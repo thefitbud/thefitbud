@@ -19,6 +19,8 @@ const api = vi.hoisted(() => ({
   resolveException: vi.fn(),
   listExceptions: vi.fn(),
   nudgeActivity: vi.fn(),
+  bulkResolveExceptions: vi.fn(),
+  undoBulkResolveExceptions: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -30,6 +32,8 @@ vi.mock("../lib/api", () => ({
     resolveException: api.resolveException,
     listExceptions: api.listExceptions,
     nudgeActivity: api.nudgeActivity,
+    bulkResolveExceptions: api.bulkResolveExceptions,
+    undoBulkResolveExceptions: api.undoBulkResolveExceptions,
   },
 }));
 vi.mock("../lib/stage1-api", () => ({
@@ -1301,5 +1305,352 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
     );
     await screen.findByTestId("panel-item-gone");
     expect(screen.getByText("Critical")).toBeTruthy();
+  });
+});
+
+describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
+  const BULK_ID = "99999999-9999-4999-8999-999999999990";
+
+  /** Five compatible items and one meal change (individual only). */
+  function bulkRows(): ExceptionDetail[] {
+    return [
+      openItem(1),
+      openItem(2),
+      openItem(3, {
+        type: "overdue_meal",
+        sourceEntityType: "meal_assignment",
+        details: { localDate: "2026-10-21", mealName: "Dinner" },
+      }),
+      openItem(4),
+      openItem(5),
+      openItem(6, {
+        type: "meal_deviation",
+        severity: "critical",
+        sourceEntityType: "meal_assignment",
+        details: { localDate: "2026-10-20" },
+      }),
+    ];
+  }
+
+  function resolvedBody(ids: string[], skipped: Record<string, "already_resolved" | "not_found"> = {}) {
+    const items = ids.map((id) =>
+      skipped[id]
+        ? { id, status: "skipped" as const, reason: skipped[id]! }
+        : { id, status: "resolved" as const },
+    );
+    const resolvedCount = items.filter((i) => i.status === "resolved").length;
+    return {
+      bulkId: resolvedCount > 0 ? BULK_ID : null,
+      relationshipId: REL_ID,
+      resolvedCount,
+      skippedCount: items.length - resolvedCount,
+      items,
+      resolvedAt: resolvedCount > 0 ? "2026-10-22T12:00:00.000Z" : null,
+      undoExpiresAt: resolvedCount > 0 ? "2026-10-22T12:00:05.000Z" : null,
+    };
+  }
+
+  async function openBulk(rows: ExceptionDetail[] = bulkRows()) {
+    renderPanel(rows);
+    await findTitle(/Missed workout 1/);
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Resolve several…" }));
+    return screen.findByTestId("bulk-select-list");
+  }
+
+  beforeEach(() => {
+    stubWorkspaceApis();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("checkboxes only on compatible items; select all selects compatible only", async () => {
+    const list = await openBulk();
+    const boxes = list.querySelectorAll('input[type="checkbox"]');
+    // Five compatible rows have boxes; the meal change has none.
+    expect(boxes).toHaveLength(5);
+    const mealChange = Array.from(list.querySelectorAll("li")).find((li) =>
+      /Meal change/.test(li.textContent ?? ""),
+    )!;
+    expect(mealChange.querySelector("input")).toBeNull();
+    expect(mealChange.textContent).toMatch(/resolve on its own/);
+    expect(screen.getByText("Meal change · resolved on its own")).toBeTruthy();
+    // DS2: compatible rows first, the individual-only row last.
+    const rowsText = Array.from(list.querySelectorAll("li")).map((li) => li.textContent ?? "");
+    expect(rowsText.at(-1)).toMatch(/Meal change/);
+    expect(rowsText.slice(0, -1).every((t) => !/Meal change/.test(t))).toBe(true);
+    // The item on screen starts selected.
+    expect(screen.getByTestId("bulk-count").textContent).toBe("1 of 5 selected");
+    // No arrows, no item nav while selecting.
+    expect(screen.queryByRole("button", { name: "Next item" })).toBeNull();
+
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select all items that can be resolved together",
+      }),
+    );
+    expect(screen.getByTestId("bulk-count").textContent).toBe("5 of 5 selected");
+    expect(screen.getByRole("button", { name: "Resolve 5 items…" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByTestId("bulk-count").textContent).toBe("0 of 5 selected");
+    expect(
+      (screen.getByRole("button", { name: "Resolve 0 items…" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    // Back leaves bulk mode to the item view.
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    expect(screen.queryByTestId("bulk-select-list")).toBeNull();
+  });
+
+  it("three or fewer resolve inline, one call with one outcome and note", async () => {
+    api.bulkResolveExceptions.mockResolvedValue(
+      resolvedBody([itemId(1), itemId(2)]),
+    );
+    const onChanged = vi.fn();
+    renderPanel(bulkRows(), { onChanged });
+    await findTitle(/Missed workout 1/);
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Resolve several…" }));
+    await screen.findByTestId("bulk-select-list");
+    // Row 1 (on screen) is preselected; add row 2.
+    fireEvent.click(screen.getAllByRole("checkbox")[2]!);
+    expect(screen.getByTestId("bulk-count").textContent).toBe("2 of 5 selected");
+    fireEvent.click(screen.getByRole("button", { name: /^Resolve 2 items…$/ }));
+    expect(screen.queryByTestId("bulk-confirm")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Plan adjusted" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "  Busy week  " },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items" }));
+    await screen.findByTestId("bulk-result-list");
+    expect(api.bulkResolveExceptions).toHaveBeenCalledTimes(1);
+    const [body, key] = api.bulkResolveExceptions.mock.calls[0]!;
+    expect(body).toEqual({
+      relationshipId: REL_ID,
+      exceptionIds: expect.arrayContaining([itemId(1)]),
+      outcome: "plan_adjusted",
+      note: "Busy week",
+    });
+    expect(body.exceptionIds).toHaveLength(2);
+    expect(typeof key).toBe("string");
+    expect(api.resolveException).not.toHaveBeenCalled();
+    expect(screen.getByTestId("bulk-undo-toast").textContent).toMatch(
+      /2 items resolved · Plan adjusted/,
+    );
+    expect(onChanged).toHaveBeenCalled();
+  });
+
+  it("more than three opens the confirm dialog; Escape closes only the dialog", async () => {
+    api.bulkResolveExceptions.mockResolvedValue(
+      resolvedBody([itemId(1), itemId(2), itemId(3), itemId(4), itemId(5)]),
+    );
+    const onClose = vi.fn();
+    renderPanel(bulkRows(), { onClose });
+    await findTitle(/Missed workout 1/);
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Resolve several…" }));
+    fireEvent.click(
+      await screen.findByRole("checkbox", {
+        name: "Select all items that can be resolved together",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 5 items…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Resolve 5 items for Rohan?" });
+    expect(dialog.textContent).toMatch(/The same outcome and note go on every item/);
+    expect(dialog.textContent).toMatch(/You can undo for 5 seconds after/);
+    // Focus moves into the dialog on the chosen outcome.
+    expect(document.activeElement?.textContent).toBe("Talked to client");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: /Resolve 5 items/ })).toBeNull();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Resolve 5 items…" }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 5 items…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve 5 items" }));
+    await screen.findByTestId("bulk-result-list");
+    expect(api.bulkResolveExceptions).toHaveBeenCalledTimes(1);
+    expect(api.bulkResolveExceptions.mock.calls[0]![0].outcome).toBe("talked");
+    expect(api.bulkResolveExceptions.mock.calls[0]![0].note).toBeNull();
+  });
+
+  it("partial failure shows a per-item result line and chips", async () => {
+    const ids = [itemId(1), itemId(2), itemId(3), itemId(4), itemId(5)];
+    api.bulkResolveExceptions.mockResolvedValue(
+      resolvedBody(ids, { [itemId(3)]: "already_resolved" }),
+    );
+    await openBulk();
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select all items that can be resolved together",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 5 items…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve 5 items" }));
+    const summary = await screen.findByTestId("bulk-summary");
+    expect(summary.textContent).toMatch(
+      /^4 resolved, 1 already resolved elsewhere\. Overdue meal · Wed 21 Oct was left as it was\.$/,
+    );
+    const result = screen.getByTestId("bulk-result-list");
+    expect(result.textContent).toMatch(/Already resolved/);
+    expect(result.textContent?.match(/Resolved/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(screen.getByTestId("bulk-undo-toast").textContent).toMatch(/4 items resolved/);
+  });
+
+  it("Undo within 5 s restores all; after 5 s the button is gone", async () => {
+    const ids = [itemId(1), itemId(2), itemId(3), itemId(4), itemId(5)];
+    api.bulkResolveExceptions.mockResolvedValue(resolvedBody(ids));
+    api.undoBulkResolveExceptions.mockResolvedValue({
+      bulkId: BULK_ID,
+      relationshipId: REL_ID,
+      restoredCount: 5,
+      items: ids.map((id) => ({ id, status: "active" })),
+    });
+    await openBulk();
+    fireEvent.click(
+      screen.getByRole("checkbox", {
+        name: "Select all items that can be resolved together",
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 5 items…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve 5 items" }));
+    const undo = await screen.findByRole("button", { name: "Undo" });
+    expect(document.activeElement).toBe(undo);
+    fireEvent.click(undo);
+    await screen.findByTestId("bulk-select-list");
+    expect(api.undoBulkResolveExceptions).toHaveBeenCalledWith(
+      BULK_ID,
+      expect.any(String),
+    );
+    expect(screen.getByTestId("bulk-count").textContent).toBe("5 of 5 selected");
+
+    // Second round: let the window pass.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 5 items…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve 5 items" }));
+    await screen.findByRole("button", { name: "Undo" });
+    // Let React run the passive effect that starts the 5 s window.
+    await act(async () => {
+      await Promise.resolve();
+    });
+    act(() => {
+      vi.advanceTimersByTime(4900);
+    });
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    expect(api.undoBulkResolveExceptions).toHaveBeenCalledTimes(1);
+    // The footer names what is still open and leads there.
+    expect(screen.getByRole("button", { name: /Review meal change item/ })).toBeTruthy();
+  });
+
+  it("a retry after a network failure reuses the idempotency key; a new note gets a new one", async () => {
+    api.bulkResolveExceptions
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(resolvedBody([itemId(1), itemId(2)]));
+    await openBulk();
+    fireEvent.click(screen.getAllByRole("checkbox")[2]!);
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Could not resolve these items.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items" }));
+    await waitFor(() => expect(api.bulkResolveExceptions).toHaveBeenCalledTimes(2));
+    await screen.findByRole("alert");
+    const firstKey = api.bulkResolveExceptions.mock.calls[0]![1];
+    expect(api.bulkResolveExceptions.mock.calls[1]![1]).toBe(firstKey);
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Changed" } });
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items" }));
+    await screen.findByTestId("bulk-result-list");
+    expect(api.bulkResolveExceptions.mock.calls[2]![1]).not.toBe(firstKey);
+  });
+
+  it("undo too late keeps the items resolved and says so", async () => {
+    api.bulkResolveExceptions.mockResolvedValue(resolvedBody([itemId(1), itemId(2)]));
+    api.undoBulkResolveExceptions.mockRejectedValue(
+      new ApiClientError({
+        status: 409,
+        code: "undo_expired",
+        message: "Undo window has passed.",
+        requestId: "req-1",
+      }),
+    );
+    await openBulk();
+    fireEvent.click(screen.getAllByRole("checkbox")[2]!);
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Too late to undo. These items stay resolved.",
+    );
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("a failed list refresh after Undo says so instead of failing silently", async () => {
+    const ids = [itemId(1), itemId(2)];
+    api.bulkResolveExceptions.mockResolvedValue(resolvedBody(ids));
+    api.undoBulkResolveExceptions.mockResolvedValue({
+      bulkId: BULK_ID,
+      relationshipId: REL_ID,
+      restoredCount: 2,
+      items: ids.map((id) => ({ id, status: "active" })),
+    });
+    await openBulk();
+    fireEvent.click(screen.getAllByRole("checkbox")[2]!);
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items…" }));
+    api.listExceptions.mockRejectedValue(new TypeError("Failed to fetch"));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve 2 items" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await screen.findByTestId("bulk-select-list");
+    expect((await screen.findByTestId("bulk-list-refresh-failed")).textContent).toBe(
+      "Couldn't refresh the list.",
+    );
+  });
+
+  it("the individual-only hint is count-safe", async () => {
+    const { individualOnlyHint } = await import("./side-panel/bulkModel");
+    const change = (n: number) =>
+      openItem(n, { type: "meal_deviation", sourceEntityType: "meal_assignment" });
+    expect(individualOnlyHint([openItem(1)])).toBeNull();
+    expect(individualOnlyHint([change(1)])).toBe("Meal change · resolved on its own");
+    expect(individualOnlyHint([change(1), change(2)])).toBe(
+      "Meal change · 2 resolved on their own",
+    );
+  });
+
+  it("an ended client gets no bulk action", async () => {
+    api.getClientWorkspace.mockResolvedValue({
+      header: {
+        traineeDisplayName: "Rohan Mehta",
+        clientWhatsappE164: null,
+        endedAt: "2026-10-03T12:00:00.000Z",
+      },
+    });
+    renderPanel(bulkRows());
+    await screen.findByTestId("panel-readonly-line");
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    expect(screen.queryByText("Resolve several…")).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+
+  it("with fewer than two compatible items there is no bulk action", async () => {
+    renderPanel([
+      openItem(1),
+      openItem(2, { type: "meal_deviation", sourceEntityType: "meal_assignment" }),
+    ]);
+    await findTitle(/Missed workout 1/);
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    await screen.findByRole("menuitem", { name: "Adjust plan" });
+    expect(screen.queryByRole("menuitem", { name: "Resolve several…" })).toBeNull();
   });
 });

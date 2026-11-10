@@ -17,6 +17,8 @@ export function ResolveForm<T extends string>({
   note,
   onNote,
   autoFocus,
+  outcomeLabel = "Resolve · Outcome",
+  plain = false,
 }: {
   outcomes: readonly ResolveOutcomeOption<T>[];
   outcome: T;
@@ -25,6 +27,10 @@ export function ResolveForm<T extends string>({
   onNote: (value: string) => void;
   /** Focus the chosen chip on open so the keyboard lands in the form. */
   autoFocus?: boolean;
+  /** Label above the chips; the bulk dialog (DS2) reads just "Outcome". */
+  outcomeLabel?: string;
+  /** No card border (inside the bulk confirm dialog, DS2). */
+  plain?: boolean;
 }) {
   const outcomeLabelId = useId();
   const noteId = useId();
@@ -36,9 +42,12 @@ export function ResolveForm<T extends string>({
   }, []);
 
   return (
-    <section className="sp-resolve-form" aria-label="Resolve">
+    <section
+      className={plain ? "sp-resolve-form is-plain" : "sp-resolve-form"}
+      aria-label="Resolve"
+    >
       <p id={outcomeLabelId} className="sp-form-label">
-        Resolve · Outcome
+        {outcomeLabel}
       </p>
       <div
         className="sp-outcomes"

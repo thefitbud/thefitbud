@@ -670,3 +670,403 @@
   min-height: 44px;
   padding: 0 8px;
 }
+
+/* Z7-8 bulk side panel (DS2 frames): selection, confirm over 3, result, Undo. */
+.sp-bulk {
+  display: contents;
+}
+
+.sp-bulk-all {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.sp-bulk-all-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  color: var(--deep-navy, #1a1248);
+  cursor: pointer;
+}
+
+.sp-bulk-hint {
+  font-size: 12px;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-bulk-check {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  accent-color: var(--indigo, #4527c6);
+  cursor: pointer;
+}
+
+/*
+ * tap-targets.css grows every checkbox to 44 px on touch widths. Here the
+ * whole row (or the "n of m selected" label) is the <label>, at least 44 px
+ * tall and full width, so the box itself keeps its 22 px drawing.
+ */
+@media (max-width: 1024px), (pointer: coarse) {
+  .sp-bulk-row-inner .sp-bulk-check,
+  .sp-bulk-all-label .sp-bulk-check {
+    width: 22px !important;
+    height: 22px !important;
+    min-width: 22px !important;
+    min-height: 22px !important;
+  }
+}
+
+.sp-bulk-check:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+.sp-bulk-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #e7e9f2;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.sp-bulk-list > li + li {
+  border-top: 1px solid #e7e9f2;
+}
+
+.sp-bulk-row-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 56px;
+  padding: 10px 14px;
+  background: #fff;
+}
+
+label.sp-bulk-row-inner {
+  cursor: pointer;
+}
+
+label.sp-bulk-row-inner:hover {
+  background: #f7f8fc;
+}
+
+.sp-bulk-row.is-on .sp-bulk-row-inner {
+  background: #f5f3ff;
+}
+
+.sp-bulk-mark {
+  flex: none;
+  width: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sp-bulk-mark .is-ok {
+  color: var(--semantic-positive-text, #047857);
+}
+
+.sp-bulk-mark .is-skip {
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-bulk-box.is-off {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  border: 1px dashed #d9dce8;
+  border-radius: 6px;
+  background: #f4f5f9;
+}
+
+.sp-bulk-icon {
+  flex: none;
+  display: inline-flex;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-bulk-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-bulk-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+}
+
+.sp-bulk-sub {
+  font-size: 12px;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-bulk-chip {
+  flex: none;
+}
+
+/* Selection bar (deep navy) with Clear and Resolve n items… */
+.drawer-foot.sp-bulk-foot {
+  gap: 8px;
+}
+
+.sp-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 16px;
+  border-radius: 12px;
+  background: var(--deep-navy, #1a1248);
+  color: #fff;
+}
+
+.sp-bulk-bar-count {
+  flex: 1;
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-bulk-bar-btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid rgb(255 255 255 / 30%);
+  border-radius: 10px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sp-bulk-bar-btn:hover {
+  background: rgb(255 255 255 / 8%);
+}
+
+.sp-bulk-bar-btn:focus-visible,
+.sp-bulk-bar .button-primary:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.sp-bulk-bar .button-primary {
+  min-height: 44px;
+}
+
+/* Confirm over 3: modal over the page and panel; top bar and nav stay clear. */
+.sp-bulk-scrim {
+  position: fixed;
+  top: var(--sp-top, 0px);
+  left: var(--sp-left, 0px);
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgb(26 18 72 / 40%);
+}
+
+@media (min-width: 1024px) {
+  .sp-bulk-scrim {
+    justify-content: flex-end;
+    padding-right: max(16px, calc(540px - 350px));
+  }
+}
+
+.sp-bulk-dialog {
+  width: min(580px, 100%);
+  max-height: calc(100% - 16px);
+  display: flex;
+  flex-direction: column;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 16px 48px rgb(26 18 72 / 20%);
+  overflow: hidden;
+}
+
+.sp-bulk-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 24px 18px;
+  overflow: auto;
+}
+
+.sp-bulk-dialog-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--deep-navy, #1a1248);
+}
+
+.sp-bulk-dialog-text {
+  margin: -6px 0 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-bulk-dialog-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #e7e9f2;
+  border-radius: 12px;
+}
+
+.sp-bulk-dialog-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 14px;
+  color: var(--deep-navy, #1a1248);
+}
+
+.sp-bulk-dialog-list li + li {
+  border-top: 1px solid #e7e9f2;
+}
+
+.sp-bulk-dialog-list svg {
+  flex: none;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-resolve-form.is-plain {
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.sp-bulk-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 24px;
+  border-top: 1px solid #e7e9f2;
+}
+
+.sp-bulk-dialog-undo {
+  flex: 1;
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-bulk-dialog-foot .button-primary,
+.sp-bulk-dialog-foot .button-secondary {
+  min-height: 44px;
+}
+
+@media (max-width: 599px) {
+  .sp-bulk-dialog-foot {
+    flex-wrap: wrap;
+  }
+
+  .sp-bulk-dialog-undo {
+    flex-basis: 100%;
+  }
+}
+
+/* Partial result notice (DS2 partial). */
+.sp-notice.sp-bulk-partial {
+  border: 1px solid #f6d58a;
+  background: var(--semantic-attention-fill, #fffbeb);
+  color: var(--semantic-attention-text, #b45309);
+}
+
+/* Undo toast in the footer with a 5 s countdown ring (DS2 Undo). */
+.drawer-foot.sp-bulk-toast-foot {
+  align-items: center;
+}
+
+.sp-bulk-toast {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  max-width: 100%;
+  padding: 6px 10px 6px 14px;
+  border-radius: 12px;
+  background: var(--deep-navy, #1a1248);
+  color: #fff;
+  box-shadow: 0 8px 24px rgb(26 18 72 / 20%);
+}
+
+.sp-bulk-countdown {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: conic-gradient(#fff var(--sp-undo-left, 100%), rgb(255 255 255 / 25%) 0);
+  -webkit-mask: radial-gradient(circle, transparent 7px, #000 8px);
+  mask: radial-gradient(circle, transparent 7px, #000 8px);
+  animation: sp-undo-countdown 5s linear forwards;
+}
+
+@property --sp-undo-left {
+  syntax: "<percentage>";
+  inherits: false;
+  initial-value: 100%;
+}
+
+@keyframes sp-undo-countdown {
+  from {
+    --sp-undo-left: 100%;
+  }
+  to {
+    --sp-undo-left: 0%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sp-bulk-countdown {
+    animation: none;
+  }
+}
+
+.sp-bulk-toast-text {
+  min-width: 0;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.sp-bulk-undo {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #c9bfff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sp-bulk-undo:hover {
+  text-decoration: underline;
+}
+
+.sp-bulk-undo:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
