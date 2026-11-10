@@ -211,6 +211,35 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     expect(screen.getByRole("dialog", { name: "Exception" })).toBeTruthy();
   });
 
+  it("selects the row on a touch tap of Review, and the click still reaches the Review handler (HM5)", async () => {
+    const meera = {
+      ...attentionGroup(),
+      relationshipId: MEERA,
+      traineeDisplayName: "Meera Iyer",
+      items: [{ ...attentionGroup().items[0]!, id: "4b0e7c2a-3f1d-4a55-9c1e-2d6f8a9b1c30", ageMinutes: 60 }],
+    };
+    api.getAttentionGroups.mockResolvedValue({ groups: [attentionGroup(), meera] });
+    await renderHome();
+    const rows = screen.getAllByRole("row");
+    expect(rows[0]!.className).toContain("is-focused");
+    const review = within(rows[1]!).getByRole("button", { name: "Review" });
+    // A touch tap: pointerdown does not select, the click does (so it must bubble).
+    fireEvent.pointerDown(review, { pointerType: "touch" });
+    fireEvent.click(review, { detail: 1 });
+    expect(loc()).toContain("exception=4b0e7c2a");
+    expect(screen.getAllByRole("row")[1]!.className).toContain("is-focused");
+    expect(screen.getAllByRole("row")[0]!.className).not.toContain("is-focused");
+  });
+
+  it("clicking the open overflow menu's own padding does not open the client panel", async () => {
+    await renderHome();
+    const grid = screen.getByRole("grid", { name: "Needs attention" });
+    fireEvent.click(within(grid).getByRole("button", { name: "More actions for Rohan Mehta" }));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(menu);
+    expect(loc()).not.toContain("client=");
+  });
+
   it("opens the ask drawer from the row, and Mark answered does not also move the page", async () => {
     await renderHome();
     fireEvent.click(screen.getByText(/asked about Lunch/));
@@ -220,10 +249,9 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     cleanup();
     seedPopulated();
     await renderHome();
-    const askRow = screen.getByText(/asked about Lunch/).closest(".home-li");
-    if (!askRow) throw new Error("no ask row");
-    act(() => (askRow as HTMLElement).focus());
-    fireEvent.keyDown(askRow, { key: "Enter" });
+    // The ask's name is a real button, so Enter/Space activate it natively.
+    const askName = screen.getByRole("button", { name: /asked about Lunch/ });
+    fireEvent.click(askName);
     expect(loc()).toContain(`ask=${ASK}`);
 
     cleanup();
@@ -247,10 +275,9 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     await renderHome();
     const again = screen.getByRole("heading", { name: "Check-ins to review" }).closest("section");
     if (!again) throw new Error("no check-in section");
-    const row = within(again).getByText("Rohan Mehta").closest(".home-li");
-    if (!row) throw new Error("no check-in row");
-    act(() => (row as HTMLElement).focus());
-    fireEvent.keyDown(row, { key: "Enter" });
+    const nameLink = within(again).getByRole("link", { name: "Rohan Mehta" });
+    expect(nameLink.getAttribute("href")).toBe(`/clients/${ROHAN}/check-ins/${CHECKIN}`);
+    fireEvent.click(nameLink);
     expect(loc()).toBe(`/clients/${ROHAN}/check-ins/${CHECKIN}`);
 
     cleanup();
@@ -273,10 +300,9 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     cleanup();
     seedPopulated();
     await renderHome();
-    const row = screen.getByText("Meera Iyer").closest(".home-li");
-    if (!row) throw new Error("no renewal row");
-    act(() => (row as HTMLElement).focus());
-    fireEvent.keyDown(row, { key: "Enter" });
+    const nameLink = screen.getByRole("link", { name: "Meera Iyer" });
+    expect(nameLink.getAttribute("href")).toBe(`/clients/${MEERA}/configure#subscription`);
+    fireEvent.click(nameLink);
     expect(loc()).toBe(`/clients/${MEERA}/configure#subscription`);
   });
 

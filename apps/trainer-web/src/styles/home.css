@@ -255,7 +255,7 @@ a.home-tile:focus-visible {
 
 .home-row {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(72px, 92px) minmax(48px, 64px) auto 44px;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(112px, 124px) minmax(76px, 84px) auto 44px;
   align-items: center;
   gap: 8px;
   min-height: 60px;
@@ -428,6 +428,19 @@ a.home-tile:focus-visible {
   line-height: 20px;
   font-weight: 600;
   color: var(--deep-navy, #1a1248);
+}
+
+.home-li-name {
+  all: unset;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  border-radius: 4px;
+}
+
+.home-li-name:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
 }
 
 .home-li-tx > span {
@@ -800,6 +813,19 @@ a.home-tile:focus-visible {
 
   .home-tile-lbl {
     font-size: 12px;
+  }
+}
+
+/* Rail beside the list: give the issue text room back (name and gaps tighten). */
+@media (min-width: 1101px) and (max-width: 1400px) {
+  .home-row {
+    grid-template-columns: minmax(148px, 152px) minmax(0, 1fr) 96px 76px auto 44px;
+    gap: 8px;
+  }
+
+  /* The "+N more" count is in the row's title; drop it so the issue text reads. */
+  .home-row .home-more {
+    display: none;
   }
 }
 
