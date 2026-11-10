@@ -119,12 +119,12 @@ describe("SubscriptionDrawer (frames 211 / 211b)", () => {
     expect(within(dialog).getByText("Mon 24 Aug")).toBeTruthy();
     expect(within(dialog).getByText("Sat 24 Oct")).toBeTruthy();
     expect(within(dialog).getByText("Home shows a renewal reminder 7 days before.")).toBeTruthy();
-    expect(within(dialog).getByText("Tracking only. FitBud doesn't collect payments.")).toBeTruthy();
+    expect(within(dialog).getByText("Tracking only.")).toBeTruthy();
     const text = dialog.textContent ?? "";
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     // D-W8-2: no session package, counts, collection or invoices.
     expect(text).not.toMatch(/\bsessions?\b|package ·|Carried over|Counts as used|invoice/i);
-    expect(text).not.toMatch(/Collect|Pay now/);
+    expect(text).not.toMatch(/collect|pay now/i);
   });
 
   it("saves a new version with every tracked field and shows it on the page", async () => {

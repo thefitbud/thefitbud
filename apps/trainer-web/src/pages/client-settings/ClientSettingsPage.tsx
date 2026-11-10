@@ -346,10 +346,6 @@ export function ClientSettingsPage() {
                 </table>
               </div>
             )}
-            <p className="cs-table-note">
-              Payment records are for your own tracking. FitBud doesn't collect payments, send
-              invoices or remind clients to pay.
-            </p>
           </div>
         </section>
 

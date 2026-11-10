@@ -516,7 +516,7 @@ export function SubscriptionDrawer({
             ) : null}
           </div>
           <footer className="cs-drawer-foot cs-drawer-foot-note">
-            <p className="cs-foot-note">Tracking only. FitBud doesn't collect payments.</p>
+            <p className="cs-foot-note">Tracking only.</p>
             <button
               type="button"
               className="button-secondary"

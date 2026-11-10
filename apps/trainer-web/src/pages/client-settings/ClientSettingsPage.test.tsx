@@ -152,10 +152,8 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     expect(text).not.toMatch(/sessions? (left|used|remaining)|Add package|Renew package/i);
     expect(text).not.toMatch(/Collect|Pay now|Invoice/);
     expect(text).not.toMatch(/Add payment record/);
-    // Frames 211/212 footnote: tracking only, stated plainly (DESIGN-NOTES "Payment records").
-    expect(within(payments).getByText(
-      "Payment records are for your own tracking. FitBud doesn't collect payments, send invoices or remind clients to pay.",
-    )).toBeTruthy();
+    // Frame 211/212 footnote is not built: spec wins over frame copy (orchestrator, Z8-3).
+    expect(text).not.toMatch(/collect payments|invoice|remind clients to pay/i);
     expect(within(payments).getByRole("columnheader", { name: "Due" })).toBeTruthy();
   });
 
