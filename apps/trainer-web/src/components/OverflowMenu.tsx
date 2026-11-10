@@ -214,44 +214,69 @@ export function OverflowMenu({
       const root = rootRef.current;
       if (!root) return;
       const target = ev.target;
-      if (!(target instanceof Node) || !root.contains(target)) return;
+      if (!(target instanceof HTMLElement) || !root.contains(target)) return;
       const buttons = menuButtons(root);
-      if (buttons.length === 0) return;
-      const current = buttons.findIndex((button) => button === document.activeElement);
       const focusAt = (index: number) => {
+        if (buttons.length === 0) return;
         buttons[(index + buttons.length) % buttons.length]?.focus({
           preventScroll: true,
         });
       };
+
+      if (ev.key === "Tab") {
+        // Menu pattern: Tab closes the menu. Focus the trigger first (without
+        // preventing the default) so the browser's Tab / Shift+Tab continues
+        // from the trigger to the next or previous control on the page.
+        triggerRef.current?.focus({ preventScroll: true });
+        setOpen(false);
+        return;
+      }
+
+      if (target === triggerRef.current) {
+        // Enter / Space on the trigger keep their native toggle; arrows move
+        // into the open menu.
+        if (ev.key === "ArrowDown" || ev.key === "Home") {
+          ev.preventDefault();
+          ev.stopPropagation();
+          focusAt(0);
+        } else if (ev.key === "ArrowUp" || ev.key === "End") {
+          ev.preventDefault();
+          ev.stopPropagation();
+          focusAt(buttons.length - 1);
+        }
+        return;
+      }
+
+      const current = buttons.indexOf(target as HTMLButtonElement);
+      if (current < 0) return;
       if (ev.key === "ArrowDown") {
         ev.preventDefault();
         ev.stopPropagation();
-        focusAt(current < 0 ? 0 : current + 1);
+        focusAt(current + 1);
         return;
       }
       if (ev.key === "ArrowUp") {
         ev.preventDefault();
         ev.stopPropagation();
-        focusAt(current < 0 ? buttons.length - 1 : current - 1);
+        focusAt(current - 1);
         return;
       }
       if (ev.key === "Home") {
         ev.preventDefault();
         ev.stopPropagation();
-        buttons[0]?.focus({ preventScroll: true });
+        focusAt(0);
         return;
       }
       if (ev.key === "End") {
         ev.preventDefault();
         ev.stopPropagation();
-        buttons[buttons.length - 1]?.focus({ preventScroll: true });
+        focusAt(buttons.length - 1);
         return;
       }
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
         ev.stopPropagation();
-        const index = current < 0 ? 0 : current;
-        const id = buttons[index]?.dataset.menuItemId;
+        const id = buttons[current]?.dataset.menuItemId;
         const item = items.find((entry) => entry.id === id);
         if (item) activate(item);
       }
@@ -281,7 +306,7 @@ export function OverflowMenu({
         className="overflow-menu-trigger"
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-controls={menuId}
+        aria-controls={open ? menuId : undefined}
         aria-label={label}
         onClick={() => setOpen((v) => !v)}
       >
@@ -300,6 +325,7 @@ export function OverflowMenu({
               <button
                 type="button"
                 role="menuitem"
+                tabIndex={-1}
                 data-menu-item-id={item.id}
                 className={
                   item.destructive

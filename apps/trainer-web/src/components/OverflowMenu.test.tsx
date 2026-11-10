@@ -112,6 +112,78 @@ describe("OverflowMenu keyboard", () => {
   });
 });
 
+describe("OverflowMenu keyboard: trigger, Tab and ARIA", () => {
+  it("activates the focused item on Space", () => {
+    const menuItems = renderMenu();
+    const rendered = openMenu();
+    fireEvent.keyDown(rendered[0]!, { key: "End" });
+    fireEvent.keyDown(rendered[4]!, { key: " " });
+
+    expect(menuItems[4]?.onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("closes on Tab, hands focus to the trigger and keeps the browser's Tab", () => {
+    const menuItems = renderMenu();
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    const rendered = openMenu();
+    fireEvent.keyDown(rendered[0]!, { key: "ArrowDown" });
+
+    const notPrevented = fireEvent.keyDown(rendered[1]!, { key: "Tab" });
+
+    expect(notPrevented).toBe(true);
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    expect(menuItems.every((item) => vi.mocked(item.onSelect).mock.calls.length === 0)).toBe(
+      true,
+    );
+  });
+
+  it("does not activate an item when Enter is pressed on the trigger", () => {
+    const menuItems = renderMenu();
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    openMenu();
+    trigger.focus();
+
+    fireEvent.keyDown(trigger, { key: "Enter" });
+
+    expect(menuItems.every((item) => vi.mocked(item.onSelect).mock.calls.length === 0)).toBe(
+      true,
+    );
+  });
+
+  it("moves from the trigger into the menu with ArrowDown and ArrowUp", () => {
+    renderMenu();
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    const menuItems = openMenu();
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(menuItems[4]);
+
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(menuItems[0]);
+  });
+
+  it("uses menu roles, keeps items out of the Tab order and links the trigger", () => {
+    renderMenu();
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
+    expect(trigger.getAttribute("aria-expanded")).toBe("false");
+    expect(trigger.hasAttribute("aria-controls")).toBe(false);
+
+    const menuItems = openMenu();
+    const menu = screen.getByRole("menu");
+    expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(trigger.getAttribute("aria-controls")).toBe(menu.id);
+    for (const item of menuItems) {
+      expect(item.getAttribute("tabindex")).toBe("-1");
+      expect(item.parentElement?.getAttribute("role")).toBe("none");
+    }
+  });
+});
+
 describe("placeOverflowMenu", () => {
   it("flips a right-aligned menu that would clip off the left at 393px", () => {
     // QA-PR27 finding 8: 5-item menu measured from x -132 to 60.
