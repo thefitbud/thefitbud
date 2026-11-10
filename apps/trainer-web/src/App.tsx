@@ -15,6 +15,7 @@ import { ClientOverviewPage } from "./pages/ClientOverviewPage";
 import { ClientPlanPage } from "./pages/ClientPlanPage";
 import { PlanBuilderPage } from "./pages/plan/PlanBuilderPage";
 import { GoResolverPage } from "./pages/GoResolverPage";
+import { ClientSettingsPage } from "./pages/client-settings/ClientSettingsPage";
 import { ClientProgressPage } from "./pages/ClientProgressPage";
 import { ClientWorkspaceLayout } from "./pages/ClientWorkspaceLayout";
 import { ClientsPage } from "./pages/ClientsPage";
@@ -92,6 +93,7 @@ export function App() {
             <Route path="history" element={<ClientHistoryPage />} />
             <Route path="onboarding" element={<OnboardingReviewPage />} />
             <Route path="configure" element={<ConfigureCoachingPage />} />
+            <Route path="settings" element={<ClientSettingsPage />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />

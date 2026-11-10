@@ -1,0 +1,326 @@
+/* Client Check-ins tab (Z8-9; frames 162, 162b, 162c, 192b). */
+
+.client-checkins {
+  gap: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Summary cards */
+.client-checkins-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.client-checkins-summary > div {
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 16px;
+  padding: 14px 16px;
+  min-width: 0;
+}
+
+.client-checkins-summary dt {
+  font-size: 0.75rem;
+  color: var(--ink-500, #5b616b);
+}
+
+.client-checkins-summary dd {
+  margin: 2px 0 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--deep-navy, #1a1248);
+}
+
+/* Ended notice (162c) */
+.client-checkins-ended {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  border: 1px solid #e5e7eb;
+  background: var(--semantic-neutral-fill, #f3f4f6);
+  color: var(--semantic-neutral-text, #374151);
+  font-size: 0.8125rem;
+}
+
+.client-checkins-ended svg {
+  flex: none;
+}
+
+/* Filter chips + actions */
+.client-checkins-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.client-checkins-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.client-checkins-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 22px;
+  border: 1px solid var(--border-strong, #d9dce8);
+  background: var(--surface, #ffffff);
+  color: var(--ink-700, #25262b);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.client-checkins-chip[aria-pressed="true"] {
+  background: var(--deep-navy, #1a1248);
+  border-color: var(--deep-navy, #1a1248);
+  color: #ffffff;
+}
+
+.client-checkins-chip:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+.client-checkins-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.client-checkins-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.client-checkins-actions .button-secondary,
+.client-checkins-actions .button-primary,
+.client-checkins-empty .button-primary {
+  min-height: 44px;
+  border-radius: 14px;
+}
+
+/* Month groups and rows */
+.client-checkins-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.client-checkins-month {
+  margin: 2px 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-500, #5b616b);
+}
+
+.client-checkins-list {
+  display: block;
+  width: 100%;
+  border-collapse: separate;
+  margin: 0;
+  padding: 0;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 16px;
+  overflow: hidden;
+}
+
+.client-checkins-list tbody {
+  display: block;
+}
+
+.client-checkins-row > td {
+  padding: 0;
+  border: 0;
+}
+
+.client-checkins-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 200px 220px 24px;
+  grid-template-areas: "date detail status aside chevron";
+  gap: 16px;
+  align-items: center;
+  min-height: 76px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border, #e7e9f2);
+}
+
+.client-checkins-row:first-child {
+  border-top: 0;
+}
+
+.client-checkins-row:hover {
+  background: var(--hover, #f7f8fc);
+}
+
+.client-checkins-date {
+  grid-area: date;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.client-checkins-date span {
+  font-size: 0.75rem;
+  color: var(--ink-500, #5b616b);
+}
+
+.client-checkins-open {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+  text-decoration: none;
+}
+
+/* The whole row opens the review; the reminder sits above this layer. */
+.client-checkins-open::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.client-checkins-open:focus-visible {
+  outline: none;
+}
+
+.client-checkins-open:focus-visible::after {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: -2px;
+}
+
+.client-checkins-detail {
+  grid-area: detail;
+  min-width: 0;
+  font-size: 0.8125rem;
+  color: var(--ink-700, #25262b);
+}
+
+.client-checkins-measure {
+  color: var(--ink-700, #25262b);
+}
+
+.client-checkins-note {
+  margin-top: 4px;
+  color: var(--ink-500, #5b616b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.client-checkins-status {
+  grid-area: status;
+  min-width: 0;
+}
+
+.client-checkins-status .status-chip {
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.client-checkins-aside {
+  grid-area: aside;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--ink-500, #5b616b);
+}
+
+.client-checkins-remind {
+  position: relative;
+  z-index: 1;
+  min-height: 44px;
+  border-radius: 14px;
+  white-space: nowrap;
+}
+
+.client-checkins-chevron {
+  grid-area: chevron;
+  color: var(--ink-400, #9aa0aa);
+}
+
+.client-checkins-none {
+  margin: 0 4px;
+}
+
+/* Empty state (162b) */
+.client-checkins-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 60px 24px;
+  text-align: center;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 16px;
+}
+
+.client-checkins-empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 32px;
+  background: var(--pale-lavender, #edeaff);
+  color: var(--indigo, #4527c6);
+}
+
+.client-checkins-empty h2 {
+  margin: 8px 0 0;
+  font-size: 1.1875rem;
+  font-weight: 600;
+  color: var(--deep-navy, #1a1248);
+}
+
+.client-checkins-empty p {
+  margin: 0 0 6px;
+  font-size: 0.875rem;
+  color: var(--ink-500, #5b616b);
+}
+
+/* Narrower web and iPad landscape (192b) */
+@media (max-width: 1279px) {
+  .client-checkins-row {
+    grid-template-columns: 96px minmax(0, 1fr) 205px 150px 20px;
+    gap: 12px;
+  }
+
+  .client-checkins-remind-long {
+    display: none;
+  }
+}
+
+/* iPad portrait: status and aside drop under the detail */
+@media (max-width: 900px) {
+  .client-checkins-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .client-checkins-row {
+    grid-template-columns: 96px minmax(0, 1fr) 20px;
+    grid-template-areas:
+      "date detail chevron"
+      "date status chevron"
+      "date aside chevron";
+    row-gap: 8px;
+    align-items: start;
+  }
+
+  .client-checkins-chevron {
+    align-self: center;
+  }
+}
