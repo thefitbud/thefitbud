@@ -313,7 +313,7 @@ export function ResponsivenessPanel({
       <p className="responsiveness-footer muted" style={FOOTER_TEXT}>
         {ended
           ? "Reminders are off while coaching is ended."
-          : `Reminders are timed by FitBud and respect ${traineeFirstName}'s settings and meal times. You can switch categories on or off in Configure.`}
+          : `Reminders are timed by FitBud and respect ${traineeFirstName}'s settings and meal times. Switch categories on or off in Plan › Coaching setup.`}
       </p>
     </div>
   );
