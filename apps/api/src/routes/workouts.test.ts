@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
-import { armCoachLogWriteBarrier } from "../domain/coach-log.js";
+import { drizzle } from "drizzle-orm/d1";
 import {
   getTestDbOverride,
   setTestDbOverride,
@@ -20,6 +20,51 @@ import {
   createMemoryDb as createSharedMemoryDb,
   type SqlJsCompatDatabase,
 } from "../test-support/memory-db.js";
+
+
+/**
+ * Concurrent-edit ordering for this file's tests only (Z7-22). Returns a copy
+ * of `db` whose first `parties` reads of `table` each run, then hold their
+ * result until all `parties` have read. Every handler has its recordVersion
+ * snapshot before any of them writes, so a 409 can only come from the
+ * versioned update missing the row. Later reads pass straight through.
+ */
+function holdFirstReadsOf(db: Db, table: string, parties: number): Db {
+  // drizzle() keeps the D1 binding on `$client`; the `Db` type omits it.
+  const d1 = (db as Db & { $client: D1Database }).$client;
+  const reads = new RegExp(`^select\\b[\\s\\S]*\\bfrom "${table}"`, "i");
+  let arrived = 0;
+  let open: () => void = () => {};
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  async function hold<T>(result: T): Promise<T> {
+    if (arrived >= parties) return result;
+    arrived += 1;
+    if (arrived >= parties) open();
+    await opened;
+    return result;
+  }
+  function wrap(statement: D1PreparedStatement): D1PreparedStatement {
+    return {
+      bind: (...values: unknown[]) => wrap(statement.bind(...values)),
+      all: async () => hold(await statement.all()),
+      raw: async () => hold(await statement.raw()),
+      first: async (column?: string) => hold(await statement.first(column as string)),
+      run: () => statement.run(),
+    } as unknown as D1PreparedStatement;
+  }
+  const gated = {
+    prepare: (query: string) => {
+      const statement = d1.prepare(query);
+      return reads.test(query) ? wrap(statement) : statement;
+    },
+    batch: (statements: D1PreparedStatement[]) => d1.batch(statements),
+    exec: (query: string) => d1.exec(query),
+    dump: () => d1.dump(),
+  } as unknown as D1Database;
+  return drizzle(gated, { schema });
+}
 
 async function createMemoryDb(): Promise<{
   db: Db;
@@ -1754,7 +1799,7 @@ describe("workout assignment and execution", () => {
       const recordVersion = before!.recordVersion;
       // Both handlers read this version before either write. The 409 comes
       // from the versioned update missing the row, not from a later read.
-      const disarm = armCoachLogWriteBarrier(2);
+      setTestDbOverride(holdFirstReadsOf(db, "workout_executions", 2));
       try {
         const [first, second] = await Promise.all([
           patch(8, recordVersion),
@@ -1790,7 +1835,7 @@ describe("workout assignment and execution", () => {
           .where(eq(schema.changeLog.recordId, executionId));
         expect(changes).toHaveLength(2);
       } finally {
-        disarm();
+        setTestDbOverride(db);
       }
     });
   });
