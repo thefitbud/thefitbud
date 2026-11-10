@@ -188,6 +188,32 @@ export const completeWorkoutRequestSchema = z.object({
 });
 export type CompleteWorkoutRequest = z.infer<typeof completeWorkoutRequestSchema>;
 
+/**
+ * Optional body for POST .../assignments/:id/start (Z7-20).
+ * The whole body may be omitted; existing clients keep working.
+ */
+export const startWorkoutRequestSchema = z.object({
+  /**
+   * When the trainee started, for an offline or near-midnight submit.
+   * Omitted: the server receive time is used.
+   */
+  clientLoggedAt: isoDateTimeSchema.optional(),
+});
+export type StartWorkoutRequest = z.infer<typeof startWorkoutRequestSchema>;
+
+/**
+ * Optional body for POST .../assignments/:id/skip (Z7-20).
+ * The whole body may be omitted; existing clients keep working.
+ */
+export const skipWorkoutRequestSchema = z.object({
+  /**
+   * When the trainee skipped, for an offline or near-midnight submit.
+   * Omitted: the server receive time is used, and today's skip rules apply.
+   */
+  clientLoggedAt: isoDateTimeSchema.optional(),
+});
+export type SkipWorkoutRequest = z.infer<typeof skipWorkoutRequestSchema>;
+
 export const workoutAdherenceItemSchema = z.object({
   assignmentId: uuidSchema,
   localDate: localDateSchema,

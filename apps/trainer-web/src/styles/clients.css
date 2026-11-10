@@ -636,23 +636,42 @@
   align-items: stretch;
   gap: 8px;
   margin-bottom: 1rem;
+  /* visible, not hidden: the roster e2e treats overflow-x hidden as clipped pills. */
   overflow: visible;
   padding-bottom: 4px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .filter-bar-row {
   display: flex;
-  flex-wrap: nowrap;
+  /* Wrap onto the next line when the 1280px content column is narrower than the
+     pill row. A horizontal scroll leaves pill boxes outside the bar, which the
+     roster check counts as clipped. At 1440 the same row still fits on one line. */
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px 10px;
-  overflow-x: auto;
-  overflow-y: hidden;
+  overflow: visible;
   max-width: 100%;
-  scrollbar-width: thin;
 }
 
 .filter-bar-row > * {
   flex-shrink: 0;
+  max-width: 100%;
+}
+
+/* Search gives up a few pixels so Status, Adherence and More stay on one line
+   at 1440. Groups and More do not shrink; at 1280 the row wraps instead. */
+.filter-bar-row > .filter-search {
+  flex: 1 1 120px;
+  min-width: 120px;
+  max-width: 168px;
+}
+
+.filter-bar-row > .filter-pill-group,
+.filter-bar-row > .filter-more,
+.filter-bar-row > .filter-clear {
+  flex: 0 0 auto;
 }
 
 .filter-bar-more {
@@ -675,7 +694,6 @@
   color: var(--ink-700, #25262b);
   cursor: pointer;
   white-space: nowrap;
-  flex: 0 0 auto;
 }
 
 .filter-more.is-active {
@@ -689,7 +707,6 @@
   align-items: center;
   gap: 8px;
   height: 32px;
-  flex: 0 1 160px;
   min-width: 120px;
   max-width: 168px;
   padding: 0 10px;
@@ -704,7 +721,7 @@
   background: transparent;
   font: inherit;
   font-size: 12px;
-  min-width: 100px;
+  min-width: 0;
   width: 100%;
 }
 
@@ -712,8 +729,7 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   max-width: 100%;
 }
 
@@ -727,8 +743,9 @@
 
 .filter-pills {
   display: inline-flex;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 4px;
+  max-width: 100%;
 }
 
 .filter-pill {
