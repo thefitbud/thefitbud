@@ -152,7 +152,10 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     expect(text).not.toMatch(/sessions? (left|used|remaining)|Add package|Renew package/i);
     expect(text).not.toMatch(/Collect|Pay now|Invoice/);
     expect(text).not.toMatch(/Add payment record/);
-    expect(text).not.toMatch(/collect payments|invoice|remind clients to pay/i);
+    // Frames 211/212 footnote: tracking only, stated plainly (DESIGN-NOTES "Payment records").
+    expect(within(payments).getByText(
+      "Payment records are for your own tracking. FitBud doesn't collect payments, send invoices or remind clients to pay.",
+    )).toBeTruthy();
     expect(within(payments).getByRole("columnheader", { name: "Due" })).toBeTruthy();
   });
 
@@ -197,7 +200,30 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     await screen.findByTestId("cs-section-basic");
     expect(screen.queryByRole("button", { name: "Edit basic details" })).toBeNull();
     expect(screen.queryByRole("button", { name: "End coaching…" })).toBeNull();
-    expect(screen.getByText("Fri 30 Oct")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit subscription" })).toBeNull();
+    // Frame 212: lock line, Ended chip, renewal row and the coached range.
+    expect(screen.getByTestId("cs-readonly-banner").textContent).toBe(
+      "Coaching with Rohan ended Fri 30 Oct. Client settings are read-only.",
+    );
+    const sub = screen.getByTestId("cs-section-subscription");
+    expect(within(sub).getByText("Ended")).toBeTruthy();
+    expect(within(sub).getByText("Ended Fri 30 Oct")).toBeTruthy();
+    expect(within(sub).queryByText(/Renews in|Renews today|Renewal expired/)).toBeNull();
+    const rel = screen.getByTestId("cs-section-relationship");
+    expect(within(rel).getByText("Mon 24 Aug — Fri 30 Oct")).toBeTruthy();
+    // No write controls anywhere on the page.
+    expect(screen.queryAllByRole("button").map((b) => b.textContent)).toEqual([]);
+    expect(document.querySelectorAll("input, select, textarea")).toHaveLength(0);
+  });
+
+  it("is read-only when only the server says so (relationship ended elsewhere)", async () => {
+    api.getClientSettings.mockResolvedValue(
+      settings({ relationshipStatus: "ended", readOnly: true, endedAt: "2026-10-30T04:30:00.000Z" }),
+    );
+    renderPage({ ended: false });
+    await screen.findByTestId("cs-readonly-banner");
+    expect(screen.queryByRole("button", { name: "Edit subscription" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit basic details" })).toBeNull();
   });
 
   it("shows the API's message when loading fails", async () => {
