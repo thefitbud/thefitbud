@@ -1152,6 +1152,89 @@ describe("Z6-8 client settings", () => {
         );
         expect(result).toEqual({ kind: "not_found" });
         expect(await relationshipBasics(ctx.relationshipId)).toEqual(before);
+        expect(await receiptCount()).toBe(0);
+      });
+
+      it("a same-key write that loses the receipt does not leave its update behind", async () => {
+        const ctx = await reachActive("cs-loser@example.com", "loser");
+        const trainer = await ownerOf(ctx.relationshipId);
+        const row = await loadOwnedRelationship(db, ctx.relationshipId, trainer!.id);
+        const first = await saveClientBasics(
+          db,
+          row!,
+          { clientDisplayName: "Asha", contactPhoneE164: "+919876543210" },
+          writeContext(trainer!.id, "lose-key"),
+        );
+        expect(first.kind).toBe("saved");
+        if (first.kind !== "saved") return;
+        expect(first.body.data.basics.clientDisplayName).toBe("Asha");
+        // A third patch lands after the winner and before the loser.
+        await db
+          .update(schema.coachingRelationships)
+          .set({ clientDisplayName: "Kept" })
+          .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+        const kept = await relationshipBasics(ctx.relationshipId);
+        const receiptsBefore = await receiptCount();
+        // Same key, different body: the loser already passed the route's receipt
+        // lookup. Its UPDATE must roll back with the failed receipt insert.
+        await expect(
+          saveClientBasics(
+            db,
+            row!,
+            { clientDisplayName: "Loser" },
+            { ...writeContext(trainer!.id, "lose-key"), fingerprint: "fp-lose-other" },
+          ),
+        ).rejects.toThrow();
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(kept);
+        // Same key, same body as the winner: a retry must not put "Asha" back over "Kept".
+        await expect(
+          saveClientBasics(
+            db,
+            row!,
+            { clientDisplayName: "Asha", contactPhoneE164: "+919876543210" },
+            writeContext(trainer!.id, "lose-key"),
+          ),
+        ).rejects.toThrow();
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(kept);
+        expect(await receiptCount()).toBe(receiptsBefore);
+        const [receipt] = await db
+          .select()
+          .from(schema.idempotencyRecords)
+          .where(eq(schema.idempotencyRecords.operation, "client_settings.basics.patch"));
+        expect(JSON.parse(receipt!.responseBody)).toEqual(first.body);
+      });
+
+      it("a relationship that ends before the batched write stores no success receipt", async () => {
+        const ctx = await reachActive("cs-endbatch@example.com", "endbatch");
+        const trainer = await ownerOf(ctx.relationshipId);
+        const row = await loadOwnedRelationship(db, ctx.relationshipId, trainer!.id);
+        const seeded = await saveClientBasics(
+          db,
+          row!,
+          { clientDisplayName: "Asha", contactPhoneE164: "+919876543210" },
+          writeContext(trainer!.id, "endbatch-seed"),
+        );
+        expect(seeded.kind).toBe("saved");
+        const before = await relationshipBasics(ctx.relationshipId);
+        const receiptsBefore = await receiptCount();
+        const realBatch = db.batch.bind(db);
+        vi.spyOn(db, "batch").mockImplementation((async (queries: Parameters<typeof db.batch>[0]) => {
+          expect(queries).toHaveLength(2);
+          await db
+            .update(schema.coachingRelationships)
+            .set({ status: "ended" })
+            .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+          return realBatch(queries);
+        }) as unknown as typeof db.batch);
+        const result = await saveClientBasics(
+          db,
+          row!,
+          { clientDisplayName: "Late rename" },
+          writeContext(trainer!.id, "endbatch-late"),
+        );
+        expect(result).toEqual({ kind: "ended" });
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(before);
+        expect(await receiptCount()).toBe(receiptsBefore);
       });
     });
 

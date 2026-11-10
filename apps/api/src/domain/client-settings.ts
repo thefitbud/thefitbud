@@ -9,10 +9,11 @@
  * - Payment records follow 0036's rules: amount > 0, paid ⇔ paid date and method,
  *   unpaid ⇒ neither (D-W6-22). The API rejects a bad state with 400 before the
  *   CHECK constraint can turn it into a 500.
- * - Every subscription and payment write is stored together with its
+ * - Every subscription, payment and basics write is stored together with its
  *   idempotency receipt in one D1 batch, so a retry replays the first answer and
- *   never writes twice. Basics (Z7-25) write one conditional UPDATE first and the
- *   receipt after it; see `saveClientBasics`.
+ *   never writes twice. A duplicate key fails the batch and rolls the write
+ *   back with the receipt. Basics inserts that receipt only when its
+ *   conditional UPDATE changed a row; see `saveClientBasics`.
  *
  * - Basic details (Z6-8b, D-W6-42): the trainer-owned client name and contact
  *   phone live on the coaching relationship only. This module never writes
@@ -21,7 +22,7 @@
  *
  * Nothing in this module logs: names, phone numbers and notes stay out of logs.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import {
   clientSettingsResponseSchema,
@@ -230,6 +231,55 @@ function receiptInsert(
   });
 }
 
+/** This trainer's relationship, and only while it is still active. */
+function activeOwnedRelationship(relationship: Pick<RelationshipRow, "id" | "trainerUserId">) {
+  return and(
+    eq(coachingRelationships.id, relationship.id),
+    eq(coachingRelationships.trainerUserId, relationship.trainerUserId),
+    eq(coachingRelationships.status, "active"),
+  );
+}
+
+const sqlValue = <T>(value: T, alias: string) => sql<T>`${value}`.as(alias);
+
+/**
+ * Receipt for a basics PATCH, inserted only when the UPDATE just ahead of it in
+ * the same batch changed a row and that row is still this trainer's active
+ * relationship. A zero-row update (already ended, or not this trainer) stores
+ * nothing. A duplicate key fails this insert and rolls the UPDATE back with it.
+ */
+function basicsReceiptInsert(
+  db: Db,
+  input: {
+    relationship: Pick<RelationshipRow, "id" | "trainerUserId">;
+    actorUserId: string;
+    keyHash: string;
+    fingerprint: string;
+    body: unknown;
+    now: string;
+  },
+): Write {
+  const expiresAt = new Date(
+    Date.parse(input.now) + RECEIPT_TTL_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+  return db.insert(idempotencyRecords).select(
+    db
+      .select({
+        id: sqlValue(createId(), "id"),
+        actorUserId: sqlValue(input.actorUserId, "actor_user_id"),
+        operation: sqlValue(CLIENT_SETTINGS_BASICS_OPERATION, "operation"),
+        keyHash: sqlValue(input.keyHash, "key_hash"),
+        requestFingerprint: sqlValue(input.fingerprint, "request_fingerprint"),
+        responseStatus: sqlValue(200, "response_status"),
+        responseBody: sqlValue(JSON.stringify(input.body), "response_body"),
+        createdAt: sqlValue(input.now, "created_at"),
+        expiresAt: sqlValue(expiresAt, "expires_at"),
+      })
+      .from(coachingRelationships)
+      .where(and(activeOwnedRelationship(input.relationship), sql`changes() = 1`)),
+  );
+}
+
 export type WriteContext = {
   actorUserId: string;
   idempotencyKey: string;
@@ -428,10 +478,15 @@ export type SaveClientBasicsResult =
  *  - two overlapping single-field PATCHes both persist (field merge in SQL, not a
  *    read-modify-write of both columns from a row read earlier), and
  *  - a relationship that ended after the route read it is refused with no change.
- * The answer is built from the row the UPDATE returned, then stored as the
- * receipt. The receipt insert is a plain insert: a concurrent request with the
- * same key fails it, and the route replays the winner's answer. Re-applying the
- * same field values on such a race writes nothing new.
+ * The UPDATE and its idempotency receipt are one D1 batch. The receipt insert
+ * selects a row only when that UPDATE changed one (`changes() = 1`) and the
+ * relationship is still this trainer's and active, so a zero-row update stores
+ * no success receipt. A duplicate key fails the insert and rolls the UPDATE
+ * back with it: a same-key request that loses the race does not leave its write
+ * behind, and the route replays the winner or answers IDEMPOTENCY_KEY_REUSE.
+ * The stored answer is built from a fresh read of the row just before the
+ * batch. D1 has no interactive transaction, so the receipt cannot be filled
+ * from the UPDATE's RETURNING inside that same batch.
  */
 export async function saveClientBasics(
   db: Db,
@@ -446,35 +501,46 @@ export async function saveClientBasics(
     // The request schema needs at least one field; never issue an empty SET.
     throw new Error("saveClientBasics needs at least one field");
   }
-  const [updated] = await db
-    .update(coachingRelationships)
-    .set(set)
-    .where(
-      and(
-        eq(coachingRelationships.id, relationship.id),
-        eq(coachingRelationships.trainerUserId, relationship.trainerUserId),
-        eq(coachingRelationships.status, "active"),
-      ),
-    )
-    .returning();
-  if (!updated) {
-    const current = await loadOwnedRelationship(
+  const current = await loadOwnedRelationship(
+    db,
+    relationship.id,
+    relationship.trainerUserId,
+  );
+  if (!current) return { kind: "not_found" };
+  if (current.status !== "active") return { kind: "ended" };
+  // The patch overwrites only the sent fields. Anything committed to the other
+  // field before this read stays in the stored answer; the UPDATE below does
+  // not write that column, so a later commit of it is kept on the row.
+  const body = {
+    data: await loadClientSettings(db, { ...current, ...set }, context.now),
+  };
+  const keyHash = await sha256Hex(context.idempotencyKey);
+  const [written] = await db.batch([
+    db.update(coachingRelationships).set(set).where(activeOwnedRelationship(relationship)),
+    basicsReceiptInsert(db, {
+      relationship,
+      actorUserId: context.actorUserId,
+      keyHash,
+      fingerprint: context.fingerprint,
+      body,
+      now: context.now,
+    }),
+  ]);
+  // The receipt insert uses the same `changes() = 1` test, so a saved answer
+  // exists only together with its receipt. Zero rows means the relationship
+  // ended or is not this trainer's; the insert matched nothing.
+  if (written.meta.changes !== 1) {
+    if (written.meta.changes !== 0) {
+      throw new Error("saveClientBasics wrote more than one row");
+    }
+    const after = await loadOwnedRelationship(
       db,
       relationship.id,
       relationship.trainerUserId,
     );
-    return current ? { kind: "ended" } : { kind: "not_found" };
+    if (!after) return { kind: "not_found" };
+    if (after.status !== "active") return { kind: "ended" };
+    throw new Error("saveClientBasics matched no row on an active relationship");
   }
-  const body = { data: await loadClientSettings(db, updated, context.now) };
-  const keyHash = await sha256Hex(context.idempotencyKey);
-  await receiptInsert(db, {
-    actorUserId: context.actorUserId,
-    operation: CLIENT_SETTINGS_BASICS_OPERATION,
-    keyHash,
-    fingerprint: context.fingerprint,
-    status: 200,
-    body,
-    now: context.now,
-  });
   return { kind: "saved", status: 200, body };
 }
