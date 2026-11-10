@@ -134,7 +134,12 @@ describe("week-circle.css", () => {
     expect(css).not.toMatch(/week-circle--partial\s*,[^}]*week-circle--rest/);
     expect(css).toContain(".week-circle__half");
     expect(css).toContain(".week-circle__dash");
-    expect(css).toMatch(/\.week-circle__half\s*\{[^}]*border-radius:\s*1\.125rem 0 0 1\.125rem/);
+    // A centred disc filled on one half only, so it reads as a half circle.
+    const half = /\.week-circle__half\s*\{([^}]*)\}/.exec(css)?.[1] ?? "";
+    expect(half).toMatch(/border-radius:\s*50%/);
+    expect(half).toMatch(/width:\s*1\.125rem/);
+    expect(half).toMatch(/height:\s*1\.125rem/);
+    expect(half).toMatch(/linear-gradient\(\s*90deg,[^;]*50%,\s*transparent 50%/);
     expect(css).toMatch(/\.week-circle__dash\s*\{[^}]*height:\s*2px/);
   });
 

@@ -31,11 +31,16 @@
   color: var(--semantic-attention-text, #b45309);
 }
 
+/* A true half: a centred disc with only its left half filled. */
 .week-circle__half {
   width: 1.125rem;
   height: 1.125rem;
-  border-radius: 1.125rem 0 0 1.125rem;
-  background: var(--semantic-attention-text, #b45309);
+  border-radius: 50%;
+  background: linear-gradient(
+    90deg,
+    var(--semantic-attention-text, #b45309) 50%,
+    transparent 50%
+  );
 }
 
 /* Unlogged today: open ring. "To do", not the half circle. */
