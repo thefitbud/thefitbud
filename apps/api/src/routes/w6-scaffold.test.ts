@@ -206,12 +206,11 @@ describe("W6 scaffold exports resolve", () => {
   it("contracts index exports each W6 placeholder type (enforced by typecheck)", () => {
     const placeholders: [
       contracts.W6StrengthContract,
-      contracts.W6CheckinFormV2Contract,
       contracts.W6ClientSettingsContract,
       contracts.W6StepsContract,
       contracts.W6AccountContract,
       contracts.W6CoachLogContract,
-    ] = [{}, {}, {}, {}, {}, {}];
-    expect(placeholders).toHaveLength(6);
+    ] = [{}, {}, {}, {}, {}];
+    expect(placeholders).toHaveLength(5);
   });
 });
