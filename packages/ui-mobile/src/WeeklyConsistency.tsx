@@ -1,5 +1,6 @@
 import { StyleSheet, View } from "react-native";
 import type { WeekDayState } from "@fitbud/contracts";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { FitText as Text } from "./FitText.js";
 import { colors, spacing } from "./theme.js";
 import { fontFamilyMedium, typeScale } from "./typography.js";
@@ -48,7 +49,7 @@ export function WeeklyConsistency({
           <View
             key={day.date}
             style={[styles.dot, { backgroundColor: dayDot(day.state) }]}
-            accessibilityLabel={`${day.date} ${day.state}`}
+            accessibilityLabel={`${formatCivilDate(day.date)}, ${labelFor("week_day_state", day.state)}`}
           />
         ))}
       </View>
