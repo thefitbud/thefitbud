@@ -296,16 +296,16 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     expect(screen.getByText("Open settings to renew")).toBeTruthy();
 
     fireEvent.click(screen.getByText("Meera Iyer"));
-    expect(loc()).toBe(`/clients/${MEERA}/configure#subscription`);
+    expect(loc()).toBe(`/clients/${MEERA}/settings#subscription`);
     expect(loc()).not.toContain(ROHAN);
 
     cleanup();
     seedPopulated();
     await renderHome();
     const nameLink = screen.getByRole("link", { name: "Meera Iyer" });
-    expect(nameLink.getAttribute("href")).toBe(`/clients/${MEERA}/configure#subscription`);
+    expect(nameLink.getAttribute("href")).toBe(`/clients/${MEERA}/settings#subscription`);
     fireEvent.click(nameLink);
-    expect(loc()).toBe(`/clients/${MEERA}/configure#subscription`);
+    expect(loc()).toBe(`/clients/${MEERA}/settings#subscription`);
   });
 
   it("links count cards to full views and leaves a zero card out of the tab order", async () => {
