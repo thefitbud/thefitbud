@@ -70,6 +70,10 @@ function renderHeader(ws: ClientWorkspace) {
           }
         />
         <Route
+          path="/clients/:relationshipId/settings"
+          element={<p>settings route</p>}
+        />
+        <Route
           path="/clients/:relationshipId/configure"
           element={<p>configure route</p>}
         />
@@ -94,6 +98,7 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
   it("ended client: configure and reminder entries are labelled view-only", () => {
     const { onOpenModal } = renderHeader(workspace("ended"));
     expect(openMenu()).toEqual([
+      "Client settings",
       "View coaching setup",
       "Onboarding answers",
       "View reminder history",
@@ -112,6 +117,7 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
   it("ended client with a pending reactivation is labelled the same way", () => {
     renderHeader(workspace("ended", { sentAt: "2026-10-20T04:00:00.000Z" }));
     expect(openMenu()).toEqual([
+      "Client settings",
       "View coaching setup",
       "Onboarding answers",
       "View reminder history",
@@ -119,16 +125,27 @@ describe("WorkspaceHeader ⋯ menu (CE2)", () => {
   });
 
   it.each(["active", "coaching_ready", "onboarding_submitted"] as const)(
-    "%s client: menu is unchanged",
+    "%s client: Client settings first, then the actions in frame 208 order",
     (status) => {
       renderHeader(workspace(status));
       expect(openMenu()).toEqual([
-        "Configure coaching",
+        "Client settings",
+        "Coaching setup",
         "Onboarding answers",
-        "Reminder settings for this client",
+        "Reminder settings",
         "Add note",
-        "End coaching",
+        "End coaching…",
       ]);
+    },
+  );
+
+  it.each(["active", "ended"] as const)(
+    "%s client: Client settings opens the settings route",
+    (status) => {
+      renderHeader(workspace(status));
+      openMenu();
+      fireEvent.click(screen.getByRole("menuitem", { name: "Client settings" }));
+      expect(screen.getByText("settings route")).toBeTruthy();
     },
   );
 });

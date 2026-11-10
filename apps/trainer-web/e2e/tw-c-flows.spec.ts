@@ -117,13 +117,13 @@ test.describe("TW-C workspace", () => {
     await page.goto(`/clients/${ROHAN}/overview`);
     await page.getByRole("button", { name: /more actions/i }).click();
     await expect(
-      page.getByRole("menuitem", { name: /Configure coaching/i }),
+      page.getByRole("menuitem", { name: /Coaching setup/i }),
     ).toBeVisible();
     await expect(
       page.getByRole("menuitem", { name: /Onboarding answers/i }),
     ).toBeVisible();
     await expect(
-      page.getByRole("menuitem", { name: /Reminder settings for this client/i }),
+      page.getByRole("menuitem", { name: /Reminder settings/i }),
     ).toBeVisible();
     await expect(page.getByRole("menuitem", { name: /Add note/i })).toBeVisible();
     await expect(page.getByRole("menuitem", { name: /End coaching/i })).toBeVisible();
