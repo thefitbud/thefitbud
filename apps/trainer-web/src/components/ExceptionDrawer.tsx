@@ -45,6 +45,8 @@ import { useOnlineStatus } from "./OfflineBanner";
 import { LoadingBlock } from "./StatePanels";
 import { compactHeadline } from "./workspace/ResponsivenessPanel";
 import { AlsoOpenList } from "./side-panel/AlsoOpenList";
+import { BulkPanel } from "./side-panel/BulkPanel";
+import { compatibleIds } from "./side-panel/bulkModel";
 import { PanelHeader, type PanelNav } from "./side-panel/PanelHeader";
 import { ResolveForm } from "./side-panel/ResolveForm";
 import {
@@ -361,6 +363,12 @@ export function ExceptionDrawer({
   const [note, setNote] = useState("");
   const [outcome, setOutcome] = useState<OutcomeId>("talked");
   const [showResolveForm, setShowResolveForm] = useState(false);
+  /** Z7-8: the panel lists the client's items with checkboxes (DS2). */
+  const [bulkMode, setBulkMode] = useState(false);
+  const bulkModeRef = useRef(false);
+  bulkModeRef.current = bulkMode;
+  /** Bulk confirm dialog takes Escape first (true when it handled it). */
+  const bulkEscapeRef = useRef<(() => boolean) | null>(null);
   /** True while Resolve is optimistic and Undo can cancel before POST. */
   const [resolveUndoPending, setResolveUndoPending] = useState(false);
   const [reminderLine, setReminderLine] = useState<string | null>(null);
@@ -529,6 +537,19 @@ export function ExceptionDrawer({
   }, []);
   const loadRef = useRef(load);
   loadRef.current = load;
+
+  /** Fetch this client's open items again (after a bulk resolve or Undo). */
+  const reloadList = useCallback(async () => {
+    const rid = listRidRef.current;
+    if (!rid) return;
+    try {
+      const res = await apiClient.listExceptions(rid);
+      if (!mountedRef.current || listRidRef.current !== rid) return;
+      setList(buildPanelList(res.items));
+    } catch {
+      /* keep the list on screen; the bulk result already shows per item */
+    }
+  }, []);
 
   // List mode: that client's open items only (D11), newest first.
   useEffect(() => {
@@ -986,6 +1007,10 @@ export function ExceptionDrawer({
       const bar = document.querySelector<HTMLElement>(".shell-topbar, .top-bar");
       const bottom = bar ? Math.max(0, bar.getBoundingClientRect().bottom) : 0;
       backdrop!.style.setProperty("--sp-top", `${Math.round(bottom)}px`);
+      // Z7-8 confirm scrim starts right of the app's side navigation (DS2).
+      const main = document.querySelector<HTMLElement>(".shell-main");
+      const left = main ? Math.max(0, main.getBoundingClientRect().left) : 0;
+      backdrop!.style.setProperty("--sp-left", `${Math.round(left)}px`);
     }
     place();
     window.addEventListener("resize", place);
@@ -1007,6 +1032,10 @@ export function ExceptionDrawer({
   );
   const readOnly = resolved || ended;
   readOnlyRef.current = readOnly;
+  // D11: an ended client gets no bulk actions; leave bulk mode if it ends.
+  useEffect(() => {
+    if (ended && bulkMode) setBulkMode(false);
+  }, [ended, bulkMode]);
   const acknowledged = detail?.status === "acknowledged";
   const active =
     detail &&
@@ -1086,18 +1115,24 @@ export function ExceptionDrawer({
       if (closingRef.current) return;
       if (ev.key === "Escape") {
         if (document.querySelector(".overflow-menu-list")) return;
+        if (bulkEscapeRef.current?.()) {
+          ev.preventDefault();
+          return;
+        }
         ev.preventDefault();
         requestClose();
         return;
       }
       const typing = isTypingTarget(ev.target);
-      if (!typing && (ev.key === "n" || ev.key === "N")) {
+      const bulk = bulkModeRef.current;
+      if (!typing && !bulk && (ev.key === "n" || ev.key === "N")) {
         ev.preventDefault();
         nudgeRef.current();
         return;
       }
       if (
         !typing &&
+        !bulk &&
         (ev.key === "ArrowLeft" || ev.key === "ArrowRight") &&
         !ev.altKey &&
         !ev.metaKey &&
@@ -1109,14 +1144,18 @@ export function ExceptionDrawer({
         return;
       }
       if (ev.key !== "Tab" || !panelRef.current) return;
-      const focusable = panelRef.current.querySelectorAll<HTMLElement>(
+      // The bulk confirm dialog keeps Tab inside itself while it is open.
+      const trap =
+        panelRef.current.querySelector<HTMLElement>(".sp-bulk-dialog") ??
+        panelRef.current;
+      const focusable = trap.querySelectorAll<HTMLElement>(
         'button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       );
       if (focusable.length === 0) return;
       const first = focusable[0]!;
       const last = focusable[focusable.length - 1]!;
       const activeEl = document.activeElement;
-      const inside = activeEl instanceof Node && panelRef.current.contains(activeEl);
+      const inside = activeEl instanceof Node && trap.contains(activeEl);
       if (!inside) {
         ev.preventDefault();
         (ev.shiftKey ? last : first).focus();
@@ -1168,7 +1207,7 @@ export function ExceptionDrawer({
     () => items.map((item) => resolvedIds.has(item.id)),
     [items, resolvedIds],
   );
-  const nav: PanelNav | null = inList
+  const nav: PanelNav | null = inList && !bulkMode
     ? {
         index: listIndex,
         total: items.length,
@@ -1269,6 +1308,43 @@ export function ExceptionDrawer({
     setShowResolveForm(true);
   }
 
+  /** Z7-8: bulk needs the client's list, two compatible items, not ended. */
+  const bulkAvailable = Boolean(
+    listRid && list && !ended && compatibleIds(items).length >= 2,
+  );
+
+  function enterBulk() {
+    // A single Resolve still in its Undo window is kept (it was confirmed).
+    flushPendingResolve();
+    setResolveUndoPending(false);
+    setShowResolveForm(false);
+    setNudgeHint(null);
+    setError(null);
+    setBulkMode(true);
+  }
+
+  function exitBulk() {
+    setBulkMode(false);
+    focusAfterNavRef.current = true;
+    if (currentId) void load(currentId, { quiet: true });
+  }
+
+  function openFromBulk(id: string) {
+    setBulkMode(false);
+    const index = items.findIndex((item) => item.id === id);
+    if (id === currentId || index < 0) {
+      focusAfterNavRef.current = true;
+      if (currentId) void load(currentId, { quiet: true });
+      return;
+    }
+    goTo(index);
+  }
+
+  function afterBulkWrite() {
+    void reloadList();
+    onChangedRef.current?.();
+  }
+
   function cancelResolveForm() {
     setShowResolveForm(false);
     setNote("");
@@ -1297,7 +1373,9 @@ export function ExceptionDrawer({
           meta={meta}
           nav={nav}
           severity={
-            detail && !resolved
+            bulkMode
+              ? null
+              : detail && !resolved
               ? detail.severity
               : gone
                 ? (items.find((item) => item.id === currentId)?.severity ??
@@ -1309,8 +1387,30 @@ export function ExceptionDrawer({
           onClose={requestClose}
         />
 
-        {loading ? <LoadingBlock label="Loading…" /> : null}
-        {error && !detail && !loading && gone ? (
+        {bulkMode && listRid && list ? (
+          <BulkPanel
+            relationshipId={listRid}
+            firstName={firstName}
+            items={items}
+            initialSelectedId={currentId}
+            outcomes={OUTCOMES}
+            defaultOutcome="talked"
+            online={online}
+            escapeRef={bulkEscapeRef}
+            onExit={exitBulk}
+            onOpenItem={openFromBulk}
+            onResolved={afterBulkWrite}
+            onRestored={afterBulkWrite}
+            onEnded={() => {
+              setEndedByApi(true);
+              setBulkMode(false);
+              if (currentId) void load(currentId, { quiet: true });
+            }}
+            onClose={requestClose}
+          />
+        ) : null}
+        {!bulkMode && loading ? <LoadingBlock label="Loading…" /> : null}
+        {!bulkMode && error && !detail && !loading && gone ? (
           <>
             <div
               className="drawer-body sp-body sp-gone"
@@ -1347,7 +1447,7 @@ export function ExceptionDrawer({
             </div>
           </>
         ) : null}
-        {error && !detail && !loading && !gone ? (
+        {!bulkMode && error && !detail && !loading && !gone ? (
           <div className="drawer-body">
             <p role="alert">{error}</p>
             <Button variant="secondary" onClick={requestClose}>
@@ -1355,13 +1455,13 @@ export function ExceptionDrawer({
             </Button>
           </div>
         ) : null}
-        {listEmpty && !error && !loading ? (
+        {!bulkMode && listEmpty && !error && !loading ? (
           <div className="drawer-body">
             <p className="muted">No open items for {firstName}.</p>
           </div>
         ) : null}
 
-        {detail ? (
+        {!bulkMode && detail ? (
           <>
             <div className="drawer-body sp-body">
               {error ? (
@@ -1667,6 +1767,15 @@ export function ExceptionDrawer({
                         label: "Add note",
                         onSelect: openResolveForm,
                       },
+                      ...(bulkAvailable
+                        ? [
+                            {
+                              id: "bulk",
+                              label: "Resolve several…",
+                              onSelect: enterBulk,
+                            },
+                          ]
+                        : []),
                       {
                         id: "plan",
                         label: "Adjust plan",
