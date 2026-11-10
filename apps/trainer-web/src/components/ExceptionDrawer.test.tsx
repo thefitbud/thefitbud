@@ -1075,3 +1075,166 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     ).toBeTruthy();
   });
 });
+
+describe("Side panel read-only, gone and ended (Z7-7)", () => {
+  const WRITE_NAMES = ["Mark reviewed", "Resolve…", "Nudge", "More actions"];
+  function expectNoWriteActions() {
+    for (const name of WRITE_NAMES) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.queryByRole("button", { name: /Resolve item/ })).toBeNull();
+  }
+  function stubWorkspace(endedAt: string | null) {
+    api.getClientWorkspace.mockResolvedValue({
+      header: {
+        traineeDisplayName: "Kavya Nair",
+        clientWhatsappE164: null,
+        endedAt,
+      },
+    });
+  }
+  beforeEach(() => {
+    api.getWorkoutAssignment.mockResolvedValue({
+      workoutDayName: "Upper body A",
+      windowEndsAt: "2026-10-22T12:00:00.000Z",
+      workoutDay: { exercises: [] },
+    });
+    api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+    stubWorkspace(null);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("a resolved item opens read-only with the note, who and when (frame 132)", async () => {
+    api.getException.mockResolvedValue({
+      ...resolvedDetail("trainer"),
+      actions: [
+        {
+          id: "99999999-9999-4999-8999-999999999999",
+          exceptionId: EXC_ID,
+          trainerUserId: "88888888-8888-4888-8888-888888888888",
+          action: "resolve",
+          note: "Family dinner out.",
+          createdAt: RESOLVED_AT,
+        },
+      ],
+    });
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect((await screen.findByTestId("panel-readonly-line")).textContent).toMatch(
+      /Read-only · a resolved item can't be changed/,
+    );
+    expect(screen.getByTestId("exception-resolve-banner").textContent).toMatch(
+      /Resolved by you ·/,
+    );
+    expect(screen.getByTestId("panel-resolved-note").textContent).toMatch(
+      /Your note · private.*Family dinner out\./,
+    );
+    expectNoWriteActions();
+    expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+  });
+
+  it("a deleted item shows the gone state with a way back (frame 133)", async () => {
+    const rows = [openItem(1), openItem(2)];
+    api.listExceptions.mockResolvedValue({ items: rows, nextCursor: null });
+    api.getException.mockImplementation(async (id: string) => {
+      if (id === itemId(2)) {
+        throw new ApiClientError({
+          status: 404,
+          code: "EXCEPTION_NOT_FOUND",
+          message: "Exception not found.",
+        requestId: "req-1",
+        });
+      }
+      return rows[0];
+    });
+    render(
+      <MemoryRouter initialEntries={[`/?client=${REL_ID}&exception=${itemId(2)}`]}>
+        <ExceptionDrawer exceptionId={itemId(2)} onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+    const gone = await screen.findByTestId("panel-item-gone");
+    expect(gone.textContent).toMatch(/This item no longer exists/);
+    expectNoWriteActions();
+    fireEvent.click(screen.getByRole("button", { name: /Back to item 1 of 2/ }));
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+  });
+
+  it("a load failure that is not a 404 does not claim the item is gone", async () => {
+    api.getException.mockRejectedValue(new Error("boom"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Could not load this item.",
+    );
+    expect(screen.queryByTestId("panel-item-gone")).toBeNull();
+  });
+
+  it("an ended client's open item shows no write actions, and n does not nudge", async () => {
+    stubWorkspace("2026-10-03T12:00:00.000Z");
+    api.getException.mockResolvedValue(activeDetail);
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect((await screen.findByTestId("panel-readonly-line")).textContent).toMatch(
+      /coaching has ended/,
+    );
+    expectNoWriteActions();
+    fireEvent.keyDown(document, { key: "n" });
+    expect(api.nudgeActivity).not.toHaveBeenCalled();
+    // Viewing still works.
+    expect(screen.getByText("Timeline")).toBeTruthy();
+  });
+
+  it("an item closed when coaching ended is read-only with the system label", async () => {
+    api.getException.mockResolvedValue(resolvedDetail("coaching_ended"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(await screen.findByText(/Closed when coaching ended ·/)).toBeTruthy();
+    expectNoWriteActions();
+  });
+
+  it("a write that returns RELATIONSHIP_ENDED turns the panel read-only", async () => {
+    api.getException.mockResolvedValue(activeDetail);
+    api.acknowledgeException.mockRejectedValue(
+      new ApiClientError({
+        status: 409,
+        code: "RELATIONSHIP_ENDED",
+        message: "Coaching relationship has ended.",
+      requestId: "req-1",
+      }),
+    );
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+    expect(await screen.findByTestId("panel-readonly-line")).toBeTruthy();
+    expectNoWriteActions();
+  });
+
+  it("INVALID_TRANSITION on a resolved-elsewhere item reloads it read-only", async () => {
+    api.getException
+      .mockResolvedValueOnce(activeDetail)
+      .mockResolvedValue(resolvedDetail("trainer"));
+    api.acknowledgeException.mockRejectedValue(
+      new ApiClientError({
+        status: 409,
+        code: "INVALID_TRANSITION",
+        message: "Invalid transition.",
+      requestId: "req-1",
+      }),
+    );
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+    expect(await screen.findByTestId("panel-resolved-elsewhere")).toBeTruthy();
+    expectNoWriteActions();
+  });
+});

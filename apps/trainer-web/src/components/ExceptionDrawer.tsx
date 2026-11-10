@@ -10,10 +10,14 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   Bell,
   ChevronRight,
+  AlertCircle,
+  Check,
   CheckCircle2,
+  ChevronLeft,
   ClipboardCheck,
   Clock,
   Dumbbell,
+  Info,
   Moon,
   Utensils,
 } from "lucide-react";
@@ -337,6 +341,12 @@ export function ExceptionDrawer({
     Readonly<Record<string, OutcomeId>>
   >({});
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
+  /** The API said the item is gone (404 / EXCEPTION_NOT_FOUND): frame 133. */
+  const [gone, setGone] = useState(false);
+  /** A write came back RELATIONSHIP_ENDED: the panel turns read-only. */
+  const [endedByApi, setEndedByApi] = useState(false);
+  /** A write came back INVALID_TRANSITION: someone else already changed it. */
+  const [changedElsewhere, setChangedElsewhere] = useState(false);
   const [clientName, setClientName] = useState("Client");
   const [clientHeader, setClientHeader] = useState<WorkspaceHeader | null>(
     null,
@@ -375,6 +385,8 @@ export function ExceptionDrawer({
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const nudgeRef = useRef<() => void>(() => undefined);
+  /** Mirrors `readOnly` for the Nudge shortcut and handlers. */
+  const readOnlyRef = useRef(false);
   const stepRef = useRef<(delta: number) => void>(() => undefined);
   // DR1: set synchronously the moment a close is requested. The parent's
   // close is a router navigation (a React transition), so the drawer and its
@@ -443,6 +455,7 @@ export function ExceptionDrawer({
     // Quiet reload after an action keeps the drawer content on screen.
     if (!opts?.quiet) setLoading(true);
     setError(null);
+    setGone(false);
     try {
       const result = await apiClient.getException(id);
       if (stale()) return;
@@ -497,7 +510,15 @@ export function ExceptionDrawer({
       const is404 =
         err instanceof ApiClientError &&
         (err.status === 404 || err.code === "EXCEPTION_NOT_FOUND");
-      setError(is404 ? "This item no longer exists" : err instanceof ApiClientError ? err.message : "This item no longer exists");
+      setGone(is404);
+      // Only a 404 proves the item is gone; anything else is a load failure.
+      setError(
+        is404
+          ? "This item no longer exists"
+          : err instanceof ApiClientError
+            ? err.message
+            : "Could not load this item.",
+      );
       setDetail(null);
     } finally {
       if (!stale()) setLoading(false);
@@ -640,6 +661,7 @@ export function ExceptionDrawer({
         delete next[p.id];
         return next;
       });
+      if (isCurrent() && handleWriteCode(err, p.id)) return;
       if (isCurrent()) {
         // Give the trainer their outcome and note back to try again.
         pendingFocusRef.current = "resolve";
@@ -722,6 +744,35 @@ export function ExceptionDrawer({
     return () => window.clearInterval(id);
   }, []);
 
+  /**
+   * Real API codes only (no guessing from the message): the coaching ended
+   * under the panel, the item was deleted, or another session already moved
+   * it on. Returns true when the code was handled.
+   */
+  function handleWriteCode(err: unknown, id: string): boolean {
+    if (!(err instanceof ApiClientError)) return false;
+    if (err.code === "RELATIONSHIP_ENDED") {
+      setEndedByApi(true);
+      setShowResolveForm(false);
+      void loadRef.current(id, { quiet: true });
+      return true;
+    }
+    if (err.code === "EXCEPTION_NOT_FOUND" || err.status === 404) {
+      setGone(true);
+      setDetail(null);
+      setShowResolveForm(false);
+      setError("This item no longer exists");
+      return true;
+    }
+    if (err.code === "INVALID_TRANSITION") {
+      setChangedElsewhere(true);
+      setShowResolveForm(false);
+      void loadRef.current(id, { quiet: true });
+      return true;
+    }
+    return false;
+  }
+
   async function markReviewed() {
     if (!currentId) return;
     const id = currentId;
@@ -739,6 +790,7 @@ export function ExceptionDrawer({
       onChanged?.();
     } catch (err) {
       restoreFocusAfterReviewRef.current = false;
+      if (handleWriteCode(err, id)) return;
       setError(
         err instanceof ApiClientError ? err.message : "Could not mark reviewed.",
       );
@@ -856,7 +908,7 @@ export function ExceptionDrawer({
   };
 
   async function nudge() {
-    if (!detail) return;
+    if (!detail || readOnlyRef.current) return;
     if (nudgePaused) return;
     if (nudgeBlockedUntil != null && Date.now() < nudgeBlockedUntil) return;
     setNudgeHint(null);
@@ -888,6 +940,7 @@ export function ExceptionDrawer({
         setNudgeHint("Nudge sent");
       }
     } catch (err) {
+      if (handleWriteCode(err, detail.id)) return;
       if (err instanceof ApiClientError) {
         if (err.code === "REMINDERS_PAUSED") {
           setNudgePaused(true);
@@ -941,6 +994,16 @@ export function ExceptionDrawer({
   }, []);
 
   const resolved = detail?.status === "resolved";
+  // CE7: an ended client is read-only (server guard EC1b stays). Known from
+  // the workspace header, from a coaching_ended close, or from a write that
+  // came back RELATIONSHIP_ENDED.
+  const ended = Boolean(
+    endedByApi ||
+      clientHeader?.endedAt ||
+      detail?.closedReason === "coaching_ended",
+  );
+  const readOnly = resolved || ended;
+  readOnlyRef.current = readOnly;
   const acknowledged = detail?.status === "acknowledged";
   const active =
     detail &&
@@ -1073,7 +1136,7 @@ export function ExceptionDrawer({
     (nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil);
   const isSkipped =
     detail?.type === "skipped_meal" || detail?.type === "skipped_workout";
-  const showNudge = Boolean(detail && !resolved && !isSkipped);
+  const showNudge = Boolean(detail && !readOnly && !isSkipped);
   const whatsappHref = clientWhatsappHref({
     phoneE164: clientWhatsappE164,
     name: clientName,
@@ -1095,6 +1158,8 @@ export function ExceptionDrawer({
     : null;
 
   const inList = listIndex >= 0;
+  const resolvedNote =
+    detail?.actions.find((a) => a.action === "resolve")?.note?.trim() || null;
   const resolvedCount = items.filter((item) => resolvedIds.has(item.id)).length;
   const resolvedFlags = useMemo(
     () => items.map((item) => resolvedIds.has(item.id)),
@@ -1132,6 +1197,12 @@ export function ExceptionDrawer({
           : resolvedCloseLabel(detail.closedReason)
       : itemAgeLine(detail)
     : null;
+  /** Gone item: the nearest other item the panel can go back to. */
+  const otherItemIndex = (() => {
+    if (!inList) return items.length > 0 ? 0 : null;
+    if (items.length < 2) return null;
+    return listIndex > 0 ? listIndex - 1 : 1;
+  })();
   const listEmpty = Boolean(list && items.length === 0 && !currentId);
   const leavePanel = (ev: {
     button: number;
@@ -1158,13 +1229,13 @@ export function ExceptionDrawer({
     helperTotal == null || helperTotal <= 1
       ? "every item is resolved"
       : `all ${helperTotal} items are resolved`;
-  const formOpen = Boolean(showResolveForm && detail && !resolved);
+  const formOpen = Boolean(showResolveForm && detail && !readOnly);
   const nudgeLimitText =
-    nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil
+    !readOnly && nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil
       ? nudgeLimitNotice(nudgeBlockedUntil - nudgeNow)
       : null;
   const quietText =
-    detail && !resolved && quietWindow
+    detail && !readOnly && quietWindow
       ? quietHoursNotice({
           firstName,
           timeZone: clientHeader?.traineeTimezone ?? null,
@@ -1229,7 +1300,44 @@ export function ExceptionDrawer({
         />
 
         {loading ? <LoadingBlock label="Loading…" /> : null}
-        {error && !detail && !loading ? (
+        {error && !detail && !loading && gone ? (
+          <>
+            <div
+              className="drawer-body sp-body sp-gone"
+              data-testid="panel-item-gone"
+            >
+              <span className="sp-gone-icon" aria-hidden>
+                <AlertCircle size={22} strokeWidth={1.75} />
+              </span>
+              <h3 className="sp-gone-title" role="alert">
+                This item no longer exists
+              </h3>
+              <p className="sp-gone-text">
+                It was removed, so there is nothing to review.
+                {otherItemIndex != null
+                  ? ` ${firstName}'s other items are still open.`
+                  : ""}
+              </p>
+            </div>
+            <div className="drawer-foot sp-foot">
+              <div className="sp-actions">
+                {otherItemIndex != null ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => goTo(otherItemIndex)}
+                  >
+                    <ChevronLeft size={16} strokeWidth={2} aria-hidden />
+                    Back to item {otherItemIndex + 1} of {items.length}
+                  </Button>
+                ) : null}
+                <Button variant="primary" onClick={requestClose}>
+                  Close
+                </Button>
+              </div>
+            </div>
+          </>
+        ) : null}
+        {error && !detail && !loading && !gone ? (
           <div className="drawer-body">
             <p role="alert">{error}</p>
             <Button variant="secondary" onClick={requestClose}>
@@ -1251,11 +1359,37 @@ export function ExceptionDrawer({
                   {error}
                 </p>
               ) : null}
+              {changedElsewhere && resolved ? (
+                <p
+                  className="sp-notice sp-notice-limit"
+                  role="status"
+                  data-testid="panel-resolved-elsewhere"
+                >
+                  <Info size={16} strokeWidth={1.75} aria-hidden />
+                  <span>
+                    This item was already resolved elsewhere. Nothing was
+                    changed.
+                  </span>
+                </p>
+              ) : null}
               <div>
                 <h3 ref={titleRef} className="sp-title" tabIndex={-1}>
                   {reasonHeading(detail, plannedTitle)}
+                  {resolved ? (
+                    <span className="sp-resolved-pill">
+                      <Check size={12} strokeWidth={2.5} aria-hidden />
+                      Resolved
+                    </span>
+                  ) : null}
                 </h3>
                 {ageLine ? <p className="sp-age">{ageLine}</p> : null}
+                {readOnly && !resolveUndoPending ? (
+                  <p className="sp-age" data-testid="panel-readonly-line">
+                    {resolved
+                      ? "Read-only · a resolved item can't be changed"
+                      : "Read-only · coaching has ended"}
+                  </p>
+                ) : null}
               </div>
 
               <div className="drawer-source sp-source">
@@ -1321,7 +1455,7 @@ export function ExceptionDrawer({
                 />
               ) : null}
 
-              {!resolved && !formOpen && (reminderLine || nudgeHint) ? (
+              {!readOnly && !formOpen && (reminderLine || nudgeHint) ? (
                 <section className="sp-section" aria-labelledby="sp-signals">
                   <h3 id="sp-signals" className="sp-section-title">
                     Signals
@@ -1359,6 +1493,19 @@ export function ExceptionDrawer({
                   <Moon size={16} strokeWidth={1.75} aria-hidden />
                   <span>{quietText}</span>
                 </p>
+              ) : null}
+
+              {resolved && resolvedNote ? (
+                <section
+                  className="sp-section"
+                  aria-labelledby="sp-note"
+                  data-testid="panel-resolved-note"
+                >
+                  <h3 id="sp-note" className="sp-section-title">
+                    Your note · private
+                  </h3>
+                  <p className="sp-note-text">{resolvedNote}</p>
+                </section>
               ) : null}
 
               {list && !formOpen ? (
@@ -1426,7 +1573,7 @@ export function ExceptionDrawer({
               </div>
             ) : null}
 
-            {!resolved && formOpen ? (
+            {!readOnly && formOpen ? (
               <div className="drawer-foot sp-foot sp-foot-form">
                 <div className="sp-actions">
                   <Button
@@ -1449,7 +1596,32 @@ export function ExceptionDrawer({
               </div>
             ) : null}
 
-            {!resolved && !formOpen ? (
+            {readOnly && !(resolved && inList) ? (
+              <div
+                className="drawer-foot sp-foot sp-foot-readonly"
+                data-testid="panel-readonly-foot"
+              >
+                <p className="sp-foot-summary">
+                  {ended
+                    ? `Coaching with ${firstName} has ended. This item is read-only.`
+                    : "Resolved items can't be changed."}
+                </p>
+                <div className="sp-actions">
+                  <Link
+                    className="link sp-open-client"
+                    to={`/clients/${detail.coachingRelationshipId}`}
+                    onClick={leavePanel}
+                  >
+                    Open client
+                  </Link>
+                  <Button variant="primary" onClick={requestClose}>
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {!readOnly && !formOpen ? (
               <div className="drawer-foot sp-foot">
                 <div className="sp-actions">
                   {active ? (
