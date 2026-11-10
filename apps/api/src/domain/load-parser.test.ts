@@ -178,3 +178,70 @@ describe("resolveSetLoad", () => {
     ).toEqual({ prescribedLoadKg: 40, actualLoadKg: 45, loadKind: "kg" });
   });
 });
+
+// Z7-28: regression pins for known Z6-1 behaviour. These document what the
+// parser does today (and what migration 0035 does in SQL); a later intentional
+// change needs a new decision and must update these on purpose.
+describe("space collapsing (Z6-1 known behaviour)", () => {
+  const gap = (n: number) => " ".repeat(n);
+
+  it("rejects digits split by 1 to 8 spaces as text", () => {
+    for (let n = 1; n <= 8; n++) {
+      expect(parseLoadLabel(`4${gap(n)}0 kg`), `${n} spaces`).toEqual(TEXT);
+    }
+  });
+
+  it("joins digits separated by 9 or more spaces into one number", () => {
+    // Three passes of "  " -> " " leave 2 spaces from a 9-space run, which the
+    // digit-gap check (exactly one space) no longer sees; all spaces are then dropped.
+    for (const n of [9, 10, 12, 20, 40]) {
+      expect(parseLoadLabel(`4${gap(n)}0 kg`), `${n} spaces`).toEqual(kg(40));
+    }
+    expect(parseLoadLabel(`1${gap(9)}2${gap(9)}5 kg`)).toEqual(kg(125));
+    expect(parseLoadLabel(`40${gap(9)}.5 kg`)).toEqual(kg(40.5));
+    expect(parseLoadLabel(`4${gap(9)}0`, { bareNumberUnit: "kg" })).toEqual(kg(40));
+  });
+
+  it("still reads a run of spaces around words and units as one load", () => {
+    expect(parseLoadLabel(`40${gap(9)}kg`)).toEqual(kg(40));
+    expect(parseLoadLabel(`BW${gap(9)}+${gap(9)}10 kg`)).toEqual(plus(10));
+  });
+});
+
+describe("one load_kind for prescribed and actual (Z6-1 known behaviour)", () => {
+  it("takes the kind from the actual label once logged, whatever the prescribed kind", () => {
+    expect(
+      resolveSetLoad({ prescribedLoadLabel: "BW+10", actualLoadLabel: "40 kg" }),
+    ).toEqual({ prescribedLoadKg: 10, actualLoadKg: 40, loadKind: "kg" });
+    expect(
+      resolveSetLoad({ prescribedLoadLabel: "40 kg", actualLoadLabel: "BW+10" }),
+    ).toEqual({ prescribedLoadKg: 40, actualLoadKg: 10, loadKind: "bodyweight_plus" });
+  });
+
+  it("takes the kind from the prescribed label while the actual label is blank", () => {
+    for (const actual of [null, undefined, "", "   ", "\t\n"]) {
+      expect(
+        resolveSetLoad({ prescribedLoadLabel: "BW+10", actualLoadLabel: actual }),
+      ).toEqual({ prescribedLoadKg: 10, actualLoadKg: null, loadKind: "bodyweight_plus" });
+    }
+  });
+
+  it("does not fall back to the prescribed kind when the actual label is unparseable", () => {
+    expect(
+      resolveSetLoad({ prescribedLoadLabel: "BW+10", actualLoadLabel: "RPE 7" }),
+    ).toEqual({ prescribedLoadKg: 10, actualLoadKg: null, loadKind: "text" });
+  });
+
+  it("reports text for a text prescribed label with no actual, and keeps its kg null", () => {
+    expect(
+      resolveSetLoad({ prescribedLoadLabel: "easy", actualLoadLabel: null }),
+    ).toEqual({ prescribedLoadKg: null, actualLoadKg: null, loadKind: "text" });
+  });
+
+  it("applies the 9-space join to both labels while the kind follows the actual label", () => {
+    const wide = `4${" ".repeat(9)}0 kg`;
+    expect(
+      resolveSetLoad({ prescribedLoadLabel: wide, actualLoadLabel: "BW" }),
+    ).toEqual({ prescribedLoadKg: 40, actualLoadKg: null, loadKind: "bodyweight" });
+  });
+});
