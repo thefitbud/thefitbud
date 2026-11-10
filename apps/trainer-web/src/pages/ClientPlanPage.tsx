@@ -89,6 +89,32 @@ function dayLabel(iso: string | null | undefined, timezone: string): string | nu
   return local ? formatCivilDate(local) : null;
 }
 
+/**
+ * `effectiveTo` is the exclusive boundary: the instant the next version starts.
+ * The last day the version applies is the civil day of (effectiveTo − 1 ms) in
+ * the client's timezone, so a local-midnight boundary reads as the day before.
+ * Never earlier than the start day (a version replaced on the day it began).
+ */
+function lastDayLabel(
+  effectiveFrom: string | null | undefined,
+  effectiveTo: string | null | undefined,
+  timezone: string,
+): string | null {
+  if (!effectiveTo) return null;
+  const end = Date.parse(effectiveTo);
+  if (Number.isNaN(end)) return null;
+  const last = formatLocalDate(new Date(end - 1), timezone);
+  const first = localDay(effectiveFrom, timezone);
+  return formatCivilDate(first && last < first ? first : last);
+}
+
+/** Dev-only diagnostic for a failure the UI deliberately hides. Error name only, never data. */
+function reportError(where: string, err: unknown): void {
+  if (import.meta.env.DEV) {
+    console.warn(`[${where}]`, err instanceof Error ? err.name : typeof err);
+  }
+}
+
 /** "Week 6 of 8" from the version's own effective dates, in the client's time. */
 function programWeekLabel(
   effectiveFrom: string | null,
@@ -377,7 +403,7 @@ function versionEffectiveText(
   timezone: string,
 ): string {
   const from = dayLabel(version.effectiveFrom, timezone);
-  const to = dayLabel(version.effectiveTo, timezone);
+  const to = lastDayLabel(version.effectiveFrom, version.effectiveTo, timezone);
   if (!from) return "—";
   if (version.status === "scheduled") return to ? `From ${from} — ${to}` : `From ${from}`;
   if (to) return `${from} — ${to}`;
@@ -393,7 +419,7 @@ function VersionsTable({
   refreshEpoch: number;
   timezone: string;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const [status, setStatus] = useState<"" | PlanVersionStatus>("");
   const [rows, setRows] = useState<PlanWithVersions[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -639,8 +665,9 @@ export function ClientPlanPage() {
           .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))[0];
         setNextVersion(found ?? null);
       })
-      .catch(() => {
+      .catch((err: unknown) => {
         // The chip is optional context; without it the card still reads correctly.
+        reportError("plan-next-version", err);
         if (!cancelled) setNextVersion(null);
       });
     return () => {
@@ -836,7 +863,11 @@ export function ClientPlanPage() {
   }
 
   const effectiveFromLabel = dayLabel(effectiveVersion?.effectiveFrom, timezone);
-  const effectiveToLabel = dayLabel(effectiveVersion?.effectiveTo, timezone);
+  const effectiveToLabel = lastDayLabel(
+    effectiveVersion?.effectiveFrom,
+    effectiveVersion?.effectiveTo,
+    timezone,
+  );
   const now = new Date();
   const weekLabel = effectiveVersion
     ? programWeekLabel(effectiveVersion.effectiveFrom, effectiveVersion.effectiveTo, timezone, now)

@@ -151,7 +151,8 @@ function listPlansFor(query: { versionStatus?: string }) {
             status: "superseded",
             publishedAt: "2026-09-01T06:00:00.000Z",
             effectiveFrom: "2026-09-01T18:30:00.000Z",
-            effectiveTo: "2026-09-20T18:30:00.000Z",
+            // Superseded mid-day (an adjustment sets effectiveTo: now): 10:00 IST Mon 14 Sep.
+            effectiveTo: "2026-09-14T04:30:00.000Z",
           }),
         ],
       },
@@ -222,7 +223,8 @@ describe("ClientPlanPage current program card (frame 150)", () => {
     // Plan status `effective` reads "Active" through labelFor.
     expect(within(card).getByText("Active")).toBeTruthy();
     expect(within(card).getByTestId("plan-effective-line").textContent).toBe(
-      "Effective since Mon 21 Sep · v2 · ends Mon 16 Nov",
+      // effectiveTo is local midnight Mon 16 Nov (exclusive), so the last day is Sun 15 Nov.
+      "Effective since Mon 21 Sep · v2 · ends Sun 15 Nov",
     );
     expect(card.textContent).toContain("Week 5 of 8 · ");
     expect(card.textContent).toContain("what Rohan sees in his app today");
@@ -271,24 +273,26 @@ describe("ClientPlanPage current program card (frame 150)", () => {
     expect(screen.getByRole("button", { name: "Replace from template" })).toBeTruthy();
   });
 
-  it("opens the versions row with plan, version, status and civil effective dates", async () => {
+  it("shows the versions row open with plan, version, status and inclusive civil dates", async () => {
     const view = renderPage({ plan: true });
-    expect(view.container.querySelector(".versions-table")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Versions/ }));
     const table = await screen.findByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((row) => row.textContent)).toEqual([
       "Fat loss · phase 3v1ScheduledFrom Mon 16 NovYou · Sat 17 OctView Fat loss · phase 3 v1",
-      "Fat loss · phase 2v2ActiveMon 21 Sep — Mon 16 NovYou · Sat 19 SepView Fat loss · phase 2 v2",
-      "Fat loss · phase 2v1SupersededWed 2 Sep — Mon 21 SepYou · Tue 1 SepView Fat loss · phase 2 v1",
+      // Exclusive local-midnight boundary → the day before.
+      "Fat loss · phase 2v2ActiveMon 21 Sep — Sun 15 NovYou · Sat 19 SepView Fat loss · phase 2 v2",
+      // Mid-day boundary → that same civil day.
+      "Fat loss · phase 2v1SupersededWed 2 Sep — Mon 14 SepYou · Tue 1 SepView Fat loss · phase 2 v1",
     ]);
     expect(screen.getByTestId("versions-count").textContent).toBe("3 of 3");
     expect(table.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}|effective|superseded|%/);
+    // The toggle still collapses it.
+    fireEvent.click(screen.getByRole("button", { name: /Versions/ }));
+    expect(view.container.querySelector(".versions-table")).toBeNull();
   });
 
   it("filters versions by status through the API", async () => {
     renderPage({ plan: true });
-    fireEvent.click(screen.getByRole("button", { name: /Versions/ }));
     await screen.findByRole("table");
     fireEvent.change(screen.getByRole("combobox", { name: "Status" }), {
       target: { value: "scheduled" },
