@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
@@ -7,6 +7,7 @@ import type { Env } from "../types.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import * as schema from "../db/schema.js";
 import { createMemoryDb } from "../test-support/memory-db.js";
+import { BULK_IDEMPOTENCY_REPLAY_WINDOW_MS } from "../domain/exception-bulk.js";
 
 /**
  * Z6-10 authorization (D-W6-2: this module's cases live here, not in the shared
@@ -220,6 +221,7 @@ describe("Z6-10 bulk resolve authorization", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     setTestDbOverride(null);
     closeDb();
   });
@@ -440,6 +442,42 @@ describe("Z6-10 bulk resolve authorization", () => {
     expect(response.status).toBe(409);
     expect((await errorOf(response)).code).toBe("RELATIONSHIP_ENDED");
     expect(await snapshot()).toEqual(before);
+  });
+
+  it("an expired Idempotency-Key is checked per trainer: the owner gets IDEMPOTENCY_KEY_EXPIRED, another trainer's same key still gets their own answer (Z7-21)", async () => {
+    const { owner, stranger, mine, theirs } = await setup("expiredkey");
+    const t0 = Date.now();
+    vi.useFakeTimers({ toFake: ["Date"], now: t0 });
+    const request = {
+      relationshipId: owner.relationshipId,
+      exceptionIds: [mine[0]!.id],
+      outcome: "talked",
+    };
+    const first = await post("/exceptions/bulk/resolve", owner.trainer, request, "bulkz-expired-key");
+    expect(first.status).toBe(200);
+    vi.setSystemTime(t0 + BULK_IDEMPOTENCY_REPLAY_WINDOW_MS + 1);
+    const afterFirst = await snapshot();
+
+    const ownerAgain = await post("/exceptions/bulk/resolve", owner.trainer, request, "bulkz-expired-key");
+    expect(ownerAgain.status).toBe(409);
+    expect((await errorOf(ownerAgain)).code).toBe("IDEMPOTENCY_KEY_EXPIRED");
+
+    // The stranger sending the owner's request under the same key: still 404, no hint of the key.
+    const strangerAsOwner = await post("/exceptions/bulk/resolve", stranger.trainer, request, "bulkz-expired-key");
+    expect(strangerAsOwner.status).toBe(404);
+    expect((await errorOf(strangerAsOwner)).code).toBe("RELATIONSHIP_NOT_FOUND");
+    expect(await snapshot()).toEqual(afterFirst);
+
+    // And the same key on their own client works for them.
+    const own = await post(
+      "/exceptions/bulk/resolve",
+      stranger.trainer,
+      { relationshipId: stranger.relationshipId, exceptionIds: [theirs.id], outcome: "no_action" },
+      "bulkz-expired-key",
+    );
+    expect(own.status).toBe(200);
+    const [row] = await db.select().from(schema.exceptions).where(eq(schema.exceptions.id, theirs.id));
+    expect(row!.status).toBe("resolved");
   });
 
   it("error bodies are static and carry no ids or request data", async () => {
