@@ -36,18 +36,25 @@ export function assertLogTimeWithinBounds(input: {
 }
 
 /**
- * Instant used to judge a trainee log (Z7-20).
+ * Instant used to judge and store a trainee log (Z7-20).
  *
  * A client-supplied time is when the log was made, so a submit just before
  * local midnight is judged on that civil day and not on the server-receive
  * day. When the client omits it, the server receive time is used and
  * behaviour matches the paths that used to stamp `now` only.
+ *
+ * The result is always UTC with millisecond precision (`toISOString`). Late
+ * status compares this string to Zulu window ends, so an offset such as
+ * `+05:30` or a Zulu value without fractional seconds must not be stored raw.
  */
 export function resolveLogInstant(input: {
   clientLoggedAt?: string | null;
   now: string;
 }): string {
-  return input.clientLoggedAt ? input.clientLoggedAt : input.now;
+  const raw = input.clientLoggedAt ? input.clientLoggedAt : input.now;
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return raw;
+  return new Date(ms).toISOString();
 }
 
 /**

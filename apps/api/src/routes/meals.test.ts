@@ -768,6 +768,85 @@ describe("meal assignment and compliance", () => {
       }
     });
 
+    it("stores an offset near-midnight client time as UTC so late status stays on the client day", async () => {
+      const { plan, meal } = await setup("lt-offset");
+      const zone = "Asia/Kolkata";
+      const breakfast = meal("Breakfast");
+      const [windowRow] = await db
+        .select()
+        .from(schema.mealAssignments)
+        .where(eq(schema.mealAssignments.id, breakfast.id));
+      const windowEndsAt = windowRow!.windowEndsAt;
+      const clientMs = Date.parse(windowEndsAt) - 60_000;
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: zone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(clientMs));
+      const part = (type: Intl.DateTimeFormatPartTypes) =>
+        parts.find((item) => item.type === type)!.value;
+      const offset = `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}:${part("second")}+05:30`;
+      const canonical = new Date(offset).toISOString();
+      const serverReceivedAt = new Date(
+        Date.parse(windowEndsAt) + 2 * 60_000,
+      ).toISOString();
+      // The raw offset sorts after the Zulu window end even though it is earlier.
+      expect(offset > windowEndsAt).toBe(true);
+      expect(canonical <= windowEndsAt).toBe(true);
+      expect(formatLocalDate(new Date(canonical), zone)).toBe(breakfast.localDate);
+
+      const restore = pinServerNow(serverReceivedAt);
+      let response: Response;
+      try {
+        response = await app.request(
+          `/meals/assignments/${breakfast.id}/confirm`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${plan.traineeToken}`,
+              "x-fitbud-role": "trainee",
+              "Content-Type": "application/json",
+              "Idempotency-Key": "lt-offset-1",
+            },
+            body: JSON.stringify({ clientLoggedAt: offset }),
+          },
+          testEnv(),
+        );
+      } finally {
+        restore();
+      }
+      expect(response.status).toBe(200);
+      const [row] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.assignmentId, breakfast.id));
+      expect(row?.loggedAt).toBe(canonical);
+      expect(row?.clientLoggedAt).toBe(canonical);
+      expect(row!.loggedAt <= windowEndsAt).toBe(true);
+      expect(row?.loggedLate).toBe(false);
+      expect(formatLocalDate(new Date(row!.loggedAt), zone)).toBe(
+        breakfast.localDate,
+      );
+      const viewed = await app.request(
+        `/meals/assignments/${breakfast.id}`,
+        {
+          headers: {
+            Authorization: `Bearer ${plan.traineeToken}`,
+            "x-fitbud-role": "trainee",
+          },
+        },
+        testEnv(),
+      );
+      expect(
+        ((await viewed.json()) as { data: { status: string } }).data.status,
+      ).toBe("confirmed");
+    });
+
     it("without a client log time, a post-midnight receive is judged on the server day", async () => {
       const { plan, meal } = await setup("lt-midnight-server");
       const zone = "Asia/Kolkata";

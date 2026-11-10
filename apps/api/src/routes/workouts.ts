@@ -918,7 +918,7 @@ workoutRoutes.post(
       completedAt: null,
       sessionRpe: null,
       requireSessionRpe,
-      clientLoggedAt: clientLoggedAt ?? null,
+      clientLoggedAt: clientLoggedAt ? logInstant : null,
       createdAt: now,
       updatedAt: now,
     });
@@ -1592,7 +1592,7 @@ workoutRoutes.post(
       await workoutInEndedPeriod(db, {
         relationship,
         localDate: loaded.assignment.localDate,
-        loggedAt: clientLoggedAt ?? loaded.execution?.startedAt ?? now,
+        loggedAt: clientLoggedAt ? logInstant : (loaded.execution?.startedAt ?? now),
       })
     ) {
       return endedPeriodError(c);
@@ -1687,7 +1687,7 @@ workoutRoutes.post(
       completedAt: logInstant,
       sessionRpe: null,
       requireSessionRpe: config?.tracking.requireSessionRpe ?? false,
-      clientLoggedAt: clientLoggedAt ?? null,
+      clientLoggedAt: clientLoggedAt ? logInstant : null,
       createdAt: now,
       updatedAt: now,
     });
