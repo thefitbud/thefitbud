@@ -244,6 +244,23 @@ function CountCard({
   );
 }
 
+function useMediaQuery(query: string): boolean {
+  const get = () =>
+    typeof window !== "undefined" && typeof window.matchMedia === "function"
+      ? window.matchMedia(query).matches
+      : false;
+  const [matches, setMatches] = useState(get);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const mql = window.matchMedia(query);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, [query]);
+  return matches;
+}
+
 export function HomePage() {
   const { me } = useAuth();
   const online = useOnlineStatus();
@@ -718,6 +735,9 @@ export function HomePage() {
     renewals.length === 0 &&
     checkins.length === 0;
   const panelOpen = Boolean(drawerExceptionId || clientPanelId);
+  // The side panel docks at >= 1024 px, where the row's Review cell is hidden.
+  const wideViewport = useMediaQuery("(min-width: 1024px)");
+  const panelDocked = panelOpen && wideViewport;
 
   // Next check-in due for the all-clear card (frame 135), from the client
   // directory's nextCheckin. Read on mount and on a new day, and again when
@@ -1078,7 +1098,7 @@ export function HomePage() {
                         if (el) rowRefs.current.set(group.relationshipId, el);
                         else rowRefs.current.delete(group.relationshipId);
                       }}
-                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}. Review button.`}
+                      aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}.${panelDocked ? "" : " Review button."}`}
                       onClick={(event) => {
                         if (event.button !== 0) return;
                         if (isRowControlTarget(event.target)) return;

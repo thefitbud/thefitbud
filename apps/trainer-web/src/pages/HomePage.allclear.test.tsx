@@ -155,8 +155,12 @@ describe("Home all clear (Z7-4, frame 135)", () => {
         "No check-ins waiting. Next due: Arjun on Wed 11 Nov.",
       ),
     ).toBeTruthy();
-    // No invite button or activity feed (frame 135). The count cards stay,
-    // as DS4 zero cards: not links, "Nothing new".
+    // No invite button or activity feed (frame 135). The count cards stay in
+    // the DOM as DS4 zero cards (not links, "Nothing new"), hidden by CSS.
+    // home.css hides them in the all-clear state (frame 135 draws none).
+    expect(
+      screen.getByTestId("screen-TW-04").classList.contains("is-all-clear"),
+    ).toBe(true);
     const cards = screen.getByRole("group", { name: "Open a full list" });
     expect(within(cards).queryAllByRole("link")).toHaveLength(0);
     expect(within(cards).getAllByText("Nothing new")).toHaveLength(4);
@@ -216,6 +220,44 @@ describe("Home all clear (Z7-4, frame 135)", () => {
     expect(screen.getByText("Sneha Kulkarni")).toBeTruthy();
   });
 
+  it("is not all clear while Home is still loading", async () => {
+    api.getAttentionGroups.mockReturnValue(new Promise(() => {}));
+    renderHome();
+    expect(await screen.findByText("Loading your day…")).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "All clear" })).toBeNull();
+    expect(screen.queryByText("Nobody needs you right now.")).toBeNull();
+    expect(
+      screen.getByTestId("screen-TW-04").classList.contains("is-all-clear"),
+    ).toBe(false);
+  });
+
+  it("is not all clear when a section fails to load", async () => {
+    api.getAttentionGroups.mockRejectedValue(new Error("offline"));
+    renderHome();
+    await vi.waitFor(() =>
+      expect(screen.queryByText("Loading your day…")).toBeNull(),
+    );
+    await vi.waitFor(() =>
+      expect(api.getAttentionGroups).toHaveBeenCalled(),
+    );
+    expect(screen.queryByRole("heading", { name: "All clear" })).toBeNull();
+    expect(screen.queryByText("Nobody needs you right now.")).toBeNull();
+    expect(screen.queryByText("No check-ins waiting.", { exact: false })).toBeNull();
+  });
+
+  it("is not all clear when one section fails after the others load", async () => {
+    api.listTrainerCheckinInbox.mockRejectedValue(new Error("offline"));
+    renderHome();
+    await vi.waitFor(() =>
+      expect(screen.queryByText("Loading your day…")).toBeNull(),
+    );
+    await vi.waitFor(() =>
+      expect(api.listTrainerCheckinInbox).toHaveBeenCalled(),
+    );
+    expect(screen.queryByRole("heading", { name: "All clear" })).toBeNull();
+    expect(screen.queryByText("Nobody needs you right now.")).toBeNull();
+  });
+
   it("is not all clear while a renewal is due", async () => {
     api.listSubscriptionAttention.mockResolvedValue({
       items: [
@@ -232,6 +274,77 @@ describe("Home all clear (Z7-4, frame 135)", () => {
     expect(screen.queryByRole("heading", { name: "All clear" })).toBeNull();
     expect(screen.queryByText("Nobody needs you right now.")).toBeNull();
     expect(screen.getByRole("group", { name: "Open a full list" })).toBeTruthy();
+  });
+});
+
+describe("Needs attention row label with the side panel (Z7-4)", () => {
+  const ROHAN = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  let wide = true;
+  beforeEach(() => {
+    seedAllClear();
+    api.getAttentionGroups.mockResolvedValue({
+      groups: [
+        {
+          relationshipId: ROHAN,
+          traineeDisplayName: "Rohan Mehta",
+          clientWhatsappE164: null,
+          items: [
+            {
+              id: NEHA_EXC,
+              type: "missed_workout",
+              severity: "critical",
+              status: "active",
+              ageMinutes: 120,
+              summary: "Missed workout",
+              details: null,
+            },
+          ],
+        },
+      ],
+    });
+    window.matchMedia = ((query: string) => ({
+      matches: wide && query === "(min-width: 1024px)",
+      media: query,
+      onchange: null,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+      addListener: () => undefined,
+      removeListener: () => undefined,
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  function renderAt(url: string) {
+    render(
+      <MemoryRouter initialEntries={[url]}>
+        <HomePage />
+      </MemoryRouter>,
+    );
+  }
+
+  it("drops 'Review button' while the panel is docked (Review cell hidden)", async () => {
+    wide = true;
+    renderAt(`/?client=${ROHAN}`);
+    const row = await screen.findByRole("row");
+    expect(row.getAttribute("aria-label")).not.toContain("Review button");
+  });
+
+  it("keeps 'Review button' without the panel, or when it overlays (< 1024)", async () => {
+    wide = true;
+    renderAt("/");
+    expect((await screen.findByRole("row")).getAttribute("aria-label")).toContain(
+      "Review button.",
+    );
+    cleanup();
+    wide = false;
+    renderAt(`/?client=${ROHAN}`);
+    expect((await screen.findByRole("row")).getAttribute("aria-label")).toContain(
+      "Review button.",
+    );
   });
 });
 

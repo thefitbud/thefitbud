@@ -862,10 +862,6 @@ a.home-tile:focus-visible {
   .home-row .home-who {
     gap: 8px;
   }
-
-  .home-sort {
-    display: none;
-  }
 }
 
 @media (max-width: 1023px) {
@@ -964,7 +960,12 @@ a.home-tile:focus-visible {
   }
 }
 
-/* Z7-4 all clear (frame 135): one calm column, no count cards. */
+/* Z7-4 all clear (frame 135): one calm column, no count cards. The cards
+   stay in the DOM (zero state) and are only hidden here. */
+.home-triage.is-all-clear .home-tiles {
+  display: none;
+}
+
 .home-clear {
   display: flex;
   flex-direction: column;
@@ -1024,8 +1025,7 @@ a.home-tile:focus-visible {
     margin-right: 532px;
   }
 
-  .home-triage.has-panel .home-tiles,
-  .home-triage.has-panel .home-sort {
+  .home-triage.has-panel .home-tiles {
     display: none;
   }
 
@@ -1043,8 +1043,13 @@ a.home-tile:focus-visible {
   }
 }
 
-/* Narrow column beside the panel (1024–1439): two-line rows. */
+/* Narrow column beside the panel (1024–1439): two-line rows, and the sort
+   hint gives way (it fits beside the panel from 1440, frame 02). */
 @media (min-width: 1024px) and (max-width: 1439px) {
+  .home-triage.has-panel .home-sort {
+    display: none;
+  }
+
   .home-triage.has-panel .home-row {
     grid-template-columns: minmax(0, 1fr) auto 44px;
     grid-template-areas:
