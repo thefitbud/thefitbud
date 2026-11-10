@@ -14,6 +14,12 @@
  *   never writes twice. A duplicate key fails the batch and rolls the write
  *   back with the receipt. Basics inserts that receipt only when its
  *   conditional UPDATE changed a row; see `saveClientBasics`.
+ * - Z8-17: subscription saves, payment updates and basics writes are conditional
+ *   in SQL on what the request read (the version it builds on, the payment row
+ *   it patched) and on the relationship still being this trainer's and active.
+ *   A write that loses a race changes nothing and stores no receipt, so the
+ *   route answers a static conflict instead of a constraint 500 or a silent
+ *   overwrite.
  *
  * - Basic details (Z6-8b, D-W6-42): the trainer-owned client name and contact
  *   phone live on the coaching relationship only. This module never writes
@@ -243,15 +249,18 @@ function activeOwnedRelationship(relationship: Pick<RelationshipRow, "id" | "tra
 const sqlValue = <T>(value: T, alias: string) => sql<T>`${value}`.as(alias);
 
 /**
- * Receipt for a basics PATCH, inserted only when the UPDATE just ahead of it in
- * the same batch changed a row and that row is still this trainer's active
- * relationship. A zero-row update (already ended, or not this trainer) stores
- * nothing. A duplicate key fails this insert and rolls the UPDATE back with it.
+ * Receipt inserted only when the write just ahead of it in the same batch
+ * changed exactly one row and the relationship is still this trainer's and
+ * active. A zero-row write (lost a race, already ended, or not this trainer)
+ * stores nothing. A duplicate key fails this insert and rolls the write back
+ * with it. Basics (Z7-25), subscription saves and payment updates (Z8-17).
  */
-function basicsReceiptInsert(
+function conditionalReceiptInsert(
   db: Db,
   input: {
     relationship: Pick<RelationshipRow, "id" | "trainerUserId">;
+    operation: string;
+    status: number;
     actorUserId: string;
     keyHash: string;
     fingerprint: string;
@@ -267,10 +276,10 @@ function basicsReceiptInsert(
       .select({
         id: sqlValue(createId(), "id"),
         actorUserId: sqlValue(input.actorUserId, "actor_user_id"),
-        operation: sqlValue(CLIENT_SETTINGS_BASICS_OPERATION, "operation"),
+        operation: sqlValue(input.operation, "operation"),
         keyHash: sqlValue(input.keyHash, "key_hash"),
         requestFingerprint: sqlValue(input.fingerprint, "request_fingerprint"),
-        responseStatus: sqlValue(200, "response_status"),
+        responseStatus: sqlValue(input.status, "response_status"),
         responseBody: sqlValue(JSON.stringify(input.body), "response_body"),
         createdAt: sqlValue(input.now, "created_at"),
         expiresAt: sqlValue(expiresAt, "expires_at"),
@@ -287,14 +296,44 @@ export type WriteContext = {
   now: string;
 };
 
-/** Inserts subscription version `current + 1` with its receipt, atomically. */
+export type SaveSubscriptionResult =
+  | { kind: "saved"; status: 200; body: { data: ClientSettingsSubscription } }
+  /** Another save landed a newer version first; nothing was written. */
+  | { kind: "conflict"; currentVersion: number }
+  /** The relationship was not active at write time; nothing was written. */
+  | { kind: "ended" }
+  /** The relationship no longer belongs to this trainer; nothing was written. */
+  | { kind: "not_found" };
+
+/** After a zero-row conditional write: ended or no longer owned, else null. */
+async function whyRefused(
+  db: Db,
+  relationship: Pick<RelationshipRow, "id" | "trainerUserId">,
+): Promise<{ kind: "ended" } | { kind: "not_found" } | null> {
+  const after = await loadOwnedRelationship(db, relationship.id, relationship.trainerUserId);
+  if (!after) return { kind: "not_found" };
+  if (after.status !== "active") return { kind: "ended" };
+  return null;
+}
+
+/**
+ * Inserts subscription version `currentVersion + 1` with its receipt, atomically.
+ *
+ * Z8-17: the insert is an INSERT ... SELECT that matches only while the newest
+ * stored version is still `currentVersion` and the relationship is this
+ * trainer's and active. Two saves that both read vN therefore never both reach
+ * the (relationship, version_number) unique index (which used to fail the batch
+ * and surface as a 500): the one that commits second inserts nothing, stores no
+ * receipt, and is answered from a fresh read as a version conflict, ended or not
+ * found. Earlier versions are never changed.
+ */
 export async function saveSubscriptionVersion(
   db: Db,
   relationship: RelationshipRow,
   currentVersion: number,
   request: PutClientSubscriptionRequest,
   context: WriteContext,
-): Promise<{ status: 200; body: { data: ClientSettingsSubscription } }> {
+): Promise<SaveSubscriptionResult> {
   const row: SubscriptionRow = {
     id: createId(),
     coachingRelationshipId: relationship.id,
@@ -311,20 +350,48 @@ export async function saveSubscriptionVersion(
   const today = await trainerToday(db, relationship.trainerUserId, context.now);
   const body = { data: presentSubscription(row, today) };
   const keyHash = await sha256Hex(context.idempotencyKey);
-  await db.batch([
-    // The (relationship, version_number) unique index rejects a concurrent vN+1.
-    db.insert(subscriptionVersions).values(row),
-    receiptInsert(db, {
-      actorUserId: context.actorUserId,
+  const newestVersion = sql`(select coalesce(max(${subscriptionVersions.versionNumber}), 0) from ${subscriptionVersions} where ${subscriptionVersions.coachingRelationshipId} = ${relationship.id})`;
+  const [written] = await db.batch([
+    // drizzle's INSERT ... SELECT lists every column in table order.
+    db.insert(subscriptionVersions).select(
+      db
+        .select({
+          id: sqlValue(row.id, "id"),
+          coachingRelationshipId: sqlValue(row.coachingRelationshipId, "coaching_relationship_id"),
+          versionNumber: sqlValue(row.versionNumber, "version_number"),
+          planName: sqlValue(row.planName, "plan_name"),
+          paymentFrequency: sqlValue(row.paymentFrequency, "payment_frequency"),
+          startsOn: sqlValue(row.startsOn, "starts_on"),
+          renewsOn: sqlValue(row.renewsOn, "renews_on"),
+          createdAt: sqlValue(row.createdAt, "created_at"),
+          amountPaise: sqlValue(row.amountPaise, "amount_paise"),
+          subscriptionType: sqlValue(row.subscriptionType, "subscription_type"),
+          coachingMode: sqlValue(row.coachingMode, "coaching_mode"),
+        })
+        .from(coachingRelationships)
+        .where(
+          and(activeOwnedRelationship(relationship), sql`${newestVersion} = ${currentVersion}`),
+        ),
+    ),
+    conditionalReceiptInsert(db, {
+      relationship,
       operation: CLIENT_SETTINGS_SUBSCRIPTION_OPERATION,
+      status: 200,
+      actorUserId: context.actorUserId,
       keyHash,
       fingerprint: context.fingerprint,
-      status: 200,
       body,
       now: context.now,
     }),
   ]);
-  return { status: 200, body };
+  if (written.meta.changes === 1) return { kind: "saved", status: 200, body };
+  if (written.meta.changes !== 0) {
+    throw new Error("saveSubscriptionVersion inserted more than one row");
+  }
+  const refused = await whyRefused(db, relationship);
+  if (refused) return refused;
+  const latest = await latestSubscriptionVersion(db, relationship.id);
+  return { kind: "conflict", currentVersion: latest?.versionNumber ?? 0 };
 }
 
 /** Records a payment against the given (newest) subscription version. */
@@ -419,36 +486,87 @@ export function applyPaymentPatch(
   return { ok: true, next: { status, paidOn, method, note } };
 }
 
-export async function updatePaymentRecord(
+/** How often a payment PATCH is re-applied to a row that changed under it. */
+export const PAYMENT_PATCH_ATTEMPTS = 3;
+
+export type SavePaymentPatchResult =
+  | { kind: "saved"; status: 200; body: { data: PaymentRecord } }
+  /** The patch does not fit the newest row (D-W6-22); nothing was written. */
+  | { kind: "invalid"; reason: "paid_needs_date_and_method" | "unpaid_has_no_date_or_method" }
+  /** No such payment on this relationship. */
+  | { kind: "payment_not_found" }
+  /** The row changed under every attempt; nothing was written. */
+  | { kind: "conflict" }
+  /** The relationship was not active at write time; nothing was written. */
+  | { kind: "ended" }
+  /** The relationship no longer belongs to this trainer; nothing was written. */
+  | { kind: "not_found" };
+
+/**
+ * Z8-17: applies a payment PATCH without losing a concurrent one.
+ *
+ * Merge rule: a PATCH changes only the fields it sends; every other field keeps
+ * the value of the newest stored row, not of the row this request read first.
+ * The UPDATE is a compare-and-set: it matches only while status, paid date,
+ * method, note and updated_at are exactly what the patch was applied to, and
+ * while the relationship is this trainer's and active. When another write
+ * landed in between, nothing is written and the patch is re-applied to the
+ * fresh row and re-validated, so a patch that no longer fits (a method sent
+ * while the record was paid, landing after it went unpaid) gets the usual 400.
+ * After PAYMENT_PATCH_ATTEMPTS lost races the answer is a conflict. The UPDATE
+ * and its receipt are one batch; the receipt is stored only when the UPDATE
+ * changed the row, and a duplicate key rolls the UPDATE back with it.
+ */
+export async function savePaymentPatch(
   db: Db,
-  current: PaymentRow,
-  next: Pick<PaymentRow, "status" | "paidOn" | "method" | "note">,
+  relationship: RelationshipRow,
+  paymentId: string,
+  patch: UpdatePaymentRecordRequest,
   context: WriteContext,
-): Promise<{ status: 200; body: { data: PaymentRecord } }> {
-  const row: PaymentRow = { ...current, ...next, updatedAt: context.now };
-  const body = { data: presentPayment(row) };
+): Promise<SavePaymentPatchResult> {
   const keyHash = await sha256Hex(context.idempotencyKey);
-  await db.batch([
-    db
-      .update(paymentRecords)
-      .set({ ...next, updatedAt: context.now })
-      .where(
-        and(
-          eq(paymentRecords.id, current.id),
-          eq(paymentRecords.coachingRelationshipId, current.coachingRelationshipId),
+  for (let attempt = 0; attempt < PAYMENT_PATCH_ATTEMPTS; attempt += 1) {
+    const current = await loadRelationshipPayment(db, relationship.id, paymentId);
+    if (!current) return { kind: "payment_not_found" };
+    const applied = applyPaymentPatch(current, patch);
+    if (!applied.ok) return { kind: "invalid", reason: applied.reason };
+    const row: PaymentRow = { ...current, ...applied.next, updatedAt: context.now };
+    const body = { data: presentPayment(row) };
+    const [written] = await db.batch([
+      db
+        .update(paymentRecords)
+        .set({ ...applied.next, updatedAt: context.now })
+        .where(
+          and(
+            eq(paymentRecords.id, current.id),
+            eq(paymentRecords.coachingRelationshipId, current.coachingRelationshipId),
+            eq(paymentRecords.status, current.status),
+            eq(paymentRecords.updatedAt, current.updatedAt),
+            sql`${paymentRecords.paidOn} IS ${current.paidOn}`,
+            sql`${paymentRecords.method} IS ${current.method}`,
+            sql`${paymentRecords.note} IS ${current.note}`,
+            sql`exists (select 1 from ${coachingRelationships} where ${activeOwnedRelationship(relationship)})`,
+          ),
         ),
-      ),
-    receiptInsert(db, {
-      actorUserId: context.actorUserId,
-      operation: CLIENT_SETTINGS_PAYMENT_UPDATE_OPERATION,
-      keyHash,
-      fingerprint: context.fingerprint,
-      status: 200,
-      body,
-      now: context.now,
-    }),
-  ]);
-  return { status: 200, body };
+      conditionalReceiptInsert(db, {
+        relationship,
+        operation: CLIENT_SETTINGS_PAYMENT_UPDATE_OPERATION,
+        status: 200,
+        actorUserId: context.actorUserId,
+        keyHash,
+        fingerprint: context.fingerprint,
+        body,
+        now: context.now,
+      }),
+    ]);
+    if (written.meta.changes === 1) return { kind: "saved", status: 200, body };
+    if (written.meta.changes !== 0) {
+      throw new Error("savePaymentPatch wrote more than one row");
+    }
+    const refused = await whyRefused(db, relationship);
+    if (refused) return refused;
+  }
+  return { kind: "conflict" };
 }
 
 /**
@@ -517,8 +635,10 @@ export async function saveClientBasics(
   const keyHash = await sha256Hex(context.idempotencyKey);
   const [written] = await db.batch([
     db.update(coachingRelationships).set(set).where(activeOwnedRelationship(relationship)),
-    basicsReceiptInsert(db, {
+    conditionalReceiptInsert(db, {
       relationship,
+      operation: CLIENT_SETTINGS_BASICS_OPERATION,
+      status: 200,
       actorUserId: context.actorUserId,
       keyHash,
       fingerprint: context.fingerprint,

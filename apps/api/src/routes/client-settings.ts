@@ -24,17 +24,15 @@ import {
   CLIENT_SETTINGS_PAYMENT_CREATE_OPERATION,
   CLIENT_SETTINGS_PAYMENT_UPDATE_OPERATION,
   CLIENT_SETTINGS_SUBSCRIPTION_OPERATION,
-  applyPaymentPatch,
   createPaymentRecord,
   findReceipt,
   latestSubscriptionVersion,
   loadClientSettings,
   loadOwnedRelationship,
-  loadRelationshipPayment,
   saveClientBasics,
+  savePaymentPatch,
   saveSubscriptionVersion,
   type ClientBasicsPatch,
-  updatePaymentRecord,
 } from "../domain/client-settings";
 import type { Env, Variables } from "../types";
 
@@ -86,7 +84,17 @@ async function idempotentWrite(
     return c.json(prior.body as object, prior.status as 200);
   }
   try {
-    return await run();
+    const response = await run();
+    if (response.status < 400) return response;
+    // Z8-17: a refusal decided after a lost race (version conflict, a row that
+    // changed, a relationship that ended) may have lost it to a request with the
+    // same key; that request's stored answer is the one to give.
+    const raced = await findReceipt(db, lookup);
+    if (raced.kind === "replay") {
+      return c.json(raced.body as object, raced.status as 200);
+    }
+    if (raced.kind === "reuse") return keyReused(c);
+    return response;
   } catch (error) {
     const raced = await findReceipt(db, lookup);
     if (raced.kind === "replay") {
@@ -132,7 +140,7 @@ clientSettingsRoutes.put(
     tag: "Subscriptions",
     summary: "Saves a client's subscription as a new version.",
     description:
-      "Creates subscription version expectedVersion + 1 with the plan name, payment frequency, start and renewal dates, amount (paise, 0 or more), subscription type and coaching mode. Earlier versions are never edited, and renewals read the newest version. The renewal date must be after the start date. A stale expectedVersion answers 409 SUBSCRIPTION_VERSION_CONFLICT; an ended relationship answers 409 RELATIONSHIP_ENDED. Tracking only: nothing is collected.",
+      "Creates subscription version expectedVersion + 1 with the plan name, payment frequency, start and renewal dates, amount (paise, 0 or more), subscription type and coaching mode. Earlier versions are never edited, and renewals read the newest version. The renewal date must be after the start date. A stale expectedVersion answers 409 SUBSCRIPTION_VERSION_CONFLICT, including when another save of the same version lands first while this one is in flight; an ended relationship answers 409 RELATIONSHIP_ENDED, including one that ends while the request is in flight. A refused save writes nothing. Tracking only: nothing is collected.",
     roles: ["trainer"],
     idempotency: true,
     body: putClientSubscriptionRequestSchema,
@@ -177,17 +185,21 @@ clientSettingsRoutes.put(
       },
       async () => {
         if (relationship.status === "ended") return relationshipEnded(c);
-        const current = await latestSubscriptionVersion(db, relationship.id);
-        const currentVersion = current?.versionNumber ?? 0;
-        if (currentVersion !== parsed.data.expectedVersion) {
-          return fail(
+        const versionConflict = (currentVersion: number) =>
+          fail(
             c,
             409,
             "SUBSCRIPTION_VERSION_CONFLICT",
             "Subscription was changed after this version was loaded.",
             { expectedVersion: parsed.data.expectedVersion, currentVersion },
           );
+        const current = await latestSubscriptionVersion(db, relationship.id);
+        const currentVersion = current?.versionNumber ?? 0;
+        if (currentVersion !== parsed.data.expectedVersion) {
+          return versionConflict(currentVersion);
         }
+        // Z8-17: the insert re-checks the version and `active` at write time, so a
+        // save that loses the race answers 409, never a unique-index 500.
         const result = await saveSubscriptionVersion(
           db,
           relationship,
@@ -195,6 +207,9 @@ clientSettingsRoutes.put(
           parsed.data,
           { actorUserId: actor.userId, idempotencyKey, fingerprint, now: nowIso() },
         );
+        if (result.kind === "conflict") return versionConflict(result.currentVersion);
+        if (result.kind === "ended") return relationshipEnded(c);
+        if (result.kind === "not_found") return relationshipNotFound(c);
         return c.json(result.body, result.status);
       },
     );
@@ -281,7 +296,7 @@ clientSettingsRoutes.patch(
     tag: "Subscriptions",
     summary: "Marks a payment record paid or unpaid, or changes its paid date, method or note.",
     description:
-      "Changes only status, paid date, method and note. Marking paid needs a paid date and method (sent now or already stored). Going back to unpaid clears the paid date and method; sending either with unpaid is rejected. Another relationship's payment answers 404; an ended relationship answers 409 RELATIONSHIP_ENDED. Tracking only.",
+      "Changes only status, paid date, method and note. Marking paid needs a paid date and method (sent now or already stored). Going back to unpaid clears the paid date and method; sending either with unpaid is rejected. Only the fields sent change: they are applied to the newest stored record, so two overlapping PATCHes of different fields both persist, and a PATCH that no longer fits the newer record answers the same 400. A record that keeps changing while the PATCH is applied answers 409 PAYMENT_CONFLICT with nothing written. Another relationship's payment answers 404; an ended relationship answers 409 RELATIONSHIP_ENDED, including one that ends while the request is in flight. Tracking only.",
     roles: ["trainer"],
     idempotency: true,
     body: updatePaymentRecordRequestSchema,
@@ -327,13 +342,29 @@ clientSettingsRoutes.patch(
       },
       async () => {
         if (relationship.status === "ended") return relationshipEnded(c);
-        const current = await loadRelationshipPayment(db, relationship.id, paymentId);
-        if (!current) {
+        // Z8-17: only the sent fields change, applied to the newest row with a
+        // compare-and-set, so two overlapping PATCHes never overwrite each other.
+        const result = await savePaymentPatch(db, relationship, paymentId, parsed.data, {
+          actorUserId: actor.userId,
+          idempotencyKey,
+          fingerprint,
+          now: nowIso(),
+        });
+        if (result.kind === "payment_not_found") {
           return fail(c, 404, "PAYMENT_NOT_FOUND", "Payment record not found.");
         }
-        const patch = applyPaymentPatch(current, parsed.data);
-        if (!patch.ok) {
-          return patch.reason === "paid_needs_date_and_method"
+        if (result.kind === "ended") return relationshipEnded(c);
+        if (result.kind === "not_found") return relationshipNotFound(c);
+        if (result.kind === "conflict") {
+          return fail(
+            c,
+            409,
+            "PAYMENT_CONFLICT",
+            "Payment record was changed by another request.",
+          );
+        }
+        if (result.kind === "invalid") {
+          return result.reason === "paid_needs_date_and_method"
             ? fail(
                 c,
                 400,
@@ -347,12 +378,6 @@ clientSettingsRoutes.patch(
                 "An unpaid record has no paid date or method.",
               );
         }
-        const result = await updatePaymentRecord(db, current, patch.next, {
-          actorUserId: actor.userId,
-          idempotencyKey,
-          fingerprint,
-          now: nowIso(),
-        });
         return c.json(result.body, result.status);
       },
     );
