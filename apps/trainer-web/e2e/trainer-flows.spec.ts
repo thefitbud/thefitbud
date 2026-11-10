@@ -77,9 +77,15 @@ test("home mark reviewed then resolve", async ({ page }) => {
     .getByTestId("screen-TW-05")
     .getByRole("button", { name: /^mark reviewed$/i })
     .click();
+  // Frame 02: "Resolve…" opens the resolve form (outcome + note); the
+  // footer "Resolve item" saves it.
   await page
     .getByTestId("screen-TW-05")
-    .getByRole("button", { name: /^resolve$/i })
+    .getByRole("button", { name: /^resolve…?$/i })
+    .click();
+  await page
+    .getByTestId("screen-TW-05")
+    .getByRole("button", { name: /^resolve item$/i })
     .click();
   // Frame 02 (resolved): the panel stays open with a resolved banner and a
   // short Undo window; the resolve commits once Undo is gone.
