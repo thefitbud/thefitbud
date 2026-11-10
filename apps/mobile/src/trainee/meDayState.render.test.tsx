@@ -139,13 +139,13 @@ const labels = {
 
 /**
  * What the native strip says for each server state (Z7-18, D-W7-13).
- * `missed` is the strip-local `open` name, which `labelFor` sentence-cases.
+ * `missed` is spoken as "Missed" (the strip's `open` maps to it).
  */
 const SPOKEN: Record<WeekDayState, string> = {
   done: "Done",
   partial: "Partial",
   due: "To do",
-  missed: "Open",
+  missed: "Missed",
   rest: "Rest",
   future: "Upcoming",
 };

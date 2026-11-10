@@ -85,15 +85,21 @@ describe("DateNavigator spoken day labels", () => {
       "Mon 12 Oct, Done",
       "Tue 13 Oct, Partial",
       "Wed 14 Oct, To do",
-      "Thu 15 Oct, Open",
+      "Thu 15 Oct, Missed",
       "Fri 16 Oct, Rest",
       "Sat 17 Oct, Upcoming",
-      "Sun 18 Oct, Unknown",
+      "Sun 18 Oct, State not known",
     ]);
     for (const [index, state] of STATES.entries()) {
       const date = days[index]!.localDate;
       expect(dayLabels[index]).toBe(
-        `${formatCivilDate(date)}, ${labelFor("week_day_state", state)}`,
+        `${formatCivilDate(date)}, ${
+          state === "open"
+            ? labelFor("week_day_state", "missed")
+            : state === "unknown"
+              ? "State not known"
+              : labelFor("week_day_state", state)
+        }`,
       );
       expect(dayLabels[index]).not.toContain(date);
     }

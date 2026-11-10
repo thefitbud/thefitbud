@@ -59,6 +59,7 @@ vi.mock("../lib/config", () => ({
   isWhatsAppAutomationEnabled: () => false,
 }));
 
+import { ApiClientError } from "@fitbud/api-client";
 import { ConfigureCoachingPage } from "./ConfigureCoachingPage";
 
 type ConfigStatus = "draft" | "active";
@@ -190,19 +191,70 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("ConfigureCoachingPage on an ended relationship (CE1)", () => {
-  it("renders every input, select, switch and button disabled", async () => {
+  it("shows plain read-only values, not greyed inputs (Z7-13, frame 179 / DS7)", async () => {
     const { container } = renderPage("ended", "active");
     await screen.findByText("Coaching setup (ended)");
-    const all = controls(container);
-    // goal 2 + workouts 2 + nutrition 3 + check-ins 3 + tracking 3 + reminders 3 + subscription 4
-    expect(all.length).toBeGreaterThanOrEqual(20);
-    // The control's own disabled property, not just an ancestor fieldset:
-    // fieldset[disabled] leaves it false, which reads as editable to tools.
-    const enabled = all.filter((el) => !el.disabled).map(describeControl);
-    expect(enabled).toEqual([]);
+    // No input boxes at all: no inputs, selects, textareas or switches.
     expect(
-      container.querySelectorAll('input[role="switch"]:not([disabled])'),
+      container.querySelectorAll("input, select, textarea, [role=switch]"),
     ).toHaveLength(0);
+    // Nothing greyed: greyed controls are only for briefly unavailable ones.
+    expect(container.querySelector("[disabled]")).toBeNull();
+    expect(screen.getByTestId("configure-readonly")).toBeTruthy();
+  });
+
+  it("names every value by its label alone: no counters, no doubled date parts", async () => {
+    renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    const names = screen
+      .getAllByRole("definition")
+      .map((el) => el.getAttribute("aria-labelledby"))
+      .map((id) => document.getElementById(id ?? "")?.textContent);
+    expect(names).toEqual([
+      "Short goal",
+      "Goal description",
+      "Workouts",
+      "Meals",
+      "Check-ins",
+      "Reminders",
+      "Tracking",
+      "Subscription",
+      "Starts on",
+      "Due on",
+    ]);
+    for (const name of names) {
+      expect(name).not.toMatch(/\d+\/\d+/);
+      expect(name).not.toMatch(/(\b\w+\b) \1/);
+    }
+    const value = (name: string) =>
+      screen.getByRole("definition", { name }).textContent;
+    expect(value("Short goal")).toBe("Postpartum strength return");
+    expect(value("Goal description")).toBe(
+      "Rebuild core and lower-body strength.",
+    );
+    expect(value("Workouts")).toBe("3 a week · log within 24 h");
+    expect(value("Check-ins")).toBe(
+      "Weekly · 48 h window · FitBud weekly check-in",
+    );
+    expect(value("Reminders")).toBe("Off while coaching is ended");
+    expect(value("Tracking")).toBe("Weight");
+    expect(value("Subscription")).toBe("Monthly coaching · Monthly");
+  });
+
+  it("dates read like 'Wed 21 Oct', never numeric or ISO", async () => {
+    const { container } = renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    expect(screen.getByRole("definition", { name: "Starts on" }).textContent).toBe(
+      formatCivilDate("2026-07-06"),
+    );
+    expect(screen.getByRole("definition", { name: "Due on" }).textContent).toBe(
+      formatCivilDate("2026-11-17"),
+    );
+    expect(formatCivilDate("2026-11-17")).toMatch(/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}/);
+    const text = container.textContent ?? "";
+    expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(text).not.toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
+    expect(text).not.toContain("Renews on");
   });
 
   it("offers no save, configure or activate actions", async () => {
@@ -284,6 +336,7 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
     expect(container.textContent).not.toContain("has ended");
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Activate" })).toBeTruthy();
+    expect(screen.queryByTestId("configure-readonly")).toBeNull();
   });
 });
 
@@ -555,5 +608,148 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
         "48 h window · FitBud weekly check-in",
       ),
     );
+  });
+});
+
+describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
+  const MESSAGE = "Coaching ended. Your unsaved changes were not saved.";
+
+  function ctx(
+    onboardingStatus: Onboarding,
+    reloadWorkspace: () => void,
+    online = true,
+  ) {
+    return {
+      workspace: {
+        header: {
+          traineeDisplayName: "Kavya Menon",
+          traineeProfile: { gender: "female" },
+          onboardingStatus,
+          clientWhatsappE164: null,
+          hasCustomMealTimes: false,
+          traineeTimezone: "Asia/Kolkata",
+          endedAt: onboardingStatus === "ended" ? "2026-10-21T04:00:00.000Z" : null,
+          pendingReactivation: null,
+        },
+      },
+      workspaceLoading: false,
+      workspaceError: null,
+      notFound: false,
+      refreshEpoch: 0,
+      reloadWorkspace,
+      openWorkspaceModal: () => {},
+      relationshipId: REL_ID,
+      online,
+      ended: onboardingStatus === "ended",
+    };
+  }
+
+  function mount(reload: () => void, online = true) {
+    api.getCoachingConfiguration.mockResolvedValue(configuration("draft"));
+    const tree = (status: Onboarding) => (
+      <MemoryRouter initialEntries={[`/clients/${REL_ID}/configure`]}>
+        <Routes>
+          <Route
+            path="/clients/:relationshipId"
+            element={<Outlet context={ctx(status, reload, online)} />}
+          >
+            <Route path="configure" element={<ConfigureCoachingPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>
+    );
+    const view = render(tree("coaching_ready"));
+    return { view, tree };
+  }
+
+  it("a realtime hint that flips the header to ended shows the message and keeps unsaved text", async () => {
+    const { view, tree } = mount(() => {});
+    await screen.findByText("Configure coaching");
+    const goal = view.container.querySelector<HTMLInputElement>(
+      "input[name=goalShort]",
+    )!;
+    fireEvent.change(goal, { target: { value: "Unsaved new goal" } });
+    expect(screen.queryByText(MESSAGE)).toBeNull();
+
+    view.rerender(tree("ended"));
+    await screen.findByText(MESSAGE);
+    await screen.findByText("Coaching setup (ended)");
+    // Read-only now (Z7-13), but the unsaved text stays visible.
+    expect(
+      screen.getByRole("definition", { name: "Short goal" }).textContent,
+    ).toBe("Unsaved new goal");
+    expect(view.container.querySelector("input[name=goalShort]")).toBeNull();
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+  });
+
+  it("an ended relationship at load does not show the message", async () => {
+    renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    expect(screen.queryByText(MESSAGE)).toBeNull();
+  });
+
+  it("one tab return (visibilitychange then focus) triggers one reload", async () => {
+    const reload = vi.fn();
+    mount(reload);
+    await screen.findByText("Configure coaching");
+    document.dispatchEvent(new Event("visibilitychange"));
+    fireEvent(window, new Event("focus"));
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not refetch on focus while offline", async () => {
+    const reload = vi.fn();
+    mount(reload, false);
+    await screen.findByText("Configure coaching");
+    fireEvent(window, new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it("a reminder toggle refused with 409 RELATIONSHIP_ENDED reverts and shows the message", async () => {
+    mount(() => {});
+    await screen.findByText("Configure coaching");
+    api.saveReminderRules.mockRejectedValue(
+      new ApiClientError({
+        code: "RELATIONSHIP_ENDED",
+        message: "Coaching relationship has ended.",
+        requestId: "req-2",
+        status: 409,
+      }),
+    );
+    const box = (screen.getByText("Workout", { selector: "span" })
+      .closest("label")!
+      .querySelector("input") as HTMLInputElement);
+    const before = box.checked;
+    fireEvent.click(box);
+    await screen.findByText(MESSAGE);
+    await waitFor(() => expect(box.checked).toBe(before));
+  });
+
+  it("a save refused with 409 RELATIONSHIP_ENDED shows the same message and refetches", async () => {
+    const reload = vi.fn();
+    const { view } = mount(reload);
+    await screen.findByText("Configure coaching");
+    api.saveConfigurationDraft.mockRejectedValue(
+      new ApiClientError({
+        code: "RELATIONSHIP_ENDED",
+        message: "Coaching relationship has ended.",
+        requestId: "req-1",
+        status: 409,
+      }),
+    );
+    fireEvent.change(
+      view.container.querySelector<HTMLInputElement>("input[name=goalShort]")!,
+      { target: { value: "Unsaved new goal" } },
+    );
+    reload.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await screen.findByText(MESSAGE);
+    expect(reload).toHaveBeenCalled();
+    expect(screen.queryByText("Coaching relationship has ended.")).toBeNull();
+    expect(
+      view.container.querySelector<HTMLInputElement>("input[name=goalShort]")!
+        .value,
+    ).toBe("Unsaved new goal");
   });
 });
