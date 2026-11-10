@@ -79,30 +79,6 @@ export type CoachLogClaim = {
   update: () => CoachLogWrite;
 };
 
-/**
- * Test seam. Production leaves `wait` null. A test arms it so concurrent
- * edits all pass the route's recordVersion read before either write runs.
- */
-const coachLogWriteGate: { wait: (() => Promise<void>) | null } = { wait: null };
-
-/** Holds coach-log writes until `parties` callers are inside the gate. */
-export function armCoachLogWriteBarrier(parties: number): () => void {
-  let arrived = 0;
-  let release: () => void = () => {};
-  const opened = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  coachLogWriteGate.wait = async () => {
-    arrived += 1;
-    if (arrived >= parties) release();
-    await opened;
-  };
-  return () => {
-    coachLogWriteGate.wait = null;
-    release();
-  };
-}
-
 export type CoachLogConflictKind = "entry" | "version" | "sequence";
 
 /** The batch rolled back. `kind` tells the route which stable code to return. */
@@ -236,7 +212,6 @@ export async function recordCoachLogChange(
 ): Promise<{ eventId: string; notification: CoachLogNotificationOutcome }> {
   const { entity, action, now } = input;
   const eventId = createId();
-  if (coachLogWriteGate.wait) await coachLogWriteGate.wait();
   const committed = await withCoachLogTurn(async () => {
     const [prefs] = await db
       .select({ coachLogUpdates: notificationPreferences.coachLogUpdates })
