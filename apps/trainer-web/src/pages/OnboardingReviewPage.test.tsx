@@ -21,14 +21,18 @@ import { OnboardingReviewPage } from "./OnboardingReviewPage";
 
 type Lifecycle = "ended" | "active" | "coaching_ready" | "onboarding_submitted";
 
-function pageTree(onboardingStatus: Lifecycle, refreshEpoch = 0) {
+function pageTree(
+  onboardingStatus: Lifecycle,
+  refreshEpoch = 0,
+  clientWhatsappE164: string | null = null,
+) {
   const context = {
     workspace: {
       header: {
         traineeDisplayName: "Kavya Menon",
         traineeProfile: { gender: "female" },
         onboardingStatus,
-        clientWhatsappE164: null,
+        clientWhatsappE164,
       },
     },
     relationshipId: REL_ID,
@@ -51,8 +55,11 @@ function pageTree(onboardingStatus: Lifecycle, refreshEpoch = 0) {
   );
 }
 
-function renderPage(onboardingStatus: Lifecycle) {
-  return render(pageTree(onboardingStatus));
+function renderPage(
+  onboardingStatus: Lifecycle,
+  clientWhatsappE164: string | null = null,
+) {
+  return render(pageTree(onboardingStatus, 0, clientWhatsappE164));
 }
 
 beforeEach(() => {
@@ -88,6 +95,17 @@ describe("OnboardingReviewPage footer (CE2)", () => {
     fireEvent.click(button);
     expect(await screen.findByText("configure route")).toBeTruthy();
     expect(api.reviewOnboarding).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "WhatsApp client" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "WhatsApp client" })).toBeNull();
+  });
+
+  it("ended client with a WhatsApp number: the intake draft is hidden", async () => {
+    renderPage("ended", "+919876543210");
+    await screen.findByRole("button", { name: "View coaching setup" });
+    expect(screen.queryByRole("link", { name: "WhatsApp client" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "WhatsApp client" })).toBeNull();
+    expect(document.body.innerHTML).not.toMatch(/wa\.me/);
+    expect(document.body.textContent).not.toMatch(/Thanks for filling your intake/);
   });
 
   it.each(["active", "coaching_ready"] as const)(
@@ -96,8 +114,19 @@ describe("OnboardingReviewPage footer (CE2)", () => {
       renderPage(status);
       expect(await screen.findByRole("button", { name: "Open configure" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "View coaching setup" })).toBeNull();
+      expect(screen.getByRole("button", { name: "WhatsApp client" })).toBeTruthy();
     },
   );
+
+  it("active client: WhatsApp client still opens the intake draft", async () => {
+    renderPage("active", "+919876543210");
+    const link = await screen.findByRole("link", { name: "WhatsApp client" });
+    const href = link.getAttribute("href") ?? "";
+    expect(href).toMatch(/^https:\/\/wa\.me\/919876543210\?text=/);
+    expect(decodeURIComponent(href)).toMatch(
+      /Thanks for filling your intake, Kavya/,
+    );
+  });
 
   it("submitted intake awaiting review: Mark ready & configure is unchanged", async () => {
     renderPage("onboarding_submitted");
