@@ -217,13 +217,13 @@ export function renewalChipLabel(
 }
 
 export function subscriptionHref(relationshipId: string): string {
-  // D14 interim destination until Client settings ships (W8 Z8-3).
-  return `/clients/${encodeURIComponent(relationshipId)}/configure#subscription`;
+  // D14 final destination: the Client settings subscription section (W8 Z8-3).
+  return `/clients/${encodeURIComponent(relationshipId)}/settings#subscription`;
 }
 
 /**
  * D13/D14 full view: every subscription that has ended or renews within the
- * renewal window (DS1). A row opens that client's subscription (D14 interim).
+ * renewal window (DS1). A row opens that client's subscription in Client settings (D14).
  * Tracking only: FitBud does not charge clients.
  */
 export function RenewalsViewPage() {

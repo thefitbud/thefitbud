@@ -3,6 +3,7 @@ import { Link, useLocation, useOutletContext } from "react-router-dom";
 import {
   ChevronLeft,
   CreditCard,
+  Lock,
   Pencil,
   User,
   Users,
@@ -13,8 +14,10 @@ import type { ClientSettingsResponse } from "@fitbud/contracts";
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { StatusChip } from "../../components/StatusChip";
+import { ReadOnlyField } from "../../components/ReadOnlyField";
 import type { WorkspaceOutletContext } from "../workspaceContext";
 import { EditBasicsDrawer } from "./EditBasicsDrawer";
+import { SubscriptionDrawer } from "./SubscriptionDrawer";
 import {
   COACHING_MODE_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -47,24 +50,22 @@ function titleCase(value: string): string {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 }
 
+/** One label/value pair (DS7 `ReadOnlyField`, laid out side by side as in frames 209/212). */
 function Row({ label, value, testId }: { label: string; value: ReactNode; testId?: string }) {
-  return (
-    <div className="cs-row" data-testid={testId}>
-      <dt>{label}</dt>
-      <dd>{value}</dd>
-    </div>
-  );
+  return <ReadOnlyField label={label} value={value} testId={testId} />;
 }
 
 /**
  * Client settings (`/clients/:relationshipId/settings`), frames 209 / 209b.
  * Basic details, subscription, payment records (tracking only) and the coaching
- * relationship. Only the trainer-owned name and contact phone are edited here
- * (frame 210, D-W8-10). Session packages and collect/pay parts of the frames
- * are not built (D-W8-2). Subscription edit is Z8-3; adding payments is Z8-4.
+ * relationship. The trainer-owned name and contact phone are edited in frame
+ * 210 (D-W8-10); the subscription in frames 211/211b, each save a new version
+ * (Z8-3). An ended client sees every section read-only (frame 212). Session
+ * packages and collect/pay parts of the frames are not built (D-W8-2). Adding
+ * payments is Z8-4.
  */
 export function ClientSettingsPage() {
-  const { workspace, relationshipId, online, ended, openWorkspaceModal } =
+  const { workspace, relationshipId, online, ended, openWorkspaceModal, reloadWorkspace } =
     useOutletContext<WorkspaceOutletContext>();
   const location = useLocation();
   const [settings, setSettings] = useState<ClientSettingsResponse | null>(null);
@@ -72,8 +73,11 @@ export function ClientSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
   const [savedNotice, setSavedNotice] = useState(false);
+  const [editingSubscription, setEditingSubscription] = useState(false);
+  const [subscriptionSaved, setSubscriptionSaved] = useState(false);
   const [active, setActive] = useState<SectionId>(() => sectionFromHash(location.hash));
   const editButtonRef = useRef<HTMLButtonElement>(null);
+  const subscriptionButtonRef = useRef<HTMLButtonElement>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -118,6 +122,11 @@ export function ClientSettingsPage() {
     setEditing(false);
     // Return focus to the control that opened the drawer.
     window.setTimeout(() => editButtonRef.current?.focus(), 0);
+  }
+
+  function closeSubscriptionDrawer() {
+    setEditingSubscription(false);
+    window.setTimeout(() => subscriptionButtonRef.current?.focus(), 0);
   }
 
   const nav = (
@@ -181,6 +190,14 @@ export function ClientSettingsPage() {
 
     content = (
       <>
+        {readOnly ? (
+          <p className="cs-readonly-banner" data-testid="cs-readonly-banner">
+            <Lock size={16} strokeWidth={1.75} aria-hidden />
+            {endedOn
+              ? `Coaching with ${firstName} ended ${formatCivilDate(endedOn)}. Client settings are read-only.`
+              : `Coaching with ${firstName} has ended. Client settings are read-only.`}
+          </p>
+        ) : null}
         <section
           id="cs-basic"
           className="cs-card"
@@ -232,7 +249,9 @@ export function ClientSettingsPage() {
         >
           <header className="cs-card-head">
             <h3 id="cs-subscription-title">Subscription & package</h3>
-            {subscription && chip ? (
+            {readOnly && subscription ? (
+              <span className="cs-ended-chip">Ended</span>
+            ) : subscription && chip ? (
               <StatusChip
                 kind="renewal"
                 value={subscription.renewalState}
@@ -240,6 +259,22 @@ export function ClientSettingsPage() {
                 className="status-chip-xs"
               />
             ) : null}
+            {readOnly ? null : (
+              <button
+                ref={subscriptionButtonRef}
+                type="button"
+                className="cs-edit-button"
+                onClick={() => {
+                  setSubscriptionSaved(false);
+                  setEditingSubscription(true);
+                }}
+                disabled={!online}
+                aria-label="Edit subscription"
+              >
+                <Pencil size={16} strokeWidth={1.75} aria-hidden />
+                Edit
+              </button>
+            )}
           </header>
           {subscription ? (
             <dl className="cs-grid">
@@ -249,7 +284,14 @@ export function ClientSettingsPage() {
                 value={labelFor("payment_frequency", subscription.paymentFrequency)}
               />
               <Row label="Started" value={formatCivilDate(subscription.startsOn)} />
-              <Row label="Renews" value={formatCivilDate(subscription.renewsOn)} />
+              <Row
+                label="Renews"
+                value={
+                  readOnly && endedOn
+                    ? `Ended ${formatCivilDate(endedOn)}`
+                    : formatCivilDate(subscription.renewsOn)
+                }
+              />
               {subscription.amountPaise !== null ? (
                 <Row
                   label="Amount"
@@ -260,6 +302,11 @@ export function ClientSettingsPage() {
           ) : (
             <p className="cs-empty">No subscription saved yet.</p>
           )}
+          {subscriptionSaved ? (
+            <p className="cs-saved" role="status">
+              Saved as a new subscription version.
+            </p>
+          ) : null}
 
           <div className="cs-payments" data-testid="cs-payments">
             <h4 className="cs-eyebrow">Payment records · tracking only</h4>
@@ -322,13 +369,19 @@ export function ClientSettingsPage() {
             )}
           </header>
           <dl className="cs-grid">
-            {startedOn ? (
+            {startedOn && endedOn ? (
+              <Row
+                label="Coached"
+                value={`${formatCivilDate(startedOn)} — ${formatCivilDate(endedOn)}`}
+              />
+            ) : startedOn ? (
               <Row
                 label="Coaching since"
                 value={`${formatCivilDate(startedOn)}${weeks ? ` · ${weeks}` : ""}`}
               />
+            ) : endedOn ? (
+              <Row label="Coaching ended" value={formatCivilDate(endedOn)} />
             ) : null}
-            {endedOn ? <Row label="Coaching ended" value={formatCivilDate(endedOn)} /> : null}
             {subscription?.coachingMode ? (
               <Row label="Mode" value={COACHING_MODE_LABELS[subscription.coachingMode]} />
             ) : null}
@@ -377,6 +430,26 @@ export function ClientSettingsPage() {
             setSettings(next);
             setSavedNotice(true);
             closeDrawer();
+          }}
+        />
+      ) : null}
+      {editingSubscription && settings && !readOnly ? (
+        <SubscriptionDrawer
+          relationshipId={relationshipId}
+          subscription={settings.subscription}
+          online={online}
+          onClose={closeSubscriptionDrawer}
+          onSaved={(next) => {
+            setSettings((current) => (current ? { ...current, subscription: next } : current));
+            setSubscriptionSaved(true);
+            closeSubscriptionDrawer();
+            // The workspace header shows the renewal chip: refresh it too.
+            reloadWorkspace?.();
+          }}
+          onStale={() => {
+            closeSubscriptionDrawer();
+            void load();
+            reloadWorkspace?.();
           }}
         />
       ) : null}
