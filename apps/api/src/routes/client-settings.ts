@@ -33,6 +33,7 @@ import {
   loadRelationshipPayment,
   saveClientBasics,
   saveSubscriptionVersion,
+  type ClientBasicsPatch,
   updatePaymentRecord,
 } from "../domain/client-settings";
 import type { Env, Variables } from "../types";
@@ -364,7 +365,7 @@ clientSettingsRoutes.patch(
     tag: "Subscriptions",
     summary: "Sets or clears the name and contact phone the trainer keeps for this client.",
     description:
-      "Changes only the trainer-owned client name and contact phone stored on this coaching relationship. Each field is optional and null clears it; at least one must be sent. The name is trimmed, 1 to 120 characters. The phone is normalised and stored as +<digits>; a number that does not normalise answers 400. The client's own profile name and sign-in phone never change, and the client never sees these values. Returns the updated client settings. An ended relationship answers 409 RELATIONSHIP_ENDED.",
+      "Changes only the trainer-owned client name and contact phone stored on this coaching relationship. Each field is optional and null clears it; at least one must be sent. The name is trimmed, 1 to 120 characters. The phone is normalised and stored as +<digits>; a number that does not normalise answers 400. The client's own profile name and sign-in phone never change, and the client never sees these values. Returns the updated client settings. Only the fields sent are written, so two overlapping PATCHes of different fields both persist. A relationship that is not active, including one that ends while the request is in flight, answers 409 RELATIONSHIP_ENDED and nothing changes.",
     roles: ["trainer"],
     idempotency: true,
     body: updateClientBasicsRequestSchema,
@@ -396,22 +397,23 @@ clientSettingsRoutes.patch(
         issues: parsed.error.issues,
       });
     }
-    let contactPhoneE164 = relationship.contactPhoneE164;
+    // Z7-25: only the fields sent go into the write, so a concurrent PATCH of the
+    // other field is never overwritten with the value read above.
+    const patch: ClientBasicsPatch = {};
+    if (parsed.data.displayName !== undefined) {
+      patch.clientDisplayName = parsed.data.displayName;
+    }
     if (parsed.data.contactPhone !== undefined) {
       if (parsed.data.contactPhone === null) {
-        contactPhoneE164 = null;
+        patch.contactPhoneE164 = null;
       } else {
         const digits = normalizeWhatsappE164(parsed.data.contactPhone);
         if (!digits) {
           return fail(c, 400, "INVALID_REQUEST", "Contact phone is not a valid phone number.");
         }
-        contactPhoneE164 = `+${digits}`;
+        patch.contactPhoneE164 = `+${digits}`;
       }
     }
-    const clientDisplayName =
-      parsed.data.displayName !== undefined
-        ? parsed.data.displayName
-        : relationship.clientDisplayName;
     const fingerprint = await sha256Hex(
       JSON.stringify({ relationshipId: relationship.id, ...parsed.data }),
     );
@@ -425,13 +427,17 @@ clientSettingsRoutes.patch(
         fingerprint,
       },
       async () => {
-        if (relationship.status === "ended") return relationshipEnded(c);
-        const result = await saveClientBasics(
-          db,
-          relationship,
-          { clientDisplayName, contactPhoneE164 },
-          { actorUserId: actor.userId, idempotencyKey, fingerprint, now: nowIso() },
-        );
+        if (relationship.status !== "active") return relationshipEnded(c);
+        // The write itself re-checks ownership and `active`, so a relationship
+        // that ends between the read above and this write is still refused.
+        const result = await saveClientBasics(db, relationship, patch, {
+          actorUserId: actor.userId,
+          idempotencyKey,
+          fingerprint,
+          now: nowIso(),
+        });
+        if (result.kind === "ended") return relationshipEnded(c);
+        if (result.kind === "not_found") return relationshipNotFound(c);
         return c.json(result.body, result.status);
       },
     );
