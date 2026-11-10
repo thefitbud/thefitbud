@@ -220,6 +220,11 @@ export function HomePage() {
   const navigate = useNavigate();
   const drawerExceptionId = params.get("exception");
   const drawerAskId = params.get("ask");
+  const clientPanelId = params.get("client");
+  // HB1: closeDrawer reads this so a second close (Escape landing right after
+  // a close, before the URL commits) never pushes an extra history entry.
+  const drawerOpenRef = useRef(false);
+  drawerOpenRef.current = Boolean(drawerExceptionId || drawerAskId);
   const showAllParam = params.get("all") === "1";
 
   const {
@@ -356,6 +361,9 @@ export function HomePage() {
   }
 
   const closeDrawer = useCallback(() => {
+    if (!drawerOpenRef.current) return;
+    // Mark closed now: a second close before React re-renders is a no-op.
+    drawerOpenRef.current = false;
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete("exception");
@@ -1200,7 +1208,7 @@ export function HomePage() {
                   <h2>Check-ins to review</h2>
                   <span className="home-count">{checkinCount}</span>
                 </div>
-                <Link className="link" to="/checkins" style={{ fontSize: 13 }}>
+                <Link className="link" to="/checkins?tab=to-review" style={{ fontSize: 13 }}>
                   All
                 </Link>
               </div>
@@ -1336,10 +1344,11 @@ export function HomePage() {
       </div>
       ) : null}
 
-      {drawerExceptionId ? (
+      {drawerExceptionId || clientPanelId ? (
         <ExceptionDrawer
-          key={drawerExceptionId}
+          key={drawerExceptionId ?? `client:${clientPanelId}`}
           exceptionId={drawerExceptionId}
+          relationshipId={clientPanelId}
           openSeq={drawerOpenSeq}
           onClose={closeDrawerWithFocus}
           onChanged={() => void refreshSection("attention")}

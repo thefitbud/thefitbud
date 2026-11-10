@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({
   acknowledgeException: vi.fn(),
   resolveException: vi.fn(),
   listExceptions: vi.fn(),
+  nudgeActivity: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -28,12 +29,14 @@ vi.mock("../lib/api", () => ({
     acknowledgeException: api.acknowledgeException,
     resolveException: api.resolveException,
     listExceptions: api.listExceptions,
+    nudgeActivity: api.nudgeActivity,
   },
 }));
 vi.mock("../lib/stage1-api", () => ({
   stage1Api: { getResponsiveness: api.getResponsiveness },
 }));
 
+import { ApiClientError } from "@fitbud/api-client";
 import { formatCivilDate, formatLocalDate } from "@fitbud/core";
 import {
   ExceptionDrawer,
@@ -108,6 +111,7 @@ async function renderDrawer(onClose: () => void) {
   const utils = render(
     inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={onClose} />),
   );
+  fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
   const note = await screen.findByRole("textbox");
   return { ...utils, note: note as HTMLTextAreaElement };
 }
@@ -135,7 +139,10 @@ describe("ExceptionDrawer focus (HM1)", () => {
   });
 
   it("focuses the Close (X) button when it opens", async () => {
-    await renderDrawer(() => undefined);
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    await screen.findByRole("button", { name: "Resolve…" });
     expect(document.activeElement).toBe(
       screen.getByRole("button", { name: "Close" }),
     );
@@ -311,10 +318,11 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
     expect(await screen.findByRole("textbox")).toBeTruthy();
 
     vi.useFakeTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
 
     const banner = screen.getByTestId("exception-resolve-banner");
     expect(banner.textContent).toContain(
@@ -346,10 +354,11 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
     expect(await screen.findByRole("textbox")).toBeTruthy();
 
     vi.useFakeTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
@@ -357,7 +366,7 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(await screen.findByRole("textbox")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Resolve…" })).toBeTruthy();
 
     expect(api.resolveException).not.toHaveBeenCalled();
     expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
@@ -537,7 +546,7 @@ describe("Side panel v3 list (Z7-5)", () => {
     api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
 
     expect(screen.getByTestId("exception-resolve-banner").textContent).toContain(
       "Resolved by you · just now · Talked to client",
@@ -566,7 +575,7 @@ describe("Side panel v3 list (Z7-5)", () => {
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     expect(screen.getByText("1 of 2 resolved · 1 still open")).toBeTruthy();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
@@ -586,7 +595,7 @@ describe("Side panel v3 list (Z7-5)", () => {
     renderPanel([openItem(1)]);
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     expect(screen.getByText("All 1 resolved")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Next item ·/ })).toBeNull();
     const closes = screen.getAllByRole("button", { name: "Close" });
@@ -604,7 +613,7 @@ describe("Side panel v3 list (Z7-5)", () => {
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     expect(lastSearch).toContain(`client=${REL_ID}`);
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     fireEvent.keyDown(document, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(lastSearch).not.toContain("client="));
@@ -651,7 +660,7 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
     renderPanel([openItem(1), openItem(2)]);
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     const undo = screen.getByRole("button", { name: "Undo" });
     expect(document.activeElement).toBe(undo);
 
@@ -670,7 +679,7 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
 
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo" }));
 
     // After the commit the server returns the item resolved.
@@ -704,9 +713,10 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
     expect(await screen.findByRole("textbox")).toBeTruthy();
     vi.useFakeTimers();
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Undo" }));
     api.getException.mockResolvedValue(resolvedDetail("trainer"));
     await act(async () => {
@@ -725,7 +735,7 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
     renderPanel([openItem(1), openItem(2), openItem(3)]);
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
-    fireEvent.click(screen.getByRole("button", { name: "Resolve" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
     fireEvent.click(screen.getByRole("button", { name: /Next item · 2 of 3/ }));
     expect(await findTitle(/Missed workout 2/)).toBeTruthy();
     expect(
@@ -770,5 +780,298 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
     fireEvent.keyDown(document, { key: "ArrowRight" });
     expect(await findTitle(/Missed workout 2/)).toBeTruthy();
     expect(screen.getByText("2 of 2")).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Z7-6: resolve form (frame 02), nudge limited (131), quiet hours (199).
+// ---------------------------------------------------------------------------
+
+describe("Side panel resolve form (Z7-6)", () => {
+  beforeEach(() => {
+    stubWorkspaceApis();
+    api.getException.mockResolvedValue({
+      ...detail,
+      details: { localDate: "2026-10-13" },
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("Resolve… opens outcome chips and a private, optional note", async () => {
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    expect(screen.queryByRole("textbox")).toBeNull();
+    const resolveBtn = await screen.findByRole("button", { name: "Resolve…" });
+    // The helper names the client from the workspace header.
+    await screen.findByText("Rohan Mehta");
+    fireEvent.click(resolveBtn);
+
+    const chips = screen.getByRole("group", { name: "Resolve · Outcome" });
+    const labels = Array.from(chips.querySelectorAll("button")).map(
+      (b) => b.textContent,
+    );
+    expect(labels).toEqual([
+      "Talked to client",
+      "Plan adjusted",
+      "No action needed",
+    ]);
+    const talked = screen.getByRole("button", { name: "Talked to client" });
+    expect(talked.getAttribute("aria-pressed")).toBe("true");
+    // Keyboard lands on the chosen chip.
+    expect(document.activeElement).toBe(talked);
+    expect(
+      screen.getByRole("textbox", { name: "Note · optional · only you see this" }),
+    ).toBeTruthy();
+    // Frame 02 footer: Cancel / Resolve item with the lock helper.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resolve item" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Resolving locks this item, so Rohan can't log Tue 13 Oct late anymore.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Nudge" })).toBeNull();
+  });
+
+  it("Save sends the chosen outcome and note to the existing resolve endpoint", async () => {
+    api.resolveException.mockResolvedValue(resolvedDetail("trainer"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Plan adjusted" }));
+    expect(
+      screen
+        .getByRole("button", { name: "Plan adjusted" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "Talked to client" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "  Moved Lower body A to Sat  " },
+    });
+
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
+    expect(screen.getByTestId("exception-resolve-banner").textContent).toContain(
+      "Resolved by you · just now · Plan adjusted",
+    );
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(api.resolveException).toHaveBeenCalledTimes(1);
+    expect(api.resolveException.mock.calls[0]![0]).toBe(EXC_ID);
+    expect(api.resolveException.mock.calls[0]![1]).toEqual({
+      note: "Moved Lower body A to Sat",
+      outcome: "plan_adjusted",
+    });
+  });
+
+  it("an empty note resolves with note null (note is optional)", async () => {
+    api.resolveException.mockResolvedValue(resolvedDetail("trainer"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    expect(api.resolveException.mock.calls[0]![1]).toEqual({
+      note: null,
+      outcome: "talked",
+    });
+  });
+
+  it("Cancel closes the form without resolving and returns focus to Resolve…", async () => {
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "draft" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const resolveBtn = screen.getByRole("button", { name: "Resolve…" });
+    expect(document.activeElement).toBe(resolveBtn);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(api.resolveException).not.toHaveBeenCalled();
+    // Reopening starts clean.
+    fireEvent.click(resolveBtn);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+  });
+
+  it("a failed resolve shows the API message and keeps the outcome and note", async () => {
+    api.resolveException.mockRejectedValue(
+      new ApiClientError({
+        status: 409,
+        code: "EXCEPTION_STATE_CONFLICT",
+        message: "This item changed. Reload and try again.",
+        requestId: "req-2",
+      }),
+    );
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "No action needed" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Rest week" } });
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    vi.useRealTimers();
+    expect(
+      await screen.findByText("This item changed. Reload and try again."),
+    ).toBeTruthy();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(
+      "Rest week",
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "No action needed" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
+  });
+
+  it("the ⋯ menu holds the secondary actions", async () => {
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    const names = screen
+      .getAllByRole("menuitem")
+      .map((el) => el.textContent?.trim());
+    expect(names).toEqual([
+      "Add note",
+      "Adjust plan",
+      "Message on WhatsApp",
+      "Open client",
+      "Client settings",
+    ]);
+  });
+});
+
+describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
+  beforeEach(() => {
+    api.getException.mockResolvedValue(detail);
+    api.getWorkoutAssignment.mockResolvedValue({
+      workoutDayName: "Upper body A",
+      windowEndsAt: "2026-10-22T12:00:00.000Z",
+      workoutDay: { exercises: [] },
+    });
+    api.getClientWorkspace.mockResolvedValue({
+      header: {
+        traineeDisplayName: "Rohan Mehta",
+        clientWhatsappE164: null,
+        traineeTimezone: "Asia/Kolkata",
+      },
+    });
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("limited: shows the wait from retryAfter and disables Nudge (frame 131)", async () => {
+    api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+    api.nudgeActivity.mockRejectedValue(
+      new ApiClientError({
+        status: 429,
+        code: "NUDGE_LIMIT",
+        message: "You can nudge again in 40 min",
+        requestId: "req-1",
+        details: { retryAfter: 2400 },
+      }),
+    );
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    const nudgeBtn = await screen.findByRole("button", { name: "Nudge" });
+    fireEvent.click(nudgeBtn);
+    const notice = await screen.findByTestId("panel-nudge-limit");
+    expect(notice.textContent).toBe(
+      "Nudge limit reached. You can nudge again in 40 min.",
+    );
+    // Disabled, not hidden, and says why.
+    const after = screen.getByRole("button", { name: "Nudge" }) as HTMLButtonElement;
+    expect(after.disabled).toBe(true);
+    expect(after.getAttribute("aria-describedby")).toBe("sp-nudge-why");
+    expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
+  });
+
+  it("quiet hours: says when a nudge arrives, in the client's time with a zone", async () => {
+    // 17:10 UTC = 10:40 pm IST, inside 22:00–07:00.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-18T17:10:00.000Z"));
+    api.getResponsiveness.mockResolvedValue({
+      label: "reminders_working",
+      counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
+      quietHoursStart: "22:00",
+      quietHoursEnd: "07:00",
+    });
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    const notice = await screen.findByTestId("panel-quiet-hours");
+    expect(notice.textContent).toBe(
+      "It's 10:40 pm for Rohan and quiet hours are on. A nudge now arrives after 7:00 am (client's time, IST).",
+    );
+    // Nudge stays available: the server holds it until quiet hours end.
+    const nudgeBtn = screen.getByRole("button", { name: "Nudge" }) as HTMLButtonElement;
+    expect(nudgeBtn.disabled).toBe(false);
+  });
+
+  it("outside quiet hours there is no quiet-hours notice", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-18T06:30:00.000Z")); // 12:00 pm IST
+    api.getResponsiveness.mockResolvedValue({
+      label: "reminders_working",
+      counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
+      quietHoursStart: "22:00",
+      quietHoursEnd: "07:00",
+    });
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    await screen.findByRole("button", { name: "Nudge" });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(screen.queryByTestId("panel-quiet-hours")).toBeNull();
+  });
+
+  it("a nudge deferred for quiet hours says when it arrives", async () => {
+    api.getResponsiveness.mockRejectedValue(new Error("not needed"));
+    api.nudgeActivity.mockResolvedValue({
+      notification: {},
+      deduped: false,
+      deferredForQuietHours: true,
+      quietHoursEnd: "07:00",
+    });
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    const nudgeBtn = await screen.findByRole("button", { name: "Nudge" });
+    // The client's timezone comes with the workspace header.
+    await screen.findByText("Rohan Mehta");
+    fireEvent.click(nudgeBtn);
+    expect(
+      await screen.findByText(
+        "Nudge sent. It arrives after 7:00 am (client's time, IST).",
+      ),
+    ).toBeTruthy();
   });
 });
