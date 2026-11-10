@@ -305,6 +305,8 @@ export {
 export {
   completeSetRequestSchema,
   completeWorkoutRequestSchema,
+  skipWorkoutRequestSchema,
+  startWorkoutRequestSchema,
   exerciseExecutionSchema,
   exerciseExecutionStatusSchema,
   generateWorkoutAssignmentsRequestSchema,
@@ -322,6 +324,8 @@ export {
   workoutExecutionSummarySchema,
   type CompleteSetRequest,
   type CompleteWorkoutRequest,
+  type SkipWorkoutRequest,
+  type StartWorkoutRequest,
   type ExerciseExecution,
   type ExerciseExecutionStatus,
   type GenerateWorkoutAssignmentsRequest,

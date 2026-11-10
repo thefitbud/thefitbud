@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { eq } from "drizzle-orm";
 import {
   bulkResolveExceptionsRequestSchema,
@@ -11,7 +11,6 @@ import { createDb, type Db } from "../db/client";
 import { coachingRelationships } from "../db/schema";
 import { nowIso, sha256Hex } from "../lib/crypto";
 import { fail } from "../lib/envelope";
-import { findIdempotencyRecord } from "../lib/idempotency";
 import { requireWritableRelationship } from "../lib/relationship-write-guard";
 import {
   optionalAuthMiddleware,
@@ -23,11 +22,13 @@ import {
   BULK_RESOLVE_OPERATION,
   BULK_UNDO_OPERATION,
   classifyBulkResolve,
+  findBulkIdempotencyRecord,
   loadRelationshipExceptions,
   loadUndoState,
   performBulkResolve,
   performBulkUndo,
   undoWindowOpen,
+  type BulkIdempotencyLookup,
 } from "../domain/exception-bulk";
 import type { Env, Variables } from "../types";
 
@@ -46,7 +47,7 @@ function idempotencyKeyOf(c: {
   return key && key.length > 0 ? key : null;
 }
 
-/** Replays a stored response, or rejects a key reused with another body. */
+/** Replays a stored response, or rejects a reused or expired key. */
 async function replay(
   db: Db,
   input: {
@@ -55,19 +56,35 @@ async function replay(
     idempotencyKey: string;
     fingerprint: string;
   },
-): Promise<
-  | { kind: "none" }
-  | { kind: "replay"; status: number; body: unknown }
-  | { kind: "reuse" }
-> {
-  const existing = await findIdempotencyRecord(db, input);
-  if (!existing) return { kind: "none" };
-  if (existing.requestFingerprint !== input.fingerprint) return { kind: "reuse" };
-  return {
-    kind: "replay",
-    status: existing.responseStatus,
-    body: JSON.parse(existing.responseBody),
-  };
+): Promise<BulkIdempotencyLookup> {
+  return findBulkIdempotencyRecord(db, { ...input, now: nowIso() });
+}
+
+/** The answer for a lookup that must not run the request again, or null. */
+function answerFor(
+  c: Context<{ Bindings: Env; Variables: Variables }>,
+  lookup: BulkIdempotencyLookup,
+): Response | null {
+  switch (lookup.kind) {
+    case "replay":
+      return c.json(lookup.body as object, lookup.status as 200);
+    case "reuse":
+      return fail(
+        c,
+        409,
+        "IDEMPOTENCY_KEY_REUSE",
+        "Idempotency key was reused with a different request.",
+      );
+    case "expired":
+      return fail(
+        c,
+        409,
+        "IDEMPOTENCY_KEY_EXPIRED",
+        "Idempotency key has expired. Send the request with a new key.",
+      );
+    case "none":
+      return null;
+  }
 }
 
 exceptionsBulkRoutes.post(
@@ -76,7 +93,7 @@ exceptionsBulkRoutes.post(
     tag: "Exceptions",
     summary: "Resolves several of one client's compatible exceptions at once.",
     description:
-      "Resolves the selected missed-workout, missed-meal and missed-log exceptions of one client with one outcome and note. Returns one result per id: resolved, or skipped with a reason (not_found, incompatible_type, already_resolved). Other exception types, other clients' ids and ids that are not exceptions are never changed. An ended relationship rejects the whole call. Undo is possible for 5 seconds with POST /exceptions/bulk/undo.",
+      "Resolves the selected missed-workout, missed-meal and missed-log exceptions of one client with one outcome and note. Returns one result per id: resolved, or skipped with a reason (not_found, incompatible_type, already_resolved). Other exception types, other clients' ids and ids that are not exceptions are never changed. An ended relationship rejects the whole call. Undo is possible for 5 seconds with POST /exceptions/bulk/undo. The same Idempotency-Key replays the first response for 7 days; after that it answers 409 IDEMPOTENCY_KEY_EXPIRED.",
     roles: ["trainer"],
     idempotency: true,
     body: bulkResolveExceptionsRequestSchema,
@@ -118,18 +135,8 @@ exceptionsBulkRoutes.post(
       idempotencyKey,
       fingerprint,
     };
-    const prior = await replay(db, lookup);
-    if (prior.kind === "reuse") {
-      return fail(
-        c,
-        409,
-        "IDEMPOTENCY_KEY_REUSE",
-        "Idempotency key was reused with a different request.",
-      );
-    }
-    if (prior.kind === "replay") {
-      return c.json(prior.body as object, prior.status as 200);
-    }
+    const prior = answerFor(c, await replay(db, lookup));
+    if (prior) return prior;
 
     const [relationship] = await db
       .select()
@@ -174,18 +181,8 @@ exceptionsBulkRoutes.post(
     } catch (error) {
       // A concurrent request with the same key won the unique index and the
       // whole batch rolled back: answer with its stored result.
-      const raced = await replay(db, lookup);
-      if (raced.kind === "replay") {
-        return c.json(raced.body as object, raced.status as 200);
-      }
-      if (raced.kind === "reuse") {
-        return fail(
-          c,
-          409,
-          "IDEMPOTENCY_KEY_REUSE",
-          "Idempotency key was reused with a different request.",
-        );
-      }
+      const raced = answerFor(c, await replay(db, lookup));
+      if (raced) return raced;
       throw error;
     }
 
@@ -208,7 +205,7 @@ exceptionsBulkRoutes.post(
     tag: "Exceptions",
     summary: "Undoes a bulk resolve within 5 seconds.",
     description:
-      "Within 5 seconds of POST /exceptions/bulk/resolve, restores each resolved item's prior status and removes the resolution rows that call wrote. After 5 seconds the call answers 409 undo_expired. Only the trainer who ran the bulk resolve can undo it.",
+      "Within 5 seconds of POST /exceptions/bulk/resolve, restores each resolved item's prior status and removes the resolution rows that call wrote. After 5 seconds the call answers 409 undo_expired. Only the trainer who ran the bulk resolve can undo it. The same Idempotency-Key replays the first response for 7 days; after that it answers 409 IDEMPOTENCY_KEY_EXPIRED.",
     roles: ["trainer"],
     idempotency: true,
     body: bulkUndoRequestSchema,
@@ -252,18 +249,8 @@ exceptionsBulkRoutes.post(
       idempotencyKey,
       fingerprint,
     };
-    const prior = await replay(db, lookup);
-    if (prior.kind === "reuse") {
-      return fail(
-        c,
-        409,
-        "IDEMPOTENCY_KEY_REUSE",
-        "Idempotency key was reused with a different request.",
-      );
-    }
-    if (prior.kind === "replay") {
-      return c.json(prior.body as object, prior.status as 200);
-    }
+    const prior = answerFor(c, await replay(db, lookup));
+    if (prior) return prior;
 
     const now = nowIso();
     // Actor-scoped: another trainer's bulk id reads as not found.
@@ -308,10 +295,8 @@ exceptionsBulkRoutes.post(
         now,
       });
     } catch (error) {
-      const raced = await replay(db, lookup);
-      if (raced.kind === "replay") {
-        return c.json(raced.body as object, raced.status as 200);
-      }
+      const raced = answerFor(c, await replay(db, lookup));
+      if (raced) return raced;
       const again = await loadUndoState(db, {
         actorUserId: actor.userId,
         bulkId: parsed.data.bulkId,
