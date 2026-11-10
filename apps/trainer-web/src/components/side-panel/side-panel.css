@@ -437,6 +437,136 @@
   align-self: flex-start;
 }
 
+/* Z7-6 resolve form (frame 02): outcome chips + private note in a card. */
+.sp-resolve-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #d8d2fb;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 0 0 3px #f1eefe;
+}
+
+.sp-form-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-outcomes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.sp-outcome {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--border-strong, #d9dce8);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--near-black, #25262b);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.sp-outcome:hover {
+  background: #f7f8fc;
+}
+
+.sp-outcome.is-on {
+  border-color: #d8d2fb;
+  background: #edeaff;
+  color: var(--indigo, #4527c6);
+}
+
+.sp-outcome:focus-visible,
+.sp-note:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+.sp-note {
+  width: 100%;
+  min-height: 76px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--indigo, #4527c6);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--near-black, #25262b);
+  resize: vertical;
+}
+
+.sp-foot-form .sp-actions {
+  justify-content: space-between;
+}
+
+.sp-foot-form .sp-resolve-submit {
+  min-width: 140px;
+}
+
+.sp-foot-form .button-secondary,
+.sp-foot-form .button-primary {
+  min-height: 44px;
+}
+
+/* Frame 131 ⋯ menu: one line per action, 44 px rows, body-size text. */
+.sp-actions .overflow-menu-list {
+  min-width: 15rem;
+}
+
+.sp-actions .overflow-menu-item {
+  min-height: 44px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+/* Frames 131 / 199: nudge limit and client quiet hours, inline notices. */
+.sp-notice {
+  margin: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.sp-notice svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.sp-notice-limit {
+  border: 1px solid #e7e9f2;
+  background: #f4f5f9;
+  color: var(--near-black, #25262b);
+}
+
+.sp-notice-limit svg {
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-notice-quiet {
+  border: 1px solid #f6d58a;
+  background: var(--semantic-attention-fill, #fffbeb);
+  color: var(--semantic-attention-text, #b45309);
+}
+
 @media (max-width: 599px) {
   .sp-head {
     padding: 12px 16px 10px;
@@ -464,4 +594,79 @@
     padding-left: 16px;
     padding-right: 16px;
   }
+}
+
+/* Z7-7: resolved read-only (frame 132), item gone (frame 133). */
+.sp-resolved-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 10px;
+  padding: 2px 10px;
+  border: 1px solid #bfe6cf;
+  border-radius: 999px;
+  background: var(--semantic-success-fill, #ecfdf3);
+  color: var(--semantic-success-text, #166534);
+  font-size: 12px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+.sp-note-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--near-black, #25262b);
+  overflow-wrap: anywhere;
+}
+
+.sp-foot-readonly {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.sp-foot-readonly .sp-actions {
+  justify-content: space-between;
+}
+
+.sp-gone {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 10px;
+  padding-top: 72px;
+}
+
+.sp-gone-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: #ece9fb;
+  color: var(--indigo, #4527c6);
+}
+
+.sp-gone-title {
+  margin: 8px 0 0;
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+}
+
+.sp-gone-text {
+  margin: 0;
+  max-width: 420px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-500, #5b616b);
+}
+
+.sp-foot-readonly .link.sp-open-client {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
 }

@@ -269,10 +269,8 @@ function unique(values: Array<string | null | undefined>): string[] {
  *   digits ("98123 12345", "98123  12345", "98123-12345", "09812312345",
  *   "+91 98123 12345"), becomes `[removed]` (Z7-26);
  * - their full display name, as a whole name in any letter case (never part of
- *   another word), becomes "Deleted user". One-word names are scrubbed too,
- *   but a name shorter than MIN_SCRUB_NAME_LENGTH characters is never matched
- *   in free text: it would rewrite ordinary words in the other party's
- *   history (Z7-26).
+ *   another word), becomes "Deleted user". One-word and short names ("Om") are scrubbed too:
+ *   matching is by whole word only, so "Omelette" and "room" stay.
  * JSON columns are parsed and only their string values, and numbers that are
  * the person's phone, are rewritten, so the JSON stays valid.
  */
@@ -302,13 +300,6 @@ const RELATIONSHIP_FREE_TEXT: ReadonlyArray<{
   { table: "log_edit_events", column: "after_json", scope: "coaching_relationship_id" },
 ];
 
-/**
- * Shortest name (non-space characters) the free-text scrub and receipt cleanup
- * match. Shorter names ("Al", "A") would hit ordinary words in other people's
- * history; the profile and relationship name columns are still replaced.
- */
-export const MIN_SCRUB_NAME_LENGTH = 3;
-
 export type Scrubber = {
   rewrite(text: string): string;
   prefilter(column: SQL): SQL;
@@ -316,11 +307,9 @@ export type Scrubber = {
   mentions(text: string): { contact: boolean; name: boolean };
 };
 
-/** Names long enough to match in free text (see MIN_SCRUB_NAME_LENGTH). */
+/** Names to match in free text: every non-empty name, as a whole word. */
 export function scrubbableNames(names: string[]): string[] {
-  return names.filter(
-    (name) => Array.from(name.replace(/\s+/gu, "")).length >= MIN_SCRUB_NAME_LENGTH,
-  );
+  return names.filter((name) => name.trim().length > 0);
 }
 
 function escapeRegExp(value: string): string {
@@ -626,7 +615,7 @@ async function purgeRows(
  * the person, never on a bare substring hit:
  * - it holds their email or phone, matched with the scrubber's rules (whole
  *   address, whole number), or
- * - it holds their name (whole name, MIN_SCRUB_NAME_LENGTH or longer) AND
+ * - it holds their name (whole name, any length) AND
  *   names one of their records: their user id, one of their relationships or
  *   an invitation sent to them. A common name alone ("Rahul") never deletes
  *   another user's receipt.
