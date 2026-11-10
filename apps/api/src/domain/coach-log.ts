@@ -35,11 +35,8 @@ import {
   changeLog,
   coachingRelationships,
   logEditEvents,
-  mealCompliance,
-  measurements,
   notificationPreferences,
   notifications,
-  workoutExecutions,
 } from "../db/schema.js";
 import { createId } from "../lib/crypto.js";
 import {
@@ -67,14 +64,44 @@ const COACH_LOG_WRITE_ATTEMPTS = 3;
 export type CoachLogWrite = BatchItem<"sqlite">;
 
 /**
- * Set on an edit. The batch aborts unless the domain update left the row at
- * this version, so a concurrent edit with the same version writes nothing.
+ * Set on an edit. `update` is the versioned UPDATE (`WHERE record_version` is
+ * the snapshot the route read). The batch runs it after every other domain
+ * write and aborts unless that statement itself changed one row. A row that
+ * is already at `snapshot + 1` because the other writer committed is not
+ * success: this writer's UPDATE matched nothing, so the entry, set or
+ * exercise writes, audit and change log all roll back.
  */
 export type CoachLogClaim = {
   entity: "workout_execution" | "meal_compliance" | "measurement";
   id: string;
+  /** The version `update` writes (the snapshot plus one). */
   recordVersion: number;
+  update: () => CoachLogWrite;
 };
+
+/**
+ * Test seam. Production leaves `wait` null. A test arms it so concurrent
+ * edits all pass the route's recordVersion read before either write runs.
+ */
+const coachLogWriteGate: { wait: (() => Promise<void>) | null } = { wait: null };
+
+/** Holds coach-log writes until `parties` callers are inside the gate. */
+export function armCoachLogWriteBarrier(parties: number): () => void {
+  let arrived = 0;
+  let release: () => void = () => {};
+  const opened = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  coachLogWriteGate.wait = async () => {
+    arrived += 1;
+    if (arrived >= parties) release();
+    await opened;
+  };
+  return () => {
+    coachLogWriteGate.wait = null;
+    release();
+  };
+}
 
 export type CoachLogConflictKind = "entry" | "version" | "sequence";
 
@@ -147,22 +174,17 @@ export function classifyCoachLogWriteFailure(error: unknown): CoachLogConflictKi
 }
 
 /**
- * Aborts the batch unless the edit's version update landed. Writes NULL into
- * the relationship's NOT NULL trainer id only when the claim is false, which
- * fails the statement; a true claim matches no row. The batch rolls back
- * either way when the statement fails, so the trainer id never stays NULL.
+ * Aborts the batch unless the statement immediately before this one changed
+ * exactly one row. That statement is the edit's versioned UPDATE. Writes NULL
+ * into the relationship's NOT NULL trainer id only when `changes()` is not 1,
+ * which fails the statement; a landed update matches no row here. The batch
+ * rolls back when the statement fails, so the trainer id never stays NULL.
  */
-function versionClaimGuard(db: Db, relationshipId: string, claim: CoachLogClaim) {
-  const versionMatches =
-    claim.entity === "workout_execution"
-      ? sql`exists (select 1 from ${workoutExecutions} where ${workoutExecutions.id} = ${claim.id} and ${workoutExecutions.recordVersion} = ${claim.recordVersion})`
-      : claim.entity === "meal_compliance"
-        ? sql`exists (select 1 from ${mealCompliance} where ${mealCompliance.id} = ${claim.id} and ${mealCompliance.recordVersion} = ${claim.recordVersion})`
-        : sql`exists (select 1 from ${measurements} where ${measurements.id} = ${claim.id} and ${measurements.recordVersion} = ${claim.recordVersion})`;
+function versionClaimGuard(db: Db, relationshipId: string) {
   return db
     .update(coachingRelationships)
     .set({ trainerUserId: sql`null` })
-    .where(and(eq(coachingRelationships.id, relationshipId), sql`not (${versionMatches})`));
+    .where(and(eq(coachingRelationships.id, relationshipId), sql`changes() != 1`));
 }
 
 export type CoachLogEntity = {
@@ -196,16 +218,25 @@ export async function recordCoachLogChange(
     now: string;
     push: TrainerPushConfig;
     /**
-     * The entry writes. Called again on a sequence retry, so it must only
-     * build statements (ids and values are fixed by the caller).
+     * The entry writes, other than the versioned update on an edit. Called
+     * again on a sequence retry, so it must only build statements (ids and
+     * values are fixed by the caller).
      */
     domainWrites: () => readonly CoachLogWrite[];
     /** Present on an edit; absent on a create (the unique key is the claim). */
     claim?: CoachLogClaim;
+    /**
+     * Runs after the batch commits, before the turn releases. The response
+     * read and any idempotency insert finish before the next coach log starts,
+     * so they cannot land between that log's versioned update and its guard.
+     * A failure here does not retry the batch.
+     */
+    afterCommit?: () => Promise<void>;
   },
 ): Promise<{ eventId: string; notification: CoachLogNotificationOutcome }> {
   const { entity, action, now } = input;
   const eventId = createId();
+  if (coachLogWriteGate.wait) await coachLogWriteGate.wait();
   const committed = await withCoachLogTurn(async () => {
     const [prefs] = await db
       .select({ coachLogUpdates: notificationPreferences.coachLogUpdates })
@@ -240,12 +271,16 @@ export async function recordCoachLogChange(
     let lastSequence: unknown;
     for (let attempt = 0; attempt < COACH_LOG_WRITE_ATTEMPTS; attempt += 1) {
       const domain = input.domainWrites();
-      if (domain.length === 0) {
+      const versionedUpdate = input.claim?.update();
+      if (domain.length === 0 && !versionedUpdate) {
         throw new Error("Coach log transaction needs the entry write.");
       }
+      // The versioned UPDATE sits immediately before the guard, so changes()
+      // is that statement and not a set or exercise write.
       const writes: CoachLogWrite[] = [...domain];
-      if (input.claim) {
-        writes.push(versionClaimGuard(db, entity.coachingRelationshipId, input.claim));
+      if (versionedUpdate) {
+        writes.push(versionedUpdate);
+        writes.push(versionClaimGuard(db, entity.coachingRelationshipId));
       }
       // The audit row is the activity-feed event (the feed reads this table).
       writes.push(
@@ -301,7 +336,6 @@ export async function recordCoachLogChange(
       }
       try {
         await db.batch(writes as [CoachLogWrite, ...CoachLogWrite[]]);
-        return { eventId, notification, notificationId };
       } catch (error) {
         const kind = classifyCoachLogWriteFailure(error);
         if (kind === "sequence" && attempt < COACH_LOG_WRITE_ATTEMPTS - 1) {
@@ -311,6 +345,9 @@ export async function recordCoachLogChange(
         if (kind) throw new CoachLogConflict(kind);
         throw error;
       }
+      // The batch has committed. A failure here must not retry it.
+      if (input.afterCommit) await input.afterCommit();
+      return { eventId, notification, notificationId };
     }
     throw lastSequence instanceof Error
       ? lastSequence

@@ -1442,24 +1442,48 @@ mealRoutes.put(
         updatedAt: now,
       };
       afterCompliance = { ...before, ...edited };
-      claim = { entity: "meal_compliance", id: entryId, recordVersion: serverVersion };
-      domainWrites = () => [
-        db
-          .update(mealCompliance)
-          .set(edited)
-          .where(
-            and(
-              eq(mealCompliance.id, before.id),
-              eq(mealCompliance.recordVersion, before.recordVersion),
+      claim = {
+        entity: "meal_compliance",
+        id: entryId,
+        recordVersion: serverVersion,
+        update: () =>
+          db
+            .update(mealCompliance)
+            .set(edited)
+            .where(
+              and(
+                eq(mealCompliance.id, before.id),
+                eq(mealCompliance.recordVersion, before.recordVersion),
+              ),
             ),
-          ),
-      ];
+      };
+      domainWrites = () => [];
     }
 
+    let responseBody: { data: ReturnType<typeof mealComplianceSchema.parse> } | undefined;
     try {
       await recordCoachLogChange(db, {
         domainWrites,
         claim,
+        afterCommit: async () => {
+          const [saved] = await db
+            .select()
+            .from(mealCompliance)
+            .where(eq(mealCompliance.id, entryId))
+            .limit(1);
+          responseBody = {
+            data: mealComplianceSchema.parse(mapMealCompliance(saved!)),
+          };
+          await saveIdempotencyRecord(db, {
+            actorUserId: actor.userId,
+            operation: COACH_LOG_OPERATION,
+            idempotencyKey,
+            requestFingerprint: fingerprint,
+            responseStatus: status,
+            responseBody,
+            expiresAt: addDaysIso(7),
+          });
+        },
         entity: {
           type: "meal_compliance",
           id: entryId,
@@ -1484,30 +1508,15 @@ mealRoutes.put(
       throw error;
     }
 
-    const [saved] = await db
-      .select()
-      .from(mealCompliance)
-      .where(eq(mealCompliance.id, entryId))
-      .limit(1);
-
-    const responseBody = {
-      data: mealComplianceSchema.parse(mapMealCompliance(saved!)),
-    };
-    await saveIdempotencyRecord(db, {
-      actorUserId: actor.userId,
-      operation: COACH_LOG_OPERATION,
-      idempotencyKey,
-      requestFingerprint: fingerprint,
-      responseStatus: status,
-      responseBody,
-      expiresAt: addDaysIso(7),
-    });
+    if (!responseBody) {
+      throw new Error("Coach log committed without a stored meal entry.");
+    }
     queueRealtimeHint(c.env, {
       eventType: "meal_compliance_changed",
       entityType: "meal_compliance",
       entityId: entryId,
       coachingRelationshipId: relationship.id,
-      serverVersion: saved!.recordVersion,
+      serverVersion: responseBody.data.recordVersion,
     });
     return c.json(responseBody, status);
   },

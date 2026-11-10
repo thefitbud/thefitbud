@@ -790,32 +790,41 @@ progressRoutes.patch(
       lastEditedAt: now,
       updatedAt: now,
     };
+    let stored: typeof measurement | undefined;
     try {
       await recordCoachLogChange(db, {
-        domainWrites: () => [
-          db
-            .update(measurements)
-            .set({
-              value: nextValue,
-              unit: nextUnit,
-              observedAt: nextObservedAt,
-              recordVersion: nextVersion,
-              lastEditedByRole: "coach",
-              lastEditedByUserId: actor.userId,
-              lastEditedAt: now,
-              updatedAt: now,
-            })
-            .where(
-              and(
-                eq(measurements.id, measurement.id),
-                eq(measurements.recordVersion, measurement.recordVersion),
-              ),
-            ),
-        ],
+        afterCommit: async () => {
+          const [row] = await db
+            .select()
+            .from(measurements)
+            .where(eq(measurements.id, measurement.id))
+            .limit(1);
+          stored = row;
+        },
+        domainWrites: () => [],
         claim: {
           entity: "measurement",
           id: measurement.id,
           recordVersion: nextVersion,
+          update: () =>
+            db
+              .update(measurements)
+              .set({
+                value: nextValue,
+                unit: nextUnit,
+                observedAt: nextObservedAt,
+                recordVersion: nextVersion,
+                lastEditedByRole: "coach",
+                lastEditedByUserId: actor.userId,
+                lastEditedAt: now,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(measurements.id, measurement.id),
+                  eq(measurements.recordVersion, measurement.recordVersion),
+                ),
+              ),
         },
         entity: {
           type: "measurement",
@@ -845,7 +854,10 @@ progressRoutes.patch(
       }
       throw error;
     }
-    return ok(c, measurementSchema.parse(mapMeasurement(saved)));
+    if (!stored) {
+      return fail(c, 404, "MEASUREMENT_NOT_FOUND", "Measurement not found.");
+    }
+    return ok(c, measurementSchema.parse(mapMeasurement(stored)));
   },
 );
 

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
+import { armCoachLogWriteBarrier } from "../domain/coach-log.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import * as schema from "../db/schema.js";
 import { createTestIdToken } from "../auth/firebase.js";
@@ -534,7 +535,7 @@ describe("progress and R2 media", () => {
       expect(created.status).toBe(200);
       const measurementId = created.body.data!.id;
 
-      async function patch(value: number) {
+      async function patch(value: number, recordVersion: number) {
         const response = await app.request(
           `/progress/measurements/${measurementId}`,
           {
@@ -543,32 +544,58 @@ describe("progress and R2 media", () => {
               Cookie: trainerCookie,
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ recordVersion: 0, value }),
+            body: JSON.stringify({ recordVersion, value }),
           },
           testEnv(),
         );
         const text = await response.text();
         return {
           status: response.status,
-          body: (text ? JSON.parse(text) : null) as { error?: { code: string } },
+          body: (text ? JSON.parse(text) : null) as {
+            data?: { value: number; recordVersion: number };
+            error?: { code: string };
+          },
         };
       }
 
-      const [first, second] = await Promise.all([patch(71), patch(72)]);
-      const statuses = [first.status, second.status].sort((a, b) => a - b);
-      expect(statuses).toEqual([200, 409]);
-      const conflict = first.status === 409 ? first : second;
-      expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
-      const [row] = await db
+      const [before] = await db
         .select()
         .from(schema.measurements)
         .where(eq(schema.measurements.id, measurementId));
-      expect(row!.recordVersion).toBe(1);
-      const audits = await db
-        .select()
-        .from(schema.logEditEvents)
-        .where(eq(schema.logEditEvents.entityId, measurementId));
-      expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+      const recordVersion = before!.recordVersion;
+      // Both handlers read this version before either write. The 409 comes
+      // from the versioned update missing the row, not from a later read.
+      const disarm = armCoachLogWriteBarrier(2);
+      try {
+        const [first, second] = await Promise.all([
+          patch(71, recordVersion),
+          patch(72, recordVersion),
+        ]);
+        const statuses = [first.status, second.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 409]);
+        const conflict = first.status === 409 ? first : second;
+        const winner = first.status === 200 ? first : second;
+        expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
+        const [row] = await db
+          .select()
+          .from(schema.measurements)
+          .where(eq(schema.measurements.id, measurementId));
+        expect(row!.recordVersion).toBe(recordVersion + 1);
+        expect(row!.value).toBe(winner.body.data!.value);
+        expect([71, 72]).toContain(row!.value);
+        const audits = await db
+          .select()
+          .from(schema.logEditEvents)
+          .where(eq(schema.logEditEvents.entityId, measurementId));
+        expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+        const changes = await db
+          .select()
+          .from(schema.changeLog)
+          .where(eq(schema.changeLog.recordId, measurementId));
+        expect(changes).toHaveLength(2);
+      } finally {
+        disarm();
+      }
     });
   });
 });

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
+import { armCoachLogWriteBarrier } from "../domain/coach-log.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import { createTestIdToken } from "../auth/firebase.js";
 import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
@@ -1897,7 +1898,7 @@ describe("meal assignment and compliance", () => {
       return {
         status: response.status,
         body: (text ? JSON.parse(text) : null) as {
-          data?: { id: string; recordVersion: number };
+          data?: { id: string; recordVersion: number; outcome: string };
           error?: { code: string };
         },
       };
@@ -2008,6 +2009,63 @@ describe("meal assignment and compliance", () => {
         .from(schema.logEditEvents)
         .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
       expect(after.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+    });
+
+    it("concurrent edits with the same version return VERSION_CONFLICT and one edit audit", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectiveMealPlan("z722-edit");
+      const assignment = await todayMeal(relationshipId, today);
+      const created = await putMeal(
+        assignment.id,
+        assignment.localDate,
+        trainerCookie,
+        "z722-meal-edit-create",
+        { outcome: "confirmed" },
+      );
+      expect(created.status).toBe(201);
+      const [before] = await db
+        .select()
+        .from(schema.mealCompliance)
+        .where(eq(schema.mealCompliance.id, created.body.data!.id));
+      const recordVersion = before!.recordVersion;
+      // Both handlers read this version before either write. The 409 comes
+      // from the versioned update missing the row, not from a later read.
+      const disarm = armCoachLogWriteBarrier(2);
+      try {
+        const [first, second] = await Promise.all([
+          putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-edit-a", {
+            outcome: "skipped",
+            recordVersion,
+          }),
+          putMeal(assignment.id, assignment.localDate, trainerCookie, "z722-meal-edit-b", {
+            outcome: "modified",
+            deviationKind: "other",
+            recordVersion,
+          }),
+        ]);
+        const statuses = [first.status, second.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 409]);
+        const conflict = first.status === 409 ? first : second;
+        const winner = first.status === 200 ? first : second;
+        expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
+        const [row] = await db
+          .select()
+          .from(schema.mealCompliance)
+          .where(eq(schema.mealCompliance.id, created.body.data!.id));
+        expect(row!.recordVersion).toBe(recordVersion + 1);
+        expect(row!.outcome).toBe(winner.body.data!.outcome);
+        const audits = await db
+          .select()
+          .from(schema.logEditEvents)
+          .where(eq(schema.logEditEvents.entityId, created.body.data!.id));
+        expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+        const changes = await db
+          .select()
+          .from(schema.changeLog)
+          .where(eq(schema.changeLog.recordId, created.body.data!.id));
+        expect(changes).toHaveLength(2);
+      } finally {
+        disarm();
+      }
     });
   });
 });

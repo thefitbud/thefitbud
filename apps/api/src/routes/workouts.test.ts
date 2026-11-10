@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
+import { armCoachLogWriteBarrier } from "../domain/coach-log.js";
 import {
   getTestDbOverride,
   setTestDbOverride,
@@ -1717,7 +1718,7 @@ describe("workout assignment and execution", () => {
       const executionId = created.body.data!.id;
       const setId = created.body.data!.exercises[0]!.sets[0]!.id;
 
-      async function patch(reps: number) {
+      async function patch(reps: number, recordVersion: number) {
         const response = await app.request(
           `/workouts/executions/${executionId}`,
           {
@@ -1727,7 +1728,7 @@ describe("workout assignment and execution", () => {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              recordVersion: 0,
+              recordVersion,
               sets: [{ setExecutionId: setId, status: "completed", actualReps: reps }],
             }),
           },
@@ -1736,25 +1737,61 @@ describe("workout assignment and execution", () => {
         const text = await response.text();
         return {
           status: response.status,
-          body: (text ? JSON.parse(text) : null) as { error?: { code: string } },
+          body: (text ? JSON.parse(text) : null) as {
+            data?: {
+              recordVersion: number;
+              exercises: Array<{ sets: Array<{ id: string; actualReps: number | null }> }>;
+            };
+            error?: { code: string };
+          },
         };
       }
 
-      const [first, second] = await Promise.all([patch(8), patch(9)]);
-      const statuses = [first.status, second.status].sort((a, b) => a - b);
-      expect(statuses).toEqual([200, 409]);
-      const conflict = first.status === 409 ? first : second;
-      expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
-      const [row] = await db
+      const [before] = await db
         .select()
         .from(schema.workoutExecutions)
         .where(eq(schema.workoutExecutions.id, executionId));
-      expect(row!.recordVersion).toBe(1);
-      const audits = await db
-        .select()
-        .from(schema.logEditEvents)
-        .where(eq(schema.logEditEvents.entityId, executionId));
-      expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+      const recordVersion = before!.recordVersion;
+      // Both handlers read this version before either write. The 409 comes
+      // from the versioned update missing the row, not from a later read.
+      const disarm = armCoachLogWriteBarrier(2);
+      try {
+        const [first, second] = await Promise.all([
+          patch(8, recordVersion),
+          patch(9, recordVersion),
+        ]);
+        const statuses = [first.status, second.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 409]);
+        const conflict = first.status === 409 ? first : second;
+        const winner = first.status === 200 ? first : second;
+        expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
+        const [row] = await db
+          .select()
+          .from(schema.workoutExecutions)
+          .where(eq(schema.workoutExecutions.id, executionId));
+        expect(row!.recordVersion).toBe(recordVersion + 1);
+        const [setRow] = await db
+          .select()
+          .from(schema.setExecutions)
+          .where(eq(schema.setExecutions.id, setId));
+        const winnerReps = winner.body.data!.exercises
+          .flatMap((exercise) => exercise.sets)
+          .find((set) => set.id === setId)?.actualReps;
+        expect(setRow!.actualReps).toBe(winnerReps);
+        expect([8, 9]).toContain(setRow!.actualReps);
+        const audits = await db
+          .select()
+          .from(schema.logEditEvents)
+          .where(eq(schema.logEditEvents.entityId, executionId));
+        expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+        const changes = await db
+          .select()
+          .from(schema.changeLog)
+          .where(eq(schema.changeLog.recordId, executionId));
+        expect(changes).toHaveLength(2);
+      } finally {
+        disarm();
+      }
     });
   });
 });

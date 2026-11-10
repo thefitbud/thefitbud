@@ -2367,28 +2367,13 @@ workoutRoutes.patch(
       const values = setUpdates.get(set.id);
       return values ? { ...set, ...values } : set;
     });
+    let refreshed: NonNullable<Awaited<ReturnType<typeof loadExecutionBundle>>> | undefined;
     try {
       await recordCoachLogChange(db, {
+        afterCommit: async () => {
+          refreshed = (await loadExecutionBundle(db, execution.id)) ?? undefined;
+        },
         domainWrites: () => [
-          db
-            .update(workoutExecutions)
-            .set({
-              status: nextStatus,
-              sessionRpe: nextSessionRpe,
-              completedAt: nextCompletedAt,
-              startedAt: nextStartedAt,
-              recordVersion: nextVersion,
-              lastEditedByRole: "coach",
-              lastEditedByUserId: actor.userId,
-              lastEditedAt: now,
-              updatedAt: now,
-            })
-            .where(
-              and(
-                eq(workoutExecutions.id, execution.id),
-                eq(workoutExecutions.recordVersion, execution.recordVersion),
-              ),
-            ),
           ...[...setUpdates].map(([id, values]) =>
             db
               .update(setExecutions)
@@ -2406,6 +2391,28 @@ workoutRoutes.patch(
           entity: "workout_execution",
           id: execution.id,
           recordVersion: nextVersion,
+          // Last statement in the batch before the guard, so a missed version
+          // rolls the set and exercise writes back with it.
+          update: () =>
+            db
+              .update(workoutExecutions)
+              .set({
+                status: nextStatus,
+                sessionRpe: nextSessionRpe,
+                completedAt: nextCompletedAt,
+                startedAt: nextStartedAt,
+                recordVersion: nextVersion,
+                lastEditedByRole: "coach",
+                lastEditedByUserId: actor.userId,
+                lastEditedAt: now,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(workoutExecutions.id, execution.id),
+                  eq(workoutExecutions.recordVersion, execution.recordVersion),
+                ),
+              ),
         },
         entity: {
           type: "workout_execution",
@@ -2441,7 +2448,9 @@ workoutRoutes.patch(
       if (conflict) return conflict;
       throw error;
     }
-    const refreshed = (await loadExecutionBundle(db, execution.id))!;
+    if (!refreshed) {
+      return fail(c, 404, "EXECUTION_NOT_FOUND", "Execution not found.");
+    }
     emitWorkoutExecutionChanged(c.env, {
       id: execution.id,
       coachingRelationshipId: relationship.id,
