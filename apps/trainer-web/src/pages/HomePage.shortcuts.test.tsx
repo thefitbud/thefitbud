@@ -716,18 +716,21 @@ describe("HomePage row selection follows the client (HM5)", () => {
     expect(document.activeElement?.tagName).toBe("H1");
   });
 
-  // DR1 QA F2: Esc then Enter on the same row before the close commits keeps
+  // DR1 QA F2: Esc then Review on the same row before the close commits keeps
   // the same drawer mounted; Home must hand it a new open token.
-  it("DR1/F2: Esc then Enter on the same row gives the drawer a new open token", async () => {
+  // Z7-2: Enter on the row opens the client panel. Review is the drawer.
+  it("DR1/F2: Esc then Review on the same row gives the drawer a new open token", async () => {
     await renderHome("/");
     clickRow("Rohan Mehta");
-    fireEvent.keyDown(rowOf("Rohan Mehta"), { key: "Enter" });
+    const review = rowOf("Rohan Mehta").querySelector("button");
+    if (!review) throw new Error("no Review button");
+    fireEvent.click(review);
     expect(screen.getByRole("dialog")).toBeTruthy();
     const first = drawerProps.openSeq;
     expect(typeof first).toBe("number");
     act(() => {
       fireEvent.keyDown(rowOf("Rohan Mehta"), { key: "Escape" });
-      fireEvent.keyDown(rowOf("Rohan Mehta"), { key: "Enter" });
+      fireEvent.click(review);
     });
     expect(screen.getByRole("dialog")).toBeTruthy();
     expect(drawerProps.openSeq).toBeGreaterThan(first!);
