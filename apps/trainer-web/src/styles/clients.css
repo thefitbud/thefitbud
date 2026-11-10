@@ -949,7 +949,7 @@
 
 .clients-table th,
 .clients-table td {
-  padding: 12px 10px;
+  padding: 12px 8px;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--border, #e7e9f2);
@@ -975,17 +975,28 @@
 }
 
 /* Current: Client, Status, Adherence, Next check-in, Plan, Renewal, Action.
-   Action is a fixed width wide enough for "Review intake" / "Resend invite";
-   the rest share what is left (Renewal takes the remainder). */
-.clients-table .col-client { width: 18%; }
-.clients-table .col-status { width: 13%; }
-.clients-table .col-adherence { width: 16%; }
-.clients-table .col-checkin { width: 11%; }
+   Fixed widths fit the widest chip on one line ("Needs attention", "Expired")
+   and the Action button ("Review intake" / "Resend invite"); Plan takes a
+   share and Client takes the remainder. */
+.clients-table .col-client { width: auto; }
+.clients-table .col-status { width: 120px; }
+.clients-table .col-adherence { width: 172px; }
+.clients-table .col-checkin { width: 96px; }
 .clients-table .col-plan { width: 13%; }
-.clients-table .col-renewal { width: auto; }
+.clients-table .col-renewal { width: 124px; }
 .clients-table .col-action {
-  width: 144px;
+  width: 140px;
   text-align: right;
+}
+
+/* Icon-rail widths (1024–1279): narrower fixed columns so Client keeps room;
+   longer chips may wrap to two lines here. */
+@media (max-width: 1279px) {
+  .clients-table .col-status { width: 104px; }
+  .clients-table .col-adherence { width: 124px; }
+  .clients-table .col-checkin { width: 90px; }
+  .clients-table .col-plan { width: 13%; }
+  .clients-table .col-renewal { width: 108px; }
 }
 
 /* Ended (frame 140): Client, Status, Last plan, Action. */
