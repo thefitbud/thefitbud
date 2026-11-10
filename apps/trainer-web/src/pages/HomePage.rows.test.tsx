@@ -231,6 +231,15 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     expect(screen.getAllByRole("row")[0]!.className).not.toContain("is-focused");
   });
 
+  it("clicking the open overflow menu's own padding does not open the client panel", async () => {
+    await renderHome();
+    const grid = screen.getByRole("grid", { name: "Needs attention" });
+    fireEvent.click(within(grid).getByRole("button", { name: "More actions for Rohan Mehta" }));
+    const menu = await screen.findByRole("menu");
+    fireEvent.click(menu);
+    expect(loc()).not.toContain("client=");
+  });
+
   it("opens the ask drawer from the row, and Mark answered does not also move the page", async () => {
     await renderHome();
     fireEvent.click(screen.getByText(/asked about Lunch/));

@@ -63,7 +63,7 @@ function isRowControlTarget(target: EventTarget | null): boolean {
         : null;
   if (!el) return false;
   return Boolean(
-    el.closest("button, a, input, textarea, select, [role='menuitem']"),
+    el.closest("button, a, input, textarea, select, [role='menu'], [role='menuitem']"),
   );
 }
 
