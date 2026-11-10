@@ -386,3 +386,173 @@ a.hv-row:focus-visible {
   .hv-age { grid-area: age; align-self: start; font-size: 13px; }
   .hv-chev { grid-area: chev; }
 }
+
+/* ------------------------------------------------------------------ */
+/* Z7-10: Renewals due and Asked you on WhatsApp.                       */
+/* Every column but the text column is fixed so chips line up at every  */
+/* breakpoint.                                                          */
+/* ------------------------------------------------------------------ */
+
+button.hv-row {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+button.hv-row:hover,
+button.hv-row:focus-visible {
+  background: #faf9ff;
+}
+
+.hv-list li + li button.hv-row {
+  border-top: 1px solid var(--border-default, #e7e9f2);
+}
+
+.hv-row-rn {
+  grid-template-columns: minmax(150px, 200px) minmax(0, 1fr) 150px 120px 172px;
+  min-height: 72px;
+}
+
+.hv-row-ask {
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) 124px 156px 18px;
+  min-height: 64px;
+}
+
+.hv-plan,
+.hv-when {
+  min-width: 0;
+  font-size: 15px;
+  color: var(--ink-700, #25262b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+
+.hv-row-rn .hv-sev {
+  justify-self: center;
+}
+
+.hv-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--border-default, #e7e9f2);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--deep-navy, #1a1248);
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+a.hv-row-rn:hover .hv-open {
+  border-color: #d6cfff;
+}
+
+.hv-chev-phone {
+  display: none;
+}
+
+.hv-row-ask .hv-sev {
+  justify-self: center;
+}
+
+.hv-topic {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  padding: 3px 12px;
+  border: 1px solid var(--border-default, #e7e9f2);
+  border-radius: 14px;
+  background: var(--surface-page-web, #f3f5fb);
+  color: var(--ink-700, #25262b);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.hv-topic.is-pain {
+  border-color: #f8c9d1;
+  background: #fdecef;
+  color: #a3243f;
+}
+
+.hv-nowrap {
+  white-space: nowrap;
+}
+
+.hv-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid var(--border-default, #e7e9f2);
+  border-radius: 12px;
+  background: #f0f1f5;
+  font-size: 14px;
+  color: var(--ink-700, #25262b);
+}
+
+.hv-note svg {
+  flex: none;
+  color: var(--ink-500, #5b616b);
+}
+
+@media (max-width: 1100px) {
+  .hv-row-rn {
+    grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 140px 112px 168px;
+  }
+
+  .hv-row-ask {
+    grid-template-columns: minmax(120px, 170px) minmax(0, 1fr) 124px 136px 18px;
+  }
+}
+
+@media (max-width: 640px) {
+  /* Name and chip, then the plan, then the date: the text keeps its width. */
+  .hv-row-rn,
+  .hv-row-ask {
+    grid-template-columns: minmax(0, 1fr) auto 18px;
+  }
+
+  .hv-row-rn {
+    grid-template-areas:
+      "who sev chev"
+      "plan plan chev"
+      "when when chev";
+  }
+
+  .hv-row-ask {
+    grid-template-areas:
+      "who sev chev"
+      "issue issue chev"
+      "age age chev";
+  }
+
+  .hv-row-rn .hv-sev,
+  .hv-row-ask .hv-sev { justify-self: end; }
+  .hv-plan {
+    grid-area: plan;
+    padding-left: 44px;
+    font-size: 14px;
+  }
+  .hv-when,
+  .hv-row-ask .hv-age {
+    justify-self: start;
+    padding-left: 44px;
+    font-size: 13px;
+    color: var(--ink-500, #5b616b);
+  }
+  .hv-when { grid-area: when; }
+  .hv-open { display: none; }
+  .hv-chev-phone { display: block; }
+}
