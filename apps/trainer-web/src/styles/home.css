@@ -8,10 +8,9 @@
 
 .home-hdr {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 24px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
 }
 
 .home-eyebrow {
@@ -55,46 +54,70 @@ h1.home-title:focus-visible {
 .home-tiles {
   display: flex;
   gap: 12px;
-  flex-wrap: wrap;
+  width: 100%;
+  min-width: 0;
 }
 
 .home-tile {
-  width: 188px;
+  position: relative;
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  min-height: 76px;
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
-  border-radius: 14px;
+  padding: 14px 16px;
+  border-radius: 16px;
   background: #fff;
   border: 1px solid #e7e9f2;
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
   font: inherit;
   color: inherit;
 }
 
-.home-tile.is-active {
+a.home-tile:hover {
+  border-color: #d6cfff;
+  box-shadow: 0 6px 18px rgb(26 18 72 / 10%);
+}
+
+a.home-tile:focus-visible {
   outline: 2px solid var(--indigo, #4527c6);
-  outline-offset: 1px;
+  outline-offset: 2px;
+}
+
+.home-tile:disabled,
+.home-tile.is-zero {
+  cursor: default;
+  opacity: 1;
+  background: var(--page-bg, #f3f5fb);
+  box-shadow: none;
 }
 
 .home-tile-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex: none;
 }
 
+.home-tile-copy {
+  min-width: 0;
+}
+
 .home-tile-lbl {
   display: block;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
-  font-weight: 500;
-  color: var(--ink-500, #5b616b);
+  font-weight: 600;
+  color: var(--ink-700, #25262b);
+  white-space: nowrap;
 }
 
 .home-tile-num {
@@ -106,6 +129,51 @@ h1.home-title:focus-visible {
   font-variant-numeric: tabular-nums;
   color: var(--deep-navy, #1a1248);
   letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.home-tile.is-zero .home-tile-num,
+.home-tile:disabled .home-tile-num {
+  color: #858b96;
+}
+
+.home-tile-arrow {
+  margin-left: auto;
+  flex: none;
+  color: #858b96;
+}
+
+.home-tile-zero {
+  position: absolute;
+  right: 14px;
+  bottom: 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: #858b96;
+  white-space: nowrap;
+}
+
+/* DS4: a touch screen has no hover. The tint is the pressed state only. */
+@media (hover: none) {
+  a.home-tile:hover {
+    border-color: #e7e9f2;
+    box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+  }
+
+  .home-row:hover,
+  .home-li.is-target:hover {
+    background: transparent;
+  }
+
+  a.home-tile:active:not(:disabled) {
+    border-color: #d6cfff;
+    box-shadow: 0 6px 18px rgb(26 18 72 / 10%);
+  }
+
+  .home-row:active,
+  .home-li.is-target:active {
+    background: #f7f8fc;
+  }
 }
 
 .home-grid {
@@ -187,14 +255,15 @@ h1.home-title:focus-visible {
 
 .home-row {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(72px, 92px) minmax(48px, 64px) 68px 28px;
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(112px, 124px) minmax(76px, 84px) auto 44px;
   align-items: center;
   gap: 8px;
-  min-height: 56px;
+  min-height: 60px;
   height: auto;
   padding: 8px 12px 8px 16px;
   border-bottom: 1px solid #e7e9f2;
   outline: none;
+  cursor: pointer;
 }
 
 .home-row:last-child {
@@ -206,8 +275,34 @@ h1.home-title:focus-visible {
   background: #f7f8fc;
 }
 
-.home-row:focus-visible {
+.home-row:focus-visible,
+.home-li.is-target:focus-visible {
+  outline: none;
   box-shadow: inset 0 0 0 2px var(--indigo, #4527c6);
+  border-radius: 10px;
+}
+
+/* Review, Mark answered and the row menu stay their own 44px targets. */
+.home-row .button-sm,
+.home-row a.button-tinted,
+.home-li .button-sm,
+.home-li a.button-tinted,
+.home-li a.button-secondary,
+.home-row .overflow-menu-trigger,
+.home-li .overflow-menu-trigger {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.home-row .overflow-menu-trigger,
+.home-li .overflow-menu-trigger {
+  width: 44px;
+  height: 44px;
+  padding: 0;
 }
 
 .home-who {
@@ -310,6 +405,14 @@ h1.home-title:focus-visible {
   border-bottom: 1px solid #e7e9f2;
 }
 
+.home-li.is-target {
+  cursor: pointer;
+}
+
+.home-li.is-target:hover {
+  background: #f7f8fc;
+}
+
 .home-li:last-child {
   border-bottom: 0;
 }
@@ -325,6 +428,19 @@ h1.home-title:focus-visible {
   line-height: 20px;
   font-weight: 600;
   color: var(--deep-navy, #1a1248);
+}
+
+.home-li-name {
+  all: unset;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  border-radius: 4px;
+}
+
+.home-li-name:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
 }
 
 .home-li-tx > span {
@@ -683,7 +799,72 @@ h1.home-title:focus-visible {
   font-weight: 600;
 }
 
-@media (max-width: 1100px) {
+/* Icon-rail widths (frame 191 / DS4 iPad): four cards, labels stay on one line. */
+@media (max-width: 1279px) {
+  .home-tile {
+    padding: 12px 10px;
+    gap: 8px;
+  }
+
+  .home-tile-icon {
+    width: 36px;
+    height: 36px;
+  }
+
+  .home-tile-lbl {
+    font-size: 12px;
+  }
+}
+
+/* Rail beside the list: give the issue text room back (name and gaps tighten). */
+@media (min-width: 1024px) and (max-width: 1599px) {
+  .home-row {
+    grid-template-columns: minmax(148px, 152px) minmax(0, 1fr) 96px 76px auto 44px;
+    gap: 8px;
+  }
+}
+
+/* Z7-4: at 1024–1400 a long issue wraps to a second line instead of being
+   cut to a few characters; the rail is a little narrower (frame 191). */
+@media (min-width: 1024px) and (max-width: 1400px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr) 288px;
+  }
+
+  /* The "+N more" count is in the row's title; drop it so the issue text reads. */
+  .home-row .home-more {
+    display: none;
+  }
+
+  .home-issue-txt {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    line-height: 18px;
+  }
+}
+
+/* iPad landscape (frame 191, 1024x768): list and rail stay side by side. */
+@media (min-width: 1024px) and (max-width: 1100px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr) 296px;
+    gap: 20px;
+  }
+
+  .home-row {
+    grid-template-columns: 146px minmax(0, 1fr) 92px 60px auto 44px;
+    gap: 6px;
+    padding: 8px 8px 8px 12px;
+  }
+
+  .home-row .home-who {
+    gap: 8px;
+  }
+}
+
+@media (max-width: 1023px) {
   .home-grid {
     grid-template-columns: 1fr;
   }
@@ -733,10 +914,14 @@ h1.home-title:focus-visible {
     gap: 16px;
   }
 
+  .home-tiles {
+    flex-wrap: wrap;
+  }
+
   .home-tile {
     width: calc(50% - 6px);
     min-width: 0;
-    flex: 1 1 140px;
+    flex: 1 1 calc(50% - 6px);
   }
 }
 
@@ -767,9 +952,131 @@ h1.home-title:focus-visible {
   .home-tile {
     width: 100%;
     min-width: 0;
+    flex: 1 1 100%;
   }
 
   .home-tiles {
     width: 100%;
+  }
+}
+
+/* Z7-4 all clear (frame 135): one calm column, no count cards. The cards
+   stay in the DOM (zero state) and are only hidden here. */
+.home-triage.is-all-clear .home-tiles {
+  display: none;
+}
+
+.home-clear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 24px 56px;
+  text-align: center;
+}
+
+.home-clear-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.home-clear-ttl {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--deep-navy, #1a1248);
+}
+
+.home-clear-copy {
+  max-width: 400px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-500, #5b616b);
+}
+
+.home-clear-line {
+  margin: 0;
+  padding: 0 20px 18px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-500, #5b616b);
+}
+
+@media (max-width: 767px) {
+  .home-clear {
+    padding: 32px 16px 40px;
+  }
+}
+
+/* Z7-4: with the side panel docked (540 px at >= 1024, frame 02), Home keeps
+   one column to the panel's left: no count cards, the rail stacks below and
+   the row's Review button gives way (the panel already shows that review). */
+@media (min-width: 1024px) {
+  .home-triage.has-panel {
+    margin-right: 532px;
+  }
+
+  .home-triage.has-panel .home-tiles {
+    display: none;
+  }
+
+  .home-triage.has-panel .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-triage.has-panel .home-row {
+    grid-template-columns: minmax(120px, 148px) minmax(0, 1fr) 96px 76px 44px;
+  }
+
+  .home-triage.has-panel .home-review-cell,
+  .home-triage.has-panel .home-row .home-more {
+    display: none;
+  }
+}
+
+/* Narrow column beside the panel (1024–1439): two-line rows, and the sort
+   hint gives way (it fits beside the panel from 1440, frame 02). */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .home-triage.has-panel .home-sort {
+    display: none;
+  }
+
+  .home-triage.has-panel .home-row {
+    grid-template-columns: minmax(0, 1fr) auto 44px;
+    grid-template-areas:
+      "who chip menu"
+      "issue age age";
+    gap: 4px 8px;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(1) {
+    grid-area: who;
+    min-width: 0;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(2) {
+    grid-area: issue;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(3) {
+    grid-area: chip;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(4) {
+    grid-area: age;
+    justify-self: end;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(6) {
+    grid-area: menu;
   }
 }

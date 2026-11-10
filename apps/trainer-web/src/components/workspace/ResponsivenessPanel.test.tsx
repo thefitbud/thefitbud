@@ -25,6 +25,34 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("ResponsivenessPanel footer (D-W7-7)", () => {
+  it("ended client: reminders are off, with no Configure suggestion", async () => {
+    stage1.getResponsiveness.mockResolvedValueOnce(RESPONSIVE);
+    render(
+      <ResponsivenessPanel relationshipId={REL_ID} traineeFirstName="Kavya" ended />,
+    );
+    expect(
+      await screen.findByText("Reminders are off while coaching is ended."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/switch categories on or off in Configure/i)).toBeNull();
+  });
+
+  it("active client: the Configure footer is unchanged", async () => {
+    stage1.getResponsiveness.mockResolvedValueOnce(RESPONSIVE);
+    render(
+      <ResponsivenessPanel relationshipId={REL_ID} traineeFirstName="Rohan" />,
+    );
+    expect(
+      await screen.findByText(
+        /You can switch categories on or off in Configure/i,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Reminders are off while coaching is ended."),
+    ).toBeNull();
+  });
+});
+
 describe("ResponsivenessPanel on a workspace refresh", () => {
   it("keeps its data when a background refresh fails", async () => {
     stage1.getResponsiveness.mockResolvedValueOnce(RESPONSIVE);

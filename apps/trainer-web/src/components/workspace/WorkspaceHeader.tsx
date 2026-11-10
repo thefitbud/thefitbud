@@ -194,7 +194,7 @@ export function WorkspaceHeader({
   }
 
   // Ended relationships: Configure is read-only (CE1) and the reminders
-  // drawer only reports history, so label both as view-only (CE2).
+  // drawer only reports history (D-W7-7).
   const overflowItems = [
     {
       id: "configure",
@@ -209,7 +209,7 @@ export function WorkspaceHeader({
     {
       id: "reminders",
       label: ended
-        ? "View reminder settings"
+        ? "View reminder history"
         : "Reminder settings for this client",
       onSelect: () => onOpenModal({ type: "responsiveness" }),
     },
@@ -326,27 +326,31 @@ export function WorkspaceHeader({
             </div>
           </div>
           <div className="wsh-acts">
-            {whatsappHrefValue ? (
-              <a
-                className="button-secondary button-whatsapp"
-                href={whatsappHrefValue}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <WhatsAppGlyph />
-                Message on WhatsApp
-              </a>
-            ) : (
-              <button
-                type="button"
-                className="button-secondary button-whatsapp"
-                disabled
-                title="No WhatsApp number on file for this client"
-              >
-                <WhatsAppGlyph />
-                Message on WhatsApp
-              </button>
-            )}
+            {!ended ? (
+              <>
+              {whatsappHrefValue ? (
+                <a
+                  className="button-secondary button-whatsapp"
+                  href={whatsappHrefValue}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <WhatsAppGlyph />
+                  Message on WhatsApp
+                </a>
+              ) : (
+                <button
+                  type="button"
+                  className="button-secondary button-whatsapp"
+                  disabled
+                  title="No WhatsApp number on file for this client"
+                >
+                  <WhatsAppGlyph />
+                  Message on WhatsApp
+                </button>
+              )}
+              </>
+            ) : null}
             {ended && !pendingReactivation ? (
               <Button
                 variant="primary"

@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../index.js";
+import { armCoachLogWriteBarrier } from "../domain/coach-log.js";
 import {
   getTestDbOverride,
   setTestDbOverride,
@@ -15,11 +16,18 @@ import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 
 
 
-import { createMemoryDb as createSharedMemoryDb } from "../test-support/memory-db.js";
+import {
+  createMemoryDb as createSharedMemoryDb,
+  type SqlJsCompatDatabase,
+} from "../test-support/memory-db.js";
 
-async function createMemoryDb(): Promise<{ db: Db; close: () => void }> {
+async function createMemoryDb(): Promise<{
+  db: Db;
+  close: () => void;
+  sqlite: SqlJsCompatDatabase;
+}> {
   const handle = await createSharedMemoryDb();
-  return { db: handle.db, close: handle.close };
+  return { db: handle.db, close: handle.close, sqlite: handle.sqlite };
 }
 
 function dummyD1(): D1Database {
@@ -338,10 +346,14 @@ async function reachEffectivePlan(
 
 describe("workout assignment and execution", () => {
   let closeDb: () => void;
+  let db: Db;
+  let sqlite: SqlJsCompatDatabase;
 
   beforeEach(async () => {
     const memory = await createMemoryDb();
     closeDb = memory.close;
+    db = memory.db;
+    sqlite = memory.sqlite;
     setTestDbOverride(memory.db);
   });
 
@@ -1553,5 +1565,233 @@ describe("workout assignment and execution", () => {
     expect(((await mismatch.json()) as { error: { code: string } }).error.code).toBe(
       "CONSISTENCY_FINGERPRINT_MISMATCH",
     );
+  });
+
+  describe("coach log is one transaction (Z7-22)", () => {
+    const exerciseId = "22222222-2222-4222-8222-222222222222";
+    const set1 = "33333333-3333-4333-8333-333333333333";
+    const set2 = "33333333-3333-4333-8333-333333333334";
+
+    function logBody() {
+      return {
+        performedAt: new Date().toISOString(),
+        exercises: [
+          {
+            exerciseId,
+            sets: [
+              { setTargetId: set1, status: "completed" },
+              { setTargetId: set2, status: "completed" },
+            ],
+          },
+        ],
+      };
+    }
+
+    async function postLog(assignmentId: string, cookie: string, key: string) {
+      const response = await app.request(
+        `/workouts/assignments/${assignmentId}/log`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: cookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify(logBody()),
+        },
+        testEnv(),
+      );
+      const text = await response.text();
+      return {
+        status: response.status,
+        body: (text ? JSON.parse(text) : null) as {
+          data?: { id: string; recordVersion: number; exercises: Array<{ sets: Array<{ id: string }> }> };
+          error?: { code: string };
+        },
+      };
+    }
+
+    async function todayAssignment(relationshipId: string, today: string) {
+      const rows = await db
+        .select()
+        .from(schema.workoutAssignments)
+        .where(eq(schema.workoutAssignments.coachingRelationshipId, relationshipId));
+      const assignment = rows.find((row) => row.localDate === today);
+      expect(assignment).toBeTruthy();
+      return assignment!;
+    }
+
+    it("concurrent creates on one assignment return a conflict and keep one audit", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectivePlan(
+        "z722-race",
+        false,
+        true,
+      );
+      const assignment = await todayAssignment(relationshipId, today);
+      const [first, second] = await Promise.all([
+        postLog(assignment.id, trainerCookie, "z722-race-a"),
+        postLog(assignment.id, trainerCookie, "z722-race-b"),
+      ]);
+      const statuses = [first.status, second.status].sort((a, b) => a - b);
+      expect(statuses).toEqual([201, 409]);
+      const conflict = first.status === 409 ? first : second;
+      expect(conflict.body.error?.code).toBe("WORKOUT_ALREADY_FINISHED");
+
+      const executions = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.assignmentId, assignment.id));
+      expect(executions).toHaveLength(1);
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, executions[0]!.id));
+      expect(audits).toHaveLength(1);
+      expect(audits[0]).toMatchObject({ action: "create", entityType: "workout_execution" });
+      const changes = await db
+        .select()
+        .from(schema.changeLog)
+        .where(eq(schema.changeLog.recordId, executions[0]!.id));
+      expect(changes).toHaveLength(1);
+
+      const feed = await app.request(
+        "/activity/feed?limit=50",
+        { headers: { Cookie: trainerCookie } },
+        testEnv(),
+      );
+      expect(feed.status).toBe(200);
+      const events = (
+        (await feed.json()) as { data: { events: Array<{ id: string; type: string }> } }
+      ).data.events;
+      expect(events.some((event) => event.id === `log_edit:${audits[0]!.id}` && event.type === "coach_logged")).toBe(
+        true,
+      );
+    });
+
+    it("rolls the entry back when the audit write fails, then a retry stores both", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectivePlan(
+        "z722-rollback",
+        false,
+        true,
+      );
+      const assignment = await todayAssignment(relationshipId, today);
+      sqlite.exec(
+        "CREATE TRIGGER z722_fail_audit BEFORE INSERT ON log_edit_events BEGIN SELECT RAISE(ABORT, 'z722 injected failure'); END",
+      );
+      const failed = await postLog(assignment.id, trainerCookie, "z722-rollback-1");
+      sqlite.exec("DROP TRIGGER z722_fail_audit");
+      expect(failed.status).toBe(500);
+      const orphaned = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.assignmentId, assignment.id));
+      expect(orphaned).toHaveLength(0);
+      const audits = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.coachingRelationshipId, relationshipId));
+      expect(audits).toHaveLength(0);
+
+      const retried = await postLog(assignment.id, trainerCookie, "z722-rollback-2");
+      expect(retried.status).toBe(201);
+      const stored = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.assignmentId, assignment.id));
+      expect(stored).toHaveLength(1);
+      const audit = await db
+        .select()
+        .from(schema.logEditEvents)
+        .where(eq(schema.logEditEvents.entityId, stored[0]!.id));
+      expect(audit).toHaveLength(1);
+    });
+
+    it("concurrent edits with the same version return VERSION_CONFLICT and one edit audit", async () => {
+      const { trainerCookie, relationshipId, today } = await reachEffectivePlan(
+        "z722-edit",
+        false,
+        true,
+      );
+      const assignment = await todayAssignment(relationshipId, today);
+      const created = await postLog(assignment.id, trainerCookie, "z722-edit-create");
+      expect(created.status).toBe(201);
+      const executionId = created.body.data!.id;
+      const setId = created.body.data!.exercises[0]!.sets[0]!.id;
+
+      async function patch(reps: number, recordVersion: number) {
+        const response = await app.request(
+          `/workouts/executions/${executionId}`,
+          {
+            method: "PATCH",
+            headers: {
+              Cookie: trainerCookie,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              recordVersion,
+              sets: [{ setExecutionId: setId, status: "completed", actualReps: reps }],
+            }),
+          },
+          testEnv(),
+        );
+        const text = await response.text();
+        return {
+          status: response.status,
+          body: (text ? JSON.parse(text) : null) as {
+            data?: {
+              recordVersion: number;
+              exercises: Array<{ sets: Array<{ id: string; actualReps: number | null }> }>;
+            };
+            error?: { code: string };
+          },
+        };
+      }
+
+      const [before] = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.id, executionId));
+      const recordVersion = before!.recordVersion;
+      // Both handlers read this version before either write. The 409 comes
+      // from the versioned update missing the row, not from a later read.
+      const disarm = armCoachLogWriteBarrier(2);
+      try {
+        const [first, second] = await Promise.all([
+          patch(8, recordVersion),
+          patch(9, recordVersion),
+        ]);
+        const statuses = [first.status, second.status].sort((a, b) => a - b);
+        expect(statuses).toEqual([200, 409]);
+        const conflict = first.status === 409 ? first : second;
+        const winner = first.status === 200 ? first : second;
+        expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
+        const [row] = await db
+          .select()
+          .from(schema.workoutExecutions)
+          .where(eq(schema.workoutExecutions.id, executionId));
+        expect(row!.recordVersion).toBe(recordVersion + 1);
+        const [setRow] = await db
+          .select()
+          .from(schema.setExecutions)
+          .where(eq(schema.setExecutions.id, setId));
+        const winnerReps = winner.body.data!.exercises
+          .flatMap((exercise) => exercise.sets)
+          .find((set) => set.id === setId)?.actualReps;
+        expect(setRow!.actualReps).toBe(winnerReps);
+        expect([8, 9]).toContain(setRow!.actualReps);
+        const audits = await db
+          .select()
+          .from(schema.logEditEvents)
+          .where(eq(schema.logEditEvents.entityId, executionId));
+        expect(audits.map((audit) => audit.action).sort()).toEqual(["create", "edit"]);
+        const changes = await db
+          .select()
+          .from(schema.changeLog)
+          .where(eq(schema.changeLog.recordId, executionId));
+        expect(changes).toHaveLength(2);
+      } finally {
+        disarm();
+      }
+    });
   });
 });

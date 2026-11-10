@@ -15,6 +15,7 @@ import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
 import { demoUuid } from "../seed/demo/ids.js";
+import { loadOwnedRelationship, saveClientBasics } from "../domain/client-settings.js";
 
 /**
  * Z6-8 client settings: every endpoint, validation (D-W6-22), versioning, ended
@@ -998,6 +999,243 @@ describe("Z6-8 client settings", () => {
       // A retry of the PATCH that succeeded before the end replays its answer.
       const retry = await send("PATCH", path, ctx.trainer, { displayName: "Asha", contactPhone: "9876543210" }, "end-set");
       expect(retry.status).toBe(200);
+    });
+
+    describe("write races and the active guard (Z7-25)", () => {
+      async function receiptCount() {
+        return (
+          await db
+            .select()
+            .from(schema.idempotencyRecords)
+            .where(eq(schema.idempotencyRecords.operation, "client_settings.basics.patch"))
+        ).length;
+      }
+
+      /** The owning trainer, read from the relationship the routes created. */
+      async function ownerOf(relationshipId: string) {
+        const [row] = await db
+          .select({ id: schema.coachingRelationships.trainerUserId })
+          .from(schema.coachingRelationships)
+          .where(eq(schema.coachingRelationships.id, relationshipId));
+        return row;
+      }
+
+      function writeContext(trainerUserId: string, key: string) {
+        return {
+          actorUserId: trainerUserId,
+          idempotencyKey: key,
+          fingerprint: `fp-${key}`,
+          now: new Date().toISOString(),
+        };
+      }
+
+      it("overlapping name-only and phone-only PATCHes both persist", async () => {
+        const ctx = await reachActive("cs-race@example.com", "race");
+        const path = `${base(ctx.relationshipId)}/basic`;
+        const ownBefore = await clientOwnRows(ctx.traineeUserId);
+        const [named, phoned] = await Promise.all([
+          send("PATCH", path, ctx.trainer, { displayName: "Asha" }, "race-name"),
+          send("PATCH", path, ctx.trainer, { contactPhone: "9876543210" }, "race-phone"),
+        ]);
+        expect(named.status).toBe(200);
+        expect(phoned.status).toBe(200);
+        expect(await relationshipBasics(ctx.relationshipId)).toMatchObject({
+          clientDisplayName: "Asha",
+          contactPhoneE164: "+919876543210",
+        });
+        // Each answer carries at least its own field.
+        expect((await dataOf<{ basics: Basics }>(named)).basics.clientDisplayName).toBe("Asha");
+        expect((await dataOf<{ basics: Basics }>(phoned)).basics.contactPhoneE164).toBe("+919876543210");
+        expect(await clientOwnRows(ctx.traineeUserId)).toEqual(ownBefore);
+      });
+
+      it("a write built from a stale read never puts back the other field's old value", async () => {
+        const ctx = await reachActive("cs-stale@example.com", "stale");
+        const path = `${base(ctx.relationshipId)}/basic`;
+        const seeded = await send(
+          "PATCH",
+          path,
+          ctx.trainer,
+          { displayName: "Old name", contactPhone: "9000000001" },
+          "stale-seed",
+        );
+        expect(seeded.status).toBe(200);
+        const ownBefore = await clientOwnRows(ctx.traineeUserId);
+        // Request A reads the relationship (both old values)...
+        const trainer = await ownerOf(ctx.relationshipId);
+        const staleRow = await loadOwnedRelationship(db, ctx.relationshipId, trainer!.id);
+        expect(staleRow).toMatchObject({ clientDisplayName: "Old name" });
+        // ...request B changes the name and lands first...
+        const renamed = await send("PATCH", path, ctx.trainer, { displayName: "New name" }, "stale-b");
+        expect(renamed.status).toBe(200);
+        // ...then request A writes only the phone it was sent.
+        const result = await saveClientBasics(
+          db,
+          staleRow!,
+          { contactPhoneE164: "+919000000002" },
+          writeContext(trainer!.id, "stale-a"),
+        );
+        expect(result.kind).toBe("saved");
+        if (result.kind !== "saved") return;
+        expect(result.body.data.basics).toMatchObject({
+          clientDisplayName: "New name",
+          contactPhoneE164: "+919000000002",
+        });
+        expect(await relationshipBasics(ctx.relationshipId)).toMatchObject({
+          clientDisplayName: "New name",
+          contactPhoneE164: "+919000000002",
+        });
+        expect(await clientOwnRows(ctx.traineeUserId)).toEqual(ownBefore);
+      });
+
+      it("a relationship that ends after the read is refused at write time with no change and no receipt", async () => {
+        const ctx = await reachActive("cs-endrace@example.com", "endrace");
+        const path = `${base(ctx.relationshipId)}/basic`;
+        const seeded = await send(
+          "PATCH",
+          path,
+          ctx.trainer,
+          { displayName: "Asha", contactPhone: "9876543210" },
+          "endrace-seed",
+        );
+        expect(seeded.status).toBe(200);
+        const trainer = await ownerOf(ctx.relationshipId);
+        const staleRow = await loadOwnedRelationship(db, ctx.relationshipId, trainer!.id);
+        expect(staleRow?.status).toBe("active");
+        const ended = await send(
+          "POST",
+          `/relationships/${ctx.relationshipId}/end`,
+          ctx.trainer,
+          { reason: "paused" },
+          "endrace-end",
+        );
+        expect(ended.status).toBe(200);
+        const before = await relationshipBasics(ctx.relationshipId);
+        const ownBefore = await clientOwnRows(ctx.traineeUserId);
+        const receiptsBefore = await receiptCount();
+        for (const [index, patch] of [
+          { clientDisplayName: "Late rename" },
+          { contactPhoneE164: null },
+          { clientDisplayName: null, contactPhoneE164: "+919000000003" },
+        ].entries()) {
+          const result = await saveClientBasics(
+            db,
+            staleRow!,
+            patch,
+            writeContext(trainer!.id, `endrace-${index}`),
+          );
+          expect(result).toEqual({ kind: "ended" });
+        }
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(before);
+        expect(await clientOwnRows(ctx.traineeUserId)).toEqual(ownBefore);
+        expect(await receiptCount()).toBe(receiptsBefore);
+        // Through the route the same refusal is the static RELATIONSHIP_ENDED.
+        const response = await send("PATCH", path, ctx.trainer, { displayName: "Late" }, "endrace-route");
+        expect(response.status).toBe(409);
+        expect(await errorOf(response)).toMatchObject({
+          code: "RELATIONSHIP_ENDED",
+          message: "Coaching relationship has ended.",
+        });
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(before);
+      });
+
+      it("a stale row for another trainer's relationship writes nothing", async () => {
+        const ctx = await reachActive("cs-staleowner@example.com", "staleowner");
+        const trainer = await ownerOf(ctx.relationshipId);
+        const row = await loadOwnedRelationship(db, ctx.relationshipId, trainer!.id);
+        const before = await relationshipBasics(ctx.relationshipId);
+        const result = await saveClientBasics(
+          db,
+          { ...row!, trainerUserId: "00000000-0000-4000-8000-000000000000" },
+          { clientDisplayName: "Taken over" },
+          writeContext(trainer!.id, "staleowner"),
+        );
+        expect(result).toEqual({ kind: "not_found" });
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(before);
+        expect(await receiptCount()).toBe(0);
+      });
+
+      it("a same-key write that loses the receipt does not leave its update behind", async () => {
+        const ctx = await reachActive("cs-loser@example.com", "loser");
+        const trainer = await ownerOf(ctx.relationshipId);
+        const row = await loadOwnedRelationship(db, ctx.relationshipId, trainer!.id);
+        const first = await saveClientBasics(
+          db,
+          row!,
+          { clientDisplayName: "Asha", contactPhoneE164: "+919876543210" },
+          writeContext(trainer!.id, "lose-key"),
+        );
+        expect(first.kind).toBe("saved");
+        if (first.kind !== "saved") return;
+        expect(first.body.data.basics.clientDisplayName).toBe("Asha");
+        // A third patch lands after the winner and before the loser.
+        await db
+          .update(schema.coachingRelationships)
+          .set({ clientDisplayName: "Kept" })
+          .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+        const kept = await relationshipBasics(ctx.relationshipId);
+        const receiptsBefore = await receiptCount();
+        // Same key, different body: the loser already passed the route's receipt
+        // lookup. Its UPDATE must roll back with the failed receipt insert.
+        await expect(
+          saveClientBasics(
+            db,
+            row!,
+            { clientDisplayName: "Loser" },
+            { ...writeContext(trainer!.id, "lose-key"), fingerprint: "fp-lose-other" },
+          ),
+        ).rejects.toThrow();
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(kept);
+        // Same key, same body as the winner: a retry must not put "Asha" back over "Kept".
+        await expect(
+          saveClientBasics(
+            db,
+            row!,
+            { clientDisplayName: "Asha", contactPhoneE164: "+919876543210" },
+            writeContext(trainer!.id, "lose-key"),
+          ),
+        ).rejects.toThrow();
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(kept);
+        expect(await receiptCount()).toBe(receiptsBefore);
+        const [receipt] = await db
+          .select()
+          .from(schema.idempotencyRecords)
+          .where(eq(schema.idempotencyRecords.operation, "client_settings.basics.patch"));
+        expect(JSON.parse(receipt!.responseBody)).toEqual(first.body);
+      });
+
+      it("a relationship that ends before the batched write stores no success receipt", async () => {
+        const ctx = await reachActive("cs-endbatch@example.com", "endbatch");
+        const trainer = await ownerOf(ctx.relationshipId);
+        const row = await loadOwnedRelationship(db, ctx.relationshipId, trainer!.id);
+        const seeded = await saveClientBasics(
+          db,
+          row!,
+          { clientDisplayName: "Asha", contactPhoneE164: "+919876543210" },
+          writeContext(trainer!.id, "endbatch-seed"),
+        );
+        expect(seeded.kind).toBe("saved");
+        const before = await relationshipBasics(ctx.relationshipId);
+        const receiptsBefore = await receiptCount();
+        const realBatch = db.batch.bind(db);
+        vi.spyOn(db, "batch").mockImplementation((async (queries: Parameters<typeof db.batch>[0]) => {
+          expect(queries).toHaveLength(2);
+          await db
+            .update(schema.coachingRelationships)
+            .set({ status: "ended" })
+            .where(eq(schema.coachingRelationships.id, ctx.relationshipId));
+          return realBatch(queries);
+        }) as unknown as typeof db.batch);
+        const result = await saveClientBasics(
+          db,
+          row!,
+          { clientDisplayName: "Late rename" },
+          writeContext(trainer!.id, "endbatch-late"),
+        );
+        expect(result).toEqual({ kind: "ended" });
+        expect(await relationshipBasics(ctx.relationshipId)).toEqual(before);
+        expect(await receiptCount()).toBe(receiptsBefore);
+      });
     });
 
     it("other unknown paths keep the static 404", async () => {
