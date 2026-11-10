@@ -17,6 +17,13 @@ import { render, screen } from "../test/render";
 
 const STATES = ["done", "partial", "due", "open", "rest", "future", "unknown"] as const;
 
+/** `open` is the server's missed state; `unknown` has no shared label. */
+function spokenState(state: DateNavigatorDay["state"]): string {
+  if (state === "open") return labelFor("week_day_state", "missed");
+  if (state === "unknown") return "State not known";
+  return labelFor("week_day_state", state);
+}
+
 function day(state: DateNavigatorDay["state"], index: number): DateNavigatorDay {
   return {
     localDate: `2026-10-${12 + index}`,
@@ -38,7 +45,7 @@ describe("DateNavigator accessible names", () => {
         onToday={() => {}}
       />,
     );
-    const spoken = `${formatCivilDate(`2026-10-${12 + index}`)}, ${labelFor("week_day_state", state)}`;
+    const spoken = `${formatCivilDate(`2026-10-${12 + index}`)}, ${spokenState(state)}`;
     expect(screen.getByRole("button", { name: spoken })).toBeTruthy();
     expect(spoken).not.toContain(`2026-10-${12 + index}`);
   });

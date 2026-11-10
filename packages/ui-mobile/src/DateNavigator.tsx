@@ -43,12 +43,19 @@ function dotColor(state: DateNavigatorDay["state"]): string {
 }
 
 /**
- * Spoken day state from `labelFor("week_day_state")` (D-W7-13).
- * `done`, `partial`, `due`, `rest` and `future` are that namespace.
- * `open` and `unknown` are strip-local, so `labelFor` sentence-cases them.
+ * Spoken day state from `labelFor("week_day_state")` (D-W7-13). The strip's
+ * `open` is the server's `missed`. `unknown` is not a server state, so it has
+ * no shared label: it is the fixed phrase the web strip also speaks.
  */
 function stateLabel(state: DateNavigatorDay["state"]): string {
-  return labelFor("week_day_state", state);
+  switch (state) {
+    case "open":
+      return labelFor("week_day_state", "missed");
+    case "unknown":
+      return "State not known";
+    default:
+      return labelFor("week_day_state", state);
+  }
 }
 
 export function DateNavigator({
