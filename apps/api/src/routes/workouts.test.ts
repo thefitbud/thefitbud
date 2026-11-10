@@ -969,6 +969,157 @@ describe("workout assignment and execution", () => {
     expect(executions).toEqual([]);
   });
 
+  it("replays start and skip retries with the same client time, rejects a changed one, and bounds skip only when a client time is sent", async () => {
+    const { traineeToken, relationshipId, today, toDate } =
+      await reachEffectivePlan("lt-idem", false, true, 21);
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      {
+        headers: {
+          Authorization: `Bearer ${traineeToken}`,
+          "x-fitbud-role": "trainee",
+        },
+      },
+      testEnv(),
+    );
+    const items = (
+      (await listed.json()) as {
+        data: {
+          items: Array<{ id: string; localDate: string; windowStartsAt: string }>;
+        };
+      }
+    ).data.items.sort((a, b) => a.localDate.localeCompare(b.localDate));
+    const todays = items.find((item) => item.localDate === today)!;
+    const [future1, future2] = items.filter((item) => item.localDate > today);
+    expect(todays).toBeTruthy();
+    expect(future1).toBeTruthy();
+    expect(future2).toBeTruthy();
+
+    const db = getTestDbOverride()!;
+    const startedAt = todays.windowStartsAt;
+    const skippedAt = new Date(Date.parse(startedAt) + 60_000).toISOString();
+    const serverAt = new Date(
+      Math.max(Date.now(), Date.parse(startedAt) + 10 * 60_000),
+    ).toISOString();
+    const post = (
+      path: "start" | "skip",
+      id: string,
+      key: string,
+      body: Record<string, unknown>,
+    ) =>
+      app.request(
+        `/workouts/assignments/${id}/${path}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${traineeToken}`,
+            "x-fitbud-role": "trainee",
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify(body),
+        },
+        testEnv(),
+      );
+    const codeOf = async (response: Response) =>
+      ((await response.json()) as { error: { code: string } }).error.code;
+
+    const restore = pinServerNow(serverAt);
+    try {
+      // Start: same key and body replays; a changed or missing time conflicts.
+      const first = await post("start", todays.id, "lt-idem-start", {
+        clientLoggedAt: startedAt,
+      });
+      expect(first.status).toBe(200);
+      const firstBody = await first.json();
+      const replay = await post("start", todays.id, "lt-idem-start", {
+        clientLoggedAt: startedAt,
+      });
+      expect(replay.status).toBe(200);
+      expect(await replay.json()).toEqual(firstBody);
+      for (const changed of [{ clientLoggedAt: skippedAt }, {}]) {
+        const conflict = await post("start", todays.id, "lt-idem-start", changed);
+        expect(conflict.status).toBe(409);
+        expect(await codeOf(conflict)).toBe("IDEMPOTENCY_KEY_REUSE");
+      }
+      const started = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.assignmentId, todays.id));
+      expect(started).toHaveLength(1);
+      expect(started[0]?.startedAt).toBe(startedAt);
+      expect(started[0]?.createdAt).toBe(serverAt);
+
+      // Skip of the open session: completedAt follows the client time.
+      const skip = await post("skip", todays.id, "lt-idem-skip", {
+        clientLoggedAt: skippedAt,
+      });
+      expect(skip.status).toBe(200);
+      const skipBody = await skip.json();
+      const skipReplay = await post("skip", todays.id, "lt-idem-skip", {
+        clientLoggedAt: skippedAt,
+      });
+      expect(skipReplay.status).toBe(200);
+      expect(await skipReplay.json()).toEqual(skipBody);
+      const skipConflict = await post("skip", todays.id, "lt-idem-skip", {});
+      expect(skipConflict.status).toBe(409);
+      expect(await codeOf(skipConflict)).toBe("IDEMPOTENCY_KEY_REUSE");
+      const [skippedRow] = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.assignmentId, todays.id));
+      expect(skippedRow?.status).toBe("skipped");
+      expect(skippedRow?.completedAt).toBe(skippedAt);
+      expect(skippedRow?.createdAt).toBe(serverAt);
+      expect(skippedRow?.updatedAt).toBe(serverAt);
+
+      // A sent skip time is bounded: before the window and too far ahead fail
+      // with the static log-time errors and store nothing.
+      const early = await post("skip", future1!.id, "lt-idem-early", {
+        clientLoggedAt: serverAt,
+      });
+      expect(early.status).toBe(422);
+      const earlyError = (
+        (await early.json()) as { error: { code: string; message: string } }
+      ).error;
+      expect(earlyError).toMatchObject({
+        code: "LOG_TIME_BEFORE_WINDOW",
+        message: "The log time is before this item's window opened.",
+      });
+      const ahead = await post("skip", future2!.id, "lt-idem-ahead", {
+        clientLoggedAt: new Date(Date.parse(serverAt) + 6 * 60_000).toISOString(),
+      });
+      expect(ahead.status).toBe(422);
+      const aheadError = (
+        (await ahead.json()) as { error: { code: string; message: string } }
+      ).error;
+      expect(aheadError).toMatchObject({
+        code: "LOG_TIME_IN_FUTURE",
+        message: "The log time is in the future.",
+      });
+      for (const id of [future1!.id, future2!.id]) {
+        const none = await db
+          .select()
+          .from(schema.workoutExecutions)
+          .where(eq(schema.workoutExecutions.assignmentId, id));
+        expect(none).toEqual([]);
+      }
+
+      // Without a client time, skipping ahead of the window works as before.
+      const noTime = await post("skip", future1!.id, "lt-idem-notime", {});
+      expect(noTime.status).toBe(200);
+      const [noTimeRow] = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.assignmentId, future1!.id));
+      expect(noTimeRow?.status).toBe("skipped");
+      expect(noTimeRow?.startedAt).toBe(serverAt);
+      expect(noTimeRow?.clientLoggedAt).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
   it("derives Missed when the window expires without execution", async () => {
     const { traineeToken, relationshipId, today, toDate } =
       await reachEffectivePlan("miss");

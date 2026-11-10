@@ -860,12 +860,13 @@ async function recordCompliance(
   }
 
   const now = nowIso();
-  // Client time, when sent, is the instant bounds, late, and status use.
-  // createdAt stays the server receive time.
+  // Client time, when sent, is the instant bounds, late, and status use,
+  // normalised to UTC. createdAt stays the server receive time.
   const logInstant = resolveLogInstant({
     clientLoggedAt: input.clientLoggedAt,
     now,
   });
+  const clientInstant = input.clientLoggedAt ? logInstant : undefined;
   const timeZone = await loadTraineeTimezone(db, actor.userId);
   const logGuard = await assertMealLogAllowed(db, {
     assignmentId,
@@ -873,7 +874,7 @@ async function recordCompliance(
     relationshipEnded: relationship.status === "ended",
     traineeUserId: actor.userId,
     traineeTimezone: timeZone,
-    clientLoggedAt: input.clientLoggedAt,
+    clientLoggedAt: clientInstant,
     nowIso: now,
     alreadyLogged: Boolean(loaded.compliance),
     existingLoggedByRole: loaded.compliance?.loggedByRole ?? null,
@@ -967,7 +968,9 @@ async function recordCompliance(
     traineeUserId: actor.userId,
     outcome: input.outcome,
     recordVersion: 0,
-    loggedAt: logInstant,
+    // Z7-20 covers confirm and skip; a deviation keeps the receive time it
+    // stored before (its client time still drives bounds and late).
+    loggedAt: input.operation === DEVIATE_OPERATION ? now : logInstant,
     localDate: loaded.assignment.localDate,
     deviationKind: input.deviationKind ?? null,
     notes: input.notes ?? null,

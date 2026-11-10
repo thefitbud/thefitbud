@@ -1592,7 +1592,9 @@ workoutRoutes.post(
       await workoutInEndedPeriod(db, {
         relationship,
         localDate: loaded.assignment.localDate,
-        loggedAt: clientLoggedAt ?? loaded.execution?.startedAt ?? now,
+        loggedAt: clientLoggedAt
+          ? logInstant
+          : (loaded.execution?.startedAt ?? now),
       })
     ) {
       return endedPeriodError(c);

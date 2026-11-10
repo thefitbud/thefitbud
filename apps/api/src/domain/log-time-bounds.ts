@@ -42,12 +42,17 @@ export function assertLogTimeWithinBounds(input: {
  * local midnight is judged on that civil day and not on the server-receive
  * day. When the client omits it, the server receive time is used and
  * behaviour matches the paths that used to stamp `now` only.
+ *
+ * The contract accepts an offset (`+05:30`), but stored instants are compared
+ * as strings, so the result is always the canonical UTC form (`…Z`).
  */
 export function resolveLogInstant(input: {
   clientLoggedAt?: string | null;
   now: string;
 }): string {
-  return input.clientLoggedAt ? input.clientLoggedAt : input.now;
+  return input.clientLoggedAt
+    ? new Date(Date.parse(input.clientLoggedAt)).toISOString()
+    : input.now;
 }
 
 /**
