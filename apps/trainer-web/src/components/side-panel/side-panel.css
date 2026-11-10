@@ -664,3 +664,9 @@
   line-height: 1.45;
   color: var(--ink-500, #5b616b);
 }
+
+.sp-foot-readonly .link.sp-open-client {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+}

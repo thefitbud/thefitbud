@@ -1237,4 +1237,69 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
     expect(await screen.findByTestId("panel-resolved-elsewhere")).toBeTruthy();
     expectNoWriteActions();
   });
+
+  it("the resolved-elsewhere notice does not follow the panel to the next item", async () => {
+    const rows = [openItem(1), openItem(2)];
+    const resolvedTwo = {
+      ...openItem(2),
+      status: "resolved" as const,
+      resolvedAt: RESOLVED_AT,
+      closedReason: "trainer" as const,
+    };
+    let firstCalls = 0;
+    api.listExceptions.mockResolvedValue({ items: rows, nextCursor: null });
+    api.getException.mockImplementation(async (id: string) => {
+      if (id === itemId(2)) return resolvedTwo;
+      firstCalls += 1;
+      return firstCalls === 1
+        ? rows[0]
+        : { ...rows[0], status: "resolved", resolvedAt: RESOLVED_AT, closedReason: "trainer" };
+    });
+    api.acknowledgeException.mockRejectedValue(
+      new ApiClientError({
+        status: 409,
+        code: "INVALID_TRANSITION",
+        message: "Invalid transition.",
+        requestId: "req-1",
+      }),
+    );
+    render(
+      <MemoryRouter initialEntries={[`/?client=${REL_ID}`]}>
+        <ExceptionDrawer onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+    expect(await screen.findByTestId("panel-resolved-elsewhere")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: /Next item/ }).at(-1)!);
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    expect(screen.queryByTestId("panel-resolved-elsewhere")).toBeNull();
+  });
+
+  it("a resolved item shows no age line and a gone item keeps its severity pill", async () => {
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    await screen.findByTestId("panel-readonly-line");
+    expect(screen.queryByText(/^Resolved (Mon|Tue|Wed|Thu|Fri|Sat|Sun)/)).toBeNull();
+    cleanup();
+
+    const rows = [openItem(1, { severity: "critical" }), openItem(2)];
+    api.listExceptions.mockResolvedValue({ items: rows, nextCursor: null });
+    api.getException.mockRejectedValue(
+      new ApiClientError({
+        status: 404,
+        code: "EXCEPTION_NOT_FOUND",
+        message: "Exception not found.",
+        requestId: "req-1",
+      }),
+    );
+    render(
+      <MemoryRouter initialEntries={[`/?client=${REL_ID}`]}>
+        <ExceptionDrawer exceptionId={itemId(1)} onClose={() => undefined} />
+      </MemoryRouter>,
+    );
+    await screen.findByTestId("panel-item-gone");
+    expect(screen.getByText("Critical")).toBeTruthy();
+  });
 });

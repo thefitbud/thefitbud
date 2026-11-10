@@ -456,6 +456,9 @@ export function ExceptionDrawer({
     if (!opts?.quiet) setLoading(true);
     setError(null);
     setGone(false);
+    // A fresh load of an item starts without the "changed elsewhere" notice;
+    // the quiet reload after a write keeps the one it just set.
+    if (!opts?.quiet) setChangedElsewhere(false);
     try {
       const result = await apiClient.getException(id);
       if (stale()) return;
@@ -1190,11 +1193,11 @@ export function ExceptionDrawer({
   );
   const ageLine = detail
     ? resolved
-      ? resolvedJustNow
+      ? // Frame 132: a resolved item shows only the Read-only line; the
+        // resolved date lives in the banner and the timeline.
+        resolvedJustNow
         ? "Resolved just now"
-        : trainerClose
-          ? `Resolved ${formatCivilDate(formatLocalDate(new Date(detail.resolvedAt!), VIEWER_TZ))}`
-          : resolvedCloseLabel(detail.closedReason)
+        : null
       : itemAgeLine(detail)
     : null;
   /** Gone item: the nearest other item the panel can go back to. */
@@ -1293,7 +1296,14 @@ export function ExceptionDrawer({
           clientName={clientName}
           meta={meta}
           nav={nav}
-          severity={detail && !resolved ? detail.severity : null}
+          severity={
+            detail && !resolved
+              ? detail.severity
+              : gone
+                ? (items.find((item) => item.id === currentId)?.severity ??
+                  null)
+                : null
+          }
           currentResolved={Boolean(resolved)}
           closeRef={closeRef}
           onClose={requestClose}
