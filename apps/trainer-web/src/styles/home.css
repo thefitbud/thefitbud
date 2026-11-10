@@ -817,19 +817,58 @@ a.home-tile:focus-visible {
 }
 
 /* Rail beside the list: give the issue text room back (name and gaps tighten). */
-@media (min-width: 1101px) and (max-width: 1400px) {
+@media (min-width: 1024px) and (max-width: 1599px) {
   .home-row {
     grid-template-columns: minmax(148px, 152px) minmax(0, 1fr) 96px 76px auto 44px;
     gap: 8px;
+  }
+}
+
+/* Z7-4: at 1024–1400 a long issue wraps to a second line instead of being
+   cut to a few characters; the rail is a little narrower (frame 191). */
+@media (min-width: 1024px) and (max-width: 1400px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr) 288px;
   }
 
   /* The "+N more" count is in the row's title; drop it so the issue text reads. */
   .home-row .home-more {
     display: none;
   }
+
+  .home-issue-txt {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    line-height: 18px;
+  }
 }
 
-@media (max-width: 1100px) {
+/* iPad landscape (frame 191, 1024x768): list and rail stay side by side. */
+@media (min-width: 1024px) and (max-width: 1100px) {
+  .home-grid {
+    grid-template-columns: minmax(0, 1fr) 296px;
+    gap: 20px;
+  }
+
+  .home-row {
+    grid-template-columns: 146px minmax(0, 1fr) 92px 60px auto 44px;
+    gap: 6px;
+    padding: 8px 8px 8px 12px;
+  }
+
+  .home-row .home-who {
+    gap: 8px;
+  }
+
+  .home-sort {
+    display: none;
+  }
+}
+
+@media (max-width: 1023px) {
   .home-grid {
     grid-template-columns: 1fr;
   }
@@ -922,5 +961,117 @@ a.home-tile:focus-visible {
 
   .home-tiles {
     width: 100%;
+  }
+}
+
+/* Z7-4 all clear (frame 135): one calm column, no count cards. */
+.home-clear {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 24px 56px;
+  text-align: center;
+}
+
+.home-clear-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 8px;
+  border-radius: 14px;
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.home-clear-ttl {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 24px;
+  color: var(--deep-navy, #1a1248);
+}
+
+.home-clear-copy {
+  max-width: 400px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-500, #5b616b);
+}
+
+.home-clear-line {
+  margin: 0;
+  padding: 0 20px 18px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink-500, #5b616b);
+}
+
+@media (max-width: 767px) {
+  .home-clear {
+    padding: 32px 16px 40px;
+  }
+}
+
+/* Z7-4: with the side panel docked (540 px at >= 1024, frame 02), Home keeps
+   one column to the panel's left: no count cards, the rail stacks below and
+   the row's Review button gives way (the panel already shows that review). */
+@media (min-width: 1024px) {
+  .home-triage.has-panel {
+    margin-right: 532px;
+  }
+
+  .home-triage.has-panel .home-tiles,
+  .home-triage.has-panel .home-sort {
+    display: none;
+  }
+
+  .home-triage.has-panel .home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .home-triage.has-panel .home-row {
+    grid-template-columns: minmax(120px, 148px) minmax(0, 1fr) 96px 76px 44px;
+  }
+
+  .home-triage.has-panel .home-review-cell,
+  .home-triage.has-panel .home-row .home-more {
+    display: none;
+  }
+}
+
+/* Narrow column beside the panel (1024–1439): two-line rows. */
+@media (min-width: 1024px) and (max-width: 1439px) {
+  .home-triage.has-panel .home-row {
+    grid-template-columns: minmax(0, 1fr) auto 44px;
+    grid-template-areas:
+      "who chip menu"
+      "issue age age";
+    gap: 4px 8px;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(1) {
+    grid-area: who;
+    min-width: 0;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(2) {
+    grid-area: issue;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(3) {
+    grid-area: chip;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(4) {
+    grid-area: age;
+    justify-self: end;
+  }
+
+  .home-triage.has-panel .home-row > :nth-child(6) {
+    grid-area: menu;
   }
 }
