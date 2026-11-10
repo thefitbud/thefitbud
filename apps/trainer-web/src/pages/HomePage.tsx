@@ -9,12 +9,15 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
-  CalendarDays,
+  Wallet,
+  ChevronRight,
   ClipboardCheck,
   Info,
+  MessageCircle,
   OctagonAlert,
   Sun,
 } from "lucide-react";
@@ -50,7 +53,29 @@ import { useHomeSections } from "./home/useHomeSections";
 const ATTENTION_CAP = 8;
 const SECTION_CAP = 5;
 
-type FilterKey = "all" | "attention" | "checkins" | "renewals";
+/** Clicks and Enter on a row's own buttons stay on that control (Z7-2). */
+function isRowControlTarget(target: EventTarget | null): boolean {
+  const el =
+    target instanceof Element
+      ? target
+      : target instanceof Node
+        ? target.parentElement
+        : null;
+  if (!el) return false;
+  return Boolean(
+    el.closest("button, a, input, textarea, select, [role='menu'], [role='menuitem']"),
+  );
+}
+
+/**
+ * Keep Enter/Space on a row's own control. Clicks are not stopped here: the
+ * row's onClick already skips controls (isRowControlTarget), and stopping the
+ * click would also hide it from the grid's touch-select handler (HM5).
+ */
+function stopRowControl(event: ReactKeyboardEvent): void {
+  if (event.key !== "Enter" && event.key !== " ") return;
+  event.stopPropagation();
+}
 
 function severityRank(severity: "critical" | "attention"): number {
   return severity === "critical" ? 0 : 1;
@@ -117,6 +142,72 @@ function askDateLabel(ask: CoachAsk): string | null {
   return null;
 }
 
+function CountCard({
+  label,
+  count,
+  href,
+  pending,
+  iconBg,
+  iconColor,
+  icon,
+}: {
+  label: string;
+  count: number;
+  href: string;
+  pending: boolean;
+  iconBg: string;
+  iconColor: string;
+  icon: ReactNode;
+}) {
+  const zero = !pending && count <= 0;
+  const quiet = pending || zero;
+  const body = (
+    <>
+      <span
+        className="home-tile-icon"
+        style={{
+          background: quiet ? "#F3F4F6" : iconBg,
+          color: quiet ? "#858B96" : iconColor,
+        }}
+      >
+        {icon}
+      </span>
+      <span className="home-tile-copy">
+        <span className="home-tile-lbl">{label}</span>
+        <span className="home-tile-num">{pending ? "—" : String(count)}</span>
+      </span>
+      {zero ? (
+        <span className="home-tile-zero">Nothing new</span>
+      ) : pending ? null : (
+        <ChevronRight
+          className="home-tile-arrow"
+          size={18}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+      )}
+    </>
+  );
+  // Zero and still-loading cards are not links and stay out of tab order (DS4).
+  // A disabled button keeps the count readable for the existing count assertion.
+  if (quiet) {
+    return (
+      <button
+        type="button"
+        className={`home-tile${zero ? " is-zero" : ""}`}
+        disabled
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <Link className="home-tile" to={href}>
+      {body}
+    </Link>
+  );
+}
+
 export function HomePage() {
   const { me } = useAuth();
   const online = useOnlineStatus();
@@ -126,10 +217,10 @@ export function HomePage() {
     "UTC";
   const todayLabel = formatCivilDate(formatLocalDate(new Date(), timeZone));
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const drawerExceptionId = params.get("exception");
   const drawerAskId = params.get("ask");
   const showAllParam = params.get("all") === "1";
-  const groupParam = params.get("group");
 
   const {
     groups,
@@ -150,15 +241,6 @@ export function HomePage() {
     releaseException,
     clearHold,
   } = useHomeSections({ timeZone });
-  const [filter, setFilter] = useState<FilterKey>(
-    groupParam === "attention"
-      ? "attention"
-      : groupParam === "checkins"
-        ? "checkins"
-        : groupParam === "renewals"
-          ? "renewals"
-          : "all",
-  );
   const [showAllAttention, setShowAllAttention] = useState(showAllParam);
   const [reviewedOpen, setReviewedOpen] = useState(false);
   // HM5: the selected "Needs attention" row is held by relationshipId (the
@@ -258,6 +340,17 @@ export function HomePage() {
       const next = new URLSearchParams(prev);
       next.set("ask", id);
       next.delete("exception");
+      return next;
+    });
+  }
+
+  // D-W7-2: the panel lane reads ?client=. Row navigation closes a drawer.
+  function openClientPanel(relationshipId: string) {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("client", relationshipId);
+      next.delete("exception");
+      next.delete("ask");
       return next;
     });
   }
@@ -414,9 +507,15 @@ export function HomePage() {
       ev.preventDefault();
       selectIdx(max);
     } else if (key === "enter") {
+      // Buttons keep their own Enter (Review opens the drawer). The row opens
+      // that client's panel (Z7-2).
+      if (isRowControlTarget(ev.target)) return;
       ev.preventDefault();
-      const row = visibleOpen[focusIdx];
-      if (row?.primary) openException(row.primary.id);
+      const fromTarget = ridFromTarget(ev.target);
+      const row = fromTarget
+        ? visibleOpen.find((item) => item.group.relationshipId === fromTarget)
+        : visibleOpen[focusIdx];
+      if (row) openClientPanel(row.group.relationshipId);
     } else if (key === "a") {
       ev.preventDefault();
       if (!online) return;
@@ -567,13 +666,9 @@ export function HomePage() {
       ? "Loading your day…"
       : attentionCount === 0
         ? "You're all caught up. Nothing needs your attention right now."
-        : `${attentionCount} client${attentionCount === 1 ? "" : "s"} need you.${
+        : `${attentionCount} client${attentionCount === 1 ? " needs" : "s need"} you.${
             firstNames.length ? ` ${firstNames.join(" and ")} first.` : ""
           }`;
-
-  const showAttention = filter === "all" || filter === "attention";
-  const showCheckinsRail = filter === "all" || filter === "checkins";
-  const showRenewalsRail = filter === "all" || filter === "renewals";
 
   const allClear =
     !loading &&
@@ -585,9 +680,6 @@ export function HomePage() {
     checkins.length === 0 &&
     gettingStarted.length === 0 &&
     reviewedGroups.length === 0;
-
-  const tileNum = (n: number) =>
-    loading || error ? "—" : String(n);
 
   return (
     <div className="home-triage" data-testid="screen-TW-04">
@@ -602,61 +694,43 @@ export function HomePage() {
           </h1>
           {summary ? <p className="home-summary">{summary}</p> : null}
         </div>
-        <div className="home-tiles" role="group" aria-label="Filter by">
-          <button
-            type="button"
-            className={`home-tile${filter === "attention" ? " is-active" : ""}`}
-            onClick={() =>
-              setFilter((f) => (f === "attention" ? "all" : "attention"))
-            }
-          >
-            <span
-              className="home-tile-icon"
-              style={{ background: "#FEF2F2", color: "#B91C1C" }}
-            >
-              <OctagonAlert size={18} strokeWidth={1.75} aria-hidden />
-            </span>
-            <span>
-              <span className="home-tile-lbl">Needs attention</span>
-              <span className="home-tile-num">{tileNum(attentionCount)}</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`home-tile${filter === "checkins" ? " is-active" : ""}`}
-            onClick={() =>
-              setFilter((f) => (f === "checkins" ? "all" : "checkins"))
-            }
-          >
-            <span
-              className="home-tile-icon"
-              style={{ background: "#EFF6FF", color: "#1D4ED8" }}
-            >
-              <ClipboardCheck size={18} strokeWidth={1.75} aria-hidden />
-            </span>
-            <span>
-              <span className="home-tile-lbl">Check-ins to review</span>
-              <span className="home-tile-num">{tileNum(checkinCount)}</span>
-            </span>
-          </button>
-          <button
-            type="button"
-            className={`home-tile${filter === "renewals" ? " is-active" : ""}`}
-            onClick={() =>
-              setFilter((f) => (f === "renewals" ? "all" : "renewals"))
-            }
-          >
-            <span
-              className="home-tile-icon"
-              style={{ background: "#FFFBEB", color: "#B45309" }}
-            >
-              <CalendarDays size={18} strokeWidth={1.75} aria-hidden />
-            </span>
-            <span>
-              <span className="home-tile-lbl">Renewals due</span>
-              <span className="home-tile-num">{tileNum(renewalCount)}</span>
-            </span>
-          </button>
+        <div className="home-tiles" role="group" aria-label="Open a full list">
+          <CountCard
+            label="Needs attention"
+            count={attentionCount}
+            href="/home/attention"
+            pending={loading || Boolean(error)}
+            iconBg="#FEF2F2"
+            iconColor="#B91C1C"
+            icon={<OctagonAlert size={20} strokeWidth={1.75} aria-hidden />}
+          />
+          <CountCard
+            label="Check-ins to review"
+            count={checkinCount}
+            href="/checkins?tab=to-review"
+            pending={loading || Boolean(error)}
+            iconBg="#EDEAFF"
+            iconColor="#4527C6"
+            icon={<ClipboardCheck size={20} strokeWidth={1.75} aria-hidden />}
+          />
+          <CountCard
+            label="Renewals due"
+            count={renewalCount}
+            href="/home/renewals"
+            pending={loading || Boolean(error)}
+            iconBg="#FFFBEB"
+            iconColor="#B45309"
+            icon={<Wallet size={20} strokeWidth={1.75} aria-hidden />}
+          />
+          <CountCard
+            label="Asked you"
+            count={coachAsks.length}
+            href="/home/asks"
+            pending={loading || Boolean(error)}
+            iconBg="#F3F4F6"
+            iconColor="#3F4654"
+            icon={<MessageCircle size={20} strokeWidth={1.75} aria-hidden />}
+          />
         </div>
       </header>
 
@@ -727,7 +801,7 @@ export function HomePage() {
       {!error && !loading ? (
       <div className="home-grid">
         <div className="home-col">
-          {showAttention && openGroups.length > 0 ? (
+          {openGroups.length > 0 ? (
             <section className="home-card" aria-labelledby="na">
               <div className="home-card-h">
                 <div className="home-card-ttl">
@@ -782,6 +856,11 @@ export function HomePage() {
                         else rowRefs.current.delete(group.relationshipId);
                       }}
                       aria-label={`${group.traineeDisplayName}. ${primary.severity === "critical" ? "Critical" : "Attention"}. ${issue.text}${issue.more ? `, plus ${issue.more} more` : ""}, ${age}. Review button.`}
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        openClientPanel(group.relationshipId);
+                      }}
                     >
                       <div className="home-who" role="gridcell">
                         <span className={avatarClass(group.traineeDisplayName)}>
@@ -810,11 +889,15 @@ export function HomePage() {
                           variant="tinted"
                           className="button-sm"
                           onClick={() => openException(primary.id)}
+                          onKeyDown={stopRowControl}
                         >
                           Review
                         </Button>
                       </div>
-                      <div role="gridcell">
+                      <div
+                        role="gridcell"
+                        onKeyDown={stopRowControl}
+                      >
                         <OverflowMenu
                           label={`More actions for ${group.traineeDisplayName}`}
                           items={[
@@ -890,7 +973,7 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {filter === "all" && coachAsks.length > 0 ? (
+          {coachAsks.length > 0 ? (
             <section
               className="home-card"
               aria-labelledby="asks-heading"
@@ -908,14 +991,28 @@ export function HomePage() {
                   const item = askItemLabel(ask);
                   const date = askDateLabel(ask);
                   return (
-                    <div key={ask.id} className="home-li">
+                    <div
+                      key={ask.id}
+                      className="home-li is-target"
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        openAsk(ask.id);
+                      }}
+                    >
                       <span className={avatarClass(name)}>
                         {initials(name)}
                       </span>
                       <div className="home-li-tx">
                         <b>
-                          {name} asked about {item}
-                          {date ? ` · ${date}` : ""}{" "}
+                          <button
+                            type="button"
+                            className="home-li-name"
+                            onClick={() => openAsk(ask.id)}
+                          >
+                            {name} asked about {item}
+                            {date ? ` · ${date}` : ""}
+                          </button>{" "}
                           <StatusChip
                             kind="ask"
                             value="open"
@@ -936,6 +1033,7 @@ export function HomePage() {
                         disabled={!online}
                         data-ask-answer={ask.id}
                         onClick={() => openAsk(ask.id)}
+                        onKeyDown={stopRowControl}
                       >
                         Mark answered
                       </Button>
@@ -955,7 +1053,7 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {filter === "all" && reviewedGroups.length > 0 ? (
+          {reviewedGroups.length > 0 ? (
             <section className="home-card">
               <button
                 type="button"
@@ -1003,7 +1101,7 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {filter === "all" && gettingStarted.length > 0 ? (
+          {gettingStarted.length > 0 ? (
             <section className="home-card" aria-labelledby="gs">
               <div className="home-card-h">
                 <div className="home-card-ttl">
@@ -1051,7 +1149,7 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {filter === "all" && reengage.length > 0 ? (
+          {reengage.length > 0 ? (
             <section className="home-card" aria-labelledby="re">
               <div className="home-card-h">
                 <div className="home-card-ttl">
@@ -1095,7 +1193,7 @@ export function HomePage() {
         </div>
 
         <div className="home-col home-rail">
-          {showCheckinsRail && checkins.length > 0 ? (
+          {checkins.length > 0 ? (
             <section className="home-card">
               <div className="home-card-h">
                 <div className="home-card-ttl h3">
@@ -1111,12 +1209,29 @@ export function HomePage() {
                   const name =
                     nameByRid.get(row.coachingRelationshipId) ?? "Client";
                   return (
-                    <div key={row.checkin.id} className="home-li">
+                    <div
+                      key={row.checkin.id}
+                      className="home-li is-target"
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        navigate(
+                          `/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`,
+                        );
+                      }}
+                    >
                       <span className={avatarClass(name)}>
                         {initials(name)}
                       </span>
                       <div className="home-li-tx">
-                        <b>{name}</b>
+                        <b>
+                          <Link
+                            className="home-li-name"
+                            to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
+                          >
+                            {name}
+                          </Link>
+                        </b>
                         <span>
                           Submitted{" "}
                           {row.checkin.submittedAt
@@ -1127,6 +1242,7 @@ export function HomePage() {
                       <Link
                         className="button-tinted button-sm"
                         to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`}
+                        onKeyDown={stopRowControl}
                       >
                         Review
                       </Link>
@@ -1137,7 +1253,7 @@ export function HomePage() {
             </section>
           ) : null}
 
-          {showRenewalsRail && renewals.length > 0 ? (
+          {renewals.length > 0 ? (
             <section className="home-card">
               <div className="home-card-h">
                 <div className="home-card-ttl h3">
@@ -1151,9 +1267,26 @@ export function HomePage() {
                     nameByRid.get(item.coachingRelationshipId) ??
                     item.planName;
                   return (
-                    <div key={item.coachingRelationshipId} className="home-li">
+                    <div
+                      key={item.coachingRelationshipId}
+                      className="home-li is-target"
+                      onClick={(event) => {
+                        if (event.button !== 0) return;
+                        if (isRowControlTarget(event.target)) return;
+                        navigate(
+                          `/clients/${item.coachingRelationshipId}/configure#subscription`,
+                        );
+                      }}
+                    >
                       <div className="home-li-tx">
-                        <b>{name}</b>
+                        <b>
+                          <Link
+                            className="home-li-name"
+                            to={`/clients/${item.coachingRelationshipId}/configure#subscription`}
+                          >
+                            {name}
+                          </Link>
+                        </b>
                         <span>
                           {item.renewalState === "expired" ? "Ended" : "Due"}{" "}
                           {formatCivilDate(item.renewsOn)}
@@ -1170,19 +1303,11 @@ export function HomePage() {
               </div>
               <div className="home-foot" style={{ padding: "10px 16px" }}>
                 <span className="muted">Open settings to renew</span>
-                {renewals[0] ? (
-                  <Link
-                    className="link"
-                    to={`/clients/${renewals[0].coachingRelationshipId}/configure`}
-                  >
-                    Open settings
-                  </Link>
-                ) : null}
               </div>
             </section>
           ) : null}
 
-          {filter === "all" && activity.length > 0 ? (
+          {activity.length > 0 ? (
             <section className="home-card">
               <div className="home-card-h">
                 <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>

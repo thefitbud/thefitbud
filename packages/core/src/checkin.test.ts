@@ -156,6 +156,34 @@ describe("checkin core", () => {
       { type: "waist_cm", value: 81, unit: "cm" },
     ]);
   });
+
+  it("links no measurement row for a zero or negative answer (D-W7-9)", () => {
+    const fields = [
+      ...GLOBAL_CHECKIN_FORM_FIELDS,
+      {
+        id: "waist",
+        label: "Waist",
+        type: "measurement",
+        measurementType: "waist_cm",
+        required: false,
+      } as CheckinFieldDefinition,
+    ];
+    expect(
+      linkedMeasurementsForCheckin({
+        fields,
+        answers: {
+          wellbeing: "Good week",
+          fieldAnswers: { waist: 0, body_weight: -3 },
+        },
+      }),
+    ).toEqual([]);
+    expect(
+      linkedMeasurementsForCheckin({
+        fields,
+        answers: { wellbeing: "Good week", fieldAnswers: { waist: 81 } },
+      }),
+    ).toEqual([{ type: "waist_cm", value: 81, unit: "cm" }]);
+  });
 });
 
 /** v2 standard questions (D-W6-17): all optional, no `wellbeing` question. */

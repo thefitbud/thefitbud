@@ -2015,13 +2015,28 @@ checkinRoutes.post(
       pinned.fields,
       parsed.data.answers,
     );
-    if (invalidKeys.length > 0) {
+    // D-W7-9: zero (or below) is not a legal measurement value. It is never
+    // stored (linkedMeasurementsForCheckin), so review must not list it either.
+    const nonPositiveFieldIds = [
+      ...new Set(
+        pinned.fields
+          .filter((field) => {
+            if (field.type !== "measurement") return false;
+            const value = parsed.data.answers.fieldAnswers?.[field.id];
+            return (
+              typeof value === "number" && Number.isFinite(value) && value <= 0
+            );
+          })
+          .map((field) => field.id),
+      ),
+    ];
+    if (invalidKeys.length > 0 || nonPositiveFieldIds.length > 0) {
       return fail(
         c,
         422,
         "CHECKIN_ANSWER_INVALID",
         "A check-in answer is outside the allowed range.",
-        { invalid: invalidKeys },
+        { invalid: invalidKeys, invalidFieldIds: nonPositiveFieldIds },
       );
     }
 
