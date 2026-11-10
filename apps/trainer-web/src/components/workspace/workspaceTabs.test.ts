@@ -89,6 +89,6 @@ describe("client workspace tabs", () => {
     expect(source).not.toMatch(/>\s*Sessions\s*</);
     expect(source).not.toMatch(/>\s*Packages\s*</);
     expect(source).not.toMatch(/>\s*Configure\s*</);
-    expect(source).toContain("Configure coaching");
+    expect(source).toContain("Coaching setup");
   });
 });
