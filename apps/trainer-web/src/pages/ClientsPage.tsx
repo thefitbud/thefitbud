@@ -440,6 +440,7 @@ export function ClientsPage() {
                   <tr>
                     <th className="col-client">Client</th>
                     <th className="col-status">Status</th>
+                    <th className="col-coached">Coached</th>
                     <th className="col-plan">Last plan</th>
                     <th className="col-action">
                       <span className="sr-only">Action</span>

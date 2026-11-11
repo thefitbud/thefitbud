@@ -43,7 +43,11 @@ import { Button } from "./Button";
 import { OverflowMenu } from "./OverflowMenu";
 import { useOnlineStatus } from "./OfflineBanner";
 import { LoadingBlock } from "./StatePanels";
-import { compactHeadline } from "./workspace/ResponsivenessPanel";
+import { resolveTraineeTimezone } from "../lib/trainee-timezone";
+import {
+  compactHeadline,
+  RemindersDrawer,
+} from "./workspace/ResponsivenessPanel";
 import { AlsoOpenList } from "./side-panel/AlsoOpenList";
 import { BulkPanel } from "./side-panel/BulkPanel";
 import { compatibleIds } from "./side-panel/bulkModel";
@@ -375,6 +379,10 @@ export function ExceptionDrawer({
   const [resolveUndoPending, setResolveUndoPending] = useState(false);
   const [reminderLine, setReminderLine] = useState<string | null>(null);
   const [nudgeHint, setNudgeHint] = useState<string | null>(null);
+  /** Reminders drawer opened from the Signals line (frame 181). */
+  const [remindersOpen, setRemindersOpen] = useState(false);
+  const remindersOpenRef = useRef(false);
+  const detailsLinkRef = useRef<HTMLButtonElement>(null);
   const [nudgeBlockedUntil, setNudgeBlockedUntil] = useState<number | null>(
     null,
   );
@@ -1118,6 +1126,8 @@ export function ExceptionDrawer({
     function onKey(ev: KeyboardEvent) {
       // DR1: closing (or closed): no shortcut may act any more.
       if (closingRef.current) return;
+      // The Reminders drawer is on top: it owns Escape, Tab and shortcuts.
+      if (remindersOpenRef.current) return;
       if (ev.key === "Escape") {
         if (document.querySelector(".overflow-menu-list")) return;
         if (bulkEscapeRef.current?.()) {
@@ -1227,6 +1237,12 @@ export function ExceptionDrawer({
     : null;
   const meta = headerMeta(clientHeader, openCount);
   const firstName = clientName.split(" ")[0] ?? clientName;
+  const nudgeHelperText = clientHeader
+    ? `Sends ${firstName} a push notification`
+    : "Sends your client a push notification";
+  // Derived every render so it cannot stay true if the drawer unmounts
+  // another way (the panel's key handler reads it).
+  remindersOpenRef.current = Boolean(remindersOpen && workspaceRid);
   const clientRid = workspaceRid ?? detail?.coachingRelationshipId ?? "";
   const clientHref = `/clients/${clientRid}`;
   const nextIndex = inList
@@ -1358,6 +1374,7 @@ export function ExceptionDrawer({
   }
 
   return (
+    <>
     <div
       ref={backdropRef}
       className="drawer-backdrop sp-backdrop"
@@ -1579,7 +1596,18 @@ export function ExceptionDrawer({
                   {reminderLine ? (
                     <p className="sp-signal">
                       <Bell size={16} strokeWidth={1.75} aria-hidden />
-                      <span>{reminderLine}</span>
+                      <span id="sp-reminder-line">{reminderLine}</span>
+                      <button
+                        type="button"
+                        aria-describedby="sp-reminder-line"
+                        ref={detailsLinkRef}
+                        className="link sp-signal-details"
+                        onClick={() => {
+                          setRemindersOpen(true);
+                        }}
+                      >
+                        Details
+                      </button>
                     </p>
                   ) : null}
                   {nudgeHint ? (
@@ -1754,7 +1782,9 @@ export function ExceptionDrawer({
                       variant="secondary"
                       disabled={acting || !online || nudgeBlocked}
                       aria-describedby={
-                        nudgeLimitText ? "sp-nudge-why" : undefined
+                        nudgeLimitText
+                          ? "sp-nudge-help sp-nudge-why"
+                          : "sp-nudge-help"
                       }
                       onClick={() => void nudge()}
                     >
@@ -1840,6 +1870,11 @@ export function ExceptionDrawer({
                     </Button>
                   ) : null}
                 </div>
+                {showNudge && (active || acknowledged) ? (
+                  <p id="sp-nudge-help" className="drawer-helper sp-nudge-help">
+                    {nudgeHelperText}
+                  </p>
+                ) : null}
                 <p className="drawer-helper">
                   {active
                     ? `Mark reviewed moves ${firstName} to Reviewed. ${firstName} leaves Home when ${helperItemsText}.`
@@ -1858,5 +1893,27 @@ export function ExceptionDrawer({
         ) : null}
       </div>
     </div>
+    {remindersOpen && workspaceRid ? (
+      <RemindersDrawer
+        relationshipId={workspaceRid}
+        traineeName={clientName}
+        gender={clientHeader?.traineeProfile?.gender ?? null}
+        clientWhatsappE164={clientWhatsappE164}
+        timeZone={
+          clientHeader
+            ? resolveTraineeTimezone(clientHeader).timezone
+            : VIEWER_TZ
+        }
+        ended={Boolean(clientHeader?.endedAt)}
+        onClose={() => {
+          setRemindersOpen(false);
+          // Focus goes back to the Details link; the panel stays open.
+          window.setTimeout(() => {
+            (detailsLinkRef.current ?? closeRef.current)?.focus();
+          }, 0);
+        }}
+      />
+    ) : null}
+    </>
   );
 }
