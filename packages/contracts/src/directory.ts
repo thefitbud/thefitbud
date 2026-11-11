@@ -29,6 +29,8 @@ export const clientDirectoryItemSchema = z.object({
   /** Same derivation as Home Renewals (`deriveRenewalState`). */
   renewalState: renewalStateSchema.nullable(),
   renewsOn: localDateSchema.nullable(),
+  /** When coaching started (ISO instant, the relationship start); null for invited rows. */
+  startedAt: isoDateTimeSchema.nullable().optional(),
   /** When coaching ended (ISO instant), for ended roster chips. */
   endedAt: isoDateTimeSchema.nullable().optional(),
   /** Weeks since coaching started, counted from the relationship start. */
