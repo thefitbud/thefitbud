@@ -119,15 +119,37 @@
   color: var(--ink-500, #5b616b);
 }
 
-.pg-rail-row {
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  border-radius: 8px;
+/*
+ * Each rail group is a tab list of rows; when lines can be ticked, the checkboxes
+ * sit in their own column beside it (outside the tab list) at the same row height.
+ */
+.pg-rail-grid.has-checks {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
 }
 
-.pg-rail-row.is-selected {
+.pg-rail-checks,
+.pg-rail-tabs {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pg-rail-tab.is-selected,
+.pg-rail-checkwrap.is-selected {
   background: var(--pale-lavender, #edeaff);
+}
+
+.pg-rail-tab.is-compared {
+  background: #e2f3f5;
+}
+
+.pg-rail-tab.is-compared .pg-rail-label {
+  color: #0e7490;
+}
+
+.has-checks .pg-rail-tab {
+  border-radius: 0 8px 8px 0;
 }
 
 .pg-rail-checkwrap {
@@ -135,10 +157,17 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
+  width: 34px;
   height: 37px;
-  margin-left: 0.25rem;
+  padding-left: 0.25rem;
+  border-radius: 8px 0 0 8px;
   cursor: pointer;
+}
+
+.pg-rail-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pg-rail-check {
@@ -168,7 +197,7 @@
   cursor: pointer;
 }
 
-.pg-rail-row.is-selected .pg-rail-label {
+.pg-rail-tab.is-selected .pg-rail-label {
   color: var(--indigo, #4527c6);
 }
 
@@ -377,7 +406,7 @@
   .pg-rail-checkwrap {
     width: 44px;
     height: 44px;
-    margin-left: 0;
+    padding-left: 0;
   }
 
   /* The 44 px target is the wrapping label; the box itself stays at its drawn size. */
@@ -399,4 +428,237 @@
   .pg-layout {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* Z8-13: compare (frame 160d) and workouts from logs (frame 160e). */
+.pg-panel-head .pg-outline-btn {
+  flex: none;
+  white-space: nowrap;
+}
+
+.pg-toolbar-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.pg-compare {
+  position: relative;
+}
+
+.pg-compare-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 18px 0 16px;
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--deep-navy, #1a1248);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pg-compare-btn.is-on {
+  border-color: var(--deep-navy, #1a1248);
+  background: var(--deep-navy, #1a1248);
+  color: #ffffff;
+}
+
+.pg-compare-btn .pg-chevron {
+  margin-left: 0.25rem;
+}
+
+.pg-compare-list {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 14rem;
+  margin: 0;
+  padding: 0.375rem;
+  list-style: none;
+  background: #ffffff;
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgb(26 18 72 / 12%);
+}
+
+.pg-compare-list button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-900, #0f1115);
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pg-compare-list button:hover,
+.pg-compare-list button[aria-pressed="true"] {
+  background: var(--pale-lavender, #edeaff);
+}
+
+.pg-compare-btn:focus-visible,
+.pg-compare-list button:focus-visible,
+.pg-select select:focus-visible,
+.pg-link-btn:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+.pg-chart-grid text.pg-chart-right-tick {
+  fill: #0e7490;
+}
+
+.pg-chart-grid text.pg-chart-gap {
+  fill: var(--ink-500, #5b616b);
+  font-size: 11px;
+}
+
+.pg-panel-head:has(.pg-head-controls) {
+  flex-wrap: wrap;
+}
+
+.pg-panel-head:has(.pg-head-controls) > div:first-child {
+  flex: 1 1 16rem;
+  min-width: 0;
+}
+
+.pg-head-controls {
+  flex: 0 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.pg-select select {
+  min-height: 44px;
+  padding: 0 2.25rem 0 0.875rem;
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 10px;
+  background: #ffffff
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%231a1248' stroke-width='1.5'/%3E%3C/svg%3E")
+    no-repeat right 0.875rem center;
+  appearance: none;
+  color: var(--ink-900, #0f1115);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pg-chart-note {
+  margin: 0.25rem 0 0;
+  font-size: 12px;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-banner {
+  margin: 0.75rem 0 0;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 10px;
+  background: #f6f7fb;
+  font-size: 13px;
+  color: var(--ink-900, #0f1115);
+}
+
+.pg-banner-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.pg-banner-row > svg {
+  flex: none;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-banner-row p {
+  flex: 1;
+  margin: 0;
+}
+
+.pg-link-btn {
+  flex: none;
+  min-height: 44px;
+  padding: 0 0.25rem;
+  border: 0;
+  background: transparent;
+  color: var(--indigo, #4527c6);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.pg-uncharted {
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pg-uncharted li {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+  gap: 0.75rem;
+  padding: 0.375rem 0;
+  border-top: 1px solid var(--border, #e7e9f2);
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-uncharted li.pg-uncharted-more {
+  display: block;
+  color: var(--ink-700, #25262b);
+}
+
+.pg-weeks-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 1rem 0 0.25rem;
+}
+
+.pg-weeks-head h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+}
+
+.pg-weeks-total {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-700, #25262b);
+  font-variant-numeric: tabular-nums;
+}
+
+.pg-bar-planned {
+  fill: #ebe8fd;
+}
+
+.pg-bar-done {
+  fill: var(--indigo, #4527c6);
+}
+
+.pg-bars text.pg-bar-week {
+  font-size: 12px;
+  fill: var(--ink-700, #25262b);
+}
+
+.pg-bars text.pg-bar-count {
+  font-size: 12px;
+  fill: var(--ink-900, #0f1115);
+  font-variant-numeric: tabular-nums;
 }

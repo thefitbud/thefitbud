@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ProgressEntry, ProgressMetricKey } from "@fitbud/contracts";
+import { formatLocalDate } from "@fitbud/core";
 import {
   EmptyState,
   ErrorState,
@@ -18,15 +19,25 @@ import {
   RATING_KEYS,
   type MetricGroup,
 } from "./progress/metricKeys";
-import { MetricRail, hasPoints, type RailView } from "./progress/MetricRail";
+import {
+  MetricRail,
+  hasPoints,
+  type RailView,
+  type WorkoutsRow,
+  type WorkoutsSummary,
+} from "./progress/MetricRail";
+import { ComparePanel } from "./progress/ComparePanel";
+import { CompareControl } from "./progress/CompareControl";
 import { MultiSeriesPanel } from "./progress/MultiSeriesPanel";
 import { PhotosSection } from "./progress/PhotosSection";
 import { RangeControl } from "./progress/RangeControl";
+import { StrengthPanel } from "./progress/StrengthPanel";
 import { WeightPanel } from "./progress/WeightPanel";
 import {
   useProgressMetrics,
   type MetricRange,
 } from "./progress/useProgressMetrics";
+import { useStrength } from "./progress/useStrength";
 import "./progress/progress.css";
 
 const ALL_TIME: MetricRange = { range: "all" };
@@ -54,6 +65,11 @@ export function ClientProgressPage() {
   const [range, setRange] = useState<MetricRange>({ range: "12w" });
   const [view, setView] = useState<RailView | null>(null);
   const [checked, setChecked] = useState<Checked | null>(null);
+  /** The metric on the right-hand scale (frame 160d). */
+  const [compareKey, setCompareKey] = useState<ProgressMetricKey | null>(null);
+  /** Set while the workouts panel (frame 160e) is open. */
+  const [workoutsRow, setWorkoutsRow] = useState<WorkoutsRow | null>(null);
+  const [exerciseId, setExerciseId] = useState<string | null>(null);
 
   // All-time series for every standard key: the rail's latest values and which keys have data.
   const rail = useProgressMetrics({
@@ -63,7 +79,25 @@ export function ClientProgressPage() {
     refreshEpoch,
   });
   const railSeries = useMemo(() => rail.data?.series ?? {}, [rail.data]);
-  const anyData = ALL_METRIC_KEYS.some((key) => hasPoints(railSeries[key]));
+  const metricsWithData = ALL_METRIC_KEYS.filter((key) =>
+    hasPoints(railSeries[key]),
+  );
+
+  // All-time strength: the rail's "Workouts · from logs" rows.
+  const strengthAll = useStrength({
+    relationshipId,
+    range: ALL_TIME,
+    refreshEpoch,
+  });
+  const workouts = useMemo((): WorkoutsSummary | null => {
+    const model = strengthAll.data;
+    if (!model) return null;
+    const completed = model.workoutsPerWeek.reduce((sum, w) => sum + w.count, 0);
+    const planned = model.workoutsPerWeek.reduce((sum, w) => sum + w.planned, 0);
+    const lifts = model.exercises.length;
+    return completed || planned || lifts ? { completed, planned, lifts } : null;
+  }, [strengthAll.data]);
+  const anyData = metricsWithData.length > 0 || workouts !== null;
 
   // Photos stay on the existing progress entries list.
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
@@ -115,28 +149,57 @@ export function ClientProgressPage() {
     });
   }, [rail.data]);
 
+  // A client with workout logs but no check-in metrics opens on the workouts panel.
+  const openedOnWorkouts = useRef(false);
+  useEffect(() => {
+    if (openedOnWorkouts.current || !rail.data || !strengthAll.data) return;
+    openedOnWorkouts.current = true;
+    if (!metricsWithData.length && workouts) setWorkoutsRow("exercises");
+  }, [rail.data, strengthAll.data, metricsWithData.length, workouts]);
+
   const activeView: RailView = view ?? { group: "weight", focus: "weight" };
+  const comparing = compareKey !== null && workoutsRow === null;
   const chartKeys = useMemo((): ProgressMetricKey[] => {
+    if (comparing && compareKey) return [activeView.focus, compareKey];
     if (activeView.group === "weight" || !checked) return ["weight"];
     const ticked = checked[activeView.group];
     return [
       activeView.focus,
       ...ticked.filter((key) => key !== activeView.focus),
     ];
-  }, [activeView.group, activeView.focus, checked]);
+  }, [activeView.group, activeView.focus, checked, comparing, compareKey]);
 
   const chart = useProgressMetrics({
     relationshipId,
     keys: chartKeys,
     range,
     refreshEpoch,
-    enabled: range.range !== "all" && Boolean(rail.data),
+    enabled:
+      workoutsRow === null && range.range !== "all" && Boolean(rail.data),
   });
   const chartSeries =
     range.range === "all" ? railSeries : (chart.data?.series ?? {});
 
+  const strengthRange = useStrength({
+    relationshipId,
+    range,
+    refreshEpoch,
+    enabled: workoutsRow !== null && range.range !== "all",
+  });
+  const strength =
+    range.range === "all" ? strengthAll.data : strengthRange.data;
+  const strengthLoading =
+    range.range === "all" ? strengthAll.loading : strengthRange.loading;
+
+  useEffect(() => {
+    if (workoutsRow !== "completed") return;
+    document.getElementById("pg-weeks")?.scrollIntoView?.({ block: "nearest" });
+  }, [workoutsRow, strength]);
+
   function selectKey(group: MetricGroup, key: ProgressMetricKey) {
+    setWorkoutsRow(null);
     setView({ group, focus: key });
+    if (key === compareKey) setCompareKey(null);
     if (group === "weight") return;
     setChecked((current) => {
       const base = current ?? { body: [], ratings: [] };
@@ -160,15 +223,88 @@ export function ClientProgressPage() {
     }
   }
 
+  function chooseCompare(key: ProgressMetricKey) {
+    setWorkoutsRow(null);
+    setCompareKey(key);
+  }
+
+  const compareOptions = metricsWithData.filter(
+    (key) => key !== activeView.focus,
+  );
+
   const photoEntries = entries
     .filter((row) => row.entryType === "progress_photo" && row.mediaAssetId)
     .sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+  // Photo dates are the client's calendar days, not UTC days.
   const photoDates = new Set(
-    photoEntries.map((row) => row.observedAt.slice(0, 10)),
+    photoEntries.map((row) => formatLocalDate(new Date(row.observedAt), clientTz)),
   ).size;
 
-  const error = rail.error ?? chart.error ?? entriesError;
-  const loading = rail.loading && !rail.data;
+  const error =
+    rail.error ??
+    chart.error ??
+    strengthAll.error ??
+    strengthRange.error ??
+    entriesError;
+  const loading =
+    (rail.loading && !rail.data) || (strengthAll.loading && !strengthAll.data);
+
+  function panelBody() {
+    if (workoutsRow !== null) {
+      if (!strength) {
+        return strengthLoading ? <LoadingBlock label="Loading workouts…" /> : null;
+      }
+      return (
+        <StrengthPanel
+          model={strength}
+          range={range}
+          today={today}
+          exerciseId={exerciseId}
+          onExercise={setExerciseId}
+        />
+      );
+    }
+    if (range.range !== "all" && !chart.data && chart.loading) {
+      return <LoadingBlock label="Loading chart…" />;
+    }
+    if (comparing && compareKey) {
+      return (
+        <ComparePanel
+          primary={activeView.focus}
+          secondary={compareKey}
+          series={chartSeries}
+          onRemove={() => setCompareKey(null)}
+        />
+      );
+    }
+    if (activeView.group === "weight") {
+      return (
+        <WeightPanel
+          series={chartSeries.weight}
+          renderSource={(point) =>
+            point.checkinId ? (
+              <Link
+                className="progress-checkin-link"
+                to={`/clients/${relationshipId}/check-ins/${point.checkinId}`}
+              >
+                From check-in
+              </Link>
+            ) : (
+              "Measurement entry"
+            )
+          }
+        />
+      );
+    }
+    return (
+      <MultiSeriesPanel
+        kind={activeView.group}
+        keys={chartKeys}
+        series={chartSeries}
+        clientFirstName={clientFirstName}
+      />
+    );
+  }
 
   return (
     <div
@@ -183,6 +319,8 @@ export function ClientProgressPage() {
           onRetry={() => {
             rail.reload();
             chart.reload();
+            strengthAll.reload();
+            strengthRange.reload();
             void loadEntries();
           }}
           screenId="TW-18"
@@ -190,7 +328,7 @@ export function ClientProgressPage() {
       ) : null}
       {loading ? <LoadingBlock label="Loading progress…" /> : null}
 
-      {!loading && rail.data && !anyData ? (
+      {!loading && rail.data && strengthAll.data && !anyData ? (
         <EmptyState title="No weigh-ins yet. Weight is collected in check-ins.">
           {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
           <Link to={`/clients/${relationshipId}/configure`}>
@@ -202,7 +340,14 @@ export function ClientProgressPage() {
       {!loading && rail.data && anyData && checked ? (
         <>
           <div className="pg-toolbar">
-            <RangeControl value={range} today={today} onChange={setRange} />
+            <div className="pg-toolbar-left">
+              <RangeControl value={range} today={today} onChange={setRange} />
+              <CompareControl
+                options={compareOptions}
+                value={comparing ? compareKey : null}
+                onChange={chooseCompare}
+              />
+            </div>
             <p className="pg-toolbar-note">
               Check-in dates · values as entered
             </p>
@@ -212,44 +357,23 @@ export function ClientProgressPage() {
               series={railSeries}
               view={activeView}
               checked={checked}
+              compare={comparing ? compareKey : null}
+              workouts={workouts}
+              workoutsRow={workoutsRow}
               photoDates={photoDates}
               relationshipId={relationshipId}
               onSelect={selectKey}
               onToggle={toggleKey}
+              onWorkouts={setWorkoutsRow}
             />
             <section
               id="pg-panel"
               role="tabpanel"
               className="pg-panel workspace-card"
               aria-labelledby="pg-panel-title"
-              aria-busy={chart.loading}
+              aria-busy={workoutsRow !== null ? strengthLoading : chart.loading}
             >
-              {range.range !== "all" && !chart.data && chart.loading ? (
-                <LoadingBlock label="Loading chart…" />
-              ) : activeView.group === "weight" ? (
-                <WeightPanel
-                  series={chartSeries.weight}
-                  renderSource={(point) =>
-                    point.checkinId ? (
-                      <Link
-                        className="progress-checkin-link"
-                        to={`/clients/${relationshipId}/check-ins/${point.checkinId}`}
-                      >
-                        From check-in
-                      </Link>
-                    ) : (
-                      "Measurement entry"
-                    )
-                  }
-                />
-              ) : (
-                <MultiSeriesPanel
-                  kind={activeView.group}
-                  keys={chartKeys}
-                  series={chartSeries}
-                  clientFirstName={clientFirstName}
-                />
-              )}
+              {panelBody()}
             </section>
           </div>
         </>
