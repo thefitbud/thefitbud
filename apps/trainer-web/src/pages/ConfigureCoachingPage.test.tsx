@@ -15,6 +15,8 @@ const REL_ID = "55555555-5555-4555-8555-555555555555";
 const api = vi.hoisted(() => ({
   getCoachingConfiguration: vi.fn(),
   getSubscription: vi.fn(),
+  getClientSettings: vi.fn(),
+  saveClientSubscription: vi.fn(),
   getEffectivePlan: vi.fn(),
   getReminderRules: vi.fn(),
   getOnboardingResponse: vi.fn(),
@@ -39,6 +41,8 @@ vi.mock("../lib/api", () => ({
   apiClient: {
     getCoachingConfiguration: api.getCoachingConfiguration,
     getSubscription: api.getSubscription,
+    getClientSettings: api.getClientSettings,
+    saveClientSubscription: api.saveClientSubscription,
     getEffectivePlan: api.getEffectivePlan,
     getReminderRules: api.getReminderRules,
     getOnboardingResponse: api.getOnboardingResponse,
@@ -97,6 +101,32 @@ function configuration(status: ConfigStatus, goalShort: string | null = "Postpar
     activatedAt: status === "active" ? "2026-07-06T04:00:00.000Z" : null,
     createdAt: "2026-07-06T04:00:00.000Z",
     updatedAt: "2026-07-06T04:00:00.000Z",
+  };
+}
+
+function clientSubscription(mode: "online" | "in_person" | "hybrid" | null) {
+  return {
+    id: "77777777-7777-4777-8777-777777777777",
+    versionNumber: 2,
+    planName: "Monthly coaching",
+    paymentFrequency: "monthly",
+    startsOn: "2026-07-06",
+    renewsOn: "2026-11-17",
+    renewalState: "upcoming",
+    amountPaise: 450000,
+    subscriptionType: "monthly",
+    coachingMode: mode,
+    createdAt: "2026-07-06T04:00:00.000Z",
+  };
+}
+
+function clientSettings(
+  mode: "online" | "in_person" | "hybrid" | null,
+  hasSubscription = true,
+) {
+  return {
+    relationshipId: REL_ID,
+    subscription: hasSubscription ? clientSubscription(mode) : null,
   };
 }
 
@@ -208,6 +238,7 @@ beforeEach(() => {
     startsOn: "2026-07-06",
     renewsOn: "2026-11-17",
   });
+  api.getClientSettings.mockResolvedValue(clientSettings("hybrid"));
   api.getEffectivePlan.mockResolvedValue({ plan: null, version: null });
   api.getReminderRules.mockResolvedValue({
     items: [
@@ -259,6 +290,7 @@ describe("ConfigureCoachingPage on an ended relationship (CE1)", () => {
       "Reminders",
       "Tracking",
       "Subscription",
+      "Coaching mode",
       "Starts on",
       "Due on",
     ]);
@@ -337,7 +369,7 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
     const { container } = renderPage("active", "active");
     await screen.findByRole("heading", { name: "Coaching setup" });
     expect(screen.getByTestId("configure-active-banner").textContent).toBe(
-      "Version 1 is active. Edits to goal, expectations, check-in window and tracking are saved as version 2, with new targets from tomorrow. The steps target and check-in form change straight away.",
+      "Version 1 is active. Edits to goal, expectations, check-in window and tracking are saved as version 2, with new targets from tomorrow. The steps target, check-in form and coaching mode change straight away.",
     );
     expect(container.textContent).not.toContain("Create a new version to change it");
     expect(container.textContent).not.toContain("has ended");
@@ -1184,6 +1216,7 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     await screen.findByRole("heading", { name: "Coaching setup" });
     expect(sectionRows(container).map((row) => row.title)).toEqual([
       "Goal",
+      "Coaching mode",
       "Expectations",
       "Check-ins",
       "Tracking",
@@ -1213,12 +1246,12 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     const { container, unmount } = renderPage("active", "draft");
     await screen.findByRole("heading", { name: "Coaching setup" });
     expect(sectionRows(container).map((row) => row.badge)).toEqual([
-      "Done", "Done", "Done", "Done", "Done",
+      "Done", "Done", "Done", "Done", "Done", "Done",
     ]);
     chooseOption(selectNamed(container, "sessionsPerWeek"), "5");
-    expect(sectionRows(container)[1]!.badge).toBe("Editing");
+    expect(sectionRows(container)[2]!.badge).toBe("Editing");
     expect(
-      container.querySelectorAll(".configure-accordion-summary")[1]?.textContent,
+      container.querySelectorAll(".configure-accordion-summary")[2]?.textContent,
     ).toContain("5 workouts a week");
     unmount();
 
@@ -1226,7 +1259,7 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     await screen.findByRole("heading", { name: "Coaching setup" });
     // Reminders: no badge until a configuration exists (Z8-5 review).
     expect(sectionRows(view.container).map((row) => row.badge)).toEqual([
-      "To do", "To do", "To do", "To do", undefined,
+      "To do", "Done", "To do", "To do", "To do", undefined,
     ]);
     expect(screen.getByTestId("configure-status-note").textContent).toBe(
       "Not saved yet",
@@ -1238,15 +1271,15 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     await screen.findByRole("heading", { name: "Coaching setup" });
     chooseOption(selectNamed(container, "cadence"), "biweekly");
     const badges = sectionRows(container).map((row) => row.badge);
-    expect(badges[1]).toBe("Editing");
-    expect(badges[2]).toBe("Done");
+    expect(badges[2]).toBe("Editing");
+    expect(badges[3]).toBe("Done");
     chooseOption(selectNamed(container, "cadence"), "weekly");
     fireEvent.change(container.querySelector('[name="dueWindowHours"]')!, {
       target: { value: "24" },
     });
     const after = sectionRows(container).map((row) => row.badge);
-    expect(after[1]).toBe("Done");
-    expect(after[2]).toBe("Editing");
+    expect(after[2]).toBe("Done");
+    expect(after[3]).toBe("Editing");
   });
 
   it("Save draft never writes the subscription, so amount, type and mode can't be dropped (D-W8-5)", async () => {
@@ -1256,6 +1289,124 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
     await waitFor(() => expect(api.saveConfigurationDraft).toHaveBeenCalled());
     expect(api.saveSubscription).not.toHaveBeenCalled();
+  });
+});
+
+describe("ConfigureCoachingPage coaching mode (Z8-7, frame IP-07)", () => {
+  const modeRadio = (container: HTMLElement, value: string) =>
+    container.querySelector<HTMLInputElement>(
+      `input[name="coachingMode"][value="${value}"]`,
+    )!;
+
+  it("offers the three modes through labels, with the stored one selected and nothing to save yet", async () => {
+    const { container } = renderPage("active", "active");
+    await screen.findByTestId("coaching-mode-section");
+    const group = screen.getByRole("radiogroup", { name: "Coaching mode" });
+    expect(group.textContent).toContain("Online");
+    expect(group.textContent).toContain("Hybrid");
+    expect(group.textContent).toContain("In person");
+    expect(group.textContent).not.toMatch(/in_person|\d\s?%/);
+    expect(modeRadio(container, "hybrid").checked).toBe(true);
+    expect(modeRadio(container, "online").disabled).toBe(false);
+    expect(screen.queryByRole("button", { name: "Save coaching mode" })).toBeNull();
+    expect(api.saveClientSubscription).not.toHaveBeenCalled();
+  });
+
+  it("saves a new subscription version, sending plan, dates, amount and type back as stored", async () => {
+    api.saveClientSubscription.mockResolvedValue({
+      ...clientSubscription("in_person"),
+      versionNumber: 3,
+    });
+    const { container } = renderPage("active", "active");
+    await screen.findByTestId("coaching-mode-section");
+    fireEvent.click(modeRadio(container, "in_person"));
+    const badge = container
+      .querySelector("#configure-coaching-mode")!
+      .closest("details")!
+      .querySelector("[data-testid=configure-section-badge]");
+    expect(badge?.textContent).toBe("Editing");
+    fireEvent.click(screen.getByRole("button", { name: "Save coaching mode" }));
+    await waitFor(() => expect(api.saveClientSubscription).toHaveBeenCalledTimes(1));
+    const [relationshipId, body, key] = api.saveClientSubscription.mock.calls[0]!;
+    expect(relationshipId).toBe(REL_ID);
+    expect(body).toEqual({
+      expectedVersion: 2,
+      planName: "Monthly coaching",
+      paymentFrequency: "monthly",
+      startsOn: "2026-07-06",
+      renewsOn: "2026-11-17",
+      amountPaise: 450000,
+      subscriptionType: "monthly",
+      coachingMode: "in_person",
+    });
+    expect(typeof key).toBe("string");
+    await screen.findByText("Coaching mode set to In person");
+    expect(screen.queryByRole("button", { name: "Save coaching mode" })).toBeNull();
+    // The configuration is a separate version and is never touched.
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+    expect(api.createConfigurationVersion).not.toHaveBeenCalled();
+  });
+
+  it("Discard puts the stored mode back without a call", async () => {
+    const { container } = renderPage("active", "active");
+    await screen.findByTestId("coaching-mode-section");
+    fireEvent.click(modeRadio(container, "online"));
+    fireEvent.click(
+      container
+        .querySelector("#configure-coaching-mode")!
+        .querySelector<HTMLButtonElement>(".configure-mode-actions button")!,
+    );
+    expect(modeRadio(container, "hybrid").checked).toBe(true);
+    expect(api.saveClientSubscription).not.toHaveBeenCalled();
+  });
+
+  it("a newer subscription version reloads the latest and says so, writing nothing over it", async () => {
+    api.saveClientSubscription.mockRejectedValue(
+      new ApiClientError({
+        code: "SUBSCRIPTION_VERSION_CONFLICT",
+        message: "Subscription was changed after this version was loaded.",
+        requestId: "req-2",
+        status: 409,
+      }),
+    );
+    const { container } = renderPage("active", "active");
+    await screen.findByTestId("coaching-mode-section");
+    api.getClientSettings.mockResolvedValue({
+      relationshipId: REL_ID,
+      subscription: { ...clientSubscription("online"), versionNumber: 3 },
+    });
+    fireEvent.click(modeRadio(container, "in_person"));
+    fireEvent.click(screen.getByRole("button", { name: "Save coaching mode" }));
+    await screen.findByText(/The subscription changed while you were editing/);
+    expect(modeRadio(container, "online").checked).toBe(true);
+    expect(api.saveClientSubscription).toHaveBeenCalledTimes(1);
+  });
+
+  it("without a subscription it points to Client settings and offers no radios", async () => {
+    api.getClientSettings.mockResolvedValue(clientSettings(null, false));
+    const { container } = renderPage("active", "active");
+    await screen.findByTestId("coaching-mode-no-subscription");
+    expect(container.querySelector('input[name="coachingMode"]')).toBeNull();
+  });
+
+  it("an ended client shows the mode as plain text, with no radios", async () => {
+    const { container } = renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    expect(container.querySelector('input[name="coachingMode"]')).toBeNull();
+    expect(screen.getByRole("definition", { name: "Coaching mode" }).textContent).toBe(
+      "Hybrid",
+    );
+  });
+
+  it("an ended client never shows an unconfirmed 'Not set' when the mode fails to load", async () => {
+    api.getClientSettings.mockRejectedValue(new TypeError("Failed to fetch"));
+    renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    await waitFor(() =>
+      expect(screen.getByRole("definition", { name: "Coaching mode" }).textContent).toBe(
+        "Couldn't load",
+      ),
+    );
   });
 });
 
