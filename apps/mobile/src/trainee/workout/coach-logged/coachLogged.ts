@@ -1,4 +1,5 @@
 import type { WorkoutExecution } from "@fitbud/contracts";
+import { formatLocalDate, zonedDateTimeFormat } from "@fitbud/core";
 import { formatCivilDateShort } from "../../workoutDisplay";
 
 export type CoachLogState = "logged" | "edited" | null;
@@ -25,7 +26,7 @@ export function coachLogTitle(state: Exclude<CoachLogState, null>): string {
 
 /** "7:12 am" in the given time zone. */
 function clockTime(iso: string, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
+  return zonedDateTimeFormat("en-IN", {
     timeZone,
     hour: "numeric",
     minute: "2-digit",
@@ -37,13 +38,7 @@ function clockTime(iso: string, timeZone: string): string {
 
 /** Civil date in the time zone of an ISO instant, as "Mon 2 Nov". */
 export function civilDateOf(iso: string, timeZone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date(iso));
-  return formatCivilDateShort(parts);
+  return formatCivilDateShort(formatLocalDate(new Date(iso), timeZone));
 }
 
 /** "7:12–8:04 am", or "7:12 am" when there is no end. */

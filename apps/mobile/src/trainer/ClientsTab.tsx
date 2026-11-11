@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { ChevronRight, Search } from "lucide-react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
+import {
+  Ban,
+  CalendarClock,
+  ChevronRight,
+  ClipboardCheck,
+  Clock,
+  Eye,
+  Search,
+  type LucideIcon,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { AttentionGroupsResponse, ClientDirectoryItem } from "@fitbud/contracts";
 import { deviceTimeZone, formatClockTime, formatPersonName, labelFor } from "@fitbud/core";
-import { colors, fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import {
+  colors,
+  fontFamilyMedium,
+  fontFamilySemiBold,
+  radii,
+  semanticColors,
+  spacing,
+} from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { stage1Api } from "../lib/stage1Api";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -15,7 +31,11 @@ import { initialsFromName } from "../components/m2";
 import { ActivityFeedScreen } from "./ActivityFeedScreen";
 import { readTrainerCache, writeTrainerCache } from "./cache";
 import {
+  applyClientListFilter,
   clientListQueryForChip,
+  endedChipLabel,
+  isCheckinDue,
+  isEndedClient,
   mapDirectoryItemToRow,
   type ClientDirectoryRow,
   type ClientListFilter,
@@ -39,7 +59,14 @@ type Props = {
 type Chip = { label: string; kind: "severity" | "adherence" | "lifecycle" | "checkin" | "custom"; value: string };
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
 
-function rowChips(item: ClientDirectoryItem, group?: AttentionGroup): Chip[] {
+function rowChips(
+  item: ClientDirectoryItem,
+  group: AttentionGroup | undefined,
+  timeZone: string,
+): Chip[] {
+  if (isEndedClient(item)) {
+    return [{ label: endedChipLabel(item, timeZone), kind: "custom", value: "ended" }];
+  }
   const chips: Chip[] = [];
   const reviewed =
     group != null &&
@@ -85,6 +112,26 @@ function rowChips(item: ClientDirectoryItem, group?: AttentionGroup): Chip[] {
   return chips.slice(0, 2);
 }
 
+const CUSTOM_CHIPS: Record<string, { Icon: LucideIcon; tone: "info" | "attention" | "neutral" }> = {
+  checkin_submitted: { Icon: ClipboardCheck, tone: "info" },
+  checkin_overdue: { Icon: Clock, tone: "attention" },
+  renewal_due: { Icon: CalendarClock, tone: "attention" },
+  reviewed_still_open: { Icon: Eye, tone: "neutral" },
+  ended: { Icon: Ban, tone: "neutral" },
+};
+
+/** Roster chip with frame 17/73 tone and icon; the text always carries the state. */
+function CustomChip({ value, label }: { value: string; label: string }) {
+  const spec = CUSTOM_CHIPS[value] ?? { Icon: Eye, tone: "neutral" as const };
+  const palette = semanticColors[spec.tone];
+  return (
+    <View style={[styles.customChip, { backgroundColor: palette.fill }]}>
+      <spec.Icon size={14} color={palette.text} strokeWidth={1.75} />
+      <Text style={[styles.customChipText, { color: palette.text }]}>{label}</Text>
+    </View>
+  );
+}
+
 function isOfflineError(err: unknown): boolean {
   if (err instanceof TypeError) return true;
   if (err instanceof ApiClientError) return err.status === 0;
@@ -118,30 +165,27 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
           .getAttentionGroups()
           .catch(() => ({ groups: [] as AttentionGroupsResponse["groups"] })),
       ]);
-      setItems(page.items);
+      setItems(applyClientListFilter(page.items, chip));
       setAttentionByRelationship(
         new Map(attention.groups.map((group) => [group.relationshipId, group])),
       );
-      const all = allPage.items;
+      const all = allPage.items.filter((item) => !isEndedClient(item));
       setCounts({
         all: all.length,
         needs: all.filter((item) => item.adherenceState === "needs_attention").length,
-        checkin: all.filter((item) => {
-          const status = item.nextCheckin?.status;
-          return status === "due" || status === "overdue" || status === "submitted";
-        }).length,
+        checkin: all.filter(isCheckinDue).length,
         onboarding: all.filter((item) =>
           ["invited", "onboarding_pending", "onboarding_submitted"].includes(item.status),
         ).length,
       });
-      writeTrainerCache("trainer:clients", { items: page.items, savedAt: new Date().toISOString() });
+      writeTrainerCache("trainer:clients", { items: applyClientListFilter(page.items, chip), savedAt: new Date().toISOString() });
       setOfflineAt(null);
     } catch (err) {
       const cached = readTrainerCache<{ items: ClientDirectoryItem[]; savedAt: string }>(
         "trainer:clients",
       );
       if (isOfflineError(err) && cached) {
-        setItems(cached.items);
+        setItems(applyClientListFilter(cached.items, chip));
         setOfflineAt(cached.savedAt);
         setError(null);
       } else {
@@ -173,6 +217,8 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
     return null;
   };
 
+  const searchLabel = chip === "ended" ? "Search ended clients" : `Search ${counts.all} clients`;
+
   if (segment === "activity") {
     return (
       <Screen title="Clients" chrome="app" showHeader>
@@ -196,15 +242,20 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
       <View style={styles.search}>
         <Search color={colors.midGrey} size={18} />
         <TextInput
-          accessibilityLabel={`Search ${counts.all} clients`}
-          placeholder={`Search ${counts.all} clients`}
+          accessibilityLabel={searchLabel}
+          placeholder={searchLabel}
           placeholderTextColor={colors.midGrey}
           value={query}
           onChangeText={setQuery}
           style={styles.searchInput}
         />
       </View>
-      <View style={styles.filters}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filtersScroll}
+        contentContainerStyle={styles.filters}
+      >
         {FILTERS.map((item) => {
           const count = countFor(item.id);
           const label = count == null ? item.label : `${item.label} ${count}`;
@@ -223,7 +274,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
       {offlineAt ? (
         <Text style={styles.offline}>
           You're offline. Showing the last update from{" "}
@@ -270,16 +321,16 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
                     item.relationshipId
                       ? attentionByRelationship.get(item.relationshipId)
                       : undefined,
+                    trainerZone,
                   ).map((entry) =>
                     entry.kind === "custom" ? (
-                      <View key={entry.value} style={styles.customChip}>
-                        <Text style={styles.customChipText}>{entry.label}</Text>
-                      </View>
+                      <CustomChip key={entry.value} value={entry.value} label={entry.label} />
                     ) : (
                       <StatusChip
                         key={entry.value}
                         kind={entry.kind}
                         value={entry.value}
+                        {...(entry.label ? { label: entry.label } : {})}
                       />
                     ),
                   )}
@@ -290,6 +341,11 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
           );
         })}
       </View>
+      {chip === "ended" && rows.length > 0 ? (
+        <Text style={styles.endedNote}>
+          Ended clients are read-only. Reactivate from FitBud on web.
+        </Text>
+      ) : null}
     </Screen>
   );
 }
@@ -357,13 +413,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 44,
   },
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
+  filtersScroll: { flexGrow: 0, marginBottom: 8 },
+  filters: { flexDirection: "row", gap: 8 },
+  endedNote: { color: colors.midGrey, fontSize: 14, lineHeight: 20, marginTop: 12 },
   filter: {
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
     borderRadius: 999,
     borderWidth: 1,
-    minHeight: 36,
+    minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: 12,
   },
@@ -393,13 +451,15 @@ const styles = StyleSheet.create({
   sub: { color: colors.midGrey, fontSize: 14 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
   customChip: {
-    borderColor: "#E7E9F2",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  customChipText: { color: colors.deepNavy, fontSize: 12 },
+  customChipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
   empty: { color: colors.deepNavy, fontSize: 16, lineHeight: 22, marginTop: 24 },
   skeleton: {
     backgroundColor: "#E7E9F2",
