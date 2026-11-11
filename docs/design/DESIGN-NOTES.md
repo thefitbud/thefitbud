@@ -441,3 +441,10 @@ FitBud UI decided, Firoz approved, 11 Nov 2026 (D-W9-7–D-W9-10 in [../specs/ba
 **Measurements picker (171b) · D-W9-9.** In W9 the picker offers weight, waist, hip, chest and other; arm and thigh may stay where they are already offered as check-in keys. No neck, calf, left/right or inches (no backend field). This narrows the round 2 "Measurements question (171b)" paragraph above.
 
 **Progress photos (160f) · D-W9-10.** No Front/Side/Back switch: `media_assets` has no pose field. Photos stay unfiltered.
+
+## Superseded by (W9b, 11 Nov 2026)
+Decided by Firoz, 11 Nov 2026 (D-W9b-1, D-W9b-2 in [../specs/batches/W9b.md](../specs/batches/W9b.md); index notes in [README.md](README.md)). The PNGs are not repainted; these paragraphs win over the frames.
+
+**Steps setup privacy line (93, 95) · D-W9b-1.** Steps are shared with the coach: the trainer sees the daily total. The frames' "Steps stay on your phone and aren't shared with your coach" is false. Use the copy Z9-10 shipped: "FitBud reads your daily step count from {Apple Health | Health Connect} and shares the daily total with {coach}."
+
+**Client ⋯ menu (208) · D-W9b-2.** "Add note" is deliberately left out of the client header overflow menu. Notes are added from Overview. Z9-13 already ships the menu this way.
