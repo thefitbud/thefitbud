@@ -928,7 +928,7 @@ export function TraineeShell({
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        {!hideTabBar && tab !== "diet" && tab !== "more" ? (
+        {!hideTabBar && tab !== "workout" && tab !== "diet" && tab !== "more" ? (
           <View style={styles.topPad}>
             <AppTopBar
               title={topTitle}
@@ -969,6 +969,7 @@ export function TraineeShell({
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
+            unreadNotifications={unreadNotifications}
             autoStartToday={workoutAutostart}
             onAutoStartConsumed={() => setWorkoutAutostart(false)}
             pendingStartAssignmentId={pendingWorkoutStartId}

@@ -12,7 +12,7 @@ import {
   type WorkoutAssignment,
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor } from "../../../test/render";
-import { localDateInTimezone, startOfWeekMonday, addDays } from "../../../lib/dates";
+import { localDateInTimezone } from "../../../lib/dates";
 
 /*
  * `WorkoutTab` reaches `modules/live-activity` through the active-workout
@@ -53,7 +53,7 @@ const relationship: CoachingRelationship = coachingRelationshipSchema.parse({
  * `scheduledAssignments` filters it out — the same filter production applies,
  * with no shortcut around it here.
  */
-const FOCUS_DATE = addDays(startOfWeekMonday(TODAY), 5);
+const FOCUS_DATE = TODAY;
 
 const assignment: WorkoutAssignment = workoutAssignmentSchema.parse({
   id: "9a1b2c3d-4e5f-4061-8273-849506172839",
