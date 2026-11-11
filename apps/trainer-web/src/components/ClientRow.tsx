@@ -52,12 +52,15 @@ type Props = {
   item: ClientDirectoryItem;
   selected?: boolean;
   layout?: "row" | "card";
+  /** Ended segment uses the frame-140 column set (Client, Status, Last plan). */
+  variant?: "current" | "ended";
 };
 
 export function ClientRow({
   item,
   selected = false,
   layout = "row",
+  variant = "current",
 }: Props) {
   const navigate = useNavigate();
   const name = formatPersonName(item.traineeDisplayName);
@@ -65,6 +68,18 @@ export function ClientRow({
   const href = directoryWorkspaceHref(item);
   const goal = item.goalShort?.trim() || null;
   const planTitle = item.effectivePlan?.title?.trim() || null;
+  const endedLabel =
+    item.status === "ended" && item.endedAt
+      ? `Ended ${formatCivilDate(item.endedAt.slice(0, 10))}`
+      : null;
+  // One chip: "Ended Sat 3 Oct" when the end date is known (frame 140).
+  const lifecycleChip = (
+    <StatusChip
+      kind="lifecycle"
+      value={item.status}
+      {...(endedLabel ? { label: endedLabel } : {})}
+    />
+  );
   const checkinLabel = item.nextCheckin
     ? nextCheckinLabel(item.nextCheckin.localDate)
     : null;
@@ -106,27 +121,37 @@ export function ClientRow({
           </div>
         </div>
         <div className="client-card-chips">
-          <StatusChip kind="lifecycle" value={item.status} />
-          {item.status === "ended" && item.endedAt ? (
-            <span className="status-chip status-chip-xs">
-              Ended {formatCivilDate(item.endedAt.slice(0, 10))}
-            </span>
-          ) : null}
-          <StatusChip kind="adherence" value={item.adherenceState} />
-          {item.renewalState &&
+          {lifecycleChip}
+          {variant === "ended" ? null : (
+            <StatusChip kind="adherence" value={item.adherenceState} />
+          )}
+          {variant !== "ended" &&
+          item.renewalState &&
           (item.renewalState === "upcoming" ||
             item.renewalState === "due" ||
             item.renewalState === "expired") ? (
             <StatusChip kind="renewal" value={item.renewalState} />
           ) : null}
         </div>
-        <p className="client-card-meta">
-          Next check-in: {checkinLabel ?? "—"}
-        </p>
+        {variant === "ended" ? (
+          <p className="client-card-meta">Last plan: {planTitle ?? "—"}</p>
+        ) : (
+          <p className="client-card-meta">
+            Next check-in: {checkinLabel ?? "—"}
+          </p>
+        )}
         <div className="client-card-action">{primaryAction}</div>
       </article>
     );
   }
+
+  const planCell = planTitle ? (
+    <span className="roster-plan" title={planTitle}>
+      {planTitle}
+    </span>
+  ) : (
+    <span className="muted-dash">—</span>
+  );
 
   return (
     <tr
@@ -138,55 +163,50 @@ export function ClientRow({
         if (e.key === "Enter") activate();
       }}
     >
-      <td>
+      <td className="col-client">
         <div className="roster-person">
           <span className={`av ${avatarTone(name)}`} aria-hidden="true">
             {initials(name)}
           </span>
           <div className="roster-person-copy">
-            <p className="client-name">{name}</p>
-            <p className="client-subtitle muted">{goal ?? "—"}</p>
+            <p className="client-name" title={name}>
+              {name}
+            </p>
+            <p className="client-subtitle muted" title={goal ?? undefined}>
+              {goal ?? "—"}
+            </p>
           </div>
         </div>
       </td>
-      <td>
-        <div className="roster-status-cell">
-          <StatusChip kind="lifecycle" value={item.status} />
-          {item.status === "ended" && item.endedAt ? (
-            <span className="status-chip status-chip-xs">
-              Ended {formatCivilDate(item.endedAt.slice(0, 10))}
+      <td className="col-status">
+        <div className="roster-status-cell">{lifecycleChip}</div>
+      </td>
+      {variant === "ended" ? (
+        <td className="col-plan">{planCell}</td>
+      ) : (
+        <>
+          <td className="col-adherence">
+            <StatusChip kind="adherence" value={item.adherenceState} />
+          </td>
+          <td className="col-checkin">
+            <span className={checkinLabel ? undefined : "muted-dash"}>
+              {checkinLabel ?? "—"}
             </span>
-          ) : null}
-        </div>
-      </td>
-      <td>
-        <StatusChip kind="adherence" value={item.adherenceState} />
-      </td>
-      <td>
-        <span className={checkinLabel ? undefined : "muted-dash"}>
-          {checkinLabel ?? "—"}
-        </span>
-      </td>
-      <td>
-        {planTitle ? (
-          <span className="roster-plan" title={planTitle}>
-            {planTitle}
-          </span>
-        ) : (
-          <span className="muted-dash">—</span>
-        )}
-      </td>
-      <td>
-        {item.renewalState &&
-        (item.renewalState === "upcoming" ||
-          item.renewalState === "due" ||
-          item.renewalState === "expired") ? (
-          <StatusChip kind="renewal" value={item.renewalState} />
-        ) : (
-          <span className="muted-dash">—</span>
-        )}
-      </td>
-      <td className="client-row-action">{primaryAction}</td>
+          </td>
+          <td className="col-plan">{planCell}</td>
+          <td className="col-renewal">
+            {item.renewalState &&
+            (item.renewalState === "upcoming" ||
+              item.renewalState === "due" ||
+              item.renewalState === "expired") ? (
+              <StatusChip kind="renewal" value={item.renewalState} />
+            ) : (
+              <span className="muted-dash">—</span>
+            )}
+          </td>
+        </>
+      )}
+      <td className="col-action client-row-action">{primaryAction}</td>
     </tr>
   );
 }
