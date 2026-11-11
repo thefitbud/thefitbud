@@ -39,9 +39,7 @@ test.describe("TW-E activity, progress, check-ins", () => {
     await page.goto(`/clients/${HARPREET}/progress`);
     await expect(page.getByTestId("screen-TW-18")).toBeVisible();
     await expect(
-      page.getByRole("heading", {
-        name: "No weigh-ins yet. Weight is collected in check-ins.",
-      }),
+      page.getByRole("heading", { name: "No progress data yet" }),
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: /Open check-in settings/i }),
