@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type ReactNode,
 } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
@@ -13,16 +12,11 @@ import type {
   CheckinCadence,
   CheckinFormTemplateSummary,
   CoachingConfiguration,
+  ConfigurationSectionId,
   MealPhotoRequirement,
-  PaymentFrequency,
   PlanContent,
   ReminderType,
   Subscription,
-} from "@fitbud/contracts";
-import {
-  checkinCadenceSchema,
-  mealPhotoRequirementSchema,
-  paymentFrequencySchema,
 } from "@fitbud/contracts";
 import {
   COACHING_CONFIGURATION_DEFAULTS,
@@ -49,7 +43,18 @@ import { coachingPrefillFromIntake } from "../lib/intakePrefill";
 import { stage1Api } from "../lib/stage1-api";
 import { whatsappHref } from "../lib/whatsapp";
 import type { WorkspaceOutletContext } from "./workspaceContext";
+import { AccordionSection } from "./configure/AccordionSection";
+import {
+  ClientSettingsMovedBanner,
+  ConfigureToolbar,
+  civilDateIn,
+  configureStatusNote,
+} from "./configure/ConfigureToolbar";
+import { ExpectationsTable } from "./configure/ExpectationsTable";
+import { configureSectionStatus } from "./configure/sectionStatus";
+import { stepsNumber, useStepsTarget } from "./configure/useStepsTarget";
 import "../styles/plan.css";
+import "./configure/configure.css";
 
 /** Shown when coaching ends while this page is open (Z7-12). */
 const ENDED_ELSEWHERE_MESSAGE =
@@ -76,9 +81,10 @@ const DEFAULT_FORM = {
   requireSessionRpe: COACHING_CONFIGURATION_DEFAULTS.tracking.requireSessionRpe,
 };
 
+/** Read only: the ended view still shows the subscription it last had (W7). */
 const EMPTY_SUBSCRIPTION = {
   planName: "",
-  paymentFrequency: "monthly" as PaymentFrequency,
+  paymentFrequency: "monthly" as Subscription["paymentFrequency"],
   startsOn: "",
   renewsOn: "",
 };
@@ -114,21 +120,8 @@ function endedDateLabel(
   endedAt: string | null | undefined,
   timeZone: string | null | undefined,
 ): string | null {
-  if (!endedAt) return null;
-  const instant = new Date(endedAt);
-  if (Number.isNaN(instant.getTime())) return null;
-  const zone = timeZone?.trim() || "Asia/Kolkata";
-  let civil: string;
-  try {
-    civil = new Intl.DateTimeFormat("en-CA", {
-      timeZone: zone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(instant);
-  } catch {
-    civil = endedAt.slice(0, 10);
-  }
+  const civil = civilDateIn(endedAt, timeZone);
+  if (!civil) return null;
   const label = formatCivilDate(civil);
   if (!label || /^\d{4}-\d{2}-\d{2}/.test(label)) return null;
   return label;
@@ -146,53 +139,6 @@ function objectPronoun(gender: string | null | undefined): string {
   if (g === "female" || g === "woman" || g === "f") return "her";
   if (g === "male" || g === "man" || g === "m") return "him";
   return "them";
-}
-
-function AccordionSection({
-  id,
-  title,
-  summary,
-  defaultOpen = false,
-  forceOpen = false,
-  children,
-  error,
-}: {
-  id: string;
-  title: string;
-  summary: string;
-  defaultOpen?: boolean;
-  forceOpen?: boolean;
-  children: ReactNode;
-  error?: string | null;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-
-  useEffect(() => {
-    if (forceOpen) setOpen(true);
-  }, [forceOpen]);
-
-  return (
-    <details
-      className={`configure-accordion${error ? " has-error" : ""}`}
-      open={open}
-      onToggle={(event) => {
-        setOpen(event.currentTarget.open);
-      }}
-    >
-      <summary>
-        <span className="configure-accordion-title">{title}</span>
-        <span className="configure-accordion-summary">{summary}</span>
-      </summary>
-      <div className="configure-accordion-body" id={id}>
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        {children}
-      </div>
-    </details>
-  );
 }
 
 export function ConfigureCoachingPage() {
@@ -218,11 +164,7 @@ export function ConfigureCoachingPage() {
   const [endedNotice, setEndedNotice] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [goalError, setGoalError] = useState<string | null>(null);
-  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [subscriptionForm, setSubscriptionForm] = useState(EMPTY_SUBSCRIPTION);
-  const [subscriptionError, setSubscriptionError] = useState<string | null>(
-    null,
-  );
   const [effectivePlan, setEffectivePlan] = useState<{
     planId: string;
     versionId: string;
@@ -266,7 +208,6 @@ export function ConfigureCoachingPage() {
   }, []);
 
   const applySubscription = useCallback((value: Subscription | null) => {
-    setSubscription(value);
     setSubscriptionForm(
       value
         ? {
@@ -345,7 +286,6 @@ export function ConfigureCoachingPage() {
       }
 
       applySubscription(subscriptionResult);
-      setSubscriptionError(null);
 
       setEffectivePlan(
         planResult.ok && planResult.value.plan && planResult.value.version
@@ -459,6 +399,66 @@ export function ConfigureCoachingPage() {
   const readOnly = !canEdit;
   const mutationsBlocked = !online || relationshipEnded;
 
+  // D-W8-5 (3): the steps target lives on the configuration, so it can only be
+  // set once a draft or active version exists; until then it is disabled with
+  // the reason shown, never a save that fails out of sight.
+  const endedHandlerRef = useRef<(err: unknown) => boolean>(() => false);
+  endedHandlerRef.current = noteEndedElsewhere;
+  const onStepsEnded = useCallback(
+    (err: unknown) => endedHandlerRef.current(err),
+    [],
+  );
+  const onStepsSaved = useCallback(
+    (target: number) => showToast(`Steps target set to ${stepsNumber(target)} a day`),
+    [showToast],
+  );
+  const steps = useStepsTarget(relationshipId, {
+    reloadKey: configuration?.id ?? null,
+    onSaved: onStepsSaved,
+    onEndedElsewhere: onStepsEnded,
+  });
+  const stepsBlockedReason = configuration
+    ? null
+    : "Save the draft first. Then you can set the steps target.";
+  const stepsDisabled =
+    !configuration ||
+    mutationsBlocked ||
+    steps.saving ||
+    steps.target == null;
+
+  // D-W8-5 (2): on an active version the preferred check-in form is assigned
+  // for the next check-in at once (it is not part of the locked version).
+  const [formAssigning, setFormAssigning] = useState(false);
+  const checkinFormDisabled =
+    acting ||
+    formAssigning ||
+    mutationsBlocked ||
+    !(canEdit || status === "active");
+
+  async function changeCheckinForm(next: string | null) {
+    const previous = form.formVersionId;
+    setForm((current) => ({ ...current, formVersionId: next }));
+    if (!relationshipId || configuration?.status !== "active" || !next) return;
+    setFormAssigning(true);
+    setError(null);
+    try {
+      await apiClient.assignPreferredCheckinForm(relationshipId, {
+        checkinFormVersionId: next,
+      });
+      showToast("Check-in form assigned for the next check-in");
+    } catch (err) {
+      setForm((current) => ({ ...current, formVersionId: previous }));
+      if (noteEndedElsewhere(err)) return;
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not assign the check-in form.",
+      );
+    } finally {
+      setFormAssigning(false);
+    }
+  }
+
   const configurationMatchesForm =
     configuration != null &&
     configuration.workout.sessionsPerWeek === form.sessionsPerWeek &&
@@ -503,12 +503,8 @@ export function ConfigureCoachingPage() {
   const summaries = useMemo(() => {
     const goalBits = [
       form.goalShort.trim() || "No short goal yet",
-      form.goalDescription.trim() ? "description added" : null,
+      form.goalDescription.trim() ? "detailed goal added" : null,
     ].filter(Boolean);
-    const photoLabel = labelFor(
-      "meal_photo_requirement",
-      form.photoRequirement,
-    );
     const cadenceLabel = labelFor("checkin_cadence", form.cadence);
     const trackingBits = [
       form.requireBodyWeight ? "Weight" : null,
@@ -536,29 +532,17 @@ export function ConfigureCoachingPage() {
           checkinFormOptionValue(item) ===
           (form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID),
       )?.name ?? "FitBud weekly check-in";
-    const freqLabel = labelFor(
-      "payment_frequency",
-      subscriptionForm.paymentFrequency,
-    );
-    const renewCivil = subscriptionForm.renewsOn
-      ? formatCivilDate(subscriptionForm.renewsOn, { includeWeekday: false })
-      : null;
 
     return {
       goal: goalBits.join(" · "),
-      workouts: `${form.sessionsPerWeek} sessions/week · log within ${form.completionWindowHours} h`,
-      nutrition: `${form.mealsPerDay} meals/day · photo: ${photoLabel.toLowerCase()}`,
       checkins: `${cadenceLabel} · ${form.dueWindowHours} h window · ${checkinFormName}`,
+      expectations: `${form.sessionsPerWeek} workouts a week · ${form.mealsPerDay} meals a day · ${cadenceLabel.toLowerCase()} check-in`,
       tracking:
         trackingBits.length > 0 ? trackingBits.join(" · ") : "Nothing required",
       reminders: reminderSummary,
-      subscription: subscriptionForm.planName.trim()
-        ? relationshipEnded
-          ? freqLabel
-          : `${freqLabel}${renewCivil ? ` · renews ${renewCivil}` : ""}`
-        : "No subscription yet",
+      checkinFormName,
     };
-  }, [checkinForms, form, relationshipEnded, reminders, subscriptionForm]);
+  }, [checkinForms, form, relationshipEnded, reminders]);
 
   async function onAcknowledgeDifference() {
     if (
@@ -755,37 +739,6 @@ export function ConfigureCoachingPage() {
     }
   }
 
-  async function saveSubscriptionFields() {
-    if (!relationshipId || mutationsBlocked) return;
-    setActing(true);
-    setSubscriptionError(null);
-    try {
-      const saved = await apiClient.saveSubscription(
-        relationshipId,
-        {
-          expectedVersion: subscription?.versionNumber ?? 0,
-          planName: subscriptionForm.planName.trim(),
-          paymentFrequency: subscriptionForm.paymentFrequency,
-          startsOn: subscriptionForm.startsOn,
-          renewsOn: subscriptionForm.renewsOn,
-        },
-        createIdempotencyKey(),
-      );
-      applySubscription(saved);
-      showToast("Subscription saved");
-      reloadWorkspace();
-    } catch (err) {
-      if (noteEndedElsewhere(err)) return;
-      setSubscriptionError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not save the subscription.",
-      );
-    } finally {
-      setActing(false);
-    }
-  }
-
   async function toggleReminder(type: ReminderType, enabled: boolean) {
     if (!relationshipId || mutationsBlocked) return;
     const previous = reminders[type];
@@ -843,12 +796,10 @@ export function ConfigureCoachingPage() {
     : null;
   const pageTitle = relationshipEnded
     ? "Coaching setup (ended)"
-    : "Configure coaching";
-  const pageLede = relationshipEnded
-    ? endedOn
-      ? `Coaching with ${firstName} ended on ${endedOn}. This is the setup you last used.`
-      : `Coaching with ${firstName} has ended. This is the setup you last used.`
-    : `Set the baseline for ${firstName}: goals, expectations, reminders, and subscription.`;
+    : "Coaching setup";
+  const pageLede = endedOn
+    ? `Coaching with ${firstName} ended on ${endedOn}. This is the setup you last used.`
+    : `Coaching with ${firstName} has ended. This is the setup you last used.`;
   const pendingReactivation = relationshipEnded
     ? (header?.pendingReactivation ?? null)
     : null;
@@ -911,11 +862,14 @@ export function ConfigureCoachingPage() {
   }
 
   const fieldsDisabled = acting || !canEdit;
-  const subscriptionDisabled = acting || relationshipEnded;
+  const sectionStatus = (section: ConfigurationSectionId) =>
+    configureSectionStatus(section, form, configuration);
 
   return (
     <div
-      className="workspace-page plan-config-page configure-page"
+      className={`workspace-page plan-config-page configure-page${
+        relationshipEnded ? "" : " configure-v3"
+      }`}
       data-testid="screen-TW-11"
     >
       {relationshipEnded ? (
@@ -944,10 +898,18 @@ export function ConfigureCoachingPage() {
           </span>
         </header>
       ) : (
-        <header className="configure-page-header">
-          <h2 className="configure-page-title">{pageTitle}</h2>
-          <p className="lede">{pageLede}</p>
-        </header>
+        <>
+          {/* Frames 148/149: no visible title; the Plans | Coaching setup switch names the page. */}
+          <h2 className="sr-only">{pageTitle}</h2>
+          <ConfigureToolbar
+            relationshipId={relationshipId}
+            note={configureStatusNote(configuration)}
+          />
+          <ClientSettingsMovedBanner
+            relationshipId={relationshipId}
+            firstName={firstName}
+          />
+        </>
       )}
 
       {header?.onboardingStatus !== "coaching_ready" &&
@@ -1085,22 +1047,19 @@ export function ConfigureCoachingPage() {
           id="configure-goal"
           title="Goal"
           summary={summaries.goal}
+          status={sectionStatus("goal")}
           defaultOpen
           forceOpen={forceGoalOpen}
           error={goalError}
         >
-          <div className="plan-form">
-            <label className="field">
-              <span>
-                Short goal{" "}
-                <span className="field-counter">
-                  {form.goalShort.length}/120
-                </span>
-              </span>
+          <div className="cs-fields">
+            <label className="cs-field">
+              <span className="cs-field-label">Goal</span>
               <input
                 type="text"
                 name="goalShort"
                 maxLength={120}
+                aria-describedby="configure-goal-count"
                 value={form.goalShort}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -1108,20 +1067,20 @@ export function ConfigureCoachingPage() {
                     goalShort: event.target.value,
                   }))
                 }
-                disabled={fieldsDisabled || !canEdit}
+                disabled={fieldsDisabled}
                 required
               />
-            </label>
-            <label className="field">
-              <span>
-                Goal description{" "}
-                <span className="field-counter">
-                  {form.goalDescription.length}/500
-                </span>
+              <span className="cs-field-help" id="configure-goal-count">
+                {form.goalShort.length} of 120
               </span>
+            </label>
+            <label className="cs-field">
+              <span className="cs-field-label">Detailed goal · private</span>
               <textarea
                 name="goalDescription"
                 maxLength={500}
+                rows={2}
+                aria-describedby="configure-goal-detail-help"
                 value={form.goalDescription}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -1129,144 +1088,51 @@ export function ConfigureCoachingPage() {
                     goalDescription: event.target.value,
                   }))
                 }
-                disabled={fieldsDisabled || !canEdit}
+                disabled={fieldsDisabled}
               />
+              <span className="cs-field-help" id="configure-goal-detail-help">
+                Only you see this · {form.goalDescription.length} of 500
+              </span>
             </label>
           </div>
         </AccordionSection>
 
         <AccordionSection
-          id="configure-workouts"
-          title="Workouts"
-          summary={summaries.workouts}
+          id="configure-expectations"
+          title="Expectations"
+          summary={
+            steps.target != null
+              ? `${summaries.expectations} · ${stepsNumber(steps.target)} steps a day`
+              : summaries.expectations
+          }
+          status={sectionStatus("expectations")}
         >
-          <fieldset className="plan-form" disabled={fieldsDisabled || !canEdit}>
-            <label className="field">
-              <span>Sessions per week</span>
-              <input
-                disabled={fieldsDisabled}
-                type="number"
-                min={1}
-                max={7}
-                value={form.sessionsPerWeek}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    sessionsPerWeek: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Completion window (hours)</span>
-              <input
-                disabled={fieldsDisabled}
-                type="number"
-                min={1}
-                max={72}
-                value={form.completionWindowHours}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    completionWindowHours: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-          </fieldset>
-        </AccordionSection>
-
-        <AccordionSection
-          id="configure-nutrition"
-          title="Nutrition"
-          summary={summaries.nutrition}
-        >
-          <fieldset className="plan-form" disabled={fieldsDisabled || !canEdit}>
-            <label className="field">
-              <span>Meals per day</span>
-              <input
-                disabled={fieldsDisabled}
-                type="number"
-                min={1}
-                max={8}
-                value={form.mealsPerDay}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    mealsPerDay: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Confirmation window (hours)</span>
-              <input
-                disabled={fieldsDisabled}
-                type="number"
-                min={1}
-                max={48}
-                value={form.confirmationWindowHours}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    confirmationWindowHours: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Meal photo requirement</span>
-              <select
-                disabled={fieldsDisabled}
-                value={form.photoRequirement}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    photoRequirement: event.target
-                      .value as MealPhotoRequirement,
-                  }))
-                }
-              >
-                {mealPhotoRequirementSchema.options.map((option) => (
-                  <option key={option} value={option}>
-                    {labelFor("meal_photo_requirement", option)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </fieldset>
+          <ExpectationsTable
+            form={form}
+            onChange={(patch) =>
+              setForm((current) => ({ ...current, ...patch }))
+            }
+            disabled={fieldsDisabled}
+            checkinFormName={summaries.checkinFormName}
+            firstName={firstName}
+            steps={{ ...steps, disabled: stepsDisabled }}
+            stepsBlockedReason={stepsBlockedReason}
+          />
         </AccordionSection>
 
         <AccordionSection
           id="configure-checkins"
           title="Check-ins"
           summary={summaries.checkins}
+          status={sectionStatus("checkins")}
         >
-          <fieldset className="plan-form" disabled={fieldsDisabled || !canEdit}>
-            <label className="field">
-              <span>Cadence</span>
-              <select
-                disabled={fieldsDisabled}
-                value={form.cadence}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    cadence: event.target.value as CheckinCadence,
-                  }))
-                }
-              >
-                {checkinCadenceSchema.options.map((option) => (
-                  <option key={option} value={option}>
-                    {labelFor("checkin_cadence", option)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Due window (hours)</span>
+          <div className="cs-fields cs-fields-row">
+            <label className="cs-field">
+              <span className="cs-field-label">Due window (hours)</span>
               <input
                 disabled={fieldsDisabled}
                 type="number"
+                name="dueWindowHours"
                 min={1}
                 max={168}
                 value={form.dueWindowHours}
@@ -1278,34 +1144,17 @@ export function ConfigureCoachingPage() {
                 }
               />
             </label>
-            <label className="field">
-              <span>Check-in form</span>
+            {/* Not in a disabled fieldset: on an active version the form is
+                still assigned for the next check-in (D-W8-5). */}
+            <label className="cs-field">
+              <span className="cs-field-label">Check-in form</span>
               <select
-                disabled={fieldsDisabled}
+                name="checkinForm"
+                aria-describedby="configure-checkin-form-help"
+                disabled={checkinFormDisabled}
                 value={form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID}
                 onChange={(event) => {
-                  const next = event.target.value || null;
-                  setForm((current) => ({ ...current, formVersionId: next }));
-                  if (
-                    relationshipId &&
-                    configuration?.status === "active" &&
-                    next
-                  ) {
-                    void apiClient
-                      .assignPreferredCheckinForm(relationshipId, {
-                        checkinFormVersionId: next,
-                      })
-                      .then(() =>
-                        showToast("Check-in form assigned for next check-in"),
-                      )
-                      .catch((err: unknown) =>
-                        setError(
-                          err instanceof ApiClientError
-                            ? err.message
-                            : "Could not assign check-in form.",
-                        ),
-                      );
-                  }
+                  void changeCheckinForm(event.target.value || null);
                 }}
               >
                 {checkinForms.length === 0 ? (
@@ -1323,17 +1172,20 @@ export function ConfigureCoachingPage() {
                 )}
               </select>
             </label>
-            <p className="muted">
-              Fork and edit forms under Templates · Check-ins. The next scheduled
-              check-in uses this form.
-            </p>
-          </fieldset>
+          </div>
+          <p className="cs-field-help" id="configure-checkin-form-help">
+            {status === "active"
+              ? `Changing the form applies from ${firstName}'s next check-in. The rest of this version stays as it is.`
+              : "The next scheduled check-in uses this form."}{" "}
+            Fork and edit forms under Templates · Check-ins.
+          </p>
         </AccordionSection>
 
         <AccordionSection
           id="configure-tracking"
           title="Tracking"
           summary={summaries.tracking}
+          status={sectionStatus("tracking")}
         >
           <fieldset
             className="configure-switch-list"
@@ -1397,6 +1249,7 @@ export function ConfigureCoachingPage() {
           id="configure-reminders"
           title="Automatic reminders"
           summary={summaries.reminders}
+          status="done"
         >
           <fieldset
             className="configure-switch-list"
@@ -1461,100 +1314,6 @@ export function ConfigureCoachingPage() {
                 Open WhatsApp
               </Button>
             )}
-          </div>
-        </AccordionSection>
-
-        <AccordionSection
-          id="configure-subscription"
-          title="Subscription"
-          summary={summaries.subscription}
-        >
-          <div className="plan-form">
-            <label className="field">
-              <span>Plan name</span>
-              <input
-                type="text"
-                name="planName"
-                maxLength={120}
-                value={subscriptionForm.planName}
-                disabled={subscriptionDisabled}
-                onChange={(event) =>
-                  setSubscriptionForm((current) => ({
-                    ...current,
-                    planName: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Payment frequency</span>
-              <select
-                name="paymentFrequency"
-                value={subscriptionForm.paymentFrequency}
-                disabled={subscriptionDisabled}
-                onChange={(event) =>
-                  setSubscriptionForm((current) => ({
-                    ...current,
-                    paymentFrequency: event.target
-                      .value as PaymentFrequency,
-                  }))
-                }
-              >
-                {paymentFrequencySchema.options.map((option) => (
-                  <option key={option} value={option}>
-                    {labelFor("payment_frequency", option)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Starts on</span>
-              <input
-                type="date"
-                name="startsOn"
-                value={subscriptionForm.startsOn}
-                disabled={subscriptionDisabled}
-                onChange={(event) =>
-                  setSubscriptionForm((current) => ({
-                    ...current,
-                    startsOn: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              {/* Ended: no live "renews" wording (Z7-11); the stored date was the due date. */}
-              <span>{relationshipEnded ? "Due on" : "Renews on"}</span>
-              <input
-                type="date"
-                name="renewsOn"
-                value={subscriptionForm.renewsOn}
-                disabled={subscriptionDisabled}
-                onChange={(event) =>
-                  setSubscriptionForm((current) => ({
-                    ...current,
-                    renewsOn: event.target.value,
-                  }))
-                }
-              />
-            </label>
-            {subscriptionError ? (
-              <p className="form-error" role="alert">
-                {subscriptionError}
-              </p>
-            ) : null}
-            {!relationshipEnded ? (
-              <Button
-                type="button"
-                variant="secondary"
-                disabled={acting || !online}
-                onClick={() => {
-                  void saveSubscriptionFields();
-                }}
-              >
-                Save subscription
-              </Button>
-            ) : null}
           </div>
         </AccordionSection>
 
