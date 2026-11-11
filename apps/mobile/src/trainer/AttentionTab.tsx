@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 import { Check, ChevronRight, CircleCheck } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
@@ -25,6 +25,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
+import { reportError } from "../lib/reportError";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { StatusChip } from "../components/StatusChip";
 import { SwipeActionRow } from "../components/SwipeActionRow";
@@ -36,6 +37,8 @@ import {
   ANSWERED_TOAST_MESSAGE,
   clientNameFor,
   restoreAttentionItem,
+  ownsPendingAnswer,
+  restoreAskAt,
   scheduleUndoable,
   type UndoableAction,
   attentionIssueLine,
@@ -144,6 +147,7 @@ export function AttentionTab({
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const pendingAnswer = useRef<{
     ask: CoachAsk;
+    index: number;
     action: UndoableAction;
   } | null>(null);
   const [answerUndo, setAnswerUndo] = useState(false);
@@ -177,7 +181,10 @@ export function AttentionTab({
         s1.listCoachAsks({ status: "open" }),
         api.listTrainerCheckinInbox(),
         // Names only; the screen still works if the directory cannot load.
-        api.listClients({ limit: 50 }).catch(() => null),
+        api.listClients({ limit: 50 }).catch((err) => {
+          reportError("attention.clientNames", err);
+          return null;
+        }),
       ]);
       const names: Record<string, string> = {};
       for (const group of attentionGroups.groups) {
@@ -479,17 +486,18 @@ export function AttentionTab({
     )(ask.id, { note: null }, createIdempotencyKey());
   }
 
-  function failAnswer(ask: CoachAsk, err: unknown) {
-    pendingAnswer.current = null;
-    setAnswerUndo(false);
-    setToast(null);
-    setAsks((current) =>
-      current.some((item) => item.id === ask.id) ? current : [ask, ...current],
-    );
+  function failAnswer(ask: CoachAsk, index: number, err: unknown) {
+    reportError("attention.markAnswered", err);
+    if (ownsPendingAnswer(pendingAnswer.current?.ask.id, ask.id)) {
+      pendingAnswer.current = null;
+      setAnswerUndo(false);
+      setToast(null);
+    }
+    setAsks((current) => restoreAskAt(current, ask, index));
     setError(
       err instanceof ApiClientError
         ? err.message
-        : "Couldn't load. Pull to try again.",
+        : "Couldn't mark answered. Try again.",
     );
   }
 
@@ -500,22 +508,28 @@ export function AttentionTab({
     const previous = pendingAnswer.current;
     if (previous) {
       pendingAnswer.current = null;
-      void previous.action.flush().catch((err) => failAnswer(previous.ask, err));
+      void previous.action
+        .flush()
+        .catch((err) => failAnswer(previous.ask, previous.index, err));
     }
+    const index = Math.max(
+      0,
+      asks.findIndex((item) => item.id === ask.id),
+    );
     setAsks((current) => current.filter((item) => item.id !== ask.id));
     const action = scheduleUndoable(async () => {
       try {
         await sendAnswer(ask);
-        if (pendingAnswer.current?.ask.id === ask.id) {
+        if (ownsPendingAnswer(pendingAnswer.current?.ask.id, ask.id)) {
           pendingAnswer.current = null;
           setAnswerUndo(false);
           setToast(null);
         }
       } catch (err) {
-        failAnswer(ask, err);
+        failAnswer(ask, index, err);
       }
     });
-    pendingAnswer.current = { ask, action };
+    pendingAnswer.current = { ask, index, action };
     setAnswerUndo(true);
     setToast(ANSWERED_TOAST_MESSAGE);
   }
@@ -526,23 +540,23 @@ export function AttentionTab({
     pendingAnswer.current = null;
     setAnswerUndo(false);
     setToast(null);
-    setAsks((current) =>
-      current.some((item) => item.id === pending.ask.id)
-        ? current
-        : [pending.ask, ...current].sort((a, b) =>
-            a.askedAt.localeCompare(b.askedAt),
-          ),
-    );
+    setAsks((current) => restoreAskAt(current, pending.ask, pending.index));
   }
 
-  // Leaving the screen sends what is still waiting.
-  useEffect(
-    () => () => {
+  // Leaving the screen, or backgrounding the app, sends what is still waiting.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "background") {
+        const pending = pendingAnswer.current;
+        if (pending) void pending.action.flush().catch(() => undefined);
+      }
+    });
+    return () => {
+      sub.remove();
       const pending = pendingAnswer.current;
       if (pending) void pending.action.flush().catch(() => undefined);
-    },
-    [],
-  );
+    };
+  }, []);
 
   const markReviewedToast = undoTarget != null && toast != null;
 

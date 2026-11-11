@@ -441,6 +441,25 @@ export function scheduleUndoable(
   };
 }
 
+/** Put a held ask back where it was, so Undo restores the list exactly. */
+export function restoreAskAt<T extends { id: string }>(
+  list: ReadonlyArray<T>,
+  ask: T,
+  index: number,
+): T[] {
+  if (list.some((item) => item.id === ask.id)) return [...list];
+  const at = Math.max(0, Math.min(index, list.length));
+  return [...list.slice(0, at), ask, ...list.slice(at)];
+}
+
+/** A failed send may only clear the toast and Undo when it is still the ask on show. */
+export function ownsPendingAnswer(
+  pendingAskId: string | null | undefined,
+  askId: string,
+): boolean {
+  return pendingAskId === askId;
+}
+
 /** Client name for an Asked or Check-ins card, or null when none is known. */
 export function clientNameFor(
   names: ReadonlyMap<string, string> | Record<string, string>,

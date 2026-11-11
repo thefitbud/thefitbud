@@ -10,6 +10,8 @@ import {
   buildClientAttentionCards,
   clientNameFor,
   oldestItemAgeMinutes,
+  ownsPendingAnswer,
+  restoreAskAt,
   scheduleUndoable,
   formatAttentionAge,
   markReviewedToastMessage,
@@ -319,8 +321,9 @@ describe("since reads from the oldest open item", () => {
 
 describe("client names on Asked and Check-ins cards", () => {
   it("formats a known name and returns null for an unknown client", () => {
-    expect(clientNameFor({ r1: "rohan mehta" }, "r1")).toBe(
-      clientNameFor(new Map([["r1", "rohan mehta"]]), "r1"),
+    expect(clientNameFor({ r1: "rohan mehta" }, "r1")).toBe("Rohan Mehta");
+    expect(clientNameFor(new Map([["r1", "rohan mehta"]]), "r1")).toBe(
+      "Rohan Mehta",
     );
     expect(clientNameFor({}, "r2")).toBeNull();
   });
@@ -364,5 +367,24 @@ describe("Mark answered undo window", () => {
     expect(commit).toHaveBeenCalledTimes(1);
     expect(action.undo()).toBe(false);
     vi.useRealTimers();
+  });
+});
+
+describe("Mark answered restore and failure ownership", () => {
+  const list = [{ id: "a" }, { id: "b" }, { id: "c" }];
+  it("puts a held ask back at its saved index", () => {
+    const without = list.filter((x) => x.id !== "b");
+    expect(restoreAskAt(without, { id: "b" }, 1)).toEqual(list);
+    expect(restoreAskAt(without, { id: "a" }, 0)).toEqual(without);
+    expect(restoreAskAt([{ id: "a" }], { id: "z" }, 9).map((x) => x.id)).toEqual([
+      "a",
+      "z",
+    ]);
+  });
+
+  it("a failed earlier send does not clear a newer pending ask", () => {
+    expect(ownsPendingAnswer("second", "first")).toBe(false);
+    expect(ownsPendingAnswer(null, "first")).toBe(false);
+    expect(ownsPendingAnswer("first", "first")).toBe(true);
   });
 });
