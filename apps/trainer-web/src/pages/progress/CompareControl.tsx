@@ -38,7 +38,8 @@ export function CompareControl({ options, value, onChange }: Props) {
     return () => document.removeEventListener("mousedown", close);
   }, [open]);
 
-  if (!options.length && !value) return null;
+  // Nothing to compare yet (frames 160i, 161, 160g): the control stays in place, disabled.
+  const unavailable = !options.length && !value;
 
   return (
     <div
@@ -55,15 +56,16 @@ export function CompareControl({ options, value, onChange }: Props) {
       <button
         type="button"
         className={value ? "pg-compare-btn is-on" : "pg-compare-btn"}
-        aria-expanded={open}
-        aria-controls="pg-compare-list"
+        aria-expanded={unavailable ? undefined : open}
+        aria-controls={unavailable ? undefined : "pg-compare-list"}
+        disabled={unavailable}
         onClick={() => setOpen((current) => !current)}
       >
         <ChartIcon />
         {value ? `Compare: ${metricLabel(value)}` : "Compare with…"}
         <span aria-hidden="true" className={open ? "pg-chevron is-up" : "pg-chevron"} />
       </button>
-      {open ? (
+      {open && !unavailable ? (
         <ul id="pg-compare-list" className="pg-compare-list" aria-label="Compare with">
           {options.map((key) => (
             <li key={key}>
