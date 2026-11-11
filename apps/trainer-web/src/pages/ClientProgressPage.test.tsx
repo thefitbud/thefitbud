@@ -12,11 +12,16 @@ import {
 } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import {
+  progressEntrySchema,
   progressMetricsQuerySchema,
   progressMetricsResponseSchema,
+  strengthQuerySchema,
+  strengthReadModelSchema,
   type ProgressMetricKey,
   type ProgressMetricPoint,
   type ProgressMetricsQuery,
+  type StrengthQuery,
+  type StrengthReadModel,
 } from "@fitbud/contracts";
 
 const REL_ID = "77777777-7777-4777-8777-777777777777";
@@ -27,6 +32,8 @@ const CHECKIN_3 = "33333333-3333-4333-8333-333333333333";
 const api = vi.hoisted(() => ({
   getProgressMetrics: vi.fn(),
   listProgressEntries: vi.fn(),
+  getStrength: vi.fn(),
+  getDownloadTarget: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({ apiClient: api }));
@@ -99,6 +106,76 @@ function serveMetrics(fixture: Fixture, recentOnly: Fixture = fixture) {
   );
 }
 
+const NO_STRENGTH: StrengthReadModel = {
+  exercises: [],
+  workoutsPerWeek: [],
+  notCharted: { sets: 0, items: [] },
+};
+
+/**
+ * Rohan-like strength history as the strength API returns it (Z6-5, Z8-13): a back
+ * squat charted by kg, pull-ups charted by reps (D-W8-7) and two text-load sets.
+ */
+const ROHAN_STRENGTH: StrengthReadModel = {
+  exercises: [
+    {
+      exerciseId: "ex-squat",
+      name: "Back squat",
+      chartBy: "load_kg",
+      sessions: 3,
+      plannedSessions: 4,
+      points: [
+        { localDate: "2026-09-02", topLoadKg: 60, reps: 8, totalReps: 24, volumeKg: 1440 },
+        { localDate: "2026-09-09", topLoadKg: 62.5, reps: 8, totalReps: 24, volumeKg: 1500 },
+        { localDate: "2026-10-14", topLoadKg: 67.5, reps: 6, totalReps: 18, volumeKg: 1215 },
+      ],
+    },
+    {
+      exerciseId: "ex-pull",
+      name: "Pull-up",
+      chartBy: "reps",
+      sessions: 2,
+      plannedSessions: 2,
+      points: [
+        { localDate: "2026-10-07", topLoadKg: null, reps: 8, totalReps: 14, volumeKg: null },
+        { localDate: "2026-10-14", topLoadKg: null, reps: 12, totalReps: 22, volumeKg: null },
+      ],
+    },
+  ],
+  workoutsPerWeek: [
+    { weekStart: "2026-08-31", count: 1, planned: 2 },
+    { weekStart: "2026-09-07", count: 1, planned: 2 },
+    { weekStart: "2026-09-14", count: 0, planned: 2 },
+    { weekStart: "2026-10-05", count: 1, planned: 2 },
+    { weekStart: "2026-10-12", count: 1, planned: 3 },
+  ],
+  notCharted: {
+    sets: 2,
+    items: [
+      { localDate: "2026-10-14", exerciseName: "Band row", loadLabel: "red band", reps: 12 },
+      { localDate: "2026-10-07", exerciseName: "Back squat", loadLabel: "RPE 8", reps: 5 },
+    ],
+  },
+};
+
+/** The strength API through its own contract; `all` gets the full model. */
+function serveStrength(all: StrengthReadModel, recent: StrengthReadModel = all) {
+  api.getStrength.mockImplementation(
+    async (_relationshipId: string, query: Partial<StrengthQuery>) => {
+      const parsed = strengthQuerySchema.parse(query);
+      return strengthReadModelSchema.parse(
+        parsed.range === "all" && !parsed.from ? all : recent,
+      );
+    },
+  );
+}
+
+function strengthCalls(): Partial<StrengthQuery>[] {
+  return api.getStrength.mock.calls.map(
+    (call) => call[1] as Partial<StrengthQuery>,
+  );
+}
+
 function renderPage(onboardingStatus: Lifecycle = "active") {
   const context = {
     workspace: {
@@ -157,7 +234,9 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date("2026-10-18T04:00:00.000Z"));
   serveMetrics({});
+  serveStrength(NO_STRENGTH);
   api.listProgressEntries.mockResolvedValue({ items: [] });
+  api.getDownloadTarget.mockReturnValue(new Promise(() => {}));
 });
 
 afterEach(() => {
@@ -241,7 +320,13 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
   it("rail lists keys with data by name and latest value; keys without data are left out", async () => {
     serveMetrics(ROHAN);
     const { container } = renderPage();
-    const rail = await screen.findByRole("tablist", { name: "Metric" });
+    await screen.findByRole("tab", { name: /Weight/ });
+    const rail = screen.getByRole("complementary", { name: "Metrics" });
+    expect(
+      within(rail)
+        .getAllByRole("tablist")
+        .map((list) => list.getAttribute("aria-labelledby")),
+    ).toEqual(["pg-rail-weight", "pg-rail-body", "pg-rail-ratings"]);
     const tabs = within(rail)
       .getAllByRole("tab")
       .map((tab) => tab.textContent);
@@ -393,5 +478,269 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
     expect(
       screen.getByRole("button", { name: "Tue 1 Sep to Thu 1 Oct" }),
     ).toBeTruthy();
+  });
+
+  it("rail tab lists hold only tabs; the line checkboxes sit outside them", async () => {
+    serveMetrics(ROHAN);
+    renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /Sleep quality/ }));
+    await screen.findByRole("heading", { name: "Ratings, 1 to 5" });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    for (const list of screen.getAllByRole("tablist")) {
+      expect(list.querySelector("input, label, p")).toBeNull();
+      for (const child of Array.from(list.children)) {
+        expect(child.getAttribute("role")).toBe("tab");
+      }
+    }
+    const checks = screen.getByRole("group", {
+      name: "Ratings 1 to 5 · standard: lines on the chart",
+    });
+    expect(within(checks).getAllByRole("checkbox")).toHaveLength(3);
+  });
+
+  it("photo dates are counted on the client's calendar, not in UTC", async () => {
+    serveMetrics(ROHAN);
+    const photo = (id: string, observedAt: string) =>
+      progressEntrySchema.parse({
+        id,
+        coachingRelationshipId: REL_ID,
+        traineeUserId: "88888888-8888-4888-8888-888888888888",
+        entryType: "progress_photo",
+        title: null,
+        body: null,
+        observedAt,
+        mediaAssetId: "99999999-9999-4999-8999-99999999999" + id.slice(-1),
+        recordVersion: 0,
+        createdAt: observedAt,
+        updatedAt: observedAt,
+      });
+    api.listProgressEntries.mockResolvedValue({
+      items: [
+        // 01:30 and 15:30 on Mon 12 Oct in Kolkata; the first is still 11 Oct in UTC.
+        photo("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1", "2026-10-11T20:00:00.000Z"),
+        photo("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2", "2026-10-12T10:00:00.000Z"),
+      ],
+    });
+    renderPage();
+    const link = await screen.findByRole("link", { name: /Progress photos/ });
+    await waitFor(() => expect(link.textContent).toBe("Progress photos1 date"));
+  });
+});
+
+describe("ClientProgressPage compare (frame 160d)", () => {
+  it("puts two metrics on two labelled scales and removes the second", async () => {
+    serveMetrics(ROHAN);
+    const { container } = renderPage();
+    await screen.findByRole("heading", { name: "Weight" });
+    fireEvent.click(screen.getByRole("button", { name: /Compare with/ }));
+    const options = screen.getByRole("list", { name: "Compare with" });
+    // Weight is on the left scale already, so it is not offered.
+    expect(
+      within(options)
+        .getAllByRole("button")
+        .map((button) => button.textContent),
+    ).toEqual(["Waist", "Hip", "Energy", "Sleep quality", "Stress"]);
+    fireEvent.click(within(options).getByRole("button", { name: "Sleep quality" }));
+
+    const panel = screen.getByRole("tabpanel");
+    await within(panel).findByRole("heading", {
+      name: "Weight compared with Sleep quality",
+    });
+    await waitFor(() =>
+      expect(
+        calls().some(
+          (q) =>
+            q.range === "12w" &&
+            q.keys.join() === "weight,sleep_quality",
+        ),
+      ).toBe(true),
+    );
+    expect(panel.textContent).toContain(
+      "Two scales: kg on the left, sleep quality rating on the right. Shown side by side only; FitBud doesn't link cause and effect.",
+    );
+    const legend = within(panel).getByRole("list", { name: "Chart key" });
+    expect(
+      within(legend)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Weight (kg) · solid", "Sleep quality (1 to 5) · dashed"]);
+    const chart = within(panel).getByRole("img", {
+      name: /Weight \(kg\) on the left scale and Sleep quality \(1 to 5\) on the right scale/,
+    });
+    const right = [...chart.querySelectorAll(".pg-chart-right-tick")].map(
+      (node) => node.textContent,
+    );
+    expect(right).toEqual(["1 of 5", "2 of 5", "3 of 5", "4 of 5", "5 of 5"]);
+    expect(chart.querySelector('[data-series="weight"]')).toBeTruthy();
+    expect(chart.querySelector('[data-series="sleep_quality"]')).toBeTruthy();
+
+    expect(within(panel).getByText("Weight change")).toBeTruthy();
+    expect(within(panel).getByText("−2.7 kg")).toBeTruthy();
+    const low = within(panel).getByText("Check-ins with sleep quality 2 or lower");
+    expect(low.nextElementSibling?.textContent).toBe("1 of 2 answered");
+
+    expect(
+      screen.getByRole("button", { name: /Compare: Sleep quality/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("tab", { name: /Sleep quality/ }).className,
+    ).toContain("is-compared");
+    expect(screen.queryAllByRole("checkbox")).toHaveLength(0);
+    expectNoBannedText(container);
+
+    fireEvent.click(
+      within(panel).getByRole("button", { name: "Remove Sleep quality" }),
+    );
+    await within(panel).findByRole("heading", { name: "Weight" });
+    expect(screen.getByRole("button", { name: /Compare with/ })).toBeTruthy();
+  });
+
+  it("breaks the lines over a long gap and names it", async () => {
+    const weekly = (values: number[], dates: string[]) =>
+      dates.map((date, index) => point(date, values[index]!));
+    const dates = [
+      "2026-09-07",
+      "2026-09-14",
+      "2026-09-21",
+      "2026-09-28",
+      "2026-10-19",
+      "2026-10-26",
+    ];
+    vi.setSystemTime(new Date("2026-10-27T04:00:00.000Z"));
+    serveMetrics({
+      weight: weekly([89, 88.8, 88.5, 88.1, 87.2, 86.9], dates),
+      sleep_quality: weekly([3, 3, 2, 3, 4, 2], dates),
+    });
+    renderPage();
+    await screen.findByRole("heading", { name: "Weight" });
+    fireEvent.click(screen.getByRole("button", { name: /Compare with/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Sleep quality" }));
+    const panel = screen.getByRole("tabpanel");
+    await within(panel).findByRole("heading", {
+      name: "Weight compared with Sleep quality",
+    });
+    const chart = within(panel).getByRole("img");
+    await waitFor(() =>
+      expect(chart.querySelector(".pg-chart-gap")?.textContent).toBe(
+        "no check-in",
+      ),
+    );
+    const path = chart
+      .querySelector('[data-series="weight"] path')!
+      .getAttribute("d")!;
+    expect(path.match(/M/g)).toHaveLength(2);
+  });
+
+  it("choosing the compared metric in the rail ends the compare", async () => {
+    serveMetrics(ROHAN);
+    renderPage();
+    await screen.findByRole("heading", { name: "Weight" });
+    fireEvent.click(screen.getByRole("button", { name: /Compare with/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Waist" }));
+    await screen.findByRole("heading", { name: "Weight compared with Waist" });
+    fireEvent.click(screen.getByRole("tab", { name: /Waist/ }));
+    await screen.findByRole("heading", { name: "Body measurements" });
+    expect(screen.getByRole("button", { name: /Compare with/ })).toBeTruthy();
+  });
+});
+
+describe("ClientProgressPage workouts from logs (frame 160e, D-W8-7)", () => {
+  it("rail rows show workouts completed of planned and the number of lifts", async () => {
+    serveMetrics(ROHAN);
+    serveStrength(ROHAN_STRENGTH);
+    renderPage();
+    const completed = await screen.findByRole("tab", { name: /Workouts completed/ });
+    expect(completed.textContent).toBe("Workouts completed4 of 11");
+    expect(
+      screen.getByRole("tab", { name: /Exercise progress/ }).textContent,
+    ).toBe("Exercise progress2 lifts");
+    expect(strengthCalls()).toContainEqual({ range: "all" });
+  });
+
+  it("top set by kg, then a bodyweight lift by reps, with totals and uncharted sets", async () => {
+    serveMetrics(ROHAN);
+    serveStrength(ROHAN_STRENGTH);
+    const { container } = renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /Exercise progress/ }));
+    const panel = screen.getByRole("tabpanel");
+    await within(panel).findByRole("heading", { name: "Exercise progress" });
+    expect(strengthCalls()).toContainEqual({ range: "12w" });
+
+    // Back squat opens first: it has the most charted sessions.
+    const exercise = within(panel).getByRole("combobox", { name: "Exercise" });
+    expect((exercise as HTMLSelectElement).value).toBe("ex-squat");
+    expect(panel.textContent).toContain(
+      "Heaviest logged set per session · kg read from the logged load",
+    );
+    const first = within(panel).getByText("First in range · Wed 2 Sep");
+    expect(first.nextElementSibling?.textContent).toBe("60 kg × 8");
+    const latest = within(panel).getByText("Latest · Wed 14 Oct");
+    expect(latest.nextElementSibling?.textContent).toBe("67.5 kg × 6");
+    const sessions = within(panel).getByText("Sessions with this lift");
+    expect(sessions.nextElementSibling?.textContent).toBe("3 of 4 planned");
+    let chart = within(panel).getByRole("img", { name: /Back squat, top set in kg/ });
+    expect(chart.querySelectorAll("circle")).toHaveLength(3);
+
+    fireEvent.click(within(panel).getByRole("button", { name: "Total reps × kg" }));
+    chart = within(panel).getByRole("img", { name: /Back squat, total in kg/ });
+    expect(chart.querySelector("circle title")?.textContent).toContain("1,440 kg");
+
+    // Pull-ups carry no kg: charted by reps (D-W8-7).
+    fireEvent.change(exercise, { target: { value: "ex-pull" } });
+    fireEvent.click(within(panel).getByRole("button", { name: "Top set" }));
+    expect(panel.textContent).toContain(
+      "Most reps in one set per session · bodyweight lift, charted by reps",
+    );
+    expect(
+      within(panel).getByText("First in range · Wed 7 Oct").nextElementSibling
+        ?.textContent,
+    ).toBe("8 reps");
+    expect(
+      within(panel).getByText("Latest · Wed 14 Oct").nextElementSibling
+        ?.textContent,
+    ).toBe("12 reps");
+    chart = within(panel).getByRole("img", { name: /Pull-up, top set in reps/ });
+    const ticks = [...chart.querySelectorAll(".pg-chart-grid text")].map(
+      (node) => node.textContent ?? "",
+    );
+    expect(ticks.some((tick) => tick.endsWith(" reps"))).toBe(true);
+    expect(within(panel).getByRole("button", { name: "Total reps" })).toBeTruthy();
+
+    // Uncharted sets: count, the frame's copy, and the list on demand.
+    expect(panel.textContent).toContain(
+      '2 sets not charted: load logged as text ("RPE 8", "red band"). Bodyweight lifts chart reps instead.',
+    );
+    const see = within(panel).getByRole("button", { name: "See sets" });
+    expect(see.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(see);
+    const items = within(panel)
+      .getByRole("list")
+      .querySelectorAll("li");
+    expect([...items].map((li) => li.textContent)).toEqual([
+      "Wed 14 OctBand rowred band × 12",
+      "Wed 7 OctBack squatRPE 8 × 5",
+    ]);
+
+    // Workouts per week: totals for the range and this week, one bar group per week.
+    expect(within(panel).getByText("4 of 11 in 12 weeks · 1 of 3 this week")).toBeTruthy();
+    const bars = within(panel).getByRole("img", { name: /Workouts completed per week/ });
+    expect(
+      [...bars.querySelectorAll("title")].map((node) => node.textContent),
+    ).toContain("This week: 1 of 3 planned workouts completed");
+    expectNoBannedText(container);
+  });
+
+  it("a client with workout logs and no check-in answers opens on the workouts panel", async () => {
+    serveStrength(ROHAN_STRENGTH);
+    renderPage();
+    const panel = await screen.findByRole("tabpanel");
+    await within(panel).findByRole("heading", { name: "Exercise progress" });
+    expect(
+      screen.queryByText("No weigh-ins yet. Weight is collected in check-ins."),
+    ).toBeNull();
+    // Range All reuses the all-time model.
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    await within(panel).findByText("First logged · Wed 2 Sep");
+    expect(within(panel).getByText("4 of 11 since start · 1 of 3 this week")).toBeTruthy();
   });
 });

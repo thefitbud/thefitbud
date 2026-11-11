@@ -13,15 +13,34 @@ import {
 
 export type RailView = { group: MetricGroup; focus: ProgressMetricKey };
 
+/** The two "Workouts · from logs" rows (frame 160e). */
+export type WorkoutsRow = "completed" | "exercises";
+
+export type WorkoutsSummary = {
+  /** Finished workouts since start. */
+  completed: number;
+  /** Planned workouts since start. */
+  planned: number;
+  /** Lifts with charted sets. */
+  lifts: number;
+};
+
 type Props = {
   /** All-time series per key: the rail shows each key's latest entered value. */
   series: Partial<Record<ProgressMetricKey, ProgressMetricSeries>>;
   view: RailView;
   checked: Record<"body" | "ratings", ProgressMetricKey[]>;
+  /** The metric on the right-hand scale (frame 160d), shown in the compare colour. */
+  compare: ProgressMetricKey | null;
+  /** Shown when the client has planned or logged workouts. */
+  workouts: WorkoutsSummary | null;
+  /** The selected workouts row; when set, no metric row is selected. */
+  workoutsRow: WorkoutsRow | null;
   photoDates: number;
   relationshipId: string;
   onSelect: (group: MetricGroup, key: ProgressMetricKey) => void;
   onToggle: (group: "body" | "ratings", key: ProgressMetricKey) => void;
+  onWorkouts: (row: WorkoutsRow) => void;
 };
 
 function latestValue(row: ProgressMetricSeries | undefined): string {
@@ -33,78 +52,171 @@ export function hasPoints(row: ProgressMetricSeries | undefined): boolean {
   return (row?.points.length ?? 0) > 0;
 }
 
-/** Left rail of frames 160, 160b and 160c: one row per standard key with data. */
+/**
+ * Left rail of frames 160 to 160e. Each group is its own tab list holding only tabs;
+ * the "show on the chart" checkboxes sit in a separate group beside it, so no
+ * checkbox is inside a tab list (ARIA: a tablist owns tabs only).
+ */
 export function MetricRail({
   series,
   view,
   checked,
+  compare,
+  workouts,
+  workoutsRow,
   photoDates,
   relationshipId,
   onSelect,
   onToggle,
+  onWorkouts,
 }: Props) {
   const bodyKeys = BODY_KEYS.filter((key) => hasPoints(series[key]));
   const ratingKeys = RATING_KEYS.filter((key) => hasPoints(series[key]));
 
-  function row(group: MetricGroup, key: ProgressMetricKey) {
-    const selected = view.group === group && view.focus === key;
-    const ticked = group === "weight" ? [] : checked[group];
-    const showCheck = group !== "weight" && view.group === group;
-    const isChecked = ticked.includes(key);
-    const onlyChecked = isChecked && ticked.length === 1;
+  const isSelected = (group: MetricGroup, key: ProgressMetricKey) =>
+    workoutsRow === null && view.group === group && view.focus === key;
+
+  function rowClass(base: string, selected: boolean, compared: boolean) {
+    return `${base}${selected ? " is-selected" : ""}${compared ? " is-compared" : ""}`;
+  }
+
+  function group(
+    id: string,
+    heading: string,
+    groupName: MetricGroup,
+    keys: readonly ProgressMetricKey[],
+  ) {
+    const showChecks =
+      groupName !== "weight" &&
+      workoutsRow === null &&
+      compare === null &&
+      view.group === groupName;
+    const ticked = groupName === "weight" ? [] : checked[groupName];
     return (
-      <div
-        key={key}
-        role="presentation"
-        className={selected ? "pg-rail-row is-selected" : "pg-rail-row"}
-      >
-        {showCheck ? (
-          <label className="pg-rail-checkwrap">
-            <input
-              type="checkbox"
-              className="pg-rail-check"
-              checked={isChecked}
-              disabled={onlyChecked}
-              aria-label={`Show ${metricLabel(key)} on the chart`}
-              onChange={() => onToggle(group as "body" | "ratings", key)}
-            />
-          </label>
-        ) : null}
-        <button
-          type="button"
-          role="tab"
-          aria-selected={selected}
-          aria-controls="pg-panel"
-          className="pg-rail-tab"
-          onClick={() => onSelect(group, key)}
-        >
-          <span className="pg-rail-label">{metricLabel(key)}</span>
-          <span className="pg-rail-value">{latestValue(series[key])}</span>
-        </button>
+      <div className="pg-rail-group">
+        <p className="pg-rail-heading" id={id}>
+          {heading}
+        </p>
+        <div className={showChecks ? "pg-rail-grid has-checks" : "pg-rail-grid"}>
+          {showChecks ? (
+            <div
+              className="pg-rail-checks"
+              role="group"
+              aria-label={`${heading}: lines on the chart`}
+            >
+              {keys.map((key) => {
+                const isChecked = ticked.includes(key);
+                return (
+                  <label
+                    key={key}
+                    className={rowClass(
+                      "pg-rail-checkwrap",
+                      isSelected(groupName, key),
+                      false,
+                    )}
+                  >
+                    <input
+                      type="checkbox"
+                      className="pg-rail-check"
+                      checked={isChecked}
+                      disabled={isChecked && ticked.length === 1}
+                      aria-label={`Show ${metricLabel(key)} on the chart`}
+                      onChange={() =>
+                        onToggle(groupName as "body" | "ratings", key)
+                      }
+                    />
+                  </label>
+                );
+              })}
+            </div>
+          ) : null}
+          <div
+            role="tablist"
+            aria-orientation="vertical"
+            aria-labelledby={id}
+            className="pg-rail-tabs"
+          >
+            {keys.map((key) => {
+              const selected = isSelected(groupName, key);
+              const compared = compare === key && workoutsRow === null;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-controls="pg-panel"
+                  className={rowClass("pg-rail-tab", selected, compared)}
+                  onClick={() => onSelect(groupName, key)}
+                >
+                  <span className="pg-rail-label">
+                    {metricLabel(key)}
+                    {compared ? (
+                      <span className="sr-only"> (compared)</span>
+                    ) : null}
+                  </span>
+                  <span className="pg-rail-value">
+                    {latestValue(series[key])}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <aside className="pg-rail workspace-card" aria-label="Metrics">
-      <div role="tablist" aria-orientation="vertical" aria-label="Metric">
-        <p className="pg-rail-heading">Weight · standard question</p>
-        {row("weight", "weight")}
-        {bodyKeys.length ? (
-          <>
-            <p className="pg-rail-heading">
-              Body measurements · picked in form
-            </p>
-            {bodyKeys.map((key) => row("body", key))}
-          </>
-        ) : null}
-        {ratingKeys.length ? (
-          <>
-            <p className="pg-rail-heading">Ratings 1 to 5 · standard</p>
-            {ratingKeys.map((key) => row("ratings", key))}
-          </>
-        ) : null}
-      </div>
+      {group("pg-rail-weight", "Weight · standard question", "weight", ["weight"])}
+      {bodyKeys.length
+        ? group("pg-rail-body", "Body measurements · picked in form", "body", bodyKeys)
+        : null}
+      {ratingKeys.length
+        ? group("pg-rail-ratings", "Ratings 1 to 5 · standard", "ratings", ratingKeys)
+        : null}
+      {workouts ? (
+        <div className="pg-rail-group">
+          <p className="pg-rail-heading" id="pg-rail-workouts">
+            Workouts · from logs
+          </p>
+          <div
+            role="tablist"
+            aria-orientation="vertical"
+            aria-labelledby="pg-rail-workouts"
+            className="pg-rail-tabs"
+          >
+            {(
+              [
+                [
+                  "completed",
+                  "Workouts completed",
+                  `${workouts.completed} of ${workouts.planned}`,
+                ],
+                [
+                  "exercises",
+                  "Exercise progress",
+                  workouts.lifts === 1 ? "1 lift" : `${workouts.lifts} lifts`,
+                ],
+              ] as const
+            ).map(([row, label, value]) => (
+              <button
+                key={row}
+                type="button"
+                role="tab"
+                aria-selected={workoutsRow === row}
+                aria-controls="pg-panel"
+                className={rowClass("pg-rail-tab", workoutsRow === row, false)}
+                onClick={() => onWorkouts(row)}
+              >
+                <span className="pg-rail-label">{label}</span>
+                <span className="pg-rail-value">{value}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <p className="pg-rail-heading">Photos · standard question</p>
       <a className="pg-rail-link-row" href="#progress-photos">
         <span>Progress photos</span>
