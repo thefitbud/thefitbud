@@ -93,7 +93,11 @@ function loadOk() {
 
 function mount() {
   return render(
-    <AttentionTab onReviewException={vi.fn()} onReviewCheckin={vi.fn()} />,
+    <AttentionTab
+      onOpenClients={vi.fn()}
+      onReviewException={vi.fn()}
+      onReviewCheckin={vi.fn()}
+    />,
   );
 }
 
