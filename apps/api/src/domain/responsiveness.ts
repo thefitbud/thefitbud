@@ -18,6 +18,10 @@ import {
   userIdentities,
   workoutExecutions,
 } from "../db/schema.js";
+import {
+  resolveClientDisplayName,
+  resolveClientWhatsappE164,
+} from "./client-identity.js";
 
 const REMINDER_TYPES = [
   "workout_reminder",
@@ -512,7 +516,11 @@ export async function deriveReengagementCandidates(
       .limit(10);
     if (recentReminders.length < 3) continue;
 
-    const clientWhatsappE164 = phoneByUser.get(rel.traineeUserId) ?? null;
+    // Z9-18: the trainer-set phone and name first; the draft goes to that phone.
+    const clientWhatsappE164 = resolveClientWhatsappE164(
+      rel,
+      phoneByUser.get(rel.traineeUserId),
+    );
     const waMeUrl = clientWhatsappE164
       ? whatsappHref({
           phoneE164: clientWhatsappE164,
@@ -522,7 +530,9 @@ export async function deriveReengagementCandidates(
       : "https://wa.me/";
     items.push({
       relationshipId: rel.id,
-      traineeDisplayName: nameByUser.get(rel.traineeUserId) ?? "Client",
+      traineeDisplayName:
+        resolveClientDisplayName(rel, nameByUser.get(rel.traineeUserId)) ??
+        "Client",
       waMeUrl,
       clientWhatsappE164,
     });
