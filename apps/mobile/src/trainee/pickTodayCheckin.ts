@@ -1,4 +1,5 @@
 import type { Checkin } from "@fitbud/contracts";
+import { formatCivilDate } from "@fitbud/core";
 
 function hasCoachReview(item: Checkin): boolean {
   return Boolean(item.review) || item.status === "reviewed";
@@ -6,10 +7,13 @@ function hasCoachReview(item: Checkin): boolean {
 
 /**
  * Pick the most relevant check-in for Today's banner.
- * Prefer due/overdue, else a recent coach review (reply + next date),
- * else submitted awaiting review, else the next scheduled.
+ * Prefer due/overdue, else (F4c, D-W9-2) the next scheduled check-in once one
+ * has been reviewed: Today reads "Next check-in Wed 28 Oct", not the reviewed
+ * one (the coach's reply stays one tap away: the reviewed banner and Progress).
+ * Without a next scheduled row, fall back to the recent coach review, then
+ * submitted awaiting review, then the next scheduled.
  *
- * Reviewed must beat unreviewed submitted — otherwise a newer Sunday
+ * Reviewed must beat unreviewed submitted: otherwise a newer Sunday
  * "waiting" check-in hides Friday's coach reply while Progress still
  * lists the reviewed row as Acknowledged.
  */
@@ -31,7 +35,7 @@ export function pickTodayCheckin(
     .filter((item) => hasCoachReview(item))
     .slice()
     .sort((a, b) => b.localDate.localeCompare(a.localDate));
-  if (reviewed[0]) return reviewed[0];
+  if (reviewed[0]) return pickNextScheduledCheckin(items) ?? reviewed[0];
 
   const submitted = items
     .filter((item) => item.status === "submitted" && !hasCoachReview(item))
@@ -106,7 +110,7 @@ export function todayCheckinBanner(
   if (checkin.status === "scheduled") {
     return {
       kind: "scheduled",
-      title: `Next check-in ${checkin.localDate}`,
+      title: `Next check-in ${formatCivilDate(checkin.localDate)}`,
       body: "You can fill this in when it opens.",
       nextLine: null,
     };
@@ -121,7 +125,7 @@ export function todayCheckinBanner(
           : "Acknowledged",
       body: notes ?? `${coachFirst} reviewed your check-in.`,
       nextLine: nextScheduled
-        ? `Next check-in ${nextScheduled.localDate}`
+        ? `Next check-in ${formatCivilDate(nextScheduled.localDate)}`
         : null,
     };
   }
@@ -135,7 +139,7 @@ export function todayCheckinBanner(
   }
   return {
     kind: "due",
-    title: `Weekly check-in · Due ${checkin.localDate}`,
+    title: `Weekly check-in · Due ${formatCivilDate(checkin.localDate)}`,
     body: "Takes about 3 min",
     nextLine: null,
   };

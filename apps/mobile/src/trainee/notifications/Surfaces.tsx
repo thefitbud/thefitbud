@@ -477,12 +477,15 @@ export function LockMessageCard({
 
 export function InAppBanner({
   title,
+  body,
   openLabel,
   onOpen,
   floating = false,
   top,
 }: {
   title: string;
+  /** Second line (frames 29, 29b, 113): the meal's foods, the note, a prompt. */
+  body?: string;
   openLabel: string;
   onOpen: () => void;
   floating?: boolean;
@@ -501,10 +504,15 @@ export function InAppBanner({
     >
       <AppIcon size={38} />
       <View style={styles.bannerBody}>
-        <Text style={styles.bannerKicker}>FitBud</Text>
+        <Text style={styles.bannerKicker}>FitBud · now</Text>
         <Text numberOfLines={1} style={styles.bannerTitle}>
           {title}
         </Text>
+        {body ? (
+          <Text numberOfLines={1} style={styles.bannerLine}>
+            {body}
+          </Text>
+        ) : null}
       </View>
       <Text style={styles.chevron}>›</Text>
     </Pressable>
@@ -708,6 +716,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     paddingHorizontal: 11,
+    minHeight: 64,
     paddingVertical: 10,
     shadowColor: "#1A1248",
     shadowOpacity: 0.24,
@@ -722,7 +731,8 @@ const styles = StyleSheet.create({
   },
   bannerBody: { flex: 1, minWidth: 0 },
   bannerKicker: { color: "#4A4A52", fontFamily: fontFamilySemiBold, fontSize: 13 },
-  bannerTitle: { color: "#000", fontSize: 14 },
+  bannerTitle: { color: "#000", fontSize: 15, fontFamily: fontFamilySemiBold },
+  bannerLine: { color: "#2B2B33", fontSize: 14, lineHeight: 19 },
   chevron: {
     color: "#4A4A52",
     fontSize: 22,

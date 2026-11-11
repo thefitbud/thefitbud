@@ -11,7 +11,7 @@ import {
   workoutAssignmentSchema,
   type MealAssignment,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor } from "../test/render";
+import { mockAuth, render, screen, waitFor, fireEvent } from "../test/render";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
@@ -146,6 +146,12 @@ let outboxRows: { status: string; payloadJson: string }[] = [];
 let workouts: unknown[] = [];
 let meals: MealAssignment[] = [];
 let stepsToday: unknown = { localDate: TODAY, steps: null, target: 8000 };
+let notifications: unknown[] = [];
+let coachNoteItems: unknown[] = [];
+let reminderStatus: unknown = null;
+let checkinItems: unknown[] = [];
+const markRead = vi.fn(async () => null);
+const resume = vi.fn(async () => ({ mode: "normal", pausedUntil: null }));
 
 const api = new Proxy(
   {},
@@ -163,8 +169,14 @@ const api = new Proxy(
           return { items: meals, nextCursor: null };
         };
       if (key === "listCheckins")
-        return async () => ({ items: [], nextCursor: null });
-      if (key === "listMeCoachNotes") return async () => ({ items: [] });
+        return async () => ({ items: checkinItems, nextCursor: null });
+      if (key === "listMeCoachNotes")
+        return async () => ({ items: coachNoteItems });
+      if (key === "listNotifications")
+        return async () => ({ items: notifications, nextCursor: null });
+      if (key === "getReminderStatus") return async () => reminderStatus;
+      if (key === "markNotificationRead") return markRead;
+      if (key === "resumeReminders") return resume;
       if (key === "getStepsToday") return async () => stepsToday;
       if (key === "then") return undefined;
       return async () => null;
@@ -219,6 +231,7 @@ vi.mock("../providers/ConfigProvider", async () => {
 });
 
 const { TodayTab, effectivePlanStateFor } = await import("./TodayTab");
+const fgModule = await import("./notifications/ForegroundBanner");
 
 const completedWorkout = workoutAssignmentSchema.parse({
   ...workoutAssignment,
@@ -266,6 +279,12 @@ beforeEach(() => {
   openOverlay = vi.fn();
   onSelectDate = vi.fn();
   holdDay = null;
+  notifications = [];
+  coachNoteItems = [];
+  reminderStatus = null;
+  checkinItems = [];
+  markRead.mockClear();
+  resume.mockClear();
   failOutbox = false;
   outboxRows = [];
   Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
@@ -601,5 +620,155 @@ describe("Today v3 past day, loading and offline", () => {
     }));
     renderToday();
     await screen.findByText("1 log waiting to send");
+  });
+
+  describe("banners (Z9-4)", () => {
+    const notif = (type: string, extra: Record<string, unknown> = {}) => ({
+      id: "00000000-0000-4000-8000-0000000a0001",
+      recipientUserId: relationship.traineeUserId,
+      coachingRelationshipId: relationship.id,
+      type,
+      notificationType: type,
+      domainEntityId: "00000000-0000-4000-8000-0000000a0002",
+      readAt: null,
+      route: "/today",
+      ...extra,
+    });
+
+    it("shows the reviewed banner (frame 113) and opens the reviewed check-in", async () => {
+      notifications = [notif("checkin_reviewed")];
+      checkinItems = [
+        {
+          id: "00000000-0000-4000-8000-0000000a0002",
+          localDate: "2026-10-16",
+          status: "reviewed",
+          review: { outcome: "acknowledged", notes: "Good week." },
+        },
+      ];
+      const onOpenCheckin = vi.fn();
+      render(
+        <TodayTab
+          relationship={relationship}
+          planState={effectivePlanStateFor(livePlan)}
+          planCacheError={null}
+          selectedDate={TODAY}
+          onSelectDate={onSelectDate}
+          onStartWorkout={() => undefined}
+          onOpenDiet={() => undefined}
+          onOpenCheckin={onOpenCheckin}
+          onRefreshPlan={() => undefined}
+          onOpenOverlay={openOverlay}
+        />,
+      );
+      await screen.findByText("Rahul reviewed your check-in");
+      screen.getByText("Tap to read the note");
+      fireEvent.click(screen.getByRole("button", { name: "Open check-in review" }));
+      await waitFor(() => expect(onOpenCheckin).toHaveBeenCalledTimes(1));
+      expect(onOpenCheckin.mock.calls[0]![0].id).toBe(
+        "00000000-0000-4000-8000-0000000a0002",
+      );
+      expect(markRead).toHaveBeenCalled();
+      expect(screen.queryByText("Rahul reviewed your check-in")).toBeNull();
+    });
+
+    it("no reviewed banner without an unread reviewed notification", async () => {
+      notifications = [notif("checkin_reviewed", { readAt: "2026-11-01T00:00:00.000Z" })];
+      renderToday();
+      await screen.findByLabelText("Open diet");
+      expect(screen.queryByText("Rahul reviewed your check-in")).toBeNull();
+    });
+
+    it("paused reminders card (frame 115) and Turn back on", async () => {
+      reminderStatus = {
+        mode: "paused",
+        pausedUntil: "2026-11-25T10:00:00.000Z",
+        pushDeliverable: true,
+        trainerDisabled: {},
+      };
+      renderToday();
+      await screen.findByText(/Meal reminders paused/);
+      screen.getByText(/paused them until Wed 25 Nov/);
+      fireEvent.click(screen.getByRole("button", { name: "Turn back on" }));
+      await waitFor(() => expect(resume).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(screen.queryByText(/Meal reminders paused/)).toBeNull(),
+      );
+    });
+
+    it("no paused card in normal mode", async () => {
+      reminderStatus = { mode: "normal", pausedUntil: null };
+      renderToday();
+      await screen.findByLabelText("Open diet");
+      expect(screen.queryByText(/Meal reminders paused/)).toBeNull();
+    });
+
+    it("after a review Today shows the next check-in, not the reviewed one (F4c)", async () => {
+      checkinItems = [
+        {
+          id: "00000000-0000-4000-8000-0000000b0001",
+          localDate: "2026-10-16",
+          status: "reviewed",
+          review: { outcome: "acknowledged", notes: "Good week." },
+        },
+        {
+          id: "00000000-0000-4000-8000-0000000b0002",
+          localDate: "2026-10-23",
+          status: "scheduled",
+          review: null,
+        },
+      ];
+      renderToday();
+      await screen.findByText("Next check-in Fri 23 Oct");
+      expect(screen.queryByText("Acknowledged")).toBeNull();
+    });
+  });
+
+  describe("foreground banner (Z9-4, frames 29 and 29b)", () => {
+    const { ForegroundBanner } = fgModule;
+    const renderBanner = () =>
+      render(
+        <ForegroundBanner
+          relationship={relationship}
+          coachName="Rahul"
+          onOpenMeal={() => undefined}
+          onGoToday={() => undefined}
+        />,
+      );
+
+    it("meal banner: title, foods and tap to log (frame 29)", async () => {
+      const due = meal(1, "Breakfast", "pending");
+      meals = [
+        {
+          ...due,
+          prescription: { ...due.prescription, localTime: "00:00" },
+        } as MealAssignment,
+      ];
+      renderBanner();
+      await screen.findByText("Breakfast isn't logged yet");
+      screen.getByText("Vegetable poha · tap to log");
+      screen.getByText("FitBud · now");
+    });
+
+    it("note banner: title and the quoted note (frame 29b)", async () => {
+      meals = [];
+      notifications = [
+        {
+          id: "00000000-0000-4000-8000-0000000c0001",
+          type: "trainer_note_shared",
+          domainEntityId: "00000000-0000-4000-8000-0000000c0002",
+          readAt: null,
+        },
+      ];
+      coachNoteItems = [
+        {
+          id: "00000000-0000-4000-8000-0000000c0002",
+          body: "Keep protein up on rest days.",
+          seenAt: null,
+        },
+      ];
+      renderBanner();
+      await screen.findByText("Rahul has a note for you");
+      screen.getByText('"Keep protein up on rest days."');
+    });
   });
 });
