@@ -1,5 +1,8 @@
 import type { MealAssignment } from "@fitbud/contracts";
-import { formatClockTime, formatKcal } from "@fitbud/core";
+import { Link, useOutletContext, useParams } from "react-router-dom";
+import { formatClockTime, formatKcal, formatLocalDate } from "@fitbud/core";
+import { coachEntryTag, isWithinWindow } from "../../pages/log-entry/logEntryModel";
+import type { WorkspaceOutletContext } from "../../pages/workspaceContext";
 import { LinkedMedia } from "../LinkedMedia";
 import { Button } from "../Button";
 import { planEnergyKcal } from "./activityUtils";
@@ -19,6 +22,16 @@ export function MealPanel({
   onAddToLibrary?: (name: string) => void;
 }) {
   const compliance = assignment.compliance;
+  const { relationshipId = assignment.coachingRelationshipId } = useParams();
+  const outlet = useOutletContext<WorkspaceOutletContext | undefined>();
+  const ended = outlet?.ended ?? false;
+  const today = formatLocalDate(new Date(), clientTimezone);
+  const tag = compliance ? coachEntryTag(compliance, clientTimezone) : null;
+  // Ended clients are read-only; a trainer logs or edits a meal dated within 7 days (R2).
+  const canLogOrEdit =
+    !ended &&
+    assignment.scheduleStatus === "scheduled" &&
+    isWithinWindow(assignment.localDate, today);
   const plannedItems = assignment.prescription.items ?? [];
   const loggedItems = compliance?.loggedItems ?? [];
   const loggedTotals = compliance?.loggedTotals;
@@ -35,6 +48,20 @@ export function MealPanel({
           {formatClockTime(assignment.windowEndsAt, clientTimezone)}
         </p>
       </header>
+
+      {tag ? (
+        <p className="activity-panel-tag" data-testid="meal-coach-tag">
+          <strong>{tag}</strong>
+        </p>
+      ) : null}
+      {canLogOrEdit ? (
+        <Link
+          className="button-secondary"
+          to={`/clients/${relationshipId}/log-entry/meal/${assignment.id}`}
+        >
+          {compliance ? "Edit meal" : "Log meal"}
+        </Link>
+      ) : null}
 
       <section aria-labelledby="meal-planned-heading">
         <h3 id="meal-planned-heading">Planned</h3>
