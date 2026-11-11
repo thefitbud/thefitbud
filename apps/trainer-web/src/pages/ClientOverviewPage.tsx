@@ -1,13 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import type { TrainerNote, WeekReadModel } from "@fitbud/contracts";
+import type {
+  Checkin,
+  ClientWorkspace,
+  ProgressMetricPoint,
+  MealComplianceItem,
+  TrainerNote,
+  WeekReadModel,
+  WorkoutAdherenceItem,
+} from "@fitbud/contracts";
 import {
   formatCivilDate,
+  formatClockTime,
   formatInstant,
   formatKcal,
   formatLocalDate,
   formatNumber,
   formatRelative,
+  formatWeight,
   labelFor,
 } from "@fitbud/core";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
@@ -230,8 +240,14 @@ export function ClientOverviewPage() {
     }
   }
 
+  const workspaceLoaded = workspace != null;
+  const endedWorkspace = isWorkspaceReadOnly(workspace);
+
   useEffect(() => {
-    if (!relationshipId) return;
+    if (!relationshipId || !workspaceLoaded) return;
+    loadNotes();
+    // Frame 179: an ended client's Overview has no live week, so skip the fetch.
+    if (endedWorkspace) return;
     setWeekError(false);
     const weekStart = mondayOfWeek(todayCivilUtc());
     void stage1Api
@@ -241,8 +257,7 @@ export function ClientOverviewPage() {
         setWeek(null);
         setWeekError(true);
       });
-    loadNotes();
-  }, [relationshipId, refreshEpoch, loadNotes]);
+  }, [relationshipId, refreshEpoch, loadNotes, workspaceLoaded, endedWorkspace]);
 
   if (!workspace) {
     return (
@@ -277,6 +292,20 @@ export function ClientOverviewPage() {
           Open onboarding
         </Link>
       </div>
+    );
+  }
+
+  if (ended) {
+    return (
+      <EndedOverviewBody
+        workspace={workspace}
+        relationshipId={relationshipId}
+        refreshEpoch={refreshEpoch}
+        viewerTz={viewerTz}
+        latestNote={notes[0] ?? null}
+        notesLoadError={notesLoadError}
+        onRetryNotes={loadNotes}
+      />
     );
   }
 
@@ -337,15 +366,13 @@ export function ClientOverviewPage() {
                 </span>
               </div>
               <StatusChip kind="severity" value={openEx.severity} />
-              {ended ? null : (
-                <Button
-                  variant="tinted"
-                  disabled={!online}
-                  onClick={() => setParams({ exception: openEx.id })}
-                >
-                  Review
-                </Button>
-              )}
+              <Button
+                variant="tinted"
+                disabled={!online}
+                onClick={() => setParams({ exception: openEx.id })}
+              >
+                Review
+              </Button>
             </div>
           </section>
         ) : null}
@@ -663,15 +690,13 @@ export function ClientOverviewPage() {
               <h3>Plan</h3>
             </div>
             <div className="ov-big">No plan yet</div>
-            {ended ? null : (
-              <Link
-                className="button-primary"
-                to={`/clients/${relationshipId}/plan`}
-                style={{ marginTop: 12, display: "inline-flex" }}
-              >
-                Set up plan
-              </Link>
-            )}
+            <Link
+              className="button-primary"
+              to={`/clients/${relationshipId}/plan`}
+              style={{ marginTop: 12, display: "inline-flex" }}
+            >
+              Set up plan
+            </Link>
           </section>
         )}
 
@@ -696,7 +721,6 @@ export function ClientOverviewPage() {
             gender={header.traineeProfile.gender}
             traineeFirstName={firstName}
             clientWhatsappE164={header.clientWhatsappE164}
-            ended={ended}
           />
         </section>
 
@@ -734,12 +758,11 @@ export function ClientOverviewPage() {
           <section className="ov-card ov-side">
             <div className="ov-side-h">
               <h3>Renewal</h3>
-              {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
               <Link
                 className="text-link"
                 to={`/clients/${relationshipId}/configure`}
               >
-                {ended ? "View coaching setup" : "Open settings"}
+                Open settings
               </Link>
             </div>
             <StatusChip kind="renewal" value={header.renewalState} />
@@ -749,16 +772,14 @@ export function ClientOverviewPage() {
         <section className="ov-card ov-side">
           <div className="ov-side-h">
             <h3>Coach notes</h3>
-            {!ended ? (
-              <button
-                type="button"
-                className="text-link"
-                disabled={!online}
-                onClick={() => openWorkspaceModal({ type: "note" })}
-              >
-                Add note
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="text-link"
+              disabled={!online}
+              onClick={() => openWorkspaceModal({ type: "note" })}
+            >
+              Add note
+            </button>
           </div>
           {noteError ? (
             <p className="form-error" role="alert">
@@ -791,36 +812,34 @@ export function ClientOverviewPage() {
                       {formatRelative(note.createdAt)}
                     </time>
                   </div>
-                  {!ended ? (
-                    <div className="ov-note-actions">
+                  <div className="ov-note-actions">
+                    <button
+                      type="button"
+                      className="text-link"
+                      disabled={!online || noteBusyId === note.id}
+                      onClick={() => openWorkspaceModal({ type: "note", note })}
+                    >
+                      Edit
+                    </button>
+                    {note.visibility === "client" ? (
                       <button
                         type="button"
                         className="text-link"
                         disabled={!online || noteBusyId === note.id}
-                        onClick={() => openWorkspaceModal({ type: "note", note })}
+                        onClick={() => void makeNotePrivate(note)}
                       >
-                        Edit
+                        Make private
                       </button>
-                      {note.visibility === "client" ? (
-                        <button
-                          type="button"
-                          className="text-link"
-                          disabled={!online || noteBusyId === note.id}
-                          onClick={() => void makeNotePrivate(note)}
-                        >
-                          Make private
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="text-link"
-                        disabled={!online || noteBusyId === note.id}
-                        onClick={() => setNotePendingDelete(note)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ) : null}
+                    ) : null}
+                    <button
+                      type="button"
+                      className="text-link"
+                      disabled={!online || noteBusyId === note.id}
+                      onClick={() => setNotePendingDelete(note)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -871,7 +890,6 @@ export function ClientOverviewPage() {
           clientWhatsappE164={header.clientWhatsappE164}
           timeZone={resolveTraineeTimezone(header).timezone}
           refreshEpoch={refreshEpoch}
-          ended={ended}
           onClose={closeReminders}
         />
       ) : null}
@@ -882,6 +900,368 @@ export function ClientOverviewPage() {
           onClose={() => setParams({})}
         />
       ) : null}
+    </div>
+  );
+}
+
+/* —— Frame 179: ended client's read-only Overview body (Z8-20) —— */
+
+const MINUS = "−";
+
+/** Civil date `days` after `date` (YYYY-MM-DD, negative goes back). */
+function addCivilDays(date: string, days: number): string {
+  const { y, m, d } = civilParts(date);
+  const utc = new Date(Date.UTC(y, m - 1, d + days));
+  return utc.toISOString().slice(0, 10);
+}
+
+/** "68.2 kg → 65.1 kg · −3.1 kg"; one weigh-in shows just that value. */
+function weightLine(
+  first: ProgressMetricPoint,
+  last: ProgressMetricPoint,
+): string {
+  if (first === last) return formatWeight(first.value);
+  const delta = Math.round((last.value - first.value) * 10) / 10;
+  const sign = delta > 0 ? "+" : delta < 0 ? MINUS : "";
+  return `${formatWeight(first.value)} → ${formatWeight(last.value)} · ${sign}${formatWeight(Math.abs(delta))}`;
+}
+
+const WORKOUT_DONE = new Set<WorkoutAdherenceItem["status"]>([
+  "completed",
+  "modified",
+]);
+/** Same "logged" rule as the week read model (a skip is a logged answer). */
+const MEAL_LOGGED = new Set<MealComplianceItem["status"]>([
+  "confirmed",
+  "modified",
+  "logged_later",
+  "skipped",
+]);
+const CHECKIN_SUBMITTED = new Set<Checkin["status"]>(["submitted", "reviewed"]);
+
+type EndedData = {
+  /** Weight for the coached range: oldest first, one point per local date. */
+  weights: ProgressMetricPoint[];
+  workouts: WorkoutAdherenceItem[];
+  meals: MealComplianceItem[];
+  checkins: Checkin[];
+};
+
+async function loadAllCheckins(
+  relationshipId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<Checkin[]> {
+  const items: Checkin[] = [];
+  let cursor: string | undefined;
+  // Bounded: a coaching period has at most a few dozen check-ins.
+  for (let page = 0; page < 10; page += 1) {
+    const res = await apiClient.listCheckins(relationshipId, {
+      fromDate,
+      toDate,
+      cursor,
+      limit: 100,
+    });
+    items.push(...res.items);
+    if (!res.nextCursor) break;
+    cursor = res.nextCursor;
+  }
+  return items;
+}
+
+const endedRowsStyle = {
+  display: "grid",
+  gap: "0.75rem",
+  margin: 0,
+  padding: "0.5rem 1.25rem 1.5rem 2rem",
+} as const;
+const endedRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "minmax(7rem, 11rem) minmax(0, 1fr)",
+  gap: "1rem",
+  alignItems: "baseline",
+} as const;
+const endedLabelStyle = {
+  margin: 0,
+  fontSize: "0.875rem",
+  color: "var(--ink-500, #5b616b)",
+} as const;
+const endedValueStyle = {
+  margin: 0,
+  fontSize: "0.875rem",
+  color: "var(--deep-navy, #1a1248)",
+  fontVariantNumeric: "tabular-nums",
+} as const;
+
+function EndedRows({ label, rows }: { label: string; rows: Array<[string, string]> }) {
+  return (
+    <dl aria-label={label} style={endedRowsStyle}>
+      {rows.map(([rowLabel, value]) => (
+        <div key={rowLabel} style={endedRowStyle}>
+          <dt style={endedLabelStyle}>{rowLabel}</dt>
+          <dd style={endedValueStyle}>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function EndedOverviewBody({
+  workspace,
+  relationshipId,
+  refreshEpoch,
+  viewerTz,
+  latestNote,
+  notesLoadError,
+  onRetryNotes,
+}: {
+  workspace: ClientWorkspace;
+  relationshipId: string;
+  refreshEpoch: number;
+  viewerTz: string;
+  latestNote: TrainerNote | null;
+  notesLoadError: { message: string; requestId: string | null } | null;
+  onRetryNotes: () => void;
+}) {
+  const { header, plan } = workspace;
+  const traineeTz = resolveTraineeTimezone(header).timezone;
+  const startedAt = header.startedAt ?? null;
+  const endedAt = header.endedAt ?? null;
+  const startDate = startedAt
+    ? formatLocalDate(new Date(startedAt), traineeTz)
+    : null;
+  const endDate = endedAt ? formatLocalDate(new Date(endedAt), traineeTz) : null;
+  const lastWeekStart = endDate ? addCivilDays(endDate, -6) : null;
+
+  const [data, setData] = useState<EndedData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!startedAt || !endedAt || !startDate || !endDate || !lastWeekStart) {
+      return;
+    }
+    let cancelled = false;
+    setLoadError(null);
+    void Promise.all([
+      apiClient.getProgressMetrics(relationshipId, {
+        keys: ["weight"],
+        range: "custom",
+        from: startDate,
+        to: endDate,
+      }),
+      apiClient.getWorkoutAdherence(relationshipId, {
+        fromDate: startDate,
+        toDate: endDate,
+      }),
+      apiClient.getMealCompliance(relationshipId, {
+        fromDate: lastWeekStart,
+        toDate: endDate,
+      }),
+      loadAllCheckins(relationshipId, startDate, endDate),
+    ])
+      .then(([metrics, adherence, compliance, checkins]) => {
+        if (cancelled) return;
+        setData({
+          weights:
+            metrics.series.find((series) => series.key === "weight")?.points ??
+            [],
+          workouts: adherence.items,
+          meals: compliance.items,
+          checkins,
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        setData(null);
+        setLoadError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not load the coaching summary.",
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    relationshipId,
+    refreshEpoch,
+    attempt,
+    startedAt,
+    endedAt,
+    startDate,
+    endDate,
+    lastWeekStart,
+  ]);
+
+  const range = (from: string, to: string) =>
+    `${formatCivilDate(from)} — ${formatCivilDate(to)}`;
+
+  const summaryRows: Array<[string, string]> = [];
+  const lastWeekRows: Array<[string, string]> = [];
+  if (data && lastWeekStart) {
+    const firstWeight = data.weights[0];
+    const lastWeight = data.weights[data.weights.length - 1];
+    if (firstWeight && lastWeight) {
+      summaryRows.push(["Weight", weightLine(firstWeight, lastWeight)]);
+    }
+    if (data.workouts.length > 0) {
+      const done = data.workouts.filter((w) => WORKOUT_DONE.has(w.status)).length;
+      summaryRows.push(["Workouts", `${done} of ${data.workouts.length}`]);
+    }
+    // A check-in still scheduled was never due, so it is not counted.
+    const dueCheckins = data.checkins.filter((c) => c.status !== "scheduled");
+    if (dueCheckins.length > 0) {
+      const submitted = dueCheckins.filter((c) =>
+        CHECKIN_SUBMITTED.has(c.status),
+      ).length;
+      summaryRows.push(["Check-ins", `${submitted} of ${dueCheckins.length}`]);
+    }
+
+    const weekWorkouts = data.workouts.filter(
+      (w) => w.localDate >= lastWeekStart,
+    );
+    if (weekWorkouts.length > 0) {
+      const done = weekWorkouts.filter((w) => WORKOUT_DONE.has(w.status)).length;
+      lastWeekRows.push(["Workouts", `${done} of ${weekWorkouts.length}`]);
+    }
+    if (data.meals.length > 0) {
+      const logged = data.meals.filter((m) => MEAL_LOGGED.has(m.status)).length;
+      lastWeekRows.push(["Meals logged", `${logged} of ${data.meals.length}`]);
+    }
+    // Only a check-in inside this week; an older one is left out.
+    const lastCheckin = data.checkins
+      .filter(
+        (c) => CHECKIN_SUBMITTED.has(c.status) && c.localDate >= lastWeekStart,
+      )
+      .sort((a, b) => b.localDate.localeCompare(a.localDate))[0];
+    if (lastCheckin) {
+      // The weight point from this check-in, else the one on its date.
+      const kg =
+        data.weights.find((p) => p.checkinId === lastCheckin.id)?.value ??
+        data.weights.find((p) => p.localDate === lastCheckin.localDate)
+          ?.value ??
+        null;
+      lastWeekRows.push([
+        "Last check-in",
+        `${formatCivilDate(lastCheckin.localDate)}${
+          kg != null ? ` · ${formatWeight(kg)}` : ""
+        }`,
+      ]);
+    }
+  }
+  if (plan.plan && plan.version) {
+    summaryRows.push([
+      "Last plan",
+      `${plan.plan.title} · v${plan.version.versionNumber}`,
+    ]);
+  } else if (header.effectivePlan) {
+    summaryRows.push(["Last plan", header.effectivePlan.title]);
+  }
+
+  const loading = !data && !loadError && endDate != null && startDate != null;
+  const errorLine = loadError ? (
+    <p className="form-error ov-pad" role="alert">
+      {loadError}{" "}
+      <button
+        type="button"
+        className="text-link"
+        onClick={() => setAttempt((n) => n + 1)}
+      >
+        Retry
+      </button>
+    </p>
+  ) : null;
+
+  return (
+    <div
+      className="overview-grid overview-ended"
+      data-testid="screen-TW-09"
+      data-state="ended"
+    >
+      <div className="overview-main">
+        <section className="ov-card" aria-labelledby="ov-ended-summary">
+          <div className="ov-card-h">
+            <h2 className="t-h3" id="ov-ended-summary">
+              Summary
+              {startDate && endDate ? ` · ${range(startDate, endDate)}` : ""}
+            </h2>
+          </div>
+          {errorLine}
+          {loading ? <p className="muted ov-pad">Loading summary…</p> : null}
+          {summaryRows.length > 0 ? (
+            <EndedRows label="Summary" rows={summaryRows} />
+          ) : null}
+          {!loading && !loadError && summaryRows.length === 0 ? (
+            <p className="muted ov-pad">Nothing was logged while coaching ran.</p>
+          ) : null}
+        </section>
+
+        {endDate && lastWeekStart ? (
+          <section className="ov-card" aria-labelledby="ov-ended-week">
+            <div className="ov-card-h">
+              <h2 className="t-h3" id="ov-ended-week">
+                Last week · {range(lastWeekStart, endDate)}
+              </h2>
+              <span className="t-cap muted">Read-only</span>
+            </div>
+            {loadError ? null : loading ? (
+              <p className="muted ov-pad">Loading last week…</p>
+            ) : lastWeekRows.length > 0 ? (
+              <EndedRows label="Last week" rows={lastWeekRows} />
+            ) : (
+              <p className="muted ov-pad">Nothing was logged in the last week.</p>
+            )}
+          </section>
+        ) : null}
+      </div>
+
+      <aside className="overview-side">
+        <section className="ov-card" aria-labelledby="ov-ended-notes">
+          <div className="ov-card-h">
+            <h2 className="t-h3" id="ov-ended-notes">
+              Your notes
+            </h2>
+          </div>
+          <div style={{ padding: "0 1.25rem 1.25rem" }}>
+            {notesLoadError ? (
+              <ErrorState
+                kind="server"
+                title="We couldn't load notes"
+                message={notesLoadError.message}
+                requestId={notesLoadError.requestId}
+                onRetry={onRetryNotes}
+                screenId="TW-09"
+              />
+            ) : latestNote ? (
+              <div>
+                <p
+                  style={{
+                    margin: "0.25rem 0 0.375rem",
+                    fontSize: "0.875rem",
+                    lineHeight: 1.5,
+                    color: "var(--deep-navy, #1a1248)",
+                    whiteSpace: "pre-line",
+                  }}
+                >
+                  {latestNote.body}
+                </p>
+                <time
+                  className="t-cap muted"
+                  dateTime={latestNote.createdAt}
+                  style={{ fontWeight: 600 }}
+                >
+                  {`${formatCivilDate(
+                    formatLocalDate(new Date(latestNote.createdAt), viewerTz),
+                  )}, ${formatClockTime(latestNote.createdAt, viewerTz)}`}
+                </time>
+              </div>
+            ) : (
+              <p className="muted">No notes yet</p>
+            )}
+          </div>
+        </section>
+      </aside>
     </div>
   );
 }
