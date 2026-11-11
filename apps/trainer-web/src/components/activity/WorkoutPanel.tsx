@@ -57,7 +57,7 @@ export function WorkoutPanel({
       <header className="activity-panel-head">
         <h2>{assignment.workoutDayName}</h2>
         <p className="muted">
-          {assignment.localDate} · window ends{" "}
+          {formatCivilDate(assignment.localDate)} · window ends{" "}
           {formatClockTime(assignment.windowEndsAt, clientTimezone)}
         </p>
       </header>

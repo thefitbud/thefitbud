@@ -169,7 +169,7 @@
 
 .lw-empty .button-secondary,
 .lw-ended .button-secondary,
-.lw-save {
+.lw-actions .lw-save {
   min-height: 44px;
 }
 
@@ -394,12 +394,12 @@
   background: linear-gradient(to top, var(--page-bg) 70%, transparent);
 }
 
-.lw-save {
+.lw-actions .lw-save {
   width: 100%;
   font-size: 16px;
 }
 
-.lw-save[aria-busy="true"] {
+.lw-actions .lw-save[aria-busy="true"] {
   background: #7a68d6;
   opacity: 1;
 }

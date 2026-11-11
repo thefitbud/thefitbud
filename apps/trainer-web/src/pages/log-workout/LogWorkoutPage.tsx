@@ -502,6 +502,13 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
           )
         ) : null}
 
+        {mode === "edit" && drafts.length === 0 ? (
+          <div className="lw-card lw-empty" data-testid="log-workout-no-sets">
+            <h3>No sets to edit</h3>
+            <p>This workout was saved without any sets, so there is nothing to change.</p>
+          </div>
+        ) : null}
+
         {showForm ? (
           <>
             <div className="lw-card lw-workout-card">

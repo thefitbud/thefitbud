@@ -101,6 +101,12 @@ describe("WorkoutPanel coach tags and actions", () => {
     );
   });
 
+  it("writes the workout date like Mon 2 Nov, never ISO", () => {
+    renderPanel(assignment("2026-11-02"), execution({}));
+    expect(screen.getByText(/Mon 2 Nov · window ends/)).toBeTruthy();
+    expect(screen.queryByText(/2026-11-02/)).toBeNull();
+  });
+
   it("shows no tag for the client's own untouched entry", () => {
     renderPanel(assignment("2026-11-02"), execution({ loggedByRole: "trainee" }));
     expect(screen.queryByTestId("workout-coach-tag")).toBeNull();
