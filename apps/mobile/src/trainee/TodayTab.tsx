@@ -9,6 +9,7 @@ import type {
   WorkoutAssignment,
 } from "@fitbud/contracts";
 import {
+  formatCivilDate,
   formatClockTime,
   formatKcal,
   formatNumber,
@@ -23,7 +24,7 @@ import {
   semanticColors,
   spacing,
 } from "@fitbud/ui-mobile";
-import { Clock } from "lucide-react-native";
+import { Check, Clock, Moon } from "lucide-react-native";
 import { surface } from "@fitbud/tokens";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -53,7 +54,10 @@ import {
   mealKcalFromDayTotals,
   mealLockCopy,
 } from "./mealHelpers";
-import { estimateDurationMinutesFromDay } from "./workoutDuration";
+import {
+  durationMinutesFromExecution,
+  estimateDurationMinutesFromDay,
+} from "./workoutDuration";
 import { subscribeAll } from "./dataCache";
 import {
   buildNutritionRings,
@@ -280,6 +284,11 @@ export function TodayTab({
   const [stepsChip, setStepsChip] = useState<StepsChipState>({
     status: "loading",
   });
+  // Rest-day card: the next scheduled workout, from the same assignments
+  // endpoint. Null when none is scheduled or the read failed (line omitted).
+  const [nextWorkout, setNextWorkout] = useState<WorkoutAssignment | null>(
+    null,
+  );
   const [coachNotes, setCoachNotes] = useState<CoachNote[]>([]);
   // Trainee listExceptions is 403 — late-log gate uses a positive sentinel.
   const unresolvedExceptions = 1;
@@ -383,6 +392,42 @@ export function TodayTab({
     };
   }, [api, isToday, refreshNonce]);
 
+  const restDay =
+    planState.status === "loaded" && !loading && !workout;
+  useEffect(() => {
+    if (!restDay) {
+      setNextWorkout(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .listWorkoutAssignments(relationship.id, {
+        fromDate: addDays(selectedDate, 1),
+        toDate: addDays(selectedDate, 7),
+      })
+      .then((res) => {
+        if (cancelled) return;
+        const upcoming = scheduledAssignments(res.items)
+          .filter(
+            (item) =>
+              item.localDate > selectedDate &&
+              item.status !== "completed" &&
+              item.status !== "modified" &&
+              item.status !== "skipped",
+          )
+          .sort((a, b) => a.windowStartsAt.localeCompare(b.windowStartsAt));
+        setNextWorkout(upcoming[0] ?? null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        reportError("TodayTab.listUpcomingWorkouts", err);
+        setNextWorkout(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, relationship.id, restDay, selectedDate, refreshNonce]);
+
   const rings = useMemo(
     () => buildNutritionRings(meals, dayTotals?.totals ?? null),
     [meals, dayTotals],
@@ -406,7 +451,14 @@ export function TodayTab({
     ) {
       return { kind: "workout" as const, workout };
     }
-    return nextUp({ meals, workout, checkin });
+    // Done and rest cards lead the day (frames 04 done / rest); the meal
+    // is then carried by the Meals list. A due check-in still shows.
+    const next = nextUp({ meals, workout, checkin });
+    const workoutCardLeads =
+      !workout ||
+      workout.status === "completed" ||
+      workout.status === "modified";
+    return next && next.kind === "meal" && workoutCardLeads ? null : next;
   }, [checkin, isToday, meals, workout]);
 
   const nextOpenMeal = meals.find(
@@ -595,7 +647,13 @@ export function TodayTab({
           no heading here; the workout itself is in the hero below.
         */}
         {planState.status === "loaded" ? (
-          <Text style={styles.srOnly} accessibilityRole="header">
+          <Text
+            style={styles.srOnly}
+            accessibilityRole="header"
+            accessibilityLabel={
+              workout ? undefined : "Today's workout: rest day"
+            }
+          >
             Today&apos;s workout
           </Text>
         ) : null}
@@ -613,7 +671,54 @@ export function TodayTab({
             mealsDone={mealsDone}
             mealsTotal={meals.length}
             steps={isToday ? stepsChip : { status: "unavailable" }}
+            onOpenSteps={() => onOpenOverlay({ screen: "steps_settings" })}
           />
+        ) : null}
+
+        {planState.status === "loaded" &&
+        !loading &&
+        isToday &&
+        workout &&
+        (workout.status === "completed" || workout.status === "modified") ? (
+          <View
+            style={styles.hero}
+            accessibilityLabel={`Workout done: ${workout.workoutDayName}`}
+          >
+            <View style={styles.doneChip}>
+              <Check size={16} color={colors.white} strokeWidth={2.25} />
+              <Text style={styles.doneChipLabel}>
+                {workout.execution?.completedAt
+                  ? `Done · ${formatClockTime(workout.execution.completedAt, timeZone)}`
+                  : "Done"}
+              </Text>
+            </View>
+            <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
+            <Text style={styles.heroItems}>
+              {exerciseCountLabel(workout.workoutDay.exercises.length)}
+              {workout.execution &&
+              durationMinutesFromExecution(workout.execution) != null
+                ? ` · ${durationMinutesFromExecution(workout.execution)} min`
+                : ""}
+            </Text>
+          </View>
+        ) : null}
+
+        {restDay ? (
+          <View
+            style={styles.restCard}
+            accessibilityLabel="Rest day. Recovery is part of the plan"
+          >
+            <View style={styles.restChip}>
+              <Moon size={16} color={semanticColors.neutral.text} strokeWidth={1.75} />
+              <Text style={styles.restChipLabel}>Rest day</Text>
+            </View>
+            <Text style={styles.restTitle}>Recovery is part of the plan</Text>
+            {nextWorkout ? (
+              <Text style={styles.restNext}>
+                {`Next: ${nextWorkout.workoutDayName} · ${formatCivilDate(nextWorkout.localDate)}, ${formatClockTime(nextWorkout.windowStartsAt, timeZone)}`}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
 
         {planState.status === "loaded" && hero && !loading ? (
@@ -762,14 +867,6 @@ export function TodayTab({
               </>
             ) : null}
           </View>
-        ) : null}
-
-        {planState.status === "loaded" && !loading && !workout ? (
-          // Kept from the pre-v3 workout card until Z9-2 draws the rest-day
-          // chip and card; without it a rest day reads as "Workout 0 of 0" only.
-          <Text style={styles.restLine}>
-            Rest day. Recovery is part of the plan.
-          </Text>
         ) : null}
 
         {planState.status === "loaded" ? (
@@ -1170,12 +1267,48 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "600",
   },
-  restLine: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "600",
-    marginTop: spacing.sm,
+  doneChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
+  doneChipLabel: { color: colors.white, fontSize: 14, fontWeight: "600" },
+  restCard: {
+    backgroundColor: colors.white,
+    borderColor: surface.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.xl,
+  },
+  restChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: semanticColors.neutral.fill,
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  restChipLabel: {
+    color: semanticColors.neutral.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  restTitle: {
+    color: colors.deepNavy,
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    marginTop: spacing.xs,
+  },
+  restNext: { color: colors.darkGrey, fontSize: 15 },
   mealRow: {
     alignItems: "center",
     flexDirection: "row",
