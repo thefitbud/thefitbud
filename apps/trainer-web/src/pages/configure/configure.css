@@ -725,7 +725,7 @@
   margin-top: 0.75rem;
 }
 
-@media (max-width: 899px) {
+@media (max-width: 639px) {
   .configure-mode-options {
     grid-template-columns: 1fr;
   }
