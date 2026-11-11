@@ -6,8 +6,12 @@
 //     for this capture), uploaded as the trainer through POST /files/upload-targets,
 //     PUT /files/:id/content, POST /files/:id/confirm and
 //     POST /progress/relationships/:id/entries (the demo seed has no photos);
-//   - two weigh-ins for Harpreet Singh (coaching ready, no data) through
-//     POST /progress/relationships/:id/measurements, captured after her empty state.
+//   - Harpreet Singh (coaching ready, no data) gets an active coaching setup that
+//     pins the keyed global v2 check-in form (PUT .../draft, POST .../activate) and a
+//     scheduled next check-in on that form (POST /checkins/relationships/:id/schedule),
+//     so the empty state shows the form's questions as "No entries";
+//   - then two weigh-ins for her through POST /progress/relationships/:id/measurements,
+//     captured after her empty state.
 // The by-reps capture uses Ananya Bose as seeded; the ratings compare uses Siddharth
 // Jain after fixture-ratings.sql (applied before this script).
 const { createRequire } = require("node:module");
@@ -182,7 +186,28 @@ async function uploadPhotos(page, relId, dates) {
     await page.unroute("**/api/progress/**");
   }
 
-  // 161 empty: Harpreet before any data.
+  // 161 empty: Harpreet before any data, with an active setup on the keyed v2 form.
+  if (want("setup")) {
+    const V2 = "c1000001-0000-4000-8000-000000000012";
+    const draft = await api(page, "PUT", `/configurations/relationships/${harpreet}/draft`, {
+      expectedVersion: 0,
+      goalShort: "Strength + 1.6 km under 6 min",
+      checkin: { cadence: "weekly", dueWindowHours: 48, formVersionId: V2 },
+      tracking: { requireBodyWeight: true, requireProgressPhotos: false, requireSessionRpe: false },
+    });
+    console.log("draft", draft.status, draft.missingSections);
+    const active = await api(page, "POST", `/configurations/relationships/${harpreet}/activate`, {
+      expectedVersion: draft.recordVersion,
+    });
+    console.log("activated", active.status);
+    const inDays = new Date(Date.now() + 5 * 86400000).toISOString().slice(0, 10);
+    const scheduled = await api(page, "POST", `/checkins/relationships/${harpreet}/schedule`, {
+      localDate: inDays,
+      checkinFormVersionId: V2,
+    });
+    console.log("scheduled", JSON.stringify(scheduled).slice(0, 200));
+  }
+
   if (want("161")) {
     await shoot(page, "161-trainer-web-progress-empty-v3-web", () => openProgress(page, harpreet));
   }

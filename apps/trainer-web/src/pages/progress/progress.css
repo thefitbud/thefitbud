@@ -420,7 +420,7 @@
 
 @media (max-width: 1024px) {
   .pg-layout {
-    grid-template-columns: minmax(12.5rem, 15rem) minmax(0, 1fr);
+    grid-template-columns: minmax(12.5rem, 16.5rem) minmax(0, 1fr);
   }
 }
 

@@ -185,12 +185,15 @@ type Extras = {
   header?: Record<string, unknown>;
   /** Workspace overview (next check-in). */
   overview?: Record<string, unknown>;
+  /** Workspace configuration section (check-in cadence). */
+  configuration?: Record<string, unknown>;
 };
 
 function renderPage(onboardingStatus: Lifecycle = "active", extras: Extras = {}) {
   const context = {
     workspace: {
       overview: extras.overview,
+      configuration: extras.configuration,
       header: {
         relationshipId: REL_ID,
         traineeDisplayName: "Rohan Mehta",
@@ -848,8 +851,15 @@ describe("ClientProgressPage photos compare (frame 160f)", () => {
     const tab = await screen.findByRole("tab", { name: /Progress photos/ });
     expect(tab.textContent).toBe("Progress photos3 dates");
     expect(tab.getAttribute("aria-selected")).toBe("false");
+    expect(
+      screen.getByRole("button", { name: "12 w" }).getAttribute("aria-pressed"),
+    ).toBe("true");
     fireEvent.click(tab);
     expect(tab.getAttribute("aria-selected")).toBe("true");
+    // Photos are not filtered by range: the toolbar says All (frame 160f).
+    expect(
+      screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed"),
+    ).toBe("true");
     expect(
       screen.getByRole("tab", { name: /Weight/ }).getAttribute("aria-selected"),
     ).toBe("false");
@@ -943,6 +953,11 @@ describe("ClientProgressPage sparse data (frame 160g)", () => {
     expect(
       within(panel).queryByRole("button", { name: /data table/ }),
     ).toBeNull();
+    // The date axis runs on eight weeks from the first entry (Mon 5 Oct → Mon 30 Nov),
+    // past today and the next check-in, so the two points sit at the start.
+    const chart = within(panel).getByRole("img", { name: /Weight, 2 entries/ });
+    const ticks = [...chart.querySelectorAll("text")].map((n) => n.textContent);
+    expect(ticks).toContain("Mon 30 Nov");
     // Questions the form asks with no answers yet stay listed, and cannot be opened.
     const rail = screen.getByRole("complementary", { name: "Metrics" });
     await waitFor(() =>
@@ -956,7 +971,7 @@ describe("ClientProgressPage sparse data (frame 160g)", () => {
       .map((tab) => tab.textContent);
     expect(tabs).toEqual([
       "Weight71.8 kg",
-      "Waist81 cm",
+      "Waist1 entry",
       "HipNo entries",
       "ChestNo entries",
       "ArmNo entries",
@@ -987,7 +1002,8 @@ describe("ClientProgressPage empty (frame 161)", () => {
     serveForm(["weight", "waist", "hips", "chest", "arm", "energy", "sleep_quality", "stress", "hunger"]);
     const { container } = renderPage("active", {
       header: { effectivePlan: PLAN, traineeProfile: { displayName: "Priya Sharma", age: null, gender: "female" }, traineeDisplayName: "Priya Sharma" },
-      overview: { nextCheckin: NEXT_CHECKIN },
+      overview: { nextCheckin: NEXT_CHECKIN, recentActivity: [] },
+      configuration: { configuration: { checkin: { cadence: "weekly" } } },
     });
     const heading = await screen.findByRole("heading", {
       name: "No progress data yet",
@@ -995,7 +1011,7 @@ describe("ClientProgressPage empty (frame 161)", () => {
     const panel = heading.closest("section")!;
     expect(
       within(panel).getByText(
-        "Charts follow the standard questions in her check-in form: weight, the measurements you picked, ratings and photos. Her next check-in opens Sun 25 Oct. Workout progress appears after Priya logs a workout.",
+        "Charts follow the standard questions in her check-in form: weight, the measurements you picked, ratings and photos. Her first weekly check-in opens Sun 25 Oct. Workout progress appears after she logs her first workout.",
       ),
     ).toBeTruthy();
     expect(
@@ -1064,6 +1080,8 @@ describe("ClientProgressPage ended (frame 160h)", () => {
     expect(within(panel).getByText("−3.1 kg")).toBeTruthy();
     expect(within(panel).queryByText(/since/)).toBeNull();
     expect(within(panel).queryByText("Entries")).toBeNull();
+    expect(within(panel).queryByText("Latest entries")).toBeNull();
+    expect(within(panel).queryByRole("table")).toBeNull();
     expect(
       within(panel).queryByRole("button", { name: /data table/ }),
     ).toBeNull();

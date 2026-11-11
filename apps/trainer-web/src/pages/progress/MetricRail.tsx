@@ -52,9 +52,17 @@ type Props = {
 
 const NO_ENTRIES = "No entries";
 
-function latestValue(row: ProgressMetricSeries | undefined): string {
+function latestValue(
+  key: ProgressMetricKey,
+  row: ProgressMetricSeries | undefined,
+): string {
   const last = row?.points.at(-1);
-  return last ? formatMetricValue(last.value, row!.unit) : NO_ENTRIES;
+  if (!last) return NO_ENTRIES;
+  // One body measurement is a single reading, not a latest value (frame 160g).
+  if (row!.points.length === 1 && row!.unit === "cm" && key !== "weight") {
+    return "1 entry";
+  }
+  return formatMetricValue(last.value, row!.unit);
 }
 
 export function hasPoints(row: ProgressMetricSeries | undefined): boolean {
@@ -198,7 +206,7 @@ export function MetricRail({
                     ) : null}
                   </span>
                   <span className="pg-rail-value">
-                    {latestValue(series[key])}
+                    {latestValue(key, series[key])}
                   </span>
                 </button>
               );

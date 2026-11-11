@@ -15,6 +15,13 @@ export type FormMetrics = {
 
 const NONE: FormMetrics = { keys: [], templateId: null };
 
+/** Dev-only diagnostic for a failure the UI deliberately hides. Error name only, never data. */
+function reportError(where: string, err: unknown): void {
+  if (import.meta.env.DEV) {
+    console.warn(`[${where}]`, err instanceof Error ? err.name : typeof err);
+  }
+}
+
 /** Chartable standard keys in a pinned form, in form order. */
 export function formMetricKeys(form: CheckinFormVersion): ProgressMetricKey[] {
   const keys: ProgressMetricKey[] = [];
@@ -48,9 +55,10 @@ export function useFormMetricKeys(
           setState({ keys: formMetricKeys(form), templateId: form.templateId });
         }
       },
-      () => {
+      (err: unknown) => {
         // Optional context only (no message is shown): the rail falls back to
         // the metrics that have entries.
+        reportError("progress-form-keys", err);
         if (!cancelled) setState(NONE);
       },
     );

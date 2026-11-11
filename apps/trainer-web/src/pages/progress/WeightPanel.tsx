@@ -22,6 +22,8 @@ type Props = {
   ended?: boolean;
   /** The coached period, e.g. "Mon 6 Jul — Sat 3 Oct", when both dates are known. */
   coachedPeriod?: string | null;
+  /** Sparse only: where the date axis runs to (range end or next check-in, frame 160g). */
+  sparseAxisEnd?: string | null;
 };
 
 const LATEST_ROWS = 3;
@@ -79,6 +81,7 @@ export function WeightPanel({
   allTimeEntries,
   ended = false,
   coachedPeriod = null,
+  sparseAxisEnd = null,
 }: Props) {
   const [showTable, setShowTable] = useState(false);
   const points = series?.points ?? [];
@@ -181,6 +184,7 @@ export function WeightPanel({
 
           <MetricLineChart
             label={`Weight, ${entries} from ${formatPointDate(first.localDate)} to ${formatPointDate(last.localDate)}`}
+            xEnd={sparse ? sparseAxisEnd : null}
             series={[
               {
                 key: "weight",
@@ -202,7 +206,8 @@ export function WeightPanel({
             </div>
           ) : null}
 
-          {sparse ? null : (
+          {/* Sparse: both entries are in the stats. Ended: the chart is the record (frame 160h). */}
+          {sparse || ended ? null : (
             <>
               <p className="pg-table-heading" id="pg-weight-table-heading">
                 {showTable ? "All entries in this range" : "Latest entries"}

@@ -6,6 +6,7 @@ import { ChartLine, Lock } from "lucide-react";
 import {
   formatCivilDate,
   formatLocalDate,
+  labelFor,
   possessivePronoun,
 } from "@fitbud/core";
 import { ErrorState } from "../components/StatePanels";
@@ -66,6 +67,14 @@ export function ClientProgressPage() {
   const today = useMemo(() => todayInTimezone(clientTz), [clientTz]);
   const pronoun = possessivePronoun(header?.traineeProfile?.gender);
   const Pronoun = pronoun.charAt(0).toUpperCase() + pronoun.slice(1);
+  // Subject form of the same pronoun ("her" → "she"), for "after she logs".
+  const subject = pronoun === "her" ? "she" : pronoun === "his" ? "he" : "they";
+  const cadence = workspace?.configuration?.configuration?.checkin.cadence ?? null;
+  // "weekly" / "monthly" from the cadence label, as on the Check-ins page.
+  const cadenceWord =
+    cadence && cadence !== "biweekly"
+      ? `${labelFor("checkin_cadence", cadence).toLowerCase()} `
+      : "";
   const nextCheckin = workspace?.overview?.nextCheckin ?? null;
   const formMetrics = useFormMetricKeys(nextCheckin?.id ?? null, refreshEpoch);
   const startedOn = header?.startedAt
@@ -201,7 +210,10 @@ export function ClientProgressPage() {
     openedElsewhere.current = true;
     if (metricsWithData.length) return;
     if (workouts) setWorkoutsRow("exercises");
-    else if (photoDates.length) setPhotosOpen(true);
+    else if (photoDates.length) {
+      setPhotosOpen(true);
+      setRange(ALL_TIME);
+    }
   }, [
     rail.data,
     strengthAll.data,
@@ -296,6 +308,8 @@ export function ClientProgressPage() {
   function choosePhotos() {
     setWorkoutsRow(null);
     setPhotosOpen(true);
+    // Photos are not filtered by range: the toolbar says All (frame 160f).
+    setRange(ALL_TIME);
   }
 
   const compareOptions = metricsWithData.filter(
@@ -315,6 +329,15 @@ export function ClientProgressPage() {
     !entriesLoaded;
   const ready = !loading && rail.data && strengthAll.data && checked;
 
+  // "first" only when nothing was ever submitted: no review waiting and no answered check-ins.
+  const firstCheckin =
+    !workspace?.overview?.pendingReviewCheckin &&
+    !(workspace?.overview?.recentActivity ?? []).some(
+      (item) =>
+        item.type === "checkin" &&
+        (item.state === "submitted" || item.state === "reviewed"),
+    );
+
   function emptyPanel() {
     return (
       <div className="pg-empty-state">
@@ -332,11 +355,12 @@ export function ClientProgressPage() {
             Charts follow the standard questions in {pronoun} check-in form:
             weight, the measurements you picked, ratings and photos.
             {nextCheckin
-              ? ` ${Pronoun} next check-in opens ${formatCivilDate(
+              ? ` ${Pronoun} ${firstCheckin ? "first" : "next"} ${cadenceWord}check-in opens ${formatCivilDate(
                   formatLocalDate(new Date(nextCheckin.windowStartsAt), clientTz),
                 )}.`
               : null}{" "}
-            Workout progress appears after {clientFirstName} logs a workout.
+            Workout progress appears after {subject}{" "}
+            {subject === "they" ? "log" : "logs"} {pronoun} first workout.
           </p>
         )}
         <div className="pg-empty-actions">
@@ -359,6 +383,20 @@ export function ClientProgressPage() {
       </div>
     );
   }
+
+  // Sparse weight: the axis runs on to the range end (today) or the next check-in,
+  // and at least eight weeks from the first entry, so two points don't read as a trend.
+  const sparseAxisEnd = useMemo(() => {
+    const first = railSeries.weight?.points[0]?.localDate;
+    if (!first) return null;
+    const [y, m, d] = first.split("-").map(Number);
+    const eightWeeks = new Date(Date.UTC(y!, m! - 1, d! + 56))
+      .toISOString()
+      .slice(0, 10);
+    const candidates = [today, eightWeeks];
+    if (nextCheckin) candidates.push(nextCheckin.localDate);
+    return candidates.sort().at(-1)!;
+  }, [railSeries.weight, today, nextCheckin]);
 
   function panelBody() {
     if (!anyData) return emptyPanel();
@@ -403,6 +441,7 @@ export function ClientProgressPage() {
         <WeightPanel
           series={chartSeries.weight}
           allTimeEntries={railSeries.weight?.points.length ?? 0}
+          sparseAxisEnd={sparseAxisEnd}
           ended={ended}
           coachedPeriod={
             startedOn && endedOn
