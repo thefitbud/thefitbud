@@ -13,6 +13,7 @@ import type {
   CheckinCadence,
   CheckinFormTemplateSummary,
   CoachingConfiguration,
+  CoachingMode,
   ConfigurationSectionId,
   MealPhotoRequirement,
   PlanContent,
@@ -46,6 +47,13 @@ import { stage1Api } from "../lib/stage1-api";
 import { whatsappHref } from "../lib/whatsapp";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import { AccordionSection } from "./configure/AccordionSection";
+import {
+  CoachingModeSection,
+  coachingModeLabel,
+  coachingModeStatus,
+} from "./configure/CoachingModeSection";
+import { useCoachingMode } from "./configure/useCoachingMode";
+import { COACHING_MODE_LABELS } from "./client-settings/clientSettingsFormat";
 import {
   ClientSettingsMovedBanner,
   ConfigureToolbar,
@@ -451,6 +459,15 @@ export function ConfigureCoachingPage() {
   const steps = useStepsTarget(relationshipId, {
     reloadKey: configuration?.id ?? null,
     onSaved: onStepsSaved,
+    onEndedElsewhere: onStepsEnded,
+  });
+  const onModeSaved = useCallback(
+    (mode: CoachingMode) =>
+      showToast(`Coaching mode set to ${COACHING_MODE_LABELS[mode]}`),
+    [showToast],
+  );
+  const coachingMode = useCoachingMode(relationshipId, {
+    onSaved: onModeSaved,
     onEndedElsewhere: onStepsEnded,
   });
   const stepsBlockedReason = configuration
@@ -1214,6 +1231,12 @@ export function ConfigureCoachingPage() {
               {subscriptionForm.planName.trim() ? (
                 <>
                   <ReadOnlyField
+                    label="Coaching mode"
+                    value={coachingModeLabel(
+                      coachingMode.subscription?.coachingMode ?? null,
+                    )}
+                  />
+                  <ReadOnlyField
                     label="Starts on"
                     value={civilDateOrNotSet(subscriptionForm.startsOn)}
                   />
@@ -1301,6 +1324,24 @@ export function ConfigureCoachingPage() {
               </span>
             </label>
           </div>
+        </AccordionSection>
+
+        <AccordionSection
+          id="configure-coaching-mode"
+          title="Coaching mode"
+          summary={
+            coachingMode.subscription
+              ? coachingModeLabel(coachingMode.draft)
+              : "No subscription yet"
+          }
+          status={coachingModeStatus(coachingMode)}
+        >
+          <CoachingModeSection
+            state={coachingMode}
+            disabled={mutationsBlocked}
+            firstName={firstName}
+            settingsTo={`/clients/${relationshipId}/settings`}
+          />
         </AccordionSection>
 
         <AccordionSection
