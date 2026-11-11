@@ -747,17 +747,27 @@ describe("Today v3 past day, loading and offline", () => {
       );
 
     it("meal banner: title, foods and tap to log (frame 29)", async () => {
-      const due = meal(1, "Breakfast", "pending");
-      meals = [
-        {
-          ...due,
-          prescription: { ...due.prescription, localTime: "00:00" },
-        } as MealAssignment,
-      ];
-      renderBanner();
-      await screen.findByText("Breakfast isn't logged yet");
-      screen.getByText("Vegetable poha · tap to log");
-      screen.getByText("FitBud · now");
+      // The banner shows a meal only MEAL_REMINDER_AFTER_MINUTES (40) after its slot, in
+      // the trainee's zone. Pin the clock to 09:00 IST on TODAY so a 00:00 breakfast is
+      // always due; with the real clock this failed daily between 00:00 and 00:40 IST.
+      // Only Date is faked, so findByText's timers stay real.
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(`${TODAY}T09:00:00+05:30`));
+      try {
+        const due = meal(1, "Breakfast", "pending");
+        meals = [
+          {
+            ...due,
+            prescription: { ...due.prescription, localTime: "00:00" },
+          } as MealAssignment,
+        ];
+        renderBanner();
+        await screen.findByText("Breakfast isn't logged yet");
+        screen.getByText("Vegetable poha · tap to log");
+        screen.getByText("FitBud · now");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("note banner: no preview when the note does not match the notification", async () => {
