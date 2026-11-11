@@ -23,6 +23,7 @@
 ## Order
 1. Confirm main is green; re-run banned-strings and e2e (Playwright install failures are infrastructure). Z9b-0 only if there is a real failure.
 2. Z9b-1 and Z9b-2 in parallel (no shared files).
+3. Write the report, then stop. Do not start W10.
 
 ## Specs
 - [Z9b-1](../Z9b-1.md) Workout tab opens on today; no duplicate "Workout" title.
