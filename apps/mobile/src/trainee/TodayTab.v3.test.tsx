@@ -284,7 +284,6 @@ describe("Today v3 summary", () => {
       screen.getByText(/^2 exercises(?: · about \d+ min)? · 6 sets$/),
     ).toBeTruthy();
     expect(screen.getByLabelText("Start workout")).toBeTruthy();
-    expect(screen.queryByText("Today's workout")).toBeNull();
   });
 
   it("meals are a flat list with a logged count and a status chip per row", async () => {

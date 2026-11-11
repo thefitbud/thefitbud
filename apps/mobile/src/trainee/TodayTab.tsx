@@ -569,6 +569,18 @@ export function TodayTab({
           </View>
         ) : null}
 
+        {/*
+          Names the plan-loaded region for screen readers and the Maestro
+          flows that wait on it (CU22, D-W3b-24: gated on the plan, so a
+          plan-less trainee never gets it). Visually hidden: the frames show
+          no heading here; the workout itself is in the hero below.
+        */}
+        {planState.status === "loaded" ? (
+          <Text style={styles.srOnly} accessibilityRole="header">
+            Today&apos;s workout
+          </Text>
+        ) : null}
+
         {planState.status === "loaded" && !loading ? (
           <TodaySummaryCard
             rings={rings}
@@ -1068,6 +1080,12 @@ const styles = StyleSheet.create({
     color: colors.darkGrey,
     fontSize: 15,
     lineHeight: 22,
+  },
+  srOnly: {
+    height: 1,
+    overflow: "hidden",
+    position: "absolute",
+    width: 1,
   },
   mealsSection: { gap: spacing.xs, marginTop: spacing.sm },
   mealsList: {
