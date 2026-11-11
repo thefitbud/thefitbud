@@ -429,4 +429,15 @@ Generators: `tools/p14_checkin_forms.py` (171, 171b, 14, 14c), `tools/p15_workou
 - *Logging:* the set entry opens a number keypad with **kg** as default and a **Bodyweight** toggle (light theme, 44 pt keys, −2.5 / +2.5 quick steps, decimal; Bodyweight hides the decimal and logs reps only). Free text can't be typed into the load field, so new logs stay numeric.
 - *Implementation note:* store a derived number next to the label, e.g. `load_kg numeric null` and `load_kind` ('weight' | 'bodyweight' | 'other'). Fill them when a set is saved and backfill old rows with the same parser, so charts don't parse on every read. The label stays as the source of truth for display.
 
-**Payment records (209, 211, IP-08).** Wording: "Payment records · tracking only", "Payment record", status Paid / Unpaid (neutral chip, no red or amber), "Payment frequency" (was "Billing"). The footer says "FitBud doesn't collect payments, send invoices or remind clients to pay." Renew package stays: it renews a session count, not a payment.
+**Payment records (209, 211, IP-08).** Wording: "Payment records · tracking only", "Payment record", status Paid / Unpaid (neutral chip, no red or amber), "Payment frequency" (was "Billing"). The footer says "FitBud doesn't collect payments, send invoices or remind clients to pay." Renew package stays: it renews a session count, not a payment. **Footnote superseded by D-W9-7 (11 Nov 2026):** see "Superseded by (W9, 11 Nov 2026)" below.
+
+## Superseded by (W9, 11 Nov 2026)
+FitBud UI decided, Firoz approved, 11 Nov 2026 (D-W9-7–D-W9-10 in [../specs/batches/W9.md](../specs/batches/W9.md); index notes in [README.md](README.md)). The PNGs are not repainted; these paragraphs win over the frames and over the 22 Oct round 2 notes above.
+
+**Payments footnote (211, 212, IP-08) · D-W9-7.** The helper is **"Tracking only."** If a longer line is needed: "FitBud only records what you enter. It doesn't collect money or send invoices." Don't say FitBud doesn't remind clients to pay: trainees do get `subscription_renewal_reminder`. The collect / invoice / pay word ban on these screens stands. This replaces the round 2 footer "FitBud doesn't collect payments, send invoices or remind clients to pay."
+
+**Basics drawer phone (210) · D-W9-8.** Keep "Contact phone" and its interim helper until Z9-19. Z9-18 first makes the trainer-set name and contact phone feed Home, Clients and WhatsApp drafts; then Z9-19 restores "Phone · WhatsApp" and "Shown on Home, Clients and in WhatsApp drafts."
+
+**Measurements picker (171b) · D-W9-9.** In W9 the picker offers weight, waist, hip, chest and other; arm and thigh may stay where they are already offered as check-in keys. No neck, calf, left/right or inches (no backend field). This narrows the round 2 "Measurements question (171b)" paragraph above.
+
+**Progress photos (160f) · D-W9-10.** No Front/Side/Back switch: `media_assets` has no pose field. Photos stay unfiltered.
