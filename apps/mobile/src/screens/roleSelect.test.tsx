@@ -1,9 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 
-const persistSession = vi.fn();
-vi.mock("../lib/sessionStorage", () => ({ persistSession }));
-
 let auth: Record<string, unknown>;
 vi.mock("../auth/AuthProvider", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("../auth/AuthProvider");
@@ -28,7 +25,6 @@ const dualMe = {
 
 describe("RoleSelectScreen (frame 59)", () => {
   beforeEach(() => {
-    persistSession.mockReset();
     auth = mockAuth({ me: dualMe, accessToken: "tok" });
   });
 
@@ -40,20 +36,11 @@ describe("RoleSelectScreen (frame 59)", () => {
     await waitFor(() =>
       expect(auth.selectRole as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("trainee"),
     );
-    expect(persistSession).not.toHaveBeenCalled();
   });
 
-  it("stores no role when Remember my choice is off", async () => {
+  it("shows Remember my choice ticked and disabled", () => {
     render(<RoleSelectScreen />);
-    fireEvent.click(screen.getByLabelText("Remember my choice"));
-    fireEvent.click(screen.getByText("Continue"));
-    await waitFor(() =>
-      expect(persistSession).toHaveBeenCalledWith({
-        accessToken: "tok",
-        selectedRole: null,
-      }),
-    );
-    expect(auth.selectRole as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("trainer");
+    expect((screen.getByLabelText("Remember my choice") as HTMLElement).getAttribute("aria-disabled")).toBe("true");
   });
 });
 

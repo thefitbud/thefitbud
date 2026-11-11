@@ -125,24 +125,26 @@ export function selectInitialMobileRole(
 
 /** Link kinds that open a trainer-only screen (coach view). */
 const TRAINER_LINK_KINDS: ReadonlySet<string> = new Set([
-  "checkin",
   "exception",
   "ask",
-  "plan",
   "client",
-  "reactivate",
 ]);
 
-/** Link kinds that open a trainee-only screen (client view). */
+/**
+ * Link kinds that open a trainee-only screen (client view). `reactivate` goes
+ * to the trainee (the confirm route lives in TraineeShell). `checkin` and
+ * `plan` open for both roles, so they are in neither set: no prompt.
+ */
 const TRAINEE_LINK_KINDS: ReadonlySet<string> = new Set([
   "meal",
   "workout",
   "today",
   "progress",
   "note",
+  "reactivate",
 ]);
 
-/** Which mobile role a link needs, or null for a kind this table does not know. */
+/** Which mobile role a link needs, or null when the kind opens for both roles or is unknown. */
 export function roleForLinkKind(kind: string): Extract<Role, "trainer" | "trainee"> | null {
   if (TRAINER_LINK_KINDS.has(kind)) return "trainer";
   if (TRAINEE_LINK_KINDS.has(kind)) return "trainee";

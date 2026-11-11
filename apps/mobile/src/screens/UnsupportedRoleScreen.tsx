@@ -5,6 +5,7 @@ import { Text } from "../components/Text";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { DEFAULT_SUPPORT_EMAIL } from "../lib/support";
+import { reportError } from "../lib/reportError";
 import { useConfig } from "../providers/ConfigProvider";
 import { BrandMark } from "../components/BrandMark";
 import { colors, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
@@ -27,7 +28,9 @@ export function UnsupportedRoleScreen() {
             onPress={() => {
               void Linking.openURL(
                 `mailto:${supportEmail}?subject=${encodeURIComponent("FitBud support · Account can't use the app")}`,
-              ).catch(() => undefined);
+              ).catch((error: unknown) => {
+                reportError("UnsupportedRoleScreen.emailSupport", error);
+              });
             }}
           />
           <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />

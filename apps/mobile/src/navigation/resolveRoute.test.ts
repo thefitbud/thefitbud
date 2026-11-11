@@ -193,9 +193,33 @@ describe("roleSwitchPrompt (frame 61)", () => {
       roleSwitchPrompt({
         selectedRole: "trainee",
         permittedRoles: ["trainer", "trainee"],
-        linkKind: "checkin",
+        linkKind: "exception",
       }),
     ).toEqual({ targetRole: "trainer" });
+  });
+
+  it("offers client view for a reactivation link opened as a coach", () => {
+    expect(
+      roleSwitchPrompt({
+        selectedRole: "trainer",
+        permittedRoles: ["trainer", "trainee"],
+        linkKind: "reactivate",
+      }),
+    ).toEqual({ targetRole: "trainee" });
+  });
+
+  it("does not prompt for check-in or plan links (both roles open them)", () => {
+    for (const selectedRole of ["trainer", "trainee"] as const) {
+      for (const linkKind of ["checkin", "plan"]) {
+        expect(
+          roleSwitchPrompt({
+            selectedRole,
+            permittedRoles: ["trainer", "trainee"],
+            linkKind,
+          }),
+        ).toBeNull();
+      }
+    }
   });
 
   it("offers client view for a trainee link opened as a coach", () => {
@@ -223,7 +247,7 @@ describe("roleSwitchPrompt (frame 61)", () => {
       roleSwitchPrompt({
         selectedRole: "trainee",
         permittedRoles: ["trainee"],
-        linkKind: "checkin",
+        linkKind: "exception",
       }),
     ).toBeNull();
   });
@@ -234,7 +258,7 @@ describe("roleSwitchPrompt (frame 61)", () => {
       roleSwitchPrompt({
         selectedRole: null,
         permittedRoles: ["trainer", "trainee"],
-        linkKind: "checkin",
+        linkKind: "exception",
       }),
     ).toBeNull();
   });

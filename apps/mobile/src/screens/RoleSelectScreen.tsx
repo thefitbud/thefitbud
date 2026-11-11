@@ -12,7 +12,6 @@ import { useAuth } from "../auth/AuthProvider";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { Text } from "../components/Text";
-import { persistSession } from "../lib/sessionStorage";
 import { mobilePermittedRoles } from "../navigation/resolveRoute";
 
 type PickableRole = Extract<Role, "trainer" | "trainee">;
@@ -33,13 +32,12 @@ function firstName(fullName: string | null | undefined): string | null {
 
 /** Frame 59: pick a role, optionally remembered for the next launch. */
 export function RoleSelectScreen() {
-  const { me, accessToken, selectRole } = useAuth();
+  const { me, selectRole } = useAuth();
   const roles = me ? mobilePermittedRoles(me.permittedRoles) : [];
   const options = OPTIONS.filter((option) => roles.includes(option.role));
   const [choice, setChoice] = useState<PickableRole>(
     options[0]?.role ?? "trainer",
   );
-  const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
   const name = firstName(me?.trainerProfile?.displayName);
 
@@ -47,11 +45,6 @@ export function RoleSelectScreen() {
     setBusy(true);
     try {
       await selectRole(choice);
-      if (!remember) {
-        // selectRole stores the role for the next cold start. Not remembering
-        // means the next launch asks again, so store no role.
-        persistSession({ accessToken, selectedRole: null });
-      }
     } finally {
       setBusy(false);
     }
@@ -102,13 +95,14 @@ export function RoleSelectScreen() {
 
       <Pressable
         accessibilityRole="checkbox"
-        accessibilityState={{ checked: remember }}
+        accessibilityState={{ checked: true, disabled: true }}
         accessibilityLabel="Remember my choice"
-        onPress={() => setRemember((value) => !value)}
+        disabled
         style={styles.remember}
       >
-        <View style={[styles.box, remember ? styles.boxOn : null]}>
-          {remember ? <Check size={16} color={colors.white} /> : null}
+        {/* Always remembered: turning it off needs AuthProvider (follow-up). */}
+        <View style={[styles.box, styles.boxOn]}>
+          <Check size={16} color={colors.white} />
         </View>
         <Text style={styles.rememberLabel}>Remember my choice</Text>
       </Pressable>
@@ -118,9 +112,10 @@ export function RoleSelectScreen() {
 
 type SwitchRoleSheetProps = {
   visible: boolean;
-  targetRole: PickableRole;
+  /** Frame 61 shows the coach case only. */
+  targetRole: "trainer";
   /** What the link opens, e.g. "Rohan Mehta's check-in". */
-  subject?: string;
+  subject: string;
   onCancel: () => void;
   onSwitch: () => void;
 };
@@ -136,7 +131,7 @@ export function SwitchRoleSheet({
   onCancel,
   onSwitch,
 }: SwitchRoleSheetProps) {
-  const coach = targetRole === "trainer";
+  void targetRole;
   return (
     <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel}>
       <View style={styles.scrim}>
@@ -146,10 +141,10 @@ export function SwitchRoleSheet({
           accessibilityViewIsModal
         >
           <Text style={styles.dialogTitle}>
-            {coach ? "Switch to coach view to open this?" : "Switch to client view to open this?"}
+            Switch to coach view to open this?
           </Text>
           <Text style={styles.dialogBody}>
-            {`This link is for ${subject ?? (coach ? "a client" : "your plan")}, which you ${coach ? "review as a coach" : "follow as a client"}.`}
+            {`This link is for ${subject}, which you review as a coach.`}
           </Text>
           <View style={styles.dialogActions}>
             <Pressable
