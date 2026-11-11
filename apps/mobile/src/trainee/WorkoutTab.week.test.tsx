@@ -13,7 +13,7 @@ import {
   type WorkoutAssignment,
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor } from "../test/render";
-import { localDateInTimezone, startOfWeekMonday, addDays } from "../lib/dates";
+import { startOfWeekMonday, addDays } from "../lib/dates";
 
 /*
  * `WorkoutTab` reaches `modules/live-activity` through the active-workout
@@ -31,7 +31,12 @@ vi.mock("expo-modules-core", () => ({
 }));
 
 const TIME_ZONE = "Asia/Kolkata";
-const TODAY = localDateInTimezone(TIME_ZONE);
+/*
+ * The clock is pinned to Fri 13 Nov 2026 so the fixture's past days of the
+ * current week (Mon 9 to Thu 12 Nov) exist whatever weekday the suite runs on.
+ */
+const TODAY = "2026-11-13";
+vi.useFakeTimers({ toFake: ["Date"], now: new Date("2026-11-13T06:00:00Z") });
 
 const relationship: CoachingRelationship = coachingRelationshipSchema.parse({
   id: "1b65e3ad-84cf-4fe1-a546-0d62656c2c79",
@@ -177,8 +182,8 @@ describe("WorkoutTab current week", () => {
   it("shows the missed card with the frame's headline and a Log it row per workout", async () => {
     items = [
       dayAssignment({ n: 1, name: "Lower body B", localDate: FOCUS_DATE, status: "assigned", exercises: 6, setsEach: 3 }),
-      dayAssignment({ n: 2, name: "Lower body A", localDate: addDays(TODAY, -2), status: "missed", exercises: 5, setsEach: 3 }),
-      dayAssignment({ n: 3, name: "Upper body B", localDate: addDays(TODAY, -1), status: "missed", exercises: 5, setsEach: 3 }),
+      dayAssignment({ n: 2, name: "Lower body A", localDate: "2026-11-10", status: "missed", exercises: 5, setsEach: 3 }),
+      dayAssignment({ n: 3, name: "Upper body B", localDate: "2026-11-12", status: "missed", exercises: 5, setsEach: 3 }),
     ];
     renderWorkout();
     expect(
@@ -190,9 +195,35 @@ describe("WorkoutTab current week", () => {
     expect(screen.getAllByRole("button", { name: "Log it" })).toHaveLength(2);
   });
 
+  it("counts every missed workout of the week but shows three rows", async () => {
+    items = [
+      dayAssignment({ n: 1, name: "Lower body B", localDate: FOCUS_DATE, status: "assigned", exercises: 6, setsEach: 3 }),
+      dayAssignment({ n: 2, name: "Upper body A", localDate: "2026-11-09", status: "missed", exercises: 4, setsEach: 3 }),
+      dayAssignment({ n: 3, name: "Lower body A", localDate: "2026-11-10", status: "missed", exercises: 5, setsEach: 3 }),
+      dayAssignment({ n: 4, name: "Upper body B", localDate: "2026-11-11", status: "missed", exercises: 5, setsEach: 3 }),
+      dayAssignment({ n: 5, name: "Lower body C", localDate: "2026-11-12", status: "missed", exercises: 5, setsEach: 3 }),
+    ];
+    renderWorkout();
+    expect(
+      await screen.findByText(
+        "Four workouts this week weren't logged. If you did them, log them now.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Log it" })).toHaveLength(3);
+  });
+
+  it("does not count a missed workout from before this week", async () => {
+    items = [
+      dayAssignment({ n: 2, name: "Lower body A", localDate: "2026-11-06", status: "missed", exercises: 5, setsEach: 3 }),
+    ];
+    renderWorkout();
+    await screen.findByText("Rest day");
+    expect(screen.queryByText(/weren't logged|wasn't logged/)).toBeNull();
+  });
+
   it("uses the singular headline for one missed workout", async () => {
     items = [
-      dayAssignment({ n: 2, name: "Lower body A", localDate: addDays(TODAY, -1), status: "missed", exercises: 5, setsEach: 3 }),
+      dayAssignment({ n: 2, name: "Lower body A", localDate: "2026-11-12", status: "missed", exercises: 5, setsEach: 3 }),
     ];
     renderWorkout();
     expect(

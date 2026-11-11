@@ -138,7 +138,7 @@ const COUNT_WORDS = [
  * 1-10 (digits beyond that), with a singular form for one.
  */
 export function missedCardHeadline(count: number): string {
-  const word = COUNT_WORDS[count] ?? String(count);
+  const word = (count >= 1 && COUNT_WORDS[count]) || String(count);
   return count === 1
     ? `${word} workout this week wasn't logged. If you did it, log it now.`
     : `${word} workouts this week weren't logged. If you did them, log them now.`;
@@ -395,17 +395,23 @@ export function WorkoutTab({
     (item) => item.workoutDay.required !== false,
   ).length;
 
-  const lateLoggable = useMemo(() => {
-    return assignments
-      .filter(
-        (item) =>
-          item.status === "missed" &&
-          item.localDate < today &&
-          item.workoutDay.required !== false &&
-          !closedMissedIds.has(item.id),
-      )
-      .slice(0, 3);
+  // Every open missed workout of the current week: the headline counts these,
+  // the card shows at most three rows, and the dismiss closes all of them.
+  const missedThisWeek = useMemo(() => {
+    const weekStartToday = startOfWeekMonday(today);
+    return assignments.filter(
+      (item) =>
+        item.status === "missed" &&
+        item.localDate < today &&
+        item.localDate >= weekStartToday &&
+        item.workoutDay.required !== false &&
+        !closedMissedIds.has(item.id),
+    );
   }, [assignments, today, closedMissedIds]);
+  const lateLoggable = useMemo(
+    () => missedThisWeek.slice(0, 3),
+    [missedThisWeek],
+  );
 
   const closedMissed = useMemo(() => {
     return assignments.filter(
@@ -928,12 +934,12 @@ export function WorkoutTab({
         </View>
       )}
 
-      {lateLoggable.length > 0 ? (
+      {missedThisWeek.length > 0 ? (
         <View style={styles.missb}>
           <View style={styles.missbHead}>
             <AlertTriangle color={colors.warning} size={18} />
             <Text style={styles.missbHeadText}>
-              {missedCardHeadline(lateLoggable.length)}
+              {missedCardHeadline(missedThisWeek.length)}
             </Text>
             <Pressable
               accessibilityRole="button"
@@ -941,7 +947,7 @@ export function WorkoutTab({
               onPress={() => {
                 setClosedMissedIds((prev) => {
                   const next = new Set(prev);
-                  for (const item of lateLoggable) {
+                  for (const item of missedThisWeek) {
                     next.add(item.id);
                   }
                   return next;
