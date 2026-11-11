@@ -95,9 +95,9 @@ test.describe("TW-G history, settings, ended, reminders", () => {
 
     await page.goto(`/clients/${KAVYA}/overview`);
     await expect(page.getByTestId("screen-TW-30")).toBeVisible({ timeout: 20_000 });
-    // Header banner (role=status); the Overview body also has a "Read-only" label (Z8-20).
-    await expect(page.getByRole("status").filter({ hasText: /read-only/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /Reactivate coaching/i })).toBeVisible();
+    // Frame 179 header (Z9-13): "Ended · {date}" pill and Reactivate, no banner.
+    await expect(page.getByTestId("screen-TW-30").getByText(/^Ended · /)).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Reactivate$/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Add note$/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: "History" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Progress" })).toBeVisible();
