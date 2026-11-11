@@ -201,7 +201,6 @@ vi.mock("../sync/SyncProvider", async () => {
 });
 
 const { WorkoutTab } = await import("./WorkoutTab");
-const { PLAN_UNAVAILABLE_MESSAGE } = await import("./TodayTab");
 const { invalidateRelationshipDayData } = await import("./dataCache");
 
 
