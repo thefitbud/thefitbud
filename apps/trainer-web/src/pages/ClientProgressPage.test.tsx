@@ -38,6 +38,7 @@ const api = vi.hoisted(() => ({
   getStrength: vi.fn(),
   getDownloadTarget: vi.fn(),
   getCheckinForm: vi.fn(),
+  listMeasurements: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({ apiClient: api }));
@@ -252,6 +253,7 @@ beforeEach(() => {
   serveMetrics({});
   serveStrength(NO_STRENGTH);
   api.listProgressEntries.mockResolvedValue({ items: [] });
+  api.listMeasurements.mockResolvedValue({ items: [], nextCursor: null });
   api.getDownloadTarget.mockReturnValue(new Promise(() => {}));
 });
 
