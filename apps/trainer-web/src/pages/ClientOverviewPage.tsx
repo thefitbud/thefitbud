@@ -1135,6 +1135,7 @@ function EndedOverviewBody({
         (c) => CHECKIN_SUBMITTED.has(c.status) && c.localDate >= lastWeekStart,
       )
       .sort((a, b) => b.localDate.localeCompare(a.localDate))[0];
+    // D-W9-11: the row is always there; no check-in that week reads "None this week".
     if (lastCheckin) {
       // The weight point from this check-in, else the one on its date.
       const kg =
@@ -1148,6 +1149,8 @@ function EndedOverviewBody({
           kg != null ? ` · ${formatWeight(kg)}` : ""
         }`,
       ]);
+    } else {
+      lastWeekRows.push(["Last check-in", "None this week"]);
     }
   }
   if (plan.plan && plan.version) {
@@ -1207,10 +1210,8 @@ function EndedOverviewBody({
             </div>
             {loadError ? null : loading ? (
               <p className="muted ov-pad">Loading last week…</p>
-            ) : lastWeekRows.length > 0 ? (
-              <EndedRows label="Last week" rows={lastWeekRows} />
             ) : (
-              <p className="muted ov-pad">Nothing was logged in the last week.</p>
+              <EndedRows label="Last week" rows={lastWeekRows} />
             )}
           </section>
         ) : null}
