@@ -545,7 +545,7 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
     expect(await screen.findByText("Thu 1 Oct · 64.7 kg")).toBeTruthy();
   });
 
-  it("Last check-in is left out when the latest one is before the last week", async () => {
+  it("Last check-in reads None this week when the latest one is before the last week", async () => {
     api.getProgressMetrics.mockResolvedValue(
       weightSeries([{ localDate: "2026-09-20", value: 66.0, checkinId: null }]),
     );
@@ -562,7 +562,16 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
       await screen.findByRole("heading", { name: "Last week · Sun 27 Sep — Sat 3 Oct" })
     ).closest("section")!;
     expect(await within(week).findByText("Meals logged")).toBeTruthy();
-    expect(within(week).queryByText("Last check-in")).toBeNull();
+    const weekRows = Array.from(
+      week.querySelectorAll('dl[aria-label="Last week"] > div'),
+    ).map((row) => [
+      row.querySelector("dt")!.textContent,
+      row.querySelector("dd")!.textContent,
+    ]);
+    expect(weekRows).toEqual([
+      ["Meals logged", "1 of 1"],
+      ["Last check-in", "None this week"],
+    ]);
     expect(screen.queryByText(/Sun 20 Sep/)).toBeNull();
   });
 
@@ -576,7 +585,7 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
     ).toBeTruthy();
     expect(within(summary).queryByText("Weight")).toBeNull();
     expect(within(summary).queryByText("Last plan")).toBeNull();
-    expect(screen.getByText("Nothing was logged in the last week.")).toBeTruthy();
+    expect(screen.getByText("None this week")).toBeTruthy();
     expect(screen.getByText("No notes yet")).toBeTruthy();
   });
 
