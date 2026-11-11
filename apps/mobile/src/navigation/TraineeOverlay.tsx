@@ -30,7 +30,7 @@ import { PrivacyScreen } from "../trainee/settings/PrivacyScreen";
 import { ProfileScreen } from "../trainee/settings/ProfileScreen";
 import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
 import { ReminderSettingsScreen } from "../trainee/settings/ReminderSettingsScreen";
-import { StepsSettingsScreen } from "../trainee/settings/StepsSettingsScreen";
+import { StepsSetupScreen } from "../trainee/steps/StepsSetupScreen";
 import { LanguageScreen } from "../trainee/settings/LanguageScreen";
 import { SyncStatusScreen } from "../trainee/settings/SyncStatusScreen";
 
@@ -188,7 +188,7 @@ export function TraineeOverlayHost({
     case "language":
       return <LanguageScreen onBack={onClose} />;
     case "steps_settings":
-      return <StepsSettingsScreen onBack={onClose} />;
+      return <StepsSetupScreen coachName={coachName} onBack={onClose} />;
     case "food_search":
       if (!mealAssignment) {
         return (

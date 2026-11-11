@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CoachingRelationship, MealAssignment, Notification } from "@fitbud/contracts";
 import { MEAL_REMINDER_AFTER_MINUTES, zonedDateTimeFormat } from "@fitbud/core";
+import { stage1Api } from "../../lib/stage1Api";
 import { useAuth } from "../../auth/AuthProvider";
+import { reportError } from "../../lib/reportError";
 import { localDateInTimezone } from "../../lib/dates";
 import { isMealSnoozed } from "../../notifications/actions";
 import { inAppMealBannerCopy, noteBannerCopy } from "../../notifications/copy";
+import { setForegroundBannerActive } from "../today/bannerSlot";
 import { InAppBanner } from "./Surfaces";
 
 type Props = {
@@ -32,6 +35,15 @@ function hmMinutes(hhmm: string): number | null {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
+/** The meal's first two foods, comma-separated, e.g. "Vegetable poha, Curd" (frame 29). */
+function mealFoods(meal: MealAssignment): string {
+  return meal.prescription.items
+    .slice(0, 2)
+    .map((item) => ("name" in item && typeof item.name === "string" ? item.name.trim() : ""))
+    .filter(Boolean)
+    .join(", ");
+}
+
 export function ForegroundBanner({
   relationship,
   coachName,
@@ -41,6 +53,7 @@ export function ForegroundBanner({
   const { api, me } = useAuth();
   const [meal, setMeal] = useState<MealAssignment | null>(null);
   const [note, setNote] = useState<Notification | null>(null);
+  const [notePreview, setNotePreview] = useState<string | null>(null);
   const [hidden, setHidden] = useState<"meal" | "note" | null>(null);
 
   const load = useCallback(async () => {
@@ -70,6 +83,21 @@ export function ForegroundBanner({
         (item) => item.type === "trainer_note_shared" && item.readAt == null,
       );
       setNote(unread ?? null);
+      setNotePreview(null);
+      if (unread) {
+        try {
+          const notes = await stage1Api(api).listMeCoachNotes();
+          // No match means no preview; never show some other note's text.
+          const match = notes.items.find(
+            (item) => item.id === unread.domainEntityId,
+          );
+          setNotePreview(match?.body?.trim() || null);
+        } catch (err) {
+          // The banner still shows; only the preview line is missing.
+          reportError("ForegroundBanner.listMeCoachNotes", err);
+          setNotePreview(null);
+        }
+      }
     } catch {
       setNote(null);
     }
@@ -80,6 +108,12 @@ export function ForegroundBanner({
   }, [load]);
 
   const showMeal = meal != null && hidden !== "meal";
+  const showNote = !showMeal && note != null && hidden !== "note";
+  useEffect(() => {
+    setForegroundBannerActive(showMeal || showNote);
+    return () => setForegroundBannerActive(false);
+  }, [showMeal, showNote]);
+
   if (showMeal && meal) {
     const label = meal.mealName?.trim() || "Meal";
     const copy = inAppMealBannerCopy(label);
@@ -87,6 +121,7 @@ export function ForegroundBanner({
       <InAppBanner
         floating
         title={copy.title}
+        body={[mealFoods(meal), "tap to log"].filter(Boolean).join(" · ")}
         openLabel={`Open ${label}`}
         onOpen={() => {
           setHidden("meal");
@@ -96,12 +131,13 @@ export function ForegroundBanner({
     );
   }
 
-  if (note && hidden !== "note") {
+  if (showNote) {
     const copy = noteBannerCopy(coachName);
     return (
       <InAppBanner
         floating
         title={copy.title}
+        body={notePreview ? `"${notePreview}"` : undefined}
         openLabel="Open"
         onOpen={() => {
           setHidden("note");
