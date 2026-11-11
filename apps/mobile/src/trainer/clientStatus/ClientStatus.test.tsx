@@ -5,14 +5,14 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { clientWorkspaceSchema, responsivenessResponseSchema } from "@fitbud/contracts";
-import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
+import { fireEvent, mockAuth, render, screen } from "../../test/render";
 import { buildEndedSummary, kcalTileValue, reminderLine, weekDayCells } from "./model";
 
 const RID = "1b65e3ad-84cf-4fe1-a546-0d62656c2c79";
 const UID = "a0a69e20-297d-4101-a5e2-ecce9b8491cb";
 const PV = "6d0f2a64-3c1b-4f6e-9a10-7b6f4e0c1d11";
 
-function workspace(over: { ended: boolean }) {
+function workspace(over: { ended: boolean; traineeTz?: string; endedAt?: string }) {
   return clientWorkspaceSchema.parse({
     header: {
       relationshipId: RID,
@@ -24,11 +24,11 @@ function workspace(over: { ended: boolean }) {
       startedAt: "2026-07-06T04:00:00.000Z",
       adherenceState: "on_track",
       traineeProfile: { displayName: "Kavya Nair", age: null, gender: null },
-      traineeTimezone: "Asia/Kolkata",
+      traineeTimezone: over.traineeTz ?? "Asia/Kolkata",
       hasCustomMealTimes: false,
       trainerWhatsappE164: null,
       clientWhatsappE164: null,
-      endedAt: over.ended ? "2026-10-03T10:00:00.000Z" : null,
+      endedAt: over.ended ? (over.endedAt ?? "2026-10-03T10:00:00.000Z") : null,
     },
     overview: {
       openException: null,
@@ -94,10 +94,21 @@ const api = {
   })),
   getMealCompliance: vi.fn(async () => ({ items: [], totals: {} })),
   listCheckins: vi.fn(async () => ({ items: [], nextCursor: null })),
-  requestReactivation: vi.fn<(rid: string, body: object, key: string) => Promise<{ requestId: string; status: string }>>(async () => ({ requestId: UID, status: "pending" })),
 };
 const auth = mockAuth({ api, me: { timezone: "Asia/Kolkata" } });
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => auth }));
+
+// The real Screen's RefreshControl is a native gesture; expose its handler as a button.
+vi.mock("../../components/Screen", () => ({
+  Screen: ({ children, onRefresh }: { children: React.ReactNode; onRefresh?: () => void }) => (
+    <div>
+      <button type="button" onClick={onRefresh}>
+        Pull to refresh
+      </button>
+      {children}
+    </div>
+  ),
+}));
 
 const { ClientStatusScreen } = await import("../ClientStatusScreen");
 
@@ -147,11 +158,36 @@ describe("model", () => {
       checkins: [],
     });
     expect(summary.weeksCoached).toBe(13);
-    expect(summary.lastWeekStart).toBe("2026-09-27");
+    expect(summary.lastWeekStart).toBe("2026-09-28");
     expect(summary.workouts).toBe("1 of 2");
     expect(summary.weight?.headline).toBe("68.2 → 65.1 kg");
     expect(summary.weight?.sub).toBe("−3.1 kg from Mon 6 Jul to Fri 2 Oct");
     expect(summary.lastWeek.lastCheckin).toBe("None");
+    // Sat 3 Oct is the end: Sunday has not happened and reads "—".
+    expect(summary.lastWeek.cells.map((c) => c.letter).join("")).toBe("MTWTFSS");
+    expect(summary.lastWeek.cells[6]).toMatchObject({ mark: "none", count: "—" });
+    expect(summary.lastWeek.cells[0]).toMatchObject({ mark: "done", count: "1/1" });
+    expect(summary.lastWeek.cells[2]).toMatchObject({ mark: "missed", count: "0/1" });
+  });
+
+  it("uses the client's calendar when the end is near local midnight", () => {
+    // 19:00 UTC on Sat 3 Oct is 00:30 on Sun 4 Oct in Kolkata, still Sat 3 Oct in Los Angeles.
+    const base = {
+      startedAt: "2026-07-06T04:00:00.000Z",
+      endedAt: "2026-10-03T19:00:00.000Z",
+      weights: [],
+      workouts: [],
+      meals: [],
+      checkins: [],
+    };
+    const kolkata = buildEndedSummary({ ...base, zone: "Asia/Kolkata" });
+    const la = buildEndedSummary({ ...base, zone: "America/Los_Angeles" });
+    expect(kolkata.endDate).toBe("2026-10-04");
+    expect(kolkata.lastWeekStart).toBe("2026-09-28");
+    expect(la.endDate).toBe("2026-10-03");
+    expect(la.lastWeekStart).toBe("2026-09-28");
+    expect(kolkata.lastWeek.cells[6]).toMatchObject({ count: "–" });
+    expect(la.lastWeek.cells[6]).toMatchObject({ count: "—" });
   });
 });
 
@@ -167,17 +203,46 @@ describe("ClientStatusScreen", () => {
     expect(screen.queryByText("Reactivate")).toBeNull();
   });
 
-  it("ended client: read-only summary and Reactivate, no live actions", async () => {
+  it("ended client: read-only summary, no Reactivate, no live reads", async () => {
     api.getClientWorkspace.mockResolvedValue(workspace({ ended: true }));
+    api.getWorkspaceWeek.mockClear();
+    api.getResponsiveness.mockClear();
     renderScreen();
     await screen.findByText("Coaching summary");
     expect(screen.getByText(/Everything here is read-only/)).toBeTruthy();
     expect(screen.getByText("Last week")).toBeTruthy();
+    expect(screen.queryByText("Reactivate")).toBeNull();
     expect(screen.queryByText("WhatsApp")).toBeNull();
     expect(screen.queryByText("Add note")).toBeNull();
     expect(screen.queryByText("Reminders")).toBeNull();
-    fireEvent.click(screen.getByText("Reactivate"));
-    await waitFor(() => expect(api.requestReactivation).toHaveBeenCalledTimes(1));
-    expect(api.requestReactivation.mock.calls[0]![0]).toBe(RID);
+    expect(api.getWorkspaceWeek).not.toHaveBeenCalled();
+    expect(api.getResponsiveness).not.toHaveBeenCalled();
+  });
+
+  it("ended client: dates follow the client's zone, not the trainer's", async () => {
+    // Trainer is in Kolkata; the client is in Los Angeles. 19:00 UTC Sat 3 Oct is
+    // 00:30 Sun 4 Oct for the trainer but still Sat 3 Oct for the client.
+    api.getClientWorkspace.mockResolvedValue(
+      workspace({ ended: true, traineeTz: "America/Los_Angeles", endedAt: "2026-10-03T19:00:00.000Z" }),
+    );
+    renderScreen();
+    await screen.findByText("Coaching summary");
+    expect(screen.getByText(/Coaching ended on Sat 3 Oct/)).toBeTruthy();
+    expect(api.getWorkoutAdherence).toHaveBeenLastCalledWith(RID, {
+      fromDate: "2026-07-05",
+      toDate: "2026-10-03",
+    });
+  });
+
+  it("ended client: a failed summary retries on refresh", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: true }));
+    api.getWorkoutAdherence.mockClear();
+    api.getWorkoutAdherence.mockRejectedValueOnce(new Error("boom"));
+    renderScreen();
+    await screen.findByText(/Couldn't load the coaching summary/);
+    const callsBefore = api.getWorkoutAdherence.mock.calls.length;
+    fireEvent.click(screen.getByText("Pull to refresh"));
+    await screen.findByText("Coaching summary");
+    expect(api.getWorkoutAdherence.mock.calls.length).toBeGreaterThan(callsBefore);
   });
 });

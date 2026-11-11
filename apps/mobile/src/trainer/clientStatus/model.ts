@@ -12,7 +12,7 @@ import {
   formatWeight,
   labelFor,
 } from "@fitbud/core";
-import { addDays, weekdayShort } from "../../lib/dates";
+import { addDays, startOfWeekMonday, weekdayShort } from "../../lib/dates";
 
 const MINUS = "−";
 
@@ -38,8 +38,13 @@ export function weekDayCells(
   zone: string,
   dates: string[],
   workouts: DatedWorkout[],
+  /** Days after this date have not happened in the coaching period: shown as "—". */
+  lastDate?: string,
 ): WeekDayCell[] {
   return dates.map((date) => {
+    if (lastDate && date > lastDate) {
+      return { date, letter: weekdayShort(zone, date).slice(0, 1), mark: "none", count: "—" };
+    }
     const day = workouts.filter((item) => item.localDate === date);
     const done = day.filter((item) => WORKOUT_DONE.has(item.status)).length;
     const missed = day.some((item) => item.status === "missed");
@@ -153,7 +158,8 @@ function weightSummary(weights: ProgressMetricPoint[]): EndedSummary["weight"] {
 export function buildEndedSummary(input: EndedInput): EndedSummary {
   const startDate = formatLocalDate(new Date(input.startedAt), input.zone);
   const endDate = formatLocalDate(new Date(input.endedAt), input.zone);
-  const lastWeekStart = addDays(endDate, -6);
+  // Frame 74: the Monday-start week that contains the end date.
+  const lastWeekStart = startOfWeekMonday(endDate);
   const days = Array.from({ length: 7 }, (_, i) => addDays(lastWeekStart, i));
 
   const doneWorkouts = input.workouts.filter((w) => WORKOUT_DONE.has(w.status)).length;
@@ -161,11 +167,17 @@ export function buildEndedSummary(input: EndedInput): EndedSummary {
   const dueCheckins = input.checkins.filter((c) => c.status !== "scheduled");
   const submitted = dueCheckins.filter((c) => CHECKIN_SUBMITTED.has(c.status)).length;
 
-  const weekWorkouts = input.workouts.filter((w) => w.localDate >= lastWeekStart);
+  const weekWorkouts = input.workouts.filter(
+    (w) => w.localDate >= lastWeekStart && w.localDate <= endDate,
+  );
   const weekDone = weekWorkouts.filter((w) => WORKOUT_DONE.has(w.status)).length;
   const loggedMeals = input.meals.filter((m) => MEAL_LOGGED.has(m.status)).length;
   const lastCheckin = input.checkins
-    .filter((c) => CHECKIN_SUBMITTED.has(c.status) && c.localDate >= lastWeekStart)
+    .filter((c) =>
+        CHECKIN_SUBMITTED.has(c.status) &&
+        c.localDate >= lastWeekStart &&
+        c.localDate <= endDate,
+    )
     .sort((a, b) => b.localDate.localeCompare(a.localDate))[0];
 
   return {
@@ -177,7 +189,7 @@ export function buildEndedSummary(input: EndedInput): EndedSummary {
     checkins: dueCheckins.length > 0 ? `${submitted} of ${dueCheckins.length}` : null,
     weight: weightSummary(input.weights),
     lastWeek: {
-      cells: weekDayCells(input.zone, days, weekWorkouts),
+      cells: weekDayCells(input.zone, days, weekWorkouts, endDate),
       workouts: weekWorkouts.length > 0 ? `${weekDone} of ${weekWorkouts.length}` : null,
       meals: input.meals.length > 0 ? `${loggedMeals} of ${input.meals.length}` : null,
       lastCheckin: lastCheckin

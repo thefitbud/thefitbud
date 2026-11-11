@@ -117,7 +117,7 @@ export function ClientStatusScreen({
   const [acting, setActing] = useState(false);
   const [endedData, setEndedData] = useState<Omit<EndedInput, "zone" | "startedAt" | "endedAt"> | null>(null);
   const [endedError, setEndedError] = useState(false);
-  const [reactivating, setReactivating] = useState(false);
+  const [summaryEpoch, setSummaryEpoch] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -194,8 +194,10 @@ export function ClientStatusScreen({
   const weekLabel = weekNumber != null ? `week ${weekNumber}` : null;
   const startedAt = header?.startedAt ?? null;
   const endedAt = header?.endedAt ?? null;
-  const endDate = endedAt ? localDateInTimezone(zone, new Date(endedAt)) : null;
-  const startDate = startedAt ? localDateInTimezone(zone, new Date(startedAt)) : null;
+  // Ended-path dates are the client's own calendar (web's ended overview does the same).
+  const clientZone = header?.traineeTimezone ?? zone;
+  const endDate = endedAt ? localDateInTimezone(clientZone, new Date(endedAt)) : null;
+  const startDate = startedAt ? localDateInTimezone(clientZone, new Date(startedAt)) : null;
   const coachedLabel =
     startDate && endDate ? `coached ${formatCivilDate(startDate)} — ${formatCivilDate(endDate)}` : null;
   const meta = ended
@@ -214,7 +216,7 @@ export function ClientStatusScreen({
         to: endDate,
       }),
       api.getWorkoutAdherence(relationshipId, { fromDate: startDate, toDate: endDate }),
-      api.getMealCompliance(relationshipId, { fromDate: addDays(endDate, -6), toDate: endDate }),
+      api.getMealCompliance(relationshipId, { fromDate: startOfWeekMonday(endDate), toDate: endDate }),
       loadAllCheckins(api, relationshipId, startDate, endDate),
     ])
       .then(([metrics, adherence, compliance, checkins]) => {
@@ -234,14 +236,14 @@ export function ClientStatusScreen({
     return () => {
       cancelled = true;
     };
-  }, [api, relationshipId, ended, startedAt, endedAt, startDate, endDate]);
+  }, [api, relationshipId, ended, startedAt, endedAt, startDate, endDate, summaryEpoch]);
 
   const endedSummary = useMemo(
     () =>
       endedData && startedAt && endedAt
-        ? buildEndedSummary({ ...endedData, zone, startedAt, endedAt })
+        ? buildEndedSummary({ ...endedData, zone: clientZone, startedAt, endedAt })
         : null,
-    [endedData, startedAt, endedAt, zone],
+    [endedData, startedAt, endedAt, clientZone],
   );
 
   const weekCells = useMemo(
@@ -270,21 +272,6 @@ export function ClientStatusScreen({
       setToast("Link copied");
     } catch {
       setToast("Link copied");
-    }
-  }
-
-  async function reactivate() {
-    if (offline || reactivating) return;
-    setReactivating(true);
-    try {
-      await clientStatusApi(api).requestReactivation(relationshipId, {}, createIdempotencyKey());
-      setToast("Request sent");
-      await load();
-    } catch (err) {
-      reportError("client-status.reactivate", err);
-      setError(err instanceof ApiClientError ? err.message : "Couldn't send the request. (CLIENT-REACT)");
-    } finally {
-      setReactivating(false);
     }
   }
 
@@ -319,6 +306,7 @@ export function ClientStatusScreen({
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
+        setSummaryEpoch((n) => n + 1);
         void load().finally(() => setRefreshing(false));
       }}
     >
@@ -365,23 +353,6 @@ export function ClientStatusScreen({
               read-only.
             </Text>
           </View>
-          {header?.pendingReactivation ? (
-            <Text style={styles.meta}>
-              Waiting for {first} to confirm
-              {header.pendingReactivation.sentAt
-                ? ` · sent ${formatRelative(header.pendingReactivation.sentAt)}`
-                : ""}
-            </Text>
-          ) : (
-            <Pressable
-              accessibilityRole="button"
-              disabled={offline || reactivating}
-              onPress={() => void reactivate()}
-              style={[styles.primary, offline || reactivating ? styles.disabled : null]}
-            >
-              <Text style={styles.primaryText}>Reactivate</Text>
-            </Pressable>
-          )}
         </View>
       ) : null}
       {ended ? null : (
@@ -651,7 +622,6 @@ const styles = StyleSheet.create({
   sectionMeta: { color: colors.midGrey, fontSize: 13 },
   link: { color: colors.indigo, fontFamily: fontFamilySemiBold, fontSize: 15 },
   sectionGap: { marginTop: 18 },
-  disabled: { opacity: 0.5 },
   activity: { marginTop: 10 },
   name: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 15 },
   input: {

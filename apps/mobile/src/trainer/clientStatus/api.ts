@@ -9,11 +9,6 @@ import type { ResponsivenessResponse, WeekReadModel } from "@fitbud/contracts";
 export type ClientStatusApi = FitBudApiClient & {
   getWorkspaceWeek(relationshipId: string, start?: string): Promise<WeekReadModel>;
   getResponsiveness(relationshipId: string, days?: number): Promise<ResponsivenessResponse>;
-  requestReactivation(
-    relationshipId: string,
-    body: { intakeUpdateRequested?: boolean },
-    idempotencyKey: string,
-  ): Promise<{ requestId: string; status: "pending" }>;
 };
 
 export function clientStatusApi(client: FitBudApiClient): ClientStatusApi {
