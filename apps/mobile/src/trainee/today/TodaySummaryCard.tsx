@@ -1,7 +1,7 @@
 import { StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Dumbbell, Footprints, Utensils } from "lucide-react-native";
-import { rings } from "@fitbud/tokens";
+import { brand, rings, surface } from "@fitbud/tokens";
 import { formatNumber } from "@fitbud/core";
 import type { RingDatum } from "@fitbud/ui-mobile";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
@@ -33,8 +33,8 @@ export type TodaySummaryProps = {
 };
 
 const NUM = { fontVariant: ["tabular-nums" as const] };
-const RING_SIZE = 102;
-const RING_STROKE = 9;
+const RING_SIZE = 108;
+const RING_STROKE = 10;
 
 function find(data: readonly RingDatum[], key: RingDatum["key"]) {
   return data.find((row) => row.key === key);
@@ -157,13 +157,13 @@ function Chip({
       accessible
       accessibilityLabel={accessibilityLabel}
     >
-      {icon}
-      <View style={styles.chipText}>
+      <View style={styles.chipHead}>
+        {icon}
         <Text style={styles.chipLabel}>{label}</Text>
-        <Text style={[styles.chipValue, NUM]} numberOfLines={2}>
-          {value}
-        </Text>
       </View>
+      <Text style={[styles.chipValue, NUM]} numberOfLines={1}>
+        {value}
+      </Text>
     </View>
   );
 }
@@ -190,7 +190,7 @@ export function stepsChipText(steps: StepsChipState): {
 export function TodaySummaryCard(props: TodaySummaryProps) {
   const kcal = find(props.rings, "kcal");
   const stepsText = stepsChipText(props.steps);
-  const icon = { size: 20, color: colors.indigo, strokeWidth: 2 };
+  const icon = { size: 16, color: colors.indigo, strokeWidth: 2 };
   return (
     <View style={styles.card} testID="today-summary">
       <View style={styles.top}>
@@ -240,7 +240,7 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    borderColor: surface.border,
     borderRadius: radii.card,
     borderWidth: 1,
     gap: spacing.md,
@@ -258,13 +258,13 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  ringValue: { color: colors.deepNavy, fontSize: 26, fontWeight: "600" },
+  ringValue: { color: colors.deepNavy, fontSize: 32, fontWeight: "600" },
   ringSub: { color: colors.darkGrey, fontSize: 11, textAlign: "center" },
   macros: { flex: 1, gap: spacing.sm },
   macro: { gap: 4, minHeight: 32 },
   macroHead: { flexDirection: "row", justifyContent: "space-between" },
-  macroLabel: { color: colors.darkGrey, fontSize: 14 },
-  macroValue: { color: colors.deepNavy, fontSize: 14 },
+  macroLabel: { color: colors.darkGrey, fontSize: 16 },
+  macroValue: { color: colors.deepNavy, fontSize: 16 },
   track: {
     backgroundColor: rings.track,
     borderRadius: 3,
@@ -274,19 +274,17 @@ const styles = StyleSheet.create({
   fill: { borderRadius: 3, height: 6 },
   chips: { flexDirection: "row", gap: spacing.sm },
   chip: {
-    alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    borderColor: "#E3E0F7",
+    backgroundColor: colors.white,
+    borderColor: brand.paleLavender,
     borderRadius: radii.control,
     borderWidth: 1,
     flex: 1,
-    flexDirection: "row",
-    gap: spacing.sm,
-    minHeight: 48,
+    gap: 2,
+    height: 60,
+    justifyContent: "center",
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
   },
-  chipText: { flex: 1 },
+  chipHead: { alignItems: "center", flexDirection: "row", gap: 6 },
   chipLabel: { color: colors.darkGrey, fontSize: 12 },
   chipValue: { color: colors.deepNavy, fontSize: 14, fontWeight: "600" },
 });

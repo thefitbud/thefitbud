@@ -14,7 +14,6 @@ import {
   formatNumber,
   formatPersonName,
   greetingFor,
-  labelFor,
 } from "@fitbud/core";
 import {
   WeeklyConsistency,
@@ -22,9 +21,9 @@ import {
   radii,
   spacing,
 } from "@fitbud/ui-mobile";
+import { surface } from "@fitbud/tokens";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
 import { formatInstant } from "@fitbud/core";
@@ -69,15 +68,6 @@ import {
   TodaySummaryCard,
   type StepsChipState,
 } from "./today/TodaySummaryCard";
-
-function workoutTone(
-  status: WorkoutAssignment["status"],
-): "neutral" | "positive" | "attention" | "warning" {
-  if (status === "completed" || status === "modified") return "positive";
-  if (status === "in_progress" || status === "paused") return "attention";
-  if (status === "missed" || status === "skipped") return "warning";
-  return "neutral";
-}
 
 function mealItemLine(meal: MealAssignment): string {
   const items = meal.prescription.items
@@ -379,13 +369,26 @@ export function TodayTab({
     [meals, dayTotals],
   );
 
-  const hero = useMemo(
-    () =>
-      isToday
-        ? nextUp({ meals, workout, checkin })
-        : null,
-    [checkin, isToday, meals, workout],
+  const mealsDone = useMemo(
+    () => meals.filter((m) => isMealLoggedForCount(m.status)).length,
+    [meals],
   );
+
+  // The frames lead with the workout whenever one is scheduled and not yet
+  // finished; otherwise the usual next-up item (meal, check-in).
+  const hero = useMemo(() => {
+    if (!isToday) return null;
+    if (
+      workout &&
+      workout.status !== "completed" &&
+      workout.status !== "modified" &&
+      workout.status !== "skipped" &&
+      workout.status !== "missed"
+    ) {
+      return { kind: "workout" as const, workout };
+    }
+    return nextUp({ meals, workout, checkin });
+  }, [checkin, isToday, meals, workout]);
 
   const nextOpenMeal = meals.find(
     (meal) => meal.status === "pending" || meal.status === "overdue",
@@ -440,7 +443,10 @@ export function TodayTab({
     return formatPersonName(first) || "there";
   }, [me?.email]);
 
-  const workoutExercises = workout?.workoutDay.exercises ?? [];
+  const workoutSets = (workout?.workoutDay.exercises ?? []).reduce(
+    (sum, ex) => sum + ex.setTargets.length,
+    0,
+  );
   const workoutMins = workout
     ? estimateDurationMinutesFromDay(workout.workoutDay)
     : null;
@@ -573,9 +579,7 @@ export function TodayTab({
                 : 0
             }
             workoutTotal={workout ? 1 : 0}
-            mealsDone={
-              meals.filter((m) => isMealLoggedForCount(m.status)).length
-            }
+            mealsDone={mealsDone}
             mealsTotal={meals.length}
             steps={isToday ? stepsChip : { status: "unavailable" }}
           />
@@ -583,7 +587,13 @@ export function TodayTab({
 
         {planState.status === "loaded" && hero && !loading ? (
           <View style={styles.hero} accessibilityLabel={nextUpEyebrow(hero)}>
-            <Text style={styles.heroEyebrow}>{nextUpEyebrow(hero)}</Text>
+            <Text style={styles.heroEyebrow}>
+              {hero.kind === "workout" &&
+              hero.workout.status !== "in_progress" &&
+              hero.workout.status !== "paused"
+                ? `Today · ${formatClockTime(hero.workout.windowStartsAt, timeZone)}`
+                : nextUpEyebrow(hero)}
+            </Text>
             {hero.kind === "meal" ? (
               <>
                 <Text style={styles.heroTitle}>
@@ -676,6 +686,9 @@ export function TodayTab({
                 <Text style={styles.heroItems}>
                   {exerciseCountLabel(hero.workout.workoutDay.exercises.length)}
                   {workoutMins != null ? ` · about ${workoutMins} min` : ""}
+                  {workoutSets > 0
+                    ? ` · ${workoutSets} ${workoutSets === 1 ? "set" : "sets"}`
+                    : ""}
                 </Text>
                 <View style={styles.heroBtns}>
                   <Pressable
@@ -720,108 +733,35 @@ export function TodayTab({
           </View>
         ) : null}
 
-        {/*
-          The workout section is gated on the plan too (CU22, D-W3b-24). It
-          used to render for every trainee, including one whose trainer has
-          published nothing — an empty "Today's workout" card beside "your
-          coach is preparing your plan" — and it is why the Maestro flow's
-          `assertVisible: "Today's workout"` could pass while the plan state
-          was wrong.
-        */}
         {planState.status === "loaded" ? (
-          <>
-            <View style={styles.secHead}>
-              <Text style={styles.secTitle}>Today&apos;s workout</Text>
-              {workout ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="See workout"
-                  onPress={() =>
-                    onOpenOverlay({
-                      screen: "workout_overview",
-                      assignmentId: workout.id,
-                    })
-                  }
-                  style={styles.secLink}
-                >
-                  <Text style={styles.secLinkText}>See workout ›</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            <View style={styles.card}>
-              {workout ? (
-                <>
-                  <View style={styles.woTop}>
-                    <StatusChip
-                      label={`${labelFor("workout_assignment_status", workout.status)} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
-                      tone={workoutTone(workout.status)}
-                    />
-                  </View>
-                  <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
-                  <Text style={styles.body}>
-                    {exerciseCountLabel(workoutExercises.length)}
-                    {workoutMins != null ? ` · about ${workoutMins} min` : ""}
-                  </Text>
-                  {workoutExercises.slice(0, 3).map((ex) => (
-                    <Text key={ex.id} style={styles.exRow}>
-                      {ex.name}
-                    </Text>
-                  ))}
-                  {workoutExercises.length > 3 ? (
-                    <Text style={styles.body}>
-                      + {workoutExercises.length - 3} more exercises
-                    </Text>
-                  ) : null}
-                  {isToday &&
-                  workout.status !== "completed" &&
-                  workout.status !== "skipped" ? (
-                    <PrimaryButton
-                      label={
-                        workout.status === "in_progress" ||
-                        workout.status === "paused"
-                          ? "Continue workout"
-                          : "Start workout"
-                      }
-                      onPress={onStartWorkout}
-                    />
-                  ) : null}
-                </>
-              ) : (
-                <Text style={styles.cardTitle}>
-                  Rest day. Recovery is part of the plan.
+          <View style={styles.mealsSection}>
+            <View style={styles.mealsHead}>
+              <Text style={styles.mealsLabel} accessibilityRole="header">
+                Meals
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open diet"
+                onPress={onOpenDiet}
+                style={styles.secLink}
+              >
+                <Text style={styles.mealsCount}>
+                  {meals.length === 0
+                    ? "Diet ›"
+                    : `${mealsDone} of ${meals.length} logged ›`}
                 </Text>
-              )}
+              </Pressable>
             </View>
-          </>
-        ) : null}
-
-        {planState.status === "loaded" ? (
-          <>
-            <View style={styles.card}>
-              {rings.some((r) => r.unknown) ? (
-                <Text style={styles.footnote}>
-                  Some foods have no nutrition data. Totals show ≥ when unknown.
-                </Text>
-              ) : null}
-              <View style={styles.mealsHead}>
-                <Text style={styles.mealsLabel}>Meals</Text>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Open diet"
-                  onPress={onOpenDiet}
-                  style={styles.secLink}
-                >
-                  <Text style={styles.mealsCount}>
-                    {meals.length === 0
-                      ? "Diet ›"
-                      : `${meals.filter((m) => isMealLoggedForCount(m.status)).length} of ${meals.length} logged ›`}
-                  </Text>
-                </Pressable>
-              </View>
-              {meals.length === 0 && !loading ? (
-                <Text style={styles.body}>No meals planned today.</Text>
-              ) : (
-                meals.map((meal) => {
+            {rings.some((r) => r.unknown) ? (
+              <Text style={styles.footnote}>
+                Some foods have no nutrition data. Totals show ≥ when unknown.
+              </Text>
+            ) : null}
+            {meals.length === 0 && !loading ? (
+              <Text style={styles.body}>No meals planned today.</Text>
+            ) : (
+              <View style={styles.mealsList}>
+                {meals.map((meal, index) => {
                   const chip = mealStatusChip(meal, nextOpenMeal?.id);
                   const kcal = mealKcalFromDayTotals(
                     meal,
@@ -830,38 +770,39 @@ export function TodayTab({
                   const lockCopy = lockStateKnown
                     ? mealLockCopy(meal, coachName)
                     : null;
+                  const sub = [
+                    mealItemLine(meal),
+                    kcal != null ? formatKcal(kcal, false) : null,
+                    lockCopy,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
                   return (
-                    <View key={meal.id} style={styles.mealRow}>
+                    <View
+                      key={meal.id}
+                      style={[styles.mealRow, index > 0 && styles.mealRowRule]}
+                    >
+                      <Text style={styles.mealTime}>
+                        {formatClockTime(meal.windowStartsAt, timeZone)}
+                      </Text>
                       <View style={styles.mealMain}>
                         <Text style={styles.mealName}>
                           {cleanFoodLabel(meal.mealName)}
                         </Text>
-                        <Text style={styles.mealMeta}>
-                          {formatClockTime(meal.windowStartsAt, timeZone)}
-                          {mealItemLine(meal)
-                            ? ` · ${mealItemLine(meal)}`
-                            : ""}
-                          {lockCopy ? ` · ${lockCopy}` : ""}
+                        <Text style={styles.mealMeta} numberOfLines={1}>
+                          {sub}
                         </Text>
                       </View>
-                      <View style={styles.mealRight}>
-                        <Text style={styles.mealKcal}>
-                          {kcal != null
-                            ? formatKcal(kcal, false).replace(" kcal", "") +
-                              " kcal"
-                            : "—"}
-                        </Text>
-                        <StatusChip
-                          label={lockCopy ? "Closed" : chip.label}
-                          tone={lockCopy ? "neutral" : chip.tone}
-                        />
-                      </View>
+                      <StatusChip
+                        label={lockCopy ? "Closed" : chip.label}
+                        tone={lockCopy ? "neutral" : chip.tone}
+                      />
                     </View>
                   );
-                })
-              )}
-            </View>
-          </>
+                })}
+              </View>
+            )}
+          </View>
         ) : null}
 
         <StepsCard />
@@ -1098,7 +1039,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    borderColor: surface.border,
     borderRadius: radii.card,
     borderWidth: 1,
     gap: spacing.sm,
@@ -1128,6 +1069,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  mealsSection: { gap: spacing.xs, marginTop: spacing.sm },
+  mealsList: {
+    backgroundColor: colors.white,
+    borderColor: surface.border,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  mealRowRule: {
+    borderTopColor: colors.lightGrey,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  mealTime: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    minWidth: 64,
+    ...({ fontVariant: ["tabular-nums"] } as object),
+  },
   mealsHead: {
     alignItems: "center",
     flexDirection: "row",
@@ -1145,12 +1104,10 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   mealRow: {
-    alignItems: "flex-start",
-    borderTopColor: colors.lightGrey,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
     flexDirection: "row",
     gap: spacing.md,
-    paddingTop: spacing.md,
+    padding: spacing.md,
   },
   mealMain: {
     flex: 1,

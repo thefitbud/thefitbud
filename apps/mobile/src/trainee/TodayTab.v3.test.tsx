@@ -8,6 +8,7 @@ import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
   mealAssignmentSchema,
+  workoutAssignmentSchema,
   type MealAssignment,
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor } from "../test/render";
@@ -104,6 +105,41 @@ function meal(
   });
 }
 
+const workoutAssignment = workoutAssignmentSchema.parse({
+  id: "00000000-0000-4000-8000-000000000501",
+  coachingRelationshipId: relationship.id,
+  planId: "3f4a9b2c-1d5e-4f60-9a71-8b2c3d4e5f60",
+  planVersionId: "5c6d7e8f-9a0b-41c2-83d4-e5f607182930",
+  workoutDayId: "7a8b9c0d-1e2f-4304-9516-273849506172",
+  workoutDayName: "Lower body B",
+  localDate: TODAY,
+  windowStartsAt: `${TODAY}T13:00:00.000Z`,
+  windowEndsAt: `${TODAY}T15:00:00.000Z`,
+  status: "assigned",
+  workoutDay: {
+    id: "7a8b9c0d-1e2f-4304-9516-273849506172",
+    order: 1,
+    name: "Lower body B",
+    exercises: [1, 2].map((n) => ({
+      id: `00000000-0000-4000-8000-00000000060${n}`,
+      order: n,
+      name: n === 1 ? "Back squat" : "Romanian deadlift",
+      instructions: null,
+      setTargets: [1, 2, 3].map((o) => ({
+        id: `00000000-0000-4000-8000-0000000007${n}${o}`,
+        order: o,
+        reps: 8,
+        loadLabel: null,
+        rpe: null,
+      })),
+    })),
+  },
+  execution: null,
+  createdAt: `${TODAY}T00:00:00.000Z`,
+  updatedAt: `${TODAY}T00:00:00.000Z`,
+});
+
+let workouts: unknown[] = [];
 let meals: MealAssignment[] = [];
 let stepsToday: unknown = { localDate: TODAY, steps: null, target: 8000 };
 
@@ -112,7 +148,7 @@ const api = new Proxy(
   {
     get(_t, key: string) {
       if (key === "listWorkoutAssignments")
-        return async () => ({ items: [], nextCursor: null });
+        return async () => ({ items: workouts, nextCursor: null });
       if (key === "listMealAssignments")
         return async () => ({ items: meals, nextCursor: null });
       if (key === "listCheckins")
@@ -185,6 +221,7 @@ function renderToday() {
 
 beforeEach(() => {
   meals = [];
+  workouts = [];
   stepsToday = { localDate: TODAY, steps: null, target: 8000 };
 });
 
@@ -233,5 +270,32 @@ describe("Today v3 summary", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Steps unavailable")).toBeTruthy();
     });
+  });
+
+  it("scheduled workout: chip reads 0 of 1 and the workout leads as the hero", async () => {
+    workouts = [workoutAssignment];
+    meals = [meal(1, "Early morning", "pending")];
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Workout 0 of 1")).toBeTruthy();
+    });
+    expect(screen.getByText("Lower body B")).toBeTruthy();
+    expect(
+      screen.getByText(/^2 exercises(?: · about \d+ min)? · 6 sets$/),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Start workout")).toBeTruthy();
+    expect(screen.queryByText("Today's workout")).toBeNull();
+  });
+
+  it("meals are a flat list with a logged count and a status chip per row", async () => {
+    meals = [
+      meal(1, "Early morning", "confirmed"),
+      meal(2, "Breakfast", "pending"),
+    ];
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByText("1 of 2 logged ›")).toBeTruthy();
+    });
+    expect(screen.getByText("Logged")).toBeTruthy();
   });
 });
