@@ -442,7 +442,7 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
     const week = screen
       .getByRole("heading", { name: "Last week · Sun 27 Sep — Sat 3 Oct" })
       .closest("section")!;
-    expect(within(week).getByText("Read‑only")).toBeTruthy();
+    expect(within(week).getByText("Read-only")).toBeTruthy();
     expect(rows(week.querySelector<HTMLElement>('dl[aria-label="Last week"]')!)).toEqual([
       ["Workouts", "3 of 4"],
       ["Meals logged", "3 of 4"],

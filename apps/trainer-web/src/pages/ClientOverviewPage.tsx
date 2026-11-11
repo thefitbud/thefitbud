@@ -1215,8 +1215,7 @@ function EndedOverviewBody({
               <h2 className="t-h3" id="ov-ended-week">
                 Last week · {range(lastWeekStart, endDate)}
               </h2>
-              {/* U+2011 non-breaking hyphen keeps the label on one line. */}
-              <span className="t-cap muted">{"Read‑only"}</span>
+              <span className="t-cap muted">Read-only</span>
             </div>
             {loadError ? null : loading ? (
               <p className="muted ov-pad">Loading last week…</p>
