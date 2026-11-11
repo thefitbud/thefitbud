@@ -1,5 +1,9 @@
 /* Plan › Coaching setup, v3 frames 148/149 (Z8-5). Scoped to .configure-v3. */
 
+.workspace-shell .configure-page.configure-v3 {
+  padding-top: 0;
+}
+
 .configure-v3 {
   display: flex;
   flex-direction: column;

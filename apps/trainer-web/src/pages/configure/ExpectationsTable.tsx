@@ -128,7 +128,7 @@ export function ExpectationsTable({
                   })
                 }
               />{" "}
-              h · photos{" "}
+              h · photos:{" "}
               <select
                 className="cs-inline-select"
                 name="photoRequirement"
@@ -143,7 +143,7 @@ export function ExpectationsTable({
               >
                 {mealPhotoRequirementSchema.options.map((option) => (
                   <option key={option} value={option}>
-                    {labelFor("meal_photo_requirement", option).toLowerCase()}
+                    {labelFor("meal_photo_requirement", option)}
                   </option>
                 ))}
               </select>
