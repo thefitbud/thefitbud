@@ -1086,6 +1086,7 @@ label.sp-bulk-row-inner:hover {
   font: inherit;
 }
 
-.sp-nudge-help {
-  margin: 0;
+/* Frame 02: helper and the Mark reviewed line read as one tight block. */
+.sp-foot .sp-nudge-help {
+  margin: 0 0 -6px;
 }

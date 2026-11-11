@@ -1240,6 +1240,9 @@ export function ExceptionDrawer({
   const nudgeHelperText = clientHeader
     ? `Sends ${firstName} a push notification`
     : "Sends your client a push notification";
+  // Derived every render so it cannot stay true if the drawer unmounts
+  // another way (the panel's key handler reads it).
+  remindersOpenRef.current = Boolean(remindersOpen && workspaceRid);
   const clientRid = workspaceRid ?? detail?.coachingRelationshipId ?? "";
   const clientHref = `/clients/${clientRid}`;
   const nextIndex = inList
@@ -1593,13 +1596,13 @@ export function ExceptionDrawer({
                   {reminderLine ? (
                     <p className="sp-signal">
                       <Bell size={16} strokeWidth={1.75} aria-hidden />
-                      <span>{reminderLine}</span>
+                      <span id="sp-reminder-line">{reminderLine}</span>
                       <button
                         type="button"
+                        aria-describedby="sp-reminder-line"
                         ref={detailsLinkRef}
                         className="link sp-signal-details"
                         onClick={() => {
-                          remindersOpenRef.current = true;
                           setRemindersOpen(true);
                         }}
                       >
@@ -1903,10 +1906,11 @@ export function ExceptionDrawer({
         }
         ended={Boolean(clientHeader?.endedAt)}
         onClose={() => {
-          remindersOpenRef.current = false;
           setRemindersOpen(false);
           // Focus goes back to the Details link; the panel stays open.
-          window.setTimeout(() => detailsLinkRef.current?.focus(), 0);
+          window.setTimeout(() => {
+            (detailsLinkRef.current ?? closeRef.current)?.focus();
+          }, 0);
         }}
       />
     ) : null}
