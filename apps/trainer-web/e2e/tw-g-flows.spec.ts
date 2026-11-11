@@ -153,7 +153,7 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await page.getByRole("button", { name: /^Details$/i }).click();
     await expect(page.getByTestId("screen-TW-31")).toBeVisible();
     await expect(page.getByText(/WhatsApp reminders · Coming soon/i)).toBeVisible();
-    await expect(page.getByText(/You can switch categories on or off in Configure/i)).toBeVisible();
+    await expect(page.getByText(/Switch categories on or off in Plan › Coaching setup/i)).toBeVisible();
   });
 
   test("TW-30 reactivate modal from settings ended list", async ({ page }) => {

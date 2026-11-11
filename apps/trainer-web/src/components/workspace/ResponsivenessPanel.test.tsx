@@ -34,7 +34,7 @@ describe("ResponsivenessPanel footer (D-W7-7)", () => {
     expect(
       await screen.findByText("Reminders are off while coaching is ended."),
     ).toBeTruthy();
-    expect(screen.queryByText(/switch categories on or off in Configure/i)).toBeNull();
+    expect(screen.queryByText(/switch categories on or off/i)).toBeNull();
   });
 
   it("active client: the Configure footer is unchanged", async () => {
@@ -44,7 +44,7 @@ describe("ResponsivenessPanel footer (D-W7-7)", () => {
     );
     expect(
       await screen.findByText(
-        /You can switch categories on or off in Configure/i,
+        /Switch categories on or off in Plan › Coaching setup/i,
       ),
     ).toBeTruthy();
     expect(
