@@ -1012,7 +1012,7 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     // Disabled, not hidden, and says why.
     const after = screen.getByRole("button", { name: "Nudge" }) as HTMLButtonElement;
     expect(after.disabled).toBe(true);
-    expect(after.getAttribute("aria-describedby")).toBe("sp-nudge-why");
+    expect(after.getAttribute("aria-describedby")).toBe("sp-nudge-help sp-nudge-why");
     expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
   });
 
@@ -1652,5 +1652,79 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
     fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     await screen.findByRole("menuitem", { name: "Adjust plan" });
     expect(screen.queryByRole("menuitem", { name: "Resolve several…" })).toBeNull();
+  });
+});
+
+describe("ExceptionDrawer Nudge helper and Reminders details (Z9-14)", () => {
+  const working = {
+    label: "reminders_working",
+    counts: { sent: 3, opened: 2, loggedAfter: 1, loggedBefore: 0 },
+    quietHoursStart: null,
+    quietHoursEnd: null,
+  };
+  beforeEach(() => {
+    api.getException.mockResolvedValue(detail);
+    stubWorkspaceApis();
+    api.getResponsiveness.mockResolvedValue(working);
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("Nudge keeps its label and the helper names the client and is linked", async () => {
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    const nudge = await screen.findByRole("button", { name: "Nudge" });
+    await waitFor(() =>
+      expect(screen.getByText("Sends Rohan a push notification")).toBeTruthy(),
+    );
+    const helper = screen.getByText("Sends Rohan a push notification");
+    expect(helper.id).toBe("sp-nudge-help");
+    expect(nudge.getAttribute("aria-describedby")).toContain("sp-nudge-help");
+  });
+
+  it("without a known client the helper says 'your client'", async () => {
+    api.getClientWorkspace.mockRejectedValue(new Error("no workspace"));
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    await screen.findByRole("button", { name: "Nudge" });
+    await waitFor(() =>
+      expect(
+        screen.getByText("Sends your client a push notification"),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("Details opens the Reminders drawer; Escape closes it, keeps the panel and returns focus", async () => {
+    const onClose = vi.fn();
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={onClose} />));
+    const details = await screen.findByRole("button", { name: "Details" });
+    details.focus();
+    fireEvent.click(details);
+    await screen.findByTestId("screen-TW-31");
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("screen-TW-31")).toBeNull());
+    // The panel itself did not close.
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByTestId("screen-TW-05")).toBeTruthy();
+    await waitFor(() => expect(document.activeElement).toBe(details));
+  });
+
+  it("an ended client's panel has no Details link", async () => {
+    api.getClientWorkspace.mockResolvedValue({
+      header: {
+        traineeDisplayName: "Rohan Mehta",
+        clientWhatsappE164: null,
+        endedAt: "2026-10-03T12:00:00.000Z",
+      },
+    });
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    await screen.findByTestId("panel-readonly-line");
+    expect(screen.queryByRole("button", { name: "Details" })).toBeNull();
   });
 });

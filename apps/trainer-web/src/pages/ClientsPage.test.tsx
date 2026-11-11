@@ -56,6 +56,7 @@ const CURRENT = [
 ];
 const ENDED = [
   row("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", "Kavya Nair", "ended", {
+    startedAt: "2026-07-06T05:30:00.000Z",
     endedAt: "2026-10-03T06:00:00.000Z",
     effectivePlan: { id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", title: "Fat loss", versionNumber: 4, status: "effective" },
   }),
@@ -143,7 +144,13 @@ describe("ClientsPage toolbar (Z8-19, D-W8-13)", () => {
     const headers = screen
       .getAllByRole("columnheader")
       .map((th) => th.textContent);
-    expect(headers).toEqual(["Client", "Status", "Last plan", "Action"]);
+    expect(headers).toEqual([
+      "Client",
+      "Status",
+      "Coached",
+      "Last plan",
+      "Action",
+    ]);
     expect(screen.getByText("Ended Sat 3 Oct")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Reactivate" })).toBeTruthy();
     expect(
@@ -169,5 +176,53 @@ describe("ClientsPage toolbar (Z8-19, D-W8-13)", () => {
       "Renewal",
       "Action",
     ]);
+  });
+
+  it("shows the Coached range from startedAt and endedAt, agreeing with the ended chip", async () => {
+    renderAt("/clients?segment=ended&status=ended");
+    const name = await screen.findByText("Kavya Nair");
+    const tr = name.closest("tr") as HTMLElement;
+    expect(within(tr).getByText("Ended Sat 3 Oct")).toBeTruthy();
+    const coached = tr.querySelector("td.col-coached") as HTMLElement;
+    expect(coached.textContent).toBe("Mon 6 Jul – Sat 3 Oct");
+    expect(coached.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("leaves the Coached cell empty when startedAt is missing", async () => {
+    api.listClients.mockImplementation(async () => ({
+      items: [
+        row("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "Nikhil Joshi", "ended", {
+          startedAt: null,
+          endedAt: "2026-08-31T06:00:00.000Z",
+        }),
+      ],
+      nextCursor: null,
+      facets: FACETS,
+    }));
+    renderAt("/clients?segment=ended&status=ended");
+    const name = await screen.findByText("Nikhil Joshi");
+    const tr = name.closest("tr") as HTMLElement;
+    expect(within(tr).getByText("Ended Mon 31 Aug")).toBeTruthy();
+    const coached = tr.querySelector("td.col-coached") as HTMLElement;
+    expect(coached.textContent).toBe("");
+  });
+
+  it("renders Open as the outlined action and keeps other actions tinted", async () => {
+    api.listClients.mockImplementation(async () => ({
+      items: [
+        ...CURRENT,
+        row("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee", "Vikram Singh", "coaching_ready"),
+      ],
+      nextCursor: null,
+      facets: FACETS,
+    }));
+    renderAt("/clients");
+    await screen.findByText("Rohan Mehta");
+    const open = screen.getByRole("link", { name: "Open" });
+    expect(open.className).toContain("client-row-cta-outline");
+    expect(open.className).not.toContain("button-tinted");
+    const setUp = screen.getByRole("link", { name: "Set up plan" });
+    expect(setUp.className).toContain("button-tinted");
+    expect(setUp.className).not.toContain("client-row-cta-outline");
   });
 });
