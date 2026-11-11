@@ -6,6 +6,7 @@ import {
   Dumbbell,
   Scale,
   Target,
+  Utensils,
 } from "lucide-react";
 import type { ConfigurationSectionId } from "@fitbud/contracts";
 import { Button } from "../../components/Button";
@@ -185,6 +186,13 @@ const SECTION_ICON: Record<ConfigurationSectionId, typeof Target> = {
   tracking: Scale,
 };
 
+/** DS3 draws meals with a fork and knife, workouts with a dumbbell. */
+const MEAL_KEYS = new Set([
+  "mealsPerDay",
+  "confirmationWindowHours",
+  "photoRequirement",
+]);
+
 /** DS3 Save as vN+1: the changes only, and the day they apply from. */
 export function SaveVersionDialog({
   firstName,
@@ -227,7 +235,9 @@ export function SaveVersionDialog({
           <p className="cs-dialog-label">What changes · {changes.length}</p>
           <ul className="cs-dialog-diff" aria-label="What changes">
             {changes.map((change) => {
-              const Icon = SECTION_ICON[change.section];
+              const Icon = MEAL_KEYS.has(change.key)
+                ? Utensils
+                : SECTION_ICON[change.section];
               return (
                 <li key={change.key}>
                   <Icon size={16} strokeWidth={2} aria-hidden="true" />

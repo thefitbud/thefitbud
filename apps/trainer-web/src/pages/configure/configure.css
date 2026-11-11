@@ -433,6 +433,15 @@
   min-height: 44px;
 }
 
+/* At 900px and below the workspace shell hides horizontal overflow, which
+   makes it a scroll container and stops the footer sticking to the viewport.
+   clip hides the same overflow without becoming a scroll container. */
+@media (max-width: 900px) {
+  .workspace-shell:has(.configure-v3) {
+    overflow-x: clip;
+  }
+}
+
 @media (max-width: 860px) {
   .configure-v3 .configure-sticky-footer {
     flex-wrap: wrap;
