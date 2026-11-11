@@ -41,6 +41,11 @@ type Props = {
   /** Accessible name for the whole chart. */
   label: string;
   height?: number;
+  /**
+   * Runs the date axis on to this local date when it is later than the last entry,
+   * so a few points read as points on a timeline, not a trend (frame 160g).
+   */
+  xEnd?: string | null;
 };
 
 const PAD = { top: 12, right: 24, bottom: 34, left: 56 };
@@ -181,6 +186,7 @@ export function MetricLineChart({
   gaps,
   label,
   height = 300,
+  xEnd = null,
 }: Props) {
   const { ref, width } = useWidth(760);
   const leftSeries = series.filter((row) => row.axis !== "right");
@@ -201,7 +207,9 @@ export function MetricLineChart({
     : null;
   const dates = allPoints.map((point) => point.localDate);
   const firstDay = dates.length ? Math.min(...dates.map(dayNumber)) : 0;
-  const lastDay = dates.length ? Math.max(...dates.map(dayNumber)) : 1;
+  const lastEntryDay = dates.length ? Math.max(...dates.map(dayNumber)) : 1;
+  const extend = Boolean(xEnd && dates.length && dayNumber(xEnd) > lastEntryDay);
+  const lastDay = extend ? dayNumber(xEnd!) : lastEntryDay;
   const padRight = right ? PAD_RIGHT_AXIS : PAD.right;
   const innerW = Math.max(40, width - PAD.left - padRight);
   const innerH = height - PAD.top - PAD.bottom;
@@ -213,7 +221,11 @@ export function MetricLineChart({
       ((dayNumber(localDate) - firstDay) / (lastDay - firstDay)) * innerW
     );
   };
-  const xTicks = dateTicks(dates, x, Math.max(90, innerW / 6));
+  const xTicks = dateTicks(
+    extend ? [...dates, xEnd!] : dates,
+    x,
+    Math.max(90, innerW / 6),
+  );
   const yOn =
     (scale: { min: number; max: number }) =>
     (value: number) =>
