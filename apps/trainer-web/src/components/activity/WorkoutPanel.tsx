@@ -45,7 +45,11 @@ export function WorkoutPanel({
       )
     : null;
   const canEdit =
-    !ended && finished && entryDay !== null && isWithinWindow(entryDay, today);
+    !ended &&
+    finished &&
+    entryDay !== null &&
+    isWithinWindow(entryDay, today) &&
+    isWithinWindow(assignment.localDate, today);
   const canLog =
     !ended &&
     !execution &&

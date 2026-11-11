@@ -331,8 +331,125 @@ describe("trainer log workout (create)", () => {
     await screen.findByTestId("log-workout-page");
     fireEvent.click(screen.getByRole("button", { name: "Wed 28 Oct" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose a workout" }));
-    fireEvent.click(screen.getByRole("button", { name: /Upper body A\s*Tue 3 Nov/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Upper body A\s*Planned Tue 3 Nov/ }));
     expect(await screen.findByText("Planned for Tue 3 Nov · 2 exercises")).toBeTruthy();
+  });
+
+  it("logs a workout chosen from another day on the selected date, not its planned date", async () => {
+    api.logClientWorkout.mockResolvedValue(execution());
+    renderPage(`/clients/${REL}/log-workout`);
+    await screen.findByTestId("log-workout-page");
+    fireEvent.click(screen.getByRole("button", { name: "Wed 28 Oct" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Choose a workout" }));
+    fireEvent.click(screen.getByRole("button", { name: /Upper body A\s*Planned Tue 3 Nov/ }));
+    await screen.findByText("Planned for Tue 3 Nov · 2 exercises");
+    // The date strip still says 28 Oct.
+    expect(screen.getByRole("button", { name: "Wed 28 Oct" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(1));
+    expect(api.logClientWorkout.mock.calls[0]![0]).toBe(id(12));
+    expect(new Date(api.logClientWorkout.mock.calls[0]![1].performedAt).toISOString().slice(0, 10)).toBe(
+      "2026-10-28",
+    );
+  });
+
+  it("lets the trainer pick which workout to log when two are planned on one day", async () => {
+    api.logClientWorkout.mockResolvedValue(execution());
+    api.listWorkoutAssignments.mockResolvedValue({
+      items: [assignment("2026-11-02", 11), { ...assignment("2026-11-02", 13), workoutDayName: "Lower body A" }],
+      nextCursor: null,
+    });
+    renderPage(`/clients/${REL}/log-workout/${id(11)}`);
+    await screen.findByText("Planned for Mon 2 Nov · 2 exercises");
+    fireEvent.click(screen.getByRole("button", { name: "Choose a workout" }));
+    fireEvent.click(screen.getByRole("button", { name: /Lower body A\s*Planned Mon 2 Nov/ }));
+    expect((await screen.findByRole("heading", { name: "Lower body A" })).textContent).toBe(
+      "Lower body A",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalled());
+    expect(api.logClientWorkout.mock.calls[0]![0]).toBe(id(13));
+  });
+
+  describe("retry after a failed save", () => {
+    beforeEach(() => {
+      api.listWorkoutAssignments.mockResolvedValue({
+        items: [assignment("2026-11-04", 14)],
+        nextCursor: null,
+      });
+    });
+
+    it("resends the same key and the identical body, performedAt included, for a today-dated log", async () => {
+      api.logClientWorkout
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(execution());
+      renderPage(`/clients/${REL}/log-workout/${id(14)}`);
+      await screen.findByText("Planned for Wed 4 Nov · 2 exercises");
+      fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+      await screen.findByTestId("log-workout-not-saved");
+      // Time passes between the attempts; "now" must not leak into the retry.
+      vi.setSystemTime(new Date(NOW.getTime() + 90_000));
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(2));
+      const [, firstBody, firstKey] = api.logClientWorkout.mock.calls[0]!;
+      const [, secondBody, secondKey] = api.logClientWorkout.mock.calls[1]!;
+      expect(firstBody.performedAt).toBe(NOW.toISOString());
+      expect(secondKey).toBe(firstKey);
+      expect(secondBody).toEqual(firstBody);
+    });
+
+    it("renews the key and the body once the form changes after a failure", async () => {
+      api.logClientWorkout
+        .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+        .mockResolvedValueOnce(execution());
+      renderPage(`/clients/${REL}/log-workout/${id(14)}`);
+      await screen.findByText("Planned for Wed 4 Nov · 2 exercises");
+      fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+      await screen.findByTestId("log-workout-not-saved");
+      fireEvent.change(screen.getByLabelText("Bench press set 1 reps"), {
+        target: { value: "9" },
+      });
+      vi.setSystemTime(new Date(NOW.getTime() + 90_000));
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(2));
+      expect(api.logClientWorkout.mock.calls[1]![2]).not.toBe(
+        api.logClientWorkout.mock.calls[0]![2],
+      );
+      expect(api.logClientWorkout.mock.calls[1]![1].exercises[0].sets[0].actualReps).toBe(9);
+    });
+
+    it("offers Reload, then Edit, when the workout was already logged", async () => {
+      api.logClientWorkout.mockRejectedValue(
+        new ApiClientError({
+          code: "WORKOUT_ALREADY_FINISHED",
+          message: "This assignment already has a finished execution.",
+          requestId: "r3",
+          status: 409,
+        }),
+      );
+      renderPage(`/clients/${REL}/log-workout/${id(14)}`);
+      await screen.findByText("Planned for Wed 4 Nov · 2 exercises");
+      fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+      await screen.findByTestId("log-workout-not-saved");
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+      api.listWorkoutAssignments.mockResolvedValue({
+        items: [
+          assignment("2026-11-04", 14, {
+            id: id(300),
+            status: "completed",
+          } as WorkoutAssignment["execution"]),
+        ],
+        nextCursor: null,
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+      expect(await screen.findByTestId("log-workout-already")).toBeTruthy();
+      expect(screen.getByRole("link", { name: "Edit workout" }).getAttribute("href")).toBe(
+        `/clients/${REL}/workouts/${id(300)}/edit`,
+      );
+      expect(api.logClientWorkout).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("offers Edit, not a second log, for a finished workout", async () => {
@@ -408,6 +525,44 @@ describe("trainer edit workout", () => {
       ],
     });
     expect((await screen.findByTestId("where")).textContent).toContain("item=workout:");
+  });
+
+  it("after a version conflict offers Reload, refetches, and saves with the fresh recordVersion", async () => {
+    api.editClientWorkout
+      .mockRejectedValueOnce(
+        new ApiClientError({
+          code: "VERSION_CONFLICT",
+          message: "This entry changed since you opened it.",
+          requestId: "r4",
+          status: 409,
+        }),
+      )
+      .mockResolvedValueOnce(execution({ recordVersion: 5 }));
+    renderPage(`/clients/${REL}/workouts/${id(300)}/edit`);
+    await screen.findByText("Planned for Mon 2 Nov · 2 exercises");
+    fireEvent.change(screen.getByLabelText("Bench press set 1 reps"), {
+      target: { value: "9" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    await screen.findByTestId("log-workout-not-saved");
+    expect(api.editClientWorkout.mock.calls[0]![1].recordVersion).toBe(3);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+
+    // Someone else saved version 4 meanwhile.
+    api.getWorkoutExecution.mockResolvedValue(execution({ recordVersion: 4 }));
+    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+    expect((await screen.findByTestId("log-workout-notice")).textContent).toContain(
+      "unsaved changes were discarded",
+    );
+    expect(api.getWorkoutExecution).toHaveBeenCalledTimes(2);
+    // The discarded edit is gone: the field shows the saved value again.
+    expect((screen.getByLabelText("Bench press set 1 reps") as HTMLInputElement).value).toBe("8");
+    fireEvent.change(screen.getByLabelText("Bench press set 2 reps"), {
+      target: { value: "7" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    await waitFor(() => expect(api.editClientWorkout).toHaveBeenCalledTimes(2));
+    expect(api.editClientWorkout.mock.calls[1]![1].recordVersion).toBe(4);
   });
 
   it("moves the entry to another day through performedAt", async () => {

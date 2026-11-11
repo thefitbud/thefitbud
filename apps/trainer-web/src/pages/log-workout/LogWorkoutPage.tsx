@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type { WorkoutAssignment, WorkoutExecution } from "@fitbud/contracts";
+import type {
+  CoachLogWorkoutRequest,
+  WorkoutAssignment,
+  WorkoutExecution,
+} from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
   formatCivilDate,
@@ -34,11 +38,24 @@ type Mode = "create" | "edit";
 /** One banner per failed save; "network" is the only cause we actually checked. */
 type SaveFailure =
   | { kind: "network" }
-  | { kind: "api"; message: string }
+  | { kind: "api"; message: string; code: string }
   | { kind: "unknown" };
 
+/**
+ * API codes for which sending the same save again can never succeed: the
+ * entry changed under the trainer (edit) or is already logged (create). The
+ * only way forward is to reload what is saved.
+ */
+const RELOAD_CODES = new Set([
+  "VERSION_CONFLICT",
+  "WORKOUT_ALREADY_FINISHED",
+  "WORKOUT_IN_PROGRESS",
+]);
+
 function classifyFailure(err: unknown): SaveFailure {
-  if (err instanceof ApiClientError) return { kind: "api", message: err.message };
+  if (err instanceof ApiClientError) {
+    return { kind: "api", message: err.message, code: err.code };
+  }
   // A rejected fetch is a TypeError; anything else (a ZodError, say) is a
   // client/server disagreement and must not read as a connection problem.
   if (err instanceof TypeError) return { kind: "network" };
@@ -126,10 +143,18 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<SaveFailure | null>(null);
   const [formProblem, setFormProblem] = useState<string | null>(null);
-  const idempotency = useRef<{ fingerprint: string; key: string } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  // One logical create: the key and the exact request body travel together, so
+  // a retry resends the identical body (performedAt included). Both are
+  // renewed only when the form changes.
+  const idempotency = useRef<{
+    fingerprint: string;
+    key: string;
+    body: CoachLogWorkoutRequest;
+  } | null>(null);
   const loadSeq = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepSelection = false) => {
     if (!relationshipId || ended) return;
     const seq = ++loadSeq.current;
     setLoading(true);
@@ -170,8 +195,10 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
           [...loggable].sort((a, b) => b.localDate.localeCompare(a.localDate))[0]
             ?.localDate ??
           today;
-        setSelectedDate(initial);
-        setPickedAssignmentId(fromParam?.id ?? null);
+        if (!keepSelection) {
+          setSelectedDate(initial);
+          setPickedAssignmentId(fromParam?.id ?? null);
+        }
       }
     } catch (err) {
       if (seq !== loadSeq.current) return;
@@ -187,6 +214,18 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
     void load();
   }, [load]);
 
+  /** After a conflict: refetch what is saved and start from it (unsaved edits are dropped). */
+  async function reload() {
+    setFailure(null);
+    idempotency.current = null;
+    setNotice(
+      mode === "edit"
+        ? "Reloaded the latest saved version. Your unsaved changes were discarded."
+        : "Reloaded the latest saved workouts.",
+    );
+    await load(true);
+  }
+
   const dayAssignments = useMemo(
     () => assignments.filter((row) => row.localDate === selectedDate),
     [assignments, selectedDate],
@@ -199,18 +238,19 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
       row.execution &&
       (row.execution.status === "completed" || row.execution.status === "modified"),
   );
+  const allLoggable = assignments.filter(
+    (row) => row.scheduleStatus === "scheduled" && !row.execution,
+  );
+  // A workout picked from another day is logged on the selected date (DS8 d2).
   const createAssignment =
     mode === "create"
       ? ((pickedAssignmentId
-          ? loggableOnDay.find((row) => row.id === pickedAssignmentId)
-          : undefined) ?? loggableOnDay[0] ?? null)
+          ? allLoggable.find((row) => row.id === pickedAssignmentId)
+          : undefined) ??
+        loggableOnDay[0] ??
+        null)
       : null;
-  const otherLoggable = assignments.filter(
-    (row) =>
-      row.scheduleStatus === "scheduled" &&
-      !row.execution &&
-      row.localDate !== selectedDate,
-  );
+  const otherLoggable = allLoggable.filter((row) => row.id !== createAssignment?.id);
 
   // Prefill from the plan whenever the workout being logged changes.
   const draftSourceId = createAssignment?.id ?? null;
@@ -222,6 +262,7 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
     setOpenExercise(next[0]?.exerciseId ?? null);
     setFailure(null);
     setFormProblem(null);
+    setNotice(null);
     idempotency.current = null;
   }, [draftSourceId, mode]);
 
@@ -259,6 +300,8 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
     drafts.length > 0 &&
     (mode === "create" ? createAssignment !== null : !entryOutsideWindow && (editedCount > 0 || dateChanged));
 
+  const reloadNeeded = failure?.kind === "api" && RELOAD_CODES.has(failure.code);
+
   async function save() {
     if (!canSave) return;
     const problem = draftsProblem(drafts);
@@ -270,22 +313,26 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
     setFailure(null);
     try {
       if (mode === "create" && createAssignment) {
-        const body = buildLogRequest({
-          drafts,
-          performedAt: performedAtFor(selectedDate, timezone),
-        });
-        // One key per logical action: a retry of the same body reuses it.
+        // The fingerprint is the form (workout, day, sets), not the request,
+        // because performedAt for today is "now" and would differ per attempt.
         const fingerprint = JSON.stringify({
           id: createAssignment.id,
           day: selectedDate,
-          sets: body.exercises,
+          sets: drafts.map((exercise) => exercise.sets),
         });
         if (idempotency.current?.fingerprint !== fingerprint) {
-          idempotency.current = { fingerprint, key: newKey() };
+          idempotency.current = {
+            fingerprint,
+            key: newKey(),
+            body: buildLogRequest({
+              drafts,
+              performedAt: performedAtFor(selectedDate, timezone),
+            }),
+          };
         }
         const saved = await apiClient.logClientWorkout(
           createAssignment.id,
-          body,
+          idempotency.current.body,
           idempotency.current.key,
         );
         navigate(
@@ -378,6 +425,13 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
     <div className="lw-page" data-testid="log-workout-page">
       {head}
 
+      {notice && !failure ? (
+        <div className="lw-banner" role="status" data-testid="log-workout-notice">
+          <IconCalendar />
+          <p>{notice}</p>
+        </div>
+      ) : null}
+
       {failure ? (
         <div className="lw-banner is-error" role="alert" data-testid="log-workout-not-saved">
           <IconAlert />
@@ -385,7 +439,9 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
             {failure.kind === "network"
               ? "Not saved. We couldn’t reach FitBud, so nothing was saved. Your entries are still here. Check your connection and try again."
               : failure.kind === "api"
-                ? `Not saved. ${failure.message} Your entries are still here.`
+                ? RELOAD_CODES.has(failure.code)
+                  ? `Not saved. ${failure.message} Reload to see what is saved.`
+                  : `Not saved. ${failure.message} Your entries are still here.`
                 : "Not saved. Something went wrong on our side (LOG-WORKOUT). Your entries are still here. Try again."}
           </p>
         </div>
@@ -412,6 +468,7 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
                   setPickedAssignmentId(null);
                   setChoosing(false);
                   setFailure(null);
+                  setNotice(null);
                 }}
               >
                 <span>{chip.weekday}</span>
@@ -484,13 +541,12 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
                             type="button"
                             className="lw-choice"
                             onClick={() => {
-                              setSelectedDate(row.localDate);
                               setPickedAssignmentId(row.id);
                               setChoosing(false);
                             }}
                           >
                             <strong>{row.workoutDayName}</strong>
-                            <span>{formatCivilDate(row.localDate)}</span>
+                            <span>Planned {formatCivilDate(row.localDate)}</span>
                           </button>
                         </li>
                       ))}
@@ -512,11 +568,44 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
         {showForm ? (
           <>
             <div className="lw-card lw-workout-card">
-              <h3>{workoutName}</h3>
-              <p>
-                Planned for {formatCivilDate(planned.localDate)} · {exerciseCount}{" "}
-                {exerciseCount === 1 ? "exercise" : "exercises"}
-              </p>
+              <div className="lw-workout-row">
+                <div>
+                  <h3>{workoutName}</h3>
+                  <p>
+                    Planned for {formatCivilDate(planned.localDate)} · {exerciseCount}{" "}
+                    {exerciseCount === 1 ? "exercise" : "exercises"}
+                  </p>
+                </div>
+                {mode === "create" && otherLoggable.length > 0 ? (
+                  <Button
+                    variant="secondary"
+                    aria-expanded={choosing}
+                    disabled={saving}
+                    onClick={() => setChoosing((value) => !value)}
+                  >
+                    Choose a workout
+                  </Button>
+                ) : null}
+              </div>
+              {mode === "create" && choosing ? (
+                <ul className="lw-choices">
+                  {otherLoggable.map((row) => (
+                    <li key={row.id}>
+                      <button
+                        type="button"
+                        className="lw-choice"
+                        onClick={() => {
+                          setPickedAssignmentId(row.id);
+                          setChoosing(false);
+                        }}
+                      >
+                        <strong>{row.workoutDayName}</strong>
+                        <span>Planned {formatCivilDate(row.localDate)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
 
             <div className="lw-exercises">
@@ -664,11 +753,17 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
           <Button
             variant="primary"
             className="lw-save"
-            disabled={!canSave}
+            disabled={reloadNeeded ? !online || saving : !canSave}
             aria-busy={saving}
-            onClick={() => void save()}
+            onClick={() => (reloadNeeded ? void reload() : void save())}
           >
-            {saving ? "Saving…" : failure ? "Try again" : "Save workout"}
+            {saving
+              ? "Saving…"
+              : reloadNeeded
+                ? "Reload"
+                : failure
+                  ? "Try again"
+                  : "Save workout"}
           </Button>
         </div>
       ) : null}

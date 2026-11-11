@@ -123,6 +123,17 @@ describe("WorkoutPanel coach tags and actions", () => {
     expect(screen.queryByRole("link", { name: "Edit workout" })).toBeNull();
   });
 
+  it("offers no Edit when the assignment's day is older than 7 days, as the server refuses it", () => {
+    renderPanel(
+      assignment("2026-10-20"),
+      execution({
+        startedAt: "2026-11-02T05:00:00.000Z",
+        completedAt: "2026-11-02T05:50:00.000Z",
+      }),
+    );
+    expect(screen.queryByRole("link", { name: "Edit workout" })).toBeNull();
+  });
+
   it("offers Log workout for an unlogged assignment in range, never when ended", () => {
     renderPanel(assignment("2026-11-03"), null);
     expect(screen.getByRole("link", { name: "Log workout" }).getAttribute("href")).toBe(

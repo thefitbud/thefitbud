@@ -155,6 +155,18 @@
   margin-bottom: 12px;
 }
 
+.lw-workout-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.lw-workout-row .button-secondary {
+  min-height: 44px;
+  flex: none;
+}
+
 .lw-empty {
   display: flex;
   flex-direction: column;
@@ -391,7 +403,8 @@
   position: sticky;
   bottom: 0;
   padding: 12px 0 16px;
-  background: linear-gradient(to top, var(--page-bg) 70%, transparent);
+  background: var(--page-bg);
+  border-top: 1px solid var(--border);
 }
 
 .lw-actions .lw-save {
