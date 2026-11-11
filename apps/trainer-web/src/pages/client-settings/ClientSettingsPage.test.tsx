@@ -252,6 +252,19 @@ describe("Edit basic details drawer (frame 210)", () => {
     return screen.getByRole("dialog", { name: "Edit basic details" });
   }
 
+  it("labels the fields as frame 210 does, each helper on its own field (D-W9-8)", async () => {
+    const dialog = await openDrawer();
+    const helperFor = (field: HTMLElement) =>
+      document.getElementById(field.getAttribute("aria-describedby") ?? "")?.textContent;
+    expect(helperFor(within(dialog).getByLabelText("Name"))).toBe(
+      "Shown on Home, Clients and in WhatsApp drafts.",
+    );
+    expect(helperFor(within(dialog).getByLabelText("Phone · WhatsApp"))).toBe(
+      "Message on WhatsApp opens this number.",
+    );
+    expect(within(dialog).queryByText("Contact phone")).toBeNull();
+  });
+
   it("saves only the changed name and contact phone (relationship fields)", async () => {
     api.updateClientBasics.mockResolvedValue(
       settings({
@@ -265,7 +278,7 @@ describe("Edit basic details drawer (frame 210)", () => {
     );
     const dialog = await openDrawer();
     const name = within(dialog).getByLabelText("Name") as HTMLInputElement;
-    const phone = within(dialog).getByLabelText("Contact phone") as HTMLInputElement;
+    const phone = within(dialog).getByLabelText("Phone · WhatsApp") as HTMLInputElement;
     expect(name.value).toBe("Rohan Mehta");
     expect(phone.value).toBe("90000 00008");
     expect(document.activeElement).toBe(name);
@@ -305,7 +318,7 @@ describe("Edit basic details drawer (frame 210)", () => {
   it("validates the name and phone before saving", async () => {
     const dialog = await openDrawer();
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "   " } });
-    fireEvent.change(within(dialog).getByLabelText("Contact phone"), {
+    fireEvent.change(within(dialog).getByLabelText("Phone · WhatsApp"), {
       target: { value: "12345" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
@@ -319,12 +332,12 @@ describe("Edit basic details drawer (frame 210)", () => {
 
   it("focuses the phone field when only the phone is invalid", async () => {
     const dialog = await openDrawer();
-    fireEvent.change(within(dialog).getByLabelText("Contact phone"), {
+    fireEvent.change(within(dialog).getByLabelText("Phone · WhatsApp"), {
       target: { value: "12345" },
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
     await within(dialog).findByText(/10-digit mobile number/);
-    expect(document.activeElement).toBe(within(dialog).getByLabelText("Contact phone"));
+    expect(document.activeElement).toBe(within(dialog).getByLabelText("Phone · WhatsApp"));
   });
 
   it("clears a saved contact phone with null", async () => {
@@ -340,7 +353,7 @@ describe("Edit basic details drawer (frame 210)", () => {
     );
     api.updateClientBasics.mockResolvedValue(settings());
     const dialog = await openDrawer();
-    fireEvent.change(within(dialog).getByLabelText("Contact phone"), { target: { value: "" } });
+    fireEvent.change(within(dialog).getByLabelText("Phone · WhatsApp"), { target: { value: "" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(api.updateClientBasics).toHaveBeenCalledTimes(1));
     expect(api.updateClientBasics.mock.calls[0]![1]).toEqual({ contactPhone: null });

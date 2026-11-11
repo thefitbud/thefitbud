@@ -21,14 +21,12 @@ type FieldErrors = { name?: string; phone?: string };
 export function EditBasicsDrawer({
   relationshipId,
   settings,
-  firstName,
   online,
   onClose,
   onSaved,
 }: {
   relationshipId: string;
   settings: ClientSettingsResponse;
-  firstName: string;
   online: boolean;
   onClose: () => void;
   onSaved: (next: ClientSettingsResponse) => void;
@@ -216,11 +214,11 @@ export function EditBasicsDrawer({
               />
               <p id={nameHelpId} className={errors.name ? "cs-field-error" : "cs-field-help"}>
                 {errors.name ??
-                  `Only you see this name. ${firstName}'s own profile name doesn't change.`}
+                  "Shown on Home, Clients and in WhatsApp drafts."}
               </p>
             </div>
             <div className="cs-field">
-              <label htmlFor={phoneId}>Contact phone</label>
+              <label htmlFor={phoneId}>Phone · WhatsApp</label>
               <div className="cs-phone-input">
                 {phone.trim().startsWith("+") ? null : (
                   <span className="cs-phone-prefix" aria-hidden>
@@ -241,7 +239,7 @@ export function EditBasicsDrawer({
               </div>
               <p id={phoneHelpId} className={errors.phone ? "cs-field-error" : "cs-field-help"}>
                 {errors.phone ??
-                  `A number you keep for ${firstName}. Their sign-in number doesn't change.`}
+                  "Message on WhatsApp opens this number."}
               </p>
             </div>
             <p className="cs-drawer-note">

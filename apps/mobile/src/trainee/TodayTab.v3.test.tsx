@@ -11,7 +11,7 @@ import {
   workoutAssignmentSchema,
   type MealAssignment,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor } from "../test/render";
+import { mockAuth, render, screen, waitFor, fireEvent, act } from "../test/render";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
@@ -140,9 +140,18 @@ const workoutAssignment = workoutAssignmentSchema.parse({
 });
 
 let failDay = false;
+let failOutbox = false;
+let holdDay: Promise<void> | null = null;
+let outboxRows: { status: string; payloadJson: string }[] = [];
 let workouts: unknown[] = [];
 let meals: MealAssignment[] = [];
 let stepsToday: unknown = { localDate: TODAY, steps: null, target: 8000 };
+let notifications: unknown[] = [];
+let coachNoteItems: unknown[] = [];
+let reminderStatus: unknown = null;
+let checkinItems: unknown[] = [];
+const markRead = vi.fn(async () => null);
+const resume = vi.fn(async () => ({ mode: "normal", pausedUntil: null }));
 
 const api = new Proxy(
   {},
@@ -155,12 +164,19 @@ const api = new Proxy(
         };
       if (key === "listMealAssignments")
         return async () => {
+          if (holdDay) await holdDay;
           if (failDay) throw new Error("offline");
           return { items: meals, nextCursor: null };
         };
       if (key === "listCheckins")
-        return async () => ({ items: [], nextCursor: null });
-      if (key === "listMeCoachNotes") return async () => ({ items: [] });
+        return async () => ({ items: checkinItems, nextCursor: null });
+      if (key === "listMeCoachNotes")
+        return async () => ({ items: coachNoteItems });
+      if (key === "listNotifications")
+        return async () => ({ items: notifications, nextCursor: null });
+      if (key === "getReminderStatus") return async () => reminderStatus;
+      if (key === "markNotificationRead") return markRead;
+      if (key === "resumeReminders") return resume;
       if (key === "getStepsToday") return async () => stepsToday;
       if (key === "then") return undefined;
       return async () => null;
@@ -191,7 +207,14 @@ vi.mock("../sync/SyncProvider", async () => {
     ...actual,
     useSyncEngine: () => ({
       pullAndApply: vi.fn(async () => undefined),
-      store: { upsertLocal: vi.fn(), listLocal: vi.fn(async () => []) },
+      store: {
+        upsertLocal: vi.fn(),
+        listLocal: vi.fn(async () => []),
+        listOutbox: vi.fn(async () => {
+          if (failOutbox) throw new Error("storage");
+          return outboxRows;
+        }),
+      },
       enqueue: vi.fn(),
     }),
   };
@@ -208,6 +231,8 @@ vi.mock("../providers/ConfigProvider", async () => {
 });
 
 const { TodayTab, effectivePlanStateFor } = await import("./TodayTab");
+const fgModule = await import("./notifications/ForegroundBanner");
+const { setForegroundBannerActive } = await import("./today/bannerSlot");
 
 const completedWorkout = workoutAssignmentSchema.parse({
   ...workoutAssignment,
@@ -232,14 +257,16 @@ const completedWorkout = workoutAssignmentSchema.parse({
 
 let openOverlay = vi.fn();
 
-function renderToday() {
+let onSelectDate = vi.fn();
+
+function renderToday(selectedDate: string = TODAY) {
   return render(
     <TodayTab
       relationship={relationship}
       planState={effectivePlanStateFor(livePlan)}
       planCacheError={null}
-      selectedDate={TODAY}
-      onSelectDate={() => undefined}
+      selectedDate={selectedDate}
+      onSelectDate={onSelectDate}
       onStartWorkout={() => undefined}
       onOpenDiet={() => undefined}
       onOpenCheckin={() => undefined}
@@ -251,6 +278,17 @@ function renderToday() {
 
 beforeEach(() => {
   openOverlay = vi.fn();
+  onSelectDate = vi.fn();
+  holdDay = null;
+  notifications = [];
+  coachNoteItems = [];
+  reminderStatus = null;
+  checkinItems = [];
+  markRead.mockClear();
+  resume.mockClear();
+  failOutbox = false;
+  outboxRows = [];
+  Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
   failDay = false;
   meals = [];
   workouts = [];
@@ -449,5 +487,317 @@ describe("Today v3 done and rest states", () => {
       expect(screen.getByText("Recovery is part of the plan")).toBeTruthy();
     });
     expect(screen.queryByText(/^Next:/)).toBeNull();
+  });
+});
+
+function dayBefore(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function queuedRow(n: number, status = "pending") {
+  return {
+    status,
+    payloadJson: JSON.stringify({
+      assignmentId: `00000000-0000-4000-8000-0000000001${n}0`,
+      body: { photoIntent: null },
+    }),
+  };
+}
+
+describe("Today v3 past day, loading and offline", () => {
+  const PAST = dayBefore(TODAY, 2);
+
+  it("past day: banner with the date and Back to today, no workout card", async () => {
+    workouts = [
+      { ...workoutAssignment, localDate: PAST, windowStartsAt: `${PAST}T13:00:00.000Z`, windowEndsAt: `${PAST}T15:00:00.000Z` },
+    ];
+    meals = [{ ...meal(1, "Breakfast", "overdue"), localDate: PAST }];
+    renderToday(PAST);
+    const banner = await screen.findByLabelText(/^Past day\./);
+    expect(banner.textContent).toMatch(/you can still log it/);
+    expect(banner.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(screen.queryByText("Start workout")).toBeNull();
+    expect(screen.queryByText("Today's workout")).toBeNull();
+    screen.getByRole("button", { name: "Back to today" }).click();
+    expect(onSelectDate).toHaveBeenCalledWith(TODAY);
+  });
+
+  it("today has no past banner", async () => {
+    renderToday();
+    await screen.findByText("Meals");
+    expect(screen.queryByText("Back to today")).toBeNull();
+  });
+
+  it("loading: skeleton in place of the cards, gone once the day loads", async () => {
+    let release: () => void = () => undefined;
+    holdDay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderToday();
+    await screen.findByLabelText("Loading today");
+    expect(screen.queryByLabelText("Open diet")).toBeNull();
+    expect(screen.queryByText("Rest day")).toBeNull();
+    release();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Loading today")).toBeNull();
+    });
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+  });
+
+  it("offline with 1 log queued says 1 log waiting to send", async () => {
+    failDay = true;
+    outboxRows = [queuedRow(1)];
+    renderToday();
+    await screen.findByText("1 log waiting to send");
+  });
+
+  it("offline with 3 logs queued says 3 logs waiting to send; failed rows do not count", async () => {
+    failDay = true;
+    outboxRows = [queuedRow(1), queuedRow(2), queuedRow(3, "in_flight"), queuedRow(4, "rejected")];
+    renderToday();
+    await screen.findByText("3 logs waiting to send");
+  });
+
+  it("offline with nothing queued keeps the saved-on-phone line", async () => {
+    failDay = true;
+    renderToday();
+    await screen.findByText("Saved on phone · showing last sync");
+    expect(screen.queryByText(/waiting to send/)).toBeNull();
+  });
+
+  it("device offline: queued meal row carries a Waiting to send chip", async () => {
+    Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+    meals = [meal(1, "Breakfast", "pending"), meal(2, "Lunch", "pending")];
+    outboxRows = [queuedRow(1)];
+    renderToday();
+    await screen.findByText("1 log waiting to send");
+    expect(screen.getAllByLabelText("Waiting to send")).toHaveLength(1);
+  });
+
+  it("past completed workout keeps a read-only Done card, no Start workout", async () => {
+    workouts = [
+      {
+        ...completedWorkout,
+        localDate: PAST,
+        windowStartsAt: `${PAST}T13:00:00.000Z`,
+        windowEndsAt: `${PAST}T15:00:00.000Z`,
+      },
+    ];
+    renderToday(PAST);
+    await screen.findByLabelText("Workout done: Lower body B");
+    expect(screen.queryByText("Start workout")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start workout" })).toBeNull();
+  });
+
+  it("past day: a logged meal reads Logged", async () => {
+    meals = [
+      { ...meal(1, "Breakfast", "confirmed"), localDate: PAST },
+      { ...meal(2, "Lunch", "overdue"), localDate: PAST },
+    ];
+    renderToday(PAST);
+    await screen.findByLabelText(/^Past day\./);
+    expect(screen.getAllByText("Logged")).toHaveLength(1);
+  });
+
+  it("an unreadable outbox never reads as 0 waiting", async () => {
+    failDay = true;
+    failOutbox = true;
+    renderToday();
+    await screen.findByText("Saved on phone · showing last sync");
+    expect(screen.queryByText(/waiting to send/)).toBeNull();
+  });
+
+  it("many set-level rows for one workout count as one log", async () => {
+    failDay = true;
+    outboxRows = [1, 2, 3, 4].map((n) => ({
+      status: "pending",
+      recordId: "00000000-0000-4000-8000-000000000801",
+      payloadJson: JSON.stringify({
+        executionId: "00000000-0000-4000-8000-000000000801",
+        setExecutionId: `00000000-0000-4000-8000-00000000090${n}`,
+      }),
+    }));
+    renderToday();
+    await screen.findByText("1 log waiting to send");
+  });
+
+  describe("banners (Z9-4)", () => {
+    const notif = (type: string, extra: Record<string, unknown> = {}) => ({
+      id: "00000000-0000-4000-8000-0000000a0001",
+      recipientUserId: relationship.traineeUserId,
+      coachingRelationshipId: relationship.id,
+      type,
+      notificationType: type,
+      domainEntityId: "00000000-0000-4000-8000-0000000a0002",
+      readAt: null,
+      route: "/today",
+      ...extra,
+    });
+
+    it("shows the reviewed banner (frame 113) and opens the reviewed check-in", async () => {
+      notifications = [notif("checkin_reviewed")];
+      checkinItems = [
+        {
+          id: "00000000-0000-4000-8000-0000000a0002",
+          localDate: "2026-10-16",
+          status: "reviewed",
+          review: { outcome: "acknowledged", notes: "Good week." },
+        },
+      ];
+      const onOpenCheckin = vi.fn();
+      render(
+        <TodayTab
+          relationship={relationship}
+          planState={effectivePlanStateFor(livePlan)}
+          planCacheError={null}
+          selectedDate={TODAY}
+          onSelectDate={onSelectDate}
+          onStartWorkout={() => undefined}
+          onOpenDiet={() => undefined}
+          onOpenCheckin={onOpenCheckin}
+          onRefreshPlan={() => undefined}
+          onOpenOverlay={openOverlay}
+        />,
+      );
+      await screen.findByText("Rahul reviewed your check-in");
+      screen.getByText("Tap to read the note");
+      fireEvent.click(screen.getByRole("button", { name: "Open check-in review" }));
+      await waitFor(() => expect(onOpenCheckin).toHaveBeenCalledTimes(1));
+      expect(onOpenCheckin.mock.calls[0]![0].id).toBe(
+        "00000000-0000-4000-8000-0000000a0002",
+      );
+      expect(markRead).toHaveBeenCalledWith("00000000-0000-4000-8000-0000000a0001");
+      expect(screen.queryByText("Rahul reviewed your check-in")).toBeNull();
+    });
+
+    it("one banner at a time: reviewed banner waits while a meal or note banner is up", async () => {
+      notifications = [notif("checkin_reviewed")];
+      act(() => setForegroundBannerActive(true));
+      renderToday();
+      await screen.findByLabelText("Open diet");
+      expect(screen.queryByText("Rahul reviewed your check-in")).toBeNull();
+      act(() => setForegroundBannerActive(false));
+      await screen.findByText("Rahul reviewed your check-in");
+    });
+
+    it("no reviewed banner without an unread reviewed notification", async () => {
+      notifications = [notif("checkin_reviewed", { readAt: "2026-11-01T00:00:00.000Z" })];
+      renderToday();
+      await screen.findByLabelText("Open diet");
+      expect(screen.queryByText("Rahul reviewed your check-in")).toBeNull();
+    });
+
+    it("paused reminders card (frame 115) and Turn back on", async () => {
+      reminderStatus = {
+        mode: "paused",
+        pausedUntil: "2026-11-25T10:00:00.000Z",
+        pushDeliverable: true,
+        trainerDisabled: {},
+      };
+      renderToday();
+      await screen.findByText(/Meal reminders paused/);
+      screen.getByText(/paused them until Wed 25 Nov/);
+      fireEvent.click(screen.getByRole("button", { name: "Turn back on" }));
+      await waitFor(() => expect(resume).toHaveBeenCalled());
+      await waitFor(() =>
+        expect(screen.queryByText(/Meal reminders paused/)).toBeNull(),
+      );
+    });
+
+    it("no paused card in normal mode", async () => {
+      reminderStatus = { mode: "normal", pausedUntil: null };
+      renderToday();
+      await screen.findByLabelText("Open diet");
+      expect(screen.queryByText(/Meal reminders paused/)).toBeNull();
+    });
+
+    it("after a review Today shows the next check-in, not the reviewed one (F4c)", async () => {
+      checkinItems = [
+        {
+          id: "00000000-0000-4000-8000-0000000b0001",
+          localDate: "2026-10-16",
+          status: "reviewed",
+          review: { outcome: "acknowledged", notes: "Good week." },
+        },
+        {
+          id: "00000000-0000-4000-8000-0000000b0002",
+          localDate: "2026-10-23",
+          status: "scheduled",
+          review: null,
+        },
+      ];
+      renderToday();
+      await screen.findByText("Next check-in Fri 23 Oct");
+      expect(screen.queryByText("Acknowledged")).toBeNull();
+    });
+  });
+
+  describe("foreground banner (Z9-4, frames 29 and 29b)", () => {
+    const { ForegroundBanner } = fgModule;
+    const renderBanner = () =>
+      render(
+        <ForegroundBanner
+          relationship={relationship}
+          coachName="Rahul"
+          onOpenMeal={() => undefined}
+          onGoToday={() => undefined}
+        />,
+      );
+
+    it("meal banner: title, foods and tap to log (frame 29)", async () => {
+      const due = meal(1, "Breakfast", "pending");
+      meals = [
+        {
+          ...due,
+          prescription: { ...due.prescription, localTime: "00:00" },
+        } as MealAssignment,
+      ];
+      renderBanner();
+      await screen.findByText("Breakfast isn't logged yet");
+      screen.getByText("Vegetable poha · tap to log");
+      screen.getByText("FitBud · now");
+    });
+
+    it("note banner: no preview when the note does not match the notification", async () => {
+      meals = [];
+      notifications = [
+        {
+          id: "00000000-0000-4000-8000-0000000c0001",
+          type: "trainer_note_shared",
+          domainEntityId: "00000000-0000-4000-8000-0000000c0002",
+          readAt: null,
+        },
+      ];
+      coachNoteItems = [
+        { id: "00000000-0000-4000-8000-0000000c0099", body: "Other note.", seenAt: null },
+      ];
+      renderBanner();
+      await screen.findByText("Rahul has a note for you");
+      await waitFor(() => expect(screen.queryByText(/Other note/)).toBeNull());
+    });
+
+    it("note banner: title and the quoted note (frame 29b)", async () => {
+      meals = [];
+      notifications = [
+        {
+          id: "00000000-0000-4000-8000-0000000c0001",
+          type: "trainer_note_shared",
+          domainEntityId: "00000000-0000-4000-8000-0000000c0002",
+          readAt: null,
+        },
+      ];
+      coachNoteItems = [
+        {
+          id: "00000000-0000-4000-8000-0000000c0002",
+          body: "Keep protein up on rest days.",
+          seenAt: null,
+        },
+      ];
+      renderBanner();
+      await screen.findByText("Rahul has a note for you");
+      screen.getByText('"Keep protein up on rest days."');
+    });
   });
 });
