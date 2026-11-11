@@ -8,7 +8,11 @@ All rules are in AGENTS.md, shared with the Grok/Cursor planning bots. This file
 
 - **Running a batch:** Firoz launches one orchestrator cloud session ("Run batch Wn per docs/specs/batches/Wn.md"). The orchestrator starts one implementer session or subagent per lane. **There is no cap on how many run at once** (decided by Firoz, 3 Nov 2026 — see "No agent cap" below): run as many as the work genuinely supports, and start queued tasks as soon as their dependencies are met rather than waiting for a slot.
 - **Reviewer:** a fresh subagent per code PR, given the spec, its batch decisions, the diff and (for UI) the frames and QA screenshots only, never the implementer's conclusions or summary. It does the visual check for UI tasks.
-- **Models:** follow the spec's `model` field (`sonnet`, `opus`, or `opusplan` = opus plans, sonnet edits).
+- **Models (Firoz, 11 Nov 2026):** pick the model by the kind of work:
+  - **Opus** for the orchestrator: planning, complex reasoning (cross-cutting data, auth or ownership changes; a task that failed on Sonnet for a real complexity reason), and the final review of every PR (every fresh reviewer runs on Opus).
+  - **Sonnet** for implementers doing standard implementation tasks.
+  - **Haiku** for mechanical work: lookups, grep-style exploration, formatting, and simple edits (for example merging `main` into a branch, checking CI status, PR-body touch-ups).
+  - A spec's `model` field (`sonnet`, `opus`, or `opusplan` = opus plans, sonnet edits) is the planner's default. Follow it unless this rule points elsewhere, and record any change and its reason in the batch report.
 - **Batch report:** the orchestrator fills in the batch file's Report section at the end.
 
 ## No agent cap (Firoz, 3 Nov 2026)
