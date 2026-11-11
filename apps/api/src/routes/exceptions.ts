@@ -33,6 +33,10 @@ import {
   listAttentionExceptionsForTrainer,
 } from "../domain/exceptions";
 import {
+  resolveClientDisplayName,
+  resolveClientWhatsappE164,
+} from "../domain/client-identity";
+import {
   mapException,
   mapExceptionAction,
   mapIntervention,
@@ -278,8 +282,14 @@ exceptionRoutes.get(
         const bucket = grouped.get(item.coachingRelationshipId) ?? {
           relationshipId: item.coachingRelationshipId,
           traineeDisplayName:
-            nameByUserId.get(item.traineeUserId) ?? "Client",
-          clientWhatsappE164: phoneByUserId.get(item.traineeUserId) ?? null,
+            resolveClientDisplayName(
+              item,
+              nameByUserId.get(item.traineeUserId),
+            ) ?? "Client",
+          clientWhatsappE164: resolveClientWhatsappE164(
+            item,
+            phoneByUserId.get(item.traineeUserId),
+          ),
           items: [],
         };
         bucket.items.push({
@@ -329,7 +339,10 @@ exceptionRoutes.get(
           exception: mapException(item.exception),
           coachingRelationshipId: item.coachingRelationshipId,
           traineeUserId: item.traineeUserId,
-          traineeDisplayName: nameByUserId.get(item.traineeUserId) ?? null,
+          traineeDisplayName: resolveClientDisplayName(
+            item,
+            nameByUserId.get(item.traineeUserId),
+          ),
         })),
         nextCursor: null,
       }),
