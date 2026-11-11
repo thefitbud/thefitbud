@@ -1169,6 +1169,7 @@ const styles = StyleSheet.create({
   ttlrow: {
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: spacing.sm,
   },
   lt2: {
