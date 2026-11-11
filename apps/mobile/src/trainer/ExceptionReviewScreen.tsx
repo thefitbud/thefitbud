@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ExceptionDetail } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import type { NoteSaveInput } from "./sheets/NoteSheet";
+import { colors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
@@ -12,6 +13,8 @@ import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { labelFor } from "./labels";
+import { MoreSheet } from "./sheets/MoreSheet";
+import { NoteSheet } from "./sheets/NoteSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
 
@@ -26,7 +29,7 @@ export function ExceptionReviewScreen({
   onBack,
   onOpenClient,
 }: Props) {
-  const { api } = useAuth();
+  const { api, me } = useAuth();
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
@@ -41,6 +44,11 @@ export function ExceptionReviewScreen({
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [nudgeOpen, setNudgeOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  // One idempotency key per composer session, reused when Save is retried.
+  const noteKey = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -132,6 +140,37 @@ export function ExceptionReviewScreen({
     }
   }
 
+  async function saveNote(input: NoteSaveInput) {
+    if (!detail) return;
+    setActing(true);
+    setNoteError(null);
+    setMessage(null);
+    noteKey.current ??= createIdempotencyKey();
+    try {
+      await api.createTrainerNote(
+        detail.coachingRelationshipId,
+        input,
+        noteKey.current,
+      );
+      noteKey.current = null;
+      setNoteOpen(false);
+      setMessage(
+        input.visibility === "client" ? "Note saved and shared." : "Note saved.",
+      );
+    } catch (err) {
+      if (!(err instanceof ApiClientError)) {
+        reportError("trainer.exception.note", err);
+      }
+      setNoteError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not save note. (NOTE-ERR)",
+      );
+    } finally {
+      setActing(false);
+    }
+  }
+
   return (
     <Screen
       title="Exception"
@@ -140,6 +179,18 @@ export function ExceptionReviewScreen({
         <PrimaryButton label="Back to attention" variant="ghost" onPress={onBack} />
       }
     >
+      {detail && !ended ? (
+        <View style={styles.moreRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More actions"
+            onPress={() => setMoreOpen(true)}
+            style={styles.more}
+          >
+            <Text style={styles.moreGlyph}>⋯</Text>
+          </Pressable>
+        </View>
+      ) : null}
       {error ? <ErrorBanner message={error} /> : null}
       {message ? <Text style={styles.success}>{message}</Text> : null}
 
@@ -230,6 +281,33 @@ export function ExceptionReviewScreen({
               void resolve(input);
             }}
           />
+          <MoreSheet
+            visible={moreOpen}
+            detail={detail}
+            traineeDisplayName={traineeName}
+            onDismiss={() => setMoreOpen(false)}
+            onAddNote={() => {
+              setMoreOpen(false);
+              setNoteError(null);
+              noteKey.current = null;
+              setNoteOpen(true);
+            }}
+            onMessageOnWhatsApp={() => {
+              setMoreOpen(false);
+              setNudgeOpen(true);
+            }}
+          />
+          <NoteSheet
+            visible={noteOpen}
+            traineeDisplayName={traineeName}
+            trainerDisplayName={me?.trainerProfile?.displayName ?? null}
+            acting={acting}
+            errorMessage={noteError}
+            onDismiss={() => setNoteOpen(false)}
+            onSave={(input) => {
+              void saveNote(input);
+            }}
+          />
           <NudgeSheet
             visible={nudgeOpen}
             detail={detail}
@@ -244,6 +322,14 @@ export function ExceptionReviewScreen({
 }
 
 const styles = StyleSheet.create({
+  moreRow: { alignItems: "flex-end" },
+  more: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: touchTargetMin,
+    minWidth: touchTargetMin,
+  },
+  moreGlyph: { color: colors.deepNavy, fontSize: 24, fontWeight: "600" },
   stack: {
     gap: spacing.md,
   },

@@ -104,3 +104,28 @@ export function nudgeDraftText(
     : " quick reminder from your coach.";
   return `${greeting}${about} Log it when you can, or tell me if this week needs a change.`;
 }
+
+/** Frame 36 limit. The note contract allows more; the frame says 1,000. */
+export const NOTE_MAX_LENGTH = 1000;
+
+/** "96 of 1,000" (frame 36 counter). */
+export function noteCounterLabel(length: number): string {
+  return `${length} of 1,000`;
+}
+
+/** "Rohan will see this on their Today screen and get a notification". */
+export function noteVisibleLine(traineeDisplayName: string): string {
+  const name = firstNameOf(traineeDisplayName) || "Your client";
+  return `${name} will see this on their Today screen and get a notification`;
+}
+
+/** Shown when the toggle is off (no frame copy: states the existing private rule). */
+export function notePrivateLine(): string {
+  return "Only you will see this note";
+}
+
+/** "From Rahul · just now" (frame 36 preview chip). */
+export function noteAppearsLine(trainerDisplayName: string | null | undefined): string {
+  const name = firstNameOf(trainerDisplayName);
+  return `${name ? `From ${name}` : "From your coach"} · just now`;
+}
