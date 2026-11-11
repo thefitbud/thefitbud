@@ -985,7 +985,7 @@
 .clients-table .col-plan { width: 13%; }
 .clients-table .col-renewal { width: 124px; }
 .clients-table .col-action {
-  width: 140px;
+  width: 152px;
   text-align: right;
 }
 
@@ -1034,8 +1034,21 @@
   white-space: normal;
 }
 
+/* The CTA never spills out of the Action cell: with a wider fallback font
+   ("Resend invite", "Review intake") it wraps inside the button instead. */
 .clients-table .client-row-cta {
-  white-space: nowrap;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  height: auto !important;
+  min-height: 30px;
+  padding-block: 4px !important;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
 }
 
 .clients-ended-note {
