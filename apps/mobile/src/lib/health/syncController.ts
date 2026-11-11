@@ -3,6 +3,7 @@
  * and again each time the app comes to the foreground, with a status the
  * Steps chip and the setup screens (Z9-10) can subscribe to.
  */
+import { reportError } from "../reportError";
 import { secureGet, secureSet } from "../secureSessionStore";
 import { loadHealthStepsProvider } from "./provider";
 import {
@@ -70,7 +71,15 @@ export function createStepsSyncController(deps: StepsSyncDeps) {
     set({ ...snapshot, status: { kind: "syncing" } });
     inFlight = (async () => {
       try {
-        const provider = await deps.loadProvider();
+        let provider: HealthStepsProvider;
+        try {
+          provider = await deps.loadProvider();
+        } catch (err) {
+          reportError("steps.sync.load", err);
+          const failed: StepsSyncResult = { kind: "error", code: "STEPS-NATIVE" };
+          set({ status: failed, syncedAt: snapshot.syncedAt });
+          return failed;
+        }
         const result = await runStepsSync({
           provider,
           api: request.api,

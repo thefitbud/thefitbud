@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { setErrorReporter } from "../reportError";
 import { cameToForeground, createStepsSyncController } from "./syncController";
 import { loadHealthStepsProvider } from "./provider";
 import { createStepsServer, fakeProvider, memoryFlag } from "./testSupport";
@@ -20,7 +21,38 @@ function controllerWith(script: Parameters<typeof fakeProvider>[0]) {
   return { controller, fake, server, loads: () => loads };
 }
 
+afterEach(() => {
+  setErrorReporter(null);
+});
+
 describe("steps sync controller", () => {
+  it("a provider that fails to load is reported as STEPS-NATIVE, and the next sync loads again", async () => {
+    const reports: string[] = [];
+    setErrorReporter((where) => reports.push(where));
+    const fake = fakeProvider({ permission: () => "granted", totals: { "2026-11-11": 700 } });
+    const server = createStepsServer();
+    let loads = 0;
+    const controller = createStepsSyncController({
+      loadProvider: async () => {
+        loads += 1;
+        if (loads === 1) throw new Error("native module failed to load");
+        return fake.provider;
+      },
+      memory: memoryFlag(),
+      now: () => NOW,
+    });
+
+    expect(await controller.sync({ api: server.api, timeZone: "Asia/Kolkata", trigger: "auto" })).toEqual({
+      kind: "error",
+      code: "STEPS-NATIVE",
+    });
+    expect(controller.getSnapshot()).toEqual({ status: { kind: "error", code: "STEPS-NATIVE" }, syncedAt: null });
+    expect(reports).toEqual(["steps.sync.load"]);
+
+    expect(await controller.sync({ api: server.api, timeZone: "Asia/Kolkata", trigger: "auto" })).toMatchObject({ kind: "synced" });
+    expect(loads).toBe(2);
+  });
+
   it("runs the app-start sync once per launch", async () => {
     const { controller, server, fake } = controllerWith({ permission: () => "granted", totals: { "2026-11-11": 700 } });
     const first = controller.syncOnLaunch({ api: server.api, timeZone: "Asia/Kolkata" });

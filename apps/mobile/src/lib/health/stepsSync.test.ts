@@ -9,8 +9,11 @@ const NOW = new Date("2026-11-11T20:00:00.000Z");
 const IST = "Asia/Kolkata";
 const IST_WEEK = ["2026-11-06", "2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12"];
 
-function setup(script: FakeProviderScript, opts: { asked?: boolean; failDates?: string[]; trigger?: "auto" | "user"; timeZone?: string; now?: Date } = {}) {
-  const server = createStepsServer({ failDates: opts.failDates });
+function setup(
+  script: FakeProviderScript,
+  opts: { asked?: boolean; failDates?: string[]; relationship?: "active" | "ended" | "missing"; trigger?: "auto" | "user"; timeZone?: string; now?: Date } = {},
+) {
+  const server = createStepsServer({ failDates: opts.failDates, relationship: opts.relationship });
   const fake = fakeProvider(script);
   const memory = memoryFlag(opts.asked ?? false);
   const input: StepsSyncInput = {
@@ -94,20 +97,32 @@ describe("runStepsSync permission states", () => {
   });
 
   it("a native failure while checking permission is reported with a code, not a guess", async () => {
-    const reports: string[] = [];
-    setErrorReporter((where) => reports.push(where));
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const reports: { where: string; name: string; message: string }[] = [];
+    setErrorReporter((where, err) => reports.push({ where, name: err.name, message: err.message }));
     const { run, fake } = setup({});
     fake.provider.permission = async () => {
       throw new Error("module missing");
     };
     expect(await run()).toEqual({ kind: "error", code: "STEPS-NATIVE" });
+    expect(reports).toEqual([{ where: "steps.sync.native", name: "Error", message: "module missing" }]);
+  });
+
+  it("an automatic run prompts when HealthKit says it should, even with the app's flag set", async () => {
+    // The keychain flag survives a reinstall; HealthKit then asks afresh.
+    const { run, fake } = setup(
+      { source: "apple_health", permission: () => "not_requested", afterPrompt: "requested", totals: { "2026-11-12": 900 } },
+      { asked: true },
+    );
+    expect(await run()).toMatchObject({ kind: "synced", savedDays: 1 });
+    expect(fake.calls.prompts).toBe(1);
   });
 
   it("a read failure returns STEPS-READ and saves nothing", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const reports: string[] = [];
+    setErrorReporter((where) => reports.push(where));
     const { run, server } = setup({ readError: new Error("read failed") });
     expect(await run()).toEqual({ kind: "error", code: "STEPS-READ" });
+    expect(reports).toEqual(["steps.sync.read"]);
     expect(server.requests).toHaveLength(0);
   });
 });
@@ -144,10 +159,30 @@ describe("runStepsSync upserts", () => {
   });
 
   it("a failed day does not stop the others, and the run reports STEPS-SAVE", async () => {
-    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const reports: string[] = [];
+    setErrorReporter((where) => reports.push(where));
     const { run, server } = setup({ permission: () => "granted", totals: { "2026-11-10": 100, "2026-11-11": 200, "2026-11-12": 300 } }, { failDates: ["2026-11-11"] });
     expect(await run()).toEqual({ kind: "error", code: "STEPS-SAVE" });
+    expect(reports).toEqual(["steps.sync.save"]);
     expect([...server.days.keys()].sort()).toEqual(["2026-11-10", "2026-11-12"]);
+  });
+
+  it.each([
+    { relationship: "ended" as const, status: 409 },
+    { relationship: "missing" as const, status: 404 },
+  ])("a $relationship relationship ($status) stops at the first PUT, is not an error and is not reported", async ({ relationship }) => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const reports: string[] = [];
+    setErrorReporter((where) => reports.push(where));
+    const { run, server } = setup(
+      { permission: () => "granted", totals: { "2026-11-10": 100, "2026-11-11": 200, "2026-11-12": 300 } },
+      { relationship },
+    );
+    expect(await run()).toEqual({ kind: "ended" });
+    expect(server.requests.map((r) => r.localDate)).toEqual(["2026-11-10"]);
+    expect(server.days.size).toBe(0);
+    expect(warn).not.toHaveBeenCalled();
+    expect(reports).toEqual([]);
   });
 
   it("a repeated sync is idempotent and a later reading replaces the stored total", async () => {

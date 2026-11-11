@@ -46,6 +46,10 @@ async function load(): Promise<HealthStepsProvider> {
 }
 
 export function loadHealthStepsProvider(): Promise<HealthStepsProvider> {
-  loaded ??= load();
+  // A failed load is not kept: the next sync tries again.
+  loaded ??= load().catch((err: unknown) => {
+    loaded = null;
+    throw err;
+  });
   return loaded;
 }

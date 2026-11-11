@@ -16,7 +16,9 @@ export const TRAINEE_TOKEN = "trainee-access-token";
  * schema and every response with the shared response schema, so a body the
  * real API would reject fails the test.
  */
-export function createStepsServer(options: { failDates?: readonly string[] } = {}) {
+export function createStepsServer(
+  options: { failDates?: readonly string[]; relationship?: "active" | "ended" | "missing" } = {},
+) {
   const days = new Map<string, StepsDay>();
   const requests: { localDate: string; body: unknown; auth: string | null }[] = [];
 
@@ -36,6 +38,19 @@ export function createStepsServer(options: { failDates?: readonly string[] } = {
       return new Response(
         JSON.stringify({ error: { code: "VALIDATION_FAILED", message: "Invalid request.", requestId: "req-2" } }),
         { status: 400, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    // Same order and bodies as the API (routes/me-steps.ts): relationship checks before the write.
+    if (options.relationship === "missing") {
+      return new Response(
+        JSON.stringify({ error: { code: "RELATIONSHIP_NOT_FOUND", message: "No coaching relationship.", requestId: "req-4" } }),
+        { status: 404, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    if (options.relationship === "ended") {
+      return new Response(
+        JSON.stringify({ error: { code: "RELATIONSHIP_ENDED", message: "This coaching relationship has ended.", requestId: "req-5" } }),
+        { status: 409, headers: { "Content-Type": "application/json" } },
       );
     }
     if (options.failDates?.includes(localDate)) {
@@ -74,8 +89,10 @@ export type FakeProviderScript = {
 export function fakeProvider(script: FakeProviderScript) {
   const calls = { prompts: 0, reads: [] as DayWindow[][] };
   let prompted = false;
+  const source = script.source ?? "health_connect";
   const provider: HealthStepsProvider = {
-    source: script.source ?? "health_connect",
+    source,
+    platformKnowsIfAsked: source === "apple_health",
     availability: async () => script.availability ?? "available",
     permission: async (askedBefore) =>
       prompted ? (script.afterPrompt ?? "granted") : (script.permission?.(askedBefore) ?? "granted"),

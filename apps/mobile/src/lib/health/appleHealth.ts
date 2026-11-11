@@ -32,6 +32,7 @@ export function createAppleHealthProvider(port: AppleHealthPort): HealthStepsPro
 
   return {
     source: "apple_health",
+    platformKnowsIfAsked: true,
     async availability() {
       return (await port.isHealthDataAvailable()) ? "available" : "unavailable";
     },

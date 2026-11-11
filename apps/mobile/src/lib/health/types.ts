@@ -41,6 +41,13 @@ export type DailyStepTotal = {
 export type HealthStepsProvider = {
   /** The value saved with each day on the server. */
   readonly source: Extract<StepsSource, "apple_health" | "health_connect">;
+  /**
+   * True when `not_requested` comes from the platform itself, so it is
+   * reliable even if the app's own "asked" flag is set. HealthKit's request
+   * status is (and the keychain flag survives a reinstall, when HealthKit asks
+   * afresh). Health Connect cannot tell "never asked" from "denied".
+   */
+  readonly platformKnowsIfAsked: boolean;
   availability(): Promise<HealthAvailability>;
   /**
    * Current read permission. `askedBefore` is the app's own record of having
@@ -56,6 +63,7 @@ export type HealthStepsProvider = {
 /** Used on web, in Expo Go and in builds without the native modules. */
 export const unavailableHealthProvider: HealthStepsProvider = {
   source: "health_connect",
+  platformKnowsIfAsked: false,
   availability: async () => "unavailable",
   permission: async () => "not_requested",
   requestPermission: async () => "not_requested",

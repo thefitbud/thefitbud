@@ -28,20 +28,23 @@ async function load(): Promise<HealthStepsProvider> {
       lib.requestPermission(
         permissions.map((p) => ({ accessType: "read" as const, recordType: p.recordType as "Steps" })),
       ),
-    aggregateStepsByDay: (start, end) =>
-      lib.aggregateGroupByPeriod({
+    aggregateSteps: (start, end) =>
+      lib.aggregateRecord({
         recordType: "Steps",
         timeRangeFilter: {
           operator: "between",
           startTime: start.toISOString(),
           endTime: end.toISOString(),
         },
-        timeRangeSlicer: { period: "DAYS", length: 1 },
       }),
   });
 }
 
 export function loadHealthStepsProvider(): Promise<HealthStepsProvider> {
-  loaded ??= load();
+  // A failed load is not kept: the next sync tries again.
+  loaded ??= load().catch((err: unknown) => {
+    loaded = null;
+    throw err;
+  });
   return loaded;
 }

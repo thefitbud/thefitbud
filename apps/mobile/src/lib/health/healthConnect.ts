@@ -16,11 +16,10 @@ export const HEALTH_CONNECT_SDK = {
 
 export type HealthConnectPermission = { accessType: string; recordType: string };
 
-/** One `aggregateGroupByPeriod` group for `Steps` (`COUNT_TOTAL`). */
-export type HealthConnectStepsGroup = {
-  /** Device-local date-time of the period start, e.g. "2026-11-05T00:00". */
-  startTime: string;
-  result: { COUNT_TOTAL: number; dataOrigins?: readonly string[] };
+/** One `aggregateRecord` result for `Steps` over a window. */
+export type HealthConnectStepsAggregate = {
+  COUNT_TOTAL: number;
+  dataOrigins?: readonly string[];
 };
 
 /** The parts of the Health Connect library this adapter uses. */
@@ -31,8 +30,14 @@ export type HealthConnectPort = {
   requestPermission(
     permissions: readonly HealthConnectPermission[],
   ): Promise<readonly HealthConnectPermission[]>;
-  /** `aggregateGroupByPeriod` for `Steps`, between two instants, one-day periods. */
-  aggregateStepsByDay(start: Date, end: Date): Promise<readonly HealthConnectStepsGroup[]>;
+  /**
+   * `aggregateRecord` for `Steps` between two instants. The library reads this
+   * filter as instants, so a window means the same span whatever the device
+   * zone. `aggregateGroupByPeriod` cuts periods in device-local time, which
+   * would file a day under the wrong date when the device zone is not the
+   * trainee's stored zone.
+   */
+  aggregateSteps(start: Date, end: Date): Promise<HealthConnectStepsAggregate>;
 };
 
 function hasReadSteps(list: readonly HealthConnectPermission[]): boolean {
@@ -51,6 +56,7 @@ export function createHealthConnectProvider(port: HealthConnectPort): HealthStep
 
   return {
     source: "health_connect",
+    platformKnowsIfAsked: false,
     async availability(): Promise<HealthAvailability> {
       const status = await port.getSdkStatus();
       if (status === HEALTH_CONNECT_SDK.AVAILABLE) return "available";
@@ -69,25 +75,21 @@ export function createHealthConnectProvider(port: HealthConnectPort): HealthStep
       return hasReadSteps(granted) ? "granted" : "denied";
     },
     async readDailyTotals(windows: readonly DayWindow[]): Promise<DailyStepTotal[]> {
-      const first = windows[0];
-      const last = windows[windows.length - 1];
-      if (!first || !last) return [];
+      if (windows.length === 0) return [];
       await ready();
-      const groups = await port.aggregateStepsByDay(first.start, last.end);
-      // Periods are cut in the device's zone. The trainee's stored zone comes
-      // from the device (AcceptInviteScreen), so a period's date is the window's.
-      const byDate = new Map<string, number>();
-      for (const group of groups) {
-        const localDate = group.startTime.slice(0, 10);
-        const count = group.result.COUNT_TOTAL;
-        const hasData = (group.result.dataOrigins?.length ?? 0) > 0 || count > 0;
-        if (!hasData || !Number.isFinite(count)) continue;
-        byDate.set(localDate, (byDate.get(localDate) ?? 0) + count);
+      // One aggregate per trainee-local day (seven calls), in order.
+      const totals: DailyStepTotal[] = [];
+      for (const window of windows) {
+        const result = await port.aggregateSteps(window.start, window.end);
+        const count = result.COUNT_TOTAL;
+        // Zero with no data origin means nothing was recorded; a recorded zero is a reading.
+        const hasData = (result.dataOrigins?.length ?? 0) > 0 || count > 0;
+        totals.push({
+          localDate: window.localDate,
+          steps: hasData && Number.isFinite(count) ? Math.round(count) : null,
+        });
       }
-      return windows.map((w) => {
-        const steps = byDate.get(w.localDate);
-        return { localDate: w.localDate, steps: steps === undefined ? null : Math.round(steps) };
-      });
+      return totals;
     },
   };
 }

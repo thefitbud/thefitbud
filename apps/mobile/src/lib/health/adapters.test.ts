@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createAppleHealthProvider, type AppleHealthPort } from "./appleHealth";
 import { recentDayWindows } from "./dayWindows";
 import { createHealthConnectProvider, HEALTH_CONNECT_SDK, READ_STEPS_PERMISSION, type HealthConnectPort } from "./healthConnect";
@@ -22,7 +22,7 @@ function hcPort(overrides: Partial<HealthConnectPort> = {}): HealthConnectPort {
     initialize: vi.fn(async () => true),
     getGrantedPermissions: vi.fn(async () => []),
     requestPermission: vi.fn(async () => [READ_STEPS_PERMISSION]),
-    aggregateStepsByDay: vi.fn(async () => []),
+    aggregateSteps: vi.fn(async () => ({ COUNT_TOTAL: 0, dataOrigins: [] })),
     ...overrides,
   };
 }
@@ -101,24 +101,58 @@ describe("Health Connect adapter", () => {
     expect(await provider.permission(true)).toBe("denied");
   });
 
-  it("aggregates by day over the seven windows and maps each period by its local date", async () => {
+  it("aggregates each trainee-local day by its own instant range", async () => {
     const windows = recentDayWindows(IST, NOW);
     const port = hcPort({
-      aggregateStepsByDay: vi.fn(async () => [
-        { startTime: "2026-11-10T00:00", result: { COUNT_TOTAL: 0, dataOrigins: [] } },
-        { startTime: "2026-11-11T00:00", result: { COUNT_TOTAL: 0, dataOrigins: ["com.google.android.apps.fitness"] } },
-        { startTime: "2026-11-12T00:00", result: { COUNT_TOTAL: 2345, dataOrigins: ["com.google.android.apps.fitness"] } },
-      ]),
+      aggregateSteps: vi.fn(async (start: Date) => {
+        const iso = start.toISOString();
+        // Wed 11 Nov: a recorded zero. Thu 12 Nov: steps. Other days: nothing recorded.
+        if (iso === "2026-11-10T18:30:00.000Z") return { COUNT_TOTAL: 0, dataOrigins: ["com.google.android.apps.fitness"] };
+        if (iso === "2026-11-11T18:30:00.000Z") return { COUNT_TOTAL: 2345.4, dataOrigins: ["com.google.android.apps.fitness"] };
+        return { COUNT_TOTAL: 0, dataOrigins: [] };
+      }),
     });
     const totals = await createHealthConnectProvider(port).readDailyTotals(windows);
-    expect(port.aggregateStepsByDay).toHaveBeenCalledWith(windows[0]!.start, windows[6]!.end);
+    expect(vi.mocked(port.aggregateSteps).mock.calls).toEqual(windows.map((w) => [w.start, w.end]));
     expect(totals.slice(4)).toEqual([
-      // No data origin and zero: nothing recorded that day.
       { localDate: "2026-11-10", steps: null },
-      // A recorded zero is a reading.
       { localDate: "2026-11-11", steps: 0 },
       { localDate: "2026-11-12", steps: 2345 },
     ]);
+  });
+
+  describe("when the device zone is not the trainee's stored zone", () => {
+    const originalTz = process.env.TZ;
+    afterEach(() => {
+      process.env.TZ = originalTz;
+    });
+
+    it("files each step under the trainee-local day it happened on", async () => {
+      // Phone set to California, trainee stored as India. Version 3.5.3's
+      // period grouping would cut Pacific days and file them by Pacific date.
+      process.env.TZ = "America/Los_Angeles";
+      const samples = [
+        { at: "2026-11-11T19:00:00.000Z", count: 1000 }, // 00:30 Thu 12 Nov in India, still Wed 11 Nov in California
+        { at: "2026-11-11T12:00:00.000Z", count: 400 }, // 17:30 Wed 11 Nov in India
+        { at: "2026-11-11T18:29:59.000Z", count: 50 }, // 23:59:59 Wed 11 Nov in India
+      ];
+      const port = hcPort({
+        // Health Connect sums the records inside an instant range, whatever the device zone.
+        aggregateSteps: vi.fn(async (start: Date, end: Date) => {
+          const inside = samples.filter((x) => {
+            const t = Date.parse(x.at);
+            return t >= start.getTime() && t < end.getTime();
+          });
+          const count = inside.reduce((sum, x) => sum + x.count, 0);
+          return { COUNT_TOTAL: count, dataOrigins: inside.length > 0 ? ["com.google.android.apps.fitness"] : [] };
+        }),
+      });
+      const totals = await createHealthConnectProvider(port).readDailyTotals(recentDayWindows(IST, NOW));
+      expect(totals.slice(5)).toEqual([
+        { localDate: "2026-11-11", steps: 450 },
+        { localDate: "2026-11-12", steps: 1000 },
+      ]);
+    });
   });
 
   it("a failed initialize is an error, not a denial", async () => {
