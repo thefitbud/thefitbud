@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import type {
   Checkin,
@@ -17,7 +17,6 @@ import {
   labelFor,
 } from "@fitbud/core";
 import {
-  NutritionRings,
   WeeklyConsistency,
   colors,
   radii,
@@ -34,6 +33,7 @@ import {
   localDateInTimezone,
   startOfWeekMonday,
 } from "../lib/dates";
+import { reportError } from "../lib/reportError";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
@@ -56,7 +56,6 @@ import { subscribeAll } from "./dataCache";
 import {
   buildNutritionRings,
   isMealLoggedForCount,
-  mealsLoggedSummary,
   nutrientsFromMealPrescription,
 } from "./nutrition";
 import { nextUp, nextUpEyebrow } from "./nextUp";
@@ -66,7 +65,10 @@ import {
   sortMealsByTime,
 } from "./scheduledAssignments";
 import { StepsCard } from "./steps/StepsCard";
-import { WebNutritionSummary } from "./web/WebTraineeChrome";
+import {
+  TodaySummaryCard,
+  type StepsChipState,
+} from "./today/TodaySummaryCard";
 
 function workoutTone(
   status: WorkoutAssignment["status"],
@@ -265,6 +267,10 @@ export function TodayTab({
   const [dayTotals, setDayTotals] = useState<Awaited<
     ReturnType<typeof s1.getMeDay>
   > | null>(null);
+  // Steps chip (D-W9-3): the server's answer, not native sync.
+  const [stepsChip, setStepsChip] = useState<StepsChipState>({
+    status: "loading",
+  });
   const [coachNotes, setCoachNotes] = useState<CoachNote[]>([]);
   // Trainee listExceptions is 403 — late-log gate uses a positive sentinel.
   const unresolvedExceptions = 1;
@@ -344,6 +350,29 @@ export function TodayTab({
     await load();
     setRefreshing(false);
   }, [load, onRefreshPlan]);
+
+  useEffect(() => {
+    if (!isToday) return;
+    let cancelled = false;
+    api
+      .getStepsToday()
+      .then((res) => {
+        if (cancelled) return;
+        setStepsChip(
+          res.steps == null
+            ? { status: "not_synced", target: res.target }
+            : { status: "synced", steps: res.steps, target: res.target },
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        reportError("TodayTab.getStepsToday", err);
+        setStepsChip({ status: "unavailable" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, isToday, refreshNonce]);
 
   const rings = useMemo(
     () => buildNutritionRings(meals, dayTotals?.totals ?? null),
@@ -532,6 +561,24 @@ export function TodayTab({
           <View style={styles.card} accessibilityLabel="Loading today">
             <Text style={styles.body}>Loading your day…</Text>
           </View>
+        ) : null}
+
+        {planState.status === "loaded" && !loading ? (
+          <TodaySummaryCard
+            rings={rings}
+            workoutDone={
+              workout &&
+              (workout.status === "completed" || workout.status === "modified")
+                ? 1
+                : 0
+            }
+            workoutTotal={workout ? 1 : 0}
+            mealsDone={
+              meals.filter((m) => isMealLoggedForCount(m.status)).length
+            }
+            mealsTotal={meals.length}
+            steps={isToday ? stepsChip : { status: "unavailable" }}
+          />
         ) : null}
 
         {planState.status === "loaded" && hero && !loading ? (
@@ -750,23 +797,7 @@ export function TodayTab({
 
         {planState.status === "loaded" ? (
           <>
-            <View style={styles.secHead}>
-              <Text style={styles.secTitle}>Nutrition</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open diet"
-                onPress={onOpenDiet}
-                style={styles.secLink}
-              >
-                <Text style={styles.secLinkText}>Diet ›</Text>
-              </Pressable>
-            </View>
             <View style={styles.card}>
-              {Platform.OS === "web" ? (
-                <WebNutritionSummary data={rings} />
-              ) : (
-                <NutritionRings data={rings} />
-              )}
               {rings.some((r) => r.unknown) ? (
                 <Text style={styles.footnote}>
                   Some foods have no nutrition data. Totals show ≥ when unknown.
@@ -774,9 +805,18 @@ export function TodayTab({
               ) : null}
               <View style={styles.mealsHead}>
                 <Text style={styles.mealsLabel}>Meals</Text>
-                <Text style={styles.mealsCount}>
-                  {mealsLoggedSummary(meals)}
-                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open diet"
+                  onPress={onOpenDiet}
+                  style={styles.secLink}
+                >
+                  <Text style={styles.mealsCount}>
+                    {meals.length === 0
+                      ? "Diet ›"
+                      : `${meals.filter((m) => isMealLoggedForCount(m.status)).length} of ${meals.length} logged ›`}
+                  </Text>
+                </Pressable>
               </View>
               {meals.length === 0 && !loading ? (
                 <Text style={styles.body}>No meals planned today.</Text>
