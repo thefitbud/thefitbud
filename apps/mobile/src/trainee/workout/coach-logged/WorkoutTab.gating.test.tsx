@@ -1,19 +1,8 @@
 /**
- * (Z9-11 gating test, harness copied from WorkoutTab.render.test.tsx.)
- * The Workout tab's week load state (CU24, D-W3b-29).
- *
- * The defect these tests pin is the one CU22 removed from Today, on the
- * trainee's other main tab: "No plan yet / Workouts appear here when <Coach>
- * publishes your plan" was gated on `assignments.length === 0`, which is
- * equally true before the first load settles and after a load that failed. A
- * trainee offline on a first run was told their coach had published nothing.
- *
- * What this harness can and cannot prove (CU6): it is `happy-dom` plus
- * `react-native-web`, so it is DOM-shaped, not device-shaped. It proves which
- * text, roles and accessibility labels a screen reader and Maestro's
- * content-desc matching would see, and how those change as the load state
- * changes. It proves nothing about layout, Hermes, native gestures or
- * `Platform.OS` branches.
+ * Z9-11 gating: a coach-logged workout (loggedByRole "coach") hides the hero
+ * Start, shows "View workout", and opens the read-only CoachLoggedWorkoutScreen
+ * without starting an execution. Harness copied from WorkoutTab.render.test.tsx
+ * (happy-dom + react-native-web: proves text and roles, not layout or native).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -22,14 +11,14 @@ import {
   type CoachingRelationship,
   type WorkoutAssignment,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor } from "../test/render";
-import { localDateInTimezone, startOfWeekMonday, addDays } from "../lib/dates";
+import { mockAuth, render, screen, waitFor } from "../../../test/render";
+import { localDateInTimezone, startOfWeekMonday, addDays } from "../../../lib/dates";
 
 /*
  * `WorkoutTab` reaches `modules/live-activity` through the active-workout
  * screen, and that module calls into `expo-modules-core`, which has no JS
  * implementation off-device. `src/test/render.tsx` is CU6's file and outside
- * CU24's `files_owned`, so this is mocked here, the same way
+ * Z9-11's `files_owned`, so this is mocked here, the same way
  * `TraineeShell.planLoad.render.test.tsx` already does it. Nothing in this
  * file exercises a Live Activity.
  */
@@ -174,16 +163,16 @@ const auth = mockAuth({
   api,
   me: { id: relationship.traineeUserId, email: "aarav.ontrack@demo.fitbud.test", timezone: TIME_ZONE },
 });
-vi.mock("../auth/AuthProvider", async () => {
+vi.mock("../../../auth/AuthProvider", async () => {
   const actual = await vi.importActual<Record<string, unknown>>(
-    "../auth/AuthProvider",
+    "../../../auth/AuthProvider",
   );
   return { ...actual, useAuth: () => auth };
 });
 
-vi.mock("../sync/SyncProvider", async () => {
+vi.mock("../../../sync/SyncProvider", async () => {
   const actual = await vi.importActual<Record<string, unknown>>(
-    "../sync/SyncProvider",
+    "../../../sync/SyncProvider",
   );
   return {
     ...actual,
@@ -200,8 +189,8 @@ vi.mock("../sync/SyncProvider", async () => {
   };
 });
 
-const { WorkoutTab } = await import("./WorkoutTab");
-const { invalidateRelationshipDayData } = await import("./dataCache");
+const { WorkoutTab } = await import("../../WorkoutTab");
+const { invalidateRelationshipDayData } = await import("../../dataCache");
 
 
 beforeEach(() => {
