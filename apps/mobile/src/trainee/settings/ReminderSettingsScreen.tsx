@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
-import { Bell, ClipboardCheck, Dumbbell, Moon, SunMedium, Utensils } from "lucide-react-native";
+import { Bell, ClipboardCheck, Dumbbell, Moon, SunMedium, UserCheck, Utensils } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { NotificationPreferences, ReminderStatus } from "@fitbud/contracts";
 import { formatCivilDate, formatHhMmTime, formatLocalDate } from "@fitbud/core";
@@ -329,6 +329,19 @@ export function ReminderSettingsScreen({
                 },
               }),
             );
+          }}
+        />
+        <M2SwitchRow
+          icon={<UserCheck color={brand.indigo} size={18} strokeWidth={1.75} />}
+          label="Coach updates to my logs"
+          hint="When your coach logs or edits a meal, workout or measurement for you."
+          value={prefs?.coachLogUpdates ?? true}
+          disabled={switchesDisabled || !prefs}
+          onValueChange={(enabled) => {
+            void save({ coachLogUpdates: enabled }, (current) => ({
+              ...current,
+              coachLogUpdates: enabled,
+            }));
           }}
         />
       </M2Group>

@@ -46,6 +46,7 @@ import {
   setCached,
   subscribe,
 } from "./dataCache";
+import { CoachLogBadge } from "./coach-log/CoachLogBadge";
 const BODY_TYPES: MeasurementType[] = [
   "body_weight_kg",
   "waist_cm",
@@ -746,6 +747,12 @@ export function ProgressTab({
                       {formatDeltaCm(delta)} since {since}
                     </Text>
                   ) : null}
+                  <CoachLogBadge
+                    loggedByRole={latest!.loggedByRole}
+                    lastEditedByRole={latest!.lastEditedByRole}
+                    editedAt={latest!.updatedAt}
+                    timeZone={timeZone}
+                  />
                 </View>
                 <Pressable
                   accessibilityRole="button"

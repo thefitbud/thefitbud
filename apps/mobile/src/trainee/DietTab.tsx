@@ -66,6 +66,7 @@ import {
   navigatorDaysFor,
   type WeekModelState,
 } from "./TraineeDateNavigator";
+import { CoachLogBadge } from "./coach-log/CoachLogBadge";
 
 function MacroBar({
   label,
@@ -440,6 +441,14 @@ export function DietTab({
               {plannedSummaryLine(meal)}
             </Text>
           )}
+          {isLogged ? (
+            <CoachLogBadge
+              loggedByRole={meal.compliance?.loggedByRole}
+              lastEditedByRole={meal.compliance?.lastEditedByRole}
+              editedAt={meal.compliance?.updatedAt}
+              timeZone={timeZone}
+            />
+          ) : null}
         </View>
         {isLogged && meal.status === "modified" ? (
           <Pressable
