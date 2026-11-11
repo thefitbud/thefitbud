@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Checkin, CheckinReview } from "@fitbud/contracts";
 import {
-  pickNextScheduledCheckin,
   pickTodayCheckin,
   todayCheckinBanner,
 } from "./pickTodayCheckin";
@@ -64,7 +63,7 @@ describe("pickTodayCheckin", () => {
     ).toBe("over");
   });
 
-  it("prefers reviewed reply over a newer unreviewed submitted (live Today path)", () => {
+  it("prefers reviewed reply over a newer unreviewed submitted when nothing is scheduled", () => {
     const waitingSunday = stub({
       id: "waiting-sunday",
       localDate: "2026-10-18",
@@ -77,25 +76,55 @@ describe("pickTodayCheckin", () => {
       status: "reviewed",
       review: reviewStub("reviewed-friday"),
     });
-    const next = stub({
-      id: "next",
-      localDate: "2026-10-23",
-      status: "scheduled",
-    });
-    const picked = pickTodayCheckin([next, waitingSunday, reviewedFriday]);
+    const picked = pickTodayCheckin([waitingSunday, reviewedFriday]);
     expect(picked?.id).toBe("reviewed-friday");
-    const banner = todayCheckinBanner(
-      picked,
-      pickNextScheduledCheckin([next, waitingSunday, reviewedFriday]),
-      "Rahul",
-    );
+    const banner = todayCheckinBanner(picked, null, "Rahul");
     expect(banner.kind).toBe("reviewed");
     expect(banner.title).toBe("Acknowledged");
     expect(banner.body).toMatch(/Nice week/);
-    expect(banner.nextLine).toBe("Next check-in 2026-10-23");
   });
 
-  it("treats submitted+review payload as reviewed", () => {
+  it("F4c: after a review Today shows the next scheduled check-in, not the reviewed one", () => {
+    const reviewedFriday = stub({
+      id: "reviewed-friday",
+      localDate: "2026-10-16",
+      status: "reviewed",
+      review: reviewStub("reviewed-friday"),
+    });
+    const wrongDay = stub({
+      id: "wrong-day",
+      localDate: "2026-10-21",
+      status: "scheduled",
+    });
+    const nextFriday = stub({
+      id: "next-friday",
+      localDate: "2026-10-23",
+      status: "scheduled",
+    });
+    const items = [nextFriday, wrongDay, reviewedFriday];
+    const picked = pickTodayCheckin(items);
+    expect(picked?.id).toBe("next-friday");
+    const banner = todayCheckinBanner(picked, null, "Rahul");
+    expect(banner.kind).toBe("scheduled");
+    expect(banner.title).toBe("Next check-in Fri 23 Oct");
+  });
+
+  it("F4c: a due check-in still wins over the next scheduled after a review", () => {
+    expect(
+      pickTodayCheckin([
+        stub({ id: "next", localDate: "2026-10-30", status: "scheduled" }),
+        stub({ id: "due", localDate: "2026-10-23", status: "due" }),
+        stub({
+          id: "reviewed",
+          localDate: "2026-10-16",
+          status: "reviewed",
+          review: reviewStub("reviewed"),
+        }),
+      ])?.id,
+    ).toBe("due");
+  });
+
+  it("treats submitted+review payload as reviewed (next scheduled follows it)", () => {
     const reviewedViaPayload = stub({
       id: "submitted-with-review",
       localDate: "2026-10-16",
@@ -107,7 +136,7 @@ describe("pickTodayCheckin", () => {
         stub({ id: "next", localDate: "2026-10-23", status: "scheduled" }),
         reviewedViaPayload,
       ])?.id,
-    ).toBe("submitted-with-review");
+    ).toBe("next");
   });
 
   it("returns null when nothing actionable, reviewed, or upcoming", () => {

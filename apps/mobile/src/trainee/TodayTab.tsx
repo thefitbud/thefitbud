@@ -66,6 +66,8 @@ import {
 } from "./nutrition";
 import { nextUp, nextUpEyebrow } from "./nextUp";
 import { pickTodayCheckin } from "./pickTodayCheckin";
+import { RemindersPausedCard } from "./today/RemindersPausedCard";
+import { ReviewedBanner } from "./today/ReviewedBanner";
 import {
   scheduledAssignments,
   sortMealsByTime,
@@ -561,6 +563,10 @@ export function TodayTab({
     : null;
 
   return (
+    <>
+      {isToday ? (
+        <ReviewedBanner coachName={coachName} onOpenCheckin={onOpenCheckin} />
+      ) : null}
     <Screen
       chrome="app"
       title="Today"
@@ -905,6 +911,8 @@ export function TodayTab({
           </View>
         ) : null}
 
+        {isToday ? <RemindersPausedCard /> : null}
+
         {planState.status === "loaded" && !loading ? (
           <View style={styles.mealsSection}>
             <View style={styles.mealsHead}>
@@ -1086,6 +1094,7 @@ export function TodayTab({
         ) : null}
       </View>
     </Screen>
+    </>
   );
 }
 
