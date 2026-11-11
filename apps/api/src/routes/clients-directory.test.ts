@@ -138,6 +138,8 @@ describe("GET /clients startedAt (Z9-15)", () => {
   it("does not list another trainer's clients", async () => {
     const priya = await login("priya.coach@demo.fitbud.test");
     const items = await listClients(priya);
+    // Guard against a vacuous pass: Priya has her own clients in the seed.
+    expect(items.some((i) => i.relationshipId && i.startedAt)).toBe(true);
     const rahulIds = new Set([
       (await persistedRelationship("rahul.coach", "aarav.ontrack")).id,
       (await persistedRelationship("rahul.coach", "kavya.ended")).id,
