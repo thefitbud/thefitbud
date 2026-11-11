@@ -220,7 +220,7 @@ export function EditBasicsDrawer({
               </p>
             </div>
             <div className="cs-field">
-              <label htmlFor={phoneId}>Contact phone</label>
+              <label htmlFor={phoneId}>Phone · WhatsApp</label>
               <div className="cs-phone-input">
                 {phone.trim().startsWith("+") ? null : (
                   <span className="cs-phone-prefix" aria-hidden>
@@ -241,7 +241,7 @@ export function EditBasicsDrawer({
               </div>
               <p id={phoneHelpId} className={errors.phone ? "cs-field-error" : "cs-field-help"}>
                 {errors.phone ??
-                  `A number you keep for ${firstName}. Their sign-in number doesn't change.`}
+                  "Shown on Home, Clients and in WhatsApp drafts."}
               </p>
             </div>
             <p className="cs-drawer-note">
