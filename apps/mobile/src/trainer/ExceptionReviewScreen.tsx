@@ -13,6 +13,7 @@ import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { labelFor } from "./labels";
+import { firstNameOf } from "./sheets/exceptionSheetContent";
 import { MoreSheet } from "./sheets/MoreSheet";
 import { NoteSheet } from "./sheets/NoteSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
@@ -155,7 +156,9 @@ export function ExceptionReviewScreen({
       noteKey.current = null;
       setNoteOpen(false);
       setMessage(
-        input.visibility === "client" ? "Note saved and shared." : "Note saved.",
+        input.visibility === "client"
+          ? `Shared with ${firstNameOf(traineeName) || "client"}`
+          : "Saved privately",
       );
     } catch (err) {
       if (!(err instanceof ApiClientError)) {

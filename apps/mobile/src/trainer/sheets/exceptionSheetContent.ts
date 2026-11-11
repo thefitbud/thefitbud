@@ -110,7 +110,8 @@ export const NOTE_MAX_LENGTH = 1000;
 
 /** "96 of 1,000" (frame 36 counter). */
 export function noteCounterLabel(length: number): string {
-  return `${length} of 1,000`;
+  const format = (n: number) => n.toLocaleString("en-US");
+  return `${format(length)} of ${format(NOTE_MAX_LENGTH)}`;
 }
 
 /** "Rohan will see this on their Today screen and get a notification". */
@@ -119,9 +120,9 @@ export function noteVisibleLine(traineeDisplayName: string): string {
   return `${name} will see this on their Today screen and get a notification`;
 }
 
-/** Shown when the toggle is off (no frame copy: states the existing private rule). */
+/** Shown when the toggle is off: the frames' existing private hint. */
 export function notePrivateLine(): string {
-  return "Only you will see this note";
+  return "Only you see this.";
 }
 
 /** "From Rahul · just now" (frame 36 preview chip). */

@@ -17,7 +17,8 @@ describe("NoteSheet", () => {
     );
     expect(screen.getByText("Note about Rohan")).toBeTruthy();
     expect(screen.getByText("Private unless you share it")).toBeTruthy();
-    expect(screen.getByText(noteCounterLabel(0))).toBeTruthy();
+    expect(screen.getByText("0 of 1,000")).toBeTruthy();
+    expect(noteCounterLabel(96)).toBe("96 of 1,000");
     expect(screen.getByText("Visible to Rohan")).toBeTruthy();
     expect(screen.getByText(/Rohan will see this on their Today screen/)).toBeTruthy();
     expect(screen.getByText("From Rahul · just now")).toBeTruthy();
@@ -56,6 +57,7 @@ describe("NoteSheet", () => {
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Hi" } });
     fireEvent.click(screen.getByLabelText("Visible to Rohan"));
     expect(screen.queryByText(/just now/)).toBeNull();
+    expect(screen.getByText("Only you see this.")).toBeTruthy();
     fireEvent.click(screen.getByText("Save note"));
     expect(onSave).toHaveBeenCalledWith({ body: "Hi", visibility: "private" });
   });
