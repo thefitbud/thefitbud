@@ -45,9 +45,11 @@ function sectionDirty(
         form.photoRequirement !== saved.nutrition.photoRequirement ||
         form.cadence !== saved.checkin.cadence
       );
+    // The cadence is edited in the Expectations table (frame 149), so only
+    // Expectations reads Editing when it changes; Check-ins owns the window
+    // and the form.
     case "checkins":
       return (
-        form.cadence !== saved.checkin.cadence ||
         form.dueWindowHours !== saved.checkin.dueWindowHours ||
         // On an active version the form is assigned at once, outside the version.
         (saved.status !== "active" &&

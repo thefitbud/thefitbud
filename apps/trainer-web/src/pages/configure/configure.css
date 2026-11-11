@@ -379,3 +379,269 @@
     width: auto;
   }
 }
+
+/* Footer (Z8-6, frames 148/149): status pill, hint, actions on the right. */
+.configure-v3 .configure-sticky-footer {
+  flex-wrap: nowrap;
+  margin-top: 0;
+  padding: 0.75rem 1.125rem;
+  background: var(--surface-card);
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  backdrop-filter: none;
+}
+
+.cs-footer-pill {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.3125rem;
+  height: 1.625rem;
+  padding: 0 0.625rem;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.cs-footer-pill.is-draft {
+  background: var(--semantic-neutral-fill);
+  color: var(--semantic-neutral-text);
+}
+
+.cs-footer-pill.is-active {
+  background: var(--semantic-positive-fill);
+  border-color: #a7f3d0;
+  color: var(--semantic-positive-text);
+}
+
+.cs-footer-hint {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink-500);
+}
+
+.configure-v3 .configure-sticky-footer .screen-sticky-footer-actions {
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.configure-v3 .configure-sticky-footer button {
+  min-height: 44px;
+}
+
+@media (max-width: 860px) {
+  .configure-v3 .configure-sticky-footer {
+    flex-wrap: wrap;
+  }
+
+  .cs-footer-hint {
+    flex-basis: calc(100% - 8rem);
+  }
+}
+
+/* DS3 dialogs: Activate and Save as vN+1. */
+.cs-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgb(26 18 72 / 34%);
+}
+
+.cs-dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(600px, 100%);
+  max-height: calc(100vh - 3rem);
+  background: var(--surface-card, #fff);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgb(26 18 72 / 24%);
+  overflow: hidden;
+}
+
+.cs-dialog-head {
+  padding: 1.5rem 1.5rem 0.75rem;
+}
+
+.cs-dialog-head h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--deep-navy, #1a1248);
+}
+
+.cs-dialog-head p {
+  margin: 0.375rem 0 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink-500);
+}
+
+.cs-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  padding: 0.5rem 1.5rem 1.25rem;
+  overflow-y: auto;
+}
+
+.cs-dialog-body .form-error {
+  margin: 0;
+}
+
+.cs-dialog-summary {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 1rem;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+}
+
+.cs-dialog-summary-row {
+  display: grid;
+  grid-template-columns: 10rem minmax(0, 1fr);
+  gap: 1rem;
+  font-size: 0.9375rem;
+}
+
+.cs-dialog-summary dt {
+  color: var(--ink-500);
+}
+
+.cs-dialog-summary dd {
+  margin: 0;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-dialog-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  background: var(--semantic-neutral-fill);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  font-size: 0.875rem;
+  color: var(--ink-700);
+}
+
+.cs-dialog-notice svg {
+  flex: none;
+  margin-top: 0.125rem;
+}
+
+.cs-dialog-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-500);
+}
+
+.cs-dialog-diff {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+}
+
+.cs-dialog-diff li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem 1rem;
+  font-size: 0.9375rem;
+  color: var(--deep-navy, #1a1248);
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-dialog-diff li + li {
+  border-top: 1px solid var(--border-default);
+}
+
+.cs-dialog-diff-label {
+  width: 10rem;
+}
+
+.cs-dialog-diff s {
+  color: var(--ink-500);
+}
+
+.cs-dialog-diff em {
+  font-style: normal;
+  font-weight: 600;
+}
+
+.cs-dialog-starts {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--semantic-brand-selected-fill);
+  border: 1.5px solid var(--indigo, #3f2bd6);
+  border-radius: 14px;
+}
+
+.cs-dialog-starts-mark {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin-top: 0.0625rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: inset 0 0 0 5px var(--indigo, #3f2bd6);
+}
+
+.cs-dialog-starts div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.cs-dialog-starts b {
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+}
+
+.cs-dialog-starts span {
+  font-size: 0.875rem;
+  color: var(--ink-500);
+}
+
+.cs-dialog-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-default);
+}
+
+.cs-dialog-foot button {
+  min-height: 44px;
+}
+
+.cs-dialog-confirm {
+  min-width: 11rem;
+}
+
+@media (max-width: 640px) {
+  .cs-dialog-summary-row {
+    grid-template-columns: 1fr;
+    gap: 0.125rem;
+  }
+}

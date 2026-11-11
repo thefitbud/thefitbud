@@ -7,6 +7,7 @@ import {
   type FormEvent,
 } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
+import { PencilLine } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CheckinCadence,
@@ -22,6 +23,7 @@ import {
   COACHING_CONFIGURATION_DEFAULTS,
   GLOBAL_CHECKIN_FORM_VERSION_ID,
   consistencyFingerprint,
+  missingConfigurationSections,
   formatCivilDate,
   formatRelative,
   labelFor,
@@ -50,8 +52,18 @@ import {
   civilDateIn,
   configureStatusNote,
 } from "./configure/ConfigureToolbar";
+import {
+  ActivateDialog,
+  SaveVersionDialog,
+  type ActivateSummaryRow,
+} from "./configure/ConfigureDialogs";
 import { ExpectationsTable } from "./configure/ExpectationsTable";
 import { configureSectionStatus } from "./configure/sectionStatus";
+import {
+  SECTION_TITLES,
+  traineeDayLabel,
+  versionChanges,
+} from "./configure/versionChanges";
 import { stepsNumber, useStepsTarget } from "./configure/useStepsTarget";
 import "../styles/plan.css";
 import "./configure/configure.css";
@@ -88,6 +100,13 @@ const EMPTY_SUBSCRIPTION = {
   startsOn: "",
   renewsOn: "",
 };
+
+const SECTION_ORDER: ConfigurationSectionId[] = [
+  "goal",
+  "expectations",
+  "checkins",
+  "tracking",
+];
 
 const REMINDER_CATEGORIES: Array<{
   type: ReminderType;
@@ -168,6 +187,7 @@ export function ConfigureCoachingPage() {
   const [effectivePlan, setEffectivePlan] = useState<{
     planId: string;
     versionId: string;
+    title: string;
     content: PlanContent;
   } | null>(null);
   const [acknowledgedFingerprint, setAcknowledgedFingerprint] = useState<
@@ -186,6 +206,11 @@ export function ConfigureCoachingPage() {
   const [checkinForms, setCheckinForms] = useState<
     CheckinFormTemplateSummary[]
   >([]);
+  /** DS3: the Activate or Save as vN+1 confirmation that is open, if any. */
+  const [dialog, setDialog] = useState<"activate" | "save-version" | null>(
+    null,
+  );
+  const [dialogError, setDialogError] = useState<string | null>(null);
 
   const applyConfiguration = useCallback((config: CoachingConfiguration) => {
     setConfiguration(config);
@@ -292,6 +317,7 @@ export function ConfigureCoachingPage() {
           ? {
               planId: planResult.value.plan.id,
               versionId: planResult.value.version.id,
+              title: planResult.value.plan.title,
               content: planResult.value.version.content,
             }
           : null,
@@ -391,9 +417,11 @@ export function ConfigureCoachingPage() {
 
   const status = configuration?.status ?? null;
   const expectedVersion = configuration?.recordVersion ?? 0;
+  // Z8-6: an active version is edited in place on screen; the first edit
+  // opens vN+1, which Save as vN+1 creates and activates. The active version
+  // itself is never written (published versions are immutable).
   const canEdit =
     !relationshipEnded &&
-    status !== "active" &&
     (header?.onboardingStatus === "coaching_ready" ||
       header?.onboardingStatus === "active");
   const readOnly = !canEdit;
@@ -578,9 +606,10 @@ export function ConfigureCoachingPage() {
     }
   }
 
-  /** Persist form fields (including preferred check-in form) before status transitions. */
+  /** Persist form fields (and the preferred check-in form) into the open draft. */
   async function persistConfigurationFields(
     expected: number,
+    options: { assignForm?: boolean } = {},
   ): Promise<CoachingConfiguration> {
     const saved = await apiClient.saveConfigurationDraft(relationshipId, {
       expectedVersion: expected,
@@ -607,7 +636,7 @@ export function ConfigureCoachingPage() {
         requireSessionRpe: form.requireSessionRpe,
       },
     });
-    if (form.formVersionId) {
+    if (form.formVersionId && options.assignForm !== false) {
       await apiClient.assignPreferredCheckinForm(relationshipId, {
         checkinFormVersionId: form.formVersionId,
       });
@@ -617,7 +646,7 @@ export function ConfigureCoachingPage() {
 
   async function saveDraft(event?: FormEvent) {
     event?.preventDefault();
-    if (!relationshipId || readOnly || !online) return;
+    if (!relationshipId || readOnly || !online || status === "active") return;
     setActing(true);
     setError(null);
     setMessage(null);
@@ -647,24 +676,47 @@ export function ConfigureCoachingPage() {
     }
   }
 
-  async function activate() {
-    if (!relationshipId || !configuration || mutationsBlocked) return;
-    setActing(true);
+  /** Error text for a failed activate or Save as vN+1 (no misleading catch). */
+  function activationErrorText(err: unknown, fallback: string): string {
+    if (!(err instanceof ApiClientError)) return fallback;
+    if (
+      err.code === "CONFIGURATION_VERSION_CONFLICT" ||
+      err.code === "IDEMPOTENCY_KEY_REUSE"
+    ) {
+      return "This setup changed elsewhere. Reload the page and try again.";
+    }
+    return err.message;
+  }
+
+  function openDialog(kind: "activate" | "save-version") {
+    if (mutationsBlocked) return;
+    setDialogError(null);
     setError(null);
     setMessage(null);
-    setGoalError(null);
+    setDialog(kind);
+  }
+
+  function closeDialog() {
+    if (acting) return;
+    setDialog(null);
+    setDialogError(null);
+  }
+
+  /**
+   * DS3 Activate (first setup): unsaved edits go into the draft first, then
+   * one call to the atomic activate (Z5-2). On failure the dialog stays open
+   * with the reason and the draft is left as it was saved.
+   */
+  async function confirmActivate() {
+    if (!relationshipId || mutationsBlocked) return;
+    setActing(true);
+    setDialogError(null);
     try {
       let current = configuration;
-      if (current.status === "draft") {
-        if (!form.goalShort.trim()) {
-          setGoalError("A short goal is required.");
-          setForceGoalOpen(true);
-          setError("A short goal is required before activation.");
-          return;
-        }
-        // Save the form, then activate it in one step (D12).
-        current = await persistConfigurationFields(current.recordVersion);
-        applyConfiguration(current);
+      if (!current || hasUnsavedEdits) {
+        current = await persistConfigurationFields(current?.recordVersion ?? 0);
+        // Only the saved record moves; the form keeps what the trainer typed.
+        setConfiguration(current);
       }
       const updated = await apiClient.activateConfiguration(
         relationshipId,
@@ -672,68 +724,142 @@ export function ConfigureCoachingPage() {
         createIdempotencyKey(),
       );
       applyConfiguration(updated);
+      setDialog(null);
       setMessage(
-        "Configuration is active. Publish a plan so the trainee can start.",
+        effectivePlan
+          ? `Coaching with ${firstName} is active. ${firstName} starts today on ${effectivePlan.title}.`
+          : `Coaching with ${firstName} is active. Nothing is scheduled until you publish a plan.`,
       );
-      showToast("Configuration activated");
+      showToast("Coaching activated");
       reloadWorkspace();
     } catch (err) {
-      if (noteEndedElsewhere(err)) return;
+      if (noteEndedElsewhere(err)) {
+        setDialog(null);
+        return;
+      }
       if (
         err instanceof ApiClientError &&
-        err.code === "CONFIGURATION_INCOMPLETE"
+        err.code === "CONFIGURATION_INCOMPLETE" &&
+        !form.goalShort.trim()
       ) {
-        if (!form.goalShort.trim()) {
-          setGoalError("A short goal is required.");
-          setForceGoalOpen(true);
-        }
-        setError(err.message);
-      } else if (
-        err instanceof ApiClientError &&
-        err.code === "CONFIGURATION_NOT_EDITABLE"
-      ) {
-        setError(
-          "This version is active. Create a new version to change it.",
-        );
-      } else if (err instanceof ApiClientError && err.status === 409) {
-        setError("This configuration changed elsewhere. Reload and try again.");
-      } else {
-        setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not activate configuration.",
-        );
+        setGoalError("A short goal is required.");
+        setForceGoalOpen(true);
       }
+      setDialogError(
+        activationErrorText(
+          err,
+          "Could not activate coaching. The draft is kept.",
+        ),
+      );
     } finally {
       setActing(false);
     }
   }
 
-  async function createNewVersion() {
+  /**
+   * DS3 Save as vN+1. From the active version: create vN+1, write the edits
+   * into it, then activate it (the API keeps today on vN and applies the new
+   * targets from tomorrow, D12b). If a step fails after vN+1 was created, the
+   * new draft is discarded so the active version is what stays; the edits
+   * stay on screen. From a vN+1 draft saved earlier: save any edits into it,
+   * then activate it.
+   */
+  async function confirmSaveVersion() {
     if (!relationshipId || !configuration || mutationsBlocked) return;
+    setActing(true);
+    setDialogError(null);
+    const fromActive = configuration.status === "active";
+    let created: CoachingConfiguration | null = null;
+    try {
+      let draft: CoachingConfiguration;
+      if (fromActive) {
+        created = await apiClient.createConfigurationVersion(
+          relationshipId,
+          { expectedVersion: configuration.recordVersion },
+          createIdempotencyKey(),
+        );
+        // The check-in form was already assigned when it was picked (D-W8-5).
+        draft = await persistConfigurationFields(created.recordVersion, {
+          assignForm: false,
+        });
+        created = draft;
+      } else {
+        draft = hasUnsavedEdits
+          ? await persistConfigurationFields(configuration.recordVersion)
+          : configuration;
+        setConfiguration(draft);
+      }
+      const updated = await apiClient.activateConfiguration(
+        relationshipId,
+        { expectedVersion: draft.recordVersion },
+        createIdempotencyKey(),
+      );
+      applyConfiguration(updated);
+      setDialog(null);
+      setMessage(
+        `Version ${updated.versionNumber} saved. New targets apply from ${
+          tomorrowLabel ? `tomorrow, ${tomorrowLabel}` : "tomorrow"
+        }.`,
+      );
+      showToast(`Saved as version ${updated.versionNumber}`);
+      reloadWorkspace();
+    } catch (err) {
+      if (created) {
+        // Put the server back on the active version; the edits stay on screen.
+        const createdVersion = created.recordVersion;
+        try {
+          const remaining = await apiClient.discardConfigurationDraft(
+            relationshipId,
+            { expectedVersion: createdVersion },
+          );
+          if (remaining) setConfiguration(remaining);
+        } catch {
+          // Not discarded (it may have gone live after all): show what is saved.
+          const latest = await apiClient
+            .getCoachingConfiguration(relationshipId, { notFoundAsNull: true })
+            .catch(() => null);
+          if (latest) setConfiguration(latest);
+        }
+      }
+      if (noteEndedElsewhere(err)) {
+        setDialog(null);
+        return;
+      }
+      setDialogError(
+        activationErrorText(
+          err,
+          `Could not save version ${nextVersionNumber}. Your changes are still here.`,
+        ),
+      );
+    } finally {
+      setActing(false);
+    }
+  }
+
+  /** Discard edits on an active version, or the vN+1 draft saved earlier. */
+  async function discardChanges() {
+    if (!configuration) return;
+    if (configuration.status === "active") {
+      applyConfiguration(configuration);
+      setError(null);
+      setMessage(null);
+      return;
+    }
+    if (!relationshipId || mutationsBlocked) return;
     setActing(true);
     setError(null);
     setMessage(null);
     try {
-      const created = await apiClient.createConfigurationVersion(
+      const remaining = await apiClient.discardConfigurationDraft(
         relationshipId,
         { expectedVersion: configuration.recordVersion },
-        createIdempotencyKey(),
       );
-      applyConfiguration(created);
-      setForceGoalOpen(true);
-      setMessage(
-        "New draft version created. Activate it to go live. New targets start tomorrow.",
-      );
-      showToast("New version created");
+      if (remaining) applyConfiguration(remaining);
+      showToast(`Version ${configuration.versionNumber} discarded`);
       reloadWorkspace();
     } catch (err) {
       if (noteEndedElsewhere(err)) return;
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not create a new version.",
-      );
+      setError(activationErrorText(err, "Could not discard the draft."));
     } finally {
       setActing(false);
     }
@@ -804,38 +930,106 @@ export function ConfigureCoachingPage() {
     ? (header?.pendingReactivation ?? null)
     : null;
 
-  const primaryAction = (() => {
-    if (relationshipEnded) return null;
-    if (status === "active") {
-      return {
-        label: "Create new version",
-        onClick: () => {
-          void createNewVersion();
-        },
-        disabled: acting || mutationsBlocked,
-      };
-    }
-    if (status === "draft" && form.goalShort.trim() && canEdit) {
-      return {
-        label: "Activate",
-        onClick: () => {
-          void activate();
-        },
-        disabled: acting || mutationsBlocked,
-      };
-    }
-    return {
-      label: "Save draft",
-      onClick: () => {
-        void saveDraft();
+  // ---- Z8-6 footer (frames 148/149) and DS3 dialogs ----
+  const traineeZone = header?.traineeTimezone ?? null;
+  const todayLabel = traineeDayLabel(traineeZone, 0);
+  const tomorrowLabel = traineeDayLabel(traineeZone, 1);
+  /** A vN+1 draft saved in an earlier visit (its active version sits behind it). */
+  const nextDraftOpen =
+    status === "draft" && (configuration?.versionNumber ?? 1) > 1;
+  const editingActive = status === "active";
+  const nextVersionNumber = editingActive
+    ? (configuration?.versionNumber ?? 1) + 1
+    : (configuration?.versionNumber ?? 1);
+  const changes =
+    editingActive && configuration ? versionChanges(configuration, form) : [];
+  const hasUnsavedEdits =
+    configuration != null &&
+    (editingActive
+      ? changes.length > 0
+      : versionChanges(configuration, form).length > 0 ||
+        (form.formVersionId ?? null) !==
+          (configuration.checkin.formVersionId ?? null));
+  // D17: Activate waits for every required section. A section counts as left
+  // while its badge reads To do, or while its unsaved value is not valid.
+  const formMissing = missingConfigurationSections({
+    goalShort: form.goalShort,
+    workout: {
+      sessionsPerWeek: form.sessionsPerWeek,
+      completionWindowHours: form.completionWindowHours,
+    },
+    nutrition: {
+      mealsPerDay: form.mealsPerDay,
+      confirmationWindowHours: form.confirmationWindowHours,
+      photoRequirement: form.photoRequirement,
+    },
+    checkin: {
+      cadence: form.cadence,
+      dueWindowHours: form.dueWindowHours,
+      formVersionId: form.formVersionId,
+    },
+    tracking: {
+      requireBodyWeight: form.requireBodyWeight,
+      requireProgressPhotos: form.requireProgressPhotos,
+      requireSessionRpe: form.requireSessionRpe,
+    },
+  });
+  const sectionsLeft = SECTION_ORDER.filter(
+    (section) =>
+      formMissing.includes(section) ||
+      configureSectionStatus(section, form, configuration) === "todo",
+  );
+  const onboardingReady =
+    header?.onboardingStatus === "coaching_ready" ||
+    header?.onboardingStatus === "active";
+
+  const activateRows: ActivateSummaryRow[] = (() => {
+    const onReminders = REMINDER_CATEGORIES.filter((c) => reminders[c.type]);
+    const reminderNames = onReminders.map((c) => c.label.toLowerCase() + "s");
+    const reminderText =
+      reminderNames.length === 0
+        ? "All off"
+        : reminderNames.length === 1
+          ? reminderNames[0]!
+          : `${reminderNames.slice(0, -1).join(", ")} and ${reminderNames.at(-1)}`;
+    const rows: ActivateSummaryRow[] = [
+      { label: "Start date", value: todayLabel ? `Today · ${todayLabel}` : "Today" },
+      {
+        label: "Workouts",
+        value: `${form.sessionsPerWeek} a week${effectivePlan ? ` · ${effectivePlan.title}` : ""}`,
       },
-      disabled:
-        acting ||
-        mutationsBlocked ||
-        (header?.onboardingStatus !== "coaching_ready" &&
-          header?.onboardingStatus !== "active"),
-    };
+      {
+        label: "Meals",
+        value: `${form.mealsPerDay} a day · log within ${form.confirmationWindowHours} h`,
+      },
+      {
+        label: "Check-ins",
+        value: `${labelFor("checkin_cadence", form.cadence)} · ${form.dueWindowHours} h window · ${summaries.checkinFormName}`,
+      },
+      { label: "Tracking", value: summaries.tracking },
+      {
+        label: "Reminders",
+        value:
+          reminderNames.length && quietHours
+            ? `${reminderText.charAt(0).toUpperCase()}${reminderText.slice(1)} · quiet ${quietHours}`
+            : `${reminderText.charAt(0).toUpperCase()}${reminderText.slice(1)}`,
+      },
+    ];
+    if (steps.target != null) {
+      rows.push({ label: "Steps target", value: `${stepsNumber(steps.target)} a day` });
+    }
+    rows.push({
+      label: "Plan",
+      value: effectivePlan
+        ? `Published · ${effectivePlan.title}`
+        : "Nothing scheduled until a plan is published",
+    });
+    return rows;
   })();
+  const anyReminderOn = REMINDER_CATEGORIES.some((c) => reminders[c.type]);
+  const activateNotice = anyReminderOn
+    ? `Reminders follow this setup from ${todayLabel ?? "today"}, never in ${pronoun} quiet hours.`
+    : null;
 
   if (loading) {
     return (
@@ -924,8 +1118,8 @@ export function ConfigureCoachingPage() {
       ) : null}
 
       {status === "active" && !relationshipEnded ? (
-        <p className="banner-info" role="status">
-          This version is active. Create a new version to change it.
+        <p className="banner-info" role="status" data-testid="configure-active-banner">
+          {`Version ${configuration?.versionNumber ?? 1} is active. Edits to goal, expectations, check-in window and tracking are saved as version ${nextVersionNumber}, with new targets from tomorrow. The steps target and check-in form change straight away.`}
         </p>
       ) : null}
 
@@ -1249,7 +1443,9 @@ export function ConfigureCoachingPage() {
           id="configure-reminders"
           title="Automatic reminders"
           summary={summaries.reminders}
-          status="done"
+          // Rules save on change, but there is nothing to badge before the
+          // first configuration exists (Z8-5 review).
+          status={configuration ? "done" : undefined}
         >
           <fieldset
             className="configure-switch-list"
@@ -1351,38 +1547,136 @@ export function ConfigureCoachingPage() {
 
       {/* Ended: no actions, and the status sits in the banner (DS7). */}
       {relationshipEnded ? null : (
-      <footer className="screen-sticky-footer configure-sticky-footer">
-        <span
-          className={`status-badge status-${statusKey}`}
-          data-testid="configure-status-pill"
-        >
-          <span className="status-dot" aria-hidden="true" />
-          {statusLabel}
-        </span>
-        <div className="screen-sticky-footer-actions">
-          {primaryAction?.label === "Activate" ? (
-            <Button
-              variant="secondary"
-              disabled={acting || mutationsBlocked}
-              onClick={() => {
-                void saveDraft();
-              }}
+      <footer
+        className="screen-sticky-footer configure-sticky-footer"
+        data-testid="configure-footer"
+      >
+        {editingActive || nextDraftOpen ? (
+          <>
+            <span
+              className={`cs-footer-pill ${editingActive ? "is-active" : "is-draft"}`}
+              data-testid="configure-status-pill"
             >
-              Save draft
-            </Button>
-          ) : null}
-          {primaryAction ? (
-            <Button
-              variant="primary"
-              disabled={primaryAction.disabled}
-              onClick={primaryAction.onClick}
+              {editingActive ? (
+                `Active · v${configuration?.versionNumber ?? 1}`
+              ) : (
+                <>
+                  <PencilLine size={13} strokeWidth={2.2} aria-hidden="true" />
+                  {`Draft · v${nextVersionNumber}`}
+                </>
+              )}
+            </span>
+            <p className="cs-footer-hint" data-testid="configure-footer-hint">
+              {editingActive
+                ? hasUnsavedEdits
+                  ? `Saving creates v${nextVersionNumber} from ${
+                      tomorrowLabel ? `tomorrow, ${tomorrowLabel}` : "tomorrow"
+                    }. Today stays on v${configuration?.versionNumber ?? 1}.`
+                  : `Edit a section to start v${nextVersionNumber}.`
+                : `v${nextVersionNumber} is a saved draft. Saving makes its targets apply from ${
+                    tomorrowLabel ? `tomorrow, ${tomorrowLabel}` : "tomorrow"
+                  }.`}
+            </p>
+            <div className="screen-sticky-footer-actions">
+              <Button
+                variant="secondary"
+                disabled={
+                  acting ||
+                  (editingActive ? !hasUnsavedEdits : mutationsBlocked)
+                }
+                onClick={() => {
+                  void discardChanges();
+                }}
+              >
+                Discard
+              </Button>
+              <Button
+                variant="primary"
+                disabled={
+                  acting ||
+                  mutationsBlocked ||
+                  (editingActive ? !hasUnsavedEdits : sectionsLeft.length > 0)
+                }
+                onClick={() => openDialog("save-version")}
+              >
+                {`Save as v${nextVersionNumber}`}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <span
+              className="cs-footer-pill is-draft"
+              data-testid="configure-status-pill"
             >
-              {acting ? "Working…" : primaryAction.label}
-            </Button>
-          ) : null}
-        </div>
+              <PencilLine size={13} strokeWidth={2.2} aria-hidden="true" />
+              Draft
+            </span>
+            <p className="cs-footer-hint" data-testid="configure-footer-hint">
+              {sectionsLeft.length > 0
+                ? `${sectionsLeft.length} ${
+                    sectionsLeft.length === 1 ? "section" : "sections"
+                  } left: ${sectionsLeft.map((id) => SECTION_TITLES[id]).join(", ")}`
+                : "Every section is done. Activate to start coaching."}
+            </p>
+            <div className="screen-sticky-footer-actions">
+              <Button
+                variant="secondary"
+                disabled={acting || mutationsBlocked || !onboardingReady}
+                onClick={() => {
+                  void saveDraft();
+                }}
+              >
+                {acting && dialog == null ? "Saving…" : "Save draft"}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={
+                  acting ||
+                  mutationsBlocked ||
+                  !onboardingReady ||
+                  sectionsLeft.length > 0
+                }
+                onClick={() => openDialog("activate")}
+              >
+                Activate
+              </Button>
+            </div>
+          </>
+        )}
       </footer>
       )}
+
+      {dialog === "activate" ? (
+        <ActivateDialog
+          firstName={firstName}
+          rows={activateRows}
+          notice={activateNotice}
+          busy={acting}
+          error={dialogError}
+          onCancel={closeDialog}
+          onConfirm={() => {
+            void confirmActivate();
+          }}
+        />
+      ) : null}
+      {dialog === "save-version" && configuration ? (
+        <SaveVersionDialog
+          firstName={firstName}
+          currentVersion={
+            editingActive ? configuration.versionNumber : null
+          }
+          nextVersion={nextVersionNumber}
+          changes={editingActive ? changes : null}
+          startsLabel={tomorrowLabel}
+          busy={acting}
+          error={dialogError}
+          onCancel={closeDialog}
+          onConfirm={() => {
+            void confirmSaveVersion();
+          }}
+        />
+      ) : null}
 
       {toast ? (
         <div className="configure-toast" role="status">

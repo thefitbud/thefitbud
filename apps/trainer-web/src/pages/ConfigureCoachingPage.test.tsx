@@ -27,6 +27,7 @@ const api = vi.hoisted(() => ({
   configureConfiguration: vi.fn(),
   activateConfiguration: vi.fn(),
   createConfigurationVersion: vi.fn(),
+  discardConfigurationDraft: vi.fn(),
   saveSubscription: vi.fn(),
   saveReminderRules: vi.fn(),
   assignPreferredCheckinForm: vi.fn(),
@@ -47,6 +48,7 @@ vi.mock("../lib/api", () => ({
     configureConfiguration: api.configureConfiguration,
     activateConfiguration: api.activateConfiguration,
     createConfigurationVersion: api.createConfigurationVersion,
+    discardConfigurationDraft: api.discardConfigurationDraft,
     saveSubscription: api.saveSubscription,
     saveReminderRules: api.saveReminderRules,
     assignPreferredCheckinForm: api.assignPreferredCheckinForm,
@@ -328,35 +330,43 @@ describe("ConfigureCoachingPage on an ended relationship (CE1)", () => {
 });
 
 describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
-  it("active version: keeps the 'version is active' banner and Create new version", async () => {
+  it("active version: fields stay editable, the banner says what a save does, nothing to save yet", async () => {
     const { container } = renderPage("active", "active");
     await screen.findByRole("heading", { name: "Coaching setup" });
-    expect(
-      screen.getByText("This version is active. Create a new version to change it."),
-    ).toBeTruthy();
+    expect(screen.getByTestId("configure-active-banner").textContent).toBe(
+      "Version 1 is active. Edits to goal, expectations, check-in window and tracking are saved as version 2, with new targets from tomorrow. The steps target and check-in form change straight away.",
+    );
+    expect(container.textContent).not.toContain("Create a new version to change it");
     expect(container.textContent).not.toContain("has ended");
-    const create = screen.getByRole("button", { name: "Create new version" });
-    expect((create as HTMLButtonElement).disabled).toBe(false);
-    // Locked version fields stay disabled; reminders, the steps target and the
-    // next check-in's form stay editable (D-W8-5).
+    expect(screen.queryByRole("button", { name: "Create new version" })).toBeNull();
+    // Z8-6: the first edit opens v2, so every target is editable on screen.
     const byName = (n: string) =>
       container.querySelector<HTMLInputElement>(`[name="${n}"]`)!;
-    expect(byName("goalShort").disabled).toBe(true);
-    expect(byName("sessionsPerWeek").disabled).toBe(true);
-    expect(byName("dueWindowHours").disabled).toBe(true);
+    expect(byName("goalShort").disabled).toBe(false);
+    expect(byName("sessionsPerWeek").disabled).toBe(false);
+    expect(byName("dueWindowHours").disabled).toBe(false);
     expect(byName("checkinForm").disabled).toBe(false);
-    expect(byName("checkinForm").closest("fieldset[disabled]")).toBeNull();
     await stepsLoaded(container);
-    // Subscription moved to Client settings (Z8-3): nothing to edit or save here.
     expect(container.querySelector('[name="planName"]')).toBeNull();
     expect(screen.queryByRole("button", { name: "Save subscription" })).toBeNull();
     const switches = Array.from(
       container.querySelectorAll<HTMLInputElement>('input[role="switch"]'),
     );
     expect(switches.map((s) => s.disabled)).toEqual([
-      true, true, true, // tracking (locked with the active version)
+      false, false, false, // tracking (saved as v2)
       false, false, false, // automatic reminders
     ]);
+    // Frame 149 footer: Active · v1, Discard and Save as v2 wait for an edit.
+    expect(screen.getByTestId("configure-status-pill").textContent).toBe("Active · v1");
+    expect(screen.getByTestId("configure-footer-hint").textContent).toBe(
+      "Edit a section to start v2.",
+    );
+    const discard = screen.getByRole("button", { name: "Discard" }) as HTMLButtonElement;
+    const save = screen.getByRole("button", { name: "Save as v2" }) as HTMLButtonElement;
+    expect(discard.disabled).toBe(true);
+    expect(save.disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Save draft" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Activate" })).toBeNull();
   });
 
   it("draft: every field and both save actions are enabled, no banner", async () => {
@@ -372,7 +382,7 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
       .map((el) => el.textContent);
     // Only the WhatsApp shortcut (no number in this fixture) is disabled.
     expect(disabledButtons).toEqual(["Open WhatsApp"]);
-    expect(container.textContent).not.toContain("This version is active");
+    expect(container.textContent).not.toContain("is active.");
     expect(container.textContent).not.toContain("has ended");
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Activate" })).toBeTruthy();
@@ -380,8 +390,8 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
   });
 });
 
-describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
-  it("a draft with a short goal offers Save draft and Activate, never Mark configured", async () => {
+describe("ConfigureCoachingPage first activation (Z8-6, frame 148, DS3)", () => {
+  it("a complete draft offers Save draft and Activate, never Mark configured", async () => {
     renderPage("active", "draft");
     await screen.findByRole("heading", { name: "Coaching setup" });
     expect(screen.queryByRole("button", { name: "Mark configured" })).toBeNull();
@@ -389,19 +399,119 @@ describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
     const activate = screen.getByRole("button", { name: "Activate" });
     expect((activate as HTMLButtonElement).disabled).toBe(false);
     expect(activate.className).toContain("primary");
+    expect(screen.getByTestId("configure-status-pill").textContent).toBe("Draft");
+    expect(screen.getByTestId("configure-footer-hint").textContent).toBe(
+      "Every section is done. Activate to start coaching.",
+    );
   });
 
-  it("a draft without a short goal offers Save draft only", async () => {
+  it("Activate stays disabled while D17 sections are left, and names them", async () => {
     renderPage("active", "draft", configuration("draft", null));
     await screen.findByRole("heading", { name: "Coaching setup" });
+    const activate = screen.getByRole("button", { name: "Activate" }) as HTMLButtonElement;
+    expect(activate.disabled).toBe(true);
+    expect(screen.getByTestId("configure-footer-hint").textContent).toBe(
+      "1 section left: Goal",
+    );
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Activate" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Mark configured" })).toBeNull();
   });
 
-  it("Activate saves the form then activates in one step, without the configure call", async () => {
+  it("before anything is saved, every To do section is left", async () => {
+    renderPage("coaching_ready", "draft", null as never);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    expect(screen.getByTestId("configure-footer-hint").textContent).toBe(
+      "4 sections left: Goal, Expectations, Check-ins, Tracking",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Activate" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+  });
+
+  it("Activate opens the DS3 confirmation first: nothing is sent until it is confirmed", async () => {
+    renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    const dialog = await screen.findByRole("dialog", { name: "Start coaching Kavya?" });
+    expect(dialog.getAttribute("aria-modal")).toBe("true");
+    const rows = Array.from(dialog.querySelectorAll("dt")).map((dt) => [
+      dt.textContent,
+      dt.nextElementSibling?.textContent,
+    ]);
+    expect(rows.map(([label]) => label)).toEqual([
+      "Start date",
+      "Workouts",
+      "Meals",
+      "Check-ins",
+      "Tracking",
+      "Reminders",
+      "Steps target",
+      "Plan",
+    ]);
+    const value = (label: string) => rows.find(([l]) => l === label)?.[1];
+    expect(value("Start date")).toMatch(/^Today · (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2}$/);
+    expect(value("Workouts")).toBe("3 a week");
+    expect(value("Meals")).toBe("4 a day · log within 12 h");
+    expect(value("Check-ins")).toBe("Weekly · 48 h window · FitBud weekly check-in");
+    expect(value("Reminders")).toBe("Workouts, meals and check-ins");
+    expect(value("Steps target")).toBe("8,000 a day");
+    expect(value("Plan")).toBe("Nothing scheduled until a plan is published");
+    expect(dialog.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(api.activateConfiguration).not.toHaveBeenCalled();
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+
+    // Back to setup closes it without a call; Escape does too.
+    fireEvent.click(screen.getByRole("button", { name: "Back to setup" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    await screen.findByRole("dialog");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.activateConfiguration).not.toHaveBeenCalled();
+  });
+
+  it("confirming an unchanged draft is one activate call, with plan-aware copy (no plan)", async () => {
     const draft = configuration("draft");
-    const saved = { ...draft, recordVersion: 4 };
+    api.activateConfiguration.mockResolvedValue({
+      ...draft,
+      status: "active",
+      recordVersion: 4,
+      activatedAt: "2026-07-07T04:00:00.000Z",
+    });
+    renderPage("active", "draft", draft);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Activate coaching" }));
+    await waitFor(() => expect(api.activateConfiguration).toHaveBeenCalledTimes(1));
+    expect(api.activateConfiguration.mock.calls[0]![0]).toBe(REL_ID);
+    expect(api.activateConfiguration.mock.calls[0]![1]).toEqual({ expectedVersion: 3 });
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+    expect(api.configureConfiguration).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText(
+        "Coaching with Kavya is active. Nothing is scheduled until you publish a plan.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByTestId("configure-status-pill").textContent).toBe("Active · v1");
+  });
+
+  it("unsaved edits are saved into the draft first, then one activate call; a published plan is named", async () => {
+    api.getEffectivePlan.mockResolvedValue({
+      plan: {
+        id: "77777777-7777-4777-8777-777777777777",
+        coachingRelationshipId: REL_ID,
+        title: "Strength return, phase 1",
+        createdAt: "2026-07-06T04:00:00.000Z",
+        updatedAt: "2026-07-06T04:00:00.000Z",
+      },
+      version: {
+        id: "88888888-8888-4888-8888-888888888888",
+        content: { workoutDays: [], mealPrescriptions: [] },
+      },
+    });
+    api.getPlanConsistency.mockResolvedValue({ acknowledged: false, fingerprint: "x" });
+    const draft = configuration("draft");
+    const saved = { ...draft, recordVersion: 4, workout: { ...draft.workout, sessionsPerWeek: 4 } };
     api.saveConfigurationDraft.mockResolvedValue(saved);
     api.activateConfiguration.mockResolvedValue({
       ...saved,
@@ -409,42 +519,215 @@ describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
       recordVersion: 5,
       activatedAt: "2026-07-07T04:00:00.000Z",
     });
-    renderPage("active", "draft", draft);
+    const { container } = renderPage("active", "draft", draft);
     await screen.findByRole("heading", { name: "Coaching setup" });
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "4");
     fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.textContent).toContain("4 a week · Strength return, phase 1");
+    expect(dialog.textContent).toContain("Published · Strength return, phase 1");
+    fireEvent.click(screen.getByRole("button", { name: "Activate coaching" }));
     await waitFor(() => expect(api.activateConfiguration).toHaveBeenCalledTimes(1));
     expect(api.saveConfigurationDraft).toHaveBeenCalledTimes(1);
     expect(api.saveConfigurationDraft.mock.calls[0]![1]).toMatchObject({
       expectedVersion: 3,
+      workout: { sessionsPerWeek: 4 },
     });
-    expect(api.activateConfiguration.mock.calls[0]![0]).toBe(REL_ID);
     expect(api.activateConfiguration.mock.calls[0]![1]).toEqual({ expectedVersion: 4 });
     expect(api.saveConfigurationDraft.mock.invocationCallOrder[0]!).toBeLessThan(
       api.activateConfiguration.mock.invocationCallOrder[0]!,
     );
-    expect(api.configureConfiguration).not.toHaveBeenCalled();
     expect(
       await screen.findByText(
-        "Configuration is active. Publish a plan so the trainee can start.",
+        "Coaching with Kavya is active. Kavya starts today on Strength return, phase 1.",
       ),
     ).toBeTruthy();
   });
 
-  it("a new version reads as the one-step flow", async () => {
-    api.createConfigurationVersion.mockResolvedValue({
-      ...configuration("draft"),
-      versionNumber: 2,
-      recordVersion: 0,
-    });
-    renderPage("active", "active");
+  it("a refused activation keeps the draft and the dialog, and says why", async () => {
+    api.activateConfiguration.mockRejectedValue(
+      new ApiClientError({
+        code: "CONFIGURATION_INCOMPLETE",
+        message: "Complete every required section before activating.",
+        requestId: "req-1",
+        status: 409,
+      }),
+    );
+    renderPage("active", "draft");
     await screen.findByRole("heading", { name: "Coaching setup" });
-    fireEvent.click(screen.getByRole("button", { name: "Create new version" }));
+    fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Activate coaching" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() =>
+      expect(dialog.querySelector("[role=alert]")?.textContent).toBe(
+        "Complete every required section before activating.",
+      ),
+    );
+    expect(screen.getByTestId("configure-status-pill").textContent).toBe("Draft");
+    expect(api.discardConfigurationDraft).not.toHaveBeenCalled();
+  });
+
+  it("a failure that is not an API error does not blame a cause it did not check", async () => {
+    api.activateConfiguration.mockRejectedValue(new TypeError("Failed to fetch"));
+    renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    fireEvent.click(screen.getByRole("button", { name: "Activate" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Activate coaching" }));
+    expect(
+      await screen.findByText("Could not activate coaching. The draft is kept."),
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toContain("Failed to fetch");
+  });
+});
+
+describe("ConfigureCoachingPage Save as vN+1 (Z8-6, frame 149, DS3)", () => {
+  function activeV2() {
+    return { ...configuration("active"), versionNumber: 2, recordVersion: 6 };
+  }
+
+  it("the first edit opens v3: footer hint, Editing badge on the owning section only", async () => {
+    const { container } = renderPage("active", "active", activeV2());
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "4");
+    expect(screen.getByTestId("configure-footer-hint").textContent).toMatch(
+      /^Saving creates v3 from tomorrow, (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2}\. Today stays on v2\.$/,
+    );
+    expect(
+      (screen.getByRole("button", { name: "Save as v3" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      (screen.getByRole("button", { name: "Discard" }) as HTMLButtonElement).disabled,
+    ).toBe(false);
+  });
+
+  it("the dialog lists the changes only, starts tomorrow, then creates, saves and activates v3", async () => {
+    const active = activeV2();
+    const created = {
+      ...active,
+      id: "99999999-9999-4999-8999-999999999999",
+      status: "draft",
+      versionNumber: 3,
+      recordVersion: 0,
+      activatedAt: null,
+    };
+    const saved = {
+      ...created,
+      recordVersion: 1,
+      workout: { ...created.workout, sessionsPerWeek: 4 },
+      tracking: { ...created.tracking, requireProgressPhotos: true },
+    };
+    api.createConfigurationVersion.mockResolvedValue(created);
+    api.saveConfigurationDraft.mockResolvedValue(saved);
+    api.activateConfiguration.mockResolvedValue({
+      ...saved,
+      status: "active",
+      recordVersion: 2,
+      activatedAt: "2026-07-08T04:00:00.000Z",
+    });
+    const { container } = renderPage("active", "active", active);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "4");
+    const photos = Array.from(
+      container.querySelectorAll<HTMLInputElement>('input[role="switch"]'),
+    )[1]!;
+    fireEvent.click(photos);
+    fireEvent.click(screen.getByRole("button", { name: "Save as v3" }));
+    const dialog = await screen.findByRole("dialog", { name: "Save as version 3?" });
+    expect(dialog.textContent).toContain("Version 2 is kept as it was.");
+    expect(dialog.textContent).toContain("What changes · 2");
+    const items = Array.from(dialog.querySelectorAll("li")).map((li) => li.textContent);
+    expect(items).toEqual([
+      "Workoutsfrom 3 a weekto 4 a week",
+      "Progress photosfrom Not requiredto Required",
+    ]);
+    expect(dialog.textContent).toMatch(/Tomorrow · (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2}/);
+    expect(dialog.textContent).toContain("Today's plan stays as it is.");
+    expect(api.createConfigurationVersion).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save as version 3" }));
+    await waitFor(() => expect(api.activateConfiguration).toHaveBeenCalledTimes(1));
+    expect(api.createConfigurationVersion.mock.calls[0]![1]).toEqual({ expectedVersion: 6 });
+    expect(api.saveConfigurationDraft.mock.calls[0]![1]).toMatchObject({
+      expectedVersion: 0,
+      workout: { sessionsPerWeek: 4 },
+      tracking: { requireProgressPhotos: true },
+    });
+    expect(api.activateConfiguration.mock.calls[0]![1]).toEqual({ expectedVersion: 1 });
+    expect(api.createConfigurationVersion.mock.invocationCallOrder[0]!).toBeLessThan(
+      api.saveConfigurationDraft.mock.invocationCallOrder[0]!,
+    );
+    expect(api.saveConfigurationDraft.mock.invocationCallOrder[0]!).toBeLessThan(
+      api.activateConfiguration.mock.invocationCallOrder[0]!,
+    );
+    // The form was assigned when it was picked; the save does not re-assign it.
+    expect(api.assignPreferredCheckinForm).not.toHaveBeenCalled();
+    expect(api.discardConfigurationDraft).not.toHaveBeenCalled();
     expect(
       await screen.findByText(
-        "New draft version created. Activate it to go live. New targets start tomorrow.",
+        /^Version 3 saved\. New targets apply from tomorrow, (Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2}\.$/,
       ),
     ).toBeTruthy();
-    expect(document.body.textContent).not.toContain("Edit and activate when ready");
+    expect(screen.getByTestId("configure-status-pill").textContent).toBe("Active · v3");
+  });
+
+  it("a failed save after v3 was created discards v3, keeps v2 live and the edits on screen", async () => {
+    const active = activeV2();
+    const created = { ...active, status: "draft", versionNumber: 3, recordVersion: 0, activatedAt: null };
+    api.createConfigurationVersion.mockResolvedValue(created);
+    api.saveConfigurationDraft.mockResolvedValue({ ...created, recordVersion: 1 });
+    api.activateConfiguration.mockRejectedValue(
+      new ApiClientError({
+        code: "CONFIGURATION_VERSION_CONFLICT",
+        message: "Configuration was changed after this version was loaded.",
+        requestId: "req-2",
+        status: 409,
+      }),
+    );
+    api.discardConfigurationDraft.mockResolvedValue(active);
+    const { container } = renderPage("active", "active", active);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "5");
+    fireEvent.click(screen.getByRole("button", { name: "Save as v3" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save as version 3" }));
+    expect(
+      await screen.findByText("This setup changed elsewhere. Reload the page and try again."),
+    ).toBeTruthy();
+    expect(api.discardConfigurationDraft).toHaveBeenCalledWith(REL_ID, { expectedVersion: 1 });
+    expect(selectNamed(container, "sessionsPerWeek").value).toBe("5");
+    expect(screen.getByTestId("configure-status-pill").textContent).toBe("Active · v2");
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("Discard puts the active values back without a call", async () => {
+    const { container } = renderPage("active", "active", activeV2());
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "6");
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(selectNamed(container, "sessionsPerWeek").value).toBe("3");
+    expect(screen.getByTestId("configure-footer-hint").textContent).toBe(
+      "Edit a section to start v3.",
+    );
+    expect(api.discardConfigurationDraft).not.toHaveBeenCalled();
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+  });
+
+  it("a v3 draft saved earlier offers Discard (server) and Save as v3 (activate only)", async () => {
+    const draft = { ...configuration("draft"), versionNumber: 3, recordVersion: 2 };
+    api.activateConfiguration.mockResolvedValue({ ...draft, status: "active", recordVersion: 3 });
+    renderPage("active", "draft", draft);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    expect(screen.getByTestId("configure-status-pill").textContent).toBe("Draft · v3");
+    expect(screen.queryByRole("button", { name: "Activate" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save as v3" }));
+    const dialog = await screen.findByRole("dialog", { name: "Save as version 3?" });
+    expect(dialog.textContent).toContain(
+      "Version 3 was saved as a draft earlier. Its changes from version 2 aren't listed here.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save as version 3" }));
+    await waitFor(() => expect(api.activateConfiguration).toHaveBeenCalledTimes(1));
+    expect(api.activateConfiguration.mock.calls[0]![1]).toEqual({ expectedVersion: 2 });
+    expect(api.createConfigurationVersion).not.toHaveBeenCalled();
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
   });
 });
 
@@ -897,12 +1180,29 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
 
     const view = renderPage("coaching_ready", "draft", null as never);
     await screen.findByRole("heading", { name: "Coaching setup" });
+    // Reminders: no badge until a configuration exists (Z8-5 review).
     expect(sectionRows(view.container).map((row) => row.badge)).toEqual([
-      "To do", "To do", "To do", "To do", "Done",
+      "To do", "To do", "To do", "To do", undefined,
     ]);
     expect(screen.getByTestId("configure-status-note").textContent).toBe(
       "Not saved yet",
     );
+  });
+
+  it("a cadence change marks Expectations as Editing, not Check-ins (the section that owns the field)", async () => {
+    const { container } = renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    chooseOption(selectNamed(container, "cadence"), "biweekly");
+    const badges = sectionRows(container).map((row) => row.badge);
+    expect(badges[1]).toBe("Editing");
+    expect(badges[2]).toBe("Done");
+    chooseOption(selectNamed(container, "cadence"), "weekly");
+    fireEvent.change(container.querySelector('[name="dueWindowHours"]')!, {
+      target: { value: "24" },
+    });
+    const after = sectionRows(container).map((row) => row.badge);
+    expect(after[1]).toBe("Done");
+    expect(after[2]).toBe("Editing");
   });
 
   it("Save draft never writes the subscription, so amount, type and mode can't be dropped (D-W8-5)", async () => {
