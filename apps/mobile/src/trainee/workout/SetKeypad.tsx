@@ -47,7 +47,7 @@ export function SetKeypad({
       ? "No weight used"
       : "Weight used, in kg"
     : bodyweight
-      ? "Holding weight? Switch to kg"
+      ? "Holding weights? Switch to kg"
       : "Reps you did";
 
   return (

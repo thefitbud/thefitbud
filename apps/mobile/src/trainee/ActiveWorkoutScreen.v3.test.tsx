@@ -259,7 +259,7 @@ describe("ActiveWorkoutScreen set entry", () => {
     renderScreen(null);
     expect(screen.getByRole("button", { name: /Set 1 load: Bodyweight/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Set 1 reps/ }));
-    expect(screen.getByText("Holding weight? Switch to kg")).toBeTruthy();
+    expect(screen.getByText("Holding weights? Switch to kg")).toBeTruthy();
     tap("Plus 1");
     expect(screen.getByRole("button", { name: /Set 1 reps: 11/ })).toBeTruthy();
     fireEvent.click(screen.getByRole("tab", { name: "kg" }));
