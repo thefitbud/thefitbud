@@ -36,7 +36,11 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { addDays, localDateInTimezone } from "../lib/dates";
-import { MeasureRow, lastValuesByType } from "./checkin/MeasureRow";
+import {
+  MeasureRow,
+  lastValuesByType,
+  measureProblem,
+} from "./checkin/MeasureRow";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import {
@@ -60,7 +64,7 @@ type Step = "form" | "review" | "done";
 
 const WIZARD_STEPS = [
   {
-    label: "Measurements",
+    label: "Body and photos",
     sectionTitles: ["Measurements", "Photos"],
   },
   {
@@ -213,9 +217,18 @@ function SentList({
 function lastMeasureLabel(
   field: CheckinFieldDefinition,
   lastByType: Record<string, { value: number; observedAt: string }>,
+  lastByKey: Record<string, { value: number; localDate: string }>,
   timeZone: string,
 ): string | null {
   if (field.type !== "measurement") return null;
+  if (field.measurementType === "other") {
+    // Arm and thigh are standard keys with their own series; an unkeyed
+    // `other` question has no unambiguous last value.
+    const keyed = field.key ? lastByKey[field.key] : undefined;
+    if (!keyed) return null;
+    const when = formatCivilDate(keyed.localDate, { includeWeekday: true });
+    return `${Math.round(keyed.value * 10) / 10} ${field.unit ?? "cm"} • ${when}`;
+  }
   const last = lastByType[field.measurementType];
   if (!last || field.measurementType === "body_weight_kg") return null;
   const date = formatCivilDate(
@@ -223,7 +236,7 @@ function lastMeasureLabel(
     { includeWeekday: true },
   );
   const rounded = Math.round(last.value * 10) / 10;
-  return `${rounded} ${field.unit ?? "cm"} · ${date}`;
+  return `${rounded} ${field.unit ?? "cm"} • ${date}`;
 }
 
 function FieldControl({
@@ -420,6 +433,7 @@ function FieldControl({
             <Text style={styles.ov}>Weight</Text>
             <Text style={styles.wbigVal}>
               {shown}
+              {" "}
               <Text style={styles.wbigUnit}>kg</Text>
             </Text>
             {lastWeight ? (
@@ -480,6 +494,7 @@ function FieldControl({
         unit={unit}
         value={value}
         lastLabel={lastMeasure}
+        problem={measureProblem(field, value)}
         first={firstRow}
         onChange={onChange}
         onBlur={onBlur}
@@ -530,6 +545,9 @@ export function CheckinScreen({
   } | null>(null);
   const [lastByType, setLastByType] = useState<
     Record<string, { value: number; observedAt: string }>
+  >({});
+  const [lastByKey, setLastByKey] = useState<
+    Record<string, { value: number; localDate: string }>
   >({});
   const [formError, setFormError] = useState<string | null>(null);
   const [formNonce, setFormNonce] = useState(0);
@@ -605,12 +623,38 @@ export function CheckinScreen({
               const rounded = Math.round(latest.value * 10) / 10;
               setLastWeight({
                 value: latest.value,
-                label: `${lastDate} · ${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} kg`,
+                label: `${Number.isInteger(rounded) ? rounded : rounded.toFixed(1)} kg • ${lastDate}`,
               });
             }
           } catch (err) {
             // The hints are optional; the form works without them.
             reportError("checkin.lastWeight", err);
+          }
+        }
+
+        const seriesKeys = loaded.fields.flatMap((f) =>
+          f.type === "measurement" &&
+          f.measurementType === "other" &&
+          (f.key === "arm" || f.key === "thigh")
+            ? [f.key]
+            : [],
+        );
+        if (seriesKeys.length > 0) {
+          try {
+            const metrics = await api.getProgressMetrics(relationship.id, {
+              keys: seriesKeys,
+              range: "all",
+            });
+            if (!cancelled) {
+              const next: Record<string, { value: number; localDate: string }> = {};
+              for (const series of metrics.series) {
+                const point = series.points[series.points.length - 1];
+                if (point) next[series.key] = { value: point.value, localDate: point.localDate };
+              }
+              setLastByKey(next);
+            }
+          } catch (err) {
+            reportError("checkin.lastSeries", err);
           }
         }
 
@@ -1004,11 +1048,23 @@ export function CheckinScreen({
       }).format(draftSavedAt)
     : null;
 
+  const measurementsInvalid = fields.some(
+    (f) =>
+      f.type === "measurement" &&
+      f.measurementType !== "body_weight_kg" &&
+      measureProblem(f, values[f.id] ?? "") !== null,
+  );
+
   const formFooter = (
     <View style={styles.abar}>
       <PrimaryButton
         label="Continue"
-        disabled={!form || acting || !canEditCheckin(checkin.status)}
+        disabled={
+          !form ||
+          acting ||
+          !canEditCheckin(checkin.status) ||
+          (wizardStep === 0 && measurementsInvalid)
+        }
         onPress={() => {
           if (wizardStep < WIZARD_STEPS.length - 1) {
             setWizardStep((index) => index + 1);
@@ -1055,7 +1111,7 @@ export function CheckinScreen({
         ))}
       </View>
       <View style={styles.stepl}>
-        <Text style={styles.steplMain} numberOfLines={1}>
+        <Text style={styles.steplMain}>
           <Text style={styles.steplBold}>{WIZARD_STEPS[wizardStep]?.label}</Text>
           {" · step "}
           {wizardStep + 1} of {WIZARD_STEPS.length}
@@ -1094,9 +1150,59 @@ export function CheckinScreen({
       {visibleSections.map((section) => {
         const isPhotos = section.title === "Photos";
         const isMeasurements = section.title === "Measurements";
-        const bodyCount = section.fields.filter(
-          (f) => f.type === "measurement" && f.measurementType !== "body_weight_kg",
-        ).length;
+        const setField = (id: string) => (next: string) => {
+          setValues((current) => ({ ...current, [id]: next }));
+          scheduleDraftSave();
+        };
+        if (isMeasurements) {
+          const weightFields = section.fields.filter(
+            (f) => f.type === "measurement" && f.measurementType === "body_weight_kg",
+          );
+          const bodyFields = section.fields.filter((f) => !weightFields.includes(f));
+          return (
+            <View key={section.title} style={styles.section}>
+              {weightFields.map((field) => (
+                <View key={field.id} style={[styles.cardPad, styles.cardGap]}>
+                  <FieldControl
+                    field={field}
+                    value={values[field.id] ?? ""}
+                    lastWeight={lastWeight}
+                    onChange={setField(field.id)}
+                    onBlur={() => {
+                      flushDraftSave();
+                    }}
+                  />
+                </View>
+              ))}
+              {bodyFields.length > 0 ? (
+                <View style={styles.cardPad}>
+                  <Text style={styles.sectionTitle} accessibilityRole="header">
+                    Body measurements
+                  </Text>
+                  <Text style={styles.help}>
+                    {bodyFields.length === 1
+                      ? `${coach} asks for this measurement.`
+                      : `${coach} asks for these ${bodyFields.length}.`}{" "}
+                    Measure in the morning, before breakfast.
+                  </Text>
+                  {bodyFields.map((field, index) => (
+                    <FieldControl
+                      key={field.id}
+                      field={field}
+                      value={values[field.id] ?? ""}
+                      lastMeasure={lastMeasureLabel(field, lastByType, lastByKey, timeZone)}
+                      firstRow={index === 0}
+                      onChange={setField(field.id)}
+                      onBlur={() => {
+                        flushDraftSave();
+                      }}
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          );
+        }
         return (
           <View key={section.title} style={styles.section}>
             <View style={styles.sh}>
@@ -1106,20 +1212,8 @@ export function CheckinScreen({
                   <Text style={styles.sectionCnt}> optional</Text>
                 ) : null}
               </Text>
-              {isPhotos ? (
-                <Pressable accessibilityRole="button">
-                  <Text style={styles.shLink}>How to</Text>
-                </Pressable>
-              ) : null}
             </View>
-            {isMeasurements && bodyCount > 0 ? (
-              <Text style={styles.help}>
-                {bodyCount === 1
-                  ? `${coach} asks for this measurement.`
-                  : `${coach} asks for these ${bodyCount}.`}
-              </Text>
-            ) : null}
-            <View style={isMeasurements || isPhotos ? styles.cardPad : null}>
+            <View style={isPhotos ? styles.cardPad : null}>
               {isPhotos ? (
                 <View style={styles.ph3}>
                   {section.fields.map((field) => (
@@ -1127,10 +1221,7 @@ export function CheckinScreen({
                       key={field.id}
                       field={field}
                       value={values[field.id] ?? ""}
-                      onChange={(next) => {
-                        setValues((current) => ({ ...current, [field.id]: next }));
-                        scheduleDraftSave();
-                      }}
+                      onChange={setField(field.id)}
                       onBlur={() => {
                         void saveDraft();
                       }}
@@ -1138,18 +1229,12 @@ export function CheckinScreen({
                   ))}
                 </View>
               ) : (
-                section.fields.map((field, index) => (
+                section.fields.map((field) => (
                   <FieldControl
                     key={field.id}
                     field={field}
                     value={values[field.id] ?? ""}
-                    lastWeight={lastWeight}
-                    lastMeasure={lastMeasureLabel(field, lastByType, timeZone)}
-                    firstRow={index === 0}
-                    onChange={(next) => {
-                      setValues((current) => ({ ...current, [field.id]: next }));
-                      scheduleDraftSave();
-                    }}
+                    onChange={setField(field.id)}
                     onBlur={() => {
                       flushDraftSave();
                     }}
@@ -1505,8 +1590,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.indigo,
   },
   stepl: {
+    columnGap: spacing.md,
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "space-between",
+    rowGap: 2,
     marginBottom: spacing.sm,
     paddingHorizontal: 4,
   },
@@ -1545,6 +1633,9 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 15,
     fontWeight: "600",
+  },
+  cardGap: {
+    marginBottom: spacing.md,
   },
   cardPad: {
     backgroundColor: colors.white,

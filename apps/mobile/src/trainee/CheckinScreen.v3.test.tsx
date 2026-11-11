@@ -16,6 +16,7 @@ import {
   lastValuesByType,
   measureProblem,
 } from "./checkin/MeasureRow";
+import { enqueueAndPush } from "../sync/actions";
 
 const RELATIONSHIP_ID = "1b65e3ad-84cf-4fe1-a546-0d62656c2c79";
 const relationship = coachingRelationshipSchema.parse({
@@ -72,6 +73,19 @@ const checkin = checkinSchema.parse({
 });
 
 const api = {
+  getCheckin: vi.fn(async () => checkin),
+  getProgressMetrics: vi.fn(async () => ({
+    series: [
+      {
+        key: "arm",
+        unit: "cm",
+        points: [
+          { localDate: "2026-10-02", value: 33.5, checkinId: null },
+          { localDate: "2026-10-09", value: 34, checkinId: null },
+        ],
+      },
+    ],
+  })),
   getCheckinForm: vi.fn(async () => form),
   getProgressSummary: vi.fn(async () => ({
     measurements: [
@@ -97,11 +111,13 @@ describe("measurement helpers", () => {
     expect(cleanMeasureInput("1.2.3")).toBe("1.23");
   });
 
-  it("accepts blank and 10 to 250, rejects the rest (Z6-6)", () => {
-    expect(measureProblem("")).toBeNull();
-    expect(measureProblem("93.5")).toBeNull();
-    expect(measureProblem("9")).toBe("Enter 10 to 250 cm");
-    expect(measureProblem("251")).toBe("Enter 10 to 250 cm");
+  it("uses the core range by key and the field's unit (Z6-6)", () => {
+    const waist = form.fields[1];
+    if (waist?.type !== "measurement") throw new Error("fixture");
+    expect(measureProblem(waist, "")).toBeNull();
+    expect(measureProblem(waist, "93.5")).toBeNull();
+    expect(measureProblem(waist, "9")).toBe("Enter a valid value in cm");
+    expect(measureProblem(waist, "251")).toBe("Enter a valid value in cm");
   });
 
   it("uses the newest value per body part and none for other", () => {
@@ -122,10 +138,13 @@ describe("CheckinScreen measurements", () => {
     expect(screen.getByLabelText("Hip, cm")).toBeTruthy();
     expect(screen.getByLabelText("Arm, cm")).toBeTruthy();
     expect(screen.queryByLabelText("Chest, cm")).toBeNull();
-    expect(screen.getByText("Rahul asks for these 3.")).toBeTruthy();
-    expect(screen.getByText("Last: 94 cm · Fri 9 Oct")).toBeTruthy();
-    expect(screen.getByText("Last: 102 cm · Fri 9 Oct")).toBeTruthy();
-    expect(screen.queryByText(/Last: 34/)).toBeNull();
+    expect(screen.getByText(/Rahul asks for these 3\. Measure in the morning, before breakfast\./)).toBeTruthy();
+    expect(screen.getByText("Last: 94 cm • Fri 9 Oct")).toBeTruthy();
+    expect(screen.getByText("Last: 102 cm • Fri 9 Oct")).toBeTruthy();
+    // Arm is a keyed `other` field: its last value comes from the arm series.
+    expect(screen.getByText("Last: 34 cm • Fri 9 Oct")).toBeTruthy();
+    expect(screen.getByText("Body measurements")).toBeTruthy();
+    expect(screen.getByText("Body and photos")).toBeTruthy();
   });
 
   it("types a value on the keypad and flags an out-of-range one", async () => {
@@ -134,8 +153,47 @@ describe("CheckinScreen measurements", () => {
     expect(waist.getAttribute("inputmode")).toBe("decimal");
     fireEvent.change(waist, { target: { value: "93.5" } });
     await waitFor(() => expect(waist.value).toBe("93.5"));
-    expect(screen.queryByText("Enter 10 to 250 cm")).toBeNull();
+    expect(screen.queryByText("Enter a valid value in cm")).toBeNull();
     fireEvent.change(waist, { target: { value: "9" } });
-    await screen.findByText("Enter 10 to 250 cm");
+    await screen.findByText("Enter a valid value in cm");
+  });
+
+  it("blocks Continue on step 1 while a measurement is invalid", async () => {
+    render(<CheckinScreen relationship={relationship} checkin={checkin} onDone={() => {}} />);
+    const waist = await screen.findByLabelText("Waist, cm");
+    const next = () => screen.getByRole("button", { name: "Continue" });
+    expect(next().getAttribute("aria-disabled")).not.toBe("true");
+    fireEvent.change(waist, { target: { value: "9" } });
+    await waitFor(() => expect(next().getAttribute("aria-disabled")).toBe("true"));
+    fireEvent.change(waist, { target: { value: "93.5" } });
+    await waitFor(() => expect(next().getAttribute("aria-disabled")).not.toBe("true"));
+  });
+
+  it("shows four 1-5 ratings and submits only the answered keys", async () => {
+    render(<CheckinScreen relationship={relationship} checkin={checkin} onDone={() => {}} />);
+    const waist = await screen.findByLabelText("Waist, cm");
+    fireEvent.change(waist, { target: { value: "93.5" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    for (const name of ["Energy", "Sleep quality", "Stress", "Hunger"]) {
+      for (const n of [1, 2, 3, 4, 5]) {
+        expect(await screen.findByRole("button", { name: `${name} ${n}` })).toBeTruthy();
+      }
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Energy 4" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Send to Rahul" }));
+    await waitFor(() =>
+      expect(
+        vi.mocked(enqueueAndPush).mock.calls.some(
+          ([, op]) => (op as { operation: string }).operation === "checkin.submit",
+        ),
+      ).toBe(true),
+    );
+    const submit = vi
+      .mocked(enqueueAndPush)
+      .mock.calls.map(([, op]) => op as unknown as { operation: string; payload: { body: { answers: unknown } } })
+      .find((op) => op.operation === "checkin.submit");
+    expect(submit?.payload.body.answers).toEqual({ fieldAnswers: { waist: 93.5, energy: 4 } });
   });
 });

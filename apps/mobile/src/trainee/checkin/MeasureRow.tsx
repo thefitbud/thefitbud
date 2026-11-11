@@ -3,9 +3,15 @@ import { StyleSheet, Text, TextInput, View } from "react-native";
 
 import { colors, spacing } from "@fitbud/ui-mobile";
 
-/** Z6-6: body measurements are 10 to 250 cm. */
-export const MEASURE_MIN_CM = 10;
-export const MEASURE_MAX_CM = 250;
+import { validateCheckinAnswer, type CheckinStandardKey } from "@fitbud/core";
+import type { CheckinFieldDefinition } from "@fitbud/contracts";
+
+const TYPE_TO_KEY: Record<string, CheckinStandardKey> = {
+  body_weight_kg: "weight",
+  waist_cm: "waist",
+  hip_cm: "hips",
+  chest_cm: "chest",
+};
 
 /** Keep digits and one decimal point; the trainee types on a decimal keypad. */
 export function cleanMeasureInput(raw: string): string {
@@ -22,15 +28,25 @@ export function cleanMeasureInput(raw: string): string {
   return out;
 }
 
-/** An empty string is "not answered" and is fine; anything else must be in range. */
-export function measureProblem(raw: string): string | null {
+/**
+ * Blank is "not answered" and fine. Otherwise the value must pass the same
+ * rule the server applies by key (core `validateCheckinAnswer`, Z6-6). An
+ * unkeyed `other` question has no range, only "a positive number".
+ */
+export function measureProblem(
+  field: Extract<CheckinFieldDefinition, { type: "measurement" }>,
+  raw: string,
+): string | null {
   const text = raw.trim();
   if (!text) return null;
   const n = Number(text);
-  if (!Number.isFinite(n) || n < MEASURE_MIN_CM || n > MEASURE_MAX_CM) {
-    return `Enter ${MEASURE_MIN_CM} to ${MEASURE_MAX_CM} cm`;
-  }
-  return null;
+  const key =
+    (field.key as CheckinStandardKey | undefined) ??
+    TYPE_TO_KEY[field.measurementType];
+  const ok = key
+    ? validateCheckinAnswer(key, n).ok
+    : Number.isFinite(n) && n > 0;
+  return ok ? null : `Enter a valid value in ${field.unit ?? "cm"}`;
 }
 
 /**
@@ -53,6 +69,7 @@ export function lastValuesByType(
 }
 
 export function MeasureRow({
+  problem,
   label,
   helpText,
   unit,
@@ -62,6 +79,8 @@ export function MeasureRow({
   onChange,
   onBlur,
 }: {
+  /** Error text for an invalid value, from `measureProblem`. */
+  problem?: string | null;
   label: string;
   helpText?: string;
   unit: string;
@@ -73,7 +92,6 @@ export function MeasureRow({
   onBlur: () => void;
 }) {
   const [focused, setFocused] = useState(false);
-  const problem = measureProblem(value);
   return (
     <View style={[styles.row, first ? styles.rowFirst : null]}>
       <View style={styles.text}>
@@ -130,8 +148,8 @@ const styles = StyleSheet.create({
   problem: { color: "#B42318", fontSize: 13, fontWeight: "600", marginTop: 2 },
   box: {
     alignItems: "center",
-    backgroundColor: colors.background,
-    borderColor: "#E7E9F2",
+    backgroundColor: colors.white,
+    borderColor: "#D9DCE8",
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
