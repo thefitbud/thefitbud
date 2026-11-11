@@ -1,11 +1,24 @@
 import { useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import {
+  Ban,
+  Bell,
+  ChevronRight,
+  CircleOff,
+  ClipboardCheck,
+  File,
+  Settings,
+} from "lucide-react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
-import { formatCivilDate, formatRelative, labelFor } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatLocalDate,
+  formatRelative,
+  labelFor,
+} from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { Button } from "../Button";
-import { OverflowMenu } from "../OverflowMenu";
+import { OverflowMenu, type OverflowMenuItem } from "../OverflowMenu";
 import { StatusChip } from "../StatusChip";
 import { WhatsAppGlyph } from "../WhatsAppGlyph";
 import { clientWhatsappHref, whatsappHref } from "../../lib/whatsapp";
@@ -111,11 +124,32 @@ export function WorkspaceHeader({
     .map((p) => p.charAt(0).toUpperCase())
     .join("");
 
+  // Frame 179: civil dates in the client's timezone, like the ended Overview body.
+  const traineeTz = resolveTraineeTimezone(header).timezone;
+  const civilDay = (iso: string | null | undefined): string | null => {
+    if (!iso) return null;
+    const at = new Date(iso);
+    if (Number.isNaN(at.getTime())) return null;
+    return formatCivilDate(formatLocalDate(at, traineeTz));
+  };
+  const endedOn = ended ? civilDay(header.endedAt) : null;
+  const coachedFrom = ended ? civilDay(header.startedAt) : null;
+
   const metaNodes: Array<{ key: string; node: ReactNode }> = [];
   if (header.goalShort) {
     metaNodes.push({ key: "goal", node: <span>{header.goalShort}</span> });
   }
-  if (header.effectivePlan?.title) {
+  if (ended && coachedFrom && endedOn) {
+    metaNodes.push({
+      key: "coached",
+      node: (
+        <span>
+          Coached {coachedFrom} — {endedOn}
+        </span>
+      ),
+    });
+  }
+  if (!ended && header.effectivePlan?.title) {
     metaNodes.push({
       key: "plan",
       node: (
@@ -161,7 +195,7 @@ export function WorkspaceHeader({
       node: <span>{profileParts.join(" · ")}</span>,
     });
   }
-  if (header.renewalState && header.renewalState !== "current") {
+  if (!ended && header.renewalState && header.renewalState !== "current") {
     const renewsOn = header.renewsOn
       ? formatCivilDate(header.renewsOn)
       : null;
@@ -194,44 +228,48 @@ export function WorkspaceHeader({
   }
 
   // Ended relationships: Configure is read-only (CE1) and the reminders
-  // drawer only reports history (D-W7-7). Order and labels follow frames 208
-  // and 208b: Client settings first.
-  const overflowItems = [
+  // drawer only reports history (D-W7-7). Order, icons, descriptions and the
+  // divider follow frames 208 and 208b; notes are added from the Overview
+  // "Coach notes" card (Z9-13).
+  const menuIcon = (Icon: typeof Settings) => (
+    <Icon size={16} strokeWidth={1.75} />
+  );
+  const overflowItems: OverflowMenuItem[] = [
     {
       id: "client-settings",
       label: "Client settings",
+      description: "Basic details, subscription & package",
+      icon: menuIcon(Settings),
       onSelect: () => navigate(`/clients/${relationshipId}/settings`),
     },
     {
       id: "configure",
       label: ended ? "View coaching setup" : "Coaching setup",
+      description: "Goal, expectations, check-ins, reminders",
+      icon: menuIcon(ClipboardCheck),
       onSelect: () => navigate(`/clients/${relationshipId}/configure`),
     },
     {
       id: "onboarding",
       label: "Onboarding answers",
+      icon: menuIcon(File),
       onSelect: () => navigate(`/clients/${relationshipId}/onboarding`),
     },
     {
       id: "reminders",
-      label: ended
-        ? "View reminder history"
-        : "Reminder settings",
+      label: ended ? "View reminder history" : "Reminder settings",
+      icon: menuIcon(Bell),
       onSelect: () => onOpenModal({ type: "responsiveness" }),
     },
     ...(!ended
       ? [
           {
-            id: "note",
-            label: "Add note",
-            onSelect: () => onOpenModal({ type: "note" }),
-            disabled: !online,
-          },
-          {
             id: "end",
             label: "End coaching…",
+            icon: menuIcon(Ban),
             onSelect: () => onOpenModal({ type: "end" }),
             destructive: true,
+            dividerBefore: true,
             disabled: !online,
           },
         ]
@@ -240,55 +278,50 @@ export function WorkspaceHeader({
 
   return (
     <header className="wsh" data-testid="screen-TW-09a">
-      {ended ? (
-        <div className="wsh-ended-banner" data-testid="screen-TW-30">
-          {pendingReactivation ? (
-            <>
-              <p className="banner-neutral" role="status">
-                Waiting for {header.traineeDisplayName.split(/\s+/)[0] ?? header.traineeDisplayName} to confirm
-                {pendingReactivation.sentAt
-                  ? ` · sent ${formatRelative(pendingReactivation.sentAt)}`
-                  : null}
-              </p>
-              <div className="wsh-pending-actions button-row">
-                {remindHref ? (
-                  <a
-                    className="button-secondary button-whatsapp"
-                    href={remindHref}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <WhatsAppGlyph />
-                    Remind on WhatsApp
-                  </a>
-                ) : (
-                  <button type="button" className="button-secondary" disabled>
-                    Remind on WhatsApp
-                  </button>
-                )}
-                <button
-                  type="button"
-                  className="button-secondary"
-                  disabled={!online || cancelBusy}
-                  onClick={() => void cancelPendingReactivation()}
-                >
-                  Cancel request
-                </button>
-              </div>
-              {cancelError ? (
-                <p className="form-error" role="alert">
-                  {cancelError}
-                </p>
-              ) : null}
-            </>
-          ) : (
-            <p className="banner-neutral" role="status">
-              Coaching ended. This workspace is read-only except reactivation.
+      {ended && pendingReactivation ? (
+        <div className="wsh-pending">
+          <p className="banner-neutral" role="status">
+            Waiting for {header.traineeDisplayName.split(/\s+/)[0] ?? header.traineeDisplayName} to confirm
+            {pendingReactivation.sentAt
+              ? ` · sent ${formatRelative(pendingReactivation.sentAt)}`
+              : null}
+          </p>
+          <div className="wsh-pending-actions button-row">
+            {remindHref ? (
+              <a
+                className="button-secondary button-whatsapp"
+                href={remindHref}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <WhatsAppGlyph />
+                Remind on WhatsApp
+              </a>
+            ) : (
+              <button type="button" className="button-secondary" disabled>
+                Remind on WhatsApp
+              </button>
+            )}
+            <button
+              type="button"
+              className="button-secondary"
+              disabled={!online || cancelBusy}
+              onClick={() => void cancelPendingReactivation()}
+            >
+              Cancel request
+            </button>
+          </div>
+          {cancelError ? (
+            <p className="form-error" role="alert">
+              {cancelError}
             </p>
-          )}
+          ) : null}
         </div>
       ) : null}
-      <div className="wsh-in">
+      <div
+        className="wsh-in"
+        data-testid={ended ? "screen-TW-30" : undefined}
+      >
         <nav className="wsh-crumb" aria-label="Breadcrumb">
           <Link to="/clients">Clients</Link>
           <ChevronRight size={14} strokeWidth={1.75} aria-hidden="true" />
@@ -301,8 +334,24 @@ export function WorkspaceHeader({
           <div className="wsh-id">
             <div className="wsh-name-row">
               <h1 className="workspace-title">{header.traineeDisplayName}</h1>
-              <StatusChip kind="lifecycle" value={header.onboardingStatus} />
-              <StatusChip kind="adherence" value={header.adherenceState} />
+              {ended ? (
+                <span
+                  className="status-chip status-chip-neutral wsh-ended-pill"
+                  data-kind="lifecycle"
+                  data-value="ended"
+                >
+                  <CircleOff size={14} strokeWidth={1.75} aria-hidden="true" />
+                  <span>
+                    {labelFor("onboarding_status", "ended")}
+                    {endedOn ? ` · ${endedOn}` : null}
+                  </span>
+                </span>
+              ) : (
+                <>
+                  <StatusChip kind="lifecycle" value={header.onboardingStatus} />
+                  <StatusChip kind="adherence" value={header.adherenceState} />
+                </>
+              )}
             </div>
             {metaNodes.length > 0 ? (
               <div className="wsh-meta">
@@ -340,9 +389,13 @@ export function WorkspaceHeader({
                   href={whatsappHrefValue}
                   target="_blank"
                   rel="noreferrer"
+                  aria-label="Message on WhatsApp"
                 >
                   <WhatsAppGlyph />
-                  Message on WhatsApp
+                  <span className="wsh-wa-long">Message on WhatsApp</span>
+                  <span className="wsh-wa-short" aria-hidden="true">
+                    WhatsApp
+                  </span>
                 </a>
               ) : (
                 <button
@@ -350,9 +403,13 @@ export function WorkspaceHeader({
                   className="button-secondary button-whatsapp"
                   disabled
                   title="No WhatsApp number on file for this client"
+                  aria-label="Message on WhatsApp"
                 >
                   <WhatsAppGlyph />
-                  Message on WhatsApp
+                  <span className="wsh-wa-long">Message on WhatsApp</span>
+                  <span className="wsh-wa-short" aria-hidden="true">
+                    WhatsApp
+                  </span>
                 </button>
               )}
               </>
@@ -363,14 +420,14 @@ export function WorkspaceHeader({
                 disabled={!online}
                 onClick={() => onOpenModal({ type: "reactivate" })}
               >
-                Reactivate coaching
+                Reactivate
               </Button>
             ) : primary ? (
               <Button variant="primary" disabled={!online} onClick={runPrimary}>
                 {primary.label}
               </Button>
             ) : null}
-            <OverflowMenu items={overflowItems} />
+            <OverflowMenu items={overflowItems} variant="wide" />
           </div>
         </div>
         <nav className="wsh-tabs" aria-label="Client sections">

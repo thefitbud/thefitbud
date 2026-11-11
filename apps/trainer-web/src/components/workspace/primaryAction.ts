@@ -28,7 +28,7 @@ export function primaryActionFor(input: {
     if (input.reactivationPending) return null;
     return {
       kind: "reactivate",
-      label: "Reactivate coaching",
+      label: "Reactivate",
       to: `#reactivate-${rid}`,
     };
   }
