@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { FilterBar, type FilterPillOption } from "./FilterBar";
+import { FilterBar, type FilterOption } from "./FilterBar";
 
 const css = readFileSync(resolve(process.cwd(), "src/styles/clients.css"), "utf8");
 
@@ -18,85 +18,111 @@ function ruleBody(source: string, selector: string): string {
   return source.slice(open + 1, close);
 }
 
-const status: FilterPillOption[] = [
+const status: FilterOption[] = [
   { value: "invited", label: "Invited", count: 2 },
-  { value: "onboarding_pending", label: "Pending", count: 1 },
-  { value: "onboarding_submitted", label: "Submitted" },
-  { value: "coaching_ready", label: "Ready" },
   { value: "active", label: "Active", count: 15 },
 ];
 
-const adherence: FilterPillOption[] = [
+const adherence: FilterOption[] = [
   { value: "on_track", label: "On track", count: 4 },
-  { value: "needs_attention", label: "Attention", count: 6 },
-  { value: "no_recent_data", label: "No data" },
-  { value: "not_available", label: "N/A" },
+  { value: "needs_attention", label: "Needs attention", count: 6 },
 ];
 
 function renderBar(showClear = false) {
-  const onSearchChange = vi.fn();
-  const onClear = vi.fn();
-  const onStatus = vi.fn();
-  const onAdherence = vi.fn();
-  const onGoal = vi.fn();
-  const onRenewal = vi.fn();
+  const fns = {
+    onSearchChange: vi.fn(),
+    onClear: vi.fn(),
+    onStatus: vi.fn(),
+    onAdherence: vi.fn(),
+    onGoal: vi.fn(),
+    onRenewal: vi.fn(),
+  };
   render(
     <FilterBar
       search=""
-      onSearchChange={onSearchChange}
+      onSearchChange={fns.onSearchChange}
       showClear={showClear}
-      onClear={onClear}
+      onClear={fns.onClear}
+      trailing={<div role="tablist" aria-label="Client list segment" />}
       status={{
         label: "Status",
         options: status,
         selected: ["active"],
-        onToggle: onStatus,
+        onToggle: fns.onStatus,
+        onClear: vi.fn(),
       }}
       adherence={{
         label: "Adherence",
         options: adherence,
         selected: [],
-        onToggle: onAdherence,
+        onToggle: fns.onAdherence,
+        onClear: vi.fn(),
       }}
       goal={{
         label: "Goal",
         options: [{ value: "Lose fat", label: "Lose fat" }],
         selected: [],
-        onToggle: onGoal,
+        onToggle: fns.onGoal,
+        onClear: vi.fn(),
       }}
       renewal={{
         label: "Renewal",
         options: [{ value: "expired", label: "Expired", count: 2 }],
         selected: [],
-        onToggle: onRenewal,
+        onToggle: fns.onRenewal,
+        onClear: vi.fn(),
       }}
     />,
   );
-  return { onSearchChange, onClear, onStatus, onGoal, onRenewal };
+  return fns;
 }
 
-afterEach(() => {
-  cleanup();
-});
+afterEach(() => cleanup());
 
 describe("FilterBar", () => {
-  it("shows the primary pills and keeps Goal and Renewal behind More", () => {
-    const { onStatus, onRenewal } = renderBar();
+  it("renders search, the four dropdowns in order, then the trailing switch in one row", () => {
+    renderBar();
+    const row = screen.getByTestId("filter-bar").querySelector(".filter-bar-row")!;
     expect(screen.getByRole("searchbox")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Active 15" }).getAttribute("aria-pressed")).toBe(
-      "true",
+    expect(screen.getByPlaceholderText("Search clients")).toBeTruthy();
+    const triggers = Array.from(
+      row.querySelectorAll<HTMLButtonElement>(".filter-dropdown-trigger"),
+    ).map((b) => b.textContent);
+    expect(triggers).toEqual([
+      "Status: Active",
+      "Adherence",
+      "Goal",
+      "Renewal",
+    ]);
+    // No inline pills and no More button (D-W8-13).
+    expect(row.querySelector(".filter-pill")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^More/ })).toBeNull();
+    expect(row.lastElementChild?.className).toBe("filter-bar-trailing");
+    expect(
+      row.lastElementChild?.querySelector("[role='tablist']"),
+    ).toBeTruthy();
+  });
+
+  it("routes each dropdown pick to its own handler", () => {
+    const fns = renderBar();
+    fireEvent.click(screen.getByRole("button", { name: "Renewal" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: /Expired/ }));
+    expect(fns.onRenewal).toHaveBeenCalledWith("expired");
+    expect(fns.onStatus).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Adherence" }));
+    fireEvent.click(
+      screen.getByRole("menuitemcheckbox", { name: /Needs attention/ }),
     );
-    expect(screen.queryByRole("button", { name: "Lose fat" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Expired/ })).toBeNull();
+    expect(fns.onAdherence).toHaveBeenCalledWith("needs_attention");
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.getByRole("button", { name: "Lose fat" })).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Expired 2" }));
-    expect(onRenewal).toHaveBeenCalledWith("expired");
-    expect(onStatus).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole("button", { name: "Active 15" }));
-    expect(onStatus).toHaveBeenCalledWith("active");
+  it("forwards search typing", () => {
+    const fns = renderBar();
+    fireEvent.change(screen.getByRole("searchbox"), {
+      target: { value: "rohan" },
+    });
+    expect(fns.onSearchChange).toHaveBeenCalledWith("rohan");
   });
 
   it("calls onClear only when Clear is shown", () => {
@@ -110,28 +136,27 @@ describe("FilterBar", () => {
   });
 });
 
-describe("FilterBar overflow styles", () => {
-  it("wraps the row and each pill group so pills stay inside the bar", () => {
-    const bar = ruleBody(css, ".filter-bar {");
+describe("Clients toolbar and table styles", () => {
+  it("keeps the toolbar one wrapping row with the switch pushed right", () => {
     const row = ruleBody(css, ".filter-bar-row {");
-    const group = ruleBody(css, ".filter-pill-group {");
-    const pills = ruleBody(css, ".filter-pills {");
-
-    expect(bar).toMatch(/overflow:\s*visible/);
-    expect(bar).not.toMatch(/overflow-x:\s*hidden/);
+    expect(row).toMatch(/display:\s*flex/);
     expect(row).toMatch(/flex-wrap:\s*wrap/);
-    expect(row).toMatch(/overflow:\s*visible/);
-    expect(row).not.toMatch(/overflow-x:\s*auto/);
-    expect(row).not.toMatch(/overflow-y:\s*hidden/);
-    expect(group).toMatch(/flex-wrap:\s*wrap/);
-    expect(group).toMatch(/max-width:\s*100%/);
-    expect(pills).toMatch(/flex-wrap:\s*wrap/);
-    expect(pills).toMatch(/max-width:\s*100%/);
+    expect(row).not.toMatch(/overflow-x:\s*(auto|hidden|scroll)/);
+    expect(ruleBody(css, ".filter-bar-trailing {")).toMatch(/margin-left:\s*auto/);
+    expect(ruleBody(css, ".filter-bar-row > .filter-search {")).toMatch(
+      /flex:\s*0 1 280px/,
+    );
+  });
 
-    const search = ruleBody(css, ".filter-bar-row > .filter-search {");
-    const fixed = ruleBody(css, ".filter-bar-row > .filter-pill-group,");
-    expect(search).toMatch(/flex:\s*1 1 120px/);
-    expect(search).toMatch(/max-width:\s*168px/);
-    expect(fixed).toMatch(/flex:\s*0 0 auto/);
+  it("sizes the table to fit instead of scrolling the Action column away", () => {
+    const wrap = ruleBody(css, ".clients-table-wrap {");
+    expect(wrap).not.toMatch(/overflow-x:\s*auto/);
+    expect(ruleBody(css, ".clients-table {")).toMatch(/table-layout:\s*fixed/);
+    expect(ruleBody(css, ".clients-table .col-action {")).toMatch(
+      /width:\s*\d+px/,
+    );
+    const truncate = ruleBody(css, ".clients-table .client-name,");
+    expect(truncate).toMatch(/text-overflow:\s*ellipsis/);
+    expect(truncate).toMatch(/white-space:\s*nowrap/);
   });
 });

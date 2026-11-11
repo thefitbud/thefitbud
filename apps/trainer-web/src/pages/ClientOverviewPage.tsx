@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import type { TrainerNote, WeekReadModel } from "@fitbud/contracts";
 import {
@@ -11,7 +11,7 @@ import {
   labelFor,
 } from "@fitbud/core";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
-import { AlertOctagon, AlertTriangle, Check, X } from "lucide-react";
+import { AlertOctagon, AlertTriangle } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import { useAuth } from "../auth/AuthProvider";
 import { Button } from "../components/Button";
@@ -19,7 +19,11 @@ import { ExceptionDrawer } from "../components/ExceptionDrawer";
 import { ErrorState } from "../components/StatePanels";
 import { MeasurementTrend } from "../components/MeasurementTrend";
 import { StatusChip } from "../components/StatusChip";
-import { ResponsivenessPanel } from "../components/workspace/ResponsivenessPanel";
+import {
+  RemindersDrawer,
+  ResponsivenessPanel,
+} from "../components/workspace/ResponsivenessPanel";
+import { WeekCircle } from "../components/WeekCircle";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
@@ -66,19 +70,6 @@ function dayNum(date: string): number {
 }
 
 type WeekDayView = WeekReadModel["days"][number];
-
-function workoutCircleState(
-  day: WeekDayView,
-  today: string | undefined,
-): "done" | "missed" | "rest" | "future" {
-  if (day.state === "done") return "done";
-  if (day.state === "missed") return "missed";
-  if (day.state === "future") return "future";
-  // Unlogged today: the open circle, as unlogged-today `partial` showed (D-W6-10).
-  if (day.state === "due") return "future";
-  if (day.state === "partial") return day.date === today ? "future" : "rest";
-  return "rest";
-}
 
 function mealSlotsFor(day: WeekDayView) {
   if (day.mealSlots) return day.mealSlots;
@@ -163,6 +154,14 @@ export function ClientOverviewPage() {
   const [week, setWeek] = useState<WeekReadModel | null>(null);
   const [notes, setNotes] = useState<TrainerNote[]>([]);
   const [weekError, setWeekError] = useState(false);
+
+  // Frame 181: the Reminders drawer opens over Overview; closing returns focus to Details.
+  const [remindersOpen, setRemindersOpen] = useState(false);
+  const remindersDetailsRef = useRef<HTMLButtonElement>(null);
+  const closeReminders = useCallback(() => {
+    setRemindersOpen(false);
+    remindersDetailsRef.current?.focus();
+  }, []);
 
   const [noteBusyId, setNoteBusyId] = useState<string | null>(null);
   const [noteError, setNoteError] = useState<string | null>(null);
@@ -386,11 +385,10 @@ export function ClientOverviewPage() {
               <div className="ov-week" role="list" aria-label="Week consistency">
                 {week.days.map((day) => {
                   const isToday = todayDate === day.date;
-                  const circle = workoutCircleState(day, todayDate);
                   const slots = mealSlotsFor(day);
                   const countLabel = mealCountLabel(day, isToday);
                   const label = day.workoutLabel ?? "Rest";
-                  const isRestLabel = circle === "rest" || label === "Rest";
+                  const isRestLabel = day.state === "rest" || label === "Rest";
                   return (
                     <div
                       key={day.date}
@@ -401,18 +399,8 @@ export function ClientOverviewPage() {
                         {weekdayLabel(day.date, todayDate ?? "")}
                       </div>
                       <div className="ov-dd">{dayNum(day.date)}</div>
-                      <div
-                        className={`ov-wk is-${circle}`}
-                        role="img"
-                        title={labelFor("week_day_state", day.state)}
-                        aria-label={`Workout: ${labelFor("week_day_state", day.state)}`}
-                      >
-                        {circle === "done" ? (
-                          <Check size={16} strokeWidth={2.25} aria-hidden="true" />
-                        ) : circle === "missed" ? (
-                          <X size={16} strokeWidth={2.25} aria-hidden="true" />
-                        ) : null}
-                      </div>
+                      {/* D-W7-10: the API day-state as is; a started past day is partial, unlogged today is To do. */}
+                      <WeekCircle state={day.state} className="ov-wk" />
                       <div className={`ov-wl${isRestLabel ? " is-muted" : ""}`}>
                         {label}
                       </div>
@@ -691,9 +679,12 @@ export function ClientOverviewPage() {
           <div className="ov-side-h">
             <h3>Reminders</h3>
             <button
+              ref={remindersDetailsRef}
               type="button"
-              className="button-secondary button-compact"
-              onClick={() => openWorkspaceModal({ type: "responsiveness" })}
+              className="text-link"
+              aria-haspopup="dialog"
+              aria-expanded={remindersOpen}
+              onClick={() => setRemindersOpen(true)}
             >
               Details
             </button>
@@ -705,6 +696,7 @@ export function ClientOverviewPage() {
             gender={header.traineeProfile.gender}
             traineeFirstName={firstName}
             clientWhatsappE164={header.clientWhatsappE164}
+            ended={ended}
           />
         </section>
 
@@ -869,6 +861,19 @@ export function ClientOverviewPage() {
             </div>
           </dialog>
         </div>
+      ) : null}
+
+      {remindersOpen ? (
+        <RemindersDrawer
+          relationshipId={relationshipId}
+          traineeName={header.traineeDisplayName}
+          gender={header.traineeProfile.gender}
+          clientWhatsappE164={header.clientWhatsappE164}
+          timeZone={resolveTraineeTimezone(header).timezone}
+          refreshEpoch={refreshEpoch}
+          ended={ended}
+          onClose={closeReminders}
+        />
       ) : null}
 
       {drawerId ? (
