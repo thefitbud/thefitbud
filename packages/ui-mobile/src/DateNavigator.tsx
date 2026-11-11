@@ -1,4 +1,4 @@
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import { FitText as Text } from "./FitText.js";
 import { colors, radii, spacing, touchTargetMin } from "./theme.js";
@@ -17,6 +17,8 @@ type Props = {
   todayDate: string;
   onSelect: (localDate: string) => void;
   onToday: () => void;
+  /** Hosts with their own way back to today (a past-day banner) pass false. */
+  showTodayPill?: boolean;
 };
 
 function dotColor(state: DateNavigatorDay["state"]): string {
@@ -58,19 +60,28 @@ function stateLabel(state: DateNavigatorDay["state"]): string {
   }
 }
 
+/** The same weekday one week earlier or later, as a civil date. */
+function shiftWeek(localDate: string, weeks: number): string {
+  const [y, m, d] = localDate.split("-").map(Number);
+  const shifted = new Date(Date.UTC(y!, m! - 1, d! + weeks * 7));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
+}
+
 export function DateNavigator({
   days,
   selectedDate,
   todayDate,
   onSelect,
   onToday,
+  showTodayPill: allowTodayPill = true,
 }: Props) {
-  const showTodayPill = selectedDate !== todayDate;
+  const showTodayPill = allowTodayPill && selectedDate !== todayDate;
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
-        {showTodayPill ? (
+      {showTodayPill ? (
+        <View style={styles.header}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Go to today"
@@ -79,55 +90,63 @@ export function DateNavigator({
           >
             <Text style={styles.todayPillText}>Today</Text>
           </Pressable>
-        ) : (
-          <View />
-        )}
-      </View>
-      <View style={styles.stripCard}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.strip}
+        </View>
+      ) : null}
+      <View style={styles.stripRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous week"
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
+          onPress={() => onSelect(shiftWeek(selectedDate, -1))}
+          style={styles.chevron}
         >
-          <View style={styles.stripRow}>
-            {days.map((day) => {
-              const selected = day.localDate === selectedDate;
-              return (
-                <Pressable
-                  key={day.localDate}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={`${formatCivilDate(day.localDate)}, ${stateLabel(day.state)}`}
-                  onPress={() => onSelect(day.localDate)}
-                  style={[styles.day, selected ? styles.daySelected : null]}
-                >
-                  <Text
-                    style={[
-                      styles.weekday,
-                      selected ? styles.textSelected : null,
-                    ]}
-                  >
-                    {String(day.weekdayLabel)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dayNum,
-                      selected ? styles.textSelected : null,
-                    ]}
-                  >
-                    {String(day.dayLabel)}
-                  </Text>
-                  <View
-                    style={[
-                      styles.dot,
-                      { backgroundColor: dotColor(day.state) },
-                    ]}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
+          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u2039"}</Text>
+        </Pressable>
+        {days.map((day) => {
+          const selected = day.localDate === selectedDate;
+          const isToday = day.localDate === todayDate;
+          return (
+            <Pressable
+              key={day.localDate}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${formatCivilDate(day.localDate)}, ${stateLabel(day.state)}`}
+              onPress={() => onSelect(day.localDate)}
+              style={[
+                styles.day,
+                isToday && !selected ? styles.dayToday : null,
+                selected ? styles.daySelected : null,
+              ]}
+            >
+              <Text
+                style={[styles.weekday, selected ? styles.textSelected : null]}
+              >
+                {isToday ? "Today" : String(day.weekdayLabel)}
+              </Text>
+              <Text
+                style={[styles.dayNum, selected ? styles.textSelected : null]}
+              >
+                {String(day.dayLabel)}
+              </Text>
+              <View
+                style={[
+                  styles.dot,
+                  selected ? styles.dotOnSelected : null,
+                  { backgroundColor: dotColor(day.state) },
+                ]}
+              />
+            </Pressable>
+          );
+        })}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next week"
+          hitSlop={{ top: 12, bottom: 12, left: 4, right: 12 }}
+          onPress={() => onSelect(shiftWeek(selectedDate, 1))}
+          style={styles.chevron}
+        >
+          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u203A"}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -138,64 +157,79 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   stripRow: {
+    alignItems: "center",
     flexDirection: "row",
   },
   header: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    minHeight: touchTargetMin / 2,
+    marginBottom: spacing.xs,
   },
   todayPill: {
     backgroundColor: colors.paleLavender,
     borderRadius: radii.pill,
+    justifyContent: "center",
+    minHeight: touchTargetMin,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
   },
   todayPillText: {
     color: colors.indigo,
     fontSize: typeScale.caption,
     fontWeight: "600",
   },
-  stripCard: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
-    borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+  chevron: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: touchTargetMin,
+    width: 20,
   },
-  strip: {
-    paddingVertical: spacing.xs,
+  chevronGlyph: {
+    color: colors.midGrey,
+    fontSize: 28,
+    lineHeight: 32,
   },
   day: {
     alignItems: "center",
-    borderRadius: radii.control,
-    marginRight: spacing.sm,
-    minHeight: touchTargetMin,
-    minWidth: 44,
-    paddingHorizontal: spacing.sm,
+    borderColor: "transparent",
+    borderRadius: 999,
+    borderWidth: 1.5,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 76,
     paddingVertical: spacing.sm,
   },
+  dayToday: {
+    borderColor: colors.indigo,
+  },
   daySelected: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.indigo,
+    borderColor: colors.indigo,
   },
   weekday: {
     color: colors.midGrey,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
   dayNum: {
     color: colors.deepNavy,
-    fontSize: typeScale.body,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "600",
   },
   textSelected: {
-    color: colors.indigo,
+    color: colors.white,
   },
   dot: {
     borderRadius: 4,
     height: 6,
-    marginTop: 2,
+    marginTop: 4,
     width: 6,
+  },
+  // A white ring keeps the state colour readable on the indigo pill; the
+  // state is also in the day's spoken label, never colour alone.
+  dotOnSelected: {
+    borderColor: colors.white,
+    borderWidth: 1,
+    height: 8,
+    width: 8,
   },
 });

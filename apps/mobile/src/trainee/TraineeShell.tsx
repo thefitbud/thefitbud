@@ -216,6 +216,10 @@ export function TraineeShell({
   const [pendingWorkoutStartId, setPendingWorkoutStartId] = useState<
     string | null
   >(null);
+  /** Set by Today's "View summary"; Workout opens it, then clears it. */
+  const [pendingSummaryExecutionId, setPendingSummaryExecutionId] = useState<
+    string | null
+  >(null);
   const [workoutImmersive, setWorkoutImmersive] = useState(false);
   const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
@@ -928,7 +932,11 @@ export function TraineeShell({
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        {!hideTabBar && tab !== "workout" && tab !== "diet" && tab !== "more" ? (
+        {!hideTabBar &&
+        tab !== "today" &&
+        tab !== "workout" &&
+        tab !== "diet" &&
+        tab !== "more" ? (
           <View style={styles.topPad}>
             <AppTopBar
               title={topTitle}
@@ -959,6 +967,11 @@ export function TraineeShell({
               void loadEffectivePlan();
             }}
             onOpenOverlay={openOverlay}
+            unreadNotifications={unreadNotifications}
+            onViewSummary={(executionId) => {
+              setPendingSummaryExecutionId(executionId);
+              setTab("workout");
+            }}
           />
         ) : null}
 
@@ -974,6 +987,8 @@ export function TraineeShell({
             onAutoStartConsumed={() => setWorkoutAutostart(false)}
             pendingStartAssignmentId={pendingWorkoutStartId}
             onPendingStartConsumed={() => setPendingWorkoutStartId(null)}
+            pendingSummaryExecutionId={pendingSummaryExecutionId}
+            onPendingSummaryConsumed={() => setPendingSummaryExecutionId(null)}
             onImmersiveChange={setWorkoutImmersive}
           />
         ) : null}
