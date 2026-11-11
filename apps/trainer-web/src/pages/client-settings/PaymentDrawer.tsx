@@ -410,7 +410,7 @@ export function PaymentDrawer({
               <span id={statusId} className="cs-field-label">
                 Status
               </span>
-              <div className="cs-segmented" role="radiogroup" aria-labelledby={statusId}>
+              <div className="cs-segmented cs-segmented-fit" role="radiogroup" aria-labelledby={statusId}>
                 {STATUSES.map((value, i) => (
                   <label
                     key={value}
@@ -453,7 +453,7 @@ export function PaymentDrawer({
                     Method
                   </span>
                   <div
-                    className={`cs-segmented${shown.method ? " is-invalid" : ""}`}
+                    className={`cs-segmented cs-segmented-fit${shown.method ? " is-invalid" : ""}`}
                     role="radiogroup"
                     aria-labelledby={methodId}
                     aria-describedby={shown.method ? helpIds.method : undefined}

@@ -783,6 +783,12 @@
   margin: 0;
 }
 
+.cs-segmented.cs-segmented-fit {
+  align-self: flex-start;
+  width: fit-content;
+  max-width: 100%;
+}
+
 .cs-segmented.is-invalid {
   outline: 1px solid var(--error);
 }
