@@ -140,6 +140,7 @@ const workoutAssignment = workoutAssignmentSchema.parse({
 });
 
 let failDay = false;
+let failOutbox = false;
 let holdDay: Promise<void> | null = null;
 let outboxRows: { status: string; payloadJson: string }[] = [];
 let workouts: unknown[] = [];
@@ -197,7 +198,10 @@ vi.mock("../sync/SyncProvider", async () => {
       store: {
         upsertLocal: vi.fn(),
         listLocal: vi.fn(async () => []),
-        listOutbox: vi.fn(async () => outboxRows),
+        listOutbox: vi.fn(async () => {
+          if (failOutbox) throw new Error("storage");
+          return outboxRows;
+        }),
       },
       enqueue: vi.fn(),
     }),
@@ -262,6 +266,7 @@ beforeEach(() => {
   openOverlay = vi.fn();
   onSelectDate = vi.fn();
   holdDay = null;
+  failOutbox = false;
   outboxRows = [];
   Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
   failDay = false;
@@ -549,5 +554,52 @@ describe("Today v3 past day, loading and offline", () => {
     renderToday();
     await screen.findByText("1 log waiting to send");
     expect(screen.getAllByLabelText("Waiting to send")).toHaveLength(1);
+  });
+
+  it("past completed workout keeps a read-only Done card, no Start workout", async () => {
+    workouts = [
+      {
+        ...completedWorkout,
+        localDate: PAST,
+        windowStartsAt: `${PAST}T13:00:00.000Z`,
+        windowEndsAt: `${PAST}T15:00:00.000Z`,
+      },
+    ];
+    renderToday(PAST);
+    await screen.findByLabelText("Workout done: Lower body B");
+    expect(screen.queryByText("Start workout")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start workout" })).toBeNull();
+  });
+
+  it("past day: a logged meal reads Logged", async () => {
+    meals = [
+      { ...meal(1, "Breakfast", "confirmed"), localDate: PAST },
+      { ...meal(2, "Lunch", "overdue"), localDate: PAST },
+    ];
+    renderToday(PAST);
+    await screen.findByLabelText(/^Past day\./);
+    expect(screen.getAllByText("Logged")).toHaveLength(1);
+  });
+
+  it("an unreadable outbox never reads as 0 waiting", async () => {
+    failDay = true;
+    failOutbox = true;
+    renderToday();
+    await screen.findByText("Saved on phone · showing last sync");
+    expect(screen.queryByText(/waiting to send/)).toBeNull();
+  });
+
+  it("many set-level rows for one workout count as one log", async () => {
+    failDay = true;
+    outboxRows = [1, 2, 3, 4].map((n) => ({
+      status: "pending",
+      recordId: "00000000-0000-4000-8000-000000000801",
+      payloadJson: JSON.stringify({
+        executionId: "00000000-0000-4000-8000-000000000801",
+        setExecutionId: `00000000-0000-4000-8000-00000000090${n}`,
+      }),
+    }));
+    renderToday();
+    await screen.findByText("1 log waiting to send");
   });
 });

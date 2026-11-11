@@ -75,7 +75,7 @@ import {
   TodaySummaryCard,
   type StepsChipState,
 } from "./today/TodaySummaryCard";
-import { PastDayBanner } from "./today/PastDayBanner";
+import { INFO_BORDER, PastDayBanner } from "./today/PastDayBanner";
 import { TodaySkeleton } from "./today/TodaySkeleton";
 import {
   queuedLogsLabel,
@@ -232,10 +232,13 @@ function UpNextChip({ label }: { label: string }) {
 
 /** A log saved on the phone and not yet sent (frame 104). */
 function WaitingChip() {
-  const palette = semanticColors.brandSelected;
+  const palette = semanticColors.info;
   return (
     <View
-      style={[styles.upNextChip, { backgroundColor: palette.fill }]}
+      style={[
+        styles.upNextChip,
+        { backgroundColor: palette.fill, borderColor: INFO_BORDER, borderWidth: 1 },
+      ]}
       accessibilityLabel="Waiting to send"
     >
       <CloudUpload size={14} color={palette.text} strokeWidth={1.75} />
@@ -714,7 +717,6 @@ export function TodayTab({
 
         {planState.status === "loaded" &&
         !loading &&
-        isToday &&
         workout &&
         (workout.status === "completed" || workout.status === "modified") ? (
           <View
@@ -937,9 +939,13 @@ export function TodayTab({
                     meal,
                     dayTotals?.totals.perMeal,
                   );
-                  const lockCopy = lockStateKnown
-                    ? mealLockCopy(meal, coachName)
-                    : null;
+                  const logged = isMealLoggedForCount(meal.status);
+                  // A logged meal is "Logged" whatever the lock says; the lock
+                  // only closes meals that were never logged.
+                  const lockCopy =
+                    lockStateKnown && !logged
+                      ? mealLockCopy(meal, coachName)
+                      : null;
                   const sub = [
                     mealItemLine(meal),
                     kcal != null ? formatKcal(kcal, false) : null,

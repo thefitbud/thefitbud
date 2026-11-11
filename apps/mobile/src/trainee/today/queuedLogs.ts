@@ -3,7 +3,7 @@ import { reportError } from "../../lib/reportError";
 import { useSyncEngine } from "../../sync/SyncProvider";
 
 /** The slice of an outbox row Today reads. */
-type QueuedRow = { status: string; payloadJson: string };
+type QueuedRow = { status: string; payloadJson: string; recordId?: string };
 
 export type QueuedLogs = {
   /** Logs saved on the phone and not yet accepted by the server. */
@@ -27,18 +27,28 @@ export function summariseQueuedLogs(rows: readonly QueuedRow[]): QueuedLogs {
     (row) => row.status === "pending" || row.status === "in_flight",
   );
   const mealAssignmentIds = new Set<string>();
+  // One logical action, not one row: a workout queues a row per set, so rows
+  // are grouped by the record they act on (a meal, a workout execution).
+  const actions = new Set<string>();
   for (const row of waiting) {
+    let key = row.recordId ?? row.payloadJson;
     try {
-      const body = JSON.parse(row.payloadJson) as { assignmentId?: unknown };
+      const body = JSON.parse(row.payloadJson) as {
+        assignmentId?: unknown;
+        executionId?: unknown;
+      };
       if (typeof body.assignmentId === "string") {
         mealAssignmentIds.add(body.assignmentId);
       }
+      if (typeof body.executionId === "string") key = body.executionId;
+      else if (typeof body.assignmentId === "string") key = body.assignmentId;
     } catch {
       // A payload that is not JSON still counts as a waiting log; it just
       // cannot be tied to a meal row.
     }
+    actions.add(key);
   }
-  return { count: waiting.length, mealAssignmentIds };
+  return { count: actions.size, mealAssignmentIds };
 }
 
 /** "1 log waiting to send" / "3 logs waiting to send" (frame 104). */

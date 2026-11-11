@@ -1,8 +1,11 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { Clock } from "lucide-react-native";
 import { formatCivilDate } from "@fitbud/core";
-import { colors, semanticColors, spacing } from "@fitbud/ui-mobile";
+import { semanticColors, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+
+/** Border for info-toned chips and banners (the token has fill and text only). */
+export const INFO_BORDER = "#BFDBFE";
 
 /**
  * Banner above a past day (frames 04 v3 past): the civil date, whether the
@@ -17,7 +20,7 @@ export function PastDayBanner({
   canStillLog: boolean;
   onBackToToday: () => void;
 }) {
-  const palette = semanticColors.brandSelected;
+  const palette = semanticColors.info;
   const date = formatCivilDate(localDate);
   const message = canStillLog ? `${date} · you can still log it` : date;
   return (
@@ -46,7 +49,7 @@ export function PastDayBanner({
 const styles = StyleSheet.create({
   banner: {
     alignItems: "center",
-    borderColor: colors.lightGrey,
+    borderColor: INFO_BORDER,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -56,8 +59,8 @@ const styles = StyleSheet.create({
   },
   message: {
     flex: 1,
-    fontSize: 15,
-    fontWeight: "500",
+    fontSize: 13,
+    fontWeight: "400",
     paddingVertical: spacing.sm,
   },
   back: {
@@ -67,7 +70,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   backLabel: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });
