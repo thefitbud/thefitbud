@@ -12,8 +12,7 @@ import {
   type CoachingRelationship,
   type WorkoutAssignment,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor } from "../test/render";
-import { startOfWeekMonday, addDays } from "../lib/dates";
+import { fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 
 /*
  * `WorkoutTab` reaches `modules/live-activity` through the active-workout
@@ -53,8 +52,8 @@ const relationship: CoachingRelationship = coachingRelationshipSchema.parse({
 });
 
 
-/** The tab opens on the Saturday of the current week (its own default focus). */
-const FOCUS_DATE = addDays(startOfWeekMonday(TODAY), 5);
+/** The tab opens on today (Z9b-1); no picked or selected date overrides it. */
+const FOCUS_DATE = TODAY;
 
 const uuid = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -240,6 +239,49 @@ describe("WorkoutTab current week", () => {
     renderWorkout();
     await screen.findByText("Start workout");
     expect(screen.queryByText(/weren't logged|wasn't logged/)).toBeNull();
+  });
+});
+
+describe("WorkoutTab default focus and bell", () => {
+  const wed = () =>
+    dayAssignment({ n: 1, name: "Upper body A", localDate: "2026-11-11", status: "assigned", exercises: 4, setsEach: 3 });
+  const fri = () =>
+    dayAssignment({ n: 2, name: "Lower body B", localDate: "2026-11-13", status: "assigned", exercises: 6, setsEach: 3 });
+
+  it("opens on today when today is a Wednesday and no date is selected", async () => {
+    vi.setSystemTime(new Date("2026-11-11T06:00:00Z"));
+    try {
+      items = [wed(), fri()];
+      render(<WorkoutTab relationship={relationship} />);
+      expect(await screen.findByText("Upper body A")).toBeTruthy();
+      expect(screen.queryByText("Lower body B")).toBeNull();
+    } finally {
+      vi.setSystemTime(new Date("2026-11-13T06:00:00Z"));
+    }
+  });
+
+  it("lets a date selected by the shell win over today", async () => {
+    items = [wed(), fri()];
+    render(<WorkoutTab relationship={relationship} selectedDate="2026-11-11" />);
+    expect(await screen.findByText("Upper body A")).toBeTruthy();
+    expect(screen.queryByText("Lower body B")).toBeNull();
+  });
+
+  it("lets a picked day win over today", async () => {
+    items = [wed(), fri()];
+    render(<WorkoutTab relationship={relationship} onOpenOverlay={vi.fn()} />);
+    expect(await screen.findByText("Lower body B")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Wed Upper A" }));
+    expect(await screen.findByText("Upper body A")).toBeTruthy();
+  });
+
+  it("opens notifications from the title-row bell", async () => {
+    const onOpenOverlay = vi.fn();
+    render(
+      <WorkoutTab relationship={relationship} onOpenOverlay={onOpenOverlay} unreadNotifications={3} />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
+    expect(onOpenOverlay).toHaveBeenCalledWith({ screen: "notifications" });
   });
 });
 

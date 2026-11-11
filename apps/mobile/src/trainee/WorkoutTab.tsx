@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
   AlertTriangle,
+  Bell,
   CalendarClock,
   Check,
   Dumbbell,
@@ -192,6 +193,7 @@ export function WorkoutTab({
   onPendingStartConsumed,
   onImmersiveChange,
   coachName: coachNameProp,
+  unreadNotifications = 0,
 }: {
   relationship: CoachingRelationship;
   /**
@@ -204,6 +206,8 @@ export function WorkoutTab({
   selectedDate?: string;
   onSelectDate?: (localDate: string) => void;
   onOpenOverlay?: import("../navigation/TraineeOverlay").TraineeOverlayOpener;
+  /** Unread count for the title-row bell (frame 10), as DietTab does. */
+  unreadNotifications?: number;
   autoStartToday?: boolean;
   onAutoStartConsumed?: () => void;
   pendingStartAssignmentId?: string | null;
@@ -254,14 +258,8 @@ export function WorkoutTab({
 
   const timeZone = me?.timezone ?? "Asia/Kolkata";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
-  const lowerBodySaturday = useMemo(
-    () => addDays(startOfWeekMonday(today), 5),
-    [today],
-  );
   const [pickedDate, setPickedDate] = useState<string | null>(null);
-  const focusDate =
-    pickedDate ??
-    (selectedDate && selectedDate !== today ? selectedDate : lowerBodySaturday);
+  const focusDate = pickedDate ?? selectedDate ?? today;
   const weekStart = useMemo(
     () => startOfWeekMonday(focusDate),
     [focusDate],
@@ -775,6 +773,15 @@ export function WorkoutTab({
             Workout
           </Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Notifications"
+          onPress={() => onOpenOverlay?.({ screen: "notifications" })}
+          style={styles.iconbtn}
+        >
+          <Bell size={22} color={colors.darkGrey} strokeWidth={1.75} />
+          {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
+        </Pressable>
       </View>
 
       <View style={styles.wks} accessibilityRole="summary">
@@ -1166,6 +1173,22 @@ const styles = StyleSheet.create({
   },
   lt2: {
     flex: 1,
+  },
+  iconbtn: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    position: "relative",
+    width: 44,
+  },
+  unreadDot: {
+    backgroundColor: colors.indigo,
+    borderRadius: 5,
+    height: 9,
+    position: "absolute",
+    right: 11,
+    top: 10,
+    width: 9,
   },
   planEyebrow: {
     color: colors.midGrey,
