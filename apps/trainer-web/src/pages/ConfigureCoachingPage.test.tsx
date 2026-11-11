@@ -369,7 +369,7 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
     const { container } = renderPage("active", "active");
     await screen.findByRole("heading", { name: "Coaching setup" });
     expect(screen.getByTestId("configure-active-banner").textContent).toBe(
-      "Version 1 is active. Edits to goal, expectations, check-in window and tracking are saved as version 2, with new targets from tomorrow. The steps target and check-in form change straight away.",
+      "Version 1 is active. Edits to goal, expectations, check-in window and tracking are saved as version 2, with new targets from tomorrow. The steps target, check-in form and coaching mode change straight away.",
     );
     expect(container.textContent).not.toContain("Create a new version to change it");
     expect(container.textContent).not.toContain("has ended");
@@ -1395,6 +1395,17 @@ describe("ConfigureCoachingPage coaching mode (Z8-7, frame IP-07)", () => {
     expect(container.querySelector('input[name="coachingMode"]')).toBeNull();
     expect(screen.getByRole("definition", { name: "Coaching mode" }).textContent).toBe(
       "Hybrid",
+    );
+  });
+
+  it("an ended client never shows an unconfirmed 'Not set' when the mode fails to load", async () => {
+    api.getClientSettings.mockRejectedValue(new TypeError("Failed to fetch"));
+    renderPage("ended", "active");
+    await screen.findByText("Coaching setup (ended)");
+    await waitFor(() =>
+      expect(screen.getByRole("definition", { name: "Coaching mode" }).textContent).toBe(
+        "Couldn't load",
+      ),
     );
   });
 });

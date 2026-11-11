@@ -1148,7 +1148,7 @@ export function ConfigureCoachingPage() {
 
       {status === "active" && !relationshipEnded ? (
         <p className="banner-info" role="status" data-testid="configure-active-banner">
-          {`Version ${configuration?.versionNumber ?? 1} is active. Edits to goal, expectations, check-in window and tracking are saved as version ${nextVersionNumber}, with new targets from tomorrow. The steps target and check-in form change straight away.`}
+          {`Version ${configuration?.versionNumber ?? 1} is active. Edits to goal, expectations, check-in window and tracking are saved as version ${nextVersionNumber}, with new targets from tomorrow. The steps target, check-in form and coaching mode change straight away.`}
         </p>
       ) : null}
 
@@ -1232,9 +1232,13 @@ export function ConfigureCoachingPage() {
                 <>
                   <ReadOnlyField
                     label="Coaching mode"
-                    value={coachingModeLabel(
-                      coachingMode.subscription?.coachingMode ?? null,
-                    )}
+                    value={
+                      coachingMode.loading
+                        ? "Loading…"
+                        : coachingMode.loadFailed
+                          ? "Couldn't load"
+                          : coachingModeLabel(coachingMode.subscription?.coachingMode ?? null)
+                    }
                   />
                   <ReadOnlyField
                     label="Starts on"
