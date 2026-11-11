@@ -436,6 +436,8 @@ export async function listAttentionExceptionsForTrainer(
     exception: ExceptionRow;
     coachingRelationshipId: string;
     traineeUserId: string;
+    clientDisplayName: string | null;
+    contactPhoneE164: string | null;
   }>
 > {
   const relationships = await db
@@ -491,6 +493,9 @@ export async function listAttentionExceptionsForTrainer(
         exception,
         coachingRelationshipId: relationship.id,
         traineeUserId: relationship.traineeUserId,
+        // Z9-18: the trainer-set name and phone, from the same relationship read.
+        clientDisplayName: relationship.clientDisplayName ?? null,
+        contactPhoneE164: relationship.contactPhoneE164 ?? null,
       },
     ];
   });

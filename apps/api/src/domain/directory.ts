@@ -22,6 +22,7 @@ import {
 } from "../db/schema";
 import { deriveAdherenceForRelationships } from "./adherence";
 import { deriveOnboardingStatusForRelationships } from "./client-status";
+import { resolveClientDisplayName } from "./client-identity";
 import { mapCheckin } from "./mappers";
 import { buildPage } from "../lib/cursor";
 
@@ -223,8 +224,12 @@ export async function loadClientDirectory(
     const invitation = relationship.invitationId
       ? invitationById.get(relationship.invitationId)
       : undefined;
+    // Z9-18: the trainer-set name first, so the list and its search match it.
     const displayName =
-      nameByUser.get(relationship.traineeUserId) ??
+      resolveClientDisplayName(
+        relationship,
+        nameByUser.get(relationship.traineeUserId),
+      ) ??
       invitation?.recipientDisplayName ??
       invitation?.recipientEmail ??
       "Client";
