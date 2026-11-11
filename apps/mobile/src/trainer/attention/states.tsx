@@ -8,7 +8,7 @@ export const ATTENTION_EMPTY_BODY =
   "New items show up here as your clients log, or miss a log. Pull down to check again.";
 export const ATTENTION_ERROR_TITLE = "Couldn't load Attention";
 export const ATTENTION_ERROR_BODY =
-  "Pull down to try again. If it keeps happening, email tech@thefitbud.com from More > Help.";
+  "Pull down to try again. If it keeps happening, email tech@thefitbud.com from More › Help.";
 
 /** Frame 43: all clear. */
 export function AttentionEmptyState() {

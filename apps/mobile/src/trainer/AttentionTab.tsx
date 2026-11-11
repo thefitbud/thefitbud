@@ -229,6 +229,8 @@ export function AttentionTab({
         // Offline with nothing cached, or any other error, is a failed load:
         // never an empty list and never called "offline" without proof.
         if (!isNetworkFailure(err)) reportError("attention.load", err);
+        // The offline line and an error never show together.
+        setOfflineAt(null);
         if (hasData.current) {
           setError("Couldn't load. Pull to try again.");
         } else {
