@@ -13,6 +13,7 @@ import {
   traineeProfiles,
   workoutExecutions,
 } from "../db/schema.js";
+import { resolveClientDisplayName } from "../domain/client-identity.js";
 import { describeCoachLogEvent } from "../domain/coach-log.js";
 import { buildPage } from "../lib/cursor.js";
 import { fail, ok } from "../lib/envelope.js";
@@ -62,7 +63,17 @@ activityFeedRoutes.get(
       .select()
       .from(traineeProfiles)
       .where(inArray(traineeProfiles.userId, rels.map((r) => r.traineeUserId)));
-    const nameByUser = new Map(trainees.map((t) => [t.userId, t.displayName]));
+    const profileNameByUser = new Map(
+      trainees.map((t) => [t.userId, t.displayName]),
+    );
+    // Z9-18: each event names the client as the trainer set it on that
+    // relationship, else by their profile name.
+    const nameByRelationship = new Map(
+      rels.map((r) => [
+        r.id,
+        resolveClientDisplayName(r, profileNameByUser.get(r.traineeUserId)),
+      ]),
+    );
     const events: Array<{
       id: string;
       relationshipId: string;
@@ -85,7 +96,7 @@ activityFeedRoutes.get(
       events.push({
         id: `meal:${row.id}`,
         relationshipId: row.coachingRelationshipId,
-        traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
+        traineeDisplayName: nameByRelationship.get(row.coachingRelationshipId) ?? null,
         type: "meal",
         subtype: labelFor("meal_compliance_outcome", row.outcome),
         occurredAt: row.loggedAt,
@@ -108,7 +119,7 @@ activityFeedRoutes.get(
       events.push({
         id: `workout:${row.id}`,
         relationshipId: row.coachingRelationshipId,
-        traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
+        traineeDisplayName: nameByRelationship.get(row.coachingRelationshipId) ?? null,
         type: "workout",
         subtype: labelFor("workout_execution_status", row.status),
         occurredAt: row.completedAt,
@@ -146,7 +157,7 @@ activityFeedRoutes.get(
       events.push({
         id: `ask:${row.id}`,
         relationshipId: row.relationshipId,
-        traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
+        traineeDisplayName: nameByRelationship.get(row.relationshipId) ?? null,
         type: "coach_ask",
         subtype: topicLabel,
         occurredAt: row.lastAskedAt,
@@ -179,7 +190,7 @@ activityFeedRoutes.get(
       events.push({
         id: `log_edit:${row.id}`,
         relationshipId: row.coachingRelationshipId,
-        traineeDisplayName: nameByUser.get(row.traineeUserId) ?? null,
+        traineeDisplayName: nameByRelationship.get(row.coachingRelationshipId) ?? null,
         type: described.type,
         subtype: described.subtype,
         occurredAt: row.createdAt,
