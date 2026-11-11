@@ -14,6 +14,9 @@ const api = vi.hoisted(() => ({
   updateClientBasics: vi.fn(),
 }));
 vi.mock("../../lib/api", () => ({ apiClient: api }));
+const authMe = vi.hoisted(() => ({ timezone: "Asia/Kolkata" as string | null }));
+vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ me: authMe }) }));
+
 
 import { ClientSettingsPage } from "./ClientSettingsPage";
 import { parsePhoneInput, renewalChipLabel } from "./clientSettingsFormat";
@@ -136,7 +139,8 @@ describe("ClientSettingsPage overview (frame 209)", () => {
 
     const payments = screen.getByTestId("cs-payments");
     expect(within(payments).getAllByText("₹6,000")).toHaveLength(2);
-    expect(within(payments).getByText("Thu 24 Sep")).toBeTruthy();
+    // Due and paid on the same day (Z8-4 adds the Paid on column).
+    expect(within(payments).getAllByText("Thu 24 Sep")).toHaveLength(2);
     expect(within(payments).getByText("Paid")).toBeTruthy();
     expect(within(payments).getByText("Unpaid")).toBeTruthy();
     expect(within(payments).getByText("UPI")).toBeTruthy();
@@ -151,7 +155,8 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     // D-W8-2: no session or package counts, no collect/pay actions.
     expect(text).not.toMatch(/sessions? (left|used|remaining)|Add package|Renew package/i);
     expect(text).not.toMatch(/Collect|Pay now|Invoice/);
-    expect(text).not.toMatch(/Add payment record/);
+    // Z8-4: the trainer records payments; FitBud never takes them.
+    expect(within(payments).getByRole("button", { name: "Add payment record" })).toBeTruthy();
     // Frame 211/212 footnote is not built: spec wins over frame copy (orchestrator, Z8-3).
     expect(text).not.toMatch(/collect payments|invoice|remind clients to pay/i);
     expect(within(payments).getByRole("columnheader", { name: "Due" })).toBeTruthy();
