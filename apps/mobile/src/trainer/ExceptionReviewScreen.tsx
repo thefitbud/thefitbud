@@ -10,8 +10,10 @@ import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { reportError } from "../lib/reportError";
 import { labelFor } from "./labels";
-import { openContextualWhatsApp } from "./whatsapp";
+import { NudgeSheet } from "./sheets/NudgeSheet";
+import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
 
 type Props = {
   exceptionId: string;
@@ -34,6 +36,11 @@ export function ExceptionReviewScreen({
   const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
     null,
   );
+  const [traineeName, setTraineeName] = useState("");
+  const [ended, setEnded] = useState(false);
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [resolveError, setResolveError] = useState<string | null>(null);
+  const [nudgeOpen, setNudgeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -46,6 +53,8 @@ export function ExceptionReviewScreen({
           result.coachingRelationshipId,
         );
         setClientWhatsappE164(workspace.header.clientWhatsappE164 ?? null);
+        setTraineeName(workspace.header.traineeDisplayName);
+        setEnded(Boolean(workspace.header.endedAt));
       } catch {
         setClientWhatsappE164(null);
       }
@@ -88,24 +97,32 @@ export function ExceptionReviewScreen({
     }
   }
 
-  async function resolve() {
+  async function resolve(input: {
+    outcome: ResolveOutcome | null;
+    note: string | null;
+  }) {
     setActing(true);
     setError(null);
+    setResolveError(null);
     setMessage(null);
     try {
       await api.resolveException(
         exceptionId,
         {
-          note: note.trim() ? note.trim() : null,
+          note: input.note,
           interventionKind: "resolve",
+          ...(input.outcome ? { outcome: input.outcome } : {}),
         },
         createIdempotencyKey(),
       );
+      setResolveOpen(false);
       setMessage("Resolved. Source signals were not changed.");
-      setNote("");
       await load();
     } catch (err) {
-      setError(
+      if (!(err instanceof ApiClientError)) {
+        reportError("trainer.exception.resolve", err);
+      }
+      setResolveError(
         err instanceof ApiClientError
           ? err.message
           : "Could not resolve exception.",
@@ -140,16 +157,15 @@ export function ExceptionReviewScreen({
             </Text>
           </View>
 
-          <Field
-            label="Note (optional)"
-            value={note}
-            onChangeText={setNote}
-            multiline
-            placeholder="Context for yourself — not a coaching decision by FitBud"
-          />
-
           {(detail.status === "detected" || detail.status === "active") && (
             <>
+              <Field
+                label="Note (optional)"
+                value={note}
+                onChangeText={setNote}
+                multiline
+                placeholder="Context for yourself — not a coaching decision by FitBud"
+              />
               <Text style={styles.sectionLabel}>
                 Acknowledge — note you've seen this; signals stay open.
               </Text>
@@ -163,16 +179,16 @@ export function ExceptionReviewScreen({
             </>
           )}
 
-          {detail.status === "acknowledged" && (
+          {detail.status === "acknowledged" && !ended && (
             <>
               <Text style={styles.sectionLabel}>
                 Resolve — close this after you've followed up.
               </Text>
               <PrimaryButton
                 label="Resolve"
-                loading={acting}
                 onPress={() => {
-                  void resolve();
+                  setResolveError(null);
+                  setResolveOpen(true);
                 }}
               />
             </>
@@ -192,18 +208,37 @@ export function ExceptionReviewScreen({
             </Text>
           </View>
 
-          <PrimaryButton
-            label="WhatsApp (outside FitBud)"
-            variant="ghost"
-            onPress={() => {
-              void openContextualWhatsApp({
-                phoneE164: clientWhatsappE164,
-                draftText: "Following up from FitBud.",
-              });
-            }}
-          />
+          {detail.status !== "resolved" && !ended ? (
+            <PrimaryButton
+              label="Nudge on WhatsApp"
+              variant="ghost"
+              onPress={() => setNudgeOpen(true)}
+            />
+          ) : null}
         </View>
       )}
+      {detail ? (
+        <>
+          <ResolveSheet
+            visible={resolveOpen}
+            detail={detail}
+            traineeDisplayName={traineeName}
+            acting={acting}
+            errorMessage={resolveError}
+            onDismiss={() => setResolveOpen(false)}
+            onConfirm={(input) => {
+              void resolve(input);
+            }}
+          />
+          <NudgeSheet
+            visible={nudgeOpen}
+            detail={detail}
+            traineeDisplayName={traineeName}
+            clientWhatsappE164={clientWhatsappE164}
+            onDismiss={() => setNudgeOpen(false)}
+          />
+        </>
+      ) : null}
     </Screen>
   );
 }
