@@ -12,7 +12,6 @@ import { allLabelEntries } from "@fitbud/core";
 import {
   coachingConfigurationStatusSchema,
   mealPhotoRequirementSchema,
-  paymentFrequencySchema,
   planTemplateTypeSchema,
   planVersionStatusSchema,
   checkinStatusSchema,
@@ -50,6 +49,7 @@ const api = vi.hoisted(() => ({
   listPlans: vi.fn(),
   getPlanVersion: vi.fn(),
   getPlanConsistency: vi.fn(),
+  getClientSteps: vi.fn(),
   getException: vi.fn(),
   getWorkoutAssignment: vi.fn(),
   getClientWorkspace: vi.fn(),
@@ -783,7 +783,8 @@ describe("rawEnumGuard: web", () => {
     );
   });
 
-  it("Configure: payment frequency, cadence, photo rule and status read as labels", async () => {
+  // Payment frequency moved to Client settings (Z8-3); Configure keeps cadence, photo rule and status.
+  it("Configure: cadence, photo rule and status read as labels", async () => {
     const REL = uuid(300);
     api.getEffectivePlan.mockResolvedValue({ plan: null, version: null });
     api.getReminderRules.mockResolvedValue({
@@ -796,14 +797,21 @@ describe("rawEnumGuard: web", () => {
     api.getOnboardingResponse.mockResolvedValue({ status: "submitted", answers: {} });
     api.listCheckinFormTemplates.mockResolvedValue({ items: [] });
     api.getPlanConsistency.mockResolvedValue({ warnings: [] });
-    const frequencies = paymentFrequencySchema.options;
+    api.getClientSteps.mockResolvedValue({
+      relationshipId: REL,
+      target: 8000,
+      from: "2026-07-01",
+      to: "2026-07-07",
+      days: [],
+    });
     const photoRules = mealPhotoRequirementSchema.options;
     const cadences = checkinCadenceSchema.options;
     for (const [index, status] of coachingConfigurationStatusSchema.options.entries()) {
-      for (const frequency of frequencies) {
+      // Block kept from the old per-frequency loop so this diff stays minimal.
+      {
         api.getSubscription.mockResolvedValue({
           planName: "Monthly coaching",
-          paymentFrequency: frequency,
+          paymentFrequency: "monthly",
           startsOn: "2026-07-06",
           renewsOn: "2026-11-17",
         });
@@ -866,13 +874,12 @@ describe("rawEnumGuard: web", () => {
             </Routes>
           </MemoryRouter>,
         );
-        await screen.findByText("Configure coaching");
+        await screen.findByRole("heading", { name: "Coaching setup" });
         await waitFor(() =>
           expect(view.container.textContent).toContain("Postpartum strength return"),
         );
         await new Promise((r) => setTimeout(r, 0));
-        expect(rawEnumHits(view.container), `${status}/${frequency}`).toEqual([]);
-        expect(view.container.textContent).toContain("Quarterly");
+        expect(rawEnumHits(view.container), status).toEqual([]);
         expect(view.container.textContent).toContain("Selected meals");
         cleanup();
       }

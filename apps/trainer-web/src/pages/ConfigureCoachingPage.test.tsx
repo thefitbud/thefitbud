@@ -21,6 +21,7 @@ const api = vi.hoisted(() => ({
   listCheckinFormTemplates: vi.fn(),
   getPlanConsistency: vi.fn(),
   getResponsiveness: vi.fn(),
+  getClientSteps: vi.fn(),
   // mutations: must never be called just by rendering the page
   saveConfigurationDraft: vi.fn(),
   configureConfiguration: vi.fn(),
@@ -30,6 +31,7 @@ const api = vi.hoisted(() => ({
   saveReminderRules: vi.fn(),
   assignPreferredCheckinForm: vi.fn(),
   acknowledgePlanConsistency: vi.fn(),
+  putClientStepsTarget: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -49,6 +51,8 @@ vi.mock("../lib/api", () => ({
     saveReminderRules: api.saveReminderRules,
     assignPreferredCheckinForm: api.assignPreferredCheckinForm,
     acknowledgePlanConsistency: api.acknowledgePlanConsistency,
+    getClientSteps: api.getClientSteps,
+    putClientStepsTarget: api.putClientStepsTarget,
   },
 }));
 vi.mock("../lib/stage1-api", () => ({
@@ -79,7 +83,7 @@ function configuration(status: ConfigStatus, goalShort: string | null = "Postpar
     nutrition: {
       mealsPerDay: 4,
       confirmationWindowHours: 12,
-      photoRequirement: "never",
+      photoRequirement: "none",
     },
     checkin: { cadence: "weekly", dueWindowHours: 48, formVersionId: null },
     tracking: {
@@ -159,6 +163,30 @@ function controls(container: HTMLElement) {
 const describeControl = (el: Element) =>
   `${el.tagName.toLowerCase()}[${el.getAttribute("name") ?? el.closest("label")?.querySelector("span")?.textContent ?? el.textContent}]`;
 
+/**
+ * Choose an option the way a person can (user-event `selectOptions` rules):
+ * a disabled select, or one inside a disabled fieldset, cannot be changed, so
+ * this throws instead of faking a change event on it (D-W8-5).
+ */
+function chooseOption(select: HTMLSelectElement, value: string) {
+  if (select.disabled || select.closest("fieldset[disabled]")) {
+    throw new Error(`select[${select.name}] is disabled; a trainer cannot change it`);
+  }
+  if (!Array.from(select.options).some((o) => o.value === value)) {
+    throw new Error(`select[${select.name}] has no option ${value}`);
+  }
+  select.focus();
+  fireEvent.change(select, { target: { value } });
+}
+
+const selectNamed = (container: HTMLElement, name: string) =>
+  container.querySelector<HTMLSelectElement>(`select[name="${name}"]`)!;
+
+/** The steps target arrives after the configuration (own request). */
+async function stepsLoaded(container: HTMLElement) {
+  await waitFor(() => expect(selectNamed(container, "stepsTarget").disabled).toBe(false));
+}
+
 const SAVE_ACTIONS = [
   "Save draft",
   "Mark configured",
@@ -186,6 +214,13 @@ beforeEach(() => {
   api.getOnboardingResponse.mockResolvedValue({ status: "submitted", answers: {} });
   api.listCheckinFormTemplates.mockResolvedValue({ items: [] });
   api.getResponsiveness.mockResolvedValue({ label: "responsive", pushEnabled: true });
+  api.getClientSteps.mockResolvedValue({
+    relationshipId: REL_ID,
+    target: 8000,
+    from: "2026-07-01",
+    to: "2026-07-07",
+    days: [],
+  });
 });
 
 afterEach(() => cleanup());
@@ -295,18 +330,26 @@ describe("ConfigureCoachingPage on an ended relationship (CE1)", () => {
 describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
   it("active version: keeps the 'version is active' banner and Create new version", async () => {
     const { container } = renderPage("active", "active");
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     expect(
       screen.getByText("This version is active. Create a new version to change it."),
     ).toBeTruthy();
     expect(container.textContent).not.toContain("has ended");
     const create = screen.getByRole("button", { name: "Create new version" });
     expect((create as HTMLButtonElement).disabled).toBe(false);
-    // Locked version fields stay disabled; reminders and subscription stay editable.
+    // Locked version fields stay disabled; reminders, the steps target and the
+    // next check-in's form stay editable (D-W8-5).
     const byName = (n: string) =>
-      container.querySelector<HTMLInputElement>(`input[name="${n}"]`)!;
+      container.querySelector<HTMLInputElement>(`[name="${n}"]`)!;
     expect(byName("goalShort").disabled).toBe(true);
-    expect(byName("planName").disabled).toBe(false);
+    expect(byName("sessionsPerWeek").disabled).toBe(true);
+    expect(byName("dueWindowHours").disabled).toBe(true);
+    expect(byName("checkinForm").disabled).toBe(false);
+    expect(byName("checkinForm").closest("fieldset[disabled]")).toBeNull();
+    await stepsLoaded(container);
+    // Subscription moved to Client settings (Z8-3): nothing to edit or save here.
+    expect(container.querySelector('[name="planName"]')).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save subscription" })).toBeNull();
     const switches = Array.from(
       container.querySelectorAll<HTMLInputElement>('input[role="switch"]'),
     );
@@ -314,15 +357,12 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
       true, true, true, // tracking (locked with the active version)
       false, false, false, // automatic reminders
     ]);
-    expect(
-      (screen.getByRole("button", { name: "Save subscription" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(false);
   });
 
   it("draft: every field and both save actions are enabled, no banner", async () => {
     const { container } = renderPage("active", "draft");
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    await stepsLoaded(container);
     const disabledFields = controls(container)
       .filter((el) => el.tagName !== "BUTTON" && el.disabled)
       .map(describeControl);
@@ -343,7 +383,7 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
 describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
   it("a draft with a short goal offers Save draft and Activate, never Mark configured", async () => {
     renderPage("active", "draft");
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     expect(screen.queryByRole("button", { name: "Mark configured" })).toBeNull();
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     const activate = screen.getByRole("button", { name: "Activate" });
@@ -353,7 +393,7 @@ describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
 
   it("a draft without a short goal offers Save draft only", async () => {
     renderPage("active", "draft", configuration("draft", null));
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Activate" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Mark configured" })).toBeNull();
@@ -370,7 +410,7 @@ describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
       activatedAt: "2026-07-07T04:00:00.000Z",
     });
     renderPage("active", "draft", draft);
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     fireEvent.click(screen.getByRole("button", { name: "Activate" }));
     await waitFor(() => expect(api.activateConfiguration).toHaveBeenCalledTimes(1));
     expect(api.saveConfigurationDraft).toHaveBeenCalledTimes(1);
@@ -397,7 +437,7 @@ describe("ConfigureCoachingPage one-step Activate (Z5-2, D12)", () => {
       recordVersion: 0,
     });
     renderPage("active", "active");
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     fireEvent.click(screen.getByRole("button", { name: "Create new version" }));
     expect(
       await screen.findByText(
@@ -468,25 +508,34 @@ describe("ConfigureCoachingPage ended copy (Z7-11, D-W7-6)", () => {
     liveWording(container.textContent ?? "");
   });
 
-  it("Rohan (active): live title, renews, WhatsApp and reminder wording stay", async () => {
+  it("Rohan (active): v3 header, Client settings banner, WhatsApp and reminder wording stay", async () => {
     const { container } = renderPage("active", "active", configuration("active"), {
       displayName: "Rohan Mehta",
       gender: "male",
     });
     expect(
-      await screen.findByRole("heading", { name: "Configure coaching" }),
+      await screen.findByRole("heading", { name: "Coaching setup" }),
     ).toBeTruthy();
+    expect(screen.getByTestId("configure-moved-banner").textContent).toContain(
+      "Name, phone, age and subscription moved to Client settings. Coaching setup is only about how you coach Rohan.",
+    );
     expect(
-      screen.getByText(
-        "Set the baseline for Rohan: goals, expectations, reminders, and subscription.",
-      ),
-    ).toBeTruthy();
+      screen.getByRole("link", { name: "Open client settings" }).getAttribute("href"),
+    ).toBe(`/clients/${REL_ID}/settings`);
+    expect(screen.getByRole("link", { name: "Plans" }).getAttribute("href")).toBe(
+      `/clients/${REL_ID}/plan`,
+    );
+    expect(screen.getByTestId("configure-status-note").textContent).toBe(
+      `Active since ${formatCivilDate("2026-07-06")} · v1`,
+    );
     expect(screen.getByTestId("configure-status-pill").textContent).toContain(
       "Active",
     );
     const text = container.textContent ?? "";
-    expect(text).toContain("renews");
-    expect(text).toContain("Renews on");
+    expect(text).not.toContain("Configure coaching");
+    expect(text).not.toContain("Set the baseline");
+    expect(text).not.toContain("renews");
+    expect(text).not.toContain("Renews on");
     expect(text).not.toContain("Due on");
     expect(text).toContain("Open WhatsApp");
     expect(text).toContain("On for");
@@ -531,11 +580,12 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
     container: HTMLElement,
     value: string,
   ): Promise<HTMLSelectElement> {
-    await screen.findByText("Configure coaching");
-    const select = Array.from(
-      container.querySelectorAll<HTMLSelectElement>("select"),
-    ).find((el) => el.closest("label")?.textContent?.startsWith("Check-in form"))!;
-    fireEvent.change(select, { target: { value } });
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    const select = screen.getByRole<HTMLSelectElement>("combobox", {
+      name: "Check-in form",
+    });
+    expect(container.contains(select)).toBe(true);
+    chooseOption(select, value);
     return select;
   }
 
@@ -582,16 +632,57 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
     });
   });
 
-  it("active configuration: choosing the global form calls the preferred-form route with GLOBAL_CHECKIN_FORM_VERSION_ID", async () => {
+  it("active configuration: the trainer assigns the next check-in's form through the enabled select (D-W8-5)", async () => {
     api.listCheckinFormTemplates.mockResolvedValue(templates);
     api.assignPreferredCheckinForm.mockResolvedValue({});
     const { container } = renderPage("active", "active");
-    await pickForm(container, GLOBAL_CHECKIN_FORM_VERSION_ID);
+    // Fails (throws) if the select is disabled, as it was before D-W8-5.
+    const select = await pickForm(container, TRAINER_LATEST_VERSION_ID);
     await waitFor(() => expect(api.assignPreferredCheckinForm).toHaveBeenCalled());
     expect(api.assignPreferredCheckinForm.mock.calls[0]).toEqual([
       REL_ID,
+      { checkinFormVersionId: TRAINER_LATEST_VERSION_ID },
+    ]);
+    // Only the preferred form changes: the locked version is not saved or revised.
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+    expect(api.createConfigurationVersion).not.toHaveBeenCalled();
+    expect(
+      await screen.findByText("Check-in form assigned for the next check-in"),
+    ).toBeTruthy();
+    await waitFor(() => expect(select.disabled).toBe(false));
+    expect(select.value).toBe(TRAINER_LATEST_VERSION_ID);
+    // Back to the FitBud form: the pinned global version, not the template's latest.
+    chooseOption(select, GLOBAL_CHECKIN_FORM_VERSION_ID);
+    await waitFor(() => expect(api.assignPreferredCheckinForm).toHaveBeenCalledTimes(2));
+    expect(api.assignPreferredCheckinForm.mock.calls[1]).toEqual([
+      REL_ID,
       { checkinFormVersionId: GLOBAL_CHECKIN_FORM_VERSION_ID },
     ]);
+  });
+
+  it("active configuration: a refused assignment puts the previous form back and says why", async () => {
+    api.listCheckinFormTemplates.mockResolvedValue(templates);
+    api.assignPreferredCheckinForm.mockRejectedValue(
+      new ApiClientError({
+        status: 403,
+        code: "FORBIDDEN",
+        message: "You cannot change this client's check-in form.",
+        requestId: "req-form",
+      }),
+    );
+    const { container } = renderPage("active", "active");
+    const select = await pickForm(container, TRAINER_LATEST_VERSION_ID);
+    expect(
+      await screen.findByText("You cannot change this client's check-in form."),
+    ).toBeTruthy();
+    await waitFor(() => expect(select.value).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID));
+  });
+
+  it("ended: there is no check-in form control to change", async () => {
+    api.listCheckinFormTemplates.mockResolvedValue(templates);
+    renderPage("ended", "active");
+    await screen.findByTestId("configure-readonly");
+    expect(screen.queryByRole("combobox", { name: "Check-in form" })).toBeNull();
   });
 
   it("the check-ins summary names the global form when it is pinned", async () => {
@@ -599,7 +690,7 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
     const withTrainer = configuration("draft");
     withTrainer.checkin.formVersionId = TRAINER_LATEST_VERSION_ID as never;
     const { container, unmount } = renderPage("active", "draft", withTrainer);
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     await waitFor(() => expect(container.textContent).toContain("Rahul weekly"));
     unmount();
     renderPage("active", "draft", configuration("draft"));
@@ -664,7 +755,7 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
 
   it("a realtime hint that flips the header to ended shows the message and keeps unsaved text", async () => {
     const { view, tree } = mount(() => {});
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     const goal = view.container.querySelector<HTMLInputElement>(
       "input[name=goalShort]",
     )!;
@@ -691,7 +782,7 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
   it("one tab return (visibilitychange then focus) triggers one reload", async () => {
     const reload = vi.fn();
     mount(reload);
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     document.dispatchEvent(new Event("visibilitychange"));
     fireEvent(window, new Event("focus"));
     expect(reload).toHaveBeenCalledTimes(1);
@@ -700,7 +791,7 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
   it("does not refetch on focus while offline", async () => {
     const reload = vi.fn();
     mount(reload, false);
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     fireEvent(window, new Event("focus"));
     document.dispatchEvent(new Event("visibilitychange"));
     expect(reload).not.toHaveBeenCalled();
@@ -708,7 +799,7 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
 
   it("a reminder toggle refused with 409 RELATIONSHIP_ENDED reverts and shows the message", async () => {
     mount(() => {});
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     api.saveReminderRules.mockRejectedValue(
       new ApiClientError({
         code: "RELATIONSHIP_ENDED",
@@ -729,7 +820,7 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
   it("a save refused with 409 RELATIONSHIP_ENDED shows the same message and refetches", async () => {
     const reload = vi.fn();
     const { view } = mount(reload);
-    await screen.findByText("Configure coaching");
+    await screen.findByRole("heading", { name: "Coaching setup" });
     api.saveConfigurationDraft.mockRejectedValue(
       new ApiClientError({
         code: "RELATIONSHIP_ENDED",
@@ -751,5 +842,173 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
       view.container.querySelector<HTMLInputElement>("input[name=goalShort]")!
         .value,
     ).toBe("Unsaved new goal");
+  });
+});
+
+describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
+  const sectionRows = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll("details > summary")).map((summary) => ({
+      title: summary.querySelector(".configure-accordion-title")?.textContent,
+      badge: summary.querySelector("[data-testid=configure-section-badge]")?.textContent,
+    }));
+
+  it("holds coaching targets only: no basics or subscription, no flag-rules column", async () => {
+    const { container } = renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    expect(sectionRows(container).map((row) => row.title)).toEqual([
+      "Goal",
+      "Expectations",
+      "Check-ins",
+      "Tracking",
+      "Automatic reminders",
+    ]);
+    const text = container.textContent ?? "";
+    expect(text).not.toContain("Payment frequency");
+    expect(text).not.toContain("Plan name");
+    expect(text).not.toContain("Raises a flag when");
+    expect(container.querySelector('[name="planName"]')).toBeNull();
+    const headers = Array.from(
+      container.querySelectorAll(".cs-expectations thead th"),
+    ).map((th) => th.textContent);
+    expect(headers).toEqual(["Expectation", "Target", "Details"]);
+    const rows = Array.from(
+      container.querySelectorAll(".cs-expectations tbody th"),
+    ).map((th) => th.textContent);
+    expect(rows).toEqual(["Workouts", "Meals logged", "Check-in", "Steps"]);
+    // Targets are editable selects, not plain text.
+    for (const name of ["sessionsPerWeek", "mealsPerDay", "cadence"]) {
+      expect(selectNamed(container, name).disabled).toBe(false);
+    }
+    expect(text).not.toMatch(/\d\s?%/);
+  });
+
+  it("badges: Done for saved sections, Editing once a target changes, To do before anything is saved", async () => {
+    const { container, unmount } = renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    expect(sectionRows(container).map((row) => row.badge)).toEqual([
+      "Done", "Done", "Done", "Done", "Done",
+    ]);
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "5");
+    expect(sectionRows(container)[1]!.badge).toBe("Editing");
+    expect(
+      container.querySelectorAll(".configure-accordion-summary")[1]?.textContent,
+    ).toContain("5 workouts a week");
+    unmount();
+
+    const view = renderPage("coaching_ready", "draft", null as never);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    expect(sectionRows(view.container).map((row) => row.badge)).toEqual([
+      "To do", "To do", "To do", "To do", "Done",
+    ]);
+    expect(screen.getByTestId("configure-status-note").textContent).toBe(
+      "Not saved yet",
+    );
+  });
+
+  it("Save draft never writes the subscription, so amount, type and mode can't be dropped (D-W8-5)", async () => {
+    api.saveConfigurationDraft.mockResolvedValue(configuration("draft"));
+    renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(api.saveConfigurationDraft).toHaveBeenCalled());
+    expect(api.saveSubscription).not.toHaveBeenCalled();
+  });
+});
+
+describe("ConfigureCoachingPage steps target (Z8-5, D-W8-5)", () => {
+  it("shows the stored target (default 8,000) and offers 1,000 to 50,000", async () => {
+    const { container } = renderPage("active", "draft");
+    await stepsLoaded(container);
+    const select = selectNamed(container, "stepsTarget");
+    expect(select.value).toBe("8000");
+    expect(select.selectedOptions[0]!.textContent).toBe("8,000 a day");
+    const values = Array.from(select.options).map((o) => Number(o.value));
+    expect(values[0]).toBe(1000);
+    expect(values[values.length - 1]).toBe(50000);
+    expect(values.every((v) => v >= 1000 && v <= 50000)).toBe(true);
+    expect(api.getClientSteps).toHaveBeenCalledWith(REL_ID, "7d");
+    expect(api.putClientStepsTarget).not.toHaveBeenCalled();
+  });
+
+  it("an active version: changing the target saves it at once, without a new version", async () => {
+    api.putClientStepsTarget.mockResolvedValue({ relationshipId: REL_ID, target: 10000 });
+    const { container } = renderPage("active", "active");
+    await stepsLoaded(container);
+    chooseOption(selectNamed(container, "stepsTarget"), "10000");
+    await waitFor(() =>
+      expect(api.putClientStepsTarget).toHaveBeenCalledWith(REL_ID, 10000),
+    );
+    expect(await screen.findByText("Steps target set to 10,000 a day")).toBeTruthy();
+    expect(api.createConfigurationVersion).not.toHaveBeenCalled();
+    expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
+    expect(selectNamed(container, "stepsTarget").value).toBe("10000");
+  });
+
+  it("keeps a stored value that is off the 1,000 grid selectable", async () => {
+    api.getClientSteps.mockResolvedValue({
+      relationshipId: REL_ID,
+      target: 7500,
+      from: "2026-07-01",
+      to: "2026-07-07",
+      days: [],
+    });
+    const { container } = renderPage("active", "active");
+    await stepsLoaded(container);
+    expect(selectNamed(container, "stepsTarget").value).toBe("7500");
+  });
+
+  it("before the first configuration exists: disabled with the reason, never a hidden save", async () => {
+    const { container } = renderPage("coaching_ready", "draft", null as never);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    await waitFor(() => expect(api.getClientSteps).toHaveBeenCalled());
+    const select = selectNamed(container, "stepsTarget");
+    expect(select.disabled).toBe(true);
+    expect(select.value).toBe("8000");
+    expect(() => chooseOption(select, "10000")).toThrow(/disabled/);
+    expect(screen.getByTestId("configure-steps-row").textContent).toContain(
+      "Save the draft first. Then you can set the steps target.",
+    );
+    expect(select.getAttribute("aria-describedby")).toBe("configure-steps-detail");
+    expect(api.putClientStepsTarget).not.toHaveBeenCalled();
+  });
+
+  it("after the first draft is saved, the target can be set", async () => {
+    api.saveConfigurationDraft.mockResolvedValue(configuration("draft", null));
+    const { container } = renderPage("coaching_ready", "draft", null as never);
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    expect(selectNamed(container, "stepsTarget").disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Save draft" }));
+    await waitFor(() => expect(api.saveConfigurationDraft).toHaveBeenCalled());
+    await stepsLoaded(container);
+    expect(screen.getByTestId("configure-steps-row").textContent).not.toContain(
+      "Save the draft first",
+    );
+  });
+
+  it("a refused save shows why and puts the previous target back", async () => {
+    api.putClientStepsTarget.mockRejectedValue(
+      new ApiClientError({
+        status: 404,
+        code: "CONFIGURATION_NOT_FOUND",
+        message: "Coaching configuration not found.",
+        requestId: "req-steps",
+      }),
+    );
+    const { container } = renderPage("active", "draft");
+    await stepsLoaded(container);
+    chooseOption(selectNamed(container, "stepsTarget"), "12000");
+    expect(
+      await screen.findByText("Save the draft first. Then you can set the steps target.", {
+        selector: "[role=alert]",
+      }),
+    ).toBeTruthy();
+    await waitFor(() => expect(selectNamed(container, "stepsTarget").value).toBe("8000"));
+  });
+
+  it("a target that could not be read stays disabled and says so", async () => {
+    api.getClientSteps.mockRejectedValue(new Error("network"));
+    const { container } = renderPage("active", "active");
+    await screen.findByText("Could not load the steps target. Reload to try again.");
+    expect(selectNamed(container, "stepsTarget").disabled).toBe(true);
   });
 });

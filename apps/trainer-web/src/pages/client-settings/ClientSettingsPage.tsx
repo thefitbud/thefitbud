@@ -5,19 +5,22 @@ import {
   CreditCard,
   Lock,
   Pencil,
+  Plus,
   User,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
-import type { ClientSettingsResponse } from "@fitbud/contracts";
+import type { ClientSettingsResponse, PaymentRecord } from "@fitbud/contracts";
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
+import { useAuth } from "../../auth/AuthProvider";
 import { StatusChip } from "../../components/StatusChip";
 import { ReadOnlyField } from "../../components/ReadOnlyField";
 import type { WorkspaceOutletContext } from "../workspaceContext";
 import { EditBasicsDrawer } from "./EditBasicsDrawer";
 import { SubscriptionDrawer } from "./SubscriptionDrawer";
+import { PaymentDrawer } from "./PaymentDrawer";
 import {
   COACHING_MODE_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -50,6 +53,15 @@ function titleCase(value: string): string {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 }
 
+/** Newest due date first, as the API lists them; newest record first on a tie. */
+function sortPayments(payments: PaymentRecord[]): PaymentRecord[] {
+  return [...payments].sort(
+    (a, b) => b.dueOn.localeCompare(a.dueOn) || b.createdAt.localeCompare(a.createdAt),
+  );
+}
+
+type PaymentEditor = { record: PaymentRecord | null; returnFocus: HTMLElement | null };
+
 /** One label/value pair (DS7 `ReadOnlyField`, laid out side by side as in frames 209/212). */
 function Row({ label, value, testId }: { label: string; value: ReactNode; testId?: string }) {
   return <ReadOnlyField label={label} value={value} testId={testId} />;
@@ -61,13 +73,15 @@ function Row({ label, value, testId }: { label: string; value: ReactNode; testId
  * relationship. The trainer-owned name and contact phone are edited in frame
  * 210 (D-W8-10); the subscription in frames 211/211b, each save a new version
  * (Z8-3). An ended client sees every section read-only (frame 212). Session
- * packages and collect/pay parts of the frames are not built (D-W8-2). Adding
- * payments is Z8-4.
+ * packages and collect/pay parts of the frames are not built (D-W8-2). Payment
+ * records are added and edited in a drawer (Z8-4): amount, due date,
+ * Paid/Unpaid, method and note, for the trainer's own tracking only.
  */
 export function ClientSettingsPage() {
   const { workspace, relationshipId, online, ended, openWorkspaceModal, reloadWorkspace } =
     useOutletContext<WorkspaceOutletContext>();
   const location = useLocation();
+  const { me } = useAuth();
   const [settings, setSettings] = useState<ClientSettingsResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +89,8 @@ export function ClientSettingsPage() {
   const [savedNotice, setSavedNotice] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState(false);
   const [subscriptionSaved, setSubscriptionSaved] = useState(false);
+  const [paymentEditor, setPaymentEditor] = useState<PaymentEditor | null>(null);
+  const [paymentSaved, setPaymentSaved] = useState<"added" | "updated" | null>(null);
   const [active, setActive] = useState<SectionId>(() => sectionFromHash(location.hash));
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const subscriptionButtonRef = useRef<HTMLButtonElement>(null);
@@ -127,6 +143,21 @@ export function ClientSettingsPage() {
   function closeSubscriptionDrawer() {
     setEditingSubscription(false);
     window.setTimeout(() => subscriptionButtonRef.current?.focus(), 0);
+  }
+
+  function openPaymentEditor(record: PaymentRecord | null, opener: HTMLElement) {
+    setPaymentSaved(null);
+    setPaymentEditor({ record, returnFocus: opener });
+  }
+
+  function closePaymentDrawer() {
+    const target = paymentEditor?.returnFocus ?? null;
+    setPaymentEditor(null);
+    window.setTimeout(() => {
+      // The opener may be gone after a reload; fall back to the section title.
+      if (target?.isConnected) target.focus();
+      else document.getElementById("cs-payments-title")?.focus();
+    }, 0);
   }
 
   const nav = (
@@ -309,25 +340,57 @@ export function ClientSettingsPage() {
           ) : null}
 
           <div className="cs-payments" data-testid="cs-payments">
-            <h4 className="cs-eyebrow">Payment records · tracking only</h4>
+            <div className="cs-payments-head">
+              <h4 id="cs-payments-title" className="cs-eyebrow" tabIndex={-1}>
+                Payment records · tracking only
+              </h4>
+              {readOnly || !subscription ? null : (
+                <button
+                  type="button"
+                  className="cs-link-button"
+                  onClick={(e) => openPaymentEditor(null, e.currentTarget)}
+                  disabled={!online}
+                >
+                  <Plus size={16} strokeWidth={1.75} aria-hidden />
+                  Add payment record
+                </button>
+              )}
+            </div>
             {payments.length === 0 ? (
-              <p className="cs-empty">No payment records yet.</p>
+              <>
+                <p className="cs-empty">No payment records yet.</p>
+                {subscription || readOnly ? null : (
+                  // The API ties each record to a subscription version.
+                  <p className="cs-empty">Save a subscription first, then add payment records to it.</p>
+                )}
+              </>
             ) : (
               <div className="cs-table-wrap">
                 <table className="cs-table">
+                  <caption className="sr-only">Payments you've recorded</caption>
                   <thead>
                     <tr>
                       <th scope="col">Due</th>
+                      <th scope="col">Note</th>
                       <th scope="col">Amount</th>
                       <th scope="col">Status</th>
                       <th scope="col">Method</th>
+                      <th scope="col">Paid on</th>
+                      {readOnly ? null : (
+                        <th scope="col">
+                          <span className="sr-only">Actions</span>
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
                     {payments.map((payment) => (
-                      <tr key={payment.id}>
-                        <td>{formatCivilDate(payment.dueOn)}</td>
-                        <td className="cs-num">{formatRupees(payment.amountPaise)}</td>
+                      <tr key={payment.id} data-testid="cs-payment-row">
+                        <td className="cs-nowrap">{formatCivilDate(payment.dueOn)}</td>
+                        <td className="cs-pay-note">
+                          {payment.note ? payment.note : <span aria-label="No note">—</span>}
+                        </td>
+                        <td className="cs-num cs-nowrap">{formatRupees(payment.amountPaise)}</td>
                         <td>
                           <span className={`cs-pay-chip is-${payment.status}`}>
                             {PAYMENT_STATUS_LABELS[payment.status]}
@@ -340,12 +403,38 @@ export function ClientSettingsPage() {
                             <span aria-label="No method">—</span>
                           )}
                         </td>
+                        <td className="cs-nowrap">
+                          {payment.paidOn ? (
+                            formatCivilDate(payment.paidOn)
+                          ) : (
+                            <span aria-label="Not paid">—</span>
+                          )}
+                        </td>
+                        {readOnly ? null : (
+                          <td className="cs-pay-action">
+                            <button
+                              type="button"
+                              className="cs-row-button"
+                              onClick={(e) => openPaymentEditor(payment, e.currentTarget)}
+                              disabled={!online}
+                              aria-label={`Edit payment record due ${formatCivilDate(payment.dueOn)}, ${formatRupees(payment.amountPaise)}`}
+                            >
+                              <Pencil size={16} strokeWidth={1.75} aria-hidden />
+                              Edit
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
             )}
+            {paymentSaved ? (
+              <p className="cs-saved" role="status">
+                {paymentSaved === "added" ? "Payment record added." : "Payment record saved."}
+              </p>
+            ) : null}
           </div>
         </section>
 
@@ -450,6 +539,36 @@ export function ClientSettingsPage() {
             closeSubscriptionDrawer();
             void load();
             reloadWorkspace?.();
+          }}
+        />
+      ) : null}
+      {paymentEditor && settings && !readOnly ? (
+        <PaymentDrawer
+          relationshipId={relationshipId}
+          record={paymentEditor.record}
+          // "Today" in the trainer's stored timezone (browser zone when unset).
+          today={civilDateOf(new Date().toISOString(), me?.timezone || undefined) ?? ""}
+          online={online}
+          onClose={closePaymentDrawer}
+          onSaved={(next) => {
+            const added = paymentEditor.record === null;
+            setSettings((current) =>
+              current
+                ? {
+                    ...current,
+                    payments: sortPayments([
+                      ...current.payments.filter((p) => p.id !== next.id),
+                      next,
+                    ]),
+                  }
+                : current,
+            );
+            setPaymentSaved(added ? "added" : "updated");
+            closePaymentDrawer();
+          }}
+          onStale={() => {
+            closePaymentDrawer();
+            void load();
           }}
         />
       ) : null}
