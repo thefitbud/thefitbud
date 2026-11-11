@@ -51,7 +51,8 @@ export function noticeForResult(result: StepsSyncResult, platform: StepsSetupPla
     case "needs_update":
       return null;
     case "denied":
-      return "Steps access is off. Allow it in Health Connect, then try again.";
+      // The screen's own denied line is already showing (state.denied).
+      return null;
     case "not_requested":
       return "Steps access was not given. Try again when you're ready.";
     case "no_data":
@@ -72,7 +73,7 @@ export function noticeForResult(result: StepsSyncResult, platform: StepsSetupPla
 export function useStepsSetup(): StepsSetupModel {
   const { api, me } = useAuth();
   const timeZone = me?.timezone ?? "UTC";
-  useStepsSyncStatus();
+  const snapshot = useStepsSyncStatus();
   const [provider, setProvider] = useState<HealthStepsProvider | null>(null);
   const [state, setState] = useState<StepsSetupState>({ kind: "checking" });
   const [busy, setBusy] = useState(false);
@@ -151,5 +152,13 @@ export function useStepsSetup(): StepsSetupModel {
     })();
   }, [api, timeZone, busy, provider, refresh]);
 
-  return { platform: platformOf(provider), state, busy, notice, install, connect };
+  // HealthKit hides denial, so on iOS "connected" follows the subscribed sync
+  // status: it turns on as soon as a sync has saved steps, even after the check ran.
+  const platform = platformOf(provider);
+  const effective: StepsSetupState =
+    platform === "ios" && state.kind === "connect" && snapshot.syncedAt !== null
+      ? { kind: "connected" }
+      : state;
+
+  return { platform, state: effective, busy, notice, install, connect };
 }

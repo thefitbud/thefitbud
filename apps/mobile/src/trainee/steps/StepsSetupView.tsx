@@ -1,4 +1,4 @@
-import { Pressable, SafeAreaView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, View } from "react-native";
 import { ChevronLeft, CircleCheck, CircleDashed, Footprints } from "lucide-react-native";
 import { brand, ink, semantic, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold } from "@fitbud/ui-mobile";
@@ -12,6 +12,8 @@ type Props = {
   coachName: string;
   busy?: boolean;
   notice?: string | null;
+  /** Name of the screen Back returns to; the frames say "More". */
+  backLabel?: string;
   onBack: () => void;
   onInstall: () => void;
   onConnect: () => void;
@@ -24,6 +26,7 @@ export function StepsSetupView({
   coachName,
   busy = false,
   notice = null,
+  backLabel = "More",
   onBack,
   onInstall,
   onConnect,
@@ -31,10 +34,10 @@ export function StepsSetupView({
   const store = platform === "ios" ? "Apple Health" : "Health Connect";
   // The frames name the coach by first name.
   const coachFirst = coachName.trim().split(/\s+/)[0] || "your coach";
-  const privacy = `Steps stay on your phone and aren't shared with ${coachFirst}.`;
+  const share = `shares the daily total with ${coachFirst}`;
 
   let title = "See your steps on Today";
-  let body = `FitBud reads your step count from ${store}. ${privacy}`;
+  let body = `FitBud reads your daily step count from ${store} and ${share}.`;
   let footer: { label: string; onPress: () => void; loading?: boolean } | null = null;
   let footnote: string | null = null;
 
@@ -42,8 +45,8 @@ export function StepsSetupView({
     title = state.reason === "needs_update" ? "Update Health Connect" : "Install Health Connect";
     body =
       state.reason === "needs_update"
-        ? `FitBud reads steps from Health Connect on Android. Update it from Play Store, then come back to connect. ${privacy}`
-        : `FitBud reads steps from Health Connect on Android. Install it from Play Store, then come back to connect. ${privacy}`;
+        ? `FitBud reads steps from Health Connect on Android. Update it from Play Store, then come back to connect. FitBud ${share}.`
+        : `FitBud reads steps from Health Connect on Android. Install it from Play Store, then come back to connect. FitBud ${share}.`;
     footer = {
       label: state.reason === "needs_update" ? "Update Health Connect from Play Store" : "Install Health Connect from Play Store",
       onPress: onInstall,
@@ -58,10 +61,9 @@ export function StepsSetupView({
       loading: busy,
     };
     footnote = "We only ask to read steps.";
-  } else if (state.kind === "connected") {
-    body = `FitBud reads your step count from ${store}. ${privacy}`;
   }
 
+  const checking = state.kind === "checking";
   const showStatusCard = state.kind === "connect" || state.kind === "connected";
   const connected = state.kind === "connected";
   const statusText = connected ? "Connected" : "Not connected";
@@ -71,12 +73,12 @@ export function StepsSetupView({
       <View style={styles.header}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Back to More"
+          accessibilityLabel={`Back to ${backLabel}`}
           onPress={onBack}
           style={styles.back}
         >
           <ChevronLeft color={brand.indigo} size={22} strokeWidth={2} />
-          <Text style={styles.backText}>More</Text>
+          <Text style={styles.backText}>{backLabel}</Text>
         </Pressable>
         <Text style={styles.headerTitle} accessibilityRole="header">
           Steps
@@ -88,8 +90,16 @@ export function StepsSetupView({
         <View style={styles.tile}>
           <Footprints color={brand.indigo} size={36} strokeWidth={1.75} />
         </View>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.body}>{body}</Text>
+        {checking ? (
+          <View style={styles.checking} accessibilityLabel="Checking steps setup" accessibilityRole="progressbar">
+            <ActivityIndicator color={brand.indigo} />
+          </View>
+        ) : (
+          <>
+            <Text style={styles.title}>{title}</Text>
+            <Text style={styles.body}>{body}</Text>
+          </>
+        )}
 
         {showStatusCard ? (
           <View style={styles.card}>
@@ -202,6 +212,7 @@ const styles = StyleSheet.create({
   pillOn: { backgroundColor: semantic.positive.fill, borderColor: semantic.positive.fill },
   pillText: { color: ink[900], fontSize: 14 },
   pillTextOn: { color: semantic.positive.text },
+  checking: { alignItems: "center", marginTop: 40 },
   notice: { color: ink[700], fontSize: 14, lineHeight: 20, marginTop: 16, textAlign: "center" },
   footer: {
     backgroundColor: "#fff",

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Linking } from "react-native";
 import { createStepsSyncController } from "../../lib/health/syncController";
 import { createStepsServer, fakeProvider, memoryFlag } from "../../lib/health/testSupport";
-import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
+import { act, fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
 
 const NOW = new Date("2026-11-11T08:00:00.000Z");
 const hoisted = vi.hoisted(() => ({
@@ -71,9 +71,10 @@ describe("steps setup", () => {
     });
     renderScreen();
     await screen.findByText("See your steps on Today");
-    expect(screen.getByText(/FitBud reads your step count from Apple Health/).textContent).toContain(
-      "aren't shared with Rahul.",
+    expect(screen.getByText(/FitBud reads your daily step count from Apple Health/).textContent).toBe(
+      "FitBud reads your daily step count from Apple Health and shares the daily total with Rahul.",
     );
+    expect(screen.queryByText(/stay on your phone/)).toBeNull();
     expect(screen.getAllByText("Not connected").length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     await waitFor(() => expect(screen.getAllByText("Connected").length).toBeGreaterThan(0));
@@ -118,7 +119,27 @@ describe("steps setup", () => {
     renderScreen();
     fireEvent.click(await screen.findByRole("button", { name: "Open Health Connect" }));
     await screen.findAllByText(/Steps access is off/);
+    expect(screen.getAllByText(/Steps access is off/)).toHaveLength(1);
     expect(screen.queryByText("Connected")).toBeNull();
+  });
+
+  it("iOS: turns Connected when a sync finishes after the check, without a refresh", async () => {
+    setup({ source: "apple_health", permission: () => "requested", totals: { "2026-11-11": 3100 } });
+    renderScreen();
+    await screen.findByRole("button", { name: "Connect" });
+    expect(screen.queryByText("Connected")).toBeNull();
+    await act(async () => {
+      const c = hoisted.current!.controller as ReturnType<typeof createStepsSyncController>;
+      await c.sync({ api: hoisted.api as never, timeZone: "Asia/Kolkata", trigger: "auto" });
+    });
+    await waitFor(() => expect(screen.getAllByText("Connected").length).toBeGreaterThan(0));
+  });
+
+  it("while checking, shows a neutral loading state with no Health Connect copy", () => {
+    setup({ source: "apple_health", permission: () => "not_requested" });
+    renderScreen();
+    expect(screen.getByLabelText("Checking steps setup")).toBeTruthy();
+    expect(screen.queryByText(/Health Connect/)).toBeNull();
   });
 
   it("back goes to More", async () => {
