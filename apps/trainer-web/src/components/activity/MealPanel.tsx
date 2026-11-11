@@ -1,6 +1,6 @@
 import type { MealAssignment } from "@fitbud/contracts";
 import { Link, useOutletContext, useParams } from "react-router-dom";
-import { formatClockTime, formatKcal, formatLocalDate } from "@fitbud/core";
+import { formatCivilDate, formatClockTime, formatKcal, formatLocalDate } from "@fitbud/core";
 import { coachEntryTag, isWithinWindow } from "../../pages/log-entry/logEntryModel";
 import type { WorkspaceOutletContext } from "../../pages/workspaceContext";
 import { LinkedMedia } from "../LinkedMedia";
@@ -44,7 +44,7 @@ export function MealPanel({
       <header className="activity-panel-head">
         <h2>{assignment.mealName}</h2>
         <p className="muted">
-          {assignment.localDate} · window ends{" "}
+          {formatCivilDate(assignment.localDate)} · window ends{" "}
           {formatClockTime(assignment.windowEndsAt, clientTimezone)}
         </p>
       </header>
