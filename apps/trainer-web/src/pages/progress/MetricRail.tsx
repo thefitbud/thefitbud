@@ -36,16 +36,25 @@ type Props = {
   workouts: WorkoutsSummary | null;
   /** The selected workouts row; when set, no metric row is selected. */
   workoutsRow: WorkoutsRow | null;
+  /** Lists the two workouts rows as "No entries" when there is no summary (frame 161). */
+  showEmptyWorkouts: boolean;
+  /** Keys the client's check-in form asks: listed as "No entries" until answered (frames 160g, 161). */
+  formKeys: readonly ProgressMetricKey[];
   photoDates: number;
+  /** The photos view (frame 160f) is open; no other row is selected. */
+  photosOpen: boolean;
   relationshipId: string;
   onSelect: (group: MetricGroup, key: ProgressMetricKey) => void;
   onToggle: (group: "body" | "ratings", key: ProgressMetricKey) => void;
   onWorkouts: (row: WorkoutsRow) => void;
+  onPhotos: () => void;
 };
+
+const NO_ENTRIES = "No entries";
 
 function latestValue(row: ProgressMetricSeries | undefined): string {
   const last = row?.points.at(-1);
-  return last ? formatMetricValue(last.value, row!.unit) : "No entries";
+  return last ? formatMetricValue(last.value, row!.unit) : NO_ENTRIES;
 }
 
 export function hasPoints(row: ProgressMetricSeries | undefined): boolean {
@@ -53,7 +62,7 @@ export function hasPoints(row: ProgressMetricSeries | undefined): boolean {
 }
 
 /**
- * Left rail of frames 160 to 160e. Each group is its own tab list holding only tabs;
+ * Left rail of frames 160 to 160i. Each group is its own tab list holding only tabs;
  * the "show on the chart" checkboxes sit in a separate group beside it, so no
  * checkbox is inside a tab list (ARIA: a tablist owns tabs only).
  */
@@ -64,17 +73,26 @@ export function MetricRail({
   compare,
   workouts,
   workoutsRow,
+  showEmptyWorkouts,
+  formKeys,
   photoDates,
+  photosOpen,
   relationshipId,
   onSelect,
   onToggle,
   onWorkouts,
+  onPhotos,
 }: Props) {
-  const bodyKeys = BODY_KEYS.filter((key) => hasPoints(series[key]));
-  const ratingKeys = RATING_KEYS.filter((key) => hasPoints(series[key]));
+  const listed = (key: ProgressMetricKey) =>
+    hasPoints(series[key]) || formKeys.includes(key);
+  const bodyKeys = BODY_KEYS.filter(listed);
+  const ratingKeys = RATING_KEYS.filter(listed);
 
   const isSelected = (group: MetricGroup, key: ProgressMetricKey) =>
-    workoutsRow === null && view.group === group && view.focus === key;
+    workoutsRow === null &&
+    !photosOpen &&
+    view.group === group &&
+    view.focus === key;
 
   function rowClass(base: string, selected: boolean, compared: boolean) {
     return `${base}${selected ? " is-selected" : ""}${compared ? " is-compared" : ""}`;
@@ -89,6 +107,7 @@ export function MetricRail({
     const showChecks =
       groupName !== "weight" &&
       workoutsRow === null &&
+      !photosOpen &&
       compare === null &&
       view.group === groupName;
     const ticked = groupName === "weight" ? [] : checked[groupName];
@@ -106,6 +125,12 @@ export function MetricRail({
             >
               {keys.map((key) => {
                 const isChecked = ticked.includes(key);
+                if (!hasPoints(series[key])) {
+                  // Keeps the rows aligned: an unanswered question has no line to show.
+                  return (
+                    <span key={key} className="pg-rail-checkwrap" aria-hidden="true" />
+                  );
+                }
                 return (
                   <label
                     key={key}
@@ -139,6 +164,23 @@ export function MetricRail({
             {keys.map((key) => {
               const selected = isSelected(groupName, key);
               const compared = compare === key && workoutsRow === null;
+              // Weight stays selectable with no entries: it is the default view.
+              if (groupName !== "weight" && !hasPoints(series[key])) {
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={false}
+                    aria-disabled="true"
+                    disabled
+                    className="pg-rail-tab is-empty"
+                  >
+                    <span className="pg-rail-label">{metricLabel(key)}</span>
+                    <span className="pg-rail-value">{NO_ENTRIES}</span>
+                  </button>
+                );
+              }
               return (
                 <button
                   key={key}
@@ -176,7 +218,7 @@ export function MetricRail({
       {ratingKeys.length
         ? group("pg-rail-ratings", "Ratings 1 to 5 · standard", "ratings", ratingKeys)
         : null}
-      {workouts ? (
+      {workouts || showEmptyWorkouts ? (
         <div className="pg-rail-group">
           <p className="pg-rail-heading" id="pg-rail-workouts">
             Workouts · from logs
@@ -192,42 +234,91 @@ export function MetricRail({
                 [
                   "completed",
                   "Workouts completed",
-                  `${workouts.completed} of ${workouts.planned}`,
+                  workouts
+                    ? `${workouts.completed} of ${workouts.planned}`
+                    : null,
                 ],
                 [
                   "exercises",
                   "Exercise progress",
-                  workouts.lifts === 1 ? "1 lift" : `${workouts.lifts} lifts`,
+                  workouts
+                    ? workouts.lifts === 1
+                      ? "1 lift"
+                      : `${workouts.lifts} lifts`
+                    : null,
                 ],
               ] as const
-            ).map(([row, label, value]) => (
-              <button
-                key={row}
-                type="button"
-                role="tab"
-                aria-selected={workoutsRow === row}
-                aria-controls="pg-panel"
-                className={rowClass("pg-rail-tab", workoutsRow === row, false)}
-                onClick={() => onWorkouts(row)}
-              >
-                <span className="pg-rail-label">{label}</span>
-                <span className="pg-rail-value">{value}</span>
-              </button>
-            ))}
+            ).map(([row, label, value]) =>
+              value === null ? (
+                <button
+                  key={row}
+                  type="button"
+                  role="tab"
+                  aria-selected={false}
+                  aria-disabled="true"
+                  disabled
+                  className="pg-rail-tab is-empty"
+                >
+                  <span className="pg-rail-label">{label}</span>
+                  <span className="pg-rail-value">{NO_ENTRIES}</span>
+                </button>
+              ) : (
+                <button
+                  key={row}
+                  type="button"
+                  role="tab"
+                  aria-selected={workoutsRow === row && !photosOpen}
+                  aria-controls="pg-panel"
+                  className={rowClass(
+                    "pg-rail-tab",
+                    workoutsRow === row && !photosOpen,
+                    false,
+                  )}
+                  onClick={() => onWorkouts(row)}
+                >
+                  <span className="pg-rail-label">{label}</span>
+                  <span className="pg-rail-value">{value}</span>
+                </button>
+              ),
+            )}
           </div>
         </div>
       ) : null}
-      <p className="pg-rail-heading">Photos · standard question</p>
-      <a className="pg-rail-link-row" href="#progress-photos">
-        <span>Progress photos</span>
-        <span className="pg-rail-value">
-          {photoDates === 0
-            ? "None yet"
-            : photoDates === 1
-              ? "1 date"
-              : `${photoDates} dates`}
-        </span>
-      </a>
+      <div className="pg-rail-group">
+        <p className="pg-rail-heading" id="pg-rail-photos">
+          Photos · standard question
+        </p>
+        <div
+          role="tablist"
+          aria-orientation="vertical"
+          aria-labelledby="pg-rail-photos"
+          className="pg-rail-tabs"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={photosOpen}
+            aria-controls="pg-panel"
+            aria-disabled={photoDates === 0 ? "true" : undefined}
+            disabled={photoDates === 0}
+            className={
+              photoDates === 0
+                ? "pg-rail-tab is-empty"
+                : rowClass("pg-rail-tab", photosOpen, false)
+            }
+            onClick={onPhotos}
+          >
+            <span className="pg-rail-label">Progress photos</span>
+            <span className="pg-rail-value">
+              {photoDates === 0
+                ? NO_ENTRIES
+                : photoDates === 1
+                  ? "1 date"
+                  : `${photoDates} dates`}
+            </span>
+          </button>
+        </div>
+      </div>
       <div className="pg-rail-foot">
         <p className="pg-rail-heading">Your own questions · not charted</p>
         <Link to={`/clients/${relationshipId}/check-ins`}>

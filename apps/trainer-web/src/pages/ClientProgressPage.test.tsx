@@ -11,7 +11,10 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { GLOBAL_CHECKIN_FORM_V2_FIELDS } from "@fitbud/core";
 import {
+  checkinFormVersionSchema,
+  checkinSchema,
   progressEntrySchema,
   progressMetricsQuerySchema,
   progressMetricsResponseSchema,
@@ -34,6 +37,7 @@ const api = vi.hoisted(() => ({
   listProgressEntries: vi.fn(),
   getStrength: vi.fn(),
   getDownloadTarget: vi.fn(),
+  getCheckinForm: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({ apiClient: api }));
@@ -176,9 +180,17 @@ function strengthCalls(): Partial<StrengthQuery>[] {
   );
 }
 
-function renderPage(onboardingStatus: Lifecycle = "active") {
+type Extras = {
+  /** Header fields on top of the Rohan-like default (startedAt, endedAt, effectivePlan, …). */
+  header?: Record<string, unknown>;
+  /** Workspace overview (next check-in). */
+  overview?: Record<string, unknown>;
+};
+
+function renderPage(onboardingStatus: Lifecycle = "active", extras: Extras = {}) {
   const context = {
     workspace: {
+      overview: extras.overview,
       header: {
         relationshipId: REL_ID,
         traineeDisplayName: "Rohan Mehta",
@@ -193,6 +205,7 @@ function renderPage(onboardingStatus: Lifecycle = "active") {
         hasCustomMealTimes: false,
         trainerWhatsappE164: null,
         clientWhatsappE164: null,
+        ...extras.header,
       },
     },
     refreshEpoch: 0,
@@ -249,9 +262,7 @@ describe("ClientProgressPage no-weigh-ins link (CE3)", () => {
   it("ended client: the link reads View coaching setup and only navigates", async () => {
     renderPage("ended");
     expect(
-      await screen.findByText(
-        "No weigh-ins yet. Weight is collected in check-ins.",
-      ),
+      await screen.findByRole("heading", { name: "No progress data yet" }),
     ).toBeTruthy();
     const link = await screen.findByRole("link", {
       name: "View coaching setup",
@@ -317,7 +328,7 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
     );
   });
 
-  it("rail lists keys with data by name and latest value; keys without data are left out", async () => {
+  it("rail lists keys with data by name and latest value; keys without data or a form question are left out", async () => {
     serveMetrics(ROHAN);
     const { container } = renderPage();
     await screen.findByRole("tab", { name: /Weight/ });
@@ -326,7 +337,12 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
       within(rail)
         .getAllByRole("tablist")
         .map((list) => list.getAttribute("aria-labelledby")),
-    ).toEqual(["pg-rail-weight", "pg-rail-body", "pg-rail-ratings"]);
+    ).toEqual([
+      "pg-rail-weight",
+      "pg-rail-body",
+      "pg-rail-ratings",
+      "pg-rail-photos",
+    ]);
     const tabs = within(rail)
       .getAllByRole("tab")
       .map((tab) => tab.textContent);
@@ -337,6 +353,7 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
       "Energy3 of 5",
       "Sleep quality2 of 5",
       "Stress3 of 5",
+      "Progress photosNo entries",
     ]);
     expect(
       within(rail).queryByRole("tab", { name: /Chest|Arm|Hunger/ }),
@@ -522,8 +539,8 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
       ],
     });
     renderPage();
-    const link = await screen.findByRole("link", { name: /Progress photos/ });
-    await waitFor(() => expect(link.textContent).toBe("Progress photos1 date"));
+    const tab = await screen.findByRole("tab", { name: /Progress photos/ });
+    await waitFor(() => expect(tab.textContent).toBe("Progress photos1 date"));
   });
 });
 
@@ -736,11 +753,345 @@ describe("ClientProgressPage workouts from logs (frame 160e, D-W8-7)", () => {
     const panel = await screen.findByRole("tabpanel");
     await within(panel).findByRole("heading", { name: "Exercise progress" });
     expect(
-      screen.queryByText("No weigh-ins yet. Weight is collected in check-ins."),
+      screen.queryByRole("heading", { name: "No progress data yet" }),
     ).toBeNull();
     // Range All reuses the all-time model.
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     await within(panel).findByText("First logged · Wed 2 Sep");
     expect(within(panel).getByText("4 of 11 since start · 1 of 3 this week")).toBeTruthy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Z8-14: photos compare (160f), sparse (160g), empty (161), ended (160h), loading (160i)
+// ---------------------------------------------------------------------------
+
+const TRAINEE_ID = "88888888-8888-4888-8888-888888888888";
+const FORM_TEMPLATE_ID = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+const NEXT_CHECKIN_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+
+function photoEntry(n: number, observedAt: string) {
+  const suffix = String(n).padStart(12, "0");
+  return progressEntrySchema.parse({
+    id: `aaaaaaaa-aaaa-4aaa-8aaa-${suffix}`,
+    coachingRelationshipId: REL_ID,
+    traineeUserId: TRAINEE_ID,
+    entryType: "progress_photo",
+    title: null,
+    body: null,
+    observedAt,
+    mediaAssetId: `bbbbbbbb-bbbb-4bbb-8bbb-${suffix}`,
+    recordVersion: 0,
+    createdAt: observedAt,
+    updatedAt: observedAt,
+  });
+}
+
+/** The client's pinned form, as the check-in form endpoint returns it. */
+function serveForm(keys: string[]) {
+  api.getCheckinForm.mockResolvedValue(
+    checkinFormVersionSchema.parse({
+      id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      templateId: FORM_TEMPLATE_ID,
+      key: "standard_checkin",
+      version: 2,
+      scope: "global",
+      fields: GLOBAL_CHECKIN_FORM_V2_FIELDS.filter((field) =>
+        keys.includes(field.key),
+      ),
+      createdAt: "2026-09-01T00:00:00.000Z",
+    }),
+  );
+}
+
+/** A scheduled next check-in whose window opens Sun 25 Oct in Kolkata. */
+const NEXT_CHECKIN = checkinSchema.parse({
+  id: NEXT_CHECKIN_ID,
+  coachingRelationshipId: REL_ID,
+  checkinScheduleId: null,
+  localDate: "2026-10-25",
+  windowStartsAt: "2026-10-24T18:30:00.000Z",
+  windowEndsAt: "2026-10-26T18:29:59.000Z",
+  recordStatus: "draft",
+  recordVersion: 0,
+  definitionVersion: 2,
+  checkinFormVersionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  answers: null,
+  submittedAt: null,
+  status: "scheduled",
+  review: null,
+  createdAt: "2026-10-18T00:00:00.000Z",
+  updatedAt: "2026-10-18T00:00:00.000Z",
+});
+
+const PLAN = {
+  id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  title: "Fat loss, phase 1",
+  effectiveFrom: "2026-10-12T00:00:00.000Z",
+};
+
+describe("ClientProgressPage photos compare (frame 160f)", () => {
+  const PHOTOS = [
+    // Client days in Kolkata: Fri 28 Aug, Fri 18 Sep (two photos), Fri 16 Oct.
+    photoEntry(1, "2026-08-28T03:00:00.000Z"),
+    photoEntry(2, "2026-09-18T03:00:00.000Z"),
+    photoEntry(3, "2026-09-18T03:05:00.000Z"),
+    photoEntry(4, "2026-10-16T03:00:00.000Z"),
+  ];
+
+  it("opens from the rail, compares the first and last dates, and a picked date replaces the older pick", async () => {
+    serveMetrics({
+      weight: [point("2026-08-28", 88.9, CHECKIN_1), point("2026-10-16", 86.4, CHECKIN_3)],
+    });
+    api.listProgressEntries.mockResolvedValue({ items: PHOTOS });
+    const { container } = renderPage();
+    const tab = await screen.findByRole("tab", { name: /Progress photos/ });
+    expect(tab.textContent).toBe("Progress photos3 dates");
+    expect(tab.getAttribute("aria-selected")).toBe("false");
+    fireEvent.click(tab);
+    expect(tab.getAttribute("aria-selected")).toBe("true");
+    expect(
+      screen.getByRole("tab", { name: /Weight/ }).getAttribute("aria-selected"),
+    ).toBe("false");
+
+    const panel = screen.getByRole("tabpanel");
+    within(panel).getByRole("heading", { name: "Progress photos" });
+    expect(within(panel).getByText("Only you and Rohan see these")).toBeTruthy();
+    // The chip carries the weight entered that day; no pose switch (no pose on stored photos).
+    const pair = within(panel).getByTestId("photo-compare");
+    expect(
+      [...pair.querySelectorAll("figcaption")].map((node) => node.textContent),
+    ).toEqual(["Fri 28 Aug · 88.9 kg", "Fri 16 Oct · 86.4 kg"]);
+    expect(within(panel).queryByRole("button", { name: "Front" })).toBeNull();
+    expect(
+      within(panel).getByText(
+        "3 dates with photos · Fri 18 Sep has 2 photos, the first is shown",
+      ),
+    ).toBeTruthy();
+    // Each date's photo loads through the authorized download target.
+    expect(api.getDownloadTarget).toHaveBeenCalledWith(PHOTOS[0]!.mediaAssetId);
+    expect(api.getDownloadTarget).not.toHaveBeenCalledWith(PHOTOS[2]!.mediaAssetId);
+
+    const strip = within(panel).getByRole("list", {
+      name: "Pick two dates to compare",
+    });
+    const thumbs = within(strip).getAllByRole("button");
+    expect(thumbs.map((t) => t.getAttribute("aria-pressed"))).toEqual([
+      "true",
+      "false",
+      "true",
+    ]);
+    fireEvent.click(thumbs[1]!);
+    // Fri 28 Aug was picked first, so it gives way; oldest stays on the left.
+    expect(
+      [...pair.querySelectorAll("figcaption")].map((node) => node.textContent),
+    ).toEqual(["Fri 18 Sep", "Fri 16 Oct · 86.4 kg"]);
+    expect(thumbs.map((t) => t.getAttribute("aria-pressed"))).toEqual([
+      "false",
+      "true",
+      "true",
+    ]);
+    expectNoBannedText(container);
+  });
+
+  it("a client with only photos opens on them; one date shows alone", async () => {
+    api.listProgressEntries.mockResolvedValue({ items: [PHOTOS[0]] });
+    renderPage();
+    const panel = await screen.findByRole("tabpanel");
+    await within(panel).findByRole("heading", { name: "Progress photos" });
+    expect(within(panel).getByText("A second date makes a compare")).toBeTruthy();
+    expect(within(panel).getByText("1 date with photos")).toBeTruthy();
+    expect(
+      screen.queryByRole("heading", { name: "No progress data yet" }),
+    ).toBeNull();
+  });
+
+  it("with no photos the rail row says No entries and cannot be opened", async () => {
+    serveMetrics(ROHAN);
+    renderPage();
+    const tab = await screen.findByRole("tab", { name: /Progress photos/ });
+    expect(tab.textContent).toBe("Progress photosNo entries");
+    expect(tab.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+describe("ClientProgressPage sparse data (frame 160g)", () => {
+  it("two weigh-ins: points without a change, and the panel says why", async () => {
+    serveMetrics({
+      weight: [point("2026-10-05", 72.4), point("2026-10-18", 71.8, CHECKIN_1)],
+      waist: [point("2026-10-05", 81)],
+      energy: [point("2026-10-18", 3, CHECKIN_1)],
+    });
+    serveForm(["weight", "waist", "hips", "chest", "arm", "energy", "sleep_quality"]);
+    const { container } = renderPage("active", {
+      overview: { nextCheckin: NEXT_CHECKIN },
+    });
+    const panel = await screen.findByRole("tabpanel");
+    await within(panel).findByRole("heading", { name: "Weight" });
+    expect(
+      within(panel).getByText("1 from a check-in, 1 measurement entry"),
+    ).toBeTruthy();
+    expect(within(panel).getByText("Start · Mon 5 Oct")).toBeTruthy();
+    expect(within(panel).getByText("Latest · Sun 18 Oct")).toBeTruthy();
+    expect(within(panel).queryByText("Change")).toBeNull();
+    expect(within(panel).getByText("Entries")).toBeTruthy();
+    expect(
+      within(panel).getByText(
+        "Two weigh-ins so far. The trend line gets useful after a few more check-ins.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(panel).queryByRole("button", { name: /data table/ }),
+    ).toBeNull();
+    // Questions the form asks with no answers yet stay listed, and cannot be opened.
+    const rail = screen.getByRole("complementary", { name: "Metrics" });
+    await waitFor(() =>
+      expect(within(rail).getByRole("tab", { name: /Hip/ }).textContent).toBe(
+        "HipNo entries",
+      ),
+    );
+    expect(api.getCheckinForm).toHaveBeenCalledWith(NEXT_CHECKIN_ID);
+    const tabs = within(rail)
+      .getAllByRole("tab")
+      .map((tab) => tab.textContent);
+    expect(tabs).toEqual([
+      "Weight71.8 kg",
+      "Waist81 cm",
+      "HipNo entries",
+      "ChestNo entries",
+      "ArmNo entries",
+      "Energy3 of 5",
+      "Sleep qualityNo entries",
+      "Progress photosNo entries",
+    ]);
+    expect(
+      within(rail).getByRole("tab", { name: /Chest/ }).hasAttribute("disabled"),
+    ).toBe(true);
+    // Thigh and Hunger are not in this client's form.
+    expect(within(rail).queryByRole("tab", { name: /Thigh|Hunger/ })).toBeNull();
+    expectNoBannedText(container);
+  });
+
+  it("three weigh-ins read as a trend again: change and the data table", async () => {
+    serveMetrics(ROHAN);
+    renderPage();
+    const panel = await screen.findByRole("tabpanel");
+    await within(panel).findByText("Change");
+    expect(within(panel).queryByText(/so far/)).toBeNull();
+    expect(within(panel).getByRole("button", { name: "Show data table" })).toBeTruthy();
+  });
+});
+
+describe("ClientProgressPage empty (frame 161)", () => {
+  it("rail and toolbar stay; the panel explains where data comes from", async () => {
+    serveForm(["weight", "waist", "hips", "chest", "arm", "energy", "sleep_quality", "stress", "hunger"]);
+    const { container } = renderPage("active", {
+      header: { effectivePlan: PLAN, traineeProfile: { displayName: "Priya Sharma", age: null, gender: "female" }, traineeDisplayName: "Priya Sharma" },
+      overview: { nextCheckin: NEXT_CHECKIN },
+    });
+    const heading = await screen.findByRole("heading", {
+      name: "No progress data yet",
+    });
+    const panel = heading.closest("section")!;
+    expect(
+      within(panel).getByText(
+        "Charts follow the standard questions in her check-in form: weight, the measurements you picked, ratings and photos. Her next check-in opens Sun 25 Oct. Workout progress appears after Priya logs a workout.",
+      ),
+    ).toBeTruthy();
+    expect(
+      within(panel)
+        .getByRole("link", { name: "Open check-in settings" })
+        .getAttribute("href"),
+    ).toBe(`/clients/${REL_ID}/configure`);
+    expect(
+      (
+        await within(panel).findByRole("link", { name: "See her check-in form" })
+      ).getAttribute("href"),
+    ).toBe(`/templates/checkins/${FORM_TEMPLATE_ID}`);
+
+    const rail = screen.getByRole("complementary", { name: "Metrics" });
+    await waitFor(() =>
+      expect(within(rail).getAllByRole("tab")).toHaveLength(12),
+    );
+    const tabs = within(rail).getAllByRole("tab");
+    expect(tabs[0]!.textContent).toBe("WeightNo entries");
+    expect(
+      tabs.slice(1).every((tab) => tab.textContent!.endsWith("No entries")),
+    ).toBe(true);
+    expect(
+      within(rail).getByRole("tab", { name: /Workouts completed/ }).textContent,
+    ).toBe("Workouts completedNo entries");
+    expect(screen.getByRole("button", { name: "12 w" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Compare with/ }).hasAttribute("disabled"),
+    ).toBe(true);
+    expectNoBannedText(container);
+  });
+});
+
+describe("ClientProgressPage ended (frame 160h)", () => {
+  const ENDED = {
+    startedAt: "2026-07-06T04:30:00.000Z",
+    endedAt: "2026-10-03T10:00:00.000Z",
+    traineeDisplayName: "Kavya Nair",
+    traineeProfile: { displayName: "Kavya Nair", age: null, gender: "female" },
+  };
+
+  it("read-only banner, coached period, last entry and change; nothing to edit", async () => {
+    serveMetrics({
+      weight: [
+        point("2026-07-06", 68.2, CHECKIN_1),
+        point("2026-08-14", 66.8, CHECKIN_2),
+        point("2026-10-02", 65.1, CHECKIN_3),
+      ],
+    });
+    const { container } = renderPage("ended", { header: ENDED });
+    const banner = await screen.findByRole("note");
+    expect(banner.textContent).toBe(
+      "Coaching with Kavya ended Sat 3 Oct. Her progress is read-only and stays here for her records.",
+    );
+    const panel = await screen.findByRole("tabpanel");
+    await within(panel).findByRole("heading", { name: "Weight" });
+    expect(
+      within(panel).getByText("Coached period Mon 6 Jul — Sat 3 Oct · 3 entries"),
+    ).toBeTruthy();
+    expect(within(panel).getByText("Start")).toBeTruthy();
+    // The whole coached period: ended clients open on All.
+    expect(
+      screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(within(panel).getByText("Last · Fri 2 Oct")).toBeTruthy();
+    expect(within(panel).getByText("−3.1 kg")).toBeTruthy();
+    expect(within(panel).queryByText(/since/)).toBeNull();
+    expect(within(panel).queryByText("Entries")).toBeNull();
+    expect(
+      within(panel).queryByRole("button", { name: /data table/ }),
+    ).toBeNull();
+    // No form is read for an ended client (no next check-in), and no edit or log action shows.
+    expect(api.getCheckinForm).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Log|Edit|Add|Upload/ })).toBeNull();
+    expectNoBannedText(container);
+  });
+});
+
+describe("ClientProgressPage loading (frame 160i)", () => {
+  it("keeps the toolbar and shows skeleton rows until data arrives", async () => {
+    let release: () => void = () => {};
+    api.listProgressEntries.mockReturnValue(
+      new Promise((resolve) => {
+        release = () => resolve({ items: [] });
+      }),
+    );
+    serveMetrics(ROHAN);
+    renderPage();
+    expect(await screen.findByTestId("progress-skeleton")).toBeTruthy();
+    expect(screen.getByText("Loading progress…")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "12 w" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(screen.queryByRole("complementary", { name: "Metrics" })).toBeNull();
+    release();
+    await screen.findByRole("complementary", { name: "Metrics" });
+    expect(screen.queryByTestId("progress-skeleton")).toBeNull();
   });
 });
