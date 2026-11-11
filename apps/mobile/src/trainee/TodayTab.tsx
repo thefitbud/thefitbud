@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import type {
   Checkin,
@@ -9,23 +9,25 @@ import type {
   WorkoutAssignment,
 } from "@fitbud/contracts";
 import {
+  formatCivilDate,
   formatClockTime,
   formatKcal,
   formatNumber,
   formatPersonName,
   greetingFor,
-  labelFor,
 } from "@fitbud/core";
 import {
-  NutritionRings,
   WeeklyConsistency,
   colors,
+  fontFamilySemiBold,
   radii,
+  semanticColors,
   spacing,
 } from "@fitbud/ui-mobile";
+import { Check, Clock, Moon } from "lucide-react-native";
+import { surface } from "@fitbud/tokens";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
 import { formatInstant } from "@fitbud/core";
@@ -34,6 +36,7 @@ import {
   localDateInTimezone,
   startOfWeekMonday,
 } from "../lib/dates";
+import { reportError } from "../lib/reportError";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
@@ -51,12 +54,14 @@ import {
   mealKcalFromDayTotals,
   mealLockCopy,
 } from "./mealHelpers";
-import { estimateDurationMinutesFromDay } from "./workoutDuration";
+import {
+  durationMinutesFromExecution,
+  estimateDurationMinutesFromDay,
+} from "./workoutDuration";
 import { subscribeAll } from "./dataCache";
 import {
   buildNutritionRings,
   isMealLoggedForCount,
-  mealsLoggedSummary,
   nutrientsFromMealPrescription,
 } from "./nutrition";
 import { nextUp, nextUpEyebrow } from "./nextUp";
@@ -66,16 +71,10 @@ import {
   sortMealsByTime,
 } from "./scheduledAssignments";
 import { StepsCard } from "./steps/StepsCard";
-import { WebNutritionSummary } from "./web/WebTraineeChrome";
-
-function workoutTone(
-  status: WorkoutAssignment["status"],
-): "neutral" | "positive" | "attention" | "warning" {
-  if (status === "completed" || status === "modified") return "positive";
-  if (status === "in_progress" || status === "paused") return "attention";
-  if (status === "missed" || status === "skipped") return "warning";
-  return "neutral";
-}
+import {
+  TodaySummaryCard,
+  type StepsChipState,
+} from "./today/TodaySummaryCard";
 
 function mealItemLine(meal: MealAssignment): string {
   const items = meal.prescription.items
@@ -189,7 +188,7 @@ function mealStatusChip(
   meal: MealAssignment,
   nextId: string | undefined,
   now = new Date(),
-): { label: string; tone: "neutral" | "positive" | "attention" } {
+): { label: string; tone: "neutral" | "positive" | "attention" | "info" } {
   if (isMealLoggedForCount(meal.status)) {
     return { label: "Logged", tone: "positive" };
   }
@@ -200,12 +199,28 @@ function mealStatusChip(
     return { label: "Overdue", tone: "attention" };
   }
   if (meal.id === nextId) {
-    return { label: "Up next", tone: "attention" };
+    // Lavender, not amber: "Up next" is not a warning (frames 04 empty/partial).
+    return { label: "Up next", tone: "info" };
   }
   if (now.getTime() >= new Date(meal.windowStartsAt).getTime()) {
     return { label: "Due", tone: "attention" };
   }
   return { label: "Later", tone: "neutral" };
+}
+
+/**
+ * "Up next" in the lavender brandSelected tone with a clock (frames 04 empty/partial).
+ * StatusChip's tone-only API has no info tone and lives outside this lane,
+ * so the same chip shape is drawn here from the shared tokens.
+ */
+function UpNextChip({ label }: { label: string }) {
+  const palette = semanticColors.brandSelected;
+  return (
+    <View style={[styles.upNextChip, { backgroundColor: palette.fill }]}>
+      <Clock size={14} color={palette.text} strokeWidth={1.75} />
+      <Text style={[styles.upNextLabel, { color: palette.text }]}>{label}</Text>
+    </View>
+  );
 }
 
 type CoachNote = Awaited<
@@ -265,6 +280,15 @@ export function TodayTab({
   const [dayTotals, setDayTotals] = useState<Awaited<
     ReturnType<typeof s1.getMeDay>
   > | null>(null);
+  // Steps chip (D-W9-3): the server's answer, not native sync.
+  const [stepsChip, setStepsChip] = useState<StepsChipState>({
+    status: "loading",
+  });
+  // Rest-day card: the next scheduled workout, from the same assignments
+  // endpoint. Null when none is scheduled or the read failed (line omitted).
+  const [nextWorkout, setNextWorkout] = useState<WorkoutAssignment | null>(
+    null,
+  );
   const [coachNotes, setCoachNotes] = useState<CoachNote[]>([]);
   // Trainee listExceptions is 403 — late-log gate uses a positive sentinel.
   const unresolvedExceptions = 1;
@@ -345,18 +369,103 @@ export function TodayTab({
     setRefreshing(false);
   }, [load, onRefreshPlan]);
 
+  useEffect(() => {
+    if (!isToday) return;
+    let cancelled = false;
+    api
+      .getStepsToday()
+      .then((res) => {
+        if (cancelled) return;
+        setStepsChip(
+          res.steps == null
+            ? { status: "not_synced", target: res.target }
+            : { status: "synced", steps: res.steps, target: res.target },
+        );
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        reportError("TodayTab.getStepsToday", err);
+        setStepsChip({ status: "unavailable" });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, isToday, refreshNonce]);
+
+  // Rest only after a successful day load: a failed load also leaves
+  // `workout` null, and must not read as a rest day.
+  const doneMinutes = workout?.execution
+    ? durationMinutesFromExecution(workout.execution)
+    : null;
+  const restDay =
+    planState.status === "loaded" && !loading && lockStateKnown && !workout;
+  useEffect(() => {
+    if (!restDay || !isToday) {
+      setNextWorkout(null);
+      return;
+    }
+    let cancelled = false;
+    api
+      .listWorkoutAssignments(relationship.id, {
+        fromDate: addDays(selectedDate, 1),
+        toDate: addDays(selectedDate, 7),
+      })
+      .then((res) => {
+        if (cancelled) return;
+        const upcoming = scheduledAssignments(res.items)
+          .filter(
+            (item) =>
+              item.localDate > today &&
+              item.status !== "missed" &&
+              item.status !== "completed" &&
+              item.status !== "modified" &&
+              item.status !== "skipped",
+          )
+          .sort((a, b) => a.windowStartsAt.localeCompare(b.windowStartsAt));
+        setNextWorkout(upcoming[0] ?? null);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        reportError("TodayTab.listUpcomingWorkouts", err);
+        setNextWorkout(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, relationship.id, restDay, isToday, today, selectedDate, refreshNonce]);
+
   const rings = useMemo(
     () => buildNutritionRings(meals, dayTotals?.totals ?? null),
     [meals, dayTotals],
   );
 
-  const hero = useMemo(
-    () =>
-      isToday
-        ? nextUp({ meals, workout, checkin })
-        : null,
-    [checkin, isToday, meals, workout],
+  const mealsDone = useMemo(
+    () => meals.filter((m) => isMealLoggedForCount(m.status)).length,
+    [meals],
   );
+
+  // The frames lead with the workout whenever one is scheduled and not yet
+  // finished; otherwise the usual next-up item (meal, check-in).
+  const hero = useMemo(() => {
+    if (!isToday) return null;
+    if (
+      workout &&
+      workout.status !== "completed" &&
+      workout.status !== "modified" &&
+      workout.status !== "skipped" &&
+      workout.status !== "missed"
+    ) {
+      return { kind: "workout" as const, workout };
+    }
+    // Done and rest cards lead the day (frames 04 done / rest); the meal
+    // is then carried by the Meals list. A due check-in still shows.
+    const next = nextUp({ meals, workout, checkin });
+    const workoutCardLeads =
+      !workout ||
+      workout.status === "completed" ||
+      workout.status === "modified";
+    return next && next.kind === "meal" && workoutCardLeads ? null : next;
+  }, [checkin, isToday, meals, workout]);
 
   const nextOpenMeal = meals.find(
     (meal) => meal.status === "pending" || meal.status === "overdue",
@@ -411,7 +520,10 @@ export function TodayTab({
     return formatPersonName(first) || "there";
   }, [me?.email]);
 
-  const workoutExercises = workout?.workoutDay.exercises ?? [];
+  const workoutSets = (workout?.workoutDay.exercises ?? []).reduce(
+    (sum, ex) => sum + ex.setTargets.length,
+    0,
+  );
   const workoutMins = workout
     ? estimateDurationMinutesFromDay(workout.workoutDay)
     : null;
@@ -534,9 +646,94 @@ export function TodayTab({
           </View>
         ) : null}
 
+        {/*
+          Names the plan-loaded region for screen readers and the Maestro
+          flows that wait on it (CU22, D-W3b-24: gated on the plan, so a
+          plan-less trainee never gets it). Visually hidden: the frames show
+          no heading here; the workout itself is in the hero below.
+        */}
+        {planState.status === "loaded" ? (
+          <Text
+            style={styles.srOnly}
+            accessibilityRole="header"
+            accessibilityLabel={
+              restDay ? "Today's workout: rest day" : undefined
+            }
+          >
+            Today&apos;s workout
+          </Text>
+        ) : null}
+
+        {planState.status === "loaded" && !loading ? (
+          <TodaySummaryCard
+            rings={rings}
+            workoutDone={
+              workout &&
+              (workout.status === "completed" || workout.status === "modified")
+                ? 1
+                : 0
+            }
+            workoutTotal={workout ? 1 : 0}
+            mealsDone={mealsDone}
+            mealsTotal={meals.length}
+            steps={isToday ? stepsChip : { status: "unavailable" }}
+            workoutUnknown={!lockStateKnown}
+            onOpenSteps={() => onOpenOverlay({ screen: "steps_settings" })}
+          />
+        ) : null}
+
+        {planState.status === "loaded" &&
+        !loading &&
+        isToday &&
+        workout &&
+        (workout.status === "completed" || workout.status === "modified") ? (
+          <View
+            style={styles.hero}
+            accessibilityLabel={`Workout done: ${workout.workoutDayName}`}
+          >
+            <View style={styles.doneChip}>
+              <Check size={16} color={colors.white} strokeWidth={2.25} />
+              <Text style={styles.doneChipLabel}>
+                {workout.execution?.completedAt
+                  ? `Done · ${formatClockTime(workout.execution.completedAt, timeZone)}`
+                  : "Done"}
+              </Text>
+            </View>
+            <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
+            <Text style={styles.heroItems}>
+              {exerciseCountLabel(workout.workoutDay.exercises.length)}
+              {doneMinutes != null ? ` · ${doneMinutes} min` : ""}
+            </Text>
+          </View>
+        ) : null}
+
+        {restDay ? (
+          <View
+            style={styles.restCard}
+            accessibilityLabel="Rest day. Recovery is part of the plan"
+          >
+            <View style={styles.restChip}>
+              <Moon size={16} color={semanticColors.neutral.text} strokeWidth={1.75} />
+              <Text style={styles.restChipLabel}>Rest day</Text>
+            </View>
+            <Text style={styles.restTitle}>Recovery is part of the plan</Text>
+            {nextWorkout && isToday ? (
+              <Text style={styles.restNext}>
+                {`Next: ${nextWorkout.workoutDayName} · ${formatCivilDate(nextWorkout.localDate)}, ${formatClockTime(nextWorkout.windowStartsAt, timeZone)}`}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
         {planState.status === "loaded" && hero && !loading ? (
           <View style={styles.hero} accessibilityLabel={nextUpEyebrow(hero)}>
-            <Text style={styles.heroEyebrow}>{nextUpEyebrow(hero)}</Text>
+            <Text style={styles.heroEyebrow}>
+              {hero.kind === "workout" &&
+              hero.workout.status !== "in_progress" &&
+              hero.workout.status !== "paused"
+                ? `Today · ${formatClockTime(hero.workout.windowStartsAt, timeZone)}`
+                : nextUpEyebrow(hero)}
+            </Text>
             {hero.kind === "meal" ? (
               <>
                 <Text style={styles.heroTitle}>
@@ -629,6 +826,9 @@ export function TodayTab({
                 <Text style={styles.heroItems}>
                   {exerciseCountLabel(hero.workout.workoutDay.exercises.length)}
                   {workoutMins != null ? ` · about ${workoutMins} min` : ""}
+                  {workoutSets > 0
+                    ? ` · ${workoutSets} ${workoutSets === 1 ? "set" : "sets"}`
+                    : ""}
                 </Text>
                 <View style={styles.heroBtns}>
                   <Pressable
@@ -673,115 +873,35 @@ export function TodayTab({
           </View>
         ) : null}
 
-        {/*
-          The workout section is gated on the plan too (CU22, D-W3b-24). It
-          used to render for every trainee, including one whose trainer has
-          published nothing — an empty "Today's workout" card beside "your
-          coach is preparing your plan" — and it is why the Maestro flow's
-          `assertVisible: "Today's workout"` could pass while the plan state
-          was wrong.
-        */}
         {planState.status === "loaded" ? (
-          <>
-            <View style={styles.secHead}>
-              <Text style={styles.secTitle}>Today&apos;s workout</Text>
-              {workout ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="See workout"
-                  onPress={() =>
-                    onOpenOverlay({
-                      screen: "workout_overview",
-                      assignmentId: workout.id,
-                    })
-                  }
-                  style={styles.secLink}
-                >
-                  <Text style={styles.secLinkText}>See workout ›</Text>
-                </Pressable>
-              ) : null}
-            </View>
-            <View style={styles.card}>
-              {workout ? (
-                <>
-                  <View style={styles.woTop}>
-                    <StatusChip
-                      label={`${labelFor("workout_assignment_status", workout.status)} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
-                      tone={workoutTone(workout.status)}
-                    />
-                  </View>
-                  <Text style={styles.cardTitle}>{workout.workoutDayName}</Text>
-                  <Text style={styles.body}>
-                    {exerciseCountLabel(workoutExercises.length)}
-                    {workoutMins != null ? ` · about ${workoutMins} min` : ""}
-                  </Text>
-                  {workoutExercises.slice(0, 3).map((ex) => (
-                    <Text key={ex.id} style={styles.exRow}>
-                      {ex.name}
-                    </Text>
-                  ))}
-                  {workoutExercises.length > 3 ? (
-                    <Text style={styles.body}>
-                      + {workoutExercises.length - 3} more exercises
-                    </Text>
-                  ) : null}
-                  {isToday &&
-                  workout.status !== "completed" &&
-                  workout.status !== "skipped" ? (
-                    <PrimaryButton
-                      label={
-                        workout.status === "in_progress" ||
-                        workout.status === "paused"
-                          ? "Continue workout"
-                          : "Start workout"
-                      }
-                      onPress={onStartWorkout}
-                    />
-                  ) : null}
-                </>
-              ) : (
-                <Text style={styles.cardTitle}>
-                  Rest day. Recovery is part of the plan.
-                </Text>
-              )}
-            </View>
-          </>
-        ) : null}
-
-        {planState.status === "loaded" ? (
-          <>
-            <View style={styles.secHead}>
-              <Text style={styles.secTitle}>Nutrition</Text>
+          <View style={styles.mealsSection}>
+            <View style={styles.mealsHead}>
+              <Text style={styles.mealsLabel} accessibilityRole="header">
+                Meals
+              </Text>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Open diet"
                 onPress={onOpenDiet}
                 style={styles.secLink}
               >
-                <Text style={styles.secLinkText}>Diet ›</Text>
+                <Text style={styles.mealsCount}>
+                  {meals.length === 0
+                    ? "Diet ›"
+                    : `${mealsDone} of ${meals.length} logged ›`}
+                </Text>
               </Pressable>
             </View>
-            <View style={styles.card}>
-              {Platform.OS === "web" ? (
-                <WebNutritionSummary data={rings} />
-              ) : (
-                <NutritionRings data={rings} />
-              )}
-              {rings.some((r) => r.unknown) ? (
-                <Text style={styles.footnote}>
-                  Some foods have no nutrition data. Totals show ≥ when unknown.
-                </Text>
-              ) : null}
-              <View style={styles.mealsHead}>
-                <Text style={styles.mealsLabel}>Meals</Text>
-                <Text style={styles.mealsCount}>
-                  {mealsLoggedSummary(meals)}
-                </Text>
-              </View>
-              {meals.length === 0 && !loading ? (
-                <Text style={styles.body}>No meals planned today.</Text>
-              ) : (
-                meals.map((meal) => {
+            {rings.some((r) => r.unknown) ? (
+              <Text style={styles.footnote}>
+                Some foods have no nutrition data. Totals show ≥ when unknown.
+              </Text>
+            ) : null}
+            {meals.length === 0 && !loading ? (
+              <Text style={styles.body}>No meals planned today.</Text>
+            ) : (
+              <View style={styles.mealsList}>
+                {meals.map((meal, index) => {
                   const chip = mealStatusChip(meal, nextOpenMeal?.id);
                   const kcal = mealKcalFromDayTotals(
                     meal,
@@ -790,38 +910,47 @@ export function TodayTab({
                   const lockCopy = lockStateKnown
                     ? mealLockCopy(meal, coachName)
                     : null;
+                  const sub = [
+                    mealItemLine(meal),
+                    kcal != null ? formatKcal(kcal, false) : null,
+                    lockCopy,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
                   return (
-                    <View key={meal.id} style={styles.mealRow}>
+                    <View
+                      key={meal.id}
+                      style={[styles.mealRow, index > 0 && styles.mealRowRule]}
+                    >
+                      <Text style={styles.mealTime}>
+                        {formatClockTime(meal.windowStartsAt, timeZone)}
+                      </Text>
                       <View style={styles.mealMain}>
                         <Text style={styles.mealName}>
                           {cleanFoodLabel(meal.mealName)}
                         </Text>
-                        <Text style={styles.mealMeta}>
-                          {formatClockTime(meal.windowStartsAt, timeZone)}
-                          {mealItemLine(meal)
-                            ? ` · ${mealItemLine(meal)}`
-                            : ""}
-                          {lockCopy ? ` · ${lockCopy}` : ""}
+                        <Text style={styles.mealMeta} numberOfLines={1}>
+                          {sub}
                         </Text>
                       </View>
-                      <View style={styles.mealRight}>
-                        <Text style={styles.mealKcal}>
-                          {kcal != null
-                            ? formatKcal(kcal, false).replace(" kcal", "") +
-                              " kcal"
-                            : "—"}
-                        </Text>
+                      {!lockCopy && chip.tone === "info" ? (
+                        <UpNextChip label={chip.label} />
+                      ) : (
                         <StatusChip
                           label={lockCopy ? "Closed" : chip.label}
-                          tone={lockCopy ? "neutral" : chip.tone}
+                          tone={
+                            lockCopy || chip.tone === "info"
+                              ? "neutral"
+                              : chip.tone
+                          }
                         />
-                      </View>
+                      )}
                     </View>
                   );
-                })
-              )}
-            </View>
-          </>
+                })}
+              </View>
+            )}
+          </View>
         ) : null}
 
         <StepsCard />
@@ -1058,7 +1187,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    borderColor: surface.border,
     borderRadius: radii.card,
     borderWidth: 1,
     gap: spacing.sm,
@@ -1088,6 +1217,30 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 22,
   },
+  srOnly: {
+    height: 1,
+    overflow: "hidden",
+    position: "absolute",
+    width: 1,
+  },
+  mealsSection: { gap: spacing.xs, marginTop: spacing.sm },
+  mealsList: {
+    backgroundColor: colors.white,
+    borderColor: surface.border,
+    borderRadius: radii.card,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  mealRowRule: {
+    borderTopColor: colors.lightGrey,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  mealTime: {
+    color: colors.darkGrey,
+    fontSize: 14,
+    minWidth: 64,
+    ...({ fontVariant: ["tabular-nums"] } as object),
+  },
   mealsHead: {
     alignItems: "center",
     flexDirection: "row",
@@ -1096,21 +1249,75 @@ const styles = StyleSheet.create({
   },
   mealsLabel: {
     color: colors.deepNavy,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: "700",
   },
   mealsCount: {
     color: colors.midGrey,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "500",
   },
+  upNextChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  upNextLabel: {
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  doneChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  doneChipLabel: { color: colors.white, fontSize: 14, fontWeight: "600" },
+  restCard: {
+    backgroundColor: colors.white,
+    borderColor: surface.border,
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: spacing.sm,
+    padding: spacing.xl,
+  },
+  restChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: semanticColors.neutral.fill,
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  restChipLabel: {
+    color: semanticColors.neutral.text,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  restTitle: {
+    color: colors.deepNavy,
+    fontSize: 24,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    marginTop: spacing.xs,
+  },
+  restNext: { color: colors.darkGrey, fontSize: 15 },
   mealRow: {
-    alignItems: "flex-start",
-    borderTopColor: colors.lightGrey,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
     flexDirection: "row",
     gap: spacing.md,
-    paddingTop: spacing.md,
+    padding: spacing.md,
   },
   mealMain: {
     flex: 1,

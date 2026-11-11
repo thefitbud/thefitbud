@@ -62,6 +62,10 @@ import {
 import { buildPage } from "../lib/cursor";
 import { onboardingStatusForRelationship } from "./client-status";
 import {
+  resolveClientDisplayName,
+  resolveClientWhatsappE164,
+} from "./client-identity";
+import {
   mapCheckin,
   mapCoachingConfiguration,
   mapMeasurement,
@@ -735,10 +739,14 @@ export async function loadClientWorkspace(
   ]);
 
   const trainee = profile[0];
-  const displayName = trainee?.displayName;
-  if (!displayName || !trainee) {
+  if (!trainee?.displayName) {
     throw new Error("Trainee profile is missing for this coaching relationship.");
   }
+  // Z9-18: the header name and WhatsApp number prefer what the trainer set in
+  // Client settings; they feed the header WhatsApp button and Reminders drafts.
+  const displayName =
+    resolveClientDisplayName(relationship, trainee.displayName) ??
+    trainee.displayName;
   const today = await trainerToday(db, relationship.trainerUserId, nowIso);
   const adherence = await deriveAdherenceForRelationships(db, {
     today,
@@ -776,7 +784,10 @@ export async function loadClientWorkspace(
         updatedAt: row.updatedAt,
       })),
       trainerWhatsappE164: trainerProfile[0]?.whatsappE164 ?? null,
-      clientWhatsappE164: clientIdentity[0]?.mobileE164 ?? null,
+      clientWhatsappE164: resolveClientWhatsappE164(
+        relationship,
+        clientIdentity[0]?.mobileE164,
+      ),
       endedAt: relationship.endedAt ?? null,
       pendingReactivation: pendingReactivationRow[0]
         ? {

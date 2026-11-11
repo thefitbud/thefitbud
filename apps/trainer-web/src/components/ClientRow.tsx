@@ -52,7 +52,7 @@ type Props = {
   item: ClientDirectoryItem;
   selected?: boolean;
   layout?: "row" | "card";
-  /** Ended segment uses the frame-140 column set (Client, Status, Last plan). */
+  /** Ended segment uses the frame-140 column set (Client, Status, Coached, Last plan). */
   variant?: "current" | "ended";
 };
 
@@ -72,6 +72,15 @@ export function ClientRow({
     item.status === "ended" && item.endedAt
       ? `Ended ${formatCivilDate(item.endedAt.slice(0, 10))}`
       : null;
+  // Coached range (frame 140): same civil-date formatting as the ended chip,
+  // so the range end and the chip always agree. Shown only when both ends
+  // are known; a missing start leaves the cell empty.
+  const coachedRange =
+    item.status === "ended" && item.startedAt && item.endedAt
+      ? `${formatCivilDate(item.startedAt.slice(0, 10))} – ${formatCivilDate(
+          item.endedAt.slice(0, 10),
+        )}`
+      : null;
   // One chip: "Ended Sat 3 Oct" when the end date is known (frame 140).
   const lifecycleChip = (
     <StatusChip
@@ -84,10 +93,16 @@ export function ClientRow({
     ? nextCheckinLabel(item.nextCheckin.localDate)
     : null;
 
+  // "Open" is the outlined row action (frame 136); the other contextual
+  // actions (Review intake, Set up plan, Resend invite, Reactivate) stay tinted.
+  const ctaClass =
+    item.status === "active"
+      ? "button-secondary btn-sm client-row-cta client-row-cta-outline"
+      : "button-tinted btn-sm client-row-cta";
   const primaryAction = href ? (
     <Link
       to={href}
-      className="button-tinted btn-sm client-row-cta"
+      className={ctaClass}
       onClick={(e) => e.stopPropagation()}
     >
       {action.label}
@@ -182,7 +197,16 @@ export function ClientRow({
         <div className="roster-status-cell">{lifecycleChip}</div>
       </td>
       {variant === "ended" ? (
-        <td className="col-plan">{planCell}</td>
+        <>
+          <td className="col-coached">
+            {coachedRange ? (
+              <span className="roster-coached" title={coachedRange}>
+                {coachedRange}
+              </span>
+            ) : null}
+          </td>
+          <td className="col-plan">{planCell}</td>
+        </>
       ) : (
         <>
           <td className="col-adherence">
