@@ -40,6 +40,47 @@ function AppIcon({ size }: { size: number }) {
   );
 }
 
+/** Banner icon per frame 29: dark navy tile, three white dots and a pink ring. */
+function BannerIcon({ size }: { size: number }) {
+  const dot = Math.round(size * 0.13);
+  return (
+    <View
+      accessibilityLabel="FitBud"
+      style={{
+        alignItems: "center",
+        backgroundColor: "#1A1248",
+        borderRadius: Math.round(size * 0.22),
+        flexDirection: "row",
+        gap: Math.round(size * 0.04),
+        height: size,
+        justifyContent: "center",
+        width: size,
+      }}
+    >
+      {[0, 1, 2].map((n) => (
+        <View
+          key={n}
+          style={{
+            backgroundColor: "#FFFFFF",
+            borderRadius: dot,
+            height: dot,
+            width: dot,
+          }}
+        />
+      ))}
+      <View
+        style={{
+          borderColor: "#F43F6E",
+          borderRadius: dot,
+          borderWidth: 1.5,
+          height: dot,
+          width: dot,
+        }}
+      />
+    </View>
+  );
+}
+
 export function DevBuildNote() {
   return (
     <Text style={styles.devLine} accessibilityRole="text">
@@ -502,7 +543,7 @@ export function InAppBanner({
         floating && top != null ? { top } : null,
       ]}
     >
-      <AppIcon size={38} />
+      <BannerIcon size={44} />
       <View style={styles.bannerBody}>
         <Text style={styles.bannerKicker}>FitBud · now</Text>
         <Text numberOfLines={1} style={styles.bannerTitle}>
@@ -731,8 +772,8 @@ const styles = StyleSheet.create({
   },
   bannerBody: { flex: 1, minWidth: 0 },
   bannerKicker: { color: "#4A4A52", fontFamily: fontFamilySemiBold, fontSize: 13 },
-  bannerTitle: { color: "#000", fontSize: 15, fontFamily: fontFamilySemiBold },
-  bannerLine: { color: "#2B2B33", fontSize: 14, lineHeight: 19 },
+  bannerTitle: { color: "#000", fontSize: 17, fontFamily: fontFamilySemiBold },
+  bannerLine: { color: "#2B2B33", fontSize: 15, lineHeight: 20 },
   chevron: {
     color: "#4A4A52",
     fontSize: 22,

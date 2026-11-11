@@ -11,7 +11,7 @@ import {
   workoutAssignmentSchema,
   type MealAssignment,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor, fireEvent } from "../test/render";
+import { mockAuth, render, screen, waitFor, fireEvent, act } from "../test/render";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
@@ -232,6 +232,7 @@ vi.mock("../providers/ConfigProvider", async () => {
 
 const { TodayTab, effectivePlanStateFor } = await import("./TodayTab");
 const fgModule = await import("./notifications/ForegroundBanner");
+const { setForegroundBannerActive } = await import("./today/bannerSlot");
 
 const completedWorkout = workoutAssignmentSchema.parse({
   ...workoutAssignment,
@@ -667,8 +668,18 @@ describe("Today v3 past day, loading and offline", () => {
       expect(onOpenCheckin.mock.calls[0]![0].id).toBe(
         "00000000-0000-4000-8000-0000000a0002",
       );
-      expect(markRead).toHaveBeenCalled();
+      expect(markRead).toHaveBeenCalledWith("00000000-0000-4000-8000-0000000a0001");
       expect(screen.queryByText("Rahul reviewed your check-in")).toBeNull();
+    });
+
+    it("one banner at a time: reviewed banner waits while a meal or note banner is up", async () => {
+      notifications = [notif("checkin_reviewed")];
+      act(() => setForegroundBannerActive(true));
+      renderToday();
+      await screen.findByLabelText("Open diet");
+      expect(screen.queryByText("Rahul reviewed your check-in")).toBeNull();
+      act(() => setForegroundBannerActive(false));
+      await screen.findByText("Rahul reviewed your check-in");
     });
 
     it("no reviewed banner without an unread reviewed notification", async () => {
@@ -747,6 +758,24 @@ describe("Today v3 past day, loading and offline", () => {
       await screen.findByText("Breakfast isn't logged yet");
       screen.getByText("Vegetable poha · tap to log");
       screen.getByText("FitBud · now");
+    });
+
+    it("note banner: no preview when the note does not match the notification", async () => {
+      meals = [];
+      notifications = [
+        {
+          id: "00000000-0000-4000-8000-0000000c0001",
+          type: "trainer_note_shared",
+          domainEntityId: "00000000-0000-4000-8000-0000000c0002",
+          readAt: null,
+        },
+      ];
+      coachNoteItems = [
+        { id: "00000000-0000-4000-8000-0000000c0099", body: "Other note.", seenAt: null },
+      ];
+      renderBanner();
+      await screen.findByText("Rahul has a note for you");
+      await waitFor(() => expect(screen.queryByText(/Other note/)).toBeNull());
     });
 
     it("note banner: title and the quoted note (frame 29b)", async () => {

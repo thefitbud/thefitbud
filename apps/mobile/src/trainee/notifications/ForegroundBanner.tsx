@@ -3,6 +3,7 @@ import type { CoachingRelationship, MealAssignment, Notification } from "@fitbud
 import { MEAL_REMINDER_AFTER_MINUTES, zonedDateTimeFormat } from "@fitbud/core";
 import { stage1Api } from "../../lib/stage1Api";
 import { useAuth } from "../../auth/AuthProvider";
+import { reportError } from "../../lib/reportError";
 import { localDateInTimezone } from "../../lib/dates";
 import { isMealSnoozed } from "../../notifications/actions";
 import { inAppMealBannerCopy, noteBannerCopy } from "../../notifications/copy";
@@ -34,7 +35,7 @@ function hmMinutes(hhmm: string): number | null {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-/** The meal's first foods, e.g. "Vegetable poha · Curd" (frame 29). */
+/** The meal's first two foods, comma-separated, e.g. "Vegetable poha, Curd" (frame 29). */
 function mealFoods(meal: MealAssignment): string {
   return meal.prescription.items
     .slice(0, 2)
@@ -86,12 +87,14 @@ export function ForegroundBanner({
       if (unread) {
         try {
           const notes = await stage1Api(api).listMeCoachNotes();
-          const match =
-            notes.items.find((item) => item.id === unread.domainEntityId) ??
-            notes.items.find((item) => !item.seenAt);
+          // No match means no preview; never show some other note's text.
+          const match = notes.items.find(
+            (item) => item.id === unread.domainEntityId,
+          );
           setNotePreview(match?.body?.trim() || null);
-        } catch {
+        } catch (err) {
           // The banner still shows; only the preview line is missing.
+          reportError("ForegroundBanner.listMeCoachNotes", err);
           setNotePreview(null);
         }
       }
