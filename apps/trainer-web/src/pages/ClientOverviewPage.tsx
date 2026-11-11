@@ -3,7 +3,7 @@ import { Link, useOutletContext, useParams, useSearchParams } from "react-router
 import type {
   Checkin,
   ClientWorkspace,
-  Measurement,
+  ProgressMetricPoint,
   MealComplianceItem,
   TrainerNote,
   WeekReadModel,
@@ -366,15 +366,13 @@ export function ClientOverviewPage() {
                 </span>
               </div>
               <StatusChip kind="severity" value={openEx.severity} />
-              {ended ? null : (
-                <Button
-                  variant="tinted"
-                  disabled={!online}
-                  onClick={() => setParams({ exception: openEx.id })}
-                >
-                  Review
-                </Button>
-              )}
+              <Button
+                variant="tinted"
+                disabled={!online}
+                onClick={() => setParams({ exception: openEx.id })}
+              >
+                Review
+              </Button>
             </div>
           </section>
         ) : null}
@@ -692,15 +690,13 @@ export function ClientOverviewPage() {
               <h3>Plan</h3>
             </div>
             <div className="ov-big">No plan yet</div>
-            {ended ? null : (
-              <Link
-                className="button-primary"
-                to={`/clients/${relationshipId}/plan`}
-                style={{ marginTop: 12, display: "inline-flex" }}
-              >
-                Set up plan
-              </Link>
-            )}
+            <Link
+              className="button-primary"
+              to={`/clients/${relationshipId}/plan`}
+              style={{ marginTop: 12, display: "inline-flex" }}
+            >
+              Set up plan
+            </Link>
           </section>
         )}
 
@@ -725,7 +721,6 @@ export function ClientOverviewPage() {
             gender={header.traineeProfile.gender}
             traineeFirstName={firstName}
             clientWhatsappE164={header.clientWhatsappE164}
-            ended={ended}
           />
         </section>
 
@@ -763,12 +758,11 @@ export function ClientOverviewPage() {
           <section className="ov-card ov-side">
             <div className="ov-side-h">
               <h3>Renewal</h3>
-              {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
               <Link
                 className="text-link"
                 to={`/clients/${relationshipId}/configure`}
               >
-                {ended ? "View coaching setup" : "Open settings"}
+                Open settings
               </Link>
             </div>
             <StatusChip kind="renewal" value={header.renewalState} />
@@ -778,16 +772,14 @@ export function ClientOverviewPage() {
         <section className="ov-card ov-side">
           <div className="ov-side-h">
             <h3>Coach notes</h3>
-            {!ended ? (
-              <button
-                type="button"
-                className="text-link"
-                disabled={!online}
-                onClick={() => openWorkspaceModal({ type: "note" })}
-              >
-                Add note
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="text-link"
+              disabled={!online}
+              onClick={() => openWorkspaceModal({ type: "note" })}
+            >
+              Add note
+            </button>
           </div>
           {noteError ? (
             <p className="form-error" role="alert">
@@ -820,36 +812,34 @@ export function ClientOverviewPage() {
                       {formatRelative(note.createdAt)}
                     </time>
                   </div>
-                  {!ended ? (
-                    <div className="ov-note-actions">
+                  <div className="ov-note-actions">
+                    <button
+                      type="button"
+                      className="text-link"
+                      disabled={!online || noteBusyId === note.id}
+                      onClick={() => openWorkspaceModal({ type: "note", note })}
+                    >
+                      Edit
+                    </button>
+                    {note.visibility === "client" ? (
                       <button
                         type="button"
                         className="text-link"
                         disabled={!online || noteBusyId === note.id}
-                        onClick={() => openWorkspaceModal({ type: "note", note })}
+                        onClick={() => void makeNotePrivate(note)}
                       >
-                        Edit
+                        Make private
                       </button>
-                      {note.visibility === "client" ? (
-                        <button
-                          type="button"
-                          className="text-link"
-                          disabled={!online || noteBusyId === note.id}
-                          onClick={() => void makeNotePrivate(note)}
-                        >
-                          Make private
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="text-link"
-                        disabled={!online || noteBusyId === note.id}
-                        onClick={() => setNotePendingDelete(note)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ) : null}
+                    ) : null}
+                    <button
+                      type="button"
+                      className="text-link"
+                      disabled={!online || noteBusyId === note.id}
+                      onClick={() => setNotePendingDelete(note)}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -900,7 +890,6 @@ export function ClientOverviewPage() {
           clientWhatsappE164={header.clientWhatsappE164}
           timeZone={resolveTraineeTimezone(header).timezone}
           refreshEpoch={refreshEpoch}
-          ended={ended}
           onClose={closeReminders}
         />
       ) : null}
@@ -927,8 +916,11 @@ function addCivilDays(date: string, days: number): string {
 }
 
 /** "68.2 kg → 65.1 kg · −3.1 kg"; one weigh-in shows just that value. */
-function weightLine(first: Measurement, last: Measurement): string {
-  if (first.id === last.id) return formatWeight(first.value);
+function weightLine(
+  first: ProgressMetricPoint,
+  last: ProgressMetricPoint,
+): string {
+  if (first === last) return formatWeight(first.value);
   const delta = Math.round((last.value - first.value) * 10) / 10;
   const sign = delta > 0 ? "+" : delta < 0 ? MINUS : "";
   return `${formatWeight(first.value)} → ${formatWeight(last.value)} · ${sign}${formatWeight(Math.abs(delta))}`;
@@ -948,7 +940,8 @@ const MEAL_LOGGED = new Set<MealComplianceItem["status"]>([
 const CHECKIN_SUBMITTED = new Set<Checkin["status"]>(["submitted", "reviewed"]);
 
 type EndedData = {
-  weights: Measurement[];
+  /** Weight for the coached range: oldest first, one point per local date. */
+  weights: ProgressMetricPoint[];
   workouts: WorkoutAdherenceItem[];
   meals: MealComplianceItem[];
   checkins: Checkin[];
@@ -1051,7 +1044,12 @@ function EndedOverviewBody({
     let cancelled = false;
     setLoadError(null);
     void Promise.all([
-      apiClient.listMeasurements(relationshipId, { limit: 100 }),
+      apiClient.getProgressMetrics(relationshipId, {
+        keys: ["weight"],
+        range: "custom",
+        from: startDate,
+        to: endDate,
+      }),
       apiClient.getWorkoutAdherence(relationshipId, {
         fromDate: startDate,
         toDate: endDate,
@@ -1062,19 +1060,12 @@ function EndedOverviewBody({
       }),
       loadAllCheckins(relationshipId, startDate, endDate),
     ])
-      .then(([measurements, adherence, compliance, checkins]) => {
+      .then(([metrics, adherence, compliance, checkins]) => {
         if (cancelled) return;
-        const fromMs = Date.parse(startedAt);
-        const toMs = Date.parse(endedAt);
-        const weights = measurements.items
-          .filter((m) => m.type === "body_weight_kg")
-          .filter((m) => {
-            const at = Date.parse(m.observedAt);
-            return at >= fromMs && at <= toMs;
-          })
-          .sort((a, b) => Date.parse(a.observedAt) - Date.parse(b.observedAt));
         setData({
-          weights,
+          weights:
+            metrics.series.find((series) => series.key === "weight")?.points ??
+            [],
           workouts: adherence.items,
           meals: compliance.items,
           checkins,
@@ -1138,21 +1129,18 @@ function EndedOverviewBody({
       const logged = data.meals.filter((m) => MEAL_LOGGED.has(m.status)).length;
       lastWeekRows.push(["Meals logged", `${logged} of ${data.meals.length}`]);
     }
+    // Only a check-in inside this week; an older one is left out.
     const lastCheckin = data.checkins
-      .filter((c) => CHECKIN_SUBMITTED.has(c.status))
+      .filter(
+        (c) => CHECKIN_SUBMITTED.has(c.status) && c.localDate >= lastWeekStart,
+      )
       .sort((a, b) => b.localDate.localeCompare(a.localDate))[0];
     if (lastCheckin) {
-      // The check-in's own answer, else its linked weigh-in, else one logged that day.
+      // The weight point from this check-in, else the one on its date.
       const kg =
-        lastCheckin.answers?.bodyWeightKg ??
-        data.weights.find((m) => m.checkinId === lastCheckin.id)?.value ??
-        data.weights
-          .filter(
-            (m) =>
-              formatLocalDate(new Date(m.observedAt), traineeTz) ===
-              lastCheckin.localDate,
-          )
-          .at(-1)?.value ??
+        data.weights.find((p) => p.checkinId === lastCheckin.id)?.value ??
+        data.weights.find((p) => p.localDate === lastCheckin.localDate)
+          ?.value ??
         null;
       lastWeekRows.push([
         "Last check-in",

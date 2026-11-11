@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   listTrainerNotes: vi.fn(),
   deleteTrainerNote: vi.fn(),
   listMeasurements: vi.fn(),
+  getProgressMetrics: vi.fn(),
   getWorkoutAdherence: vi.fn(),
   getMealCompliance: vi.fn(),
   listCheckins: vi.fn(),
@@ -101,9 +102,24 @@ const RESPONDS: ResponsivenessResponse = {
   quietHoursEnd: "07:00",
 };
 
+type WeightPoint = { localDate: string; value: number; checkinId: string | null };
+
+/** `GET …/metrics?keys=weight&range=custom`: oldest first, one point per local date. */
+function weightSeries(points: WeightPoint[]) {
+  return {
+    relationshipId: REL_ID,
+    range: "custom",
+    from: "2026-07-06",
+    to: "2026-10-03",
+    timezone: "Asia/Kolkata",
+    series: [{ key: "weight", unit: "kg", points }],
+  };
+}
+
 beforeEach(() => {
   api.listTrainerNotes.mockResolvedValue({ items: [] });
   api.listMeasurements.mockResolvedValue({ items: [], nextCursor: null });
+  api.getProgressMetrics.mockResolvedValue(weightSeries([]));
   api.getWorkoutAdherence.mockResolvedValue({ items: [], totals: {} });
   api.getMealCompliance.mockResolvedValue({ items: [], totals: {} });
   api.listCheckins.mockResolvedValue({ items: [], nextCursor: null });
@@ -349,16 +365,15 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
   });
 
   it("shows Summary, Last week and Your notes from api-client data, and no live week", async () => {
-    api.listMeasurements.mockResolvedValue({
-      items: [
-        // Newest first, as the API returns; one after the end is ignored.
-        weight("a0000000-0000-4000-8000-000000000004", 64.0, "2026-10-20T03:00:00.000Z"),
-        weight("a0000000-0000-4000-8000-000000000003", 65.1, "2026-10-02T03:00:00.000Z", "c0000000-0000-4000-8000-000000000002"),
-        weight("a0000000-0000-4000-8000-000000000002", 66.4, "2026-08-15T03:00:00.000Z"),
-        weight("a0000000-0000-4000-8000-000000000001", 68.2, "2026-07-06T05:00:00.000Z"),
-      ],
-      nextCursor: null,
-    });
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([
+        { localDate: "2026-07-06", value: 68.2, checkinId: null },
+        { localDate: "2026-08-15", value: 66.4, checkinId: null },
+        // Linked to the 2 Oct check-in; a same-day point would lose to it.
+        { localDate: "2026-10-01", value: 65.4, checkinId: null },
+        { localDate: "2026-10-02", value: 65.1, checkinId: "c0000000-0000-4000-8000-000000000002" },
+      ]),
+    );
     api.getWorkoutAdherence.mockResolvedValue({
       items: [
         workout("2026-10-03", "completed", 1),
@@ -455,6 +470,13 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
     expect(within(notes).queryByText("Older note")).toBeNull();
 
     // The coached range drives every query; the live week is never fetched.
+    expect(api.getProgressMetrics).toHaveBeenCalledWith(REL_ID, {
+      keys: ["weight"],
+      range: "custom",
+      from: "2026-07-06",
+      to: "2026-10-03",
+    });
+    expect(api.listMeasurements).not.toHaveBeenCalled();
     expect(api.getWorkoutAdherence).toHaveBeenCalledWith(REL_ID, {
       fromDate: "2026-07-06",
       toDate: "2026-10-03",
@@ -481,24 +503,67 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
     expect(document.body.textContent).not.toMatch(/\d+\s*%|\d{4}-\d{2}-\d{2}/);
   });
 
-  it("Last check-in takes the weigh-in logged that day when the check-in has none", async () => {
+  it("Weight start is the first point of the coached range even with over 100 newer measurements", async () => {
+    // The measurements list holds only the newest 100 rows of every type, so
+    // the true start (68.2 kg on Mon 6 Jul) is not in it.
     api.listMeasurements.mockResolvedValue({
-      items: [
-        // 25 Oct 8:00 am IST; not linked to the check-in.
-        weight("a0000000-0000-4000-8000-000000000009", 64.7, "2026-09-25T02:30:00.000Z"),
-        weight("a0000000-0000-4000-8000-000000000008", 66.0, "2026-09-18T02:30:00.000Z"),
-      ],
+      items: Array.from({ length: 100 }, (_, i) =>
+        weight(
+          `a0000000-0000-4000-8000-${String(i + 100).padStart(12, "0")}`,
+          66 - i * 0.01,
+          new Date(Date.UTC(2026, 9, 3, 3) - i * 3_600_000).toISOString(),
+        ),
+      ),
       nextCursor: null,
     });
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([
+        { localDate: "2026-07-06", value: 68.2, checkinId: null },
+        { localDate: "2026-09-29", value: 65.5, checkinId: null },
+        { localDate: "2026-10-03", value: 65.1, checkinId: null },
+      ]),
+    );
+    renderPage("ended", null, { header: ENDED_HEADER });
+    expect(await screen.findByText("68.2 kg → 65.1 kg · \u22123.1 kg")).toBeTruthy();
+  });
+
+  it("Last check-in takes the weight point on its date when none is linked", async () => {
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([
+        { localDate: "2026-09-18", value: 66.0, checkinId: null },
+        { localDate: "2026-10-01", value: 64.7, checkinId: null },
+      ]),
+    );
     api.listCheckins.mockResolvedValue({
       items: [
-        checkin("c0000000-0000-4000-8000-000000000009", "2026-09-25", "reviewed"),
+        checkin("c0000000-0000-4000-8000-000000000009", "2026-10-01", "reviewed"),
         checkin("c0000000-0000-4000-8000-000000000008", "2026-09-20", "reviewed"),
       ],
       nextCursor: null,
     });
     renderPage("ended", null, { header: ENDED_HEADER });
-    expect(await screen.findByText("Fri 25 Sep · 64.7 kg")).toBeTruthy();
+    expect(await screen.findByText("Thu 1 Oct · 64.7 kg")).toBeTruthy();
+  });
+
+  it("Last check-in is left out when the latest one is before the last week", async () => {
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([{ localDate: "2026-09-20", value: 66.0, checkinId: null }]),
+    );
+    api.getMealCompliance.mockResolvedValue({
+      items: [meal("2026-10-02", "confirmed", 1)],
+      totals: {},
+    });
+    api.listCheckins.mockResolvedValue({
+      items: [checkin("c0000000-0000-4000-8000-000000000008", "2026-09-20", "reviewed")],
+      nextCursor: null,
+    });
+    renderPage("ended", null, { header: ENDED_HEADER });
+    const week = (
+      await screen.findByRole("heading", { name: "Last week · Sun 27 Sep — Sat 3 Oct" })
+    ).closest("section")!;
+    expect(await within(week).findByText("Meals logged")).toBeTruthy();
+    expect(within(week).queryByText("Last check-in")).toBeNull();
+    expect(screen.queryByText(/Sun 20 Sep/)).toBeNull();
   });
 
   it("leaves out rows with no source and never invents counts", async () => {
