@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { MessageCircle, X } from "lucide-react-native";
 import type { ExceptionDetail } from "@fitbud/contracts";
@@ -43,6 +43,9 @@ export function NudgeSheet({
   onOpened,
 }: Props) {
   const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (visible) setFailed(false);
+  }, [visible]);
   const name = firstNameOf(traineeDisplayName);
   const draft = nudgeDraftText(detail, traineeDisplayName);
 
@@ -98,7 +101,7 @@ export function NudgeSheet({
         }}
       />
       <Text style={styles.footnote}>
-        You press Send in WhatsApp. FitBud only notes that the nudge was opened.
+        You press Send in WhatsApp.
       </Text>
     </BottomSheet>
   );

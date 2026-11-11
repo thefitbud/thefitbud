@@ -10,6 +10,7 @@ import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { reportError } from "../lib/reportError";
 import { labelFor } from "./labels";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
@@ -118,6 +119,9 @@ export function ExceptionReviewScreen({
       setMessage("Resolved. Source signals were not changed.");
       await load();
     } catch (err) {
+      if (!(err instanceof ApiClientError)) {
+        reportError("trainer.exception.resolve", err);
+      }
       setResolveError(
         err instanceof ApiClientError
           ? err.message
