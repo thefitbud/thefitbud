@@ -22,12 +22,12 @@
 | steps-copy | Z9b-2 (conditional) |
 
 ## Order
-1. Confirm main is green; re-run banned-strings and e2e. **Done 11 Nov 2026:** the re-run failed the same way (apt DNS on the 26.04 runner), so Z9b-0 runs first and merges as the fix for red main (the only merge allowed while main is red).
+1. Confirm main is green; re-run banned-strings and e2e. **Done 11 Nov 2026:** the re-run failed the same way (apt DNS from the runners), so Z9b-0 runs first and merges as the fix for red main (the only merge allowed while main is red).
 2. Z9b-1 and Z9b-2 in parallel (no shared files).
 3. Write the report, then stop. Do not start W10.
 
 ## Specs
-- [Z9b-0](../Z9b-0.md) Pin the e2e and banned-strings runners to ubuntu-24.04 (apt DNS failures on 26.04 keep main red).
+- [Z9b-0](../Z9b-0.md) Run the e2e and banned-strings jobs in the Playwright image (apt mirrors unreachable from the runners keep main red).
 - [Z9b-1](../Z9b-1.md) Workout tab opens on today; no duplicate "Workout" title.
 - [Z9b-2](../Z9b-2.md) Remove the false steps privacy line from StepsSettingsScreen, only if the screen is reachable.
 
