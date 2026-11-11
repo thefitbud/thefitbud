@@ -56,6 +56,12 @@ import {
   restSecondsBySetTargetId,
   workoutStartError,
 } from "./workoutSession";
+import { reportError } from "../lib/reportError";
+import { CoachLoggedWorkoutScreen } from "./workout/coach-logged/CoachLoggedWorkoutScreen";
+import {
+  coachLogState,
+  coachLogTitle,
+} from "./workout/coach-logged/coachLogged";
 import {
   assignmentDayEyebrow,
   coachInitials,
@@ -423,6 +429,10 @@ export function WorkoutTab({
   }, [assignments, closedMissedIds]);
 
   async function startOrContinue(assignment: WorkoutAssignment) {
+    if (coachLogState(assignment.execution) === "logged") {
+      void viewLoggedWorkout(assignment);
+      return;
+    }
     setDayDetailAssignmentId(null);
     setActingId(assignment.id);
     setError(null);
@@ -457,7 +467,35 @@ export function WorkoutTab({
     onPendingStartConsumed?.();
   }, [pendingStartAssignmentId, loading, assignments, onPendingStartConsumed]);
 
+  /** A coach-logged workout is read-only: open it instead of the start flow (R1). */
+  async function viewLoggedWorkout(assignment: WorkoutAssignment) {
+    if (!assignment.execution) return;
+    setActingId(assignment.id);
+    setError(null);
+    try {
+      const execution = await api.getWorkoutExecution(assignment.execution.id);
+      setActiveAssignment(assignment);
+      setSummaryExecution(
+        enrichExecutionFromAssignmentDay(execution, assignment),
+      );
+    } catch (err) {
+      reportError("workout.openLogged", err);
+      setError(
+        err instanceof ApiClientError
+          ? err.message
+          : "Could not open this workout. (WORKOUT-OPEN)",
+      );
+    } finally {
+      setActingId(null);
+    }
+  }
+
   function openDayDetail(assignment: WorkoutAssignment) {
+    if (coachLogState(assignment.execution) === "logged") {
+      onSelectDate?.(assignment.localDate);
+      void viewLoggedWorkout(assignment);
+      return;
+    }
     onSelectDate?.(assignment.localDate);
     // Prefer overlay so day-detail (mockup 10b) is a real navigation target,
     // not a silent in-tab state that can look like the week overview stayed up.
@@ -528,6 +566,20 @@ export function WorkoutTab({
       summaryExecution,
       sourceAssignment,
     );
+    if (coachLogState(enriched) === "logged") {
+      return (
+        <CoachLoggedWorkoutScreen
+          execution={enriched}
+          assignment={sourceAssignment}
+          coachName={coachName}
+          timeZone={timeZone}
+          onBack={() => {
+            setSummaryExecution(null);
+            setActiveAssignment(null);
+          }}
+        />
+      );
+    }
     return (
       <WorkoutSummaryScreen
         execution={enriched}
@@ -655,6 +707,7 @@ export function WorkoutTab({
         )
       : null;
 
+  const heroLogState = coachLogState(focusAssignment?.execution);
   const startLabel = pausedCaption ? "Continue workout" : "Start workout";
   const planEyebrow = weekPlanEyebrow(
     planState.status === "loaded" ? planState.plan : null,
@@ -830,6 +883,12 @@ export function WorkoutTab({
                 </Text>
               </View>
             ) : null}
+            {heroLogState ? (
+              <Text style={styles.wheroLogged}>
+                {coachLogTitle(heroLogState)}
+              </Text>
+            ) : null}
+            {heroLogState === "logged" ? null : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={startLabel}
@@ -851,8 +910,23 @@ export function WorkoutTab({
               <Play color={colors.deepNavy} size={20} fill={colors.deepNavy} />
               <Text style={styles.wheroStartText}>{startLabel}</Text>
             </Pressable>
-            {focusAssignment.status === "completed" ||
-            focusAssignment.status === "modified" ? (
+            )}
+            {heroLogState === "logged" ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="View workout"
+                onPress={(event) => {
+                  event.stopPropagation();
+                  void viewLoggedWorkout(focusAssignment);
+                }}
+                style={styles.wheroSecondary}
+              >
+                <Text style={styles.wheroSecondaryText}>View workout</Text>
+              </Pressable>
+            ) : null}
+            {heroLogState !== "logged" &&
+            (focusAssignment.status === "completed" ||
+              focusAssignment.status === "modified") ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="View summary"
@@ -1280,6 +1354,12 @@ const styles = StyleSheet.create({
     color: colors.deepNavy,
     fontSize: 17,
     fontWeight: "700",
+  },
+  wheroLogged: {
+    color: colors.white,
+    fontSize: 15,
+    fontWeight: "700",
+    marginTop: 12,
   },
   wheroSecondary: {
     alignItems: "center",

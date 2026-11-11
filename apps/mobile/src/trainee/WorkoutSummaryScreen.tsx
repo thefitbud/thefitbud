@@ -7,6 +7,8 @@ import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { weekDatesFrom } from "../lib/dates";
+import { CoachLogBanner } from "./workout/coach-logged/CoachLogBanner";
+import { coachLogState } from "./workout/coach-logged/coachLogged";
 import { durationMinutesFromExecution } from "./workoutDuration";
 import {
   coachInitials,
@@ -27,6 +29,7 @@ export function WorkoutSummaryScreen({
   today = "",
   weekCompleted,
   weekTotal,
+  timeZone = "Asia/Kolkata",
   offline = false,
 }: {
   execution: WorkoutExecution;
@@ -128,6 +131,17 @@ export function WorkoutSummaryScreen({
         </Text>
         <View style={styles.coral} />
       </View>
+
+      {coachLogState(execution) === "edited" ? (
+        <View style={{ marginTop: 16 }}>
+          <CoachLogBanner
+            state="edited"
+            execution={execution}
+            coachName={trimmedCoach}
+            timeZone={timeZone}
+          />
+        </View>
+      ) : null}
 
       <View style={styles.stat4}>
         <View style={styles.statTile}>
