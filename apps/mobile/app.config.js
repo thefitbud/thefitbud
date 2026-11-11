@@ -76,6 +76,30 @@ function withSentryUploadDisabled(config) {
   return config;
 }
 
+/**
+ * Steps (Z9-9, D-W9-6). HealthKit is read only: no update string, no
+ * background delivery. The plugin writes a default update string unless it is
+ * set to false. It adds the HealthKit entitlement, which needs the HealthKit
+ * capability on the App ID.
+ */
+const HEALTHKIT_PLUGIN = [
+  "@kingstinct/react-native-healthkit",
+  {
+    NSHealthShareUsageDescription:
+      "FitBud reads your daily step count so your coach can see it next to your plan.",
+    NSHealthUpdateUsageDescription: false,
+    background: false,
+  },
+];
+
+/**
+ * Health Connect needs Android API 26; SDK 52 defaults to 24. Compile and
+ * target SDK stay SDK 52's.
+ */
+const BUILD_PROPERTIES_PLUGIN = ["expo-build-properties", { android: { minSdkVersion: 26 } }];
+
+const READ_STEPS_PERMISSION = "android.permission.health.READ_STEPS";
+
 function sentryPluginEntry() {
   return [
     "@sentry/react-native/expo",
@@ -178,6 +202,7 @@ function createExpoConfig({ config }) {
       android: {
         ...config.android,
         package: variant.bundleIdentifier,
+        permissions: [...(config.android?.permissions ?? []), READ_STEPS_PERMISSION],
         ...(googleServicesFile ? { googleServicesFile } : {}),
       },
       // No icon, color or sounds: Android notifications stay exactly as they were.
@@ -186,6 +211,13 @@ function createExpoConfig({ config }) {
       plugins: [
         ...(config.plugins ?? []),
         ["expo-notifications", { mode: variant.apsEnvironment }],
+        // Steps (Z9-9): HealthKit (iOS), Health Connect with its permissions-
+        // rationale activity (Android), and minSdkVersion 26 for Health Connect.
+        // Placed before the existing tail so @bacons/apple-targets and Sentry
+        // stay last, in their order.
+        HEALTHKIT_PLUGIN,
+        "expo-health-connect",
+        BUILD_PROPERTIES_PLUGIN,
         "@bacons/apple-targets",
         sentryPluginEntry(),
       ],
