@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import {
   Check,
   ChevronDown,
@@ -25,6 +25,18 @@ import type { RestWindow } from "../notifications/liveActivity";
 import { useWorkoutLiveActivity } from "../notifications/liveActivitySession";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
+import { SetKeypad } from "./workout/SetKeypad";
+import {
+  backspace,
+  initialDraft,
+  isBodyweightLabel,
+  loadBody,
+  loadLabelForDraft,
+  pressKey,
+  stepValue,
+  type KeypadField,
+  type SetDraft,
+} from "./workout/setEntry";
 import {
   exerciseInstructionsFor,
   loadPreviousSetHistory,
@@ -34,6 +46,7 @@ import {
 const DEFAULT_REST_SECONDS = 90;
 const TARGET = 44;
 const LOGBAR_HEIGHT = 64;
+const KEYPAD_HEIGHT = 400;
 
 const RPE_ANCHORS: Record<number, string> = {
   1: "Very easy",
@@ -41,7 +54,6 @@ const RPE_ANCHORS: Record<number, string> = {
   10: "Max effort",
 };
 
-type SetDraft = { load: string; reps: string };
 
 function firstPendingExerciseIndex(execution: WorkoutExecution): number {
   return execution.exercises.findIndex((ex) =>
@@ -145,11 +157,8 @@ function applySetCompleteLocally(
             set.prescribedReps != null &&
             actualReps !== set.prescribedReps) ||
           (actualLoadLabel != null &&
-            set.prescribedLoadLabel != null &&
-            actualLoadLabel !== set.prescribedLoadLabel) ||
-          (actualLoadLabel != null &&
-            !set.prescribedLoadLabel &&
-            actualLoadLabel.trim() !== "") ||
+            displayLoad(actualLoadLabel) !==
+              displayLoad(set.prescribedLoadLabel)) ||
           (actualReps != null && set.prescribedReps == null);
         return {
           ...set,
@@ -195,13 +204,7 @@ function draftForSet(
   set: ExerciseExecution["sets"][number],
   drafts: Record<string, SetDraft>,
 ): SetDraft {
-  const existing = drafts[set.id];
-  if (existing) return existing;
-  return {
-    load: set.prescribedLoadLabel ?? "",
-    reps:
-      set.prescribedReps != null ? String(set.prescribedReps) : "",
-  };
+  return drafts[set.id] ?? initialDraft(set.prescribedLoadLabel, set.prescribedReps);
 }
 
 function isDraftModified(
@@ -212,15 +215,28 @@ function isDraftModified(
     draft.reps.trim() === ""
       ? null
       : Number.parseInt(draft.reps.trim(), 10);
-  const load = draft.load.trim();
   const repsChanged =
     reps != null &&
     Number.isFinite(reps) &&
     set.prescribedReps != null &&
     reps !== set.prescribedReps;
+  const initial = initialDraft(set.prescribedLoadLabel, set.prescribedReps);
   const loadChanged =
-    load !== "" && (set.prescribedLoadLabel ?? "") !== load;
+    draft.bodyweight !== initial.bodyweight ||
+    (!draft.bodyweight &&
+      draft.load.trim() !== "" &&
+      Number.parseFloat(draft.load) !== Number.parseFloat(initial.load));
   return repsChanged || loadChanged;
+}
+
+/** What the load cell of the current row shows. */
+function loadCellText(
+  set: ExerciseExecution["sets"][number],
+  draft: SetDraft,
+): string {
+  if (draft.bodyweight) return "Bodyweight";
+  if (draft.load.trim() !== "") return draft.load;
+  return displayLoad(set.prescribedLoadLabel);
 }
 
 export function ActiveWorkoutScreen({
@@ -252,6 +268,10 @@ export function ActiveWorkoutScreen({
     execution.sessionRpe,
   );
   const [drafts, setDrafts] = useState<Record<string, SetDraft>>({});
+  const [keypad, setKeypad] = useState<{
+    field: KeypadField;
+    replace: boolean;
+  } | null>(null);
   const [restRemaining, setRestRemaining] = useState<number | null>(null);
   const [restTotal, setRestTotal] = useState(DEFAULT_REST_SECONDS);
   // Lock-screen rest (LA1c): when the current in-app rest ends, for the Live
@@ -389,7 +409,7 @@ export function ActiveWorkoutScreen({
             const match = ex.sets.find((s) => s.id === setId);
             if (match) return draftForSet(match, prev);
           }
-          return { load: "", reps: "" };
+          return { load: "", reps: "", bodyweight: false };
         })();
       return { ...prev, [setId]: { ...base, ...patch } };
     });
@@ -409,10 +429,11 @@ export function ActiveWorkoutScreen({
 
     const draft = draftForSet(targetSet, drafts);
     const repsRaw = draft.reps.trim();
-    const loadRaw = draft.load.trim();
     const actualReps =
       repsRaw === "" ? null : Number.parseInt(repsRaw, 10);
-    const actualLoadLabel = loadRaw === "" ? null : loadRaw;
+    const loadPart = loadBody(draft, targetSet.prescribedLoadLabel);
+    const actualLoadLabel = loadLabelForDraft(draft, targetSet.prescribedLoadLabel);
+    setKeypad(null);
 
     setRestRemaining(null);
 
@@ -441,7 +462,7 @@ export function ActiveWorkoutScreen({
                 actualReps != null && Number.isFinite(actualReps)
                   ? actualReps
                   : null,
-              actualLoadLabel,
+              ...loadPart,
             },
           },
         });
@@ -564,9 +585,7 @@ export function ActiveWorkoutScreen({
 
   const logLabel = currentSet && currentDraft
     ? (() => {
-        const load = displayLoad(
-          currentDraft.load.trim() || currentSet.prescribedLoadLabel,
-        );
+        const load = loadCellText(currentSet, currentDraft);
         const reps =
           currentDraft.reps.trim() ||
           (currentSet.prescribedReps != null
@@ -575,7 +594,9 @@ export function ActiveWorkoutScreen({
         if (load === "BW") {
           return `Log set ${currentSet.order} · ${reps} reps`;
         }
-        return `Log set ${currentSet.order} · ${load} kg × ${reps}`;
+        return load === "Bodyweight"
+          ? `Log set ${currentSet.order} · Bodyweight × ${reps}`
+          : `Log set ${currentSet.order} · ${load} kg × ${reps}`;
       })()
     : "Finish workout";
 
@@ -584,25 +605,88 @@ export function ActiveWorkoutScreen({
       ? "Ready early? Logging ends the rest."
       : `Tap kg or reps to change · rest ${nextRestSeconds} s starts after`;
 
+  const nextSetLoadText = (
+    set: ExerciseExecution["sets"][number],
+  ): string =>
+    isBodyweightLabel(set.prescribedLoadLabel)
+      ? " · bodyweight"
+      : ` · ${displayLoad(set.prescribedLoadLabel)} kg`;
+
+  // During a rest the current set is already the next one to do (frame 11b).
   const nextAfterRest =
     currentSet && exercise
-      ? (() => {
-          const nextPending = exercise.sets.find(
-            (s) => s.status === "pending" && s.order > currentSet.order,
-          );
-          if (nextPending) {
-            return `Next: ${exercise.name}, set ${nextPending.order}`;
-          }
-          const nextEx = execution.exercises[currentExerciseIndex + 1];
-          if (nextEx) {
-            const first = nextEx.sets.find((s) => s.status === "pending");
-            return `Next: ${nextEx.name}${first ? `, set ${first.order}` : ""}`;
-          }
-          return "Next: finish workout";
-        })()
-      : "";
+      ? `Next: ${exercise.name}, set ${currentSet.order}${nextSetLoadText(currentSet)}`
+      : "Next: finish workout";
 
-  const logFooter = currentSet ? (
+  const keypadOpen =
+    keypad != null && currentSet != null && currentDraft != null;
+
+  function openKeypad(field: KeypadField) {
+    if (execution.status === "paused") return;
+    setKeypad({ field, replace: true });
+  }
+
+  function keypadKey(key: string) {
+    if (!keypad || !currentSet || !currentDraft) return;
+    const next = pressKey(
+      currentDraft[keypad.field],
+      key,
+      keypad.field,
+      keypad.replace,
+    );
+    updateDraft(currentSet.id, { [keypad.field]: next });
+    setKeypad({ ...keypad, replace: false });
+  }
+
+  function keypadBackspace() {
+    if (!keypad || !currentSet || !currentDraft) return;
+    updateDraft(currentSet.id, {
+      [keypad.field]: backspace(currentDraft[keypad.field], keypad.replace),
+    });
+    setKeypad({ ...keypad, replace: false });
+  }
+
+  function keypadStep(direction: 1 | -1) {
+    if (!keypad || !currentSet || !currentDraft) return;
+    const base =
+      keypad.field === "load" && currentDraft.load.trim() === ""
+        ? "0"
+        : currentDraft[keypad.field];
+    updateDraft(currentSet.id, {
+      [keypad.field]: stepValue(base, direction, keypad.field),
+    });
+    setKeypad({ ...keypad, replace: true });
+  }
+
+  function keypadBodyweight(bodyweight: boolean) {
+    if (!currentSet) return;
+    updateDraft(currentSet.id, { bodyweight });
+    // Switching to kg from the reps keypad goes to the load to type it.
+    if (!bodyweight && keypad?.field === "reps") {
+      setKeypad({ field: "load", replace: true });
+    }
+  }
+
+  function keypadPrimary() {
+    if (!keypad || !currentSet) return;
+    if (keypad.field === "load") setKeypad({ field: "reps", replace: true });
+    else completeSet(currentSet.id);
+  }
+
+  const logFooter = keypadOpen && currentSet && keypad ? (
+    <SetKeypad
+      field={keypad.field}
+      setOrder={currentSet.order}
+      bodyweight={currentDraft!.bodyweight}
+      onBodyweightChange={keypadBodyweight}
+      onKey={keypadKey}
+      onBackspace={keypadBackspace}
+      onStep={keypadStep}
+      onPrimary={keypadPrimary}
+      onClose={() => setKeypad(null)}
+      disabled={execution.status === "paused"}
+    />
+  ) : currentSet ? (
     <View style={styles.logbar}>
       <Pressable
         accessibilityRole="button"
@@ -695,9 +779,6 @@ export function ActiveWorkoutScreen({
                   {restRemaining}
                   <Text style={styles.restVs}> s left</Text>
                 </Text>
-                {nextAfterRest ? (
-                  <Text style={styles.restNx}>{nextAfterRest}</Text>
-                ) : null}
               </View>
               <View style={styles.restCtl}>
               <Pressable
@@ -711,7 +792,7 @@ export function ActiveWorkoutScreen({
                 }
                 style={styles.restCtlBtn}
               >
-                <Text style={styles.restCtlText}>−15</Text>
+                <Text style={styles.restCtlText}>−15 s</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -725,7 +806,7 @@ export function ActiveWorkoutScreen({
                 }}
                 style={styles.restCtlBtn}
               >
-                <Text style={styles.restCtlText}>+15</Text>
+                <Text style={styles.restCtlText}>+15 s</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -737,9 +818,14 @@ export function ActiveWorkoutScreen({
               </Pressable>
               </View>
             </View>
-            <View
-              style={[styles.restBar, { width: `${Math.round(restProgress * 100)}%` }]}
-            />
+            <View style={styles.restTrack}>
+              <View
+                style={[styles.restBar, { width: `${Math.round(restProgress * 100)}%` }]}
+              />
+            </View>
+            {nextAfterRest ? (
+              <Text style={styles.restNx}>{nextAfterRest}</Text>
+            ) : null}
           </View>
         ) : null}
 
@@ -820,7 +906,7 @@ export function ActiveWorkoutScreen({
                   <View style={styles.stabTh}>
                     <Text style={styles.thCell}>Set</Text>
                     <Text style={[styles.thCell, styles.thWide]}>Previous</Text>
-                    <Text style={[styles.thCell, styles.thCenter]}>kg</Text>
+                    <Text style={[styles.thCell, styles.thCenter]}>Load</Text>
                     <Text style={[styles.thCell, styles.thCenter]}>Reps</Text>
                     <Text style={styles.thCell} />
                   </View>
@@ -853,41 +939,72 @@ export function ActiveWorkoutScreen({
                         </Text>
                         {isNow ? (
                           <View style={styles.valEditWrap}>
-                            <TextInput
-                              style={styles.valInput}
-                              value={
-                                draft.load ||
-                                displayLoad(set.prescribedLoadLabel)
-                              }
-                              onChangeText={(t) =>
-                                updateDraft(set.id, { load: t })
-                              }
-                              keyboardType="decimal-pad"
-                              selectTextOnFocus
-                            />
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Set ${set.order} load: ${loadCellText(set, draft)}${draft.bodyweight ? "" : " kg"}`}
+                              onPress={() => openKeypad("load")}
+                              style={[
+                                styles.valInput,
+                                draft.bodyweight ? styles.valBw : null,
+                                keypad?.field === "load" ? styles.valActive : null,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.valInputText,
+                                  draft.bodyweight ? styles.valBwText : null,
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {loadCellText(set, draft)}
+                                {draft.bodyweight ? "" : (
+                                  <Text style={styles.valUnit}> kg</Text>
+                                )}
+                              </Text>
+                            </Pressable>
                             {rowModified ? (
                               <Text style={styles.modBadge}>EDITED</Text>
                             ) : null}
                           </View>
                         ) : (
-                          <Text style={styles.valStatic}>
-                            {displayLoad(
+                          <Text
+                            style={[
+                              styles.valStatic,
+                              isBodyweightLabel(
+                                isOk
+                                  ? set.actualLoadLabel ?? set.prescribedLoadLabel
+                                  : set.prescribedLoadLabel,
+                              )
+                                ? styles.valStaticBw
+                                : null,
+                            ]}
+                          >
+                            {isBodyweightLabel(
                               isOk
                                 ? set.actualLoadLabel ?? set.prescribedLoadLabel
                                 : set.prescribedLoadLabel,
-                            )}
+                            )
+                              ? "Bodyweight"
+                              : displayLoad(
+                                  isOk
+                                    ? set.actualLoadLabel ?? set.prescribedLoadLabel
+                                    : set.prescribedLoadLabel,
+                                )}
                           </Text>
                         )}
                         {isNow ? (
-                          <TextInput
-                            style={[styles.valInput, styles.valReps]}
-                            value={draft.reps}
-                            onChangeText={(t) =>
-                              updateDraft(set.id, { reps: t })
-                            }
-                            keyboardType="number-pad"
-                            selectTextOnFocus
-                          />
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Set ${set.order} reps: ${draft.reps || "none"}`}
+                            onPress={() => openKeypad("reps")}
+                            style={[
+                              styles.valInput,
+                              styles.valReps,
+                              keypad?.field === "reps" ? styles.valActive : null,
+                            ]}
+                          >
+                            <Text style={styles.valInputText}>{draft.reps}</Text>
+                          </Pressable>
                         ) : (
                           <Text style={styles.valStatic}>
                             {isOk
@@ -959,7 +1076,7 @@ export function ActiveWorkoutScreen({
           );
         })}
 
-        <View style={{ height: LOGBAR_HEIGHT + spacing.xl }} />
+        <View style={{ height: keypadOpen ? KEYPAD_HEIGHT : LOGBAR_HEIGHT + spacing.xl }} />
       </View>
 
       <BottomSheet
@@ -1098,15 +1215,16 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   restband: {
-    backgroundColor: colors.deepNavy,
+    backgroundColor: "#ECE9FF",
+    borderColor: "#D9D3FA",
     borderRadius: 20,
+    borderWidth: 1,
     marginBottom: spacing.md,
     marginTop: spacing.xs,
     overflow: "hidden",
-    paddingBottom: 4,
+    paddingBottom: spacing.md,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
-    position: "relative",
   },
   restbandRow: {
     alignItems: "flex-start",
@@ -1120,27 +1238,27 @@ const styles = StyleSheet.create({
     paddingRight: spacing.sm,
   },
   restK: {
-    color: "#B8A8FF",
+    color: colors.indigo,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
   },
   restV: {
-    color: colors.white,
+    color: colors.deepNavy,
     fontSize: 34,
     fontWeight: "700",
     letterSpacing: -0.5,
     lineHeight: 38,
   },
   restVs: {
-    color: "rgba(255,255,255,0.7)",
+    color: colors.deepNavy,
     fontSize: 15,
     fontWeight: "600",
   },
   restNx: {
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 13,
-    marginTop: 2,
+    color: colors.deepNavy,
+    fontSize: 14,
+    marginTop: spacing.sm,
   },
   restCtl: {
     flexDirection: "row",
@@ -1149,26 +1267,31 @@ const styles = StyleSheet.create({
   },
   restCtlBtn: {
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.12)",
-    borderRadius: 14,
+    backgroundColor: colors.white,
+    borderColor: "#D9D3FA",
+    borderRadius: 22,
+    borderWidth: 1,
     height: 48,
     justifyContent: "center",
     minWidth: 52,
     paddingHorizontal: 10,
   },
   restCtlText: {
-    color: colors.white,
+    color: colors.indigo,
     fontSize: 14,
     fontWeight: "700",
   },
+  restTrack: {
+    backgroundColor: colors.white,
+    borderRadius: 3,
+    height: 6,
+    marginTop: spacing.sm,
+    overflow: "hidden",
+  },
   restBar: {
-    backgroundColor: "#B8A8FF",
-    borderBottomLeftRadius: 2,
-    borderBottomRightRadius: 2,
-    bottom: 0,
-    height: 4,
-    left: 0,
-    position: "absolute",
+    backgroundColor: colors.indigo,
+    borderRadius: 3,
+    height: 6,
   },
   acc: {
     backgroundColor: colors.white,
@@ -1331,9 +1454,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     height: 44,
-    textAlign: "center",
+    justifyContent: "center",
     width: 76,
   },
+  valInputText: {
+    color: colors.deepNavy,
+    fontSize: 18,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  valUnit: { fontSize: 12, fontWeight: "600" },
+  valActive: { borderColor: colors.indigo, borderWidth: 2 },
+  valBw: { backgroundColor: "#ECE9FF", borderColor: "#ECE9FF" },
+  valBwText: { color: colors.indigo, fontSize: 14 },
+  valStaticBw: { fontSize: 14 },
   valReps: {
     fontSize: 17,
     width: 64,
