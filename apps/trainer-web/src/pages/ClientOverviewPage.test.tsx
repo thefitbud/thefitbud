@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ResponsivenessResponse, WeekReadModel } from "@fitbud/contracts";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 
@@ -11,6 +11,11 @@ const REL_ID = "66666666-6666-4666-8666-666666666666";
 const api = vi.hoisted(() => ({
   listTrainerNotes: vi.fn(),
   deleteTrainerNote: vi.fn(),
+  listMeasurements: vi.fn(),
+  getProgressMetrics: vi.fn(),
+  getWorkoutAdherence: vi.fn(),
+  getMealCompliance: vi.fn(),
+  listCheckins: vi.fn(),
 }));
 const stage1 = vi.hoisted(() => ({
   getWorkspaceWeek: vi.fn(),
@@ -28,7 +33,16 @@ import { ClientOverviewPage } from "./ClientOverviewPage";
 type Lifecycle = "ended" | "active" | "coaching_ready";
 type Renewal = "current" | "upcoming" | "due" | "expired" | null;
 
-function renderPage(onboardingStatus: Lifecycle, renewalState: Renewal) {
+type WorkspaceOverrides = {
+  header?: Record<string, unknown>;
+  plan?: Record<string, unknown>;
+};
+
+function renderPage(
+  onboardingStatus: Lifecycle,
+  renewalState: Renewal,
+  overrides: WorkspaceOverrides = {},
+) {
   const workspace = {
     header: {
       relationshipId: REL_ID,
@@ -40,6 +54,7 @@ function renderPage(onboardingStatus: Lifecycle, renewalState: Renewal) {
       hasCustomMealTimes: false,
       trainerWhatsappE164: null,
       clientWhatsappE164: null,
+      ...overrides.header,
     },
     overview: {
       openException: null,
@@ -48,7 +63,7 @@ function renderPage(onboardingStatus: Lifecycle, renewalState: Renewal) {
       recentActivity: [],
       progress: { measurements: [] },
     },
-    plan: { plan: null, version: null },
+    plan: { plan: null, version: null, ...overrides.plan },
     configuration: { configuration: null },
   };
   const context = {
@@ -87,8 +102,27 @@ const RESPONDS: ResponsivenessResponse = {
   quietHoursEnd: "07:00",
 };
 
+type WeightPoint = { localDate: string; value: number; checkinId: string | null };
+
+/** `GET …/metrics?keys=weight&range=custom`: oldest first, one point per local date. */
+function weightSeries(points: WeightPoint[]) {
+  return {
+    relationshipId: REL_ID,
+    range: "custom",
+    from: "2026-07-06",
+    to: "2026-10-03",
+    timezone: "Asia/Kolkata",
+    series: [{ key: "weight", unit: "kg", points }],
+  };
+}
+
 beforeEach(() => {
   api.listTrainerNotes.mockResolvedValue({ items: [] });
+  api.listMeasurements.mockResolvedValue({ items: [], nextCursor: null });
+  api.getProgressMetrics.mockResolvedValue(weightSeries([]));
+  api.getWorkoutAdherence.mockResolvedValue({ items: [], totals: {} });
+  api.getMealCompliance.mockResolvedValue({ items: [], totals: {} });
+  api.listCheckins.mockResolvedValue({ items: [], nextCursor: null });
   stage1.getWorkspaceWeek.mockRejectedValue(new Error("no week in unit test"));
   stage1.getResponsiveness.mockResolvedValue(RESPONDS);
 });
@@ -100,16 +134,13 @@ afterEach(() => {
 
 describe("ClientOverviewPage renewal link (CE3)", () => {
   it.each(["due", "expired", "upcoming"] as const)(
-    "ended client, renewal %s: the link reads View coaching setup and only navigates",
+    "ended client, renewal %s: frame 179's body has no Renewal card or settings link",
     async (renewal) => {
       renderPage("ended", renewal);
-      const link = await screen.findByRole("link", { name: "View coaching setup" });
-      expect(link.getAttribute("href")).toBe(`/clients/${REL_ID}/configure`);
+      expect(await screen.findByRole("heading", { name: "Your notes" })).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: "Renewal" })).toBeNull();
       expect(screen.queryByRole("link", { name: "Open settings" })).toBeNull();
-      fireEvent.click(link);
-      expect(await screen.findByText("configure route")).toBeTruthy();
-      expect(api.deleteTrainerNote).not.toHaveBeenCalled();
-      expect(stage1.patchTrainerNote).not.toHaveBeenCalled();
+      expect(screen.queryByRole("link", { name: "View coaching setup" })).toBeNull();
     },
   );
 
@@ -121,19 +152,15 @@ describe("ClientOverviewPage renewal link (CE3)", () => {
     renderPage(status, renewal);
     const link = await screen.findByRole("link", { name: "Open settings" });
     expect(link.getAttribute("href")).toBe(`/clients/${REL_ID}/configure`);
-    expect(screen.queryByRole("link", { name: "View coaching setup" })).toBeNull();
+    fireEvent.click(link);
+    expect(await screen.findByText("configure route")).toBeTruthy();
   });
 
-  it.each([
-    ["ended", "current"],
-    ["ended", null],
-    ["active", "current"],
-  ] as const)("%s client, renewal %s: no Renewal card", async (status, renewal) => {
-    renderPage(status, renewal);
+  it("active client, renewal current: no Renewal card", async () => {
+    renderPage("active", "current");
     expect(await screen.findByRole("heading", { name: "Progress" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Renewal" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open settings" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "View coaching setup" })).toBeNull();
   });
 });
 
@@ -148,14 +175,6 @@ describe("ClientOverviewPage Reminders card and drawer (03c, 181)", () => {
       ),
     ).toBeTruthy();
     expect(within(card).queryByText(/off while coaching is ended/)).toBeNull();
-  });
-
-  it("ended client: the compact card says reminders are off", async () => {
-    renderPage("ended", "current");
-    const card = (await screen.findByRole("heading", { name: "Reminders" })).closest("section")!;
-    expect(
-      await within(card).findByText("Reminders are off while coaching is ended."),
-    ).toBeTruthy();
   });
 
   it("Details opens the drawer over Overview; Close returns focus to Details", async () => {
@@ -203,12 +222,12 @@ describe("ClientOverviewPage Reminders card and drawer (03c, 181)", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "Details" }));
   });
 
-  it("ended client: the drawer offers only a view of coaching setup", async () => {
+  it("ended client: no Reminders card (frame 179)", async () => {
     renderPage("ended", "current");
-    fireEvent.click(await screen.findByRole("button", { name: "Details" }));
-    const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByRole("link", { name: "View coaching setup" })).toBeTruthy();
-    expect(within(dialog).queryByRole("link", { name: "Open coaching setup" })).toBeNull();
+    expect(await screen.findByRole("heading", { name: "Your notes" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Reminders" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Details" })).toBeNull();
+    expect(stage1.getResponsiveness).not.toHaveBeenCalled();
   });
 });
 
@@ -258,5 +277,339 @@ describe("ClientOverviewPage week strip uses WeekCircle (D-W7-10, D-W6-10)", () 
     expect(items[1]!.querySelector(".week-circle__half")).not.toBeNull();
     expect(items[4]!.className).toContain("is-today");
     expect(items[4]!.querySelector(".week-circle__half")).toBeNull();
+  });
+});
+
+describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
+  const ENDED_HEADER = {
+    // Mon 6 Jul 10:00 IST and Sat 3 Oct 5:30 pm IST.
+    startedAt: "2026-07-06T04:30:00.000Z",
+    endedAt: "2026-10-03T12:00:00.000Z",
+  };
+  const ENDED_PLAN = {
+    plan: { id: "77777777-7777-4777-8777-777777777777", title: "Fat loss" },
+    version: { versionNumber: 4 },
+  };
+  const TRAINEE = "88888888-8888-4888-8888-888888888888";
+
+  function weight(id: string, value: number, observedAt: string, checkinId: string | null = null) {
+    return {
+      id,
+      coachingRelationshipId: REL_ID,
+      traineeUserId: TRAINEE,
+      type: "body_weight_kg",
+      value,
+      unit: "kg",
+      observedAt,
+      source: "manual",
+      checkinId,
+      mediaAssetId: null,
+      recordVersion: 1,
+      createdAt: observedAt,
+      updatedAt: observedAt,
+    };
+  }
+  function workout(localDate: string, status: string, n: number) {
+    return {
+      assignmentId: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+      localDate,
+      workoutDayName: "Upper A",
+      status,
+      planVersionId: TRAINEE,
+      startedAt: null,
+      completedAt: null,
+      sessionRpe: null,
+    };
+  }
+  function meal(localDate: string, status: string, n: number) {
+    return {
+      assignmentId: `10000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+      localDate,
+      mealName: "Lunch",
+      status,
+      outcome: null,
+      planVersionId: TRAINEE,
+      loggedAt: null,
+      photoRequired: false,
+      hasPhotoIntent: false,
+      mediaAssetId: null,
+    };
+  }
+  function checkin(id: string, localDate: string, status: string, bodyWeightKg?: number) {
+    return {
+      id,
+      coachingRelationshipId: REL_ID,
+      checkinScheduleId: null,
+      localDate,
+      windowStartsAt: `${localDate}T00:00:00.000Z`,
+      windowEndsAt: `${localDate}T23:59:00.000Z`,
+      recordStatus: "active",
+      recordVersion: 1,
+      definitionVersion: 1,
+      checkinFormVersionId: TRAINEE,
+      answers: bodyWeightKg != null ? { bodyWeightKg } : null,
+      submittedAt: null,
+      status,
+      review: null,
+      createdAt: `${localDate}T00:00:00.000Z`,
+      updatedAt: `${localDate}T00:00:00.000Z`,
+    };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-11T06:00:00.000Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows Summary, Last week and Your notes from api-client data, and no live week", async () => {
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([
+        { localDate: "2026-07-06", value: 68.2, checkinId: null },
+        { localDate: "2026-08-15", value: 66.4, checkinId: null },
+        // Linked to the 2 Oct check-in; a same-day point would lose to it.
+        { localDate: "2026-10-01", value: 65.4, checkinId: null },
+        { localDate: "2026-10-02", value: 65.1, checkinId: "c0000000-0000-4000-8000-000000000002" },
+      ]),
+    );
+    api.getWorkoutAdherence.mockResolvedValue({
+      items: [
+        workout("2026-10-03", "completed", 1),
+        workout("2026-10-01", "modified", 2),
+        workout("2026-09-29", "missed", 3),
+        workout("2026-09-27", "completed", 4),
+        workout("2026-09-20", "completed", 5),
+        workout("2026-07-07", "skipped", 6),
+      ],
+      totals: {},
+    });
+    api.getMealCompliance.mockResolvedValue({
+      items: [
+        meal("2026-10-03", "confirmed", 1),
+        meal("2026-10-02", "logged_later", 2),
+        meal("2026-10-01", "overdue", 3),
+        meal("2026-09-28", "skipped", 4),
+      ],
+      totals: {},
+    });
+    api.listCheckins.mockResolvedValue({
+      items: [
+        checkin("c0000000-0000-4000-8000-000000000003", "2026-10-09", "scheduled"),
+        checkin("c0000000-0000-4000-8000-000000000002", "2026-10-02", "reviewed"),
+        checkin("c0000000-0000-4000-8000-000000000001", "2026-09-25", "overdue"),
+        checkin("c0000000-0000-4000-8000-000000000000", "2026-07-10", "submitted", 68.0),
+      ],
+      nextCursor: null,
+    });
+    api.listTrainerNotes.mockResolvedValue({
+      items: [
+        {
+          id: "d0000000-0000-4000-8000-000000000002",
+          coachingRelationshipId: REL_ID,
+          trainerUserId: TRAINEE,
+          checkinId: null,
+          body: "Hit her goal before Diwali.",
+          visibility: "private",
+          sharedAt: null,
+          seenAt: null,
+          createdAt: "2026-10-03T13:10:00.000Z",
+          updatedAt: "2026-10-03T13:10:00.000Z",
+        },
+        {
+          id: "d0000000-0000-4000-8000-000000000001",
+          coachingRelationshipId: REL_ID,
+          trainerUserId: TRAINEE,
+          checkinId: null,
+          body: "Older note",
+          visibility: "private",
+          sharedAt: null,
+          seenAt: null,
+          createdAt: "2026-09-01T13:10:00.000Z",
+          updatedAt: "2026-09-01T13:10:00.000Z",
+        },
+      ],
+    });
+
+    renderPage("ended", "due", { header: ENDED_HEADER, plan: ENDED_PLAN });
+
+    const summary = (
+      await screen.findByRole("heading", { name: "Summary · Mon 6 Jul — Sat 3 Oct" })
+    ).closest("section")!;
+    const summaryList = await waitFor(() => {
+      const el = summary.querySelector<HTMLElement>('dl[aria-label="Summary"]');
+      expect(el).not.toBeNull();
+      return el!;
+    });
+    const rows = (list: HTMLElement) =>
+      Array.from(list.querySelectorAll("div")).map((row) => [
+        row.querySelector("dt")!.textContent,
+        row.querySelector("dd")!.textContent,
+      ]);
+    expect(rows(summaryList)).toEqual([
+      ["Weight", "68.2 kg → 65.1 kg · −3.1 kg"],
+      ["Workouts", "4 of 6"],
+      ["Check-ins", "2 of 3"],
+      ["Last plan", "Fat loss · v4"],
+    ]);
+
+    const week = screen
+      .getByRole("heading", { name: "Last week · Sun 27 Sep — Sat 3 Oct" })
+      .closest("section")!;
+    expect(within(week).getByText("Read-only")).toBeTruthy();
+    expect(rows(week.querySelector<HTMLElement>('dl[aria-label="Last week"]')!)).toEqual([
+      ["Workouts", "3 of 4"],
+      ["Meals logged", "3 of 4"],
+      ["Last check-in", "Fri 2 Oct · 65.1 kg"],
+    ]);
+
+    const notes = screen.getByRole("heading", { name: "Your notes" }).closest("section")!;
+    expect(await within(notes).findByText("Hit her goal before Diwali.")).toBeTruthy();
+    expect(within(notes).getByText("Sat 3 Oct, 6:40 pm")).toBeTruthy();
+    expect(within(notes).queryByText("Older note")).toBeNull();
+
+    // The coached range drives every query; the live week is never fetched.
+    expect(api.getProgressMetrics).toHaveBeenCalledWith(REL_ID, {
+      keys: ["weight"],
+      range: "custom",
+      from: "2026-07-06",
+      to: "2026-10-03",
+    });
+    expect(api.listMeasurements).not.toHaveBeenCalled();
+    expect(api.getWorkoutAdherence).toHaveBeenCalledWith(REL_ID, {
+      fromDate: "2026-07-06",
+      toDate: "2026-10-03",
+    });
+    expect(api.getMealCompliance).toHaveBeenCalledWith(REL_ID, {
+      fromDate: "2026-09-27",
+      toDate: "2026-10-03",
+    });
+    expect(api.listCheckins).toHaveBeenCalledWith(
+      REL_ID,
+      expect.objectContaining({ fromDate: "2026-07-06", toDate: "2026-10-03" }),
+    );
+    expect(stage1.getWorkspaceWeek).not.toHaveBeenCalled();
+
+    // No live week, nutrition, activity, reminders, plan or write actions.
+    expect(screen.queryByRole("list", { name: "Week consistency" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "This week" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Recent activity" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Reminders" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Coach notes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add note" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/\d+\s*%|\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("Weight start is the first point of the coached range even with over 100 newer measurements", async () => {
+    // The measurements list holds only the newest 100 rows of every type, so
+    // the true start (68.2 kg on Mon 6 Jul) is not in it.
+    api.listMeasurements.mockResolvedValue({
+      items: Array.from({ length: 100 }, (_, i) =>
+        weight(
+          `a0000000-0000-4000-8000-${String(i + 100).padStart(12, "0")}`,
+          66 - i * 0.01,
+          new Date(Date.UTC(2026, 9, 3, 3) - i * 3_600_000).toISOString(),
+        ),
+      ),
+      nextCursor: null,
+    });
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([
+        { localDate: "2026-07-06", value: 68.2, checkinId: null },
+        { localDate: "2026-09-29", value: 65.5, checkinId: null },
+        { localDate: "2026-10-03", value: 65.1, checkinId: null },
+      ]),
+    );
+    renderPage("ended", null, { header: ENDED_HEADER });
+    expect(await screen.findByText("68.2 kg → 65.1 kg · \u22123.1 kg")).toBeTruthy();
+  });
+
+  it("Last check-in takes the weight point on its date when none is linked", async () => {
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([
+        { localDate: "2026-09-18", value: 66.0, checkinId: null },
+        { localDate: "2026-10-01", value: 64.7, checkinId: null },
+      ]),
+    );
+    api.listCheckins.mockResolvedValue({
+      items: [
+        checkin("c0000000-0000-4000-8000-000000000009", "2026-10-01", "reviewed"),
+        checkin("c0000000-0000-4000-8000-000000000008", "2026-09-20", "reviewed"),
+      ],
+      nextCursor: null,
+    });
+    renderPage("ended", null, { header: ENDED_HEADER });
+    expect(await screen.findByText("Thu 1 Oct · 64.7 kg")).toBeTruthy();
+  });
+
+  it("Last check-in is left out when the latest one is before the last week", async () => {
+    api.getProgressMetrics.mockResolvedValue(
+      weightSeries([{ localDate: "2026-09-20", value: 66.0, checkinId: null }]),
+    );
+    api.getMealCompliance.mockResolvedValue({
+      items: [meal("2026-10-02", "confirmed", 1)],
+      totals: {},
+    });
+    api.listCheckins.mockResolvedValue({
+      items: [checkin("c0000000-0000-4000-8000-000000000008", "2026-09-20", "reviewed")],
+      nextCursor: null,
+    });
+    renderPage("ended", null, { header: ENDED_HEADER });
+    const week = (
+      await screen.findByRole("heading", { name: "Last week · Sun 27 Sep — Sat 3 Oct" })
+    ).closest("section")!;
+    expect(await within(week).findByText("Meals logged")).toBeTruthy();
+    expect(within(week).queryByText("Last check-in")).toBeNull();
+    expect(screen.queryByText(/Sun 20 Sep/)).toBeNull();
+  });
+
+  it("leaves out rows with no source and never invents counts", async () => {
+    renderPage("ended", null, { header: ENDED_HEADER });
+    const summary = (
+      await screen.findByRole("heading", { name: "Summary · Mon 6 Jul — Sat 3 Oct" })
+    ).closest("section")!;
+    expect(
+      await within(summary).findByText("Nothing was logged while coaching ran."),
+    ).toBeTruthy();
+    expect(within(summary).queryByText("Weight")).toBeNull();
+    expect(within(summary).queryByText("Last plan")).toBeNull();
+    expect(screen.getByText("Nothing was logged in the last week.")).toBeTruthy();
+    expect(screen.getByText("No notes yet")).toBeTruthy();
+  });
+
+  it("a failed load shows the API's own message with Retry, not empty rows", async () => {
+    const { ApiClientError } = await import("@fitbud/api-client");
+    api.getWorkoutAdherence.mockRejectedValueOnce(
+      new ApiClientError({
+        code: "INTERNAL",
+        message: "Something went wrong.",
+        requestId: "unknown",
+        status: 500,
+      }),
+    );
+    renderPage("ended", null, { header: ENDED_HEADER, plan: ENDED_PLAN });
+    expect(await screen.findByText(/Something went wrong\./)).toBeTruthy();
+    expect(screen.queryByText("Nothing was logged in the last week.")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(document.querySelector('dl[aria-label="Summary"]')).not.toBeNull(),
+    );
+    expect(screen.getByText("Last plan")).toBeTruthy();
+    expect(api.getWorkoutAdherence).toHaveBeenCalledTimes(2);
+  });
+
+  it("active client keeps the live Overview (This week, activity, Reminders)", async () => {
+    renderPage("active", "current", { header: ENDED_HEADER });
+    expect(await screen.findByRole("heading", { name: "This week" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Recent activity" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Reminders" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add note" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /^Summary/ })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Your notes" })).toBeNull();
+    expect(stage1.getWorkspaceWeek).toHaveBeenCalled();
+    expect(api.getWorkoutAdherence).not.toHaveBeenCalled();
   });
 });

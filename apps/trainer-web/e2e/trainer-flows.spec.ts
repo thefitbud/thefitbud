@@ -164,9 +164,10 @@ test("share a client-visible note", async ({ page }) => {
 
 test("end coaching then reactivate", async ({ page }) => {
   await signIn(page);
-  const farhan = await findClient(page, "farhan");
+  // Arjun: no other e2e spec uses him. Farhan must stay active for TW-31 (Z8-20).
+  const arjun = await findClient(page, "arjun");
   const token = await apiToken(page);
-  const endRes = await fetch(`${API}/relationships/${farhan.relationshipId}/end`, {
+  const endRes = await fetch(`${API}/relationships/${arjun.relationshipId}/end`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
