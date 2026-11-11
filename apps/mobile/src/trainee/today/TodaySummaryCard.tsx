@@ -1,7 +1,7 @@
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { Dumbbell, Footprints, Utensils } from "lucide-react-native";
-import { brand, rings, surface } from "@fitbud/tokens";
+import { Check, Dumbbell, Footprints, Utensils } from "lucide-react-native";
+import { brand, rings, semantic, surface } from "@fitbud/tokens";
 import { formatNumber } from "@fitbud/core";
 import type { RingDatum } from "@fitbud/ui-mobile";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
@@ -30,6 +30,10 @@ export type TodaySummaryProps = {
   mealsDone: number;
   mealsTotal: number;
   steps: StepsChipState;
+  /** Opens the steps setup screen from the Steps chip. */
+  onOpenSteps?: () => void;
+  /** The day failed to load: the Workout chip must not claim a rest day. */
+  workoutUnknown?: boolean;
 };
 
 const NUM = { fontVariant: ["tabular-nums" as const] };
@@ -43,6 +47,13 @@ function find(data: readonly RingDatum[], key: RingDatum["key"]) {
 function fillFraction(logged: number, assigned: number): number {
   if (assigned <= 0 || logged <= 0) return 0;
   return Math.min(logged / assigned, 1);
+}
+
+/** Fits the number inside the ring: 32 for up to 3 characters, smaller after. */
+function ringValueSize(text: string): number {
+  if (text.length <= 3) return 32;
+  if (text.length <= 5) return 26;
+  return 20;
 }
 
 function KcalRing({ datum }: { datum: RingDatum | undefined }) {
@@ -87,7 +98,15 @@ function KcalRing({ datum }: { datum: RingDatum | undefined }) {
         ) : null}
       </Svg>
       <View style={[styles.ringCenter, { pointerEvents: "none" }]}>
-        <Text style={[styles.ringValue, NUM]}>
+        <Text
+          style={[
+            styles.ringValue,
+            NUM,
+            { fontSize: ringValueSize(`${prefix}${formatNumber(logged)}`) },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
           {prefix}
           {formatNumber(logged)}
         </Text>
@@ -140,30 +159,67 @@ function MacroBar({
   );
 }
 
+type ChipVariant = "default" | "done" | "rest";
+
 function Chip({
   icon,
   label,
   value,
   accessibilityLabel,
+  variant = "default",
+  onPress,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
   accessibilityLabel: string;
+  variant?: ChipVariant;
+  onPress?: () => void;
 }) {
-  return (
-    <View
-      style={styles.chip}
-      accessible
-      accessibilityLabel={accessibilityLabel}
-    >
+  const variantStyle =
+    variant === "done"
+      ? styles.chipDone
+      : variant === "rest"
+        ? styles.chipRest
+        : null;
+  const body = (
+    <>
       <View style={styles.chipHead}>
-        {icon}
+        {variant === "done" ? (
+          <Check size={16} color={semantic.positive.text} strokeWidth={2.25} />
+        ) : (
+          icon
+        )}
         <Text style={styles.chipLabel}>{label}</Text>
       </View>
       <Text style={[styles.chipValue, NUM]} numberOfLines={1}>
         {value}
       </Text>
+    </>
+  );
+  if (onPress) {
+    return (
+      <Pressable
+        style={({ pressed }) => [
+          styles.chip,
+          variantStyle,
+          pressed && styles.chipPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        onPress={onPress}
+      >
+        {body}
+      </Pressable>
+    );
+  }
+  return (
+    <View
+      style={[styles.chip, variantStyle]}
+      accessible
+      accessibilityLabel={accessibilityLabel}
+    >
+      {body}
     </View>
   );
 }
@@ -191,6 +247,12 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
   const kcal = find(props.rings, "kcal");
   const stepsText = stepsChipText(props.steps);
   const icon = { size: 16, color: colors.indigo, strokeWidth: 2 };
+  const workoutUnknown = props.workoutUnknown === true;
+  const workoutRest = props.workoutTotal === 0 && !workoutUnknown;
+  const workoutDone = !workoutRest && !workoutUnknown && props.workoutDone >= props.workoutTotal;
+  const mealsDone = props.mealsTotal > 0 && props.mealsDone >= props.mealsTotal;
+  const stepsDone =
+    props.steps.status === "synced" && props.steps.steps >= props.steps.target;
   return (
     <View style={styles.card} testID="today-summary">
       <View style={styles.top}>
@@ -215,22 +277,45 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
       </View>
       <View style={styles.chips}>
         <Chip
-          icon={<Dumbbell {...icon} />}
+          icon={
+            <Dumbbell
+              {...icon}
+              color={workoutRest ? semantic.neutral.text : colors.indigo}
+            />
+          }
           label="Workout"
-          value={`${props.workoutDone} of ${props.workoutTotal}`}
-          accessibilityLabel={`Workout ${props.workoutDone} of ${props.workoutTotal}`}
+          value={
+            workoutUnknown
+              ? "—"
+              : workoutRest
+              ? "Rest day"
+              : `${props.workoutDone} of ${props.workoutTotal}`
+          }
+          accessibilityLabel={
+            workoutUnknown
+              ? "Workout unavailable"
+              : workoutRest
+              ? "Workout: rest day"
+              : `Workout ${props.workoutDone} of ${props.workoutTotal}${workoutDone ? ", done" : ""}`
+          }
+          variant={workoutRest ? "rest" : workoutDone ? "done" : "default"}
         />
         <Chip
           icon={<Utensils {...icon} />}
           label="Meals"
           value={`${props.mealsDone} of ${props.mealsTotal}`}
-          accessibilityLabel={`Meals ${props.mealsDone} of ${props.mealsTotal}`}
+          accessibilityLabel={`Meals ${props.mealsDone} of ${props.mealsTotal}${mealsDone ? ", done" : ""}`}
+          variant={mealsDone ? "done" : "default"}
         />
         <Chip
           icon={<Footprints {...icon} />}
           label="Steps"
           value={stepsText.value}
-          accessibilityLabel={stepsText.a11y}
+          accessibilityLabel={
+            stepsDone ? `${stepsText.a11y}, done` : stepsText.a11y
+          }
+          variant={stepsDone ? "done" : "default"}
+          onPress={props.onOpenSteps}
         />
       </View>
     </View>
@@ -258,7 +343,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  ringValue: { color: colors.deepNavy, fontSize: 32, fontWeight: "600" },
+  ringValue: { color: colors.deepNavy, fontSize: 32, fontWeight: "600", maxWidth: RING_SIZE - 2 * RING_STROKE - 8, textAlign: "center" },
   ringSub: { color: colors.darkGrey, fontSize: 11, textAlign: "center" },
   macros: { flex: 1, gap: spacing.sm },
   macro: { gap: 4, minHeight: 32 },
@@ -283,6 +368,15 @@ const styles = StyleSheet.create({
     height: 60,
     justifyContent: "center",
     paddingHorizontal: spacing.sm,
+  },
+  chipPressed: { opacity: 0.6 },
+  chipDone: {
+    backgroundColor: semantic.positive.fill,
+    borderColor: `${semantic.positive.text}40`,
+  },
+  chipRest: {
+    backgroundColor: semantic.neutral.fill,
+    borderColor: surface.border,
   },
   chipHead: { alignItems: "center", flexDirection: "row", gap: 6 },
   chipLabel: { color: colors.darkGrey, fontSize: 12 },

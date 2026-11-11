@@ -139,6 +139,7 @@ const workoutAssignment = workoutAssignmentSchema.parse({
   updatedAt: `${TODAY}T00:00:00.000Z`,
 });
 
+let failDay = false;
 let workouts: unknown[] = [];
 let meals: MealAssignment[] = [];
 let stepsToday: unknown = { localDate: TODAY, steps: null, target: 8000 };
@@ -148,9 +149,15 @@ const api = new Proxy(
   {
     get(_t, key: string) {
       if (key === "listWorkoutAssignments")
-        return async () => ({ items: workouts, nextCursor: null });
+        return async () => {
+          if (failDay) throw new Error("offline");
+          return { items: workouts, nextCursor: null };
+        };
       if (key === "listMealAssignments")
-        return async () => ({ items: meals, nextCursor: null });
+        return async () => {
+          if (failDay) throw new Error("offline");
+          return { items: meals, nextCursor: null };
+        };
       if (key === "listCheckins")
         return async () => ({ items: [], nextCursor: null });
       if (key === "listMeCoachNotes") return async () => ({ items: [] });
@@ -202,6 +209,29 @@ vi.mock("../providers/ConfigProvider", async () => {
 
 const { TodayTab, effectivePlanStateFor } = await import("./TodayTab");
 
+const completedWorkout = workoutAssignmentSchema.parse({
+  ...workoutAssignment,
+  status: "completed",
+  execution: {
+    id: "00000000-0000-4000-8000-000000000801",
+    assignmentId: workoutAssignment.id,
+    coachingRelationshipId: relationship.id,
+    planVersionId: workoutAssignment.planVersionId,
+    traineeUserId: relationship.traineeUserId,
+    status: "completed",
+    recordVersion: 3,
+    startedAt: `${TODAY}T13:00:00.000Z`,
+    pausedAt: null,
+    completedAt: `${TODAY}T13:52:00.000Z`,
+    sessionRpe: null,
+    requireSessionRpe: false,
+    createdAt: `${TODAY}T13:00:00.000Z`,
+    updatedAt: `${TODAY}T13:52:00.000Z`,
+  },
+});
+
+let openOverlay = vi.fn();
+
 function renderToday() {
   return render(
     <TodayTab
@@ -214,12 +244,14 @@ function renderToday() {
       onOpenDiet={() => undefined}
       onOpenCheckin={() => undefined}
       onRefreshPlan={() => undefined}
-      onOpenOverlay={() => undefined}
+      onOpenOverlay={openOverlay}
     />,
   );
 }
 
 beforeEach(() => {
+  openOverlay = vi.fn();
+  failDay = false;
   meals = [];
   workouts = [];
   stepsToday = { localDate: TODAY, steps: null, target: 8000 };
@@ -238,13 +270,11 @@ describe("Today v3 summary", () => {
     expect(screen.getByLabelText("0 of 800 kcal")).toBeTruthy();
     expect(screen.getByLabelText("Protein 0 of 40 g")).toBeTruthy();
     expect(screen.getByLabelText("Meals 0 of 2")).toBeTruthy();
-    expect(screen.getByLabelText("Workout 0 of 0")).toBeTruthy();
+    expect(screen.getByLabelText("Workout: rest day")).toBeTruthy();
     await waitFor(() => {
       expect(screen.getByLabelText("Steps: set up steps")).toBeTruthy();
     });
     expect(view.container.textContent).not.toMatch(/%|\bleft\b/);
-    // No workout today: the rest line stays until Z9-2 draws the rest card.
-    expect(screen.getByText("Rest day. Recovery is part of the plan.")).toBeTruthy();
   });
 
   it("partial day: logged kcal and macros against the plan, server steps", async () => {
@@ -298,5 +328,126 @@ describe("Today v3 summary", () => {
       expect(screen.getByText("1 of 2 logged ›")).toBeTruthy();
     });
     expect(screen.getByText("Logged")).toBeTruthy();
+  });
+});
+
+describe("Today v3 done and rest states", () => {
+  it("done day: green done chips, done card with time and duration", async () => {
+    workouts = [completedWorkout];
+    meals = [meal(1, "Early morning", "confirmed")];
+    stepsToday = { localDate: TODAY, steps: 8420, target: 8000 };
+    const view = renderToday();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Workout 1 of 1, done")).toBeTruthy();
+    });
+    expect(screen.getByLabelText("Meals 1 of 1, done")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Steps 8,420 of 8,000, done")).toBeTruthy();
+    });
+    expect(screen.getByText("Done · 7:22 pm")).toBeTruthy();
+    expect(screen.getByText("Lower body B")).toBeTruthy();
+    expect(screen.getByText("2 exercises · 52 min")).toBeTruthy();
+    expect(screen.queryByLabelText("Start workout")).toBeNull();
+    expect(screen.queryByText(/Rest day/)).toBeNull();
+    expect(view.container.textContent).not.toMatch(/%|\bleft\b/);
+  });
+
+  it("partly done day: chips not yet complete carry no done state", async () => {
+    workouts = [completedWorkout];
+    meals = [
+      meal(1, "Early morning", "confirmed"),
+      meal(2, "Breakfast", "pending"),
+    ];
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByLabelText("Workout 1 of 1, done")).toBeTruthy();
+    });
+    expect(screen.getByLabelText("Meals 1 of 2")).toBeTruthy();
+  });
+
+  it("rest day: neutral chip, rest card with the next workout, header says rest day", async () => {
+    meals = [meal(1, "Early morning", "confirmed")];
+    const tomorrow = new Date(`${TODAY}T00:00:00.000Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const nextDate = tomorrow.toISOString().slice(0, 10);
+    workouts = [
+      {
+        ...workoutAssignment,
+        id: "00000000-0000-4000-8000-000000000502",
+        localDate: nextDate,
+        windowStartsAt: `${nextDate}T13:00:00.000Z`,
+        windowEndsAt: `${nextDate}T15:00:00.000Z`,
+      },
+    ];
+    const view = renderToday();
+    await waitFor(() => {
+      expect(screen.getByText("Recovery is part of the plan")).toBeTruthy();
+    });
+    expect(screen.getByLabelText("Workout: rest day")).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText(/^Next: Lower body B · \w{3} \d{1,2} \w{3}, 6:30 pm$/)).toBeTruthy();
+    });
+    // The plan-loaded marker stays; on a rest day it announces the rest day.
+    const header = screen.getByText("Today's workout");
+    expect(header.getAttribute("aria-label")).toBe("Today's workout: rest day");
+    expect(view.container.textContent).not.toMatch(/%|\bleft\b|\d{4}-\d{2}-\d{2}/);
+  });
+
+  it("rest day leads with the rest card even with a meal due; no meal hero", async () => {
+    meals = [meal(1, "Early morning", "pending")];
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByText("Recovery is part of the plan")).toBeTruthy();
+    });
+    expect(screen.queryByLabelText("Eaten as planned")).toBeNull();
+    expect(screen.getByText("Early morning")).toBeTruthy();
+  });
+
+  it("rest day with nothing scheduled omits the Next line", async () => {
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByText("Recovery is part of the plan")).toBeTruthy();
+    });
+    expect(screen.queryByText(/^Next:/)).toBeNull();
+  });
+
+  it("Steps chip opens the steps setup screen", async () => {
+    const { fireEvent } = await import("../test/render");
+    renderToday();
+    const chip = await screen.findByLabelText("Steps: set up steps");
+    fireEvent.click(chip);
+    expect(openOverlay).toHaveBeenCalledWith({ screen: "steps_settings" });
+  });
+
+  it("scheduled workout keeps the hidden header text without the rest-day label", async () => {
+    workouts = [workoutAssignment];
+    renderToday();
+    const header = await screen.findByText("Today's workout");
+    expect(header.getAttribute("aria-label")).toBeNull();
+  });
+
+  it("a failed day load does not read as a rest day", async () => {
+    failDay = true;
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't refresh/)).toBeTruthy();
+    });
+    expect(screen.queryByText("Recovery is part of the plan")).toBeNull();
+    expect(screen.queryByText("Rest day")).toBeNull();
+    expect(screen.queryByLabelText("Workout: rest day")).toBeNull();
+    const header = screen.getByText("Today's workout");
+    expect(header.getAttribute("aria-label")).toBeNull();
+  });
+
+  it("Next line skips missed workouts", async () => {
+    const tomorrow = new Date(`${TODAY}T00:00:00.000Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const d = tomorrow.toISOString().slice(0, 10);
+    workouts = [{ ...workoutAssignment, id: "00000000-0000-4000-8000-000000000503", localDate: d, windowStartsAt: `${d}T13:00:00.000Z`, windowEndsAt: `${d}T15:00:00.000Z`, status: "missed" }];
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByText("Recovery is part of the plan")).toBeTruthy();
+    });
+    expect(screen.queryByText(/^Next:/)).toBeNull();
   });
 });
