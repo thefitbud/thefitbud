@@ -157,7 +157,9 @@ jobs:
     name: e2e
     needs: changes
     if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.web == 'true') }}
-    runs-on: ubuntu-latest
+    # Pinned (W9b Z9b-0, 11 Nov 2026): on ubuntu-latest (26.04 "resolute") the Ubuntu apt
+    # mirrors don't resolve, so `playwright install --with-deps` fails. Revisit when that clears.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -220,7 +222,9 @@ jobs:
     name: banned-strings
     needs: changes
     if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.web == 'true') }}
-    runs-on: ubuntu-latest
+    # Pinned (W9b Z9b-0, 11 Nov 2026): on ubuntu-latest (26.04 "resolute") the Ubuntu apt
+    # mirrors don't resolve, so `playwright install --with-deps` fails. Revisit when that clears.
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       TURBO_TELEMETRY_DISABLED: "1"
