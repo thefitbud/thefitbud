@@ -18,9 +18,12 @@ import {
 import {
   WeeklyConsistency,
   colors,
+  fontFamilySemiBold,
   radii,
+  semanticColors,
   spacing,
 } from "@fitbud/ui-mobile";
+import { Clock } from "lucide-react-native";
 import { surface } from "@fitbud/tokens";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -181,7 +184,7 @@ function mealStatusChip(
   meal: MealAssignment,
   nextId: string | undefined,
   now = new Date(),
-): { label: string; tone: "neutral" | "positive" | "attention" } {
+): { label: string; tone: "neutral" | "positive" | "attention" | "info" } {
   if (isMealLoggedForCount(meal.status)) {
     return { label: "Logged", tone: "positive" };
   }
@@ -192,12 +195,28 @@ function mealStatusChip(
     return { label: "Overdue", tone: "attention" };
   }
   if (meal.id === nextId) {
-    return { label: "Up next", tone: "attention" };
+    // Lavender, not amber: "Up next" is not a warning (frames 04 empty/partial).
+    return { label: "Up next", tone: "info" };
   }
   if (now.getTime() >= new Date(meal.windowStartsAt).getTime()) {
     return { label: "Due", tone: "attention" };
   }
   return { label: "Later", tone: "neutral" };
+}
+
+/**
+ * "Up next" in the lavender info tone with a clock (frames 04 empty/partial).
+ * StatusChip's tone-only API has no info tone and lives outside this lane,
+ * so the same chip shape is drawn here from the shared tokens.
+ */
+function UpNextChip({ label }: { label: string }) {
+  const palette = semanticColors.info;
+  return (
+    <View style={[styles.upNextChip, { backgroundColor: palette.fill }]}>
+      <Clock size={14} color={palette.text} strokeWidth={1.75} />
+      <Text style={[styles.upNextLabel, { color: palette.text }]}>{label}</Text>
+    </View>
+  );
 }
 
 type CoachNote = Awaited<
@@ -745,6 +764,14 @@ export function TodayTab({
           </View>
         ) : null}
 
+        {planState.status === "loaded" && !loading && !workout ? (
+          // Kept from the pre-v3 workout card until Z9-2 draws the rest-day
+          // chip and card; without it a rest day reads as "Workout 0 of 0" only.
+          <Text style={styles.restLine}>
+            Rest day. Recovery is part of the plan.
+          </Text>
+        ) : null}
+
         {planState.status === "loaded" ? (
           <View style={styles.mealsSection}>
             <View style={styles.mealsHead}>
@@ -805,10 +832,18 @@ export function TodayTab({
                           {sub}
                         </Text>
                       </View>
-                      <StatusChip
-                        label={lockCopy ? "Closed" : chip.label}
-                        tone={lockCopy ? "neutral" : chip.tone}
-                      />
+                      {!lockCopy && chip.tone === "info" ? (
+                        <UpNextChip label={chip.label} />
+                      ) : (
+                        <StatusChip
+                          label={lockCopy ? "Closed" : chip.label}
+                          tone={
+                            lockCopy || chip.tone === "info"
+                              ? "neutral"
+                              : chip.tone
+                          }
+                        />
+                      )}
                     </View>
                   );
                 })}
@@ -1113,13 +1148,33 @@ const styles = StyleSheet.create({
   },
   mealsLabel: {
     color: colors.deepNavy,
-    fontSize: 14,
+    fontSize: 17,
     fontWeight: "700",
   },
   mealsCount: {
     color: colors.midGrey,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "500",
+  },
+  upNextChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  upNextLabel: {
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  restLine: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: spacing.sm,
   },
   mealRow: {
     alignItems: "center",

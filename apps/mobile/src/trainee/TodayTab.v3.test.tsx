@@ -243,6 +243,8 @@ describe("Today v3 summary", () => {
       expect(screen.getByLabelText("Steps: set up steps")).toBeTruthy();
     });
     expect(view.container.textContent).not.toMatch(/%|\bleft\b/);
+    // No workout today: the rest line stays until Z9-2 draws the rest card.
+    expect(screen.getByText("Rest day. Recovery is part of the plan.")).toBeTruthy();
   });
 
   it("partial day: logged kcal and macros against the plan, server steps", async () => {
