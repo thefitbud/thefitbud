@@ -87,7 +87,7 @@ export function validateSubscriptionDraft(draft: Draft): FieldErrors {
  * date). The native date input sits over the formatted text, so the browser
  * picker and keyboard entry still work and the value stays a civil date.
  */
-function DateField({
+export function DateField({
   id,
   value,
   invalid,
@@ -136,7 +136,7 @@ function DateField({
  * Frames 211 / 211b: edit the client's subscription. Every save creates a new
  * subscription version (Z6-8); earlier versions never change. Tracking only
  * (D-W8-2, D-P2-12): no session packages, collection, gateway or invoices.
- * Payment records are added from the page (Z8-4), not here.
+ * Payment records are added and edited in PaymentDrawer (Z8-4), not here.
  */
 export function SubscriptionDrawer({
   relationshipId,

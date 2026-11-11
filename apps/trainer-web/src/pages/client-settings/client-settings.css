@@ -697,6 +697,117 @@
   color: var(--dark-grey);
 }
 
+/* Z8-4: payment records, add and edit (frames 209 / IP-08, tracking only). */
+.cs-payments-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+}
+
+.cs-payments-head .cs-eyebrow:focus {
+  outline: none;
+}
+
+.cs-link-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 44px;
+  padding: 0 4px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--indigo);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.cs-link-button:hover {
+  text-decoration: underline;
+}
+
+.cs-link-button:focus-visible,
+.cs-row-button:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.cs-link-button:disabled,
+.cs-row-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.cs-nowrap {
+  white-space: nowrap;
+}
+
+.cs-pay-note {
+  max-width: 220px;
+  overflow-wrap: anywhere;
+}
+
+.cs-table td.cs-pay-action {
+  padding-top: 0;
+  padding-bottom: 0;
+  text-align: right;
+  width: 1%;
+}
+
+.cs-row-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  color: var(--near-black);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.cs-row-button:hover {
+  background: var(--hover, #f7f8fc);
+}
+
+.cs-pay-fixed {
+  margin: 0;
+}
+
+.cs-segmented.is-invalid {
+  outline: 1px solid var(--error);
+}
+
+.cs-textarea {
+  min-height: 88px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong, #d9dce8);
+  border-radius: 10px;
+  background: var(--white);
+  color: var(--near-black);
+  font: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.cs-textarea:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+.cs-textarea.is-invalid {
+  border-color: var(--error);
+}
+
 /* Frame 209b (iPad / ≤1100px): the section list becomes a segmented row. */
 @media (max-width: 1100px) {
   .cs-layout {
