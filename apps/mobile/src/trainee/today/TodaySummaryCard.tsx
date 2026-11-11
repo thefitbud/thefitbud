@@ -32,6 +32,8 @@ export type TodaySummaryProps = {
   steps: StepsChipState;
   /** Opens the steps setup screen from the Steps chip. */
   onOpenSteps?: () => void;
+  /** The day failed to load: the Workout chip must not claim a rest day. */
+  workoutUnknown?: boolean;
 };
 
 const NUM = { fontVariant: ["tabular-nums" as const] };
@@ -45,6 +47,13 @@ function find(data: readonly RingDatum[], key: RingDatum["key"]) {
 function fillFraction(logged: number, assigned: number): number {
   if (assigned <= 0 || logged <= 0) return 0;
   return Math.min(logged / assigned, 1);
+}
+
+/** Fits the number inside the ring: 32 for up to 3 characters, smaller after. */
+function ringValueSize(text: string): number {
+  if (text.length <= 3) return 32;
+  if (text.length <= 5) return 26;
+  return 20;
 }
 
 function KcalRing({ datum }: { datum: RingDatum | undefined }) {
@@ -89,7 +98,15 @@ function KcalRing({ datum }: { datum: RingDatum | undefined }) {
         ) : null}
       </Svg>
       <View style={[styles.ringCenter, { pointerEvents: "none" }]}>
-        <Text style={[styles.ringValue, NUM]}>
+        <Text
+          style={[
+            styles.ringValue,
+            NUM,
+            { fontSize: ringValueSize(`${prefix}${formatNumber(logged)}`) },
+          ]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+        >
           {prefix}
           {formatNumber(logged)}
         </Text>
@@ -183,7 +200,11 @@ function Chip({
   if (onPress) {
     return (
       <Pressable
-        style={[styles.chip, variantStyle]}
+        style={({ pressed }) => [
+          styles.chip,
+          variantStyle,
+          pressed && styles.chipPressed,
+        ]}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         onPress={onPress}
@@ -226,8 +247,9 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
   const kcal = find(props.rings, "kcal");
   const stepsText = stepsChipText(props.steps);
   const icon = { size: 16, color: colors.indigo, strokeWidth: 2 };
-  const workoutRest = props.workoutTotal === 0;
-  const workoutDone = !workoutRest && props.workoutDone >= props.workoutTotal;
+  const workoutUnknown = props.workoutUnknown === true;
+  const workoutRest = props.workoutTotal === 0 && !workoutUnknown;
+  const workoutDone = !workoutRest && !workoutUnknown && props.workoutDone >= props.workoutTotal;
   const mealsDone = props.mealsTotal > 0 && props.mealsDone >= props.mealsTotal;
   const stepsDone =
     props.steps.status === "synced" && props.steps.steps >= props.steps.target;
@@ -263,12 +285,16 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
           }
           label="Workout"
           value={
-            workoutRest
+            workoutUnknown
+              ? "—"
+              : workoutRest
               ? "Rest day"
               : `${props.workoutDone} of ${props.workoutTotal}`
           }
           accessibilityLabel={
-            workoutRest
+            workoutUnknown
+              ? "Workout unavailable"
+              : workoutRest
               ? "Workout: rest day"
               : `Workout ${props.workoutDone} of ${props.workoutTotal}${workoutDone ? ", done" : ""}`
           }
@@ -317,7 +343,7 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  ringValue: { color: colors.deepNavy, fontSize: 32, fontWeight: "600" },
+  ringValue: { color: colors.deepNavy, fontSize: 32, fontWeight: "600", maxWidth: RING_SIZE - 2 * RING_STROKE - 8, textAlign: "center" },
   ringSub: { color: colors.darkGrey, fontSize: 11, textAlign: "center" },
   macros: { flex: 1, gap: spacing.sm },
   macro: { gap: 4, minHeight: 32 },
@@ -343,6 +369,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing.sm,
   },
+  chipPressed: { opacity: 0.6 },
   chipDone: {
     backgroundColor: semantic.positive.fill,
     borderColor: `${semantic.positive.text}40`,

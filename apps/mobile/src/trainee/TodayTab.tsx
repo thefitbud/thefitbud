@@ -392,10 +392,15 @@ export function TodayTab({
     };
   }, [api, isToday, refreshNonce]);
 
+  // Rest only after a successful day load: a failed load also leaves
+  // `workout` null, and must not read as a rest day.
+  const doneMinutes = workout?.execution
+    ? durationMinutesFromExecution(workout.execution)
+    : null;
   const restDay =
-    planState.status === "loaded" && !loading && !workout;
+    planState.status === "loaded" && !loading && lockStateKnown && !workout;
   useEffect(() => {
-    if (!restDay) {
+    if (!restDay || !isToday) {
       setNextWorkout(null);
       return;
     }
@@ -410,7 +415,8 @@ export function TodayTab({
         const upcoming = scheduledAssignments(res.items)
           .filter(
             (item) =>
-              item.localDate > selectedDate &&
+              item.localDate > today &&
+              item.status !== "missed" &&
               item.status !== "completed" &&
               item.status !== "modified" &&
               item.status !== "skipped",
@@ -426,7 +432,7 @@ export function TodayTab({
     return () => {
       cancelled = true;
     };
-  }, [api, relationship.id, restDay, selectedDate, refreshNonce]);
+  }, [api, relationship.id, restDay, isToday, today, selectedDate, refreshNonce]);
 
   const rings = useMemo(
     () => buildNutritionRings(meals, dayTotals?.totals ?? null),
@@ -651,7 +657,7 @@ export function TodayTab({
             style={styles.srOnly}
             accessibilityRole="header"
             accessibilityLabel={
-              workout ? undefined : "Today's workout: rest day"
+              restDay ? "Today's workout: rest day" : undefined
             }
           >
             Today&apos;s workout
@@ -671,6 +677,7 @@ export function TodayTab({
             mealsDone={mealsDone}
             mealsTotal={meals.length}
             steps={isToday ? stepsChip : { status: "unavailable" }}
+            workoutUnknown={!lockStateKnown}
             onOpenSteps={() => onOpenOverlay({ screen: "steps_settings" })}
           />
         ) : null}
@@ -695,10 +702,7 @@ export function TodayTab({
             <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
             <Text style={styles.heroItems}>
               {exerciseCountLabel(workout.workoutDay.exercises.length)}
-              {workout.execution &&
-              durationMinutesFromExecution(workout.execution) != null
-                ? ` · ${durationMinutesFromExecution(workout.execution)} min`
-                : ""}
+              {doneMinutes != null ? ` · ${doneMinutes} min` : ""}
             </Text>
           </View>
         ) : null}
@@ -713,7 +717,7 @@ export function TodayTab({
               <Text style={styles.restChipLabel}>Rest day</Text>
             </View>
             <Text style={styles.restTitle}>Recovery is part of the plan</Text>
-            {nextWorkout ? (
+            {nextWorkout && isToday ? (
               <Text style={styles.restNext}>
                 {`Next: ${nextWorkout.workoutDayName} · ${formatCivilDate(nextWorkout.localDate)}, ${formatClockTime(nextWorkout.windowStartsAt, timeZone)}`}
               </Text>

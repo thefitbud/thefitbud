@@ -139,6 +139,7 @@ const workoutAssignment = workoutAssignmentSchema.parse({
   updatedAt: `${TODAY}T00:00:00.000Z`,
 });
 
+let failDay = false;
 let workouts: unknown[] = [];
 let meals: MealAssignment[] = [];
 let stepsToday: unknown = { localDate: TODAY, steps: null, target: 8000 };
@@ -148,9 +149,15 @@ const api = new Proxy(
   {
     get(_t, key: string) {
       if (key === "listWorkoutAssignments")
-        return async () => ({ items: workouts, nextCursor: null });
+        return async () => {
+          if (failDay) throw new Error("offline");
+          return { items: workouts, nextCursor: null };
+        };
       if (key === "listMealAssignments")
-        return async () => ({ items: meals, nextCursor: null });
+        return async () => {
+          if (failDay) throw new Error("offline");
+          return { items: meals, nextCursor: null };
+        };
       if (key === "listCheckins")
         return async () => ({ items: [], nextCursor: null });
       if (key === "listMeCoachNotes") return async () => ({ items: [] });
@@ -244,6 +251,7 @@ function renderToday() {
 
 beforeEach(() => {
   openOverlay = vi.fn();
+  failDay = false;
   meals = [];
   workouts = [];
   stepsToday = { localDate: TODAY, steps: null, target: 8000 };
@@ -416,5 +424,30 @@ describe("Today v3 done and rest states", () => {
     renderToday();
     const header = await screen.findByText("Today's workout");
     expect(header.getAttribute("aria-label")).toBeNull();
+  });
+
+  it("a failed day load does not read as a rest day", async () => {
+    failDay = true;
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByText(/Couldn't refresh/)).toBeTruthy();
+    });
+    expect(screen.queryByText("Recovery is part of the plan")).toBeNull();
+    expect(screen.queryByText("Rest day")).toBeNull();
+    expect(screen.queryByLabelText("Workout: rest day")).toBeNull();
+    const header = screen.getByText("Today's workout");
+    expect(header.getAttribute("aria-label")).toBeNull();
+  });
+
+  it("Next line skips missed workouts", async () => {
+    const tomorrow = new Date(`${TODAY}T00:00:00.000Z`);
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const d = tomorrow.toISOString().slice(0, 10);
+    workouts = [{ ...workoutAssignment, id: "00000000-0000-4000-8000-000000000503", localDate: d, windowStartsAt: `${d}T13:00:00.000Z`, windowEndsAt: `${d}T15:00:00.000Z`, status: "missed" }];
+    renderToday();
+    await waitFor(() => {
+      expect(screen.getByText("Recovery is part of the plan")).toBeTruthy();
+    });
+    expect(screen.queryByText(/^Next:/)).toBeNull();
   });
 });
