@@ -6,6 +6,8 @@ import type {
 } from "@fitbud/contracts";
 import {
   resolveAppRoute,
+  roleForLinkKind,
+  roleSwitchPrompt,
   selectInitialMobileRole,
 } from "./resolveRoute.js";
 
@@ -182,5 +184,58 @@ describe("resolveAppRoute", () => {
     expect(selectInitialMobileRole(["trainee"])).toBe("trainee");
     expect(selectInitialMobileRole(["trainer"])).toBe("trainer");
     expect(selectInitialMobileRole(["trainer", "trainee"])).toBeNull();
+  });
+});
+
+describe("roleSwitchPrompt (frame 61)", () => {
+  it("offers coach view for a trainer link opened as a client", () => {
+    expect(
+      roleSwitchPrompt({
+        selectedRole: "trainee",
+        permittedRoles: ["trainer", "trainee"],
+        linkKind: "checkin",
+      }),
+    ).toEqual({ targetRole: "trainer" });
+  });
+
+  it("offers client view for a trainee link opened as a coach", () => {
+    expect(
+      roleSwitchPrompt({
+        selectedRole: "trainer",
+        permittedRoles: ["trainer", "trainee"],
+        linkKind: "workout",
+      }),
+    ).toEqual({ targetRole: "trainee" });
+  });
+
+  it("does not prompt when the link fits the selected role", () => {
+    expect(
+      roleSwitchPrompt({
+        selectedRole: "trainer",
+        permittedRoles: ["trainer", "trainee"],
+        linkKind: "exception",
+      }),
+    ).toBeNull();
+  });
+
+  it("does not prompt a single-role account (nothing to switch to)", () => {
+    expect(
+      roleSwitchPrompt({
+        selectedRole: "trainee",
+        permittedRoles: ["trainee"],
+        linkKind: "checkin",
+      }),
+    ).toBeNull();
+  });
+
+  it("does not prompt for an unknown kind or before a role is selected", () => {
+    expect(roleForLinkKind("nonsense")).toBeNull();
+    expect(
+      roleSwitchPrompt({
+        selectedRole: null,
+        permittedRoles: ["trainer", "trainee"],
+        linkKind: "checkin",
+      }),
+    ).toBeNull();
   });
 });

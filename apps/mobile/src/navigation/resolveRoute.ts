@@ -122,3 +122,50 @@ export function selectInitialMobileRole(
   }
   return null;
 }
+
+/** Link kinds that open a trainer-only screen (coach view). */
+const TRAINER_LINK_KINDS: ReadonlySet<string> = new Set([
+  "checkin",
+  "exception",
+  "ask",
+  "plan",
+  "client",
+  "reactivate",
+]);
+
+/** Link kinds that open a trainee-only screen (client view). */
+const TRAINEE_LINK_KINDS: ReadonlySet<string> = new Set([
+  "meal",
+  "workout",
+  "today",
+  "progress",
+  "note",
+]);
+
+/** Which mobile role a link needs, or null for a kind this table does not know. */
+export function roleForLinkKind(kind: string): Extract<Role, "trainer" | "trainee"> | null {
+  if (TRAINER_LINK_KINDS.has(kind)) return "trainer";
+  if (TRAINEE_LINK_KINDS.has(kind)) return "trainee";
+  return null;
+}
+
+/**
+ * Frame 61: a link that needs the other role asks to switch instead of failing
+ * silently. Returns the role to offer, or null when the link already fits the
+ * selected role, or the account has no mobile access to the role it needs
+ * (nothing to offer).
+ */
+export function roleSwitchPrompt(input: {
+  selectedRole: Role | null;
+  permittedRoles: readonly Role[];
+  linkKind: string;
+}): { targetRole: Extract<Role, "trainer" | "trainee"> } | null {
+  const needed = roleForLinkKind(input.linkKind);
+  if (!needed || !input.selectedRole || needed === input.selectedRole) {
+    return null;
+  }
+  if (!mobilePermittedRoles(input.permittedRoles).includes(needed)) {
+    return null;
+  }
+  return { targetRole: needed };
+}
