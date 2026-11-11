@@ -1,11 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
-import { ChevronRight, Search } from "lucide-react-native";
+import {
+  Ban,
+  CalendarClock,
+  ChevronRight,
+  ClipboardCheck,
+  Clock,
+  Eye,
+  Search,
+  type LucideIcon,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { AttentionGroupsResponse, ClientDirectoryItem } from "@fitbud/contracts";
 import { deviceTimeZone, formatClockTime, formatPersonName, labelFor } from "@fitbud/core";
-import { colors, fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import {
+  colors,
+  fontFamilyMedium,
+  fontFamilySemiBold,
+  radii,
+  semanticColors,
+  spacing,
+} from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { stage1Api } from "../lib/stage1Api";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -49,7 +65,7 @@ function rowChips(
   timeZone: string,
 ): Chip[] {
   if (isEndedClient(item)) {
-    return [{ label: endedChipLabel(item, timeZone), kind: "lifecycle", value: "ended" }];
+    return [{ label: endedChipLabel(item, timeZone), kind: "custom", value: "ended" }];
   }
   const chips: Chip[] = [];
   const reviewed =
@@ -94,6 +110,26 @@ function rowChips(
     chips.push({ label: "", kind: "lifecycle", value: item.status });
   }
   return chips.slice(0, 2);
+}
+
+const CUSTOM_CHIPS: Record<string, { Icon: LucideIcon; tone: "info" | "attention" | "neutral" }> = {
+  checkin_submitted: { Icon: ClipboardCheck, tone: "info" },
+  checkin_overdue: { Icon: Clock, tone: "attention" },
+  renewal_due: { Icon: CalendarClock, tone: "attention" },
+  reviewed_still_open: { Icon: Eye, tone: "neutral" },
+  ended: { Icon: Ban, tone: "neutral" },
+};
+
+/** Roster chip with frame 17/73 tone and icon; the text always carries the state. */
+function CustomChip({ value, label }: { value: string; label: string }) {
+  const spec = CUSTOM_CHIPS[value] ?? { Icon: Eye, tone: "neutral" as const };
+  const palette = semanticColors[spec.tone];
+  return (
+    <View style={[styles.customChip, { backgroundColor: palette.fill }]}>
+      <spec.Icon size={14} color={palette.text} strokeWidth={1.75} />
+      <Text style={[styles.customChipText, { color: palette.text }]}>{label}</Text>
+    </View>
+  );
 }
 
 function isOfflineError(err: unknown): boolean {
@@ -288,9 +324,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
                     trainerZone,
                   ).map((entry) =>
                     entry.kind === "custom" ? (
-                      <View key={entry.value} style={styles.customChip}>
-                        <Text style={styles.customChipText}>{entry.label}</Text>
-                      </View>
+                      <CustomChip key={entry.value} value={entry.value} label={entry.label} />
                     ) : (
                       <StatusChip
                         key={entry.value}
@@ -417,13 +451,15 @@ const styles = StyleSheet.create({
   sub: { color: colors.midGrey, fontSize: 14 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 4 },
   customChip: {
-    borderColor: "#E7E9F2",
-    borderRadius: 999,
-    borderWidth: 1,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    alignItems: "center",
+    alignSelf: "flex-start",
+    borderRadius: radii.pill,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
   },
-  customChipText: { color: colors.deepNavy, fontSize: 12 },
+  customChipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
   empty: { color: colors.deepNavy, fontSize: 16, lineHeight: 22, marginTop: 24 },
   skeleton: {
     backgroundColor: "#E7E9F2",

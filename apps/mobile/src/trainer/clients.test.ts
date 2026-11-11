@@ -125,7 +125,7 @@ describe("ended clients", () => {
   const ended = item({
     status: "ended",
     startedAt: "2026-07-01T04:00:00.000Z",
-    endedAt: "2026-10-03T06:00:00.000Z",
+    endedAt: "2026-10-02T20:00:00.000Z",
   });
   const due = item({
     traineeDisplayName: "Neha Reddy",
