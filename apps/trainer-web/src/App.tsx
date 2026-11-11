@@ -15,6 +15,8 @@ import { ClientOverviewPage } from "./pages/ClientOverviewPage";
 import { ClientPlanPage } from "./pages/ClientPlanPage";
 import { PlanBuilderPage } from "./pages/plan/PlanBuilderPage";
 import { GoResolverPage } from "./pages/GoResolverPage";
+import { LogEntryRoutes } from "./pages/log-entry/LogEntryRoutes";
+import { LogWorkoutCreateRoute, LogWorkoutEditRoute } from "./pages/log-workout/LogWorkoutPage";
 import { ClientSettingsPage } from "./pages/client-settings/ClientSettingsPage";
 import { ClientProgressPage } from "./pages/ClientProgressPage";
 import { ClientWorkspaceLayout } from "./pages/ClientWorkspaceLayout";
@@ -94,6 +96,10 @@ export function App() {
             <Route path="onboarding" element={<OnboardingReviewPage />} />
             <Route path="configure" element={<ConfigureCoachingPage />} />
             <Route path="settings" element={<ClientSettingsPage />} />
+            <Route path="log-workout" element={<LogWorkoutCreateRoute />} />
+            <Route path="log-workout/:assignmentId" element={<LogWorkoutCreateRoute />} />
+            <Route path="workouts/:executionId/edit" element={<LogWorkoutEditRoute />} />
+            <Route path="log-entry/*" element={<LogEntryRoutes />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />
