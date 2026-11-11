@@ -2,6 +2,7 @@ import type { FitBudApiClient } from "@fitbud/api-client";
 import type { DeviceTokenPlatform, DeviceTokenProvider } from "@fitbud/contracts";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { reportError } from "../lib/reportError";
 import { localInstallationId } from "./routing";
 
 /**
@@ -83,7 +84,8 @@ export async function requestPushPermission(
     await prepareForPermissionPrompt(platform);
     const asked = await notifications.requestPermissionsAsync();
     return asked.granted ? "granted" : "denied";
-  } catch {
+  } catch (err) {
+    reportError("push-permission", err);
     return "denied";
   }
 }

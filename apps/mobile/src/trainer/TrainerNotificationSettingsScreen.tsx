@@ -10,6 +10,7 @@ import * as Notifications from "expo-notifications";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Snackbar } from "../components/Snackbar";
+import { reportError } from "../lib/reportError";
 import { requestPushPermission } from "../notifications/register";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
@@ -68,9 +69,22 @@ function clock12(value: string): string {
   return `${hour % 12 === 0 ? 12 : hour % 12}:${match[2]} ${suffix}`;
 }
 
-/** A failed fetch with no HTTP answer: the phone could not reach the API. */
-function isOfflineError(err: unknown): boolean {
-  return !(err instanceof ApiClientError);
+/**
+ * A proven network failure: the request never got an HTTP answer. Same rule as
+ * `isNetworkFailure` in lib/authErrors.ts. A ZodError or any other error is a
+ * client/server disagreement or a bug, never "you're offline".
+ */
+export function isNetworkFailure(err: unknown): boolean {
+  if (err instanceof ApiClientError) return false;
+  if (!(err instanceof Error)) return false;
+  return (
+    err.name === "AbortError" ||
+    err.name === "TimeoutError" ||
+    (err instanceof TypeError &&
+      /network request failed|failed to fetch|network error|load failed/i.test(
+        err.message,
+      ))
+  );
 }
 
 type Props = {
@@ -123,17 +137,19 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
 
   async function toggleTrainerCategory(key: CategoryKey, enabled: boolean) {
     if (!prefs || saving) return;
+    // Busy from here, so a second tap during the permission prompt is ignored.
+    setSaving(true);
     if (enabled && osPermission !== "granted") {
       // Android 13+ asks here (frame 54); a refusal leaves the switch off.
       const result = await requestPushPermission();
       if (result === "granted") setOsPermission("granted");
       else {
         if (result === "blocked") void Linking.openSettings();
+        setSaving(false);
         return;
       }
     }
     const before = prefs;
-    setSaving(true);
     setSnack(null);
     setPrefs({
       ...before,
@@ -147,7 +163,8 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
       setOffline(false);
     } catch (err) {
       setPrefs(before);
-      setOffline(isOfflineError(err));
+      reportError("trainer-notification-settings", err);
+      setOffline(isNetworkFailure(err));
       setSnack("Couldn't save. Try again.");
     } finally {
       setSaving(false);

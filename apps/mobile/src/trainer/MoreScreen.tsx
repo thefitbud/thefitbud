@@ -28,6 +28,7 @@ import { Text } from "../components/Text";
 import { useConfig } from "../providers/ConfigProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { Screen } from "../components/Screen";
+import { reportError } from "../lib/reportError";
 import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../lib/support";
 import {
   DEFAULT_TRAINER_WEB_URL,
@@ -96,12 +97,18 @@ export function TrainerMoreScreen({
   // Frame 54: Android 13+ shows its own prompt first. Only when the system will
   // not ask again does this send the person to phone settings.
   async function onOpenSettings() {
-    // Loaded on tap: the push module pulls in native code the screen's own
-    // render does not need.
-    const { requestPushPermission } = await import("../notifications/register");
-    const result = await requestPushPermission();
-    if (result === "granted") setPushOn(true);
-    else if (result === "blocked") void Linking.openSettings();
+    try {
+      // Loaded on tap: this is the only path that needs the push module, and
+      // the screen's tests render without it.
+      const { requestPushPermission } = await import(
+        "../notifications/register"
+      );
+      const result = await requestPushPermission();
+      if (result === "granted") setPushOn(true);
+      else if (result === "blocked") void Linking.openSettings();
+    } catch (err) {
+      reportError("trainer-more-notifications", err);
+    }
   }
 
   const email = me?.email ?? null;
