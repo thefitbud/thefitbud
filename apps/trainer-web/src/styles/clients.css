@@ -20,6 +20,11 @@
   line-height: 1.1;
 }
 
+/* Frame 136: the Clients title is medium weight, not bold. */
+.clients-page .page-header h1 {
+  font-weight: 500;
+}
+
 .clients-page .lede,
 .checkins-page .lede,
 .add-client-page .lede,
@@ -999,10 +1004,22 @@
   .clients-table .col-renewal { width: 108px; }
 }
 
-/* Ended (frame 140): Client, Status, Last plan, Action. */
-.clients-table-ended .col-client { width: 30%; }
-.clients-table-ended .col-status { width: 28%; }
+/* Ended (frame 140): Client, Status, Coached, Last plan, Action. Shares
+   follow the frame; the Action column keeps its fixed 152px. */
+.clients-table-ended .col-client { width: 20%; }
+.clients-table-ended .col-status { width: 21%; }
+.clients-table-ended .col-coached { width: 24%; }
 .clients-table-ended .col-plan { width: auto; }
+
+.clients-table .roster-coached {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--deep-navy, #1a1248);
+}
 
 .clients-table .roster-plan {
   font-weight: 400;
@@ -1049,6 +1066,22 @@
   text-align: center;
   overflow-wrap: anywhere;
   line-height: 1.2;
+}
+
+/* Open is outlined (frame 136): border, transparent fill, navy text. */
+.clients-table .client-row-cta-outline,
+.client-card .client-row-cta-outline {
+  background: transparent;
+  box-shadow: none;
+  border-color: var(--border-strong, #d9dce8);
+  color: var(--deep-navy, #1a1248);
+}
+
+.clients-table .client-row-cta-outline:hover,
+.clients-table .client-row-cta-outline:focus-visible,
+.client-card .client-row-cta-outline:hover,
+.client-card .client-row-cta-outline:focus-visible {
+  background: var(--hover, #f7f8fc);
 }
 
 .clients-ended-note {
