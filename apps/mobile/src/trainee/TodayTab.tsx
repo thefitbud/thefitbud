@@ -205,12 +205,12 @@ function mealStatusChip(
 }
 
 /**
- * "Up next" in the lavender info tone with a clock (frames 04 empty/partial).
+ * "Up next" in the lavender brandSelected tone with a clock (frames 04 empty/partial).
  * StatusChip's tone-only API has no info tone and lives outside this lane,
  * so the same chip shape is drawn here from the shared tokens.
  */
 function UpNextChip({ label }: { label: string }) {
-  const palette = semanticColors.info;
+  const palette = semanticColors.brandSelected;
   return (
     <View style={[styles.upNextChip, { backgroundColor: palette.fill }]}>
       <Clock size={14} color={palette.text} strokeWidth={1.75} />
