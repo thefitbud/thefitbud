@@ -1,68 +1,27 @@
-import { useEffect, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Search } from "lucide-react";
+import { FilterDropdown, type FilterDropdownProps } from "./FilterDropdown";
 
-export type FilterPillOption = {
-  value: string;
-  label: string;
-  count?: number;
-};
-
-type MultiPillProps = {
-  label: string;
-  options: FilterPillOption[];
-  selected: string[];
-  onToggle: (value: string) => void;
-};
-
-function MultiSelectPills({
-  label,
-  options,
-  selected,
-  onToggle,
-}: MultiPillProps) {
-  const id = `filter-${label.toLowerCase().replace(/\s+/g, "-")}`;
-  return (
-    <div className="filter-pill-group" role="group" aria-labelledby={id}>
-      <span id={id} className="filter-pill-label">
-        {label}
-      </span>
-      <div className="filter-pills">
-        {options.map((opt) => {
-          const on = selected.includes(opt.value);
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              className={on ? "filter-pill is-selected" : "filter-pill"}
-              aria-pressed={on}
-              onClick={() => onToggle(opt.value)}
-            >
-              {opt.label}
-              {typeof opt.count === "number" ? (
-                <span className="filter-pill-count">{opt.count}</span>
-              ) : null}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
+export type { FilterOption } from "./FilterDropdown";
 
 type Props = {
   search: string;
   onSearchChange: (value: string) => void;
   searchPlaceholder?: string;
-  status: MultiPillProps;
-  adherence: MultiPillProps;
-  goal: MultiPillProps;
-  renewal: MultiPillProps;
+  status: FilterDropdownProps;
+  adherence: FilterDropdownProps;
+  goal: FilterDropdownProps;
+  renewal: FilterDropdownProps;
   showClear: boolean;
   onClear: () => void;
+  /** Right end of the same row (the Current/Ended switch, D-W8-13). */
   trailing?: ReactNode;
 };
 
-/** FilterBar: search + pills; Status/Adherence primary, Goal/Renewal in More. */
+/**
+ * Clients toolbar (frames 136 and 140, D-W8-13): one row with search, the
+ * Status / Adherence / Goal / Renewal dropdowns, then `trailing` at the right.
+ */
 export function FilterBar({
   search,
   onSearchChange,
@@ -75,13 +34,6 @@ export function FilterBar({
   onClear,
   trailing,
 }: Props) {
-  const moreSelected =
-    goal.selected.length + renewal.selected.length;
-  const [moreOpen, setMoreOpen] = useState(moreSelected > 0);
-  useEffect(() => {
-    if (moreSelected > 0) setMoreOpen(true);
-  }, [moreSelected]);
-
   return (
     <div className="filter-bar" data-testid="filter-bar">
       <div className="filter-bar-row">
@@ -95,34 +47,19 @@ export function FilterBar({
             onChange={(e) => onSearchChange(e.target.value)}
           />
         </label>
-        <MultiSelectPills {...status} />
-        <MultiSelectPills {...adherence} />
-        <button
-          type="button"
-          className={
-            moreOpen || moreSelected > 0
-              ? "filter-more is-active"
-              : "filter-more"
-          }
-          aria-expanded={moreOpen}
-          aria-controls="filter-bar-more"
-          onClick={() => setMoreOpen((open) => !open)}
-        >
-          More{moreSelected > 0 ? ` (${moreSelected})` : ""}
-        </button>
-        {showClear ? (
-          <button type="button" className="filter-clear link" onClick={onClear}>
-            Clear
-          </button>
-        ) : null}
-        {trailing}
-      </div>
-      {moreOpen ? (
-        <div className="filter-bar-more" id="filter-bar-more">
-          <MultiSelectPills {...goal} />
-          <MultiSelectPills {...renewal} />
+        <div className="filter-dropdowns" role="group" aria-label="Filters">
+          <FilterDropdown {...status} />
+          <FilterDropdown {...adherence} />
+          <FilterDropdown {...goal} />
+          <FilterDropdown {...renewal} />
+          {showClear ? (
+            <button type="button" className="filter-clear link" onClick={onClear}>
+              Clear
+            </button>
+          ) : null}
         </div>
-      ) : null}
+        {trailing ? <div className="filter-bar-trailing">{trailing}</div> : null}
+      </div>
     </div>
   );
 }

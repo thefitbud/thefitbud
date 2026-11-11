@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { Plus } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  AdherenceState,
-  ClientDirectoryItem,
-  OnboardingStatus,
-} from "@fitbud/contracts";
+import type { ClientDirectoryItem, OnboardingStatus } from "@fitbud/contracts";
+import { labelFor } from "@fitbud/core";
 import { ClientRow } from "../components/ClientRow";
 import { FilterBar } from "../components/FilterBar";
 import { ErrorState, LoadingBlock } from "../components/StatePanels";
@@ -33,41 +31,8 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 
 const DIRECTORY_PAGE_LIMIT = 30;
 const SEARCH_DEBOUNCE_MS = 250;
-
-/** Compact FilterBar labels so pills fit at 1280 without clipping. */
-function shortStatusLabel(value: OnboardingStatus): string {
-  switch (value) {
-    case "invited":
-      return "Invited";
-    case "onboarding_pending":
-      return "Pending";
-    case "onboarding_submitted":
-      return "Submitted";
-    case "coaching_ready":
-      return "Ready";
-    case "active":
-      return "Active";
-    case "ended":
-      return "Ended";
-    default:
-      return value;
-  }
-}
-
-function shortAdherenceLabel(value: AdherenceState): string {
-  switch (value) {
-    case "on_track":
-      return "On track";
-    case "needs_attention":
-      return "Attention";
-    case "no_recent_data":
-      return "No data";
-    case "not_available":
-      return "N/A";
-    default:
-      return value;
-  }
-}
+const ENDED_NOTE =
+  "Ended clients are read-only. Their history and progress stay visible.";
 
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof ApiClientError ? err.message : fallback;
@@ -204,7 +169,15 @@ export function ClientsPage() {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
-      if (event.target instanceof HTMLInputElement) return;
+      if (event.defaultPrevented) return;
+      // Keys typed in the toolbar (search, dropdown buttons, menus) are not
+      // row navigation.
+      if (
+        event.target instanceof Element &&
+        event.target.closest("input, button, a, [role='menu']")
+      ) {
+        return;
+      }
       if (event.key === "ArrowDown" || event.key === "j") {
         event.preventDefault();
         setSelectedIndex((i) => Math.min(i + 1, Math.max(items.length - 1, 0)));
@@ -222,76 +195,90 @@ export function ClientsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [items, selectedIndex]);
 
+
   const goalChoices = distinctGoalShorts([
     ...goalOptions.map((goalShort) => ({ goalShort })),
     ...filters.goal.map((goalShort) => ({ goalShort })),
   ]);
-  const filtersActive = hasClientDirectoryFilters(filters);
-  const segmentCount =
-    filters.segment === "ended"
-      ? (facets?.status?.ended ?? items.length)
-      : (facets?.status?.active ?? 0);
-  const segmentLabel =
-    filters.segment === "ended" ? "ended" : "active";
+  // The Ended segment pins status=ended; that is the segment, not a filter.
+  const filtersActive = hasClientDirectoryFilters({
+    ...filters,
+    status: filters.status.filter((s) => s !== "ended"),
+  });
+  const isEnded = filters.segment === "ended";
+  // Facets count every directory row regardless of filters (API directory).
+  const statusFacets = facets?.status ?? null;
+  const currentCount = statusFacets
+    ? CLIENT_STATUS_FILTERS.reduce(
+        (sum, value) => sum + (statusFacets[value] ?? 0),
+        0,
+      )
+    : null;
+  const endedCount = statusFacets ? (statusFacets.ended ?? 0) : null;
+  const activeCount = statusFacets ? (statusFacets.active ?? 0) : null;
+
+  function selectSegment(segment: "current" | "ended") {
+    updateFilters((f) =>
+      segment === "ended"
+        ? { ...f, segment: "ended", status: ["ended"] }
+        : {
+            ...f,
+            segment: "current",
+            status: f.status.filter((s) => s !== "ended"),
+          },
+    );
+  }
+
+  const segmentSwitch = (
+    <div
+      className="clients-segment"
+      role="tablist"
+      aria-label="Client list segment"
+    >
+      {(["current", "ended"] as const).map((segment) => {
+        const selected = filters.segment === segment;
+        const count = segment === "ended" ? endedCount : currentCount;
+        return (
+          <button
+            key={segment}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            className={
+              selected ? "clients-segment-tab is-selected" : "clients-segment-tab"
+            }
+            onClick={() => selectSegment(segment)}
+          >
+            {segment === "ended" ? "Ended" : "Current"}
+            {count !== null ? (
+              <>
+                {" "}
+                <span className="clients-segment-count">{count}</span>
+              </>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
 
   return (
     <section className="page clients-page" data-testid="screen-TW-06">
       <header className="page-header clients-header">
         <div>
           <h1>Clients</h1>
-          <p className="clients-count muted" aria-live="polite">
-            {segmentCount} {segmentLabel}
-          </p>
+          {currentCount !== null && activeCount !== null ? (
+            <p className="clients-count muted" aria-live="polite">
+              {currentCount} {currentCount === 1 ? "client" : "clients"} ·{" "}
+              {activeCount} active
+            </p>
+          ) : null}
         </div>
-        <Link to="/clients/add" className="button-primary">
+        <Link to="/clients/add" className="button-primary clients-add">
+          <Plus size={16} strokeWidth={2} aria-hidden="true" />
           Add client
         </Link>
       </header>
-
-      <div
-        className="segment-control"
-        role="tablist"
-        aria-label="Client list segment"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={filters.segment === "current"}
-          className={
-            filters.segment === "current"
-              ? "segment-tab is-selected"
-              : "segment-tab"
-          }
-          onClick={() =>
-            updateFilters((f) => ({
-              ...f,
-              segment: "current",
-              status: f.status.filter((s) => s !== "ended"),
-            }))
-          }
-        >
-          Current
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={filters.segment === "ended"}
-          className={
-            filters.segment === "ended"
-              ? "segment-tab is-selected"
-              : "segment-tab"
-          }
-          onClick={() =>
-            updateFilters((f) => ({
-              ...f,
-              segment: "ended",
-              status: ["ended"],
-            }))
-          }
-        >
-          Ended
-        </button>
-      </div>
 
       <FilterBar
         search={filters.q}
@@ -306,12 +293,13 @@ export function ClientsPage() {
             status: f.segment === "ended" ? ["ended"] : [],
           }))
         }
+        trailing={segmentSwitch}
         status={{
           label: "Status",
           selected: filters.status.filter((s) => s !== "ended"),
           options: CLIENT_STATUS_FILTERS.map((value) => ({
             value,
-            label: shortStatusLabel(value),
+            label: labelFor("onboarding_status", value),
             count: facets?.status?.[value],
           })),
           onToggle: (value) =>
@@ -323,13 +311,18 @@ export function ClientsPage() {
                 value as OnboardingStatus,
               ),
             })),
+          onClear: () =>
+            updateFilters((f) => ({
+              ...f,
+              status: f.segment === "ended" ? ["ended"] : [],
+            })),
         }}
         adherence={{
           label: "Adherence",
           selected: filters.adherenceState,
           options: CLIENT_ADHERENCE_FILTERS.map((value) => ({
             value,
-            label: shortAdherenceLabel(value),
+            label: labelFor("adherence_state", value),
             count: facets?.adherence?.[value],
           })),
           onToggle: (value) =>
@@ -341,6 +334,7 @@ export function ClientsPage() {
                 value as (typeof CLIENT_ADHERENCE_FILTERS)[number],
               ),
             })),
+          onClear: () => updateFilters((f) => ({ ...f, adherenceState: [] })),
         }}
         goal={{
           label: "Goal",
@@ -351,6 +345,7 @@ export function ClientsPage() {
               ...f,
               goal: toggleClientDirectoryValue(goalChoices, f.goal, value),
             })),
+          onClear: () => updateFilters((f) => ({ ...f, goal: [] })),
         }}
         renewal={{
           label: "Renewal",
@@ -369,6 +364,7 @@ export function ClientsPage() {
                 value as RenewalFilter,
               ),
             })),
+          onClear: () => updateFilters((f) => ({ ...f, renewal: [] })),
         }}
       />
 
@@ -384,7 +380,7 @@ export function ClientsPage() {
 
       {!loading && !error && items.length === 0 ? (
         <div className="empty-state" data-testid="clients-empty">
-          {filtersActive ? (
+          {filtersActive || isEnded ? (
             <>
               <h2>No clients match these filters</h2>
               <Button
@@ -424,23 +420,44 @@ export function ClientsPage() {
                 }
                 item={item}
                 layout="card"
+                variant={isEnded ? "ended" : "current"}
                 selected={index === selectedIndex}
               />
             ))}
+            {isEnded ? (
+              <p className="clients-ended-note muted">{ENDED_NOTE}</p>
+            ) : null}
           </div>
         ) : (
           <div className="clients-table-wrap card">
-            <table className="clients-table">
+            <table
+              className={
+                isEnded ? "clients-table clients-table-ended" : "clients-table"
+              }
+            >
               <thead>
-                <tr>
-                  <th>Client</th>
-                  <th>Status</th>
-                  <th>Adherence</th>
-                  <th>Next check-in</th>
-                  <th>Plan</th>
-                  <th>Renewal</th>
-                  <th>Action</th>
-                </tr>
+                {isEnded ? (
+                  <tr>
+                    <th className="col-client">Client</th>
+                    <th className="col-status">Status</th>
+                    <th className="col-plan">Last plan</th>
+                    <th className="col-action">
+                      <span className="sr-only">Action</span>
+                    </th>
+                  </tr>
+                ) : (
+                  <tr>
+                    <th className="col-client">Client</th>
+                    <th className="col-status">Status</th>
+                    <th className="col-adherence">Adherence</th>
+                    <th className="col-checkin">Next check-in</th>
+                    <th className="col-plan">Plan</th>
+                    <th className="col-renewal">Renewal</th>
+                    <th className="col-action">
+                      <span className="sr-only">Action</span>
+                    </th>
+                  </tr>
+                )}
               </thead>
               <tbody>
                 {items.map((item, index) => (
@@ -451,11 +468,15 @@ export function ClientsPage() {
                       `${item.traineeDisplayName}-${index}`
                     }
                     item={item}
+                    variant={isEnded ? "ended" : "current"}
                     selected={index === selectedIndex}
                   />
                 ))}
               </tbody>
             </table>
+            {isEnded ? (
+              <p className="clients-ended-note muted">{ENDED_NOTE}</p>
+            ) : null}
           </div>
         )
       ) : null}
