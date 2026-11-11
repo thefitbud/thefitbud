@@ -9,7 +9,7 @@
 ## Decisions
 - **D-W9b-1 Steps privacy copy (frames 93, 95):** steps **are** shared with the coach (the trainer sees daily steps). The frames' line "Steps stay on your phone and aren't shared with your coach" is false. The copy Z9-10 shipped is correct: "FitBud reads your daily step count from {Apple Health | Health Connect} and shares the daily total with {coach}." Decided by Firoz, 11 Nov 2026. The PNGs are not repainted; see the notes in `docs/design/README.md` and `DESIGN-NOTES.md` › "Superseded by (W9b, 11 Nov 2026)".
 - **D-W9b-2 Client ⋯ menu (frame 208):** "Add note" is deliberately left out of the client header overflow menu. Notes are added from Overview. This confirms what Z9-13 shipped. Decided by Firoz, 11 Nov 2026.
-- **D-W9b-3 Lanes (planner):** workout (`WorkoutTab.tsx`, `WorkoutTab.week.test.tsx`, `TraineeShell.tsx`), steps-copy (`trainee/settings/StepsSettingsScreen.tsx`, only if reachable). Z10-15 and Z14-20 are not touched.
+- **D-W9b-3 Lanes (planner):** workout (`WorkoutTab.tsx`, `WorkoutTab.week.test.tsx`, `TraineeShell.tsx`, plus the `FOCUS_DATE` fixture lines in `WorkoutTab.render.test.tsx` and `workout/coach-logged/WorkoutTab.gating.test.tsx`), steps-copy (`trainee/settings/StepsSettingsScreen.tsx`, only if reachable). Z10-15 and Z14-20 are not touched.
 
 ## Questions for Firoz
 - None.
