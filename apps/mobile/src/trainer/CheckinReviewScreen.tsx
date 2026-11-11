@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, StyleSheet, Switch, TextInput, View } from "react-native";
 import { Eye } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
@@ -18,6 +18,8 @@ import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
 import { StatusChip } from "../components/StatusChip";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { reportError } from "../lib/reportError";
+import { Photos } from "./checkinReview/Photos";
 import { checkinReviewRows, type ReviewMeasureTile } from "./checkinReviewRows";
 import {
   noteForCheckin,
@@ -43,7 +45,8 @@ export function CheckinReviewScreen({
   relationshipId,
   onBack,
 }: Props) {
-  const { api } = useAuth();
+  const { api, me } = useAuth();
+  const zone = me?.timezone ?? deviceTimeZone();
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
   const [name, setName] = useState("Client");
   const [outcome, setOutcome] = useState<CheckinReviewOutcome>("needs_follow_up");
@@ -66,7 +69,8 @@ export function CheckinReviewScreen({
         try {
           const workspace = await api.getClientWorkspace(rid);
           setName(formatPersonName(workspace.header.traineeDisplayName));
-        } catch {
+        } catch (workspaceError) {
+          reportError("checkinReview.workspace", workspaceError);
           setName("Client");
         }
       }
@@ -134,11 +138,18 @@ export function CheckinReviewScreen({
       await load();
     } catch (err) {
       // The review itself is stored once recorded; show it read-only.
-      if (recorded) void load();
-      if (err instanceof ApiClientError && err.status === 409) {
+      if (recorded) {
+        // The review is stored; only the note failed. Say what is known.
+        void load();
+        if (!(err instanceof ApiClientError)) reportError("checkinReview.save", err);
+        setError("Review saved. The note wasn't shared.");
+      } else if (err instanceof ApiClientError && err.status === 409) {
         setError(`${first}'s check-in changed. Pull to reload.`);
+      } else if (err instanceof ApiClientError) {
+        setError(err.message);
       } else {
-        setError(err instanceof ApiClientError ? err.message : "Couldn't load. Pull to try again.");
+        reportError("checkinReview.save", err);
+        setError("Couldn't save the review. Try again.");
       }
     } finally {
       setActing(false);
@@ -149,7 +160,7 @@ export function CheckinReviewScreen({
   const subtitle = context
     ? `Weekly check-in · ${formatCivilDate(context.checkin.localDate)}${
         submitted
-          ? `, ${formatClockTime(submitted, deviceTimeZone())}`
+          ? `, ${formatClockTime(submitted, zone)}`
           : ""
       }`
     : "";
@@ -157,11 +168,12 @@ export function CheckinReviewScreen({
   const savedSheet =
     reviewed && context ? (
       <View style={styles.sheet}>
+        <View style={styles.handle} />
         <View style={styles.savedHead}>
           <StatusChip kind="checkin" value="reviewed" />
           {savedReview ? (
             <Text style={styles.savedLine}>
-              {reviewedSummaryLine(savedReview, deviceTimeZone())}
+              {reviewedSummaryLine(savedReview, zone)}
             </Text>
           ) : null}
         </View>
@@ -188,6 +200,7 @@ export function CheckinReviewScreen({
 
   const sheet = reviewed || !context ? savedSheet : (
     <View style={styles.sheet}>
+      <View style={styles.handle} />
       <View style={styles.outcomes}>
         {OUTCOMES.map((item) => {
           const selected = outcome === item.value;
@@ -199,7 +212,10 @@ export function CheckinReviewScreen({
               onPress={() => setOutcome(item.value)}
               style={[styles.outcome, selected ? styles.outcomeOn : null]}
             >
-              <Text style={[styles.outcomeText, selected ? styles.outcomeTextOn : null]}>
+              <Text
+                numberOfLines={1}
+                style={[styles.outcomeText, selected ? styles.outcomeTextOn : null]}
+              >
                 {item.label}
               </Text>
             </Pressable>
@@ -229,7 +245,13 @@ export function CheckinReviewScreen({
               : "Only you see this note"}
           </Text>
         </View>
-        <View style={[styles.switch, visible ? styles.switchOn : null]} />
+        <Switch
+          value={visible}
+          onValueChange={setVisible}
+          accessibilityLabel={`Visible to ${first}`}
+          trackColor={{ false: "#E7E9F2", true: colors.indigo }}
+          thumbColor={colors.white}
+        />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -245,8 +267,9 @@ export function CheckinReviewScreen({
   return (
     <Screen
       title={name}
-      subtitle={subtitle}
       chrome="app"
+      showHeader={false}
+      footerVariant="toast"
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
@@ -254,9 +277,23 @@ export function CheckinReviewScreen({
       }}
       footer={sheet}
     >
-      <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}>
-        <Text style={styles.backText}>‹</Text>
-      </Pressable>
+      <View style={styles.header}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={onBack}
+          style={styles.back}
+        >
+          <Text style={styles.backText}>‹</Text>
+        </Pressable>
+        <View style={styles.headerText}>
+          <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
+            {name}
+          </Text>
+          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        </View>
+        <View style={styles.back} />
+      </View>
       {toast ? <Snackbar leadingCheck message={toast} onDismiss={() => setToast(null)} /> : null}
       {offline ? (
         <Text style={styles.offline}>You're offline. Showing the last update from this phone.</Text>
@@ -307,22 +344,7 @@ export function CheckinReviewScreen({
           ))}
         </View>
       ) : null}
-      {(context?.photos.length ?? 0) > 0 ? (
-        <View style={styles.photos}>
-          <Text style={styles.photosHead} accessibilityRole="header">
-            Photos <Text style={styles.photosCount}>{context?.photos.length}</Text>
-          </Text>
-          <View style={styles.photoRow}>
-            {context?.photos.map((photo) => (
-              <View
-                key={photo.id}
-                accessibilityLabel="Check-in photo"
-                style={styles.photoTile}
-              />
-            ))}
-          </View>
-        </View>
-      ) : null}
+      {context ? <Photos photos={context.photos} checkinId={checkinId} /> : null}
       {context ? (
         <Text style={styles.since}>
           {context.recentWorkoutAdherence.completed} of{" "}
@@ -363,7 +385,19 @@ function Measure({ item }: { item: ReviewMeasureTile }) {
 }
 
 const styles = StyleSheet.create({
+  header: { alignItems: "center", flexDirection: "row", marginBottom: 8 },
+  headerText: { alignItems: "center", flex: 1 },
+  title: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 20 },
+  subtitle: { color: colors.midGrey, fontSize: 14, marginTop: 2 },
   back: { minHeight: 44, justifyContent: "center", width: 44 },
+  handle: {
+    alignSelf: "center",
+    backgroundColor: "#D9DBE8",
+    borderRadius: 999,
+    height: 4,
+    marginBottom: 12,
+    width: 40,
+  },
   backText: { color: colors.indigo, fontSize: 28 },
   card: {
     backgroundColor: colors.white,
@@ -402,11 +436,6 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   delta: { color: colors.midGrey, fontSize: 13, marginTop: 4 },
-  photos: { marginTop: 16 },
-  photosHead: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 17 },
-  photosCount: { color: colors.midGrey, fontFamily: fontFamilySemiBold, fontSize: 17 },
-  photoRow: { flexDirection: "row", gap: 8, marginTop: 8 },
-  photoTile: { aspectRatio: 3 / 4, backgroundColor: "#E4E0F7", borderRadius: 14, flex: 1 },
   savedHead: { alignItems: "center", flexDirection: "row", gap: 10 },
   savedLine: { color: colors.midGrey, flexShrink: 1, fontSize: 14 },
   savedNote: {
@@ -434,22 +463,32 @@ const styles = StyleSheet.create({
   since: { color: colors.deepNavy, fontSize: 15, lineHeight: 22, marginTop: 16 },
   sheet: {
     backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderWidth: 1,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    marginHorizontal: -16,
     padding: 16,
+    paddingBottom: 24,
+    shadowColor: "#1B1650",
+    shadowOffset: { height: -2, width: 0 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
-  outcomes: { flexDirection: "row", gap: 6 },
+  outcomes: {
+    backgroundColor: "#ECEAF6",
+    borderRadius: 14,
+    flexDirection: "row",
+    padding: 3,
+  },
   outcome: {
-    borderRadius: 999,
+    alignItems: "center",
+    borderRadius: 12,
     flex: 1,
-    minHeight: 36,
     justifyContent: "center",
-    paddingHorizontal: 6,
+    minHeight: 44,
+    paddingHorizontal: 4,
   },
-  outcomeOn: { backgroundColor: colors.white, borderColor: "#E7E9F2", borderWidth: 1 },
-  outcomeText: { color: colors.midGrey, fontSize: 12, textAlign: "center" },
+  outcomeOn: { backgroundColor: colors.white },
+  outcomeText: { color: colors.midGrey, fontSize: 13, textAlign: "center" },
   outcomeTextOn: { color: colors.deepNavy, fontFamily: fontFamilySemiBold },
   note: {
     borderColor: "#E7E9F2",
@@ -470,13 +509,6 @@ const styles = StyleSheet.create({
   },
   visibleLabel: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 15 },
   visibleHint: { color: colors.midGrey, fontSize: 13 },
-  switch: {
-    backgroundColor: "#E7E9F2",
-    borderRadius: 999,
-    height: 28,
-    width: 48,
-  },
-  switchOn: { backgroundColor: colors.indigo },
   save: {
     alignItems: "center",
     backgroundColor: colors.indigo,

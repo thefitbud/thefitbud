@@ -10,7 +10,6 @@ import {
   checkinReviewContextSchema,
   type CheckinReviewContext,
 } from "@fitbud/contracts";
-import { deviceTimeZone } from "@fitbud/core";
 import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
 import {
   noteForCheckin,
@@ -41,7 +40,19 @@ const form = checkinFormVersionSchema.parse({
   ],
 });
 
-function context(reviewed: boolean): CheckinReviewContext {
+function photo(id: string, type: string, entityId: string, status: string) {
+  return {
+    id,
+    mediaType: "checkin_photo",
+    status,
+    contentType: "image/jpeg",
+    createdAt: "2026-10-16T16:00:00.000Z",
+    domainEntityType: type,
+    domainEntityId: entityId,
+  };
+}
+
+function context(reviewed: boolean, withNote = true): CheckinReviewContext {
   return checkinReviewContextSchema.parse({
     checkin: {
       id: CHECKIN,
@@ -85,12 +96,18 @@ function context(reviewed: boolean): CheckinReviewContext {
     recentWorkoutAdherence: { completed: 3, missed: 1, modified: 0, skipped: 0, pending: 0 },
     recentMealCompliance: { confirmed: 10, modified: 1, skipped: 0, overdue: 0, pending: 2 },
     activeExceptions: [],
-    photos: [],
+    photos: [
+      photo("aaaaaaaa-0000-4000-8000-000000000001", "checkin", CHECKIN, "ready"),
+      photo("aaaaaaaa-0000-4000-8000-000000000002", "checkin", CHECKIN, "ready"),
+      // Not this check-in's, or not uploaded: never shown or counted.
+      photo("aaaaaaaa-0000-4000-8000-000000000003", "checkin", "00000000-0000-4000-8000-000000000009", "ready"),
+      photo("aaaaaaaa-0000-4000-8000-000000000004", "checkin", CHECKIN, "pending_upload"),
+    ],
     measurements: [
       { type: "body_weight_kg", value: "86.4", unit: "kg", observedAt: "2026-10-16T05:00:00.000Z" },
       { type: "body_weight_kg", value: "86.9", unit: "kg", observedAt: "2026-10-09T05:00:00.000Z" },
     ],
-    previousNotes: reviewed
+    previousNotes: reviewed && withNote
       ? [
           {
             id: "7a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
@@ -116,6 +133,7 @@ const api = {
   getClientWorkspace: vi.fn(async () => ({ header: { traineeDisplayName: "Rohan Mehta" } })),
   recordCheckinReview: vi.fn(async () => ({})),
   createTrainerNote: vi.fn(async () => ({})),
+  getDownloadTarget: vi.fn(async (id: string) => ({ downloadUrl: `https://files.test/${id}?exp=1&sig=x` })),
 };
 const auth = mockAuth({ api, me: { timezone: "Asia/Kolkata" } });
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => auth }));
@@ -150,6 +168,17 @@ describe("CheckinReviewScreen", () => {
     expect(screen.getByText("Save review")).toBeTruthy();
   });
 
+  it("shows only this check-in's uploaded photos as thumbnails", async () => {
+    api.getDownloadTarget.mockClear();
+    render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    await screen.findByText("Photos");
+    await waitFor(() => expect(screen.getAllByLabelText("Check-in photo")).toHaveLength(2));
+    expect(api.getDownloadTarget).toHaveBeenCalledTimes(2);
+    expect(api.getDownloadTarget).not.toHaveBeenCalledWith("aaaaaaaa-0000-4000-8000-000000000003");
+    expect(api.getDownloadTarget).not.toHaveBeenCalledWith("aaaaaaaa-0000-4000-8000-000000000004");
+    expect(screen.getByText("2")).toBeTruthy();
+  });
+
   it("stays on the screen after saving and turns read-only", async () => {
     const onBack = vi.fn();
     // The screen reloads after saving; the server then returns the review.
@@ -168,9 +197,30 @@ describe("CheckinReviewScreen", () => {
     expect(onBack).not.toHaveBeenCalled();
     expect(api.recordCheckinReview).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Review saved · shared with Rohan")).toBeTruthy();
-    expect(screen.getByText(reviewedSummaryLine(context(true).checkin.review!, deviceTimeZone()))).toBeTruthy();
+    expect(screen.getByText("Needs follow-up · Sun 18 Oct, 9:46 am")).toBeTruthy();
     expect(screen.getByText("Visible to Rohan")).toBeTruthy();
     expect(screen.queryByText("Save review")).toBeNull();
     expect(screen.queryByLabelText("Add a note for Rohan")).toBeNull();
+  });
+
+  it("review saved but note failed: read-only, honest message, nothing claimed as shared", async () => {
+    let saved = false;
+    api.recordCheckinReview.mockImplementationOnce(async () => {
+      saved = true;
+      return {};
+    });
+    api.createTrainerNote.mockRejectedValueOnce(new Error("boom"));
+    api.getCheckinReviewContext.mockImplementation(async () => context(saved, false));
+    render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    fireEvent.change(await screen.findByLabelText("Add a note for Rohan"), {
+      target: { value: "Weekend leg day works." },
+    });
+    fireEvent.click(screen.getByText("Save review"));
+    await waitFor(() => expect(screen.getByText("Check-in item closed in Attention")).toBeTruthy());
+    expect(screen.getByText("Review saved. The note wasn't shared.")).toBeTruthy();
+    expect(screen.queryByText("Couldn't load. Pull to try again.")).toBeNull();
+    expect(screen.queryByText(/shared with Rohan/)).toBeNull();
+    expect(screen.queryByText("Visible to Rohan")).toBeNull();
+    expect(screen.queryByText("Save review")).toBeNull();
   });
 });
