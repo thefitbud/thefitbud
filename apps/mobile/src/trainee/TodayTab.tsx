@@ -24,7 +24,7 @@ import {
   semanticColors,
   spacing,
 } from "@fitbud/ui-mobile";
-import { Check, Clock, Moon } from "lucide-react-native";
+import { Check, Clock, CloudUpload, Moon } from "lucide-react-native";
 import { surface } from "@fitbud/tokens";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -75,6 +75,13 @@ import {
   TodaySummaryCard,
   type StepsChipState,
 } from "./today/TodaySummaryCard";
+import { INFO_BORDER, PastDayBanner } from "./today/PastDayBanner";
+import { TodaySkeleton } from "./today/TodaySkeleton";
+import {
+  queuedLogsLabel,
+  useDeviceOffline,
+  useQueuedLogs,
+} from "./today/queuedLogs";
 
 function mealItemLine(meal: MealAssignment): string {
   const items = meal.prescription.items
@@ -219,6 +226,25 @@ function UpNextChip({ label }: { label: string }) {
     <View style={[styles.upNextChip, { backgroundColor: palette.fill }]}>
       <Clock size={14} color={palette.text} strokeWidth={1.75} />
       <Text style={[styles.upNextLabel, { color: palette.text }]}>{label}</Text>
+    </View>
+  );
+}
+
+/** A log saved on the phone and not yet sent (frame 104). */
+function WaitingChip() {
+  const palette = semanticColors.info;
+  return (
+    <View
+      style={[
+        styles.upNextChip,
+        { backgroundColor: palette.fill, borderColor: INFO_BORDER, borderWidth: 1 },
+      ]}
+      accessibilityLabel="Waiting to send"
+    >
+      <CloudUpload size={14} color={palette.text} strokeWidth={1.75} />
+      <Text style={[styles.upNextLabel, { color: palette.text }]}>
+        Waiting to send
+      </Text>
     </View>
   );
 }
@@ -471,6 +497,12 @@ export function TodayTab({
     (meal) => meal.status === "pending" || meal.status === "overdue",
   );
 
+  // Offline means the day load failed or the device reports no network. The
+  // outbox is read only then: that is when "waiting to send" is news.
+  const deviceOffline = useDeviceOffline();
+  const offline = offlineHint || deviceOffline;
+  const queued = useQueuedLogs(offline);
+
   const lateLoggableCount = meals.filter((meal) =>
     canShowMealLogActions({
       lockStateKnown,
@@ -583,8 +615,12 @@ export function TodayTab({
           day={dayTotals}
         />
 
-        {offlineHint ? (
-          <Text style={styles.offlineHint}>Saved on phone · showing last sync</Text>
+        {offline ? (
+          <Text style={styles.offlineHint} accessibilityRole="text">
+            {queued && queued.count > 0
+              ? queuedLogsLabel(queued.count)
+              : "Saved on phone · showing last sync"}
+          </Text>
         ) : null}
         {error ? <ErrorBanner message={error} /> : null}
         {/*
@@ -633,18 +669,15 @@ export function TodayTab({
           </View>
         ) : null}
 
-        {!isToday && !isFuture && lateLoggableCount > 0 ? (
-          <Text style={styles.lateBanner}>
-            You can still log {lateLoggableCount} item
-            {lateLoggableCount === 1 ? "" : "s"} from this day.
-          </Text>
+        {!isToday && !isFuture && !loading ? (
+          <PastDayBanner
+            localDate={selectedDate}
+            canStillLog={lateLoggableCount > 0}
+            onBackToToday={() => onSelectDate(today)}
+          />
         ) : null}
 
-        {loading ? (
-          <View style={styles.card} accessibilityLabel="Loading today">
-            <Text style={styles.body}>Loading your day…</Text>
-          </View>
-        ) : null}
+        {loading ? <TodaySkeleton /> : null}
 
         {/*
           Names the plan-loaded region for screen readers and the Maestro
@@ -652,7 +685,7 @@ export function TodayTab({
           plan-less trainee never gets it). Visually hidden: the frames show
           no heading here; the workout itself is in the hero below.
         */}
-        {planState.status === "loaded" ? (
+        {planState.status === "loaded" && isToday ? (
           <Text
             style={styles.srOnly}
             accessibilityRole="header"
@@ -684,7 +717,6 @@ export function TodayTab({
 
         {planState.status === "loaded" &&
         !loading &&
-        isToday &&
         workout &&
         (workout.status === "completed" || workout.status === "modified") ? (
           <View
@@ -873,7 +905,7 @@ export function TodayTab({
           </View>
         ) : null}
 
-        {planState.status === "loaded" ? (
+        {planState.status === "loaded" && !loading ? (
           <View style={styles.mealsSection}>
             <View style={styles.mealsHead}>
               <Text style={styles.mealsLabel} accessibilityRole="header">
@@ -907,9 +939,13 @@ export function TodayTab({
                     meal,
                     dayTotals?.totals.perMeal,
                   );
-                  const lockCopy = lockStateKnown
-                    ? mealLockCopy(meal, coachName)
-                    : null;
+                  const logged = isMealLoggedForCount(meal.status);
+                  // A logged meal is "Logged" whatever the lock says; the lock
+                  // only closes meals that were never logged.
+                  const lockCopy =
+                    lockStateKnown && !logged
+                      ? mealLockCopy(meal, coachName)
+                      : null;
                   const sub = [
                     mealItemLine(meal),
                     kcal != null ? formatKcal(kcal, false) : null,
@@ -933,7 +969,11 @@ export function TodayTab({
                           {sub}
                         </Text>
                       </View>
-                      {!lockCopy && chip.tone === "info" ? (
+                      {!lockCopy &&
+                      !isMealLoggedForCount(meal.status) &&
+                      queued?.mealAssignmentIds.has(meal.id) ? (
+                        <WaitingChip />
+                      ) : !lockCopy && chip.tone === "info" ? (
                         <UpNextChip label={chip.label} />
                       ) : (
                         <StatusChip
@@ -1073,14 +1113,6 @@ const styles = StyleSheet.create({
     color: colors.midGrey,
     fontSize: 13,
     fontWeight: "600",
-  },
-  lateBanner: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.card,
-    color: colors.deepNavy,
-    fontSize: 14,
-    fontWeight: "600",
-    padding: spacing.md,
   },
   hero: {
     backgroundColor: colors.deepNavy,

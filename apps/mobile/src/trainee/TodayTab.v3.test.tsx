@@ -140,6 +140,9 @@ const workoutAssignment = workoutAssignmentSchema.parse({
 });
 
 let failDay = false;
+let failOutbox = false;
+let holdDay: Promise<void> | null = null;
+let outboxRows: { status: string; payloadJson: string }[] = [];
 let workouts: unknown[] = [];
 let meals: MealAssignment[] = [];
 let stepsToday: unknown = { localDate: TODAY, steps: null, target: 8000 };
@@ -155,6 +158,7 @@ const api = new Proxy(
         };
       if (key === "listMealAssignments")
         return async () => {
+          if (holdDay) await holdDay;
           if (failDay) throw new Error("offline");
           return { items: meals, nextCursor: null };
         };
@@ -191,7 +195,14 @@ vi.mock("../sync/SyncProvider", async () => {
     ...actual,
     useSyncEngine: () => ({
       pullAndApply: vi.fn(async () => undefined),
-      store: { upsertLocal: vi.fn(), listLocal: vi.fn(async () => []) },
+      store: {
+        upsertLocal: vi.fn(),
+        listLocal: vi.fn(async () => []),
+        listOutbox: vi.fn(async () => {
+          if (failOutbox) throw new Error("storage");
+          return outboxRows;
+        }),
+      },
       enqueue: vi.fn(),
     }),
   };
@@ -232,14 +243,16 @@ const completedWorkout = workoutAssignmentSchema.parse({
 
 let openOverlay = vi.fn();
 
-function renderToday() {
+let onSelectDate = vi.fn();
+
+function renderToday(selectedDate: string = TODAY) {
   return render(
     <TodayTab
       relationship={relationship}
       planState={effectivePlanStateFor(livePlan)}
       planCacheError={null}
-      selectedDate={TODAY}
-      onSelectDate={() => undefined}
+      selectedDate={selectedDate}
+      onSelectDate={onSelectDate}
       onStartWorkout={() => undefined}
       onOpenDiet={() => undefined}
       onOpenCheckin={() => undefined}
@@ -251,6 +264,11 @@ function renderToday() {
 
 beforeEach(() => {
   openOverlay = vi.fn();
+  onSelectDate = vi.fn();
+  holdDay = null;
+  failOutbox = false;
+  outboxRows = [];
+  Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
   failDay = false;
   meals = [];
   workouts = [];
@@ -449,5 +467,139 @@ describe("Today v3 done and rest states", () => {
       expect(screen.getByText("Recovery is part of the plan")).toBeTruthy();
     });
     expect(screen.queryByText(/^Next:/)).toBeNull();
+  });
+});
+
+function dayBefore(date: string, n: number): string {
+  const d = new Date(`${date}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+
+function queuedRow(n: number, status = "pending") {
+  return {
+    status,
+    payloadJson: JSON.stringify({
+      assignmentId: `00000000-0000-4000-8000-0000000001${n}0`,
+      body: { photoIntent: null },
+    }),
+  };
+}
+
+describe("Today v3 past day, loading and offline", () => {
+  const PAST = dayBefore(TODAY, 2);
+
+  it("past day: banner with the date and Back to today, no workout card", async () => {
+    workouts = [
+      { ...workoutAssignment, localDate: PAST, windowStartsAt: `${PAST}T13:00:00.000Z`, windowEndsAt: `${PAST}T15:00:00.000Z` },
+    ];
+    meals = [{ ...meal(1, "Breakfast", "overdue"), localDate: PAST }];
+    renderToday(PAST);
+    const banner = await screen.findByLabelText(/^Past day\./);
+    expect(banner.textContent).toMatch(/you can still log it/);
+    expect(banner.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+    expect(screen.queryByText("Start workout")).toBeNull();
+    expect(screen.queryByText("Today's workout")).toBeNull();
+    screen.getByRole("button", { name: "Back to today" }).click();
+    expect(onSelectDate).toHaveBeenCalledWith(TODAY);
+  });
+
+  it("today has no past banner", async () => {
+    renderToday();
+    await screen.findByText("Meals");
+    expect(screen.queryByText("Back to today")).toBeNull();
+  });
+
+  it("loading: skeleton in place of the cards, gone once the day loads", async () => {
+    let release: () => void = () => undefined;
+    holdDay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    renderToday();
+    await screen.findByLabelText("Loading today");
+    expect(screen.queryByLabelText("Open diet")).toBeNull();
+    expect(screen.queryByText("Rest day")).toBeNull();
+    release();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Loading today")).toBeNull();
+    });
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+  });
+
+  it("offline with 1 log queued says 1 log waiting to send", async () => {
+    failDay = true;
+    outboxRows = [queuedRow(1)];
+    renderToday();
+    await screen.findByText("1 log waiting to send");
+  });
+
+  it("offline with 3 logs queued says 3 logs waiting to send; failed rows do not count", async () => {
+    failDay = true;
+    outboxRows = [queuedRow(1), queuedRow(2), queuedRow(3, "in_flight"), queuedRow(4, "rejected")];
+    renderToday();
+    await screen.findByText("3 logs waiting to send");
+  });
+
+  it("offline with nothing queued keeps the saved-on-phone line", async () => {
+    failDay = true;
+    renderToday();
+    await screen.findByText("Saved on phone · showing last sync");
+    expect(screen.queryByText(/waiting to send/)).toBeNull();
+  });
+
+  it("device offline: queued meal row carries a Waiting to send chip", async () => {
+    Object.defineProperty(navigator, "onLine", { value: false, configurable: true });
+    meals = [meal(1, "Breakfast", "pending"), meal(2, "Lunch", "pending")];
+    outboxRows = [queuedRow(1)];
+    renderToday();
+    await screen.findByText("1 log waiting to send");
+    expect(screen.getAllByLabelText("Waiting to send")).toHaveLength(1);
+  });
+
+  it("past completed workout keeps a read-only Done card, no Start workout", async () => {
+    workouts = [
+      {
+        ...completedWorkout,
+        localDate: PAST,
+        windowStartsAt: `${PAST}T13:00:00.000Z`,
+        windowEndsAt: `${PAST}T15:00:00.000Z`,
+      },
+    ];
+    renderToday(PAST);
+    await screen.findByLabelText("Workout done: Lower body B");
+    expect(screen.queryByText("Start workout")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start workout" })).toBeNull();
+  });
+
+  it("past day: a logged meal reads Logged", async () => {
+    meals = [
+      { ...meal(1, "Breakfast", "confirmed"), localDate: PAST },
+      { ...meal(2, "Lunch", "overdue"), localDate: PAST },
+    ];
+    renderToday(PAST);
+    await screen.findByLabelText(/^Past day\./);
+    expect(screen.getAllByText("Logged")).toHaveLength(1);
+  });
+
+  it("an unreadable outbox never reads as 0 waiting", async () => {
+    failDay = true;
+    failOutbox = true;
+    renderToday();
+    await screen.findByText("Saved on phone · showing last sync");
+    expect(screen.queryByText(/waiting to send/)).toBeNull();
+  });
+
+  it("many set-level rows for one workout count as one log", async () => {
+    failDay = true;
+    outboxRows = [1, 2, 3, 4].map((n) => ({
+      status: "pending",
+      recordId: "00000000-0000-4000-8000-000000000801",
+      payloadJson: JSON.stringify({
+        executionId: "00000000-0000-4000-8000-000000000801",
+        setExecutionId: `00000000-0000-4000-8000-00000000090${n}`,
+      }),
+    }));
+    renderToday();
+    await screen.findByText("1 log waiting to send");
   });
 });
