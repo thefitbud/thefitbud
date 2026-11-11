@@ -630,89 +630,59 @@
   color: var(--indigo, #4527c6);
 }
 
+/* Z8-19 / D-W8-13: one toolbar row (frames 136, 140): search, four filter
+   dropdowns, then the Current/Ended switch at the right end. */
+.clients-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .filter-bar {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 8px;
-  margin-bottom: 1rem;
-  /* visible, not hidden: the roster e2e treats overflow-x hidden as clipped pills. */
-  overflow: visible;
-  padding-bottom: 4px;
+  margin-bottom: 0.5rem;
   min-width: 0;
   max-width: 100%;
 }
 
 .filter-bar-row {
   display: flex;
-  /* Wrap onto the next line when the 1280px content column is narrower than the
-     pill row. A horizontal scroll leaves pill boxes outside the bar, which the
-     roster check counts as clipped. At 1440 the same row still fits on one line. */
+  /* Wraps only when the column cannot hold the row; the switch then drops to
+     the next line instead of overflowing. */
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px 10px;
-  overflow: visible;
+  gap: 10px 8px;
   max-width: 100%;
 }
 
-.filter-bar-row > * {
-  flex-shrink: 0;
-  max-width: 100%;
-}
-
-/* Search gives up a few pixels so Status, Adherence and More stay on one line
-   at 1440. Groups and More do not shrink; at 1280 the row wraps instead. */
 .filter-bar-row > .filter-search {
-  flex: 1 1 120px;
-  min-width: 120px;
-  max-width: 168px;
+  flex: 0 1 280px;
+  min-width: 180px;
 }
 
-.filter-bar-row > .filter-pill-group,
-.filter-bar-row > .filter-more,
-.filter-bar-row > .filter-clear {
-  flex: 0 0 auto;
-}
-
-.filter-bar-more {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 10px;
-  overflow: visible;
-  max-width: 100%;
-}
-
-.filter-more {
-  height: 28px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border, #e7e9f2);
-  background: #fff;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--ink-700, #25262b);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.filter-more.is-active {
-  background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
-  border-color: transparent;
+/* Icon-rail widths (1024–1279): a narrower search keeps the switch on the
+   same row at 1024. */
+@media (max-width: 1279px) {
+  .filter-bar-row > .filter-search {
+    flex-basis: 180px;
+  }
 }
 
 .filter-search {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  height: 32px;
-  min-width: 120px;
-  max-width: 168px;
-  padding: 0 10px;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 0 12px;
   border-radius: 10px;
   background: #fff;
   border: 1px solid var(--border, #e7e9f2);
+  color: var(--ink-500, #5b616b);
+}
+
+.filter-search:focus-within {
+  border-color: var(--indigo, #4527c6);
+  box-shadow: 0 0 0 3px rgb(69 39 198 / 14%);
 }
 
 .filter-search input {
@@ -720,33 +690,219 @@
   outline: none;
   background: transparent;
   font: inherit;
-  font-size: 12px;
+  font-size: 14px;
+  color: var(--deep-navy, #1a1248);
   min-width: 0;
   width: 100%;
 }
 
-.filter-pill-group {
+.filter-dropdowns {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.filter-dropdown {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.filter-dropdown-trigger {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  flex-wrap: wrap;
-  max-width: 100%;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 36px;
+  max-width: 220px;
+  padding: 0 12px 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border, #e7e9f2);
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.filter-pill-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #5c6578;
+.filter-dropdown-trigger:hover {
+  border-color: #cfd3e3;
 }
 
-.filter-pills {
+.filter-dropdown-trigger:focus-visible,
+.clients-segment-tab:focus-visible,
+.filter-dropdown-option:focus-visible,
+.filter-dropdown-clear:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+/* Selection is spelled out in the label ("Status: Invited"); the border only
+   reinforces it. */
+.filter-dropdown-trigger.has-selection {
+  border-color: var(--indigo, #4527c6);
+  color: var(--indigo, #4527c6);
+}
+
+.filter-dropdown-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter-dropdown-trigger svg {
+  flex: 0 0 auto;
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 220px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border, #e7e9f2);
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(26 18 72 / 14%);
+}
+
+.filter-dropdown-option,
+.filter-dropdown-clear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  color: var(--deep-navy, #1a1248);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filter-dropdown-option:hover,
+.filter-dropdown-option:focus-visible,
+.filter-dropdown-clear:hover,
+.filter-dropdown-clear:focus-visible {
+  background: #f3f2ff;
+}
+
+.filter-dropdown-check {
   display: inline-flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  border: 1px solid #c9cddb;
+  color: #fff;
 }
+
+.filter-dropdown-option[aria-checked="true"] .filter-dropdown-check {
+  background: var(--indigo, #4527c6);
+  border-color: var(--indigo, #4527c6);
+}
+
+.filter-dropdown-option-label {
+  flex: 1 1 auto;
+}
+
+.filter-dropdown-count {
+  margin-left: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-500, #5b616b);
+}
+
+.filter-dropdown-clear {
+  margin-top: 4px;
+  border-top: 1px solid var(--border, #e7e9f2);
+  border-radius: 0 0 8px 8px;
+  color: var(--indigo, #4527c6);
+  font-weight: 600;
+}
+
+.filter-dropdown-empty {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: var(--ink-500, #5b616b);
+}
+
+.filter-bar-trailing {
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+
+.clients-segment {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 10px;
+  background: #eceef4;
+}
+
+.clients-segment-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-500, #5b616b);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.clients-segment-tab.is-selected {
+  background: #fff;
+  color: var(--deep-navy, #1a1248);
+  box-shadow: 0 1px 2px rgb(26 18 72 / 12%);
+}
+
+.clients-segment-count {
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-clear {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* Tablet / coarse pointer: 44px hit targets (tap-targets.css rule, applied to
+   the Clients toolbar controls). */
+@media (max-width: 1024px), (pointer: coarse) {
+  .filter-search,
+  .filter-dropdown-trigger,
+  .filter-dropdown-option,
+  .filter-dropdown-clear {
+    height: 44px;
+    min-height: 44px;
+  }
+
+  .clients-segment-tab {
+    height: 44px;
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
 
 .filter-pill {
   display: inline-flex;
@@ -775,42 +931,134 @@
   opacity: 0.75;
 }
 
-.filter-clear {
-  flex: 0 0 auto;
-  margin-left: 4px;
-  white-space: nowrap;
-}
-
 .clients-table-wrap {
   background: #fff;
   border: 1px solid var(--border, #e7e9f2);
   border-radius: 16px;
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
-  overflow-x: auto;
-  overflow-y: hidden;
+  /* Columns are sized to fit (fixed layout below), so nothing scrolls away:
+     the Action column stays fully visible at 1024, 1280 and 1440. */
+  overflow: hidden;
 }
 
 .clients-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
 }
 
 .clients-table th,
 .clients-table td {
-  padding: 12px 16px;
+  padding: 12px 8px;
   text-align: left;
   vertical-align: middle;
   border-bottom: 1px solid var(--border, #e7e9f2);
   font-size: 13px;
+  overflow: hidden;
+}
+
+.clients-table th:first-child,
+.clients-table td:first-child {
+  padding-left: 20px;
+}
+
+.clients-table th:last-child,
+.clients-table td:last-child {
+  padding-right: 16px;
 }
 
 .clients-table th {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  color: #5c6578;
   background: #fafbfe;
+}
+
+/* Current: Client, Status, Adherence, Next check-in, Plan, Renewal, Action.
+   Fixed widths fit the widest chip on one line ("Needs attention", "Expired")
+   and the Action button ("Review intake" / "Resend invite"); Plan takes a
+   share and Client takes the remainder. */
+.clients-table .col-client { width: auto; }
+.clients-table .col-status { width: 120px; }
+.clients-table .col-adherence { width: 172px; }
+.clients-table .col-checkin { width: 96px; }
+.clients-table .col-plan { width: 13%; }
+.clients-table .col-renewal { width: 124px; }
+.clients-table .col-action {
+  width: 152px;
+  text-align: right;
+}
+
+/* Icon-rail widths (1024–1279): narrower fixed columns so Client keeps room;
+   longer chips may wrap to two lines here. */
+@media (max-width: 1279px) {
+  .clients-table .col-status { width: 104px; }
+  .clients-table .col-adherence { width: 124px; }
+  .clients-table .col-checkin { width: 90px; }
+  .clients-table .col-plan { width: 13%; }
+  .clients-table .col-renewal { width: 108px; }
+}
+
+/* Ended (frame 140): Client, Status, Last plan, Action. */
+.clients-table-ended .col-client { width: 30%; }
+.clients-table-ended .col-status { width: 28%; }
+.clients-table-ended .col-plan { width: auto; }
+
+.clients-table .roster-plan {
+  font-weight: 400;
+  color: var(--deep-navy, #1a1248);
+}
+
+.clients-table .client-name,
+.clients-table .client-subtitle,
+.clients-table .roster-plan {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clients-table .roster-person-copy {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.clients-table .roster-person .av {
+  flex: 0 0 32px;
+}
+
+/* Chips may wrap inside a narrow column instead of spilling into the next. */
+.clients-table .status-chip {
+  max-width: 100%;
+  white-space: normal;
+}
+
+/* The CTA never spills out of the Action cell: with a wider fallback font
+   ("Resend invite", "Review intake") it wraps inside the button instead. */
+.clients-table .client-row-cta {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  height: auto !important;
+  min-height: 30px;
+  padding-block: 4px !important;
+  white-space: normal;
+  text-align: center;
+  overflow-wrap: anywhere;
+  line-height: 1.2;
+}
+
+.clients-ended-note {
+  margin: 0;
+  padding: 14px 20px;
+  font-size: 13px;
+}
+
+.client-card-stack .clients-ended-note {
+  padding: 4px 0 0;
 }
 
 .clients-table tr.is-selected {

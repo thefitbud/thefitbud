@@ -321,36 +321,76 @@ test.describe("TW-B roster + invite", () => {
   test("roster search, Ended segment, FilterBar unclipped at 1280/1440", async ({
     page,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     await signIn(page);
     await page.waitForURL((url) => !url.pathname.includes("/sign-in"), {
       timeout: 45_000,
     });
 
-    async function assertFilterBarUnclipped() {
+    // Z8-19: the toolbar is one row (search, four dropdowns, the switch) and
+    // the table's Action cells sit fully inside the table. Wait for the counts
+    // and rows first so the check runs against the loaded layout.
+    async function assertToolbarAndActionUnclipped(width: number) {
+      await expect(
+        page.getByRole("tab", { name: /^Current \d+$/ }),
+      ).toBeVisible({ timeout: 20_000 });
+      await expect(page.locator("[data-client-row]").first()).toBeVisible({
+        timeout: 20_000,
+      });
       const bar = page.getByTestId("filter-bar");
-      await expect(bar).toBeVisible();
-      const ok = await bar.evaluate((el) => {
-        const style = getComputedStyle(el);
-        if (style.overflowX === "hidden") return false;
-        const pills = Array.from(el.querySelectorAll(".filter-pill"));
+      const result = await bar.evaluate((el) => {
         const barBox = el.getBoundingClientRect();
-        return pills.every((pill) => {
-          const box = pill.getBoundingClientRect();
+        const controls = Array.from(
+          el.querySelectorAll(
+            ".filter-search, .filter-dropdown-trigger, [role='tab']",
+          ),
+        );
+        const toolbarInside = controls.every((node) => {
+          const box = node.getBoundingClientRect();
           return box.right <= barBox.right + 1 && box.left >= barBox.left - 1;
         });
+        const wrap = document.querySelector(".clients-table-wrap");
+        const wrapBox = wrap?.getBoundingClientRect();
+        const actions = Array.from(
+          document.querySelectorAll(".clients-table td.col-action > *"),
+        );
+        const actionsInside =
+          !!wrapBox &&
+          actions.length > 0 &&
+          actions.every((node) => {
+            const box = node.getBoundingClientRect();
+            return (
+              box.width > 0 &&
+              box.right <= wrapBox.right + 0.5 &&
+              box.left >= wrapBox.left - 0.5 &&
+              (node as HTMLElement).scrollWidth <=
+                (node as HTMLElement).clientWidth + 1
+            );
+          });
+        const noScroll = !!wrap && wrap.scrollWidth <= wrap.clientWidth + 1;
+        return { toolbarInside, actionsInside, noScroll, count: actions.length };
       });
-      expect(ok, "FilterBar pills must not be clipped").toBe(true);
+      expect(result.toolbarInside, `toolbar inside bar at ${width}`).toBe(true);
+      expect(result.count, `action cells at ${width}`).toBeGreaterThan(0);
+      expect(result.actionsInside, `Action column unclipped at ${width}`).toBe(
+        true,
+      );
+      expect(result.noScroll, `table does not scroll at ${width}`).toBe(true);
     }
 
-    for (const width of [1440, 1280] as const) {
-      await page.setViewportSize({ width, height: 900 });
+    for (const [width, height] of [
+      [1440, 900],
+      [1280, 800],
+      [1024, 768],
+    ] as const) {
+      await page.setViewportSize({ width, height });
       await page.goto("/clients");
       await page.getByTestId("screen-TW-06").waitFor({ state: "visible" });
-      await assertFilterBarUnclipped();
+      await assertToolbarAndActionUnclipped(width);
     }
 
-    await expect(page.getByText(/\d+ active/i)).toBeVisible();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(page.getByText(/^\d+ clients · \d+ active$/)).toBeVisible();
     await expect(page.getByText(/Kavya/i)).toHaveCount(0);
     await page.getByPlaceholder(/search clients/i).fill("rohan");
     await page.waitForTimeout(400);
@@ -359,39 +399,81 @@ test.describe("TW-B roster + invite", () => {
     await page.getByPlaceholder(/search clients/i).fill("");
     await page.waitForTimeout(400);
 
-    // Renewal filter uses Home Renewals derivation (Rohan = expired).
+    // Renewal filter uses Home Renewals derivation (Rohan = expired); the
+    // closed dropdown names the selection in text.
     await page.goto("/clients?renewal=expired");
-    await page.getByRole("button", { name: /^More/i }).click();
     await expect(page.getByText(/Rohan/i).first()).toBeVisible({
       timeout: 15_000,
     });
-    await expect(page.getByText(/Expired/i).first()).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Renewal: Expired" }),
+    ).toBeVisible();
 
-    // History: Invited → Expired then Back restores status=invited.
-    // Z5-22: pills gain a facet count ("Expired 2") once listClients
-    // answers, so an exact /^Expired$/ name only matched if the click beat
-    // the API. Wait for the filtered page to load (the pressed Invited pill
-    // shows its count), then pick the pill in the Renewal group with or
-    // without its count.
+    // History: Status Invited → Renewal Expired, then Back restores
+    // status=invited only. Wait for facet counts before picking.
     await page.goto("/clients");
-    await page.getByRole("button", { name: /^Invited/i }).click();
+    await expect(
+      page.getByRole("tab", { name: /^Current \d+$/ }),
+    ).toBeVisible({ timeout: 20_000 });
+    const statusButton = page.getByRole("button", { name: /^Status/ });
+    await statusButton.focus();
+    await page.keyboard.press("Enter");
+    const statusMenu = page.getByRole("menu", { name: "Status" });
+    await expect(statusMenu).toBeVisible();
+    await statusMenu
+      .getByRole("menuitemcheckbox", { name: /^Invited( \d+)?$/ })
+      .click();
     await expect(page).toHaveURL(/status=invited/);
     await expect(
-      page.getByRole("button", { name: /^Invited \d+$/i }),
-    ).toHaveAttribute("aria-pressed", "true", { timeout: 15_000 });
-    await page.getByRole("button", { name: /^More/i }).click();
+      statusMenu.getByRole("menuitemcheckbox", { name: /^Invited/ }),
+    ).toHaveAttribute("aria-checked", "true", { timeout: 15_000 });
+    await page.keyboard.press("Escape");
+    await expect(statusMenu).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Status: Invited" }),
+    ).toBeFocused();
+
+    await page.getByRole("button", { name: /^Renewal/ }).click();
     await page
-      .getByRole("group", { name: "Renewal" })
-      .getByRole("button", { name: /^Expired( \d+)?$/i })
+      .getByRole("menu", { name: "Renewal" })
+      .getByRole("menuitemcheckbox", { name: /^Expired( \d+)?$/ })
       .click();
     await expect(page).toHaveURL(/renewal=expired/);
     await page.goBack();
     await expect(page).toHaveURL(/status=invited/);
+    await expect(page).not.toHaveURL(/renewal=expired/);
 
-    await page.getByRole("tab", { name: /^Ended$/i }).click();
+    await page.getByRole("tab", { name: /^Ended \d+$/ }).click();
     await expect(page.getByText(/Kavya|Nikhil/i).first()).toBeVisible({
       timeout: 15_000,
     });
+    await expect(
+      page.getByText(
+        "Ended clients are read-only. Their history and progress stay visible.",
+      ),
+    ).toBeVisible();
+    for (const [width, height] of [
+      [1280, 800],
+      [1024, 768],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      const ok = await page.evaluate(() => {
+        const wrap = document.querySelector(".clients-table-wrap");
+        const wrapBox = wrap?.getBoundingClientRect();
+        const actions = Array.from(
+          document.querySelectorAll(".clients-table td.col-action > *"),
+        );
+        return (
+          !!wrapBox &&
+          actions.length > 0 &&
+          actions.every((node) => {
+            const box = node.getBoundingClientRect();
+            return box.right <= wrapBox.right + 0.5 && box.left >= wrapBox.left - 0.5;
+          })
+        );
+      });
+      expect(ok, `ended Action column unclipped at ${width}`).toBe(true);
+    }
   });
 
   test("add client share card: WhatsApp, copy, QR", async ({ page, context }) => {
