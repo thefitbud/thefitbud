@@ -73,8 +73,21 @@ describe("check-ins list model", () => {
   it("words lines with civil dates, client zone and days overdue", () => {
     expect(model.toReview[0]!.line).toBe("Check-in · submitted Fri 16 Oct, 9:30 pm");
     // Zone abbreviation text comes from the engine (GST or GMT+4), so match its shape.
-    expect(model.toReview[1]!.line).toMatch(/^Check-in · submitted Sat 17 Oct, 7:15 pm \S+$/);
+    expect(model.toReview[1]!.line).toMatch(/^Check-in · submitted Sat 17 Oct, 7:15 pm (GST|GMT\+4)$/);
     expect(model.overdue[0]!.line).toBe("Check-in · due Fri 16 Oct · 2 d overdue");
+  });
+
+  it("no zone suffix when the client zone is an alias of the trainer's", () => {
+    const aliased = buildCheckinListModel(
+      [ITEMS[1]!],
+      { trainerZone: "Asia/Calcutta", today: "2026-10-18" },
+    );
+    expect(aliased.toReview[0]!.line).toBe("Check-in · submitted Fri 16 Oct, 9:30 pm");
+    const other = buildCheckinListModel(
+      [ITEMS[0]!],
+      { trainerZone: "Asia/Calcutta", today: "2026-10-18" },
+    );
+    expect(other.toReview[0]!.line).toMatch(/pm (GST|GMT\+4)$/);
   });
 
   it("counts civil days and never goes negative", () => {

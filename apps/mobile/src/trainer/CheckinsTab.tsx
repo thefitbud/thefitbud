@@ -9,6 +9,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { localDateInTimezone } from "../lib/dates";
+import { reportError } from "../lib/reportError";
 import { CheckinsList } from "./checkinsList/List";
 import {
   buildCheckinListModel,
@@ -63,7 +64,8 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
     try {
       const workspace = await api.getClientWorkspace(row.relationshipId);
       phone = workspace.header.clientWhatsappE164 ?? null;
-    } catch {
+    } catch (err) {
+      reportError("trainer.checkins.whatsappLookup", err);
       phone = null;
     }
     await openContextualWhatsApp({

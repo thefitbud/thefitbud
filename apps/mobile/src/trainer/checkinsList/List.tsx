@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { ClipboardCheck, Clock3 } from "lucide-react-native";
 import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
@@ -77,7 +77,10 @@ export function CheckinsList({
           ))}
         </View>
       )}
-      {!loading && segment === "to_review" && rows.length > 0 ? (
+      {!loading &&
+      Platform.OS !== "android" &&
+      segment === "to_review" &&
+      rows.length > 0 ? (
         <Text style={styles.hint}>Pull down to check for new check-ins</Text>
       ) : null}
     </View>
