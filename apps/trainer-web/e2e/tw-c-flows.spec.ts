@@ -125,7 +125,8 @@ test.describe("TW-C workspace", () => {
     await expect(
       page.getByRole("menuitem", { name: /Reminder settings/i }),
     ).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: /Add note/i })).toBeVisible();
+    // Z9-13: notes are added from the Overview "Coach notes" card, not this menu.
+    await expect(page.getByRole("menuitem", { name: /Add note/i })).toHaveCount(0);
     await expect(page.getByRole("menuitem", { name: /End coaching/i })).toBeVisible();
   });
 
@@ -136,9 +137,9 @@ test.describe("TW-C workspace", () => {
     await expect(page.getByText(/time/i).first()).toBeVisible({ timeout: 15_000 });
 
     await page.goto(`/clients/${KAVYA}/overview`);
-    await expect(page.getByText(/Coaching ended/i)).toBeVisible();
+    await expect(page.getByTestId("screen-TW-30").getByText(/^Ended · /)).toBeVisible();
     await expect(
-      page.getByRole("button", { name: /Reactivate coaching/i }),
+      page.getByRole("button", { name: /^Reactivate$/ }),
     ).toBeVisible();
 
     await page.goto(`/clients/${UNKNOWN}/overview`);
@@ -209,8 +210,8 @@ test.describe("TW-C workspace", () => {
     page,
   }) => {
     await page.goto(`/clients/${ROHAN}/overview`);
-    await page.getByRole("button", { name: /more actions/i }).click();
-    await page.getByRole("menuitem", { name: /add note/i }).click();
+    // Z9-13: the entry point is the Overview "Coach notes" card.
+    await page.getByRole("button", { name: /^Add note$/i }).click();
     await expect(page.getByTestId("screen-TW-34")).toBeVisible();
     const visibility = page.getByRole("checkbox", {
       name: /Visible to client/i,
@@ -239,7 +240,7 @@ test.describe("TW-C workspace", () => {
     await expect(page.getByText(noteBody)).toBeVisible();
 
     await page.goto(`/clients/${KAVYA}/overview`);
-    await expect(page.getByText(/Coaching ended/i)).toBeVisible();
+    await expect(page.getByTestId("screen-TW-30").getByText(/^Ended · /)).toBeVisible();
     await page.getByRole("button", { name: /more actions/i }).click();
     await expect(page.getByRole("menuitem", { name: /add note/i })).toHaveCount(
       0,

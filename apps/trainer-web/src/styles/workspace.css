@@ -1998,7 +1998,7 @@
   gap: 0.35rem;
 }
 
-.wsh-ended-banner {
+.wsh-pending {
   padding: 0 0 0.75rem;
 }
 
@@ -2053,4 +2053,118 @@
 .responsiveness-footer {
   font-size: 0.8125rem;
   line-height: 1.45;
+}
+
+/* —— Z9-13: client ⋯ menu (frames 208, 208b) ——
+ * Opt-in `OverflowMenu variant="wide"` and the item icon / description /
+ * divider parts. Every other OverflowMenu consumer keeps the default list
+ * from styles.css. */
+.overflow-menu-divider {
+  height: 1px;
+  margin: 0.25rem 0.375rem;
+  background: var(--border-default, #e7e9f2);
+  list-style: none;
+}
+
+.overflow-menu-list-wide {
+  width: 260px;
+  min-width: 0;
+  padding: 0.375rem;
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgb(26 18 72 / 12%);
+}
+
+.overflow-menu-list-wide .overflow-menu-item {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+
+.overflow-menu-list-wide .overflow-menu-item:hover,
+.overflow-menu-list-wide .overflow-menu-item:focus-visible {
+  color: var(--indigo, #4527c6);
+}
+
+.overflow-menu-list-wide .overflow-menu-item-destructive,
+.overflow-menu-list-wide .overflow-menu-item-destructive:hover,
+.overflow-menu-list-wide .overflow-menu-item-destructive:focus-visible {
+  color: var(--semantic-critical-text, #b91c1c);
+}
+
+.overflow-menu-list-wide .overflow-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.overflow-menu-item-icon {
+  display: inline-flex;
+  flex: none;
+  color: currentColor;
+}
+
+.overflow-menu-item-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.overflow-menu-item-desc {
+  margin-top: 0.125rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 400;
+  color: var(--ink-500, #5b616b);
+  white-space: normal;
+}
+
+/* Header actions share the 44 px height of the ⋯ trigger (frame 208). */
+.wsh-acts .button-primary,
+.wsh-acts .button-secondary {
+  box-sizing: border-box;
+  min-height: 44px;
+}
+
+/* Header ⋯ trigger: 44 px square beside the header buttons (frame 208). */
+.wsh-acts .overflow-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--border-default, #e7e9f2);
+  border-radius: 12px;
+  background: var(--white, #fff);
+  color: var(--indigo, #4527c6);
+}
+
+.wsh-acts .overflow-menu-trigger[aria-expanded="true"] {
+  border-color: #d4ccff;
+  background: var(--pale-lavender, #edeaff);
+}
+
+/* Frame 179: ended pill "Ended · Sat 3 Oct". */
+.wsh-ended-pill {
+  white-space: nowrap;
+}
+
+/* Frame 208b (iPad 1024): the header WhatsApp button reads "WhatsApp". */
+.wsh-wa-short {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  .wsh-wa-long {
+    display: none;
+  }
+
+  .wsh-wa-short {
+    display: inline;
+  }
 }
