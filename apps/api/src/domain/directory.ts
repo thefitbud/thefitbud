@@ -246,6 +246,7 @@ export async function loadClientDirectory(
         adherenceByRelationship.get(relationship.id) ?? "not_available",
       renewalState: renewal?.renewalState ?? null,
       renewsOn: renewal?.renewsOn ?? null,
+      startedAt: relationship.startedAt,
       endedAt: relationship.endedAt ?? null,
       week: coachingWeekNumber(relationship.startedAt, input.nowIso),
       city:
@@ -274,6 +275,7 @@ export async function loadClientDirectory(
       adherenceState: "not_available",
       renewalState: null,
       renewsOn: null,
+      startedAt: null,
       updatedAt: invitation.updatedAt,
       email: invitation.recipientEmail,
     } as DirectoryRow & { email: string | null });
@@ -352,6 +354,7 @@ export async function loadClientDirectory(
       adherenceState: item.adherenceState,
       renewalState: item.renewalState,
       renewsOn: item.renewsOn,
+      startedAt: item.startedAt ?? null,
       endedAt: item.endedAt ?? undefined,
       week: item.week ?? null,
       city: item.city ?? null,
