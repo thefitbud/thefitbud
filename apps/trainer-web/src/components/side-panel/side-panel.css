@@ -1070,3 +1070,23 @@ label.sp-bulk-row-inner:hover {
   outline: 2px solid #fff;
   outline-offset: 2px;
 }
+
+/* Z9-14: Details link on the Signals reminder line (44 px target). */
+.sp-signal-details {
+  margin-left: auto;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* Frame 02: helper and the Mark reviewed line read as one tight block. */
+.sp-foot .sp-nudge-help {
+  margin: 0 0 -6px;
+}
