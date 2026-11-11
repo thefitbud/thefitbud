@@ -779,8 +779,14 @@
   background: var(--hover, #f7f8fc);
 }
 
-.cs-pay-fixed {
+/* Amount and due stacked: side by side they overflow the 560 px drawer. */
+.cs-grid.cs-pay-fixed {
   margin: 0;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.cs-grid.cs-pay-fixed .readonly-field {
+  grid-template-columns: 120px minmax(0, 1fr);
 }
 
 .cs-segmented.cs-segmented-fit {

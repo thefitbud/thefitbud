@@ -16,6 +16,9 @@ const api = vi.hoisted(() => ({
   saveClientSubscription: vi.fn(),
 }));
 vi.mock("../../lib/api", () => ({ apiClient: api }));
+const authMe = vi.hoisted(() => ({ timezone: "Asia/Kolkata" as string | null }));
+vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ me: authMe }) }));
+
 
 import { ClientSettingsPage } from "./ClientSettingsPage";
 import { parseRupeesInput, validateSubscriptionDraft } from "./SubscriptionDrawer";

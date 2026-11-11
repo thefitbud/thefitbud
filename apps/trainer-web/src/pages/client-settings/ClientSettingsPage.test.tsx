@@ -14,6 +14,9 @@ const api = vi.hoisted(() => ({
   updateClientBasics: vi.fn(),
 }));
 vi.mock("../../lib/api", () => ({ apiClient: api }));
+const authMe = vi.hoisted(() => ({ timezone: "Asia/Kolkata" as string | null }));
+vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ me: authMe }) }));
+
 
 import { ClientSettingsPage } from "./ClientSettingsPage";
 import { parsePhoneInput, renewalChipLabel } from "./clientSettingsFormat";

@@ -2,7 +2,14 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import type { ClientSettingsResponse, PaymentRecord } from "@fitbud/contracts";
 import {
@@ -23,9 +30,17 @@ const api = vi.hoisted(() => ({
   updatePaymentRecord: vi.fn(),
 }));
 vi.mock("../../lib/api", () => ({ apiClient: api }));
+const authMe = vi.hoisted(() => ({
+  timezone: "Asia/Kolkata" as string | null,
+}));
+vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => ({ me: authMe }) }));
 
 import { ClientSettingsPage } from "./ClientSettingsPage";
-import { buildUpdateBody, validatePaymentDraft, type PaymentDraft } from "./PaymentDrawer";
+import {
+  buildUpdateBody,
+  validatePaymentDraft,
+  type PaymentDraft,
+} from "./PaymentDrawer";
 
 function record(overrides: Partial<PaymentRecord> = {}): PaymentRecord {
   return {
@@ -55,7 +70,9 @@ const unpaid = record({
   updatedAt: "2026-10-01T04:30:00.000Z",
 });
 
-function settings(overrides: Partial<ClientSettingsResponse> = {}): ClientSettingsResponse {
+function settings(
+  overrides: Partial<ClientSettingsResponse> = {},
+): ClientSettingsResponse {
   return {
     relationshipId: REL_ID,
     relationshipStatus: "active",
@@ -108,7 +125,10 @@ function renderPage({ ended = false, online = true } = {}) {
   return render(
     <MemoryRouter initialEntries={[`/clients/${REL_ID}/settings#subscription`]}>
       <Routes>
-        <Route path="/clients/:relationshipId" element={<Outlet context={context} />}>
+        <Route
+          path="/clients/:relationshipId"
+          element={<Outlet context={context} />}
+        >
           <Route path="settings" element={<ClientSettingsPage />} />
         </Route>
       </Routes>
@@ -117,7 +137,9 @@ function renderPage({ ended = false, online = true } = {}) {
 }
 
 async function openAdd() {
-  fireEvent.click(await screen.findByRole("button", { name: "Add payment record" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Add payment record" }),
+  );
   return screen.getByRole("dialog", { name: "Add payment record" });
 }
 
@@ -145,20 +167,33 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
   it("lists every record with readable dates, labels, note and paid date", async () => {
     renderPage();
     const payments = await screen.findByTestId("cs-payments");
-    for (const name of ["Due", "Note", "Amount", "Status", "Method", "Paid on"]) {
+    for (const name of [
+      "Due",
+      "Note",
+      "Amount",
+      "Status",
+      "Method",
+      "Paid on",
+    ]) {
       expect(within(payments).getByRole("columnheader", { name })).toBeTruthy();
     }
     expect(rows()).toEqual([
       expect.stringMatching(/^Sat 24 Oct.*₹6,000.*Unpaid.*Edit$/),
-      expect.stringMatching(/^Mon 24 Aug.*Month 1.*₹6,000.*Paid.*UPI.*Tue 25 Aug.*Edit$/),
+      expect.stringMatching(
+        /^Mon 24 Aug.*Month 1.*₹6,000.*Paid.*UPI.*Tue 25 Aug.*Edit$/,
+      ),
     ]);
     expect(
-      within(payments).getByRole("button", { name: "Edit payment record due Mon 24 Aug, ₹6,000" }),
+      within(payments).getByRole("button", {
+        name: "Edit payment record due Mon 24 Aug, ₹6,000",
+      }),
     ).toBeTruthy();
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}|\bupi\b|\bunpaid\b|%/);
     // Tracking only (D-W8-2, D-P2-12): no collect, pay, invoice or gateway words.
-    expect(text).not.toMatch(/collect|pay now|invoice|gateway|remind .* to pay|sessions? (left|used)/i);
+    expect(text).not.toMatch(
+      /collect|pay now|invoice|gateway|remind .* to pay|sessions? (left|used)/i,
+    );
   });
 
   it("adds a paid record with one idempotency key and shows it in the list", async () => {
@@ -177,11 +212,20 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     // Tracking-only fields, nothing that takes money.
     expect(within(dialog).getByText("Tracking only.")).toBeTruthy();
     expect(dialog.textContent).not.toMatch(/collect|invoice|gateway|pay now/i);
-    expect((within(dialog).getByRole("radio", { name: "Paid" }) as HTMLInputElement).checked).toBe(true);
+    expect(
+      (within(dialog).getByRole("radio", { name: "Paid" }) as HTMLInputElement)
+        .checked,
+    ).toBe(true);
 
-    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "6,500.50" } });
-    fireEvent.change(within(dialog).getByLabelText("Due date"), { target: { value: "2026-09-24" } });
-    fireEvent.change(within(dialog).getByLabelText("Paid date"), { target: { value: "2026-09-26" } });
+    fireEvent.change(within(dialog).getByLabelText("Amount"), {
+      target: { value: "6,500.50" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Due date"), {
+      target: { value: "2026-09-24" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Paid date"), {
+      target: { value: "2026-09-26" },
+    });
     expect(within(dialog).getByText("Thu 24 Sep")).toBeTruthy();
     expect(within(dialog).getByText("Sat 26 Sep")).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("radio", { name: "Cash" }));
@@ -190,7 +234,9 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     });
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
 
-    await waitFor(() => expect(api.createPaymentRecord).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(api.createPaymentRecord).toHaveBeenCalledTimes(1),
+    );
     const [relId, body, key] = api.createPaymentRecord.mock.calls[0]!;
     expect(relId).toBe(REL_ID);
     expect(body).toEqual({
@@ -205,28 +251,45 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     expect(key).toMatch(/^[0-9a-f-]{36}$/);
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByRole("status").textContent).toBe("Payment record added.");
+    expect(screen.getByRole("status").textContent).toBe(
+      "Payment record added.",
+    );
     // Sorted into place by due date, between the two existing records.
     expect(rows()).toEqual([
       expect.stringMatching(/^Sat 24 Oct/),
-      expect.stringMatching(/^Thu 24 Sep.*Month 2.*₹6,500\.50.*Paid.*Cash.*Sat 26 Sep/),
+      expect.stringMatching(
+        /^Thu 24 Sep.*Month 2.*₹6,500\.50.*Paid.*Cash.*Sat 26 Sep/,
+      ),
       expect.stringMatching(/^Mon 24 Aug/),
     ]);
   });
 
   it("adds an unpaid record without a paid date or method", async () => {
     api.createPaymentRecord.mockResolvedValue(
-      record({ id: NEW_ID, dueOn: "2026-11-24", status: "unpaid", paidOn: null, method: null, note: null }),
+      record({
+        id: NEW_ID,
+        dueOn: "2026-11-24",
+        status: "unpaid",
+        paidOn: null,
+        method: null,
+        note: null,
+      }),
     );
     renderPage();
     const dialog = await openAdd();
     fireEvent.click(within(dialog).getByRole("radio", { name: "Unpaid" }));
     expect(within(dialog).queryByLabelText("Paid date")).toBeNull();
     expect(within(dialog).queryByRole("radio", { name: "UPI" })).toBeNull();
-    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "6000" } });
-    fireEvent.change(within(dialog).getByLabelText("Due date"), { target: { value: "2026-11-24" } });
+    fireEvent.change(within(dialog).getByLabelText("Amount"), {
+      target: { value: "6000" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Due date"), {
+      target: { value: "2026-11-24" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
-    await waitFor(() => expect(api.createPaymentRecord).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(api.createPaymentRecord).toHaveBeenCalledTimes(1),
+    );
     const body = api.createPaymentRecord.mock.calls[0]![1];
     expect(body).toEqual({
       amountPaise: 600_000,
@@ -242,14 +305,22 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
   it("blocks saving with a field summary and sends nothing", async () => {
     renderPage();
     const dialog = await openAdd();
-    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "0" } });
+    fireEvent.change(within(dialog).getByLabelText("Amount"), {
+      target: { value: "0" },
+    });
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
     const summary = await within(dialog).findByRole("alert");
     expect(summary.textContent).toBe("Fix 2 fields to save: Amount, Method");
     expect(within(dialog).getByText("Choose Cash, UPI or Bank.")).toBeTruthy();
-    expect(document.activeElement).toBe(within(dialog).getByLabelText("Amount"));
+    expect(document.activeElement).toBe(
+      within(dialog).getByLabelText("Amount"),
+    );
     expect(
-      (within(dialog).getByRole("button", { name: "Add record" }) as HTMLButtonElement).disabled,
+      (
+        within(dialog).getByRole("button", {
+          name: "Add record",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
     expect(api.createPaymentRecord).not.toHaveBeenCalled();
   });
@@ -265,36 +336,63 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     renderPage();
     const dialog = await openEdit(/Edit payment record due Sat 24 Oct/);
     // Amount and due date are fixed on an existing record.
-    expect(within(dialog).queryByRole("textbox", { name: "Amount" })).toBeNull();
+    expect(
+      within(dialog).queryByRole("textbox", { name: "Amount" }),
+    ).toBeNull();
     expect(within(dialog).getByText("₹6,000")).toBeTruthy();
     expect(within(dialog).getByText("Sat 24 Oct")).toBeTruthy();
     expect(within(dialog).queryByLabelText("Paid date")).toBeNull();
+    expect(
+      within(dialog).getByText(
+        "Amount and due date can't be changed after a record is added.",
+      ),
+    ).toBeTruthy();
 
     fireEvent.click(within(dialog).getByRole("radio", { name: "Paid" }));
-    fireEvent.change(within(dialog).getByLabelText("Paid date"), { target: { value: "2026-10-26" } });
+    fireEvent.change(within(dialog).getByLabelText("Paid date"), {
+      target: { value: "2026-10-26" },
+    });
     fireEvent.click(within(dialog).getByRole("radio", { name: "Bank" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
 
-    await waitFor(() => expect(api.updatePaymentRecord).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect(api.updatePaymentRecord).toHaveBeenCalledTimes(1),
+    );
     const [relId, paymentId, body] = api.updatePaymentRecord.mock.calls[0]!;
     expect([relId, paymentId]).toEqual([REL_ID, UNPAID_ID]);
-    expect(body).toEqual({ status: "paid", paidOn: "2026-10-26", method: "bank" });
+    expect(body).toEqual({
+      status: "paid",
+      paidOn: "2026-10-26",
+      method: "bank",
+    });
     expect(updatePaymentRecordRequestSchema.safeParse(body).success).toBe(true);
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByRole("status").textContent).toBe("Payment record saved.");
+    expect(screen.getByRole("status").textContent).toBe(
+      "Payment record saved.",
+    );
     expect(rows()[0]).toMatch(/^Sat 24 Oct.*Paid.*Bank.*Mon 26 Oct/);
   });
 
   it("changes only the note when only the note changes", async () => {
-    api.updatePaymentRecord.mockResolvedValue(record({ note: "Month 1, paid late" }));
+    api.updatePaymentRecord.mockResolvedValue(
+      record({ note: "Month 1, paid late" }),
+    );
     renderPage();
     const dialog = await openEdit(/Edit payment record due Mon 24 Aug/);
     fireEvent.change(within(dialog).getByLabelText("Note (optional)"), {
       target: { value: "Month 1, paid late" },
     });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(api.updatePaymentRecord).toHaveBeenCalledTimes(1));
-    expect(api.updatePaymentRecord.mock.calls[0]![2]).toEqual({ note: "Month 1, paid late" });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() =>
+      expect(api.updatePaymentRecord).toHaveBeenCalledTimes(1),
+    );
+    expect(api.updatePaymentRecord.mock.calls[0]![2]).toEqual({
+      note: "Month 1, paid late",
+    });
   });
 
   it("going back to unpaid sends only the status", async () => {
@@ -304,8 +402,12 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     renderPage();
     const dialog = await openEdit(/Edit payment record due Mon 24 Aug/);
     fireEvent.click(within(dialog).getByRole("radio", { name: "Unpaid" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(api.updatePaymentRecord).toHaveBeenCalledTimes(1));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() =>
+      expect(api.updatePaymentRecord).toHaveBeenCalledTimes(1),
+    );
     const body = api.updatePaymentRecord.mock.calls[0]![2];
     expect(body).toEqual({ status: "unpaid" });
     expect(updatePaymentRecordRequestSchema.safeParse(body).success).toBe(true);
@@ -314,7 +416,9 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
   it("closes without a request when nothing changed", async () => {
     renderPage();
     const dialog = await openEdit(/Edit payment record due Mon 24 Aug/);
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(api.updatePaymentRecord).not.toHaveBeenCalled();
   });
@@ -325,16 +429,28 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
       .mockResolvedValueOnce(record({ id: NEW_ID, dueOn: "2026-09-24" }));
     renderPage();
     const dialog = await openAdd();
-    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "6000" } });
-    fireEvent.change(within(dialog).getByLabelText("Due date"), { target: { value: "2026-09-24" } });
-    fireEvent.change(within(dialog).getByLabelText("Paid date"), { target: { value: "2026-09-24" } });
+    fireEvent.change(within(dialog).getByLabelText("Amount"), {
+      target: { value: "6000" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Due date"), {
+      target: { value: "2026-09-24" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Paid date"), {
+      target: { value: "2026-09-24" },
+    });
     fireEvent.click(within(dialog).getByRole("radio", { name: "UPI" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
-    expect(await within(dialog).findByText("Couldn't save. Try again. (CS-PAY-SAVE)")).toBeTruthy();
+    expect(
+      await within(dialog).findByText(
+        "Couldn't save. Try again. (CS-PAY-SAVE)",
+      ),
+    ).toBeTruthy();
     expect(within(dialog).queryByText(/Failed to fetch/)).toBeNull();
 
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
-    await waitFor(() => expect(api.createPaymentRecord).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(api.createPaymentRecord).toHaveBeenCalledTimes(2),
+    );
     const first = api.createPaymentRecord.mock.calls[0]!;
     const second = api.createPaymentRecord.mock.calls[1]!;
     expect(second[1]).toEqual(first[1]);
@@ -349,11 +465,17 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     const dialog = await openEdit(/Edit payment record due Mon 24 Aug/);
     const note = within(dialog).getByLabelText("Note (optional)");
     fireEvent.change(note, { target: { value: "A" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
     await within(dialog).findByText(/CS-PAY-SAVE/);
     fireEvent.change(note, { target: { value: "B" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    await waitFor(() => expect(api.updatePaymentRecord).toHaveBeenCalledTimes(2));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
+    await waitFor(() =>
+      expect(api.updatePaymentRecord).toHaveBeenCalledTimes(2),
+    );
     expect(api.updatePaymentRecord.mock.calls[1]![3]).not.toBe(
       api.updatePaymentRecord.mock.calls[0]![3],
     );
@@ -364,24 +486,41 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
       new ApiClientError({
         status: 409,
         code: "PAYMENT_CONFLICT",
-        message: "This payment record changed while saving. Reload and try again.",
+        message:
+          "This payment record changed while saving. Reload and try again.",
         requestId: "req-7",
       }),
     );
     renderPage();
     const dialog = await openEdit(/Edit payment record due Mon 24 Aug/);
-    fireEvent.change(within(dialog).getByLabelText("Note (optional)"), { target: { value: "x" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
+    fireEvent.change(within(dialog).getByLabelText("Note (optional)"), {
+      target: { value: "x" },
+    });
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Save changes" }),
+    );
     expect(
-      await within(dialog).findByText("This payment record changed while saving. Reload and try again."),
+      await within(dialog).findByText(
+        "This payment record changed while saving. Reload and try again.",
+      ),
     ).toBeTruthy();
     expect(
-      (within(dialog).getByRole("button", { name: "Save changes" }) as HTMLButtonElement).disabled,
+      (
+        within(dialog).getByRole("button", {
+          name: "Save changes",
+        }) as HTMLButtonElement
+      ).disabled,
     ).toBe(true);
-    api.getClientSettings.mockResolvedValue(settings({ payments: [record({ note: "Elsewhere" })] }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Reload latest" }));
+    api.getClientSettings.mockResolvedValue(
+      settings({ payments: [record({ note: "Elsewhere" })] }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Reload latest" }),
+    );
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() => expect(rows()).toEqual([expect.stringMatching(/Elsewhere/)]));
+    await waitFor(() =>
+      expect(rows()).toEqual([expect.stringMatching(/Elsewhere/)]),
+    );
     expect(api.getClientSettings).toHaveBeenCalledTimes(2);
   });
 
@@ -396,58 +535,116 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     );
     renderPage();
     const dialog = await openAdd();
-    fireEvent.change(within(dialog).getByLabelText("Amount"), { target: { value: "6000" } });
-    fireEvent.change(within(dialog).getByLabelText("Due date"), { target: { value: "2026-09-24" } });
-    fireEvent.change(within(dialog).getByLabelText("Paid date"), { target: { value: "2026-09-24" } });
+    fireEvent.change(within(dialog).getByLabelText("Amount"), {
+      target: { value: "6000" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Due date"), {
+      target: { value: "2026-09-24" },
+    });
+    fireEvent.change(within(dialog).getByLabelText("Paid date"), {
+      target: { value: "2026-09-24" },
+    });
     fireEvent.click(within(dialog).getByRole("radio", { name: "UPI" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
     await within(dialog).findByText("Coaching with this client has ended.");
     api.getClientSettings.mockResolvedValue(
-      settings({ relationshipStatus: "ended", readOnly: true, endedAt: "2026-10-30T04:30:00.000Z" }),
+      settings({
+        relationshipStatus: "ended",
+        readOnly: true,
+        endedAt: "2026-10-30T04:30:00.000Z",
+      }),
     );
-    fireEvent.click(within(dialog).getByRole("button", { name: "Reload latest" }));
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: "Reload latest" }),
+    );
     await screen.findByTestId("cs-readonly-banner");
-    expect(screen.queryByRole("button", { name: "Add payment record" })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Edit payment record/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add payment record" }),
+    ).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Edit payment record/ }),
+    ).toBeNull();
   });
 
   it("is read-only for an ended client: records listed, no add or edit", async () => {
     api.getClientSettings.mockResolvedValue(
-      settings({ relationshipStatus: "ended", readOnly: true, endedAt: "2026-10-30T04:30:00.000Z" }),
+      settings({
+        relationshipStatus: "ended",
+        readOnly: true,
+        endedAt: "2026-10-30T04:30:00.000Z",
+      }),
     );
     renderPage({ ended: true });
     const payments = await screen.findByTestId("cs-payments");
     expect(rows()).toHaveLength(2);
     expect(within(payments).queryAllByRole("button")).toHaveLength(0);
-    expect(within(payments).queryByRole("columnheader", { name: "Actions" })).toBeNull();
+    expect(
+      within(payments).queryByRole("columnheader", { name: "Actions" }),
+    ).toBeNull();
   });
 
   it("asks for a subscription before the first record (the API needs one)", async () => {
-    api.getClientSettings.mockResolvedValue(settings({ subscription: null, payments: [] }));
+    api.getClientSettings.mockResolvedValue(
+      settings({ subscription: null, payments: [] }),
+    );
     renderPage();
     expect(await screen.findByText("No payment records yet.")).toBeTruthy();
     expect(
-      screen.getByText("Save a subscription first, then add payment records to it."),
+      screen.getByText(
+        "Save a subscription first, then add payment records to it.",
+      ),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Add payment record" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Add payment record" }),
+    ).toBeNull();
   });
 
   it("disables add and edit while offline", async () => {
     renderPage({ online: false });
-    const add = (await screen.findByRole("button", { name: "Add payment record" })) as HTMLButtonElement;
+    const add = (await screen.findByRole("button", {
+      name: "Add payment record",
+    })) as HTMLButtonElement;
     expect(add.disabled).toBe(true);
-    for (const button of screen.getAllByRole("button", { name: /Edit payment record/ })) {
+    for (const button of screen.getAllByRole("button", {
+      name: /Edit payment record/,
+    })) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
     }
   });
 
   it("returns focus to the control that opened the drawer", async () => {
     renderPage();
-    const edit = await screen.findByRole("button", { name: /Edit payment record due Mon 24 Aug/ });
+    const edit = await screen.findByRole("button", {
+      name: /Edit payment record due Mon 24 Aug/,
+    });
     fireEvent.click(edit);
     const dialog = screen.getByRole("dialog", { name: "Edit payment record" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(document.activeElement).toBe(edit));
+  });
+});
+
+describe("today in the trainer's timezone", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    authMe.timezone = "Asia/Kolkata";
+  });
+
+  it("defaults new due and paid dates to the trainer's civil today, not the browser's", async () => {
+    // 20:00 UTC on Tue 10 Nov is already Wed 11 Nov in Kolkata, still Tue in Los Angeles.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-10T20:00:00.000Z"));
+    authMe.timezone = "Asia/Kolkata";
+    renderPage();
+    let dialog = await openAdd();
+    expect(within(dialog).getAllByText("Wed 11 Nov")).toHaveLength(2);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    cleanup();
+
+    authMe.timezone = "America/Los_Angeles";
+    renderPage();
+    dialog = await openAdd();
+    expect(within(dialog).getAllByText("Tue 10 Nov")).toHaveLength(2);
   });
 });
 
@@ -463,18 +660,37 @@ describe("payment draft rules", () => {
 
   it("mirrors the contract: amount above ₹0, paid needs date and method", () => {
     expect(validatePaymentDraft(base, false)).toEqual({});
-    expect(validatePaymentDraft({ ...base, amount: "" }, false).amount).toBe("Enter the amount.");
-    expect(validatePaymentDraft({ ...base, amount: "0" }, false).amount).toMatch(/from ₹0.01/);
-    expect(validatePaymentDraft({ ...base, amount: "12abc" }, false).amount).toBeTruthy();
-    expect(validatePaymentDraft({ ...base, amount: "0.01" }, false)).toEqual({});
-    expect(validatePaymentDraft({ ...base, paidOn: "", method: null }, false)).toEqual({
+    expect(validatePaymentDraft({ ...base, amount: "" }, false).amount).toBe(
+      "Enter the amount.",
+    );
+    expect(
+      validatePaymentDraft({ ...base, amount: "0" }, false).amount,
+    ).toMatch(/from ₹0.01/);
+    expect(
+      validatePaymentDraft({ ...base, amount: "12abc" }, false).amount,
+    ).toBeTruthy();
+    expect(validatePaymentDraft({ ...base, amount: "0.01" }, false)).toEqual(
+      {},
+    );
+    expect(
+      validatePaymentDraft({ ...base, paidOn: "", method: null }, false),
+    ).toEqual({
       paidOn: "Choose the date it was paid.",
       method: "Choose Cash, UPI or Bank.",
     });
-    expect(validatePaymentDraft({ ...base, status: "unpaid", paidOn: "", method: null }, false)).toEqual({});
-    expect(validatePaymentDraft({ ...base, note: "x".repeat(501) }, false).note).toBeTruthy();
+    expect(
+      validatePaymentDraft(
+        { ...base, status: "unpaid", paidOn: "", method: null },
+        false,
+      ),
+    ).toEqual({});
+    expect(
+      validatePaymentDraft({ ...base, note: "x".repeat(501) }, false).note,
+    ).toBeTruthy();
     // Editing never validates the fixed amount and due date.
-    expect(validatePaymentDraft({ ...base, amount: "", dueOn: "" }, true)).toEqual({});
+    expect(
+      validatePaymentDraft({ ...base, amount: "", dueOn: "" }, true),
+    ).toEqual({});
   });
 
   it("builds a PATCH with only the changed fields", () => {
@@ -488,8 +704,14 @@ describe("payment draft rules", () => {
       note: " Month 1 ",
     };
     expect(buildUpdateBody(stored, same)).toBe("unchanged");
-    expect(buildUpdateBody(stored, { ...same, method: "cash" })).toEqual({ method: "cash" });
-    expect(buildUpdateBody(stored, { ...same, note: "" })).toEqual({ note: null });
-    expect(buildUpdateBody(stored, { ...same, status: "unpaid" })).toEqual({ status: "unpaid" });
+    expect(buildUpdateBody(stored, { ...same, method: "cash" })).toEqual({
+      method: "cash",
+    });
+    expect(buildUpdateBody(stored, { ...same, note: "" })).toEqual({
+      note: null,
+    });
+    expect(buildUpdateBody(stored, { ...same, status: "unpaid" })).toEqual({
+      status: "unpaid",
+    });
   });
 });

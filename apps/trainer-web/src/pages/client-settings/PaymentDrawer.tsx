@@ -13,7 +13,11 @@ import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import { ReadOnlyField } from "../../components/ReadOnlyField";
 import { DateField, parseRupeesInput } from "./SubscriptionDrawer";
-import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, formatRupees } from "./clientSettingsFormat";
+import {
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS_LABELS,
+  formatRupees,
+} from "./clientSettingsFormat";
 
 /** Same bound as the contract's payment note. */
 export const PAYMENT_NOTE_MAX = 500;
@@ -58,13 +62,17 @@ export type PaymentDraft = {
  * paid record needs its paid date and method) so the server never sees them.
  * `editing` skips amount and due date, which an existing record never changes.
  */
-export function validatePaymentDraft(draft: PaymentDraft, editing: boolean): FieldErrors {
+export function validatePaymentDraft(
+  draft: PaymentDraft,
+  editing: boolean,
+): FieldErrors {
   const errors: FieldErrors = {};
   if (!editing) {
     const amount = parseRupeesInput(draft.amount);
     if (amount === null) errors.amount = "Enter the amount.";
     else if (amount === "invalid" || amount < 1) {
-      errors.amount = "Enter an amount in rupees, from ₹0.01 up to ₹1,00,00,000.";
+      errors.amount =
+        "Enter an amount in rupees, from ₹0.01 up to ₹1,00,00,000.";
     }
     if (!draft.dueOn) errors.dueOn = "Choose the due date.";
   }
@@ -79,7 +87,9 @@ export function validatePaymentDraft(draft: PaymentDraft, editing: boolean): Fie
 }
 
 /** POST body for a new record. Unpaid records carry no paid date or method. */
-export function buildCreateBody(draft: PaymentDraft): CreatePaymentRecordRequest {
+export function buildCreateBody(
+  draft: PaymentDraft,
+): CreatePaymentRecordRequest {
   const note = draft.note.trim();
   const paid = draft.status === "paid";
   return {
@@ -151,11 +161,23 @@ export function PaymentDrawer({
           method: record.method,
           note: record.note ?? "",
         }
-      : { amount: "", dueOn: today, status: "paid", paidOn: today, method: null, note: "" },
+      : {
+          amount: "",
+          dueOn: today,
+          status: "paid",
+          paidOn: today,
+          method: null,
+          note: "",
+        },
   );
-  const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>({});
+  const [touched, setTouched] = useState<Partial<Record<FieldKey, boolean>>>(
+    {},
+  );
   const [submitted, setSubmitted] = useState(false);
-  const [saveError, setSaveError] = useState<{ message: string; stale: boolean } | null>(null);
+  const [saveError, setSaveError] = useState<{
+    message: string;
+    stale: boolean;
+  } | null>(null);
   const [saving, setSaving] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const amountRef = useRef<HTMLInputElement>(null);
@@ -187,7 +209,8 @@ export function PaymentDrawer({
   const allErrors = validatePaymentDraft(draft, editing);
   const shown: FieldErrors = {};
   for (const key of FIELD_ORDER) {
-    if (allErrors[key] && (submitted || touched[key])) shown[key] = allErrors[key];
+    if (allErrors[key] && (submitted || touched[key]))
+      shown[key] = allErrors[key];
   }
   const shownKeys = FIELD_ORDER.filter((k) => shown[k]);
 
@@ -231,7 +254,8 @@ export function PaymentDrawer({
     setDraft((d) => {
       const next = { ...d, [key]: value };
       // Marking paid again starts from today unless a paid date is already set.
-      if (key === "status" && value === "paid" && !next.paidOn) next.paidOn = today;
+      if (key === "status" && value === "paid" && !next.paidOn)
+        next.paidOn = today;
       return next;
     });
     setSaveError((e) => (e?.stale ? e : null));
@@ -293,9 +317,15 @@ export function PaymentDrawer({
     } catch (err) {
       // Only the API's own curated message is shown verbatim (AGENTS.md).
       if (err instanceof ApiClientError) {
-        setSaveError({ message: err.message, stale: STALE_CODES.has(err.code) });
+        setSaveError({
+          message: err.message,
+          stale: STALE_CODES.has(err.code),
+        });
       } else {
-        setSaveError({ message: "Couldn't save. Try again. (CS-PAY-SAVE)", stale: false });
+        setSaveError({
+          message: "Couldn't save. Try again. (CS-PAY-SAVE)",
+          stale: false,
+        });
       }
     } finally {
       savingRef.current = false;
@@ -333,7 +363,9 @@ export function PaymentDrawer({
         onClick={(e) => e.stopPropagation()}
       >
         <header className="cs-drawer-head">
-          <h2 id={titleId}>{editing ? "Edit payment record" : "Add payment record"}</h2>
+          <h2 id={titleId}>
+            {editing ? "Edit payment record" : "Add payment record"}
+          </h2>
           <button
             type="button"
             className="cs-icon-button"
@@ -350,25 +382,44 @@ export function PaymentDrawer({
               <div className="cs-error-summary" role="alert">
                 <AlertCircle size={16} strokeWidth={1.75} aria-hidden />
                 <span>
-                  Fix {shownKeys.length} {shownKeys.length === 1 ? "field" : "fields"} to save:{" "}
+                  Fix {shownKeys.length}{" "}
+                  {shownKeys.length === 1 ? "field" : "fields"} to save:{" "}
                   {shownKeys.map((k) => FIELD_LABELS[k]).join(", ")}
                 </span>
               </div>
             ) : null}
 
             {record ? (
-              <dl className="cs-grid cs-pay-fixed">
-                <ReadOnlyField
-                  label="Amount"
-                  value={<span className="cs-num">{formatRupees(record.amountPaise)}</span>}
-                />
-                <ReadOnlyField label="Due" value={formatCivilDate(record.dueOn)} />
-              </dl>
+              <>
+                <dl className="cs-grid cs-pay-fixed">
+                  <ReadOnlyField
+                    label="Amount"
+                    value={
+                      <span className="cs-num">
+                        {formatRupees(record.amountPaise)}
+                      </span>
+                    }
+                  />
+                  <ReadOnlyField
+                    label="Due"
+                    value={
+                      <span className="cs-nowrap">
+                        {formatCivilDate(record.dueOn)}
+                      </span>
+                    }
+                  />
+                </dl>
+                <p className="cs-field-help" data-testid="cs-pay-fixed-help">
+                  Amount and due date can't be changed after a record is added.
+                </p>
+              </>
             ) : (
               <div className="cs-field-pair">
                 <div className="cs-field">
                   <label htmlFor={ids.amount}>Amount</label>
-                  <div className={`cs-money-input${shown.amount ? " is-invalid" : ""}`}>
+                  <div
+                    className={`cs-money-input${shown.amount ? " is-invalid" : ""}`}
+                  >
                     <span className="cs-phone-prefix" aria-hidden>
                       ₹
                     </span>
@@ -380,7 +431,9 @@ export function PaymentDrawer({
                       value={draft.amount}
                       autoComplete="off"
                       aria-invalid={shown.amount ? true : undefined}
-                      aria-describedby={shown.amount ? helpIds.amount : undefined}
+                      aria-describedby={
+                        shown.amount ? helpIds.amount : undefined
+                      }
                       onChange={(e) => set("amount", e.target.value)}
                       onBlur={() => touch("amount")}
                     />
@@ -410,7 +463,11 @@ export function PaymentDrawer({
               <span id={statusId} className="cs-field-label">
                 Status
               </span>
-              <div className="cs-segmented cs-segmented-fit" role="radiogroup" aria-labelledby={statusId}>
+              <div
+                className="cs-segmented cs-segmented-fit"
+                role="radiogroup"
+                aria-labelledby={statusId}
+              >
                 {STATUSES.map((value, i) => (
                   <label
                     key={value}
@@ -504,7 +561,11 @@ export function PaymentDrawer({
               <div className="cs-save-error" role="alert">
                 <p className="form-error">{saveError.message}</p>
                 {saveError.stale ? (
-                  <button type="button" className="button-secondary" onClick={onStale}>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={onStale}
+                  >
                     Reload latest
                   </button>
                 ) : null}
@@ -529,7 +590,9 @@ export function PaymentDrawer({
             <button
               type="submit"
               className="button-primary"
-              disabled={saving || !online || blocked || Boolean(saveError?.stale)}
+              disabled={
+                saving || !online || blocked || Boolean(saveError?.stale)
+              }
             >
               {saving ? "Saving…" : editing ? "Save changes" : "Add record"}
             </button>

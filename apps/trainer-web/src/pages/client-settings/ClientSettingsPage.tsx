@@ -14,6 +14,7 @@ import { ApiClientError } from "@fitbud/api-client";
 import type { ClientSettingsResponse, PaymentRecord } from "@fitbud/contracts";
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
+import { useAuth } from "../../auth/AuthProvider";
 import { StatusChip } from "../../components/StatusChip";
 import { ReadOnlyField } from "../../components/ReadOnlyField";
 import type { WorkspaceOutletContext } from "../workspaceContext";
@@ -80,6 +81,7 @@ export function ClientSettingsPage() {
   const { workspace, relationshipId, online, ended, openWorkspaceModal, reloadWorkspace } =
     useOutletContext<WorkspaceOutletContext>();
   const location = useLocation();
+  const { me } = useAuth();
   const [settings, setSettings] = useState<ClientSettingsResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -544,7 +546,8 @@ export function ClientSettingsPage() {
         <PaymentDrawer
           relationshipId={relationshipId}
           record={paymentEditor.record}
-          today={civilDateOf(new Date().toISOString()) ?? ""}
+          // "Today" in the trainer's stored timezone (browser zone when unset).
+          today={civilDateOf(new Date().toISOString(), me?.timezone || undefined) ?? ""}
           online={online}
           onClose={closePaymentDrawer}
           onSaved={(next) => {
