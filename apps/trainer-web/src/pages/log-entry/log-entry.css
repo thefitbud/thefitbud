@@ -1,0 +1,173 @@
+/* Trainer log and edit of a client's meal or measurement (Z8-16). Builds on the Z8-15 .lw-* layout. */
+
+.le-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.le-choice {
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong, #d9dce8);
+  background: var(--white);
+  color: var(--deep-navy);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.le-choice[aria-pressed="true"] {
+  background: var(--indigo);
+  border-color: var(--indigo);
+  color: var(--white);
+}
+
+.le-choice:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 2px;
+}
+
+.le-choice:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.le-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--mid-grey);
+}
+
+.le-field input,
+.le-field textarea {
+  min-height: 44px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong, #d9dce8);
+  background: var(--white);
+  font: inherit;
+  font-size: 16px;
+  color: var(--deep-navy);
+  font-variant-numeric: tabular-nums;
+}
+
+.le-field textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.le-field input:focus-visible,
+.le-field textarea:focus-visible {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+.le-value {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 260px;
+}
+
+.le-value em {
+  font-style: normal;
+  font-size: 15px;
+  color: var(--mid-grey);
+}
+
+.le-count {
+  align-self: flex-end;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--mid-grey);
+}
+
+.le-tag {
+  display: inline-block;
+  margin: 0;
+  font-size: 14px;
+  color: var(--dark-grey);
+}
+
+.le-locked {
+  margin: 0;
+  font-size: 14px;
+  color: var(--mid-grey);
+}
+
+.le-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.le-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.le-row strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.le-row .muted {
+  display: block;
+  font-size: 14px;
+}
+
+.le-hint {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--error);
+}
+
+/* Entry links (Log meal, Edit meal, Log measurement, Edit): a 44px target. */
+.button-secondary.le-entry-link {
+  min-height: 44px;
+  padding: 0 1rem;
+}
+
+/* Measurements on the Progress page: a card under the panel, same heading style. */
+.le-measures.workspace-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 1rem;
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+.le-measures-head h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+}
+
+.le-measures-head p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--mid-grey);
+}
+
+.le-measures .le-entry-link {
+  align-self: flex-start;
+}

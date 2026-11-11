@@ -36,6 +36,7 @@ import { PanelSkeleton, ProgressSkeleton } from "./progress/ProgressSkeleton";
 import { RangeControl } from "./progress/RangeControl";
 import { StrengthPanel } from "./progress/StrengthPanel";
 import { WeightPanel } from "./progress/WeightPanel";
+import { ProgressPanel } from "../components/activity/ProgressPanel";
 import { useFormMetricKeys } from "./progress/useFormMetricKeys";
 import {
   useProgressMetrics,
@@ -555,6 +556,14 @@ export function ClientProgressPage() {
             {panelBody()}
           </section>
         </div>
+      ) : null}
+
+      {ready ? (
+        <ProgressPanel
+          relationshipId={relationshipId}
+          clientTimezone={clientTz}
+          ended={ended}
+        />
       ) : null}
 
       {!online ? (
