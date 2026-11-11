@@ -30,6 +30,8 @@ import {
   backspace,
   initialDraft,
   isBodyweightLabel,
+  plainKgFromLabel,
+  prescribedLoadText,
   loadBody,
   loadLabelForDraft,
   pressKey,
@@ -83,11 +85,9 @@ function formatElapsedMinutes(totalSeconds: number): string {
 
 function displayLoad(label: string | null | undefined): string {
   const raw = label?.trim() ?? "";
-  if (!raw) return "BW";
-  const match = raw.match(/([\d.]+)/);
-  if (match) return match[1]!;
-  if (/body\s*weight|^bw$/i.test(raw)) return "BW";
-  return raw;
+  if (isBodyweightLabel(raw)) return "BW";
+  const kg = plainKgFromLabel(raw);
+  return kg !== "" ? kg : raw;
 }
 
 function exercisePrescriptionLine(
@@ -229,6 +229,11 @@ function isDraftModified(
   return repsChanged || loadChanged;
 }
 
+/** True when the load cell shows a kg number (so it carries the "kg" unit). */
+function loadCellIsKg(draft: SetDraft): boolean {
+  return !draft.bodyweight && draft.load.trim() !== "";
+}
+
 /** What the load cell of the current row shows. */
 function loadCellText(
   set: ExerciseExecution["sets"][number],
@@ -236,6 +241,8 @@ function loadCellText(
 ): string {
   if (draft.bodyweight) return "Bodyweight";
   if (draft.load.trim() !== "") return draft.load;
+  // Switched to kg on a bodyweight set: nothing typed yet.
+  if (isBodyweightLabel(set.prescribedLoadLabel)) return "—";
   return displayLoad(set.prescribedLoadLabel);
 }
 
@@ -594,23 +601,26 @@ export function ActiveWorkoutScreen({
         if (load === "BW") {
           return `Log set ${currentSet.order} · ${reps} reps`;
         }
-        return load === "Bodyweight"
-          ? `Log set ${currentSet.order} · Bodyweight × ${reps}`
-          : `Log set ${currentSet.order} · ${load} kg × ${reps}`;
+        if (load === "Bodyweight") {
+          return `Log set ${currentSet.order} · Bodyweight × ${reps}`;
+        }
+        return loadCellIsKg(currentDraft)
+          ? `Log set ${currentSet.order} · ${load} kg × ${reps}`
+          : `Log set ${currentSet.order} · ${load} × ${reps}`;
       })()
     : "Finish workout";
 
   const logSub =
     restRemaining != null && restRemaining > 0
-      ? "Ready early? Logging ends the rest."
-      : `Tap kg or reps to change · rest ${nextRestSeconds} s starts after`;
+      ? "Ready early? Logging a set ends the rest."
+      : `Tap load or reps to change · rest ${nextRestSeconds} s starts after`;
 
   const nextSetLoadText = (
     set: ExerciseExecution["sets"][number],
-  ): string =>
-    isBodyweightLabel(set.prescribedLoadLabel)
-      ? " · bodyweight"
-      : ` · ${displayLoad(set.prescribedLoadLabel)} kg`;
+  ): string => {
+    const text = prescribedLoadText(set.prescribedLoadLabel);
+    return text ? ` · ${text}` : "";
+  };
 
   // During a rest the current set is already the next one to do (frame 11b).
   const nextAfterRest =
@@ -941,7 +951,7 @@ export function ActiveWorkoutScreen({
                           <View style={styles.valEditWrap}>
                             <Pressable
                               accessibilityRole="button"
-                              accessibilityLabel={`Set ${set.order} load: ${loadCellText(set, draft)}${draft.bodyweight ? "" : " kg"}`}
+                              accessibilityLabel={`Set ${set.order} load: ${loadCellText(set, draft)}${loadCellIsKg(draft) ? " kg" : ""}`}
                               onPress={() => openKeypad("load")}
                               style={[
                                 styles.valInput,
@@ -957,7 +967,7 @@ export function ActiveWorkoutScreen({
                                 numberOfLines={1}
                               >
                                 {loadCellText(set, draft)}
-                                {draft.bodyweight ? "" : (
+                                {!loadCellIsKg(draft) ? "" : (
                                   <Text style={styles.valUnit}> kg</Text>
                                 )}
                               </Text>

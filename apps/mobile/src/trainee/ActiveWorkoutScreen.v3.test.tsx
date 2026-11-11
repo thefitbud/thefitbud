@@ -4,18 +4,20 @@
  * into the outbox, and the light rest card. DOM-shaped (react-native-web), so
  * layout is checked in the visual captures, not here.
  */
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   workoutExecutionSchema,
   completeSetRequestSchema,
   type WorkoutExecution,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, fireEvent, within } from "../test/render";
+import { mockAuth, render, screen, fireEvent } from "../test/render";
 import {
   backspace,
   initialDraft,
   loadBody,
   pressKey,
+  prescribedLoadText,
   stepValue,
 } from "./workout/setEntry";
 
@@ -122,21 +124,23 @@ function execution(load: string | null): WorkoutExecution {
   });
 }
 
-function renderScreen(load: string | null) {
-  const onChange = vi.fn();
-  render(
+function Harness({ initial }: { initial: WorkoutExecution }) {
+  const [exec, setExec] = useState(initial);
+  return (
     <ActiveWorkoutScreen
-      execution={execution(load)}
-      onChange={onChange}
+      execution={exec}
+      onChange={setExec}
       onFinished={() => undefined}
       onExit={() => undefined}
       sessionName="Lower body B"
-    />,
+    />
   );
-  return { onChange };
 }
 
-/** The row check button and the footer share a label; the footer is last. */
+function renderScreen(load: string | null, ex: WorkoutExecution = execution(load)) {
+  render(<Harness initial={ex} />);
+}
+
 const tap = (name: string | RegExp) =>
   fireEvent.click(screen.getAllByRole("button", { name }).at(-1)!);
 
@@ -185,12 +189,17 @@ describe("set entry maths", () => {
   });
 
   it("builds a numeric load body, or Bodyweight, or nothing for a free-text prescription", () => {
-    expect(loadBody(initialDraft("20 kg", 10), "20 kg")).toEqual({ actualLoadKg: 20 });
+    expect(loadBody(initialDraft("20 kg", 10), "20 kg")).toEqual({ actualLoadLabel: null });
     expect(loadBody({ load: "22.5", reps: "10", bodyweight: false }, "20 kg")).toEqual({
       actualLoadKg: 22.5,
     });
     expect(loadBody({ load: "20", reps: "10", bodyweight: true }, "20 kg")).toEqual({
       actualLoadLabel: "Bodyweight",
+    });
+    // A bare number prescription, untouched, is not a change.
+    expect(loadBody(initialDraft("40", 10), "40")).toEqual({ actualLoadLabel: null });
+    expect(loadBody({ load: "42.5", reps: "10", bodyweight: false }, "40")).toEqual({
+      actualLoadKg: 42.5,
     });
     expect(loadBody(initialDraft("BW+10", 10), "BW+10")).toEqual({ actualLoadLabel: null });
     expect(loadBody(initialDraft(null, 10), null)).toEqual({ actualLoadLabel: null });
@@ -268,17 +277,45 @@ describe("ActiveWorkoutScreen set entry", () => {
     expect(lastBody()).toEqual({ actualReps: 10, actualLoadLabel: null });
   });
 
-  it("shows the rest card with −15 s, +15 s, Skip and the next set after logging", () => {
+  it("shows the rest card and names the set that is actually next (set 2)", () => {
     renderScreen("20 kg");
     tap(/^Log set 1/);
     expect(screen.getByText("REST")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "15 seconds less" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "15 seconds more" })).toBeTruthy();
     expect(screen.getByText("−15 s")).toBeTruthy();
     expect(screen.getByText("+15 s")).toBeTruthy();
-    expect(screen.getByText("Next: Romanian deadlift, set 1 · 20 kg")).toBeTruthy();
-    expect(within(document.body).getAllByText(/s left/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Next: Romanian deadlift, set 2 · 20 kg")).toBeTruthy();
+    expect(screen.getByText("Ready early? Logging a set ends the rest.")).toBeTruthy();
     tap("Skip rest");
     expect(screen.queryByText("REST")).toBeNull();
+    expect(screen.getByText(/Tap load or reps to change/)).toBeTruthy();
+  });
+
+  it("rolls over to the next exercise after the last set (frame 11b)", () => {
+    const ex = execution("20 kg");
+    ex.exercises[0]!.sets[0]!.status = "completed";
+    const second = {
+      ...ex.exercises[0]!,
+      id: uuid(501),
+      name: "Step-ups",
+      order: 2,
+      sets: [set(20, 1, null, 10), set(21, 2, null, 10)].map((x) => ({
+        ...x,
+        exerciseExecutionId: uuid(501),
+      })),
+    };
+    ex.exercises.push(second);
+    renderScreen("20 kg", ex);
+    tap(/^Log set 2/);
+    expect(screen.getByText("Next: Step-ups, set 1 · bodyweight")).toBeTruthy();
+  });
+
+  it("shows the raw prescription for a free-text load and invents no kg", () => {
+    expect(prescribedLoadText("RPE 7")).toBe("RPE 7");
+    expect(prescribedLoadText("90 lb")).toBe("90 lb");
+    expect(prescribedLoadText("BW")).toBe("bodyweight");
+    expect(prescribedLoadText("22.5 kg")).toBe("22.5 kg");
+    renderScreen("RPE 7");
+    tap(/^Log set 1/);
+    expect(screen.getByText("Next: Romanian deadlift, set 2 · RPE 7")).toBeTruthy();
   });
 });

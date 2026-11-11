@@ -107,6 +107,14 @@ export function loadBody(
   draft: SetDraft,
   prescribedLoadLabel?: string | null,
 ): SetLoadBody {
+  // Untouched: the prescription stands (a bare "40" included).
+  const initial = initialDraft(prescribedLoadLabel, null);
+  if (
+    draft.bodyweight === initial.bodyweight &&
+    (draft.bodyweight || draft.load === initial.load)
+  ) {
+    return { actualLoadLabel: null };
+  }
   if (draft.bodyweight) {
     // Bodyweight as prescribed is not a change: keep the prescribed load.
     return isBodyweightLabel(prescribedLoadLabel)
@@ -118,6 +126,13 @@ export function loadBody(
     return { actualLoadKg: Math.round(kg * 100) / 100 };
   }
   return { actualLoadLabel: null };
+}
+
+/** How a prescribed load reads: "bodyweight", "40 kg", or the raw label ("RPE 7", "90 lb"). */
+export function prescribedLoadText(label: string | null | undefined): string {
+  if (isBodyweightLabel(label)) return "bodyweight";
+  const kg = plainKgFromLabel(label);
+  return kg !== "" ? `${kg} kg` : (label ?? "").trim();
 }
 
 /** The label the screen shows for the set once it is logged locally. */
