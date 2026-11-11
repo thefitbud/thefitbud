@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Eye } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CheckinReviewContext, CheckinReviewOutcome } from "@fitbud/contracts";
@@ -18,6 +19,11 @@ import { Snackbar } from "../components/Snackbar";
 import { StatusChip } from "../components/StatusChip";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { checkinReviewRows, type ReviewMeasureTile } from "./checkinReviewRows";
+import {
+  noteForCheckin,
+  reviewedSummaryLine,
+  signedDelta,
+} from "./checkinReview/savedReview";
 
 const OUTCOMES: Array<{ value: CheckinReviewOutcome; label: string }> = [
   { value: "acknowledged", label: labelFor("checkin_review_outcome", "acknowledged") },
@@ -89,6 +95,8 @@ export function CheckinReviewScreen({
 
   const reviewed = Boolean(context?.checkin.review) || context?.checkin.status === "reviewed";
   const first = name.split(" ")[0] || "them";
+  const savedNote = context ? noteForCheckin(context.previousNotes, checkinId) : null;
+  const savedReview = context?.checkin.review ?? null;
   const rows = context
     ? checkinReviewRows({
         fields: context.pinnedForm.fields,
@@ -101,12 +109,14 @@ export function CheckinReviewScreen({
     if (!context || reviewed || offline) return;
     setActing(true);
     setError(null);
+    let recorded = false;
     try {
       await api.recordCheckinReview(
         checkinId,
         { outcome, notes: note.trim() ? note.trim() : null },
         createIdempotencyKey(),
       );
+      recorded = true;
       const rid = relationshipId || context.checkin.coachingRelationshipId;
       if (note.trim() && rid) {
         await api.createTrainerNote(
@@ -119,9 +129,12 @@ export function CheckinReviewScreen({
           createIdempotencyKey(),
         );
       }
-      setToast("Review saved");
-      onBack();
+      // Stay on the screen: reload so it shows the saved, read-only review.
+      setToast(note.trim() && visible ? `Review saved · shared with ${first}` : "Review saved");
+      await load();
     } catch (err) {
+      // The review itself is stored once recorded; show it read-only.
+      if (recorded) void load();
       if (err instanceof ApiClientError && err.status === 409) {
         setError(`${first}'s check-in changed. Pull to reload.`);
       } else {
@@ -141,7 +154,39 @@ export function CheckinReviewScreen({
       }`
     : "";
 
-  const sheet = reviewed || !context ? null : (
+  const savedSheet =
+    reviewed && context ? (
+      <View style={styles.sheet}>
+        <View style={styles.savedHead}>
+          <StatusChip kind="checkin" value="reviewed" />
+          {savedReview ? (
+            <Text style={styles.savedLine}>
+              {reviewedSummaryLine(savedReview, deviceTimeZone())}
+            </Text>
+          ) : null}
+        </View>
+        {savedReview?.notes ? (
+          <Text style={styles.savedNote}>{savedReview.notes}</Text>
+        ) : null}
+        <View style={styles.savedFoot}>
+          {savedNote ? (
+            <View style={styles.sharedChip}>
+              {savedNote.visibility === "client" ? (
+                <Eye color={colors.indigo} size={16} />
+              ) : null}
+              <Text style={styles.sharedChipText}>
+                {savedNote.visibility === "client"
+                  ? `Visible to ${first}`
+                  : "Only you see this note"}
+              </Text>
+            </View>
+          ) : null}
+          <Text style={styles.closedLine}>Check-in item closed in Attention</Text>
+        </View>
+      </View>
+    ) : null;
+
+  const sheet = reviewed || !context ? savedSheet : (
     <View style={styles.sheet}>
       <View style={styles.outcomes}>
         {OUTCOMES.map((item) => {
@@ -212,43 +257,49 @@ export function CheckinReviewScreen({
       <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}>
         <Text style={styles.backText}>‹</Text>
       </Pressable>
+      {toast ? <Snackbar leadingCheck message={toast} onDismiss={() => setToast(null)} /> : null}
       {offline ? (
         <Text style={styles.offline}>You're offline. Showing the last update from this phone.</Text>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
       {loading && !context ? <View style={styles.skeleton} accessibilityLabel="Loading" /> : null}
-      {reviewed ? (
-        <View style={styles.block}>
-          <StatusChip kind="checkin" value="reviewed" />
-          {context?.checkin.review?.notes ? (
-            <Text style={styles.body}>{context.checkin.review.notes}</Text>
+      {rows.ratings.length > 0 || rows.texts.length > 0 ? (
+        <View style={styles.card}>
+          {rows.ratings.length > 0 ? (
+            <View style={styles.scales}>
+              {rows.ratings.map(({ fieldId, label, value }, index) => (
+                <View
+                  key={fieldId}
+                  style={[styles.scale, index > 0 ? styles.scaleDivider : null]}
+                >
+                  <Text style={styles.scaleLabel}>{label}</Text>
+                  <Text style={styles.scaleValue}>{value} of 5</Text>
+                  <View style={styles.pips}>
+                    {Array.from({ length: 5 }, (_, pip) => (
+                      <View
+                        key={pip}
+                        style={[styles.pip, pip < value ? styles.pipOn : null]}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
           ) : null}
-        </View>
-      ) : null}
-      {rows.ratings.length > 0 ? (
-        <View style={styles.scales}>
-          {rows.ratings.map(({ fieldId, label, value }) => (
-            <View key={fieldId} style={styles.scale}>
-              <Text style={styles.scaleLabel}>{label}</Text>
-              <Text style={styles.scaleValue}>{value} of 5</Text>
-              <View style={styles.pips}>
-                {Array.from({ length: 5 }, (_, index) => (
-                  <View
-                    key={index}
-                    style={[styles.pip, index < value ? styles.pipOn : null]}
-                  />
-                ))}
-              </View>
+          {rows.texts.map(({ fieldId, label, text }, index) => (
+            <View
+              key={fieldId}
+              style={[
+                styles.block,
+                index > 0 || rows.ratings.length > 0 ? styles.blockDivider : null,
+              ]}
+            >
+              <Text style={styles.q}>{label}</Text>
+              <Text style={styles.body}>{text}</Text>
             </View>
           ))}
         </View>
       ) : null}
-      {rows.texts.map(({ fieldId, label, text }) => (
-        <View key={fieldId} style={styles.block}>
-          <Text style={styles.q}>{label}</Text>
-          <Text style={styles.body}>{text}</Text>
-        </View>
-      ))}
       {rows.measures.length > 0 ? (
         <View style={styles.measureRow}>
           {rows.measures.map((item) => (
@@ -257,7 +308,20 @@ export function CheckinReviewScreen({
         </View>
       ) : null}
       {(context?.photos.length ?? 0) > 0 ? (
-        <Text style={styles.body}>{context?.photos.length} photos</Text>
+        <View style={styles.photos}>
+          <Text style={styles.photosHead} accessibilityRole="header">
+            Photos <Text style={styles.photosCount}>{context?.photos.length}</Text>
+          </Text>
+          <View style={styles.photoRow}>
+            {context?.photos.map((photo) => (
+              <View
+                key={photo.id}
+                accessibilityLabel="Check-in photo"
+                style={styles.photoTile}
+              />
+            ))}
+          </View>
+        </View>
       ) : null}
       {context ? (
         <Text style={styles.since}>
@@ -277,7 +341,6 @@ export function CheckinReviewScreen({
           Meals logged
         </Text>
       ) : null}
-      {toast ? <Snackbar message={toast} onDismiss={() => setToast(null)} /> : null}
     </Screen>
   );
 }
@@ -291,8 +354,7 @@ function Measure({ item }: { item: ReviewMeasureTile }) {
       </Text>
       {item.since ? (
         <Text style={styles.delta}>
-          {item.since.delta > 0 ? "+" : ""}
-          {item.since.delta} since{" "}
+          {signedDelta(item.since.delta)} since{" "}
           {formatCivilDate(item.since.previousObservedAt.slice(0, 10))}
         </Text>
       ) : null}
@@ -303,28 +365,31 @@ function Measure({ item }: { item: ReviewMeasureTile }) {
 const styles = StyleSheet.create({
   back: { minHeight: 44, justifyContent: "center", width: 44 },
   backText: { color: colors.indigo, fontSize: 28 },
-  scales: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 8 },
-  scale: {
+  card: {
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    flexBasis: "31%",
-    flexGrow: 0,
-    padding: 10,
+    marginTop: 8,
+    overflow: "hidden",
   },
+  scales: { flexDirection: "row" },
+  scale: { flex: 1, padding: 12 },
+  scaleDivider: { borderLeftColor: "#E7E9F2", borderLeftWidth: 1 },
   scaleLabel: { color: colors.midGrey, fontSize: 13 },
   scaleValue: {
     color: colors.deepNavy,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
+    fontVariant: ["tabular-nums"],
     marginTop: 4,
   },
   pips: { flexDirection: "row", gap: 4, marginTop: 8 },
   pip: { backgroundColor: "#E7E9F2", borderRadius: 999, flex: 1, height: 4 },
   pipOn: { backgroundColor: colors.deepNavy },
-  block: { marginTop: 16 },
-  q: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 16 },
+  block: { padding: 14 },
+  blockDivider: { borderTopColor: "#E7E9F2", borderTopWidth: 1 },
+  q: { color: colors.midGrey, fontSize: 14 },
   body: { color: colors.nearBlack, fontSize: 16, lineHeight: 22, marginTop: 4 },
   measureRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
   measure: {
@@ -337,6 +402,35 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   delta: { color: colors.midGrey, fontSize: 13, marginTop: 4 },
+  photos: { marginTop: 16 },
+  photosHead: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 17 },
+  photosCount: { color: colors.midGrey, fontFamily: fontFamilySemiBold, fontSize: 17 },
+  photoRow: { flexDirection: "row", gap: 8, marginTop: 8 },
+  photoTile: { aspectRatio: 3 / 4, backgroundColor: "#E4E0F7", borderRadius: 14, flex: 1 },
+  savedHead: { alignItems: "center", flexDirection: "row", gap: 10 },
+  savedLine: { color: colors.midGrey, flexShrink: 1, fontSize: 14 },
+  savedNote: {
+    borderColor: "#E7E9F2",
+    borderRadius: 16,
+    borderWidth: 1,
+    color: colors.deepNavy,
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 10,
+    padding: 12,
+  },
+  savedFoot: { alignItems: "center", flexDirection: "row", gap: 10, marginTop: 10 },
+  sharedChip: {
+    alignItems: "center",
+    backgroundColor: "#EAF0FF",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  sharedChipText: { color: colors.indigo, fontSize: 14 },
+  closedLine: { color: colors.midGrey, flex: 1, fontSize: 14 },
   since: { color: colors.deepNavy, fontSize: 15, lineHeight: 22, marginTop: 16 },
   sheet: {
     backgroundColor: colors.white,
