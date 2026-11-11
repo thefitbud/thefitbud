@@ -391,6 +391,68 @@ export type NeedsYouRowModel = {
   trailing: "chevron";
 };
 
+/** Age of the oldest open item. "since" always reads from this, not the newest item. */
+export function oldestItemAgeMinutes(
+  items: ReadonlyArray<{ ageMinutes: number }>,
+): number {
+  return items.reduce((max, item) => Math.max(max, item.ageMinutes), 0);
+}
+
+/** How long Mark answered can be undone before it is sent (frame 05 toast). */
+export const ANSWER_UNDO_WINDOW_MS = 5000;
+
+export const ANSWERED_TOAST_MESSAGE = "Marked answered";
+
+export type UndoableAction = {
+  /** Cancel the pending action. False when it was already sent or cancelled. */
+  undo: () => boolean;
+  /** Send now (a newer action replaced it, or the screen is closing). */
+  flush: () => Promise<void>;
+};
+
+/**
+ * Hold `commit` back for `windowMs`. Undo inside the window means it never
+ * runs; otherwise it runs once, when the window ends or on `flush`.
+ */
+export function scheduleUndoable(
+  commit: () => Promise<void>,
+  windowMs: number = ANSWER_UNDO_WINDOW_MS,
+): UndoableAction {
+  let state: "pending" | "sent" | "undone" = "pending";
+  let sending: Promise<void> = Promise.resolve();
+  const send = () => {
+    if (state !== "pending") return sending;
+    state = "sent";
+    clearTimeout(timer);
+    sending = commit();
+    return sending;
+  };
+  const timer = setTimeout(() => {
+    void send().catch(() => undefined);
+  }, windowMs);
+  return {
+    undo: () => {
+      if (state !== "pending") return false;
+      state = "undone";
+      clearTimeout(timer);
+      return true;
+    },
+    flush: send,
+  };
+}
+
+/** Client name for an Asked or Check-ins card, or null when none is known. */
+export function clientNameFor(
+  names: ReadonlyMap<string, string> | Record<string, string>,
+  relationshipId: string,
+): string | null {
+  const value =
+    names instanceof Map
+      ? names.get(relationshipId)
+      : (names as Record<string, string>)[relationshipId];
+  return value ? formatPersonName(value) : null;
+}
+
 export function needsYouRowModel(input: {
   items: AttentionGroupItem[];
   issue: string;
@@ -404,7 +466,7 @@ export function needsYouRowModel(input: {
     issue: input.issue,
     severityLabel: labelFor("exception_severity", primary?.severity ?? "attention"),
     openLabel: openItemsLabel(input.items.length),
-    age: formatAttentionAge(primary?.ageMinutes ?? 0),
+    age: formatAttentionAge(oldestItemAgeMinutes(input.items)),
     trailing: "chevron",
   };
 }

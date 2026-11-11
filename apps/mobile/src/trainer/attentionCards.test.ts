@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AttentionGroupsResponse } from "@fitbud/contracts";
 import {
   acknowledgeAttentionItem,
@@ -6,7 +6,11 @@ import {
   attentionSectionModel,
   attentionSubtitle,
   ATTENTION_SCREEN_TITLE,
+  ANSWER_UNDO_WINDOW_MS,
   buildClientAttentionCards,
+  clientNameFor,
+  oldestItemAgeMinutes,
+  scheduleUndoable,
   formatAttentionAge,
   markReviewedToastMessage,
   needsYouRowModel,
@@ -293,5 +297,72 @@ describe("swipe Mark reviewed + Undo toast", () => {
         ?.items.map((entry) => entry.id)
         .sort(),
     ).toEqual([a, b, c].sort());
+  });
+});
+
+describe("since reads from the oldest open item", () => {
+  it("uses the oldest age even when the most severe item is newer", () => {
+    const newest = { ...item("a", "active", "critical"), ageMinutes: 2 * 24 * 60 };
+    const oldest = { ...item("b", "detected", "attention"), ageMinutes: 5 * 24 * 60 };
+    expect(oldestItemAgeMinutes([newest, oldest])).toBe(5 * 24 * 60);
+    const row = needsYouRowModel({ items: [newest, oldest], issue: "x" });
+    expect(row.age).toBe("since 5 d");
+    expect(row.severityLabel).toBe("Critical");
+  });
+
+  it("reads today when every item is from the same day", () => {
+    expect(needsYouRowModel({ items: [item("a", "active")], issue: "x" }).age).toBe(
+      "today",
+    );
+  });
+});
+
+describe("client names on Asked and Check-ins cards", () => {
+  it("formats a known name and returns null for an unknown client", () => {
+    expect(clientNameFor({ r1: "rohan mehta" }, "r1")).toBe(
+      clientNameFor(new Map([["r1", "rohan mehta"]]), "r1"),
+    );
+    expect(clientNameFor({}, "r2")).toBeNull();
+  });
+});
+
+describe("Mark answered undo window", () => {
+  it("is 5 seconds", () => {
+    expect(ANSWER_UNDO_WINDOW_MS).toBe(5000);
+  });
+
+  it("sends once when the window ends", async () => {
+    vi.useFakeTimers();
+    const commit = vi.fn(async () => undefined);
+    scheduleUndoable(commit);
+    await vi.advanceTimersByTimeAsync(ANSWER_UNDO_WINDOW_MS - 1);
+    expect(commit).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(commit).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it("never sends after Undo inside the window", async () => {
+    vi.useFakeTimers();
+    const commit = vi.fn(async () => undefined);
+    const action = scheduleUndoable(commit);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(action.undo()).toBe(true);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(commit).not.toHaveBeenCalled();
+    await action.flush();
+    expect(commit).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("flush sends now, once, and Undo is then refused", async () => {
+    vi.useFakeTimers();
+    const commit = vi.fn(async () => undefined);
+    const action = scheduleUndoable(commit);
+    await action.flush();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(action.undo()).toBe(false);
+    vi.useRealTimers();
   });
 });

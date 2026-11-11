@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Check, ChevronRight, CircleCheck } from "lucide-react-native";
 import { Text } from "../components/Text";
@@ -33,7 +33,11 @@ import { initialsFromName } from "../components/m2";
 import {
   acknowledgeAttentionItem,
   acknowledgeAttentionItems,
+  ANSWERED_TOAST_MESSAGE,
+  clientNameFor,
   restoreAttentionItem,
+  scheduleUndoable,
+  type UndoableAction,
   attentionIssueLine,
   attentionSectionModel,
   ATTENTION_SCREEN_TITLE,
@@ -81,6 +85,8 @@ type Snapshot = {
   reviewed?: AttentionGroup[];
   asks: CoachAsk[];
   checkins: TrainerCheckinInboxItem[];
+  /** Client names by relationship id, for the Asked cards. */
+  clientNames?: Record<string, string>;
   savedAt: string;
 };
 
@@ -135,6 +141,12 @@ export function AttentionTab({
   const [lists, setLists] = useState<AttentionLists>(EMPTY_LISTS);
   const [asks, setAsks] = useState<CoachAsk[]>([]);
   const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
+  const [clientNames, setClientNames] = useState<Record<string, string>>({});
+  const pendingAnswer = useRef<{
+    ask: CoachAsk;
+    action: UndoableAction;
+  } | null>(null);
+  const [answerUndo, setAnswerUndo] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -154,16 +166,28 @@ export function AttentionTab({
     setLists(listsFromSnapshot(snapshot));
     setAsks(snapshot.asks);
     setCheckins(snapshot.checkins);
+    setClientNames(snapshot.clientNames ?? {});
   }, []);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const [attentionGroups, coachAsks, inbox] = await Promise.all([
+      const [attentionGroups, coachAsks, inbox, directory] = await Promise.all([
         s1.getAttentionGroups(),
         s1.listCoachAsks({ status: "open" }),
         api.listTrainerCheckinInbox(),
+        // Names only; the screen still works if the directory cannot load.
+        api.listClients({ limit: 50 }).catch(() => null),
       ]);
+      const names: Record<string, string> = {};
+      for (const group of attentionGroups.groups) {
+        names[group.relationshipId] = group.traineeDisplayName;
+      }
+      for (const client of directory?.items ?? []) {
+        if (client.relationshipId) {
+          names[client.relationshipId] = client.traineeDisplayName;
+        }
+      }
       const nextCheckins = inbox.items.filter(
         (item: TrainerCheckinInboxItem) => item.checkin.status === "submitted",
       );
@@ -171,8 +195,12 @@ export function AttentionTab({
         groups: attentionGroups.groups,
         needsYou: attentionGroups.needsYou,
         reviewed: attentionGroups.reviewed,
-        asks: coachAsks.items,
+        // A reload while Undo is open must not bring the held ask back.
+        asks: coachAsks.items.filter(
+          (ask) => ask.id !== pendingAnswer.current?.ask.id,
+        ),
         checkins: nextCheckins,
+        clientNames: names,
         savedAt: new Date().toISOString(),
       };
       applySnapshot(snapshot);
@@ -441,26 +469,80 @@ export function AttentionTab({
     setToast("Opened WhatsApp");
   }
 
+  async function sendAnswer(ask: CoachAsk) {
+    await (
+      s1.answerCoachAsk as unknown as (
+        id: string,
+        body: { note?: string | null },
+        idempotencyKey: string,
+      ) => Promise<CoachAsk>
+    )(ask.id, { note: null }, createIdempotencyKey());
+  }
+
+  function failAnswer(ask: CoachAsk, err: unknown) {
+    pendingAnswer.current = null;
+    setAnswerUndo(false);
+    setToast(null);
+    setAsks((current) =>
+      current.some((item) => item.id === ask.id) ? current : [ask, ...current],
+    );
+    setError(
+      err instanceof ApiClientError
+        ? err.message
+        : "Couldn't load. Pull to try again.",
+    );
+  }
+
+  // Mark answered is held for 5 s so Undo needs no server call. A second
+  // Mark answered sends the first one now.
   async function answerAsk(ask: CoachAsk) {
     if (offline) return;
-    try {
-      await (
-        s1.answerCoachAsk as unknown as (
-          id: string,
-          body: { note?: string | null },
-          idempotencyKey: string,
-        ) => Promise<CoachAsk>
-      )(ask.id, { note: null }, createIdempotencyKey());
-      setAsks((current) => current.filter((item) => item.id !== ask.id));
-      setToast("Marked answered");
-    } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load. Pull to try again.",
-      );
+    const previous = pendingAnswer.current;
+    if (previous) {
+      pendingAnswer.current = null;
+      void previous.action.flush().catch((err) => failAnswer(previous.ask, err));
     }
+    setAsks((current) => current.filter((item) => item.id !== ask.id));
+    const action = scheduleUndoable(async () => {
+      try {
+        await sendAnswer(ask);
+        if (pendingAnswer.current?.ask.id === ask.id) {
+          pendingAnswer.current = null;
+          setAnswerUndo(false);
+          setToast(null);
+        }
+      } catch (err) {
+        failAnswer(ask, err);
+      }
+    });
+    pendingAnswer.current = { ask, action };
+    setAnswerUndo(true);
+    setToast(ANSWERED_TOAST_MESSAGE);
   }
+
+  function undoAnswer() {
+    const pending = pendingAnswer.current;
+    if (!pending || !pending.action.undo()) return;
+    pendingAnswer.current = null;
+    setAnswerUndo(false);
+    setToast(null);
+    setAsks((current) =>
+      current.some((item) => item.id === pending.ask.id)
+        ? current
+        : [pending.ask, ...current].sort((a, b) =>
+            a.askedAt.localeCompare(b.askedAt),
+          ),
+    );
+  }
+
+  // Leaving the screen sends what is still waiting.
+  useEffect(
+    () => () => {
+      const pending = pendingAnswer.current;
+      if (pending) void pending.action.flush().catch(() => undefined);
+    },
+    [],
+  );
 
   const markReviewedToast = undoTarget != null && toast != null;
 
@@ -480,17 +562,19 @@ export function AttentionTab({
         toast ? (
           <Snackbar
             message={toast}
-            leadingCheck={markReviewedToast}
-            actionLabel={undoTarget ? "Undo" : undefined}
+            leadingCheck={markReviewedToast || answerUndo}
+            actionLabel={undoTarget || answerUndo ? "Undo" : undefined}
             onAction={
               undoTarget
                 ? () => {
                     void undoAcknowledge();
                   }
-                : undefined
+                : answerUndo
+                  ? undoAnswer
+                  : undefined
             }
             onDismiss={
-              markReviewedToast ? undefined : () => setToast(null)
+              markReviewedToast || answerUndo ? undefined : () => setToast(null)
             }
           />
         ) : undefined
@@ -634,9 +718,13 @@ export function AttentionTab({
         ? asks.map((ask) => (
             <View key={ask.id} style={styles.askedCard}>
               <Text style={styles.name}>
-                {ask.itemLabel?.trim() || labelFor("coach_ask_topic", ask.topic)}
+                {clientNameFor(clientNames, ask.relationshipId) ??
+                  labelFor("coach_ask_topic", ask.topic)}
               </Text>
-              <Text style={styles.issue}>Asked you on WhatsApp</Text>
+              <Text style={styles.issue}>
+                {ask.itemLabel?.trim() || labelFor("coach_ask_topic", ask.topic)}
+                {" · Asked you on WhatsApp"}
+              </Text>
               <Pressable
                 accessibilityRole="button"
                 disabled={offline}
@@ -658,10 +746,12 @@ export function AttentionTab({
               style={styles.askedCard}
             >
               <Text style={styles.name}>
-                {labelFor("checkin_status", item.checkin.status)}
+                {item.traineeDisplayName
+                  ? formatPersonName(item.traineeDisplayName)
+                  : labelFor("checkin_status", item.checkin.status)}
               </Text>
               <Text style={styles.issue}>
-                {formatCivilDate(item.checkin.localDate)}
+                {`${labelFor("checkin_status", item.checkin.status)} · ${formatCivilDate(item.checkin.localDate)}`}
               </Text>
             </Pressable>
           ))
