@@ -114,9 +114,11 @@ function renderPage(
       intakeUpdateRequested: boolean;
     } | null;
     gender?: string;
+    /** Render under React StrictMode (effects run twice, as in development). */
+    strict?: boolean;
   } = {},
 ) {
-  api.getCoachingConfiguration.mockResolvedValue(config);
+  if (!options.strict) api.getCoachingConfiguration.mockResolvedValue(config);
   const context = {
     workspace: {
       header: {
@@ -151,6 +153,7 @@ function renderPage(
         </Route>
       </Routes>
     </MemoryRouter>,
+    { reactStrictMode: options.strict === true },
   );
 }
 
@@ -696,6 +699,28 @@ describe("ConfigureCoachingPage Save as vN+1 (Z8-6, frame 149, DS3)", () => {
     expect(selectNamed(container, "sessionsPerWeek").value).toBe("5");
     expect(screen.getByTestId("configure-status-pill").textContent).toBe("Active · v2");
     expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("a load that resolves late never resets edits the trainer has started (StrictMode double load)", async () => {
+    const active = activeV2();
+    let resolveStale: (value: unknown) => void = () => {};
+    api.getCoachingConfiguration
+      .mockImplementationOnce(
+        () => new Promise((resolve) => {
+          resolveStale = resolve;
+        }),
+      )
+      .mockResolvedValue(active);
+    const { container } = renderPage("active", "active", active, { strict: true });
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    await waitFor(() => expect(api.getCoachingConfiguration).toHaveBeenCalledTimes(2));
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "5");
+    resolveStale(active);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitFor(() =>
+      expect(screen.getByTestId("configure-footer-hint").textContent).toMatch(/^Saving creates v3/),
+    );
+    expect(selectNamed(container, "sessionsPerWeek").value).toBe("5");
   });
 
   it("Discard puts the active values back without a call", async () => {

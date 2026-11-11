@@ -35,6 +35,13 @@ async function openSetup(page: Page) {
   await expect(page.getByTestId("configure-footer")).toBeVisible();
 }
 
+/** The accordion row whose title is exactly this section name. */
+function section(page: Page, title: string) {
+  return page.locator("details", {
+    has: page.locator(".configure-accordion-title", { hasText: new RegExp(`^${title}$`) }),
+  });
+}
+
 test.describe("Z8-6 Coaching setup: activate and save as a new version", () => {
   test.describe.configure({ mode: "serial" });
 
@@ -154,11 +161,15 @@ test.describe("Z8-6 Coaching setup: activate and save as a new version", () => {
     await expect(save).toBeDisabled();
 
     // First edit: Expectations reads Editing, the footer names v(N+1).
-    await page.locator("details").filter({ hasText: "Expectations" }).locator("summary").first().click();
+    await section(page, "Expectations").locator("summary").click();
     await page.locator('select[name="sessionsPerWeek"]').selectOption(String(nextSessions));
     await expect(
-      page.locator("details").filter({ hasText: "Expectations" }).getByTestId("configure-section-badge").first(),
+      section(page, "Expectations").getByTestId("configure-section-badge"),
     ).toHaveText("Editing");
+    // Only the section that owns the field reads Editing.
+    await expect(
+      section(page, "Check-ins").getByTestId("configure-section-badge"),
+    ).toHaveText("Done");
     await expect(page.getByTestId("configure-footer-hint")).toHaveText(
       new RegExp(`^Saving creates v${next} from tomorrow, ${DAY.source}\\. Today stays on v${current}\\.$`),
     );

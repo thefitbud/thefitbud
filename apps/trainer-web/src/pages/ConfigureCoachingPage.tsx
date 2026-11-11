@@ -250,8 +250,14 @@ export function ConfigureCoachingPage() {
     window.setTimeout(() => setToast(null), 2800);
   }, []);
 
+  // Only the latest load may write state. Without this, a load that resolves
+  // late (React StrictMode runs the effect twice in development, and a slow
+  // network can reorder) resets the form under edits the trainer has started.
+  const loadSeq = useRef(0);
   const load = useCallback(async () => {
     if (!relationshipId) return;
+    const seq = ++loadSeq.current;
+    const isLatest = () => seq === loadSeq.current;
     setLoading(true);
     setError(null);
     setGoalError(null);
@@ -291,6 +297,7 @@ export function ConfigureCoachingPage() {
           () => ({ ok: false as const }),
         ),
       ]);
+      if (!isLatest()) return;
 
       if (configResult) {
         applyConfiguration(configResult);
@@ -351,13 +358,14 @@ export function ConfigureCoachingPage() {
       );
       setCheckinForms(formsResult.ok ? formsResult.value.items : []);
     } catch (err) {
+      if (!isLatest()) return;
       setError(
         err instanceof ApiClientError
           ? err.message
           : "Could not load coaching configuration.",
       );
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, [applyConfiguration, applySubscription, relationshipId]);
 
