@@ -3,7 +3,7 @@ import { workoutExecutionSchema } from "@fitbud/contracts";
 import { render, screen } from "../../../test/render";
 import { CoachLoggedWorkoutScreen } from "./CoachLoggedWorkoutScreen";
 import { WorkoutSummaryScreen } from "../../WorkoutSummaryScreen";
-import { coachLogState, sessionTimeRange } from "./coachLogged";
+import { coachLogMeta, coachLogState, sessionTimeRange } from "./coachLogged";
 
 vi.mock("expo-modules-core", () => ({
   requireOptionalNativeModule: () => null,
@@ -87,6 +87,16 @@ describe("coach-logged workout (Z9-11)", () => {
   it("formats the session range in the trainee time zone", () => {
     expect(sessionTimeRange(T, "2026-11-02T02:34:00.000Z", "Asia/Kolkata")).toBe(
       "7:12–8:04 am",
+    );
+  });
+
+  it("has no leading separator when the coach name is empty", () => {
+    const e = execution({ loggedByRole: "coach" });
+    expect(coachLogMeta("logged", e, "", "Asia/Kolkata")).toBe(
+      "Mon 2 Nov · 7:12–8:04 am",
+    );
+    expect(coachLogMeta("edited", e, "  ", "Asia/Kolkata").startsWith(" ")).toBe(
+      false,
     );
   });
 

@@ -56,6 +56,7 @@ import {
   restSecondsBySetTargetId,
   workoutStartError,
 } from "./workoutSession";
+import { reportError } from "../lib/reportError";
 import { CoachLoggedWorkoutScreen } from "./workout/coach-logged/CoachLoggedWorkoutScreen";
 import {
   coachLogState,
@@ -478,10 +479,11 @@ export function WorkoutTab({
         enrichExecutionFromAssignmentDay(execution, assignment),
       );
     } catch (err) {
+      reportError("workout.openLogged", err);
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not open this workout.",
+          : "Could not open this workout. (WORKOUT-OPEN)",
       );
     } finally {
       setActingId(null);

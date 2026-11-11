@@ -60,19 +60,20 @@ export function sessionTimeRange(
   return sP === eP ? `${sT}–${eT} ${eP}` : `${start}–${end}`;
 }
 
-/** The banner's second line. */
+/** The banner's second line; no leading separator when the name is empty. */
 export function coachLogMeta(
   state: Exclude<CoachLogState, null>,
   execution: WorkoutExecution,
   coachName: string,
   timeZone: string,
 ): string {
-  if (state === "edited") {
-    return `${coachName} · ${civilDateOf(execution.updatedAt, timeZone)}`;
-  }
-  return `${coachName} · ${civilDateOf(execution.startedAt, timeZone)} · ${sessionTimeRange(
-    execution.startedAt,
-    execution.completedAt,
-    timeZone,
-  )}`;
+  const parts =
+    state === "edited"
+      ? [coachName.trim(), civilDateOf(execution.updatedAt, timeZone)]
+      : [
+          coachName.trim(),
+          civilDateOf(execution.startedAt, timeZone),
+          sessionTimeRange(execution.startedAt, execution.completedAt, timeZone),
+        ];
+  return parts.filter(Boolean).join(" · ");
 }
