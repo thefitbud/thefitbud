@@ -158,6 +158,12 @@ jobs:
     needs: changes
     if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.web == 'true') }}
     runs-on: ubuntu-latest
+    # W9b Z9b-0 (11 Nov 2026): GitHub runners stopped resolving the Ubuntu apt mirrors (on both
+    # 24.04 and 26.04), so `playwright install --with-deps` failed. The official Playwright image
+    # ships the system dependencies and browsers; keep its tag equal to the locked playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --ipc=host
     timeout-minutes: 45
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -198,7 +204,7 @@ jobs:
         run: pnpm build:packages
 
       - name: Install Playwright browsers
-        run: pnpm --filter @fitbud/trainer-web exec playwright install --with-deps chromium webkit
+        run: pnpm --filter @fitbud/trainer-web exec playwright install chromium webkit
 
       # global-setup.ts runs db:reset, starts wrangler dev on FITBUD_API_PORT and waits for
       # the demo login; Playwright's webServer starts trainer-web on FITBUD_WEB_PORT.
@@ -221,6 +227,12 @@ jobs:
     needs: changes
     if: ${{ always() && (needs.changes.result != 'success' || needs.changes.outputs.web == 'true') }}
     runs-on: ubuntu-latest
+    # W9b Z9b-0 (11 Nov 2026): GitHub runners stopped resolving the Ubuntu apt mirrors (on both
+    # 24.04 and 26.04), so `playwright install --with-deps` failed. The official Playwright image
+    # ships the system dependencies and browsers; keep its tag equal to the locked playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --ipc=host
     timeout-minutes: 30
     env:
       TURBO_TELEMETRY_DISABLED: "1"
@@ -261,7 +273,7 @@ jobs:
         run: pnpm build:packages
 
       - name: Install Playwright browser
-        run: pnpm --filter @fitbud/trainer-web exec playwright install --with-deps chromium
+        run: pnpm --filter @fitbud/trainer-web exec playwright install chromium
 
       # Scans rendered UI text against docs/spec/banned-strings.json. Error-severity hits
       # on cleaned screens fail; the rest are reported only (see banned-strings.spec.ts).
