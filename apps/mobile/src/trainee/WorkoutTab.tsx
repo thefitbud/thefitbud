@@ -59,7 +59,6 @@ import {
 import {
   assignmentDayEyebrow,
   coachInitials,
-  missedLogHeadline,
   shortWorkoutDayName,
   totalSetsInDay,
   weekPlanEyebrow,
@@ -119,6 +118,31 @@ export function workoutWeekStateFor(
 
 /** No assignments to derive from, shared so each render does not allocate. */
 const NO_ASSIGNMENTS: WorkoutAssignment[] = [];
+
+const COUNT_WORDS = [
+  "",
+  "One",
+  "Two",
+  "Three",
+  "Four",
+  "Five",
+  "Six",
+  "Seven",
+  "Eight",
+  "Nine",
+  "Ten",
+];
+
+/**
+ * Frame 10's headline for the missed card: the count is spelled as a word for
+ * 1-10 (digits beyond that), with a singular form for one.
+ */
+export function missedCardHeadline(count: number): string {
+  const word = COUNT_WORDS[count] ?? String(count);
+  return count === 1
+    ? `${word} workout this week wasn't logged. If you did it, log it now.`
+    : `${word} workouts this week weren't logged. If you did them, log them now.`;
+}
 
 const TARGET = 44;
 const SKIP_REASONS = [
@@ -909,7 +933,7 @@ export function WorkoutTab({
           <View style={styles.missbHead}>
             <AlertTriangle color={colors.warning} size={18} />
             <Text style={styles.missbHeadText}>
-              {missedLogHeadline(lateLoggable.length)}
+              {missedCardHeadline(lateLoggable.length)}
             </Text>
             <Pressable
               accessibilityRole="button"
