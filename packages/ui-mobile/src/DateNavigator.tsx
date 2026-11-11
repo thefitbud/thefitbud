@@ -1,5 +1,5 @@
 import { Pressable, StyleSheet, View } from "react-native";
-import { formatCivilDate, labelFor } from "@fitbud/core";
+import { addDaysToLocalDate, formatCivilDate, labelFor } from "@fitbud/core";
 import { FitText as Text } from "./FitText.js";
 import { colors, radii, spacing, touchTargetMin } from "./theme.js";
 import { typeScale } from "./typography.js";
@@ -60,14 +60,6 @@ function stateLabel(state: DateNavigatorDay["state"]): string {
   }
 }
 
-/** The same weekday one week earlier or later, as a civil date. */
-function shiftWeek(localDate: string, weeks: number): string {
-  const [y, m, d] = localDate.split("-").map(Number);
-  const shifted = new Date(Date.UTC(y!, m! - 1, d! + weeks * 7));
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`;
-}
-
 export function DateNavigator({
   days,
   selectedDate,
@@ -96,8 +88,8 @@ export function DateNavigator({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Previous week"
-          hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
-          onPress={() => onSelect(shiftWeek(selectedDate, -1))}
+          hitSlop={{ top: 0, bottom: 0, left: 2, right: 2 }}
+          onPress={() => onSelect(addDaysToLocalDate(selectedDate, -7))}
           style={styles.chevron}
         >
           <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u2039"}</Text>
@@ -121,7 +113,7 @@ export function DateNavigator({
               <Text
                 style={[styles.weekday, selected ? styles.textSelected : null]}
               >
-                {isToday ? "Today" : String(day.weekdayLabel)}
+                {isToday && selected ? "Today" : String(day.weekdayLabel)}
               </Text>
               <Text
                 style={[styles.dayNum, selected ? styles.textSelected : null]}
@@ -141,8 +133,8 @@ export function DateNavigator({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Next week"
-          hitSlop={{ top: 12, bottom: 12, left: 4, right: 12 }}
-          onPress={() => onSelect(shiftWeek(selectedDate, 1))}
+          hitSlop={{ top: 0, bottom: 0, left: 2, right: 2 }}
+          onPress={() => onSelect(addDaysToLocalDate(selectedDate, 7))}
           style={styles.chevron}
         >
           <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u203A"}</Text>
@@ -156,9 +148,13 @@ const styles = StyleSheet.create({
   wrap: {
     marginBottom: spacing.sm,
   },
+  // Full bleed: the host's 24 pt gutters would leave day cells under 44 pt
+  // at 393 wide, so the row takes them back (day cells >= 44 pt, chevrons
+  // 44 pt effective).
   stripRow: {
     alignItems: "center",
     flexDirection: "row",
+    marginHorizontal: -spacing.xl,
   },
   header: {
     flexDirection: "row",
@@ -177,11 +173,13 @@ const styles = StyleSheet.create({
     fontSize: typeScale.caption,
     fontWeight: "600",
   },
+  // 40 wide plus 2 pt of hit slop each side is 44 effective; the strip runs
+  // edge to edge (see `stripRow`) so seven day cells still get 44 or more.
   chevron: {
     alignItems: "center",
     justifyContent: "center",
     minHeight: touchTargetMin,
-    width: 20,
+    width: 40,
   },
   chevronGlyph: {
     color: colors.midGrey,
@@ -196,6 +194,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     minHeight: 76,
+    minWidth: 44,
     paddingVertical: spacing.sm,
   },
   dayToday: {

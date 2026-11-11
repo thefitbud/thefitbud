@@ -103,7 +103,6 @@ function dayAssignment(opts: {
 }
 
 let items: WorkoutAssignment[] = [];
-let executionDetail: unknown = null;
 
 const api = new Proxy(
   {},
@@ -112,7 +111,6 @@ const api = new Proxy(
       if (key === "listWorkoutAssignments") {
         return async () => ({ items, nextCursor: null });
       }
-      if (key === "getWorkoutExecution") return async () => executionDetail;
       if (key === "then") return undefined;
       return async () => ({ items: [], nextCursor: null });
     },
@@ -284,88 +282,6 @@ describe("WorkoutTab default focus and bell", () => {
     );
     fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
     expect(onOpenOverlay).toHaveBeenCalledWith({ screen: "notifications" });
-  });
-});
-
-describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
-  function doneToday(loggedByRole: "trainee" | "coach") {
-    const base = dayAssignment({
-      n: 1,
-      name: "Lower body B",
-      localDate: TODAY,
-      status: "assigned",
-      exercises: 2,
-      setsEach: 2,
-    });
-    const execution = {
-      id: uuid(8001),
-      assignmentId: base.id,
-      coachingRelationshipId: relationship.id,
-      planVersionId: base.planVersionId,
-      traineeUserId: relationship.traineeUserId,
-      status: "completed",
-      recordVersion: 2,
-      startedAt: `${TODAY}T13:00:00.000Z`,
-      pausedAt: null,
-      completedAt: `${TODAY}T13:52:00.000Z`,
-      sessionRpe: null,
-      requireSessionRpe: false,
-      loggedByRole,
-      createdAt: `${TODAY}T13:00:00.000Z`,
-      updatedAt: `${TODAY}T13:52:00.000Z`,
-    };
-    const assignment = workoutAssignmentSchema.parse({
-      ...base,
-      status: "completed",
-      execution,
-    });
-    executionDetail = {
-      ...execution,
-      exercises: base.workoutDay.exercises.map((ex, i) => ({
-        id: uuid(9000 + i),
-        workoutExecutionId: execution.id,
-        exerciseId: ex.id,
-        name: ex.name,
-        order: i + 1,
-        status: "completed",
-        sets: [],
-        createdAt: `${TODAY}T13:00:00.000Z`,
-        updatedAt: `${TODAY}T13:52:00.000Z`,
-      })),
-    };
-    return assignment;
-  }
-
-  it("opens that execution's summary once loaded, then clears the prop", async () => {
-    items = [doneToday("trainee")];
-    const consumed = vi.fn();
-    render(
-      <WorkoutTab
-        relationship={relationship}
-        selectedDate={TODAY}
-        pendingSummaryExecutionId={uuid(8001)}
-        onPendingSummaryConsumed={consumed}
-      />,
-    );
-    expect(await screen.findByText("How hard it felt")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
-    await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
-  });
-
-  it("opens the coach-logged view for a coach-logged entry", async () => {
-    items = [doneToday("coach")];
-    const consumed = vi.fn();
-    render(
-      <WorkoutTab
-        relationship={relationship}
-        selectedDate={TODAY}
-        pendingSummaryExecutionId={uuid(8001)}
-        onPendingSummaryConsumed={consumed}
-      />,
-    );
-    expect(await screen.findByText(/Logged by/i)).toBeTruthy();
-    expect(screen.queryByText("How hard it felt")).toBeNull();
-    await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
   });
 });
 

@@ -217,6 +217,7 @@ vi.mock("../sync/SyncProvider", async () => {
           if (failOutbox) throw new Error("storage");
           return outboxRows;
         }),
+        getMeta: vi.fn(async () => ({ cursor: null, lastSyncedAt: null })),
       },
       enqueue: vi.fn(),
     }),
@@ -833,8 +834,32 @@ describe("Today header, past notice and done card (Z10-20)", () => {
   it("header: sync button opens the sync overlay", async () => {
     renderToday();
     await screen.findByText("Meals");
-    fireEvent.click(screen.getByRole("button", { name: "Sync status" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sync status, Synced" }),
+    );
     expect(openOverlay).toHaveBeenCalledWith({ screen: "sync" });
+  });
+
+  it("header: a failed outbox row changes the sync button's label", async () => {
+    outboxRows = [{ status: "rejected", payloadJson: "{}" }];
+    renderToday();
+    await screen.findByText("Meals");
+    expect(
+      await screen.findByRole("button", {
+        name: "Sync status, Couldn't send",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sync status, Synced" })).toBeNull();
+  });
+
+  it("header: queued rows read 'Saved on phone'", async () => {
+    outboxRows = [{ status: "pending", payloadJson: "{}" }];
+    renderToday();
+    expect(
+      await screen.findByRole("button", {
+        name: "Sync status, Saved on phone",
+      }),
+    ).toBeTruthy();
   });
 
   it("past day: the title is the date and exactly one past-day notice shows", async () => {

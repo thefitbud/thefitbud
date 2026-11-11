@@ -109,6 +109,23 @@ describe("DateNavigator strip (Z10-20, frame 04)", () => {
     expect(onSelect).toHaveBeenLastCalledWith("2026-10-05");
   });
 
+  it("shows 'Today' only on the selected today; an unselected today keeps its weekday", () => {
+    render(
+      <DateNavigator
+        {...props}
+        selectedDate="2026-10-13"
+        onSelect={() => {}}
+        showTodayPill={false}
+      />,
+    );
+    expect(screen.queryByText("Today")).toBeNull();
+    // day("done", 0) is 12 Oct, today; its weekday label is "Wed" in the fixture.
+    expect(
+      screen.getByRole("button", { name: /^Mon 12 Oct, Done$/ }),
+    ).toBeTruthy();
+    expect(screen.getAllByText("Wed").length).toBe(2);
+  });
+
   it("hides its own Today pill when the host has another way back", () => {
     render(
       <DateNavigator

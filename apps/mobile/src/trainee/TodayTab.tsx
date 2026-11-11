@@ -13,8 +13,6 @@ import {
   formatClockTime,
   formatKcal,
   formatNumber,
-  formatPersonName,
-  greetingFor,
 } from "@fitbud/core";
 import {
   WeeklyConsistency,
@@ -583,22 +581,6 @@ export function TodayTab({
     }
   }
 
-  const allDone =
-    isToday &&
-    planState.status === "loaded" &&
-    meals.length > 0 &&
-    meals.every((m) => isMealLoggedForCount(m.status)) &&
-    (!workout ||
-      workout.status === "completed" ||
-      workout.status === "skipped");
-
-  const displayName = useMemo(() => {
-    const email = me?.email ?? "";
-    const local = email.split("@")[0] ?? "";
-    const first = local.split(".")[0] ?? "";
-    return formatPersonName(first) || "there";
-  }, [me?.email]);
-
   const workoutSets = (workout?.workoutDay.exercises ?? []).reduce(
     (sum, ex) => sum + ex.setTargets.length,
     0,
@@ -629,36 +611,6 @@ export function TodayTab({
           onOpenSync={() => onOpenOverlay({ screen: "sync" })}
           onOpenNotifications={() => onOpenOverlay({ screen: "notifications" })}
         />
-        {isToday ? (
-          <View style={styles.greet}>
-            <Text style={styles.greetTitle} accessibilityRole="header">
-              {allDone
-                ? "That's everything for today."
-                : greetingFor(displayName, timeZone || "Asia/Kolkata")}
-            </Text>
-            {/*
-              Gated on the plan's OWN load state (CU22, D-W3b-24). It used to
-              be gated on nothing but `planReady`, which was false while the
-              plan was still loading, so this line claimed the coach had
-              published nothing whenever it rendered first — which it always
-              did, because the shell's plan load awaits a sync pull and
-              `TodayTab`'s day load does not. While the plan is loading this
-              says nothing at all; the day's own loading card below is the
-              honest signal.
-            */}
-            {planState.status === "loading" ||
-            planState.status === "unavailable" ? null : (
-              <Text style={styles.greetSub}>
-                {allDone
-                  ? "Nicely done."
-                  : planState.status === "loaded"
-                    ? "Here's your day."
-                    : `${coachName} is preparing your plan.`}
-              </Text>
-            )}
-          </View>
-        ) : null}
-
         {/*
           The strip renders this screen's own week state (CU23 review fix).
           It used to fetch `GET /me/week` a second time for the same week and
@@ -1168,21 +1120,6 @@ const styles = StyleSheet.create({
   stack: {
     gap: spacing.md,
     paddingTop: spacing.sm,
-  },
-  greet: {
-    gap: 2,
-    marginBottom: spacing.xs,
-  },
-  greetTitle: {
-    color: colors.deepNavy,
-    fontSize: 28,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-  },
-  greetSub: {
-    color: colors.midGrey,
-    fontSize: 16,
-    lineHeight: 22,
   },
   offlineHint: {
     color: colors.midGrey,
