@@ -1,4 +1,4 @@
-/* Client settings (frames 209, 209b, 210). Scoped to .cs-* classes. */
+/* Client settings (frames 209, 209b, 210, 211, 211b, 212). Scoped to .cs-* classes. */
 
 .cs-page {
   display: flex;
@@ -236,7 +236,8 @@
   margin: 0;
 }
 
-.cs-row {
+/* DS7 ReadOnlyField pairs, laid out label | value as in frames 209 and 212. */
+.cs-grid .readonly-field {
   display: grid;
   grid-template-columns: 166px minmax(0, 1fr);
   gap: 12px;
@@ -244,18 +245,54 @@
   min-width: 0;
 }
 
-.cs-row dt {
+.cs-grid .readonly-field-label {
   color: var(--dark-grey);
   font-size: 14px;
+  font-weight: 400;
+  line-height: 1.45;
 }
 
-.cs-row dd {
+.cs-grid .readonly-field-value {
   margin: 0;
   color: var(--deep-navy);
   font-size: 14px;
   font-weight: 600;
   overflow-wrap: anywhere;
+  white-space: normal;
 }
+
+/* Frame 212: ended clients see a lock line above the read-only sections. */
+.cs-readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 10px 16px;
+  background: var(--semantic-neutral-fill, #f3f4f7);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--near-black);
+  font-size: 14px;
+}
+
+.cs-readonly-banner svg {
+  flex: none;
+  color: var(--dark-grey);
+}
+
+.cs-ended-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--semantic-neutral-fill, #f3f4f7);
+  color: var(--semantic-neutral-text, #3f4450);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+
 
 .cs-num {
   font-variant-numeric: tabular-nums;
@@ -389,7 +426,8 @@
   gap: 6px;
 }
 
-.cs-field label {
+.cs-field label,
+.cs-field-label {
   font-size: 13px;
   font-weight: 500;
   color: var(--near-black);
@@ -459,6 +497,172 @@
 
 .cs-field-error {
   color: var(--error);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.cs-field-error svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+/* Frame 211: wider drawer with paired fields. */
+.cs-drawer.cs-drawer-wide {
+  width: min(560px, 100vw);
+}
+
+.cs-field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.cs-segmented {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 3px;
+  background: #ebe9f6;
+  border-radius: 12px;
+}
+
+.cs-segment {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
+  border-radius: 9px;
+  color: var(--dark-grey);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.cs-field .cs-segment {
+  font-weight: 400;
+  color: var(--dark-grey);
+}
+
+.cs-segment input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.cs-field .cs-segment.is-selected {
+  background: var(--white);
+  color: var(--near-black);
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 10%);
+}
+
+.cs-segment:has(input:focus-visible) {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+.cs-date {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong, #d9dce8);
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.cs-date:focus-within {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+.cs-date.is-invalid {
+  border-color: var(--error);
+}
+
+.cs-date-text {
+  flex: 1;
+  font-size: 14px;
+  color: var(--near-black);
+}
+
+.cs-date-icon {
+  color: var(--dark-grey);
+}
+
+/* The native input covers the field: picker and keyboard entry, no ISO text shown. */
+.cs-field .cs-date input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.cs-money-input {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-strong, #d9dce8);
+  border-radius: 10px;
+  background: var(--white);
+}
+
+.cs-money-input:focus-within {
+  outline: 2px solid var(--indigo);
+  outline-offset: 1px;
+}
+
+.cs-money-input.is-invalid {
+  border-color: var(--error);
+}
+
+.cs-field .cs-money-input input {
+  border: 0;
+  outline: none;
+  padding-left: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-error-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--semantic-critical-fill, #fef2f2);
+  border: 1px solid #f6c9c9;
+  border-radius: 10px;
+  color: var(--error);
+  font-size: 13px;
+}
+
+.cs-error-summary svg {
+  flex: none;
+}
+
+.cs-save-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.cs-save-error .form-error {
+  margin: 0;
+}
+
+.cs-save-error button {
+  min-height: 44px;
 }
 
 .cs-drawer-note {
@@ -481,6 +685,16 @@
 
 .cs-drawer-foot button {
   min-height: 44px;
+}
+
+.cs-drawer-foot-note {
+  align-items: center;
+}
+
+.cs-foot-note {
+  margin: 0 auto 0 0;
+  font-size: 12px;
+  color: var(--dark-grey);
 }
 
 /* Frame 209b (iPad / ≤1100px): the section list becomes a segmented row. */
@@ -529,7 +743,7 @@
     box-shadow: 0 1px 2px rgb(26 18 72 / 10%);
   }
 
-  .cs-row {
+  .cs-grid .readonly-field {
     grid-template-columns: 120px minmax(0, 1fr);
   }
 }
@@ -542,5 +756,19 @@
   .cs-only-you {
     margin-left: 0;
     flex-basis: 100%;
+  }
+}
+
+@media (max-width: 560px) {
+  .cs-field-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cs-foot-note {
+    flex-basis: 100%;
+  }
+
+  .cs-drawer-foot-note {
+    flex-wrap: wrap;
   }
 }

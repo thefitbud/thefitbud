@@ -160,7 +160,7 @@ function renderAt(initial: string) {
       <Routes>
         <Route path="/home/renewals" element={<RenewalsViewPage />} />
         <Route path="/home/asks" element={<AsksViewPage />} />
-        <Route path="/clients/:rid/configure" element={<div>Configure page</div>} />
+        <Route path="/clients/:rid/settings" element={<div>Settings page</div>} />
         <Route path="/" element={<div>Home page</div>} />
       </Routes>
       <LocationProbe />
@@ -219,15 +219,15 @@ describe("RenewalsViewPage", () => {
     assertNoLeaks();
   });
 
-  it("a row opens that client's subscription (D14 interim)", async () => {
+  it("a row opens that client's subscription in Client settings (D14)", async () => {
     api.listSubscriptionAttention.mockResolvedValue(renewals());
     renderAt("/home/renewals");
     const row = await screen.findByRole("link", { name: /^Neha Reddy\./ });
-    expect(row.getAttribute("href")).toBe(`/clients/${NEHA}/configure#subscription`);
+    expect(row.getAttribute("href")).toBe(`/clients/${NEHA}/settings#subscription`);
     fireEvent.click(row);
-    expect(await screen.findByText("Configure page")).toBeTruthy();
+    expect(await screen.findByText("Settings page")).toBeTruthy();
     expect(screen.getByTestId("location").textContent).toBe(
-      `/clients/${NEHA}/configure#subscription`,
+      `/clients/${NEHA}/settings#subscription`,
     );
   });
 

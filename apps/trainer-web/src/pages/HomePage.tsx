@@ -1425,7 +1425,7 @@ export function HomePage() {
                         if (event.button !== 0) return;
                         if (isRowControlTarget(event.target)) return;
                         navigate(
-                          `/clients/${item.coachingRelationshipId}/configure#subscription`,
+                          `/clients/${item.coachingRelationshipId}/settings#subscription`,
                         );
                       }}
                     >
@@ -1433,7 +1433,7 @@ export function HomePage() {
                         <b>
                           <Link
                             className="home-li-name"
-                            to={`/clients/${item.coachingRelationshipId}/configure#subscription`}
+                            to={`/clients/${item.coachingRelationshipId}/settings#subscription`}
                           >
                             {name}
                           </Link>
