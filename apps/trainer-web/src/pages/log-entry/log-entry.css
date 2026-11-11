@@ -131,3 +131,43 @@
   display: block;
   font-size: 14px;
 }
+
+.le-hint {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--error);
+}
+
+/* Entry links (Log meal, Edit meal, Log measurement, Edit): a 44px target. */
+.button-secondary.le-entry-link {
+  min-height: 44px;
+  padding: 0 1rem;
+}
+
+/* Measurements on the Progress page: a card under the panel, same heading style. */
+.le-measures.workspace-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 1rem;
+  padding: 1.25rem 1.25rem 1rem;
+}
+
+.le-measures-head h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 500;
+  color: var(--deep-navy, #1a1248);
+}
+
+.le-measures-head p {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--mid-grey);
+}
+
+.le-measures .le-entry-link {
+  align-self: flex-start;
+}

@@ -6,6 +6,7 @@ import type { WorkspaceOutletContext } from "../../pages/workspaceContext";
 import { LinkedMedia } from "../LinkedMedia";
 import { Button } from "../Button";
 import { planEnergyKcal } from "./activityUtils";
+import "../../pages/log-entry/log-entry.css";
 
 function macroCell(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return "—";
@@ -56,7 +57,7 @@ export function MealPanel({
       ) : null}
       {canLogOrEdit ? (
         <Link
-          className="button-secondary"
+          className="button-secondary le-entry-link"
           to={`/clients/${relationshipId}/log-entry/meal/${assignment.id}`}
         >
           {compliance ? "Edit meal" : "Log meal"}

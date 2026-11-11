@@ -175,7 +175,8 @@ export function FailureBanner({
           ? "Not saved. We couldn’t reach FitBud, so nothing was saved. Your entries are still here. Check your connection and try again."
           : failure.kind === "api"
             ? RELOAD_CODES.has(failure.code)
-              ? `Not saved. ${failure.message} Reload to see what is saved.`
+              ? // The API's message already says what to do; the button reads Reload.
+                `Not saved. ${failure.message}`
               : `Not saved. ${failure.message} Your entries are still here.`
             : `Not saved. Something went wrong on our side (${screen}). Your entries are still here. Try again.`}
       </p>

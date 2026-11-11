@@ -140,6 +140,12 @@ export function LogMeasurementPage({ mode }: { mode: Mode }) {
     (mode === "create" || valueChanged || dateChanged);
   const reloadNeeded = isReloadFailure(failure);
   const unit = unitFor(type);
+  // Edit keeps Save off until the value is valid and changed; say why when the
+  // value was emptied or is not a number, instead of a silently dead button.
+  const editValueHint =
+    mode === "edit" && editable && !saving && !formProblem && parsedValue === null
+      ? measurementValueProblem(valueText)
+      : null;
 
   async function save() {
     if (!canSave) return;
@@ -304,7 +310,8 @@ export function LogMeasurementPage({ mode }: { mode: Mode }) {
               inputMode="decimal"
               value={valueText}
               disabled={saving || !editable}
-              aria-invalid={formProblem ? true : undefined}
+              aria-invalid={formProblem || editValueHint ? true : undefined}
+              aria-describedby={editValueHint ? "le-value-hint" : undefined}
               onChange={(event) => {
                 setValueText(event.target.value.trim());
                 setFormProblem(null);
@@ -312,6 +319,11 @@ export function LogMeasurementPage({ mode }: { mode: Mode }) {
             />
             <em>{unit}</em>
           </div>
+          {editValueHint ? (
+            <p className="le-hint" id="le-value-hint" role="status" data-testid="log-measurement-value-hint">
+              {editValueHint}
+            </p>
+          ) : null}
         </div>
       </section>
 

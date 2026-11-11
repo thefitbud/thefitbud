@@ -261,7 +261,10 @@ describe("trainer log meal", () => {
 
     // 409: the button becomes Reload; pressing it must not resend the old body.
     const banner = await screen.findByTestId("log-meal-not-saved");
-    expect(banner.textContent).toContain("Reload to see what is saved.");
+    // The API's message already says "Reload and try again": no second reload sentence.
+    expect(banner.textContent).toBe(
+      "Not saved. This meal changed since it was opened. Reload and try again.",
+    );
     expect(api.request).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Reload" }));
     await waitFor(() => expect(api.getMealAssignment).toHaveBeenCalledTimes(2));
@@ -474,6 +477,20 @@ describe("trainer log measurement", () => {
     expect(api.request.mock.calls[1]![3].body).toEqual({ recordVersion: 4, value: 72.5 });
   });
 
+  it("edit: an emptied or invalid value says why Save is off", async () => {
+    renderPage(`/clients/${REL}/log-entry/measurement/${MEASURE_ID}`);
+    await screen.findByRole("heading", { name: "Edit measurement" });
+    expect(screen.queryByTestId("log-measurement-value-hint")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Value"), { target: { value: "" } });
+    expect(screen.getByTestId("log-measurement-value-hint").textContent).toBe("Enter the measurement.");
+    expect((screen.getByRole("button", { name: "Save measurement" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Value"), { target: { value: "abc" } });
+    expect(screen.getByTestId("log-measurement-value-hint").textContent).toContain("Enter a number above 0");
+    fireEvent.change(screen.getByLabelText("Value"), { target: { value: "71.5" } });
+    expect(screen.queryByTestId("log-measurement-value-hint")).toBeNull();
+    expect(api.request).not.toHaveBeenCalled();
+  });
+
   it("moving the date sends observedAt; a measurement older than 7 days cannot be edited", async () => {
     api.request.mockResolvedValue(measurement());
     renderPage(`/clients/${REL}/log-entry/measurement/${MEASURE_ID}`);
@@ -586,5 +603,41 @@ describe("entry points", () => {
     await screen.findAllByText(/Body weight · 72.4 kg/, { selector: "strong" });
     expect(screen.queryByRole("link", { name: "Log measurement" })).toBeNull();
     expect(screen.queryByRole("link", { name: /^Edit / })).toBeNull();
+  });
+
+  it("progress panel: never hides an editable entry, and labels a shortened list honestly", async () => {
+    // 14 entries inside the 7-day window (two a day), then 30 older ones, newest first.
+    const recent = Array.from({ length: 14 }, (_, i) =>
+      measurement({
+        id: id(100 + i),
+        observedAt: new Date(Date.UTC(2026, 10, 4 - Math.floor(i / 2), 4, 0) - (i % 2) * 3600000).toISOString(),
+      }),
+    );
+    const older = Array.from({ length: 30 }, (_, i) =>
+      measurement({ id: id(200 + i), observedAt: new Date(Date.UTC(2026, 9, 25 - i, 5)).toISOString() }),
+    );
+    api.listMeasurements.mockResolvedValue({ items: [...recent, ...older], nextCursor: null });
+    inRouter(<ProgressPanel relationshipId={REL} clientTimezone="Asia/Kolkata" ended={false} />);
+    await screen.findAllByText(/Body weight · 72.4 kg/, { selector: "strong" });
+    expect(screen.getAllByRole("link", { name: /^Edit / })).toHaveLength(14);
+    expect(screen.getAllByRole("listitem")).toHaveLength(24);
+    expect(screen.getByTestId("progress-panel-count").textContent).toBe("Latest 24 entries");
+    cleanup();
+
+    // Everything fits: no label.
+    api.listMeasurements.mockResolvedValue({ items: recent.slice(0, 3), nextCursor: null });
+    inRouter(<ProgressPanel relationshipId={REL} clientTimezone="Asia/Kolkata" ended={false} />);
+    await screen.findAllByText(/Body weight · 72.4 kg/, { selector: "strong" });
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.queryByTestId("progress-panel-count")).toBeNull();
+  });
+
+  it("entry links are 44px targets", async () => {
+    inRouter(<MealPanel assignment={meal("2026-11-03", MEAL_ID)} clientTimezone="Asia/Kolkata" />);
+    expect(screen.getByRole("link", { name: "Log meal" }).className).toContain("le-entry-link");
+    cleanup();
+    inRouter(<ProgressPanel relationshipId={REL} clientTimezone="Asia/Kolkata" ended={false} />);
+    expect((await screen.findByRole("link", { name: /^Edit / })).className).toContain("le-entry-link");
+    expect(screen.getByRole("link", { name: "Log measurement" }).className).toContain("le-entry-link");
   });
 });
