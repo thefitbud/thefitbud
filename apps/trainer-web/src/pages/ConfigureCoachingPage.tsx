@@ -840,7 +840,11 @@ export function ConfigureCoachingPage() {
   async function discardChanges() {
     if (!configuration) return;
     if (configuration.status === "active") {
+      // The check-in form was assigned on the server when it was picked
+      // (D-W8-5), outside the version: Discard keeps it.
+      const assignedForm = form.formVersionId;
       applyConfiguration(configuration);
+      setForm((current) => ({ ...current, formVersionId: assignedForm }));
       setError(null);
       setMessage(null);
       return;

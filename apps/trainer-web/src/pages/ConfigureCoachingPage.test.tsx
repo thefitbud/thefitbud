@@ -943,6 +943,25 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
     ]);
   });
 
+  it("active configuration: Discard keeps the form already assigned on the server and reverts the rest (Z8-6)", async () => {
+    api.listCheckinFormTemplates.mockResolvedValue(templates);
+    api.assignPreferredCheckinForm.mockResolvedValue({});
+    const { container } = renderPage("active", "active");
+    const select = await pickForm(container, TRAINER_LATEST_VERSION_ID);
+    await waitFor(() => expect(api.assignPreferredCheckinForm).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(select.disabled).toBe(false));
+    chooseOption(selectNamed(container, "sessionsPerWeek"), "5");
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(selectNamed(container, "sessionsPerWeek").value).toBe("3");
+    expect(select.value).toBe(TRAINER_LATEST_VERSION_ID);
+    expect(screen.getByTestId("configure-footer-hint").textContent).toBe(
+      "Edit a section to start v2.",
+    );
+    // Discard sends nothing: no re-assignment, no draft call.
+    expect(api.assignPreferredCheckinForm).toHaveBeenCalledTimes(1);
+    expect(api.discardConfigurationDraft).not.toHaveBeenCalled();
+  });
+
   it("active configuration: a refused assignment puts the previous form back and says why", async () => {
     api.listCheckinFormTemplates.mockResolvedValue(templates);
     api.assignPreferredCheckinForm.mockRejectedValue(
