@@ -23,7 +23,7 @@ strengthRoutes.get(
   "/relationships/:relationshipId",
   operation({
     tag: "Strength",
-    summary: "Top set per exercise, workouts per week and uncharted sets for a client.",
+    summary: "Top set per exercise (kg, or reps for bodyweight lifts), finished and planned workouts per week and uncharted sets for a client.",
     description:
       "Readable by the relationship's trainer or trainee, including after the relationship has ended. Dates are the trainee's local dates.",
     roles: ["trainer", "trainee"],

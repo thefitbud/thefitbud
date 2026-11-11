@@ -1,6 +1,5 @@
 import type {
   ProgressMetricKey,
-  ProgressMetricSeries,
 } from "@fitbud/contracts";
 import { formatCivilDate } from "@fitbud/core";
 
@@ -61,12 +60,12 @@ export function metricLabel(key: ProgressMetricKey): string {
   return METRIC_LABELS[key];
 }
 
-const NUMBER = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 });
+const NUMBER = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 
 /** A value as entered, with its unit: "86.4 kg", "94 cm", "3 of 5". */
 export function formatMetricValue(
   value: number,
-  unit: ProgressMetricSeries["unit"],
+  unit: string | null,
 ): string {
   if (unit === null) return `${NUMBER.format(value)} of 5`;
   return `${NUMBER.format(value)} ${unit}`;
@@ -75,7 +74,7 @@ export function formatMetricValue(
 /** A signed difference between two entered values: "−2.7 kg", "+1 cm", "0 kg". */
 export function formatMetricDifference(
   value: number,
-  unit: ProgressMetricSeries["unit"],
+  unit: string | null,
 ): string {
   const rounded = Math.round(value * 10) / 10;
   const sign = rounded > 0 ? "+" : rounded < 0 ? "−" : "";
