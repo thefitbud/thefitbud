@@ -263,3 +263,123 @@ describe("OverflowMenu viewport clamp", () => {
     expect(Number.parseFloat(menu.style.left) + 28 + 192).toBeLessThanOrEqual(393);
   });
 });
+
+describe("OverflowMenu default variant (unchanged for every other consumer)", () => {
+  it("renders plain label buttons, no icons, descriptions, dividers or wide class", () => {
+    renderMenu();
+    const menuItems = openMenu();
+    const menu = screen.getByRole("menu");
+    expect(menu.className).toBe("overflow-menu-list");
+    expect(screen.queryAllByRole("separator")).toHaveLength(0);
+    expect(menu.querySelectorAll("li")).toHaveLength(items.length);
+    for (const [index, item] of menuItems.entries()) {
+      // Exactly one text node, the label, as before Z9-13.
+      expect(item.childNodes).toHaveLength(1);
+      expect(item.childNodes[0]?.nodeType).toBe(Node.TEXT_NODE);
+      expect(item.textContent).toBe(items[index]?.label);
+      expect(item.hasAttribute("aria-label")).toBe(false);
+      expect(item.hasAttribute("aria-describedby")).toBe(false);
+    }
+    expect(menuItems[4]?.className).toBe(
+      "overflow-menu-item overflow-menu-item-destructive",
+    );
+    expect(menuItems[0]?.className).toBe("overflow-menu-item");
+  });
+});
+
+describe("OverflowMenu icons, descriptions and dividers (frame 208)", () => {
+  const rich = (): OverflowMenuItem[] => [
+    {
+      id: "settings",
+      label: "Client settings",
+      description: "Basic details, subscription & package",
+      icon: <svg data-testid="icon-settings" />,
+      onSelect: vi.fn(),
+    },
+    {
+      id: "answers",
+      label: "Onboarding answers",
+      icon: <svg data-testid="icon-answers" />,
+      onSelect: vi.fn(),
+    },
+    {
+      id: "end",
+      label: "End coaching…",
+      icon: <svg data-testid="icon-end" />,
+      destructive: true,
+      dividerBefore: true,
+      onSelect: vi.fn(),
+    },
+  ];
+
+  it("renders the icon, the description as an accessible description and a divider", () => {
+    render(<OverflowMenu items={rich()} variant="wide" />);
+    const menuItems = openMenu();
+    const menu = screen.getByRole("menu");
+    expect(menu.classList.contains("overflow-menu-list-wide")).toBe(true);
+
+    // Accessible name stays the label; the description is described-by.
+    const settings = screen.getByRole("menuitem", { name: "Client settings" });
+    expect(settings.textContent).toContain("Basic details, subscription & package");
+    const descId = settings.getAttribute("aria-describedby");
+    expect(descId).toBeTruthy();
+    expect(document.getElementById(descId!)?.textContent).toBe(
+      "Basic details, subscription & package",
+    );
+    expect(screen.getByRole("menuitem", { name: "Onboarding answers" }).hasAttribute(
+      "aria-describedby",
+    )).toBe(false);
+
+    // Icons are decorative.
+    const icon = screen.getByTestId("icon-settings");
+    expect(icon.parentElement?.getAttribute("aria-hidden")).toBe("true");
+
+    // One separator, right before End coaching, not a menu item.
+    const separators = screen.getAllByRole("separator");
+    expect(separators).toHaveLength(1);
+    expect(separators[0]?.nextElementSibling?.querySelector('[role="menuitem"]')).toBe(
+      menuItems[2],
+    );
+    expect(menuItems).toHaveLength(3);
+  });
+
+  it("arrow keys skip the divider and wrap", () => {
+    render(<OverflowMenu items={rich()} variant="wide" />);
+    const menuItems = openMenu();
+    fireEvent.keyDown(menuItems[0]!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(menuItems[1]);
+    fireEvent.keyDown(menuItems[1]!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(menuItems[2]);
+    fireEvent.keyDown(menuItems[2]!, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(menuItems[1]);
+    fireEvent.keyDown(menuItems[1]!, { key: "End" });
+    expect(document.activeElement).toBe(menuItems[2]);
+    fireEvent.keyDown(menuItems[2]!, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(menuItems[0]);
+  });
+
+  it("Enter on the trigger opens it natively, Escape closes and returns focus", () => {
+    const menuItems = rich();
+    render(<OverflowMenu items={menuItems} variant="wide" />);
+    const trigger = screen.getByRole("button", { name: "More actions" });
+    trigger.focus();
+    // Native button: Enter/Space fire click.
+    fireEvent.click(trigger);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole("menuitem", { name: "Client settings" }),
+    );
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it("Enter activates the focused rich item", () => {
+    const menuItems = rich();
+    render(<OverflowMenu items={menuItems} variant="wide" />);
+    const rendered = openMenu();
+    fireEvent.keyDown(rendered[0]!, { key: "End" });
+    fireEvent.keyDown(rendered[2]!, { key: "Enter" });
+    expect(menuItems[2]?.onSelect).toHaveBeenCalledTimes(1);
+  });
+});

@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useId,
   useLayoutEffect,
@@ -14,12 +15,26 @@ export type OverflowMenuItem = {
   onSelect: () => void;
   disabled?: boolean;
   destructive?: boolean;
+  /** Decorative leading icon (frame 208). Opt-in; omitted items render as before. */
+  icon?: ReactNode;
+  /** Secondary line under the label, exposed as the item's accessible description. */
+  description?: string;
+  /** Draws a separator above this item. Separators are not menu items. */
+  dividerBefore?: boolean;
 };
+
+/**
+ * `default` keeps the original compact list. `wide` (frame 208) is 260 px
+ * wide with 44 px rows; its styles live with the client header in
+ * `styles/workspace.css`.
+ */
+export type OverflowMenuVariant = "default" | "wide";
 
 type Props = {
   items: OverflowMenuItem[];
   label?: string;
   className?: string;
+  variant?: OverflowMenuVariant;
 };
 
 /** Matches `.overflow-menu-list` `top: calc(100% + 4px)`. */
@@ -118,6 +133,7 @@ export function OverflowMenu({
   items,
   label = "More actions",
   className = "",
+  variant = "default",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [menuStyle, setMenuStyle] = useState<MenuStyle | null>(null);
@@ -317,28 +333,68 @@ export function OverflowMenu({
           ref={menuRef}
           id={menuId}
           role="menu"
-          className="overflow-menu-list"
+          className={
+            variant === "wide"
+              ? "overflow-menu-list overflow-menu-list-wide"
+              : "overflow-menu-list"
+          }
           style={listStyle}
         >
-          {items.map((item) => (
-            <li key={item.id} role="none">
-              <button
-                type="button"
-                role="menuitem"
-                tabIndex={-1}
-                data-menu-item-id={item.id}
-                className={
-                  item.destructive
-                    ? "overflow-menu-item overflow-menu-item-destructive"
-                    : "overflow-menu-item"
-                }
-                disabled={item.disabled}
-                onClick={() => activate(item)}
-              >
-                {item.label}
-              </button>
-            </li>
-          ))}
+          {items.map((item) => {
+            const rich = item.icon != null || Boolean(item.description);
+            const descriptionId = item.description
+              ? `${menuId}-${item.id}-desc`
+              : undefined;
+            return (
+              <Fragment key={item.id}>
+                {item.dividerBefore ? (
+                  <li role="separator" className="overflow-menu-divider" />
+                ) : null}
+                <li role="none">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    tabIndex={-1}
+                    data-menu-item-id={item.id}
+                    className={
+                      item.destructive
+                        ? "overflow-menu-item overflow-menu-item-destructive"
+                        : "overflow-menu-item"
+                    }
+                    disabled={item.disabled}
+                    onClick={() => activate(item)}
+                    aria-label={rich ? item.label : undefined}
+                    aria-describedby={descriptionId}
+                  >
+                    {rich ? (
+                      <>
+                        {item.icon != null ? (
+                          <span className="overflow-menu-item-icon" aria-hidden="true">
+                            {item.icon}
+                          </span>
+                        ) : null}
+                        <span className="overflow-menu-item-text">
+                          <span className="overflow-menu-item-label">
+                            {item.label}
+                          </span>
+                          {item.description ? (
+                            <span
+                              id={descriptionId}
+                              className="overflow-menu-item-desc"
+                            >
+                              {item.description}
+                            </span>
+                          ) : null}
+                        </span>
+                      </>
+                    ) : (
+                      item.label
+                    )}
+                  </button>
+                </li>
+              </Fragment>
+            );
+          })}
         </ul>
       ) : null}
     </div>
