@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { ChevronRight, Search } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
@@ -15,7 +15,11 @@ import { initialsFromName } from "../components/m2";
 import { ActivityFeedScreen } from "./ActivityFeedScreen";
 import { readTrainerCache, writeTrainerCache } from "./cache";
 import {
+  applyClientListFilter,
   clientListQueryForChip,
+  endedChipLabel,
+  isCheckinDue,
+  isEndedClient,
   mapDirectoryItemToRow,
   type ClientDirectoryRow,
   type ClientListFilter,
@@ -39,7 +43,14 @@ type Props = {
 type Chip = { label: string; kind: "severity" | "adherence" | "lifecycle" | "checkin" | "custom"; value: string };
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
 
-function rowChips(item: ClientDirectoryItem, group?: AttentionGroup): Chip[] {
+function rowChips(
+  item: ClientDirectoryItem,
+  group: AttentionGroup | undefined,
+  timeZone: string,
+): Chip[] {
+  if (isEndedClient(item)) {
+    return [{ label: endedChipLabel(item, timeZone), kind: "lifecycle", value: "ended" }];
+  }
   const chips: Chip[] = [];
   const reviewed =
     group != null &&
@@ -118,30 +129,27 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
           .getAttentionGroups()
           .catch(() => ({ groups: [] as AttentionGroupsResponse["groups"] })),
       ]);
-      setItems(page.items);
+      setItems(applyClientListFilter(page.items, chip));
       setAttentionByRelationship(
         new Map(attention.groups.map((group) => [group.relationshipId, group])),
       );
-      const all = allPage.items;
+      const all = allPage.items.filter((item) => !isEndedClient(item));
       setCounts({
         all: all.length,
         needs: all.filter((item) => item.adherenceState === "needs_attention").length,
-        checkin: all.filter((item) => {
-          const status = item.nextCheckin?.status;
-          return status === "due" || status === "overdue" || status === "submitted";
-        }).length,
+        checkin: all.filter(isCheckinDue).length,
         onboarding: all.filter((item) =>
           ["invited", "onboarding_pending", "onboarding_submitted"].includes(item.status),
         ).length,
       });
-      writeTrainerCache("trainer:clients", { items: page.items, savedAt: new Date().toISOString() });
+      writeTrainerCache("trainer:clients", { items: applyClientListFilter(page.items, chip), savedAt: new Date().toISOString() });
       setOfflineAt(null);
     } catch (err) {
       const cached = readTrainerCache<{ items: ClientDirectoryItem[]; savedAt: string }>(
         "trainer:clients",
       );
       if (isOfflineError(err) && cached) {
-        setItems(cached.items);
+        setItems(applyClientListFilter(cached.items, chip));
         setOfflineAt(cached.savedAt);
         setError(null);
       } else {
@@ -173,6 +181,8 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
     return null;
   };
 
+  const searchLabel = chip === "ended" ? "Search ended clients" : `Search ${counts.all} clients`;
+
   if (segment === "activity") {
     return (
       <Screen title="Clients" chrome="app" showHeader>
@@ -196,15 +206,20 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
       <View style={styles.search}>
         <Search color={colors.midGrey} size={18} />
         <TextInput
-          accessibilityLabel={`Search ${counts.all} clients`}
-          placeholder={`Search ${counts.all} clients`}
+          accessibilityLabel={searchLabel}
+          placeholder={searchLabel}
           placeholderTextColor={colors.midGrey}
           value={query}
           onChangeText={setQuery}
           style={styles.searchInput}
         />
       </View>
-      <View style={styles.filters}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filtersScroll}
+        contentContainerStyle={styles.filters}
+      >
         {FILTERS.map((item) => {
           const count = countFor(item.id);
           const label = count == null ? item.label : `${item.label} ${count}`;
@@ -223,7 +238,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
             </Pressable>
           );
         })}
-      </View>
+      </ScrollView>
       {offlineAt ? (
         <Text style={styles.offline}>
           You're offline. Showing the last update from{" "}
@@ -270,6 +285,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
                     item.relationshipId
                       ? attentionByRelationship.get(item.relationshipId)
                       : undefined,
+                    trainerZone,
                   ).map((entry) =>
                     entry.kind === "custom" ? (
                       <View key={entry.value} style={styles.customChip}>
@@ -280,6 +296,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
                         key={entry.value}
                         kind={entry.kind}
                         value={entry.value}
+                        {...(entry.label ? { label: entry.label } : {})}
                       />
                     ),
                   )}
@@ -290,6 +307,11 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
           );
         })}
       </View>
+      {chip === "ended" && rows.length > 0 ? (
+        <Text style={styles.endedNote}>
+          Ended clients are read-only. Reactivate from FitBud on web.
+        </Text>
+      ) : null}
     </Screen>
   );
 }
@@ -357,13 +379,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 44,
   },
-  filters: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 8 },
+  filtersScroll: { flexGrow: 0, marginBottom: 8 },
+  filters: { flexDirection: "row", gap: 8 },
+  endedNote: { color: colors.midGrey, fontSize: 14, lineHeight: 20, marginTop: 12 },
   filter: {
     backgroundColor: colors.white,
     borderColor: "#E7E9F2",
     borderRadius: 999,
     borderWidth: 1,
-    minHeight: 36,
+    minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: 12,
   },

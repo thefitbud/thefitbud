@@ -5,7 +5,9 @@ import type {
   Invitation,
 } from "@fitbud/contracts";
 import {
+  applyClientListFilter,
   buildClientDirectoryRows,
+  endedChipLabel,
   filterClientRows,
   mapDirectoryItemToRow,
 } from "./clients.js";
@@ -98,5 +100,63 @@ describe("mapDirectoryItemToRow", () => {
       updatedAt: "2026-10-18T04:10:00.000Z",
     } satisfies ClientDirectoryItem;
     expect(mapDirectoryItemToRow(item).subtitle).toBe("No goal set yet");
+  });
+});
+
+function item(over: Partial<ClientDirectoryItem>): ClientDirectoryItem {
+  return {
+    relationshipId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+    invitationId: null,
+    traineeDisplayName: "Kavya Nair",
+    status: "active",
+    goalShort: "Lose 4 kg",
+    nextCheckin: null,
+    effectivePlan: null,
+    adherenceState: "on_track",
+    renewalState: null,
+    renewsOn: null,
+    updatedAt: "2026-10-18T04:10:00.000Z",
+    ...over,
+  };
+}
+
+describe("ended clients", () => {
+  const active = item({ traineeDisplayName: "Rohan Mehta", week: 6 });
+  const ended = item({
+    status: "ended",
+    startedAt: "2026-07-01T04:00:00.000Z",
+    endedAt: "2026-10-03T06:00:00.000Z",
+  });
+  const due = item({
+    traineeDisplayName: "Neha Reddy",
+    nextCheckin: {
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      localDate: "2026-10-18",
+      status: "overdue",
+    },
+  });
+
+  it("hides ended clients everywhere except the Ended filter", () => {
+    const all = [active, ended, due];
+    expect(applyClientListFilter(all, "all")).toEqual([active, due]);
+    expect(applyClientListFilter(all, "needs_attention")).toEqual([active, due]);
+    expect(applyClientListFilter(all, "onboarding")).toEqual([active, due]);
+    expect(applyClientListFilter(all, "ended")).toEqual([ended]);
+  });
+
+  it("narrows check-in due to clients with a check-in waiting", () => {
+    expect(applyClientListFilter([active, ended, due], "checkin_due")).toEqual([due]);
+  });
+
+  it("shows weeks coached for ended clients and week N for active ones", () => {
+    expect(mapDirectoryItemToRow(ended).subtitle).toBe("Lose 4 kg · 13 weeks");
+    expect(mapDirectoryItemToRow(active).subtitle).toBe("Lose 4 kg · week 6");
+  });
+
+  it("labels the ended chip with the end date in the trainer zone", () => {
+    expect(endedChipLabel(ended, "Asia/Kolkata", new Date("2026-11-11T00:00:00Z"))).toBe(
+      "Ended Sat 3 Oct",
+    );
+    expect(endedChipLabel(item({ status: "ended" }), "Asia/Kolkata")).toBe("Ended");
   });
 });
