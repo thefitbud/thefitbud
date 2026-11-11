@@ -450,7 +450,9 @@ export function DietTab({
             />
           ) : null}
         </View>
-        {isLogged && meal.status === "modified" ? (
+        {isLogged &&
+        meal.status === "modified" &&
+        meal.compliance?.loggedByRole !== "coach" ? (
           <Pressable
             accessibilityRole="button"
             onPress={() =>

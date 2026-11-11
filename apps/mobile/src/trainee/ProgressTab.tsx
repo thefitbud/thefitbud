@@ -674,6 +674,12 @@ export function ProgressTab({
           ) : (
             <Text style={styles.muted}>First weigh-in logged</Text>
           )}
+          <CoachLogBadge
+            loggedByRole={latestWeight.loggedByRole}
+            lastEditedByRole={latestWeight.lastEditedByRole}
+            editedAt={latestWeight.updatedAt}
+            timeZone={timeZone}
+          />
           <WeightTrendChart
             series={series}
             coachName={coach}
