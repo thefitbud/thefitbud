@@ -512,7 +512,6 @@ export function ClientSettingsPage() {
         <EditBasicsDrawer
           relationshipId={relationshipId}
           settings={settings}
-          firstName={firstName}
           online={online}
           onClose={closeDrawer}
           onSaved={(next) => {

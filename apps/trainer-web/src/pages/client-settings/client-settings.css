@@ -466,12 +466,16 @@
   outline-offset: 1px;
 }
 
-.cs-phone-input input {
+.cs-field .cs-phone-input input {
   border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
   outline: none;
+  padding-left: 8px;
 }
 
-.cs-phone-input input:focus-visible {
+.cs-field .cs-phone-input input:focus-visible {
   outline: none;
 }
 

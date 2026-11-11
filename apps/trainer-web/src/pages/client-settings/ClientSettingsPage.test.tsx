@@ -252,13 +252,16 @@ describe("Edit basic details drawer (frame 210)", () => {
     return screen.getByRole("dialog", { name: "Edit basic details" });
   }
 
-  it("labels the phone field as frame 210 does, with its helper (D-W9-8)", async () => {
+  it("labels the fields as frame 210 does, each helper on its own field (D-W9-8)", async () => {
     const dialog = await openDrawer();
-    const phone = within(dialog).getByLabelText("Phone · WhatsApp");
-    expect(phone.getAttribute("aria-describedby")).toBeTruthy();
-    expect(
-      within(dialog).getByText("Shown on Home, Clients and in WhatsApp drafts."),
-    ).toBeTruthy();
+    const helperFor = (field: HTMLElement) =>
+      document.getElementById(field.getAttribute("aria-describedby") ?? "")?.textContent;
+    expect(helperFor(within(dialog).getByLabelText("Name"))).toBe(
+      "Shown on Home, Clients and in WhatsApp drafts.",
+    );
+    expect(helperFor(within(dialog).getByLabelText("Phone · WhatsApp"))).toBe(
+      "Message on WhatsApp opens this number.",
+    );
     expect(within(dialog).queryByText("Contact phone")).toBeNull();
   });
 
