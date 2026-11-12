@@ -31,6 +31,8 @@ import { isMealLoggedForCount } from "../trainee/nutrition";
 import { reportError } from "../lib/reportError";
 import { readTrainerCache, writeTrainerCache } from "./cache";
 import { ClientLogWorkoutScreen } from "./clientlog/ClientLogWorkoutScreen";
+import { ClientLogMealScreen } from "./clientlog/meal/ClientLogMealScreen";
+import { ClientLogMeasurementScreen } from "./clientlog/measurement/ClientLogMeasurementScreen";
 import { dateStrip } from "./clientlog/model";
 import { clientStatusApi } from "./clientStatus/api";
 import { EndedSummary } from "./clientStatus/EndedSummary";
@@ -121,6 +123,7 @@ export function ClientStatusScreen({
   const [endedError, setEndedError] = useState(false);
   const [summaryEpoch, setSummaryEpoch] = useState(0);
   const [logging, setLogging] = useState<{ date?: string; assignmentId?: string } | null>(null);
+  const [loggingOther, setLoggingOther] = useState<"meal" | "measurement" | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -301,6 +304,24 @@ export function ClientStatusScreen({
     }
   }
 
+  if (loggingOther) {
+    const Other = loggingOther === "meal" ? ClientLogMealScreen : ClientLogMeasurementScreen;
+    return (
+      <Other
+        relationshipId={relationshipId}
+        displayName={header?.traineeDisplayName || displayName}
+        ended={ended}
+        clientZone={clientZone}
+        onBack={() => setLoggingOther(null)}
+        onSaved={(message) => {
+          setLoggingOther(null);
+          setToast(message);
+          void load();
+        }}
+      />
+    );
+  }
+
   if (logging) {
     return (
       <ClientLogWorkoutScreen
@@ -378,6 +399,7 @@ export function ClientStatusScreen({
         </View>
       ) : null}
       {ended ? null : (
+        <>
         <View style={styles.actions}>
           <Pressable
             accessibilityRole="button"
@@ -418,6 +440,25 @@ export function ClientStatusScreen({
             <Text style={styles.secondaryText}>Edit</Text>
           </Pressable>
         </View>
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={offline}
+            onPress={() => setLoggingOther("meal")}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Log meal</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={offline}
+            onPress={() => setLoggingOther("measurement")}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Log measurement</Text>
+          </Pressable>
+        </View>
+        </>
       )}
       {!header?.clientWhatsappE164 && !ended ? (
         <Text style={styles.hint}>No WhatsApp number on file</Text>
