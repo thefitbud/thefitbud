@@ -33,24 +33,42 @@ type RowProps = {
   /** Text of the "Previous" column; omit to hide the column. */
   previousLabel?: string;
   onOpenField: (field: KeypadField) => void;
-  onComplete: () => void;
+  /** Omit to hide the tick (the trainer form saves the whole workout at once). */
+  onComplete?: () => void;
+  /**
+   * Whether the load and reps cells are inputs. Defaults to `isNow`; the trainer
+   * form passes true for every row while `isNow` stays the current-row styling.
+   */
+  editable?: boolean;
+  /** Grey filled input cells (the trainer log form) instead of outlined ones. */
+  filled?: boolean;
   /** Disables the tick on the row being edited (for example while paused). */
   completeDisabled?: boolean;
 };
 
 /** Column header of the set table. Pass showPrevious={false} to match a row without it. */
-export function SetEntryHeader({ showPrevious = true }: { showPrevious?: boolean }) {
+export function SetEntryHeader({
+  showPrevious = true,
+  secondColumnLabel = "Previous",
+  showTick = true,
+}: {
+  showPrevious?: boolean;
+  /** Label of the second column, "Previous" by default ("Planned" in the trainer form). */
+  secondColumnLabel?: string;
+  /** Pass false to match rows without the tick column. */
+  showTick?: boolean;
+}) {
   return (
     <View style={styles.stabTh}>
       <Text style={styles.thCell}>Set</Text>
       {showPrevious ? (
-        <Text style={[styles.thCell, styles.thWide]}>Previous</Text>
+        <Text style={[styles.thCell, styles.thWide]}>{secondColumnLabel}</Text>
       ) : (
         <View style={styles.thWide} />
       )}
       <Text style={[styles.thCell, styles.thCenter]}>Load</Text>
       <Text style={[styles.thCell, styles.thCenter]}>Reps</Text>
-      <Text style={styles.thCell} />
+      {showTick ? <Text style={styles.thCell} /> : null}
     </View>
   );
 }
@@ -65,8 +83,11 @@ export function SetEntryRow({
   previousLabel,
   onOpenField,
   onComplete,
+  editable,
+  filled = false,
   completeDisabled = false,
 }: RowProps) {
+  const isEditable = editable ?? isNow;
   const isOk = set.status !== "pending";
   const shownLoadLabel = isOk
     ? set.actualLoadLabel ?? set.prescribedLoadLabel
@@ -90,7 +111,7 @@ export function SetEntryRow({
       ) : (
         <View style={styles.stabPrev} />
       )}
-      {isNow ? (
+      {isEditable ? (
         <View style={styles.valEditWrap}>
           <Pressable
             accessibilityRole="button"
@@ -98,6 +119,7 @@ export function SetEntryRow({
             onPress={() => onOpenField("load")}
             style={[
               styles.valInput,
+              filled ? styles.valFilled : null,
               draft.bodyweight ? styles.valBw : null,
               activeField === "load" ? styles.valActive : null,
             ]}
@@ -122,7 +144,7 @@ export function SetEntryRow({
           {staticBw ? "Bodyweight" : displayLoad(shownLoadLabel)}
         </Text>
       )}
-      {isNow ? (
+      {isEditable ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Set ${set.order} reps: ${draft.reps || "none"}`}
@@ -130,6 +152,7 @@ export function SetEntryRow({
           style={[
             styles.valInput,
             styles.valReps,
+            filled ? styles.valFilled : null,
             activeField === "reps" ? styles.valActive : null,
           ]}
         >
@@ -142,21 +165,23 @@ export function SetEntryRow({
             : set.prescribedReps ?? "—"}
         </Text>
       )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          isOk ? `Set ${set.order} logged` : `Log set ${set.order}`
-        }
-        disabled={!isNow || completeDisabled || set.status !== "pending"}
-        onPress={onComplete}
-        style={[styles.ck, isOk ? styles.ckOk : null, isNow ? styles.ckNow : null]}
-      >
-        <Check
-          color={isOk || isNow ? colors.white : colors.midGrey}
-          size={22}
-          strokeWidth={2.6}
-        />
-      </Pressable>
+      {onComplete ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            isOk ? `Set ${set.order} logged` : `Log set ${set.order}`
+          }
+          disabled={!isNow || completeDisabled || set.status !== "pending"}
+          onPress={onComplete}
+          style={[styles.ck, isOk ? styles.ckOk : null, isNow ? styles.ckNow : null]}
+        >
+          <Check
+            color={isOk || isNow ? colors.white : colors.midGrey}
+            size={22}
+            strokeWidth={2.6}
+          />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -246,6 +271,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   valUnit: { fontSize: 12, fontWeight: "600" },
+  valFilled: { backgroundColor: "#F6F5FB", borderColor: "#F6F5FB" },
   valActive: { borderColor: colors.indigo, borderWidth: 2 },
   valBw: { backgroundColor: "#ECE9FF", borderColor: "#ECE9FF" },
   valBwText: { color: colors.indigo, fontSize: 14 },
