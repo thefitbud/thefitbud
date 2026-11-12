@@ -25,7 +25,7 @@ const dualMe = {
 
 describe("RoleSelectScreen (frame 59)", () => {
   beforeEach(() => {
-    auth = mockAuth({ me: dualMe, accessToken: "tok" });
+    auth = mockAuth({ me: dualMe, accessToken: "tok", rememberRole: true });
   });
 
   it("greets by first name and remembers by default", async () => {
@@ -34,13 +34,47 @@ describe("RoleSelectScreen (frame 59)", () => {
     fireEvent.click(screen.getByLabelText("Client. Follow your plan"));
     fireEvent.click(screen.getByText("Continue"));
     await waitFor(() =>
-      expect(auth.selectRole as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("trainee"),
+      expect(auth.selectRole as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("trainee", {
+        remember: true,
+      }),
     );
   });
 
-  it("shows Remember my choice ticked and disabled", () => {
+  it("Remember my choice is a checkbox that exposes its state and can be unticked (Z11-14)", async () => {
     render(<RoleSelectScreen />);
-    expect((screen.getByLabelText("Remember my choice") as HTMLElement).getAttribute("aria-disabled")).toBe("true");
+    const box = screen.getByRole("checkbox", { name: "Remember my choice" }) as HTMLElement;
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(box.getAttribute("aria-disabled")).toBeNull();
+
+    fireEvent.click(box);
+    expect(box.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(screen.getByText("Continue"));
+    await waitFor(() =>
+      expect(auth.selectRole as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("trainer", {
+        remember: false,
+      }),
+    );
+  });
+
+  it("opens unticked when the user unticked it before", () => {
+    auth = mockAuth({ me: dualMe, accessToken: "tok", rememberRole: false });
+    render(<RoleSelectScreen />);
+    const box = screen.getByRole("checkbox", { name: "Remember my choice" }) as HTMLElement;
+    expect(box.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("opened from More, starts on the role in use", async () => {
+    auth = mockAuth({ me: dualMe, accessToken: "tok", selectedRole: "trainee", rememberRole: true });
+    render(<RoleSelectScreen />);
+    expect(
+      (screen.getByLabelText("Client. Follow your plan") as HTMLElement).getAttribute("aria-checked"),
+    ).toBe("true");
+    fireEvent.click(screen.getByText("Continue"));
+    await waitFor(() =>
+      expect(auth.selectRole as ReturnType<typeof vi.fn>).toHaveBeenCalledWith("trainee", {
+        remember: true,
+      }),
+    );
   });
 });
 
