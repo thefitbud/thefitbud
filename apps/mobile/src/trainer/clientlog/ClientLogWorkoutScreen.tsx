@@ -232,8 +232,9 @@ export function ClientLogWorkoutScreen({
       }
       reportError("client-log.save", err);
       if (err instanceof ApiClientError) {
-        // A definite refusal: nothing was applied, so the next try is a new send.
-        idempotencyKey.current = createIdempotencyKey();
+        // Only a 4xx is a definite refusal (nothing was applied), so the next try is a new send.
+        // A 5xx or status 0 may have been applied server-side: keep the key so a retry replays.
+        if (err.status >= 400 && err.status < 500) idempotencyKey.current = createIdempotencyKey();
         setSave({
           state: "failed",
           message: `Not saved. ${err.message} Your entries are still here.`,

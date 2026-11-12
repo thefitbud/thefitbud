@@ -269,6 +269,44 @@ describe("ClientLogWorkoutScreen", () => {
     await screen.findByText(/Not saved\. A trainer log must be dated within the last 7 days\./);
   });
 
+  function retryButton() {
+    return screen.queryByRole("button", { name: "Try again" }) ?? screen.getByRole("button", { name: "Save workout" });
+  }
+
+  it("reuses the key after a 5xx, since the server may have applied the log", async () => {
+    api.listWorkoutAssignments.mockResolvedValue({ items: [assignment({ date: "2026-11-02" })], nextCursor: null });
+    api.logClientWorkout.mockReset();
+    api.logClientWorkout
+      .mockRejectedValueOnce(new ApiClientError({ code: "INTERNAL", message: "Something went wrong on our side.", requestId: "r", status: 500 }))
+      .mockResolvedValueOnce(execution());
+    const onSaved = vi.fn();
+    renderForm({ initialDate: "2026-11-02", onSaved });
+    await screen.findByText("Upper body A");
+    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    await screen.findByText(/Not saved\. Something went wrong on our side\./);
+    fireEvent.click(retryButton());
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(api.logClientWorkout.mock.calls[1]![2]).toBe(api.logClientWorkout.mock.calls[0]![2]);
+  });
+
+  it("uses a new key after a 4xx refusal, since nothing was applied", async () => {
+    api.listWorkoutAssignments.mockResolvedValue({ items: [assignment({ date: "2026-11-02" })], nextCursor: null });
+    api.logClientWorkout.mockReset();
+    api.logClientWorkout
+      .mockRejectedValueOnce(
+        new ApiClientError({ code: "BACKDATE_LIMIT", message: "A trainer log must be dated within the last 7 days.", requestId: "r", status: 422 }),
+      )
+      .mockResolvedValueOnce(execution());
+    const onSaved = vi.fn();
+    renderForm({ initialDate: "2026-11-02", onSaved });
+    await screen.findByText("Upper body A");
+    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    await screen.findByText(/Not saved\. A trainer log must be dated within the last 7 days\./);
+    fireEvent.click(retryButton());
+    await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(2));
+    expect(api.logClientWorkout.mock.calls[1]![2]).not.toBe(api.logClientWorkout.mock.calls[0]![2]);
+  });
+
   it("edits a finished entry: opens on what was logged and sends only the change", async () => {
     api.listWorkoutAssignments.mockResolvedValue({
       items: [assignment({ date: "2026-11-02", execution: execution({ loggedByRole: "coach" }) })],
