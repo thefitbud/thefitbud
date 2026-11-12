@@ -189,7 +189,11 @@ describe("dayKcalSummary (D-W11-6)", () => {
     } as Partial<MealAssignment>);
     const totals = {
       kcalScaled: 500 * NUTRIENT_SCALE,
-      perMeal: [{ slotKey: S1, kcalScaled: 500 * NUTRIENT_SCALE }],
+      // The server has a stale value for the changed meal; the logged foods win.
+      perMeal: [
+        { slotKey: S1, kcalScaled: 500 * NUTRIENT_SCALE },
+        { slotKey: S2, kcalScaled: 999 * NUTRIENT_SCALE },
+      ],
     } as unknown as MeDayResponse["totals"];
     const out = dayKcalSummary(
       [slot("m1", S1, "confirmed"), modified, slot("m3", S3, "pending"), slot("m4", S4, "skipped")],

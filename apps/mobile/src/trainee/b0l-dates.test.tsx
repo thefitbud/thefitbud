@@ -10,7 +10,9 @@ import {
   type MealAssignment,
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor } from "../test/render";
+import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { addDays, localDateInTimezone } from "../lib/dates";
+import { invalidateRelationshipDayData } from "./dataCache";
 
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 vi.mock("expo-modules-core", () => ({
@@ -88,6 +90,18 @@ function meal(
 
 let meals: MealAssignment[] = [];
 let offline = false;
+let dayTotals: unknown = null;
+const SLOT1 = "00000000-0000-4000-8000-000000000310";
+const SLOT2 = "00000000-0000-4000-8000-000000000320";
+const dayOf = (kcal: number, perMeal: Array<[string, number]>) => ({
+  state: "partial",
+  assignments: { workouts: [], meals: [] },
+  logs: { workouts: 0, meals: perMeal.length },
+  totals: {
+    kcalScaled: Math.round(kcal * NUTRIENT_SCALE),
+    perMeal: perMeal.map(([slotKey, k]) => ({ slotKey, kcalScaled: Math.round(k * NUTRIENT_SCALE) })),
+  },
+});
 
 const api = new Proxy(
   {},
@@ -99,6 +113,7 @@ const api = new Proxy(
           if (offline) throw new Error("offline");
           return { items: meals, nextCursor: null };
         };
+      if (key === "getMeDay") return async () => dayTotals;
       if (key === "listWorkoutAssignments" || key === "listCheckins" || key === "listNotifications")
         return async () => ({ items: [], nextCursor: null });
       if (key === "listMeCoachNotes") return async () => ({ items: [] });
@@ -220,6 +235,7 @@ describe("no ISO dates on Today or Diet", () => {
     it(`Diet ${name}`, async () => {
       meals = items;
       offline = isOffline;
+      dayTotals = null;
       const view = renderDiet(date);
       await waitFor(() => expect(view.container.textContent).toMatch(/kcal/));
       expect(view.container.textContent).not.toMatch(ISO);
@@ -233,12 +249,60 @@ describe("no ISO dates on Today or Diet", () => {
     });
   }
 
-  it("Diet summary kcal equals the sum of the logged rows", async () => {
-    meals = [meal(1, "confirmed", TODAY), meal(2, "modified", TODAY, 250), meal(3, "pending", TODAY)];
+  const partial = () => [
+    meal(1, "confirmed", TODAY),
+    meal(2, "modified", TODAY, 532),
+    meal(3, "pending", TODAY),
+  ];
+
+  it("Diet head equals the sum of the logged rows, not the server day total", async () => {
+    meals = partial();
     offline = false;
+    // Server day total (1,000) differs from the rows: 461 + 532 = 993.
+    dayTotals = dayOf(1000, [[SLOT1, 461], [SLOT2, 532]]);
     const view = renderDiet(TODAY);
-    // 400 (confirmed, plan) + 250 (changed, logged); the pending meal adds nothing.
-    await waitFor(() => expect(screen.getAllByText(/650/).length).toBeGreaterThan(0));
-    expect(view.container.textContent).toMatch(/650\s*of\s*1,?200\s*kcal/);
+    await waitFor(() => {
+      const text = view.container.textContent ?? "";
+      expect(text).toMatch(/Logged · 461 kcal/);
+      expect(text).toMatch(/Changed · 532 kcal/);
+      expect(text).toMatch(/993\s*of\s*1,200\s*kcal/);
+      expect(text).not.toMatch(/1,000\s*of/);
+    });
+  });
+
+  it("Today and Diet show the same logged total for the same data", async () => {
+    meals = partial();
+    offline = false;
+    dayTotals = dayOf(1000, [[SLOT1, 461], [SLOT2, 532]]);
+    const diet = renderDiet(TODAY);
+    await waitFor(() => expect(diet.container.textContent).toMatch(/993\s*of/));
+    diet.unmount();
+    const today = renderToday(TODAY);
+    await waitFor(() => expect(today.container.textContent).toMatch(/993/));
+    expect(today.container.textContent).not.toMatch(/\b1,000\b/);
+  });
+
+  it("a skipped meal reads Skipped with no kcal and adds nothing", async () => {
+    meals = [meal(1, "skipped", TODAY), meal(2, "confirmed", TODAY)];
+    offline = false;
+    dayTotals = null;
+    const view = renderDiet(TODAY);
+    await waitFor(() => {
+      expect(screen.getAllByText(/^Skipped$/).length).toBeGreaterThan(0);
+      expect(view.container.textContent).toMatch(/400\s*of\s*800\s*kcal/);
+    });
+    expect(view.container.textContent).not.toMatch(/Skipped\s*·/);
+  });
+
+  it("goes offline after an online load and keeps the same kcal", async () => {
+    meals = partial();
+    offline = false;
+    dayTotals = dayOf(1000, [[SLOT1, 461], [SLOT2, 532]]);
+    const view = renderDiet(TODAY);
+    await waitFor(() => expect(view.container.textContent).toMatch(/993\s*of\s*1,200\s*kcal/));
+    offline = true;
+    invalidateRelationshipDayData(REL);
+    await waitFor(() => expect(view.container.textContent).toMatch(/Saved on phone/));
+    expect(view.container.textContent).toMatch(/993\s*of\s*1,200\s*kcal/);
   });
 });

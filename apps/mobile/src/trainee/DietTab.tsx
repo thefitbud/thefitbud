@@ -20,7 +20,7 @@ import {
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
-import { formatClockTime, formatKcal, formatNumber } from "@fitbud/core";
+import { formatClockTime, formatKcal, formatNumber, labelFor } from "@fitbud/core";
 import { rings } from "@fitbud/tokens";
 import {
   colors,
@@ -302,7 +302,6 @@ export function DietTab({
     () => buildNutritionRings(assignments, dayTotals?.totals ?? null),
     [assignments, dayTotals],
   );
-  const kcalRing = nutritionRings.find((r) => r.key === "kcal");
   // One kcal source for the ring and the meal rows (D-W11-6).
   const kcalSummary = useMemo(
     () => dayKcalSummary(assignments, dayTotals?.totals ?? null),
@@ -439,9 +438,17 @@ export function DietTab({
             <Text style={styles.mealSub}>{lockCopy}</Text>
           ) : isLogged ? (
             <Text style={styles.mealSub}>
-              {meal.status === "modified" ? "Changed" : "Logged"}
-              {loggedKcal != null ? ` · ${formatKcal(loggedKcal)}` : ""}
-              {planKcal > 0 && planKcal !== loggedKcal ? ` · plan ${formatKcal(planKcal)}` : ""}
+              {meal.status === "skipped"
+                ? labelFor("meal_assignment_status", "skipped")
+                : meal.status === "modified"
+                  ? "Changed"
+                  : "Logged"}
+              {meal.status !== "skipped" && loggedKcal != null
+                ? ` · ${formatKcal(loggedKcal)}`
+                : ""}
+              {meal.status !== "skipped" && planKcal > 0 && planKcal !== loggedKcal
+                ? ` · plan ${formatKcal(planKcal)}`
+                : ""}
             </Text>
           ) : (
             <Text style={styles.mealSub} numberOfLines={1}>
@@ -733,13 +740,13 @@ export function DietTab({
       <View style={styles.daysum2}>
         <KcalRing
           logged={kcalSummary.loggedTotal}
-          assigned={kcalRing?.assigned ?? 0}
+          assigned={kcalSummary.plannedTotal}
         />
         <View style={styles.daysumBody}>
           <Text style={styles.daysumHead}>
             {formatNumber(kcalSummary.loggedTotal)}{" "}
             <Text style={styles.daysumOf}>
-              of {formatNumber(kcalRing?.assigned ?? 0)} kcal
+              of {formatNumber(kcalSummary.plannedTotal)} kcal
             </Text>
           </Text>
           <Text style={styles.daysumSub}>{assignments.length === 0 ? mealsLoggedSummary(assignments) : `${mealsLoggedSummary(assignments)} today`}</Text>

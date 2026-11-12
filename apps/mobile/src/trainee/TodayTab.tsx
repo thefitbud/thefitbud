@@ -49,7 +49,6 @@ import { confirmMealAssignment, MealSyncError } from "./mealActions";
 import {
   canShowMealLogActions,
   cleanFoodLabel,
-  mealKcalFromDayTotals,
   mealLockCopy,
 } from "./mealHelpers";
 import {
@@ -59,6 +58,7 @@ import {
 import { subscribeAll } from "./dataCache";
 import {
   buildNutritionRings,
+  dayKcalSummary,
   isMealLoggedForCount,
   nutrientsFromMealPrescription,
 } from "./nutrition";
@@ -505,9 +505,23 @@ export function TodayTab({
     };
   }, [api, relationship.id, restDay, isToday, today, selectedDate, refreshNonce]);
 
-  const rings = useMemo(
-    () => buildNutritionRings(meals, dayTotals?.totals ?? null),
+  // Same kcal source as Diet (D-W11-6): the ring's logged kcal is the sum of the
+  // logged rows. dayKcalSummary covers meals the server has not counted yet by
+  // their own logged value, which is what buildNutritionRings' "extras" did.
+  const kcalSummary = useMemo(
+    () => dayKcalSummary(meals, dayTotals?.totals ?? null),
     [meals, dayTotals],
+  );
+  const kcalRowById = useMemo(
+    () => new Map(kcalSummary.rows.map((row) => [row.id, row])),
+    [kcalSummary],
+  );
+  const rings = useMemo(
+    () =>
+      buildNutritionRings(meals, dayTotals?.totals ?? null).map((ring) =>
+        ring.key === "kcal" ? { ...ring, logged: kcalSummary.loggedTotal } : ring,
+      ),
+    [meals, dayTotals, kcalSummary],
   );
 
   const mealsDone = useMemo(
@@ -961,10 +975,9 @@ export function TodayTab({
               <View style={styles.mealsList}>
                 {meals.map((meal, index) => {
                   const chip = mealStatusChip(meal, nextOpenMeal?.id);
-                  const kcal = mealKcalFromDayTotals(
-                    meal,
-                    dayTotals?.totals.perMeal,
-                  );
+                  const kcalRow = kcalRowById.get(meal.id);
+                  const kcal =
+                    meal.status === "skipped" ? null : (kcalRow?.kcal ?? null);
                   const logged = isMealLoggedForCount(meal.status);
                   // A logged meal is "Logged" whatever the lock says; the lock
                   // only closes meals that were never logged.
