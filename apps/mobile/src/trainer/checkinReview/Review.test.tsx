@@ -135,8 +135,13 @@ const api = {
   createTrainerNote: vi.fn(async () => ({})),
   getDownloadTarget: vi.fn(async (id: string) => ({ downloadUrl: `https://files.test/${id}?exp=1&sig=x` })),
 };
-const auth = mockAuth({ api, me: { timezone: "Asia/Kolkata" } });
+const auth = mockAuth({ api, me: { timezone: "America/Los_Angeles" } }); // stored zone must NOT be used (D-W3b-11 (b))
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => auth }));
+// D-W3b-11 (b): the screen shows times in the device zone; pin it so the expected labels are stable.
+vi.mock("@fitbud/core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@fitbud/core")>()),
+  deviceTimeZone: () => "Asia/Kolkata",
+}));
 
 const reportError = vi.fn();
 vi.mock("../../lib/reportError", () => ({ reportError: (...args: unknown[]) => reportError(...args) }));
