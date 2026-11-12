@@ -5,7 +5,11 @@ import { fireEvent, mockAuth, render, screen } from "../../test/render";
 
 const RID = "1b65e3ad-84cf-4fe1-a546-0d62656c2c79";
 
-function workspace(ended: boolean) {
+const A1 = "00000000-0000-4000-8000-0000000000a1";
+const A2 = "00000000-0000-4000-8000-0000000000a2";
+const PV = "6d0f2a64-3c1b-4f6e-9a10-7b6f4e0c1d11";
+
+function workspace(ended: boolean, activity = false) {
   return clientWorkspaceSchema.parse({
     header: {
       relationshipId: RID,
@@ -26,7 +30,12 @@ function workspace(ended: boolean) {
     overview: {
       openException: null,
       nextCheckin: null,
-      recentActivity: [],
+      recentActivity: activity
+        ? [
+            { type: "workout", id: A1, occurredAt: "2026-11-02T04:00:00.000Z", localDate: "2026-11-02", title: "Upper body A", state: "completed", planVersionId: PV },
+            { type: "workout", id: A2, occurredAt: "2026-10-27T04:00:00.000Z", localDate: "2026-10-27", title: "Lower body A", state: "completed", planVersionId: PV },
+          ]
+        : [],
       progress: { measurements: [], entries: [], media: [] },
     },
     plan: { plan: null, version: null },
@@ -52,6 +61,11 @@ const auth = mockAuth({ api, me: { timezone: "Asia/Kolkata" } });
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => auth }));
 vi.mock("../../components/Screen", () => ({
   Screen: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock("../../lib/dates", async (orig) => ({
+  ...(await orig<typeof import("../../lib/dates")>()),
+  localDateInTimezone: () => "2026-11-04",
 }));
 
 const { ClientStatusScreen } = await import("../ClientStatusScreen");
@@ -81,5 +95,13 @@ describe("Log workout entry", () => {
     renderScreen();
     await screen.findByText(/Coaching ended/);
     expect(screen.queryByRole("button", { name: "Log workout" })).toBeNull();
+  });
+
+  it("offers Edit on a completed workout inside the 7-day strip, not one 8 days back", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace(false, true));
+    renderScreen();
+    await screen.findByText("Lower body A");
+    expect(screen.getByRole("button", { name: "Edit Upper body A" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Edit Lower body A" })).toBeNull();
   });
 });

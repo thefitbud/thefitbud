@@ -32,7 +32,9 @@ import {
   exerciseSummary,
   exercisesFromAssignment,
   exercisesFromExecution,
+  isEditableSet,
   isFinishedExecution,
+  isNetworkError,
   loggableAssignments,
   performedAtFor,
   plannedText,
@@ -48,6 +50,8 @@ type Props = {
   clientZone: string;
   /** A day to open on (the Edit entry on Recent activity). */
   initialDate?: string;
+  /** The workout to open on (the Edit entry on Recent activity); wins over the day's first one. */
+  initialAssignmentId?: string;
   onBack: () => void;
   /** Called after a save, with the toast text. */
   onSaved: (message: string) => void;
@@ -61,16 +65,13 @@ type Save =
 const NETWORK_COPY =
   "Not saved. We couldn’t reach FitBud, so nothing was saved. Your entries are still here. Check your connection and try again.";
 
-function isNetworkError(err: unknown): boolean {
-  return err instanceof TypeError || (err instanceof ApiClientError && err.status === 0);
-}
-
 export function ClientLogWorkoutScreen({
   relationshipId,
   displayName,
   ended,
   clientZone,
   initialDate,
+  initialAssignmentId,
   onBack,
   onSaved,
 }: Props) {
@@ -85,7 +86,7 @@ export function ClientLogWorkoutScreen({
   );
   const [assignments, setAssignments] = useState<WorkoutAssignment[] | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [picked, setPicked] = useState<string | null>(null);
+  const [picked, setPicked] = useState<string | null>(initialAssignmentId ?? null);
   const [choosing, setChoosing] = useState(false);
   const [execution, setExecution] = useState<WorkoutExecution | null>(null);
   const [exercises, setExercises] = useState<FormExercise[]>([]);
@@ -125,6 +126,7 @@ export function ClientLogWorkoutScreen({
     setExecution(null);
     setKeypad(null);
     setSave({ state: "idle" });
+    // A different entry is a different logical log.
     idempotencyKey.current = createIdempotencyKey();
     if (!assignment) {
       setExercises([]);
@@ -165,7 +167,6 @@ export function ClientLogWorkoutScreen({
       if (!set) return prev;
       return { ...prev, [setId]: { ...draftForSet({ ...set, prescribedLoadLabel: set.prescribedLoadLabel }, prev), ...patch } };
     });
-    idempotencyKey.current = createIdempotencyKey();
     if (save.state === "failed" && !save.stale) setSave({ state: "idle" });
   }
 
@@ -231,6 +232,8 @@ export function ClientLogWorkoutScreen({
       }
       reportError("client-log.save", err);
       if (err instanceof ApiClientError) {
+        // A definite refusal: nothing was applied, so the next try is a new send.
+        idempotencyKey.current = createIdempotencyKey();
         setSave({
           state: "failed",
           message: `Not saved. ${err.message} Your entries are still here.`,
@@ -272,7 +275,7 @@ export function ClientLogWorkoutScreen({
             Ended clients are read-only, so you can’t log workouts for them. Reactivate coaching
             from their client page to log again.
           </Text>
-          <Pressable accessibilityRole="button" onPress={onBack} style={styles.outlined}>
+          <Pressable accessibilityRole="button" onPress={onBack} style={[styles.outlined, styles.centered]}>
             <Text style={styles.outlinedText}>Open {first}’s page</Text>
           </Pressable>
         </View>
@@ -516,7 +519,14 @@ function ExerciseCard({
         <Text style={styles.cardSub}>{summary}</Text>
       </Pressable>
       <SetEntryHeader secondColumnLabel="Planned" showTick={false} />
-      {exercise.sets.map((set) => (
+      {exercise.sets.map((set) =>
+        !isEditableSet(set) ? (
+          <View key={set.id} style={styles.skippedRow}>
+            <Text style={styles.skippedNo}>{set.order}</Text>
+            <Text style={styles.skippedPlan}>{plannedText(set)}</Text>
+            <Text style={styles.skippedTag}>{set.status === "skipped" ? "Skipped" : "Not logged"}</Text>
+          </View>
+        ) : (
         <SetEntryRow
           key={set.id}
           set={{
@@ -534,7 +544,8 @@ function ExerciseCard({
           activeField={activeSetId === set.id ? activeField : null}
           onOpenField={(field) => onOpenField(set.id, field)}
         />
-      ))}
+        ),
+      )}
     </View>
   );
 }
@@ -604,6 +615,10 @@ const styles = StyleSheet.create({
   numText: { color: colors.indigo, fontSize: 18 },
   pickRow: { borderTopColor: colors.lightGrey, borderTopWidth: 1, marginTop: spacing.sm, minHeight: 56, paddingTop: spacing.sm },
   pickName: { color: colors.deepNavy, fontSize: 17, fontWeight: "600" },
+  skippedRow: { alignItems: "center", flexDirection: "row", gap: 6, marginTop: 4, minHeight: 56, paddingHorizontal: 6 },
+  skippedNo: { color: colors.midGrey, fontSize: 15, fontWeight: "700", textAlign: "center", width: 34 },
+  skippedPlan: { color: colors.midGrey, flex: 1, fontSize: 14 },
+  skippedTag: { color: colors.midGrey, fontSize: 15, fontWeight: "600" },
   outlined: {
     alignItems: "center",
     alignSelf: "flex-start",
@@ -616,6 +631,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: spacing.xl,
   },
+  centered: { alignSelf: "center" },
   outlinedText: { color: colors.deepNavy, fontSize: 17, fontWeight: "600" },
   errBox: {
     alignItems: "flex-start",

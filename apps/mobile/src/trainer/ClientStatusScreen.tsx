@@ -120,7 +120,7 @@ export function ClientStatusScreen({
   const [endedData, setEndedData] = useState<Omit<EndedInput, "zone" | "startedAt" | "endedAt"> | null>(null);
   const [endedError, setEndedError] = useState(false);
   const [summaryEpoch, setSummaryEpoch] = useState(0);
-  const [logging, setLogging] = useState<{ date?: string } | null>(null);
+  const [logging, setLogging] = useState<{ date?: string; assignmentId?: string } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -309,6 +309,7 @@ export function ClientStatusScreen({
         ended={ended}
         clientZone={clientZone}
         initialDate={logging.date}
+        initialAssignmentId={logging.assignmentId}
         onBack={() => setLogging(null)}
         onSaved={(message) => {
           setLogging(null);
@@ -513,7 +514,7 @@ export function ClientStatusScreen({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Edit ${item.title}`}
-                  onPress={() => setLogging({ date: item.localDate })}
+                  onPress={() => setLogging({ date: item.localDate, assignmentId: item.id })}
                   style={styles.editLink}
                 >
                   <Text style={styles.link}>Edit</Text>

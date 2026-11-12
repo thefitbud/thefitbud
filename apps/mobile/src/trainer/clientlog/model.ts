@@ -10,6 +10,7 @@ import type {
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
+import { ApiClientError } from "@fitbud/api-client";
 import { localDateTimeToUtcIso } from "@fitbud/core";
 import {
   displayLoad,
@@ -64,6 +65,8 @@ export type FormSet = {
   prescribedLoadLabel: string | null;
   actualReps: number | null;
   actualLoadLabel: string | null;
+  /** Set execution status when editing; undefined when logging (every set is logged as done). */
+  status?: string;
 };
 
 export type FormExercise = {
@@ -117,8 +120,29 @@ export function exercisesFromExecution(e: WorkoutExecution): FormExercise[] {
           prescribedLoadLabel: s.prescribedLoadLabel,
           actualReps: s.actualReps,
           actualLoadLabel: s.actualLoadLabel,
+          status: s.status,
         })),
     }));
+}
+
+/** A skipped (or never logged) set is shown as such and not edited here. */
+export function isEditableSet(set: FormSet): boolean {
+  return set.status === undefined || set.status === "completed" || set.status === "modified";
+}
+
+/**
+ * A connection failure, by the same message check as `authErrors.ts`. Anything
+ * else (a ZodError, another TypeError) is a client or server disagreement and
+ * must not read as "no connection".
+ */
+export function isNetworkError(err: unknown): boolean {
+  if (err instanceof ApiClientError || !(err instanceof Error)) return false;
+  return (
+    err.name === "AbortError" ||
+    err.name === "TimeoutError" ||
+    (err instanceof TypeError &&
+      /network request failed|failed to fetch|network error|load failed/i.test(err.message))
+  );
 }
 
 /** What a row starts with: the plan when logging, what was logged when editing. */
@@ -192,6 +216,7 @@ export function buildEditBody(
   const sets: NonNullable<CoachEditWorkoutRequest["sets"]> = [];
   for (const ex of exercises) {
     for (const set of ex.sets) {
+      if (!isEditableSet(set)) continue;
       const draft = drafts[set.id] ?? startDraft(set);
       if (draftSame(draft, startDraft(set))) continue;
       const kg = Number.parseFloat(draft.load);

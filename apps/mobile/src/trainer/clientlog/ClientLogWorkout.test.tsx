@@ -8,12 +8,14 @@ import { workoutAssignmentSchema, workoutExecutionSchema } from "@fitbud/contrac
 import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
 import {
   assignmentsOn,
+  isNetworkError,
   buildEditBody,
   buildLogBody,
   dateStrip,
   draftsFor,
   exercisesFromAssignment,
   exercisesFromExecution,
+  isEditableSet,
   loggableAssignments,
   performedAtFor,
 } from "./model";
@@ -61,13 +63,15 @@ function assignment(over: { id?: string; date: string; execution?: unknown; name
   });
 }
 
-function execution(over: { status?: string; loggedByRole?: string; lastEditedByRole?: string | null } = {}) {
+function execution(
+  over: { id?: string; status?: string; loggedByRole?: string; lastEditedByRole?: string | null; skipLast?: boolean } = {},
+) {
   const set = (id: number, order: number, reps: number, label: string, actualReps: number) => ({
     id: ids(id),
     exerciseExecutionId: ids(60),
     setTargetId: ids(30 + order),
     order,
-    status: "completed",
+    status: over.skipLast && order === 3 ? "skipped" : "completed",
     prescribedReps: reps,
     prescribedLoadLabel: label,
     actualReps,
@@ -77,7 +81,7 @@ function execution(over: { status?: string; loggedByRole?: string; lastEditedByR
     updatedAt: "2026-11-02T06:00:00.000Z",
   });
   return workoutExecutionSchema.parse({
-    id: ids(50),
+    id: over.id ?? ids(50),
     assignmentId: ids(10),
     coachingRelationshipId: RID,
     planVersionId: ids(3),
@@ -94,7 +98,7 @@ function execution(over: { status?: string; loggedByRole?: string; lastEditedByR
     exercises: [
       {
         id: ids(60),
-        workoutExecutionId: ids(50),
+        workoutExecutionId: over.id ?? ids(50),
         exerciseId: ids(20),
         name: "Bench press",
         order: 1,
@@ -145,6 +149,21 @@ describe("model", () => {
     expect(sets[2]).toEqual({ setTargetId: ids(33), status: "completed", actualReps: 7, bodyweight: true });
   });
 
+  it("keeps a skipped set out of the editable rows and out of the edit body", () => {
+    const ex = exercisesFromExecution(execution({ skipLast: true }));
+    expect(ex[0]!.sets.map((x) => x.status)).toEqual(["completed", "completed", "skipped"]);
+    expect(isEditableSet(ex[0]!.sets[2]!)).toBe(false);
+    const drafts = draftsFor(ex);
+    drafts[ids(63)] = { load: "50", reps: "9", bodyweight: false };
+    expect(buildEditBody(ex, drafts, 3)).toBeNull();
+  });
+
+  it("reads only a connection failure as no connection", () => {
+    expect(isNetworkError(new TypeError("Network request failed"))).toBe(true);
+    expect(isNetworkError(new TypeError("undefined is not a function"))).toBe(false);
+    expect(isNetworkError(new ApiClientError({ code: "X", message: "m", requestId: "r", status: 500 }))).toBe(false);
+  });
+
   it("edits only the sets that changed and sends the version read", () => {
     const ex = exercisesFromExecution(execution());
     const drafts = draftsFor(ex);
@@ -180,7 +199,7 @@ vi.mock("../../lib/dates", async (orig) => ({
 
 const { ClientLogWorkoutScreen } = await import("./ClientLogWorkoutScreen");
 
-function renderForm(over: { ended?: boolean; initialDate?: string; onSaved?: (m: string) => void } = {}) {
+function renderForm(over: { ended?: boolean; initialDate?: string; initialAssignmentId?: string; onSaved?: (m: string) => void } = {}) {
   render(
     <ClientLogWorkoutScreen
       relationshipId={RID}
@@ -188,6 +207,7 @@ function renderForm(over: { ended?: boolean; initialDate?: string; onSaved?: (m:
       ended={over.ended ?? false}
       clientZone="Asia/Kolkata"
       initialDate={over.initialDate}
+      initialAssignmentId={over.initialAssignmentId}
       onBack={() => {}}
       onSaved={over.onSaved ?? (() => {})}
     />,
@@ -279,5 +299,54 @@ describe("ClientLogWorkoutScreen", () => {
     expect(screen.getByText("Coaching with Rohan has ended")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save workout" })).toBeNull();
     expect(api.listWorkoutAssignments).not.toHaveBeenCalled();
+  });
+
+  it("Edit from Recent activity opens that workout when two were done on one day", async () => {
+    const first = assignment({ id: ids(11), date: "2026-11-02", name: "Upper body A", execution: execution({ id: ids(51) }) });
+    const second = assignment({ id: ids(12), date: "2026-11-02", name: "Lower body B", execution: execution({ id: ids(52) }) });
+    api.listWorkoutAssignments.mockResolvedValue({ items: [first, second], nextCursor: null });
+    api.getWorkoutExecution.mockReset();
+    api.getWorkoutExecution.mockImplementation(async (id: string) => execution({ id }));
+    renderForm({ initialDate: "2026-11-02", initialAssignmentId: ids(12) });
+    await screen.findByText("Lower body B");
+    expect(screen.queryByText("Upper body A")).toBeNull();
+    await waitFor(() => expect(api.getWorkoutExecution).toHaveBeenCalledWith(ids(52)));
+    expect(api.getWorkoutExecution).not.toHaveBeenCalledWith(ids(51));
+  });
+
+  it("a version conflict shows the API message, blocks a second save and reloads on request", async () => {
+    api.listWorkoutAssignments.mockResolvedValue({
+      items: [assignment({ date: "2026-11-02", execution: execution() })],
+      nextCursor: null,
+    });
+    api.getWorkoutExecution.mockReset();
+    api.getWorkoutExecution.mockResolvedValue(execution());
+    api.editClientWorkout.mockReset();
+    api.editClientWorkout.mockRejectedValue(
+      new ApiClientError({ code: "VERSION_CONFLICT", message: "This entry changed. Reload it.", requestId: "r", status: 409 }),
+    );
+    renderForm({ initialDate: "2026-11-02" });
+    await screen.findByText("Bench press");
+    fireEvent.click(screen.getByRole("button", { name: /Set 2 reps/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Minus 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByText(/Not saved\. This entry changed\. Reload it\./);
+    expect((screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(api.editClientWorkout).toHaveBeenCalledTimes(1);
+    const before = api.getWorkoutExecution.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Reload entry" }));
+    await waitFor(() => expect(api.getWorkoutExecution.mock.calls.length).toBe(before + 1));
+  });
+
+  it("does not call another TypeError a lost connection", async () => {
+    api.listWorkoutAssignments.mockResolvedValue({ items: [assignment({ date: "2026-11-02" })], nextCursor: null });
+    api.logClientWorkout.mockReset();
+    api.logClientWorkout.mockRejectedValueOnce(new TypeError("undefined is not a function"));
+    renderForm({ initialDate: "2026-11-02" });
+    await screen.findByText("Upper body A");
+    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    await screen.findByText(/LOG-SAVE/);
+    expect(screen.queryByText(/couldn’t reach FitBud/)).toBeNull();
   });
 });
