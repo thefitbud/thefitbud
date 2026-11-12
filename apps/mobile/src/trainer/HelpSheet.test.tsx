@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("react-native", () => ({
-  Linking: { openURL: vi.fn() },
+  Linking: { openURL: vi.fn(), canOpenURL: vi.fn() },
   Platform: { OS: "ios" },
-  Clipboard: { setString: vi.fn() },
   StyleSheet: { create: (styles: unknown) => styles },
   View: "View",
   Pressable: "Pressable",
   Modal: "Modal",
   ScrollView: "ScrollView",
 }));
+vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
 vi.mock("lucide-react-native", () => ({
   Check: "Check",
   ClipboardList: "ClipboardList",
@@ -33,7 +33,8 @@ vi.mock("@fitbud/tokens", () => ({
   surface: {},
 }));
 
-import { Clipboard, Platform } from "react-native";
+import { setStringAsync } from "expo-clipboard";
+import { Platform } from "react-native";
 import {
   buildHelpDetails,
   copyText,
@@ -60,8 +61,9 @@ describe("openSupportMailOrFallback", () => {
   it("opens the mail app and does not show the sheet", async () => {
     const open = vi.fn().mockResolvedValue(undefined);
     const fallback = vi.fn();
+    const canOpen = vi.fn().mockResolvedValue(true);
     expect(
-      await openSupportMailOrFallback("mailto:a@b.c", fallback, open),
+      await openSupportMailOrFallback("mailto:a@b.c", fallback, open, canOpen),
     ).toBe("opened");
     expect(open).toHaveBeenCalledWith("mailto:a@b.c");
     expect(fallback).not.toHaveBeenCalled();
@@ -70,33 +72,69 @@ describe("openSupportMailOrFallback", () => {
   it("shows the sheet when there is no mail app", async () => {
     const open = vi.fn().mockRejectedValue(new Error("no handler"));
     const fallback = vi.fn();
+    const canOpen = vi.fn().mockResolvedValue(true);
     expect(
-      await openSupportMailOrFallback("mailto:a@b.c", fallback, open),
+      await openSupportMailOrFallback("mailto:a@b.c", fallback, open, canOpen),
     ).toBe("fallback");
     expect(fallback).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("copyText", () => {
-  it("uses the built-in Clipboard on the phone", async () => {
-    expect(await copyText("tech@thefitbud.com")).toBe(true);
-    expect(Clipboard.setString).toHaveBeenCalledWith("tech@thefitbud.com");
+describe("openSupportMailOrFallback canOpenURL", () => {
+  it("shows the sheet on iOS when mailto cannot be opened, without opening", async () => {
+    const open = vi.fn();
+    const fallback = vi.fn();
+    const canOpen = vi.fn().mockResolvedValue(false);
+    expect(
+      await openSupportMailOrFallback("mailto:a@b.c", fallback, open, canOpen),
+    ).toBe("fallback");
+    expect(canOpen).toHaveBeenCalledWith("mailto:a@b.c");
+    expect(open).not.toHaveBeenCalled();
+    expect(fallback).toHaveBeenCalledTimes(1);
   });
 
-  it("uses the browser clipboard on web", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { clipboard: { writeText } });
-    (Platform as { OS: string }).OS = "web";
-    expect(await copyText("tech@thefitbud.com")).toBe(true);
-    expect(writeText).toHaveBeenCalledWith("tech@thefitbud.com");
+  it("opens on iOS when mailto can be opened", async () => {
+    const open = vi.fn().mockResolvedValue(undefined);
+    const canOpen = vi.fn().mockResolvedValue(true);
+    expect(
+      await openSupportMailOrFallback("mailto:a@b.c", vi.fn(), open, canOpen),
+    ).toBe("opened");
+  });
+
+  it("skips canOpenURL on Android and relies on the open result", async () => {
+    (Platform as { OS: string }).OS = "android";
+    const open = vi.fn().mockResolvedValue(undefined);
+    const canOpen = vi.fn().mockResolvedValue(false);
+    expect(
+      await openSupportMailOrFallback("mailto:a@b.c", vi.fn(), open, canOpen),
+    ).toBe("opened");
+    expect(canOpen).not.toHaveBeenCalled();
     (Platform as { OS: string }).OS = "ios";
-    vi.unstubAllGlobals();
+  });
+});
+
+describe("copyText", () => {
+  it("uses expo-clipboard on the phone", async () => {
+    vi.mocked(setStringAsync).mockResolvedValueOnce(true);
+    expect(await copyText("tech@thefitbud.com")).toBe(true);
+    expect(setStringAsync).toHaveBeenCalledWith("tech@thefitbud.com");
+  });
+
+  it("uses expo-clipboard on web too", async () => {
+    (Platform as { OS: string }).OS = "web";
+    vi.mocked(setStringAsync).mockResolvedValueOnce(true);
+    expect(await copyText("tech@thefitbud.com")).toBe(true);
+    expect(setStringAsync).toHaveBeenLastCalledWith("tech@thefitbud.com");
+    (Platform as { OS: string }).OS = "ios";
+  });
+
+  it("returns false when the clipboard reports no copy", async () => {
+    vi.mocked(setStringAsync).mockResolvedValueOnce(false);
+    expect(await copyText("x")).toBe(false);
   });
 
   it("reports failure instead of claiming a copy", async () => {
-    vi.mocked(Clipboard.setString).mockImplementationOnce(() => {
-      throw new Error("no clipboard");
-    });
+    vi.mocked(setStringAsync).mockRejectedValueOnce(new Error("no clipboard"));
     expect(await copyText("x")).toBe(false);
   });
 });

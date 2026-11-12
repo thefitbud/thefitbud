@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  Clipboard,
   Linking,
   Platform,
   Pressable,
@@ -8,6 +7,7 @@ import {
   View,
 } from "react-native";
 import { Check, ClipboardList, Copy, X } from "lucide-react-native";
+import { setStringAsync } from "expo-clipboard";
 import Constants from "expo-constants";
 import { brand, ink, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
@@ -31,27 +31,12 @@ export function deviceLabel(os: string, isPad = false): string {
 }
 
 /**
- * Copies text. Web uses the browser clipboard; the phone uses react-native's
- * built-in `Clipboard` (still exported in 0.76, so no native config change; it
- * logs a one-time dev deprecation warning). Returns false when the copy failed,
- * so the row never shows a tick for a copy that did not happen.
+ * Copies text with `expo-clipboard` (native and web). Returns false when the
+ * copy failed, so the row never shows a tick for a copy that did not happen.
  */
 export async function copyText(text: string): Promise<boolean> {
   try {
-    if (Platform.OS === "web") {
-      const clipboard = (
-        globalThis as {
-          navigator?: {
-            clipboard?: { writeText: (v: string) => Promise<void> };
-          };
-        }
-      ).navigator?.clipboard;
-      if (!clipboard) return false;
-      await clipboard.writeText(text);
-      return true;
-    }
-    Clipboard.setString(text);
-    return true;
+    return await setStringAsync(text);
   } catch (err) {
     reportError("trainer-help-copy", err);
     return false;
@@ -59,17 +44,24 @@ export async function copyText(text: string): Promise<boolean> {
 }
 
 /**
- * Opens the mail app with the support prefill. `canOpenURL` is not used: on iOS
- * it answers false for mailto unless the scheme is declared in native config,
- * which is frozen. A rejected open means no mail app, so the caller shows the
- * Help sheet.
+ * Opens the mail app with the support prefill. On iOS `canOpenURL` is reliable
+ * because `mailto` is declared in LSApplicationQueriesSchemes (app.config.js);
+ * a false answer means no mail app. Android has no `<queries>` entry for
+ * mailto (needs a manifest plugin), so there `canOpenURL` can answer false for
+ * an installed mail app: it is skipped and a rejected open is the signal.
+ * Web goes straight to open.
  */
 export async function openSupportMailOrFallback(
   mailto: string,
   onNoMailApp: () => void,
   open: (url: string) => Promise<unknown> = (url) => Linking.openURL(url),
+  canOpen: (url: string) => Promise<boolean> = (url) => Linking.canOpenURL(url),
 ): Promise<"opened" | "fallback"> {
   try {
+    if (Platform.OS === "ios" && !(await canOpen(mailto))) {
+      onNoMailApp();
+      return "fallback";
+    }
     await open(mailto);
     return "opened";
   } catch (err) {

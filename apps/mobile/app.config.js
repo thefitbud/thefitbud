@@ -191,6 +191,13 @@ function createExpoConfig({ config }) {
       ios: {
         ...config.ios,
         bundleIdentifier: variant.bundleIdentifier,
+        // Lets Linking.canOpenURL("mailto:") answer truthfully on iOS (Z10-26).
+        infoPlist: {
+          ...config.ios?.infoPlist,
+          LSApplicationQueriesSchemes: [
+            ...new Set([...(config.ios?.infoPlist?.LSApplicationQueriesSchemes ?? []), "mailto"]),
+          ],
+        },
         // One value feeds both this entitlement and the expo-notifications
         // `mode` below, so they cannot disagree. The plugin only writes
         // aps-environment when it is not already set.
