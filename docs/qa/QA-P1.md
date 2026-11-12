@@ -16,11 +16,11 @@
 | G5 | [P1/G5.md](P1/G5.md) | 0 | 1 | 3 | 1 |
 | G6 | [P1/G6.md](P1/G6.md) | 0 | 2 | 4 | 1 |
 | G7 | [P1/G7.md](P1/G7.md) | 0 | 3 | 9 | 0 |
-| G9 | [P1/G9.md](P1/G9.md) | 4 | 7 | 4 | 2 |
+| G9 | [P1/G9.md](P1/G9.md) | 3 | 7 | 5 | 2 |
 | G10 | [P1/G10.md](P1/G10.md) | 0 | 5 | 0 | 2 |
 | G11 | [P1/G11.md](P1/G11.md) | 0 | 5 | 8 | 6 |
-| redesign | [P1/redesign.md](P1/redesign.md) | 17 | 75 | 15 | 44 |
-| **All** | | **21** | **106** | **66** | **58** |
+| redesign | [P1/redesign.md](P1/redesign.md) | 17 | 75 | 13 | 46 |
+| **All** | | **20** | **106** | **65** | **60** |
 
 G8 is in W7 (Z7-4, D-W12-3); its frames (135, 191 and the DS1 home views) are audited in `redesign.md`. No bucket has more than 40 GAP rows, so no file was split. Frames that are not app screens or are parked (Live Activity, OS notification renderings, Phase 10 sessions/calendar, reference frames) are listed at the end of `redesign.md`.
 
@@ -30,9 +30,9 @@ G8 is in W7 (Z7-4, D-W12-3); its frames (135, 191 and the DS1 home views) are au
 - **Date rule breaks on web:** native date inputs show `mm/dd/yyyy` on History (165) and `11/12/2026` in Publish & schedule (155); raw IANA "Asia/Kolkata" shows in Profile (176) and first-run (125); raw E.164 WhatsApp numbers on Profile (176, mobile 55) and invite detail (144).
 - **Unstyled controls on web:** `.segment-btn` is only styled under `.clients-page` and `.checkins-page` (`apps/trainer-web/src/styles/clients.css:185`), so the segments on Activity (158) and the Templates owner filter (168) render as native buttons.
 - **Trainer mobile review sheet is half wired (new):** on the v3 sheet `Resolve…` does nothing (no `onResolve` from `AttentionTab.tsx:792`), `Nudge…` opens WhatsApp directly with no sheet (`AttentionTab.tsx:485`) and there is no ⋯ (Add note, WhatsApp). Frames 31-resolved, 31-all-resolved, 33, 34, 35, 36 are unreachable from Needs you.
-- **Trainee Today empty state shows an API error (new):** a coaching-ready trainee with no plan sees a red banner "An active coaching configuration is required to schedule check-ins." (`apps/mobile/src/trainee/TodayTab.tsx:651`; the design review flags the banned string `active coaching`).
-- **Mobile trainee W12 screens are close:** G9/G10 are mostly MATCH or CLOSE (onboarding, meal plan, ask coach, diet sheets, workout day/summary, progress, inbox). The real gaps are sign in (06, 06b, 103), the diet error state (102), reminder and meal-time settings (76, 79, 82–84) and the ended trainee landing on an overlay instead of Today (89).
-- **Redesign (W7–W10) holds up:** 17 MATCH and 75 CLOSE of the audited frames; GAPs are the mobile review sheet wiring above, the trainee measurement keypad (14c), the reviewed check-in screen (101), the check-in form builder (171, 171b), the iPad 768 drawer (193), Edit basic details fields (210), the Reactivate dialog (180) and the Today empty state.
+- **Trainee Today with no plan shows an API error (new, not a frame state):** a coaching-ready trainee with no plan sees a red banner "An active coaching configuration is required to schedule check-ins." from the check-in card: TodayCheckinCard (rendered at `apps/mobile/src/trainee/TodayTab.tsx:1114`) catches the ensureDueCheckin failure at `CheckinScreen.tsx:1270` and renders an ErrorBanner at `CheckinScreen.tsx:1304`. The design review flags the banned string `active coaching`. Frame 04-empty (a planned trainee with nothing logged) is not audited: no capture of that state.
+- **Mobile trainee W12 screens are close:** G9/G10 are mostly MATCH or CLOSE (onboarding, meal plan, ask coach, diet sheets, workout day/summary, progress, inbox). The real gaps are sign in (06, 06b, 103), the item-unavailable screen (26: production shows only "This meal isn't available anymore.", with no date or replacement and no backend source for them; the capture bridge hard-codes the frame copy), the diet error state (102), reminder and meal-time settings (76, 79, 82–84) and the ended trainee landing on an overlay instead of Today (89).
+- **Redesign (W7–W10) holds up:** 17 MATCH and 75 CLOSE (13 GAP) of the audited frames; GAPs are the mobile review sheet wiring above, the trainee measurement keypad (14c), the reviewed check-in screen (101), the check-in form builder (171, 171b), the iPad 768 drawer (193), Edit basic details fields (210), and the Reactivate dialog (180).
 - **Account deletion (BP1)** is not built on either platform (Z12-29, Z12-30), as expected.
 - **Seed content:** the check-in scale label "100 %" (`apps/api/src/seed/demo/generator/templates/forms.ts:100`) shows in the form preview (171), a percentage on screen.
 - **Known inputs from the spec:** after Z11-3 and Z5-3 the design review finds no ISO dates and no raw enum values in any captured mobile or web text; the Diet ring and meal rows agree on the captures (Z11-3). Frames 07 and 86 are left as CLOSE with "PR Z9-5 in flight" (Diet buttons); re-check them when Z9-5 merges.
@@ -88,9 +88,9 @@ MB covered TR-10 to TR-15, TR-18 and TR-23. P1 verdicts for those frames:
 | 113 | CLOSE |
 | 114 | NOT AUDITED |
 | 25 | CLOSE |
-| 26 | MATCH |
+| 26 | GAP |
 
-Result: 12 CLOSE, 2 GAP, 1 MATCH, 3 NOT AUDITED. The claim roughly holds for the frames that were reached (mostly CLOSE, one MATCH: 26), except 14c and 101, which are GAP; 99, 100 and 114 need seed states that do not exist.
+Result: 12 CLOSE, 3 GAP, 3 NOT AUDITED. The claim does not quite hold: none of the reached frames is a MATCH (26 is a GAP once the capture bridge's hard-coded copy is set aside), most are CLOSE, and 14c, 101 and 26 are GAP; 99, 100 and 114 need seed states that do not exist.
 
 ## W12 tasks whose gap list changes
 
@@ -115,9 +115,9 @@ Every W12 spec defers its gap list to this audit. Where the audit found the work
 | Z12-15 | 176, 177 GAP | Confirmed; add timezone label and phone formatting. |
 | Z12-16 | 182, 183 CLOSE | Shrinks to copy and the meal block. |
 | Z12-17 | 184, 185, 187 GAP; 186 CLOSE | Client-level error/not-found/forbidden render from `pages/ClientWorkspaceLayout.tsx:153` and `:178` (not owned); `ForbiddenPage` is not used for another coach's client. |
-| Z12-18 | 06, 06b, 103 GAP | Files are now `screens/auth/SignInScreen.tsx`, `screens/auth/CodeSignInScreen.tsx` and `lib/authErrors.ts`, not `AuthScreen.tsx`. |
+| Z12-18 | 06, 06b, 103 GAP | The screens are `screens/auth/SignInScreen.tsx` and `CodeSignInScreen.tsx` (inside `screens/auth/**`); the wrong-password copy is in `lib/authErrors.ts`, which is outside files_owned. |
 | Z12-19 | 21, 23 MATCH; 20, 22 CLOSE | Shrinks to polish. |
-| Z12-20 | 26 MATCH; 24, 25 CLOSE | Shrinks; quantity/unit spacing on 24. |
+| Z12-20 | 26 GAP; 24, 25 CLOSE | 26 needs a backend source for the replacement meal and the update date (production shows only the reason line, `TraineeShell.tsx:294`); quantity/unit spacing on 24. |
 | Z12-21 | 08c MATCH; 08, 08b CLOSE; 07b not audited | Shrinks; stepper label truncation. |
 | Z12-22 | 102 GAP; 09 CLOSE; 100 not audited | 102 is in `DietTab.tsx:727`, owned by Z12-21: coordinate. |
 | Z12-23 | 10b, 12 CLOSE; 99 not audited | Shrinks; 99 lives in `WorkoutTab.tsx` (not owned). |
@@ -128,11 +128,13 @@ Every W12 spec defers its gap list to this audit. Where the audit found the work
 | Z12-28 | 89 GAP; 90 CLOSE | Ended landing is decided in `navigation/TraineeOverlay.tsx:332` (not owned). |
 | Z12-29, Z12-30 | BP1 GAP (not built) | Confirmed. |
 
-**No W12 task covers (new):** mobile review sheet Resolve/Nudge/⋯ wiring (frames 31 resolved, 33–36; the W10 exception-redesign follow-up that D-W11-F1 sends to W12); trainee Today empty-state error banner (04 empty); trainee measurement keypad (14c); reviewed check-in screen (101); check-in form builder and measurement picker (171, 171b); Edit basic details fields (210); Reactivate dialog choices (180); 768 portrait shell (193, and 196); web bell popover (123); the seed's "100 %" scale label.
+**No W12 task covers (new):** mobile review sheet Resolve/Nudge/⋯ wiring (frames 31 resolved, 33–36; the W10 exception-redesign follow-up that D-W11-F1 sends to W12); trainee Today check-in card error for a no-plan trainee (`CheckinScreen.tsx:1304`); trainee measurement keypad (14c); reviewed check-in screen (101); check-in form builder and measurement picker (171, 171b); Edit basic details fields (210); Reactivate dialog choices (180); 768 portrait shell (193, and 196); web bell popover (123); the seed's "100 %" scale label.
 
 ## Checks
 
+- `pnpm lint` and `pnpm typecheck`: ran locally, pass.
+- `pnpm test`: not run anywhere. Locally only the API suite ran (the two TZ runs above), and the `ci` workflow was path-skipped on this docs-only PR.
 - `TZ=Pacific/Kiritimati` and `TZ=Pacific/Pago_Pago` `pnpm --filter @fitbud/api test`: pass (above).
-- `node scripts/qa/visual/diff.mjs` per bucket: ran, reports committed under `P1/captures/<bucket>/design-review.md`. Design-guide findings: `active coaching` on trainee Today empty (real), `100 %` in the check-in form preview (seed text), `3ba526ca` on mobile sign in (the dev-only bundle commit badge, not shipped).
+- `node scripts/qa/visual/diff.mjs` per bucket: ran; the reports are committed under `P1/captures/<bucket>/design-review.md`. The side-by-side PNGs are not committed (repo weight). To regenerate them, run `node scripts/qa/visual/diff.mjs --task <bucket> --qa-dir docs/qa/P1/captures` for G1–G7, G9–G11 and `redesign`. Design-guide findings: `active coaching` on the no-plan trainee's Today (real), `100 %` in the check-in form preview (seed text), and `3ba526ca` on mobile sign in (the dev-only bundle commit badge, not shipped).
 - The e2e banned-strings scan was not run: it boots the API through e2e global setup, which this task must not run.
 - No app code changed.

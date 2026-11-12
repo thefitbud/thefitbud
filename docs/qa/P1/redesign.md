@@ -4,7 +4,7 @@ Audited on `main` at 3ba526c (captures) and 21d76f8 (frames 51, 59, ds5-ios-trai
 
 Verdicts are by eye from the frame and the capture side by side; the diff score from `scripts/qa/visual/diff.mjs` is advisory (frames use sample data, so most scores are high). MATCH = layout, copy and state match apart from data; CLOSE = same structure with small differences listed in the note; GAP = a frame detail is missing or wrong (bullets below); NOT AUDITED = not reached, with the reason.
 
-Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/design-review.md`](captures/redesign/design-review.md) (side-by-side images in `captures/redesign/design-review/`).
+Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/design-review.md`](captures/redesign/design-review.md). The side-by-side images are not committed; regenerate them with `node scripts/qa/visual/diff.mjs --task redesign --qa-dir docs/qa/P1/captures`.
 
 | Frame | Verdict | Capture | Diff (design review) | Target | Note |
 |---|---|---|---|---|---|
@@ -79,14 +79,15 @@ Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/de
 | `ds5-web-credits.png` | **CLOSE** | `ds5-web-credits-1440x900.png` | 5.8% (check by eye) | BT3 | Adds food data and exercise text sections. |
 | `04-trainee-today-ios-v3-partial.png` | **CLOSE** | `04-trainee-today-ios-v3-partial-393x852.png` | 30.4% (likely gap) | Z9-1 | Week strip is a separate card plus a "‹ Thu 12 Nov ›" row; in-app banner (29) over the top. |
 | `04-trainee-today-ios-v3-done.png` | **CLOSE** | `04-trainee-today-ios-v3-done-393x852.png` | 39.3% (likely gap) | Z9-2 | Done card matches; same strip difference. |
-| `04-trainee-today-ios-v3-empty.png` | **GAP** | `04-trainee-today-ios-v3-empty-393x852.png` | 27.4% (likely gap) | new | Harpreet (coaching ready, no plan). |
-| `04-trainee-today-ios-v3-past.png` | **NOT AUDITED** | `04-trainee-today-ios-v3-past-393x852.png` | 19.9% (likely gap) | Z9-3 | The previous-day tap landed on Diet; past-day Today not shown. |
+| `04-trainee-today-ios-v3-empty.png` | **NOT AUDITED** | — | — | Z9-1 | Frame is a trainee with a plan and nothing logged yet; the only capture taken (Harpreet) has no plan, which is a different state. The no-plan finding is filed below as a separate row. |
+| (no frame) trainee Today, coaching ready with no plan | **GAP** | `04-trainee-today-ios-v3-empty-393x852.png` | 27.4% (likely gap) | new | Not a frame: a new finding on Harpreet's Today (capture kept under the 04-empty name). |
+| `04-trainee-today-ios-v3-past.png` | **NOT AUDITED** | — | — | Z9-3 | The previous-day tap landed on Diet; past-day Today not shown (the leftover capture shows Diet, a different state). |
 | `04-trainee-today-ios-v3-rest.png` | **NOT AUDITED** | — | — | Z9-2 | Rest card seen in the 115 capture (Farhan), but no persona has a full rest day today. |
 | `04-trainee-today-android-v3-partial.png` | **CLOSE** | `04-trainee-today-android-v3-partial-412x915.png` | 36.5% (likely gap) | Z9-1 | As iOS. |
 | `04-trainee-today-android-v3-done.png` | **CLOSE** | `04-trainee-today-android-v3-done-412x915.png` | 36.5% (likely gap) | Z9-2 | As iOS. |
-| `04-trainee-today-android-v3-empty.png` | **GAP** | `04-trainee-today-android-v3-empty-412x915.png` | 25.8% (likely gap) | new |  |
-| `04-trainee-today-android-v3-past.png` | **NOT AUDITED** | `04-trainee-today-android-v3-past-412x915.png` | 15.2% (likely gap) | Z9-3 | As iOS past. |
-| `04-trainee-today-android-v3-rest.png` | **NOT AUDITED** | `04-trainee-today-android-v3-rest-412x915.png` | 29.4% (likely gap) | Z9-2 | Farhan has a workout today; rest not shown. |
+| `04-trainee-today-android-v3-empty.png` | **NOT AUDITED** | — | — | Z9-1 | As iOS empty: the capture (Harpreet, no plan) shows a different state; same no-plan finding as the iOS row. |
+| `04-trainee-today-android-v3-past.png` | **NOT AUDITED** | — | — | Z9-3 | As iOS past (the leftover capture shows Today for the current day, a different state). |
+| `04-trainee-today-android-v3-rest.png` | **NOT AUDITED** | — | — | Z9-2 | Farhan has a workout today; the leftover capture shows a training day, not rest. |
 | `104-trainee-today-offline-v3-android.png` | **CLOSE** | `104-trainee-today-offline-v3-android-412x915.png` | 33.6% (likely gap) | Z9-3 | Only a "Saved on phone · showing last sync" caption; no offline banner or "Waiting to send" pill. |
 | `96-trainee-today-loading-v3-ios.png` | **MATCH** | `96-trainee-today-loading-v3-ios-393x852.png` | 9.3% (check by eye) | Z9-3 |  |
 | `29-trainee-inapp-meal-v3-ios.png` | **CLOSE** | `29-trainee-inapp-meal-v3-ios-393x852.png` | 41.3% (likely gap) | Z9-4 | Banner matches. |
@@ -160,7 +161,7 @@ Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/de
 | `ds5-ios-terms.png` | **NOT AUDITED** | — | — | BT3d | Opens the system browser. |
 | `ds5-ios-credits.png` | **NOT AUDITED** | — | — | BT3d | Opens the system browser. |
 
-Totals: 17 MATCH, 75 CLOSE, 15 GAP, 44 not audited.
+Totals (frames only): 17 MATCH, 75 CLOSE, 13 GAP, 46 not audited. The "(no frame)" row is a finding outside the frame set and is not counted.
 
 ## Gaps (file:line on main 21d76f8)
 
@@ -169,8 +170,7 @@ Totals: 17 MATCH, 75 CLOSE, 15 GAP, 44 not audited.
 - `180-trainer-web-reactivate-web.png` → new: Dialog sends a reactivation request with an "update her intake" checkbox; frame offers "Start from her last plan (as a new draft)" or "Start fresh (pick a template)" + Reactivate. `apps/trainer-web/src/components/coaching/CoachingLifecycleModals.tsx:165`
 - `171-trainer-web-checkin-form-builder-v3-web.png` → new: No standard-questions block with Charted chips and no middle editor panel; inline editors per question. Seed scale label "100 %" shows in the preview (percentage, apps/api/src/seed/demo/generator/templates/forms.ts:100). `apps/trainer-web/src/pages/templates/CheckinTemplateBuilderPage.tsx:869`
 - `171b-trainer-web-checkin-form-measure-picker-v3-web.png` → new: No measurements picker (checkbox list with One/Left & right); measurements are own-question rows. `apps/trainer-web/src/pages/templates/CheckinTemplateBuilderPage.tsx:873`
-- `04-trainee-today-ios-v3-empty.png` → new: Today shows a red banner with the API text "An active coaching configuration is required to schedule check-ins." (design review: banned string `active coaching`) and a "preparing your plan" card; frame shows the empty Today with zero values. `apps/mobile/src/trainee/TodayTab.tsx:651`
-- `04-trainee-today-android-v3-empty.png` → new: Same raw configuration error banner as iOS empty. `apps/mobile/src/trainee/TodayTab.tsx:651`
+- `(no frame) trainee Today, coaching ready with no plan` → new: The check-in card on Today catches the ensureDueCheckin failure and shows the API text "An active coaching configuration is required to schedule check-ins." in a red ErrorBanner (design review: banned string `active coaching`). TodayCheckinCard is rendered at apps/mobile/src/trainee/TodayTab.tsx:1114; the catch is at CheckinScreen.tsx:1270 and the banner at :1304. `apps/mobile/src/trainee/CheckinScreen.tsx:1304`
 - `101-trainee-checkin-reviewed-ios.png` → new: Reviewed check-in shows an "Acknowledged" card, note and "What you sent"; no green "Rahul reviewed your check-in · date" banner or "From Rahul" note card with avatar. `apps/mobile/src/trainee/CheckinScreen.tsx:92`
 - `14c-trainee-check-in-measure-entry-v3-ios.png` → new: Measurement entry is an inline text field; frame has the custom keypad sheet with ‹ › Done bar and four rows with "Last:" hints. `apps/mobile/src/trainee/checkin/MeasureRow.tsx:114`
 - `31-trainer-mobile-review-sheet-v3-resolved-ios.png` → new: Resolved/Undo state cannot be reached: the sheet's "Resolve…" calls `onResolve`, which AttentionTab never passes. `apps/mobile/src/trainer/ReviewSheet.tsx:382`
