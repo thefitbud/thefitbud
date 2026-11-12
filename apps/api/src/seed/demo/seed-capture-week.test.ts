@@ -102,7 +102,8 @@ describe.each(REFERENCE_INSTANTS)("capture client rows at %s", (now) => {
           where e.workout_execution_id = x.id)
        from workout_executions x where x.id = '${execIdOf(dates.completed)}'`,
     );
-    expect(status).toBe("completed");
+    // The coach's edit left two sets off the prescription: "modified", as the route resolves it.
+    expect(status).toBe("modified");
     expect(loggedBy).toBe("trainee");
     expect(Number(sets)).toBeGreaterThan(0);
 
@@ -125,6 +126,28 @@ describe.each(REFERENCE_INSTANTS)("capture client rows at %s", (now) => {
     }
   });
 
+  it("resolves the edited sets and the execution status by the route's rules", () => {
+    const execId = execIdOf(dates.coachEdited);
+    const [editedAt] = one(`select last_edited_at from workout_executions where id = '${execId}'`);
+    const sets = q(
+      `select s.status, s.prescribed_reps, s.actual_reps, s.updated_at from set_executions s
+       join exercise_executions e on e.id = s.exercise_execution_id
+       where e.workout_execution_id = '${execId}' order by e."order", s."order"`,
+    );
+    const modified = sets.filter((row) => row[0] === "modified");
+    expect(modified).toHaveLength(2);
+    for (const row of modified) expect(row[2]).not.toBe(row[1]);
+    for (const row of sets.filter((r) => r[0] === "completed")) expect(row[2]).toBe(row[1]);
+    // Only the edited sets carry the edit time.
+    expect(sets.filter((row) => row[3] === editedAt)).toHaveLength(2);
+    const audit = one(
+      `select after_json from log_edit_events where entity_id = '${execId}' and action = 'edit'`,
+    );
+    const after = JSON.parse(String(audit[0])) as { status: string; sets: Array<{ status: string }> };
+    expect(after.status).toBe("modified");
+    expect(after.sets.filter((set) => set.status === "modified")).toHaveLength(2);
+  });
+
   it("holds the coach entries as production writes them: roles, audit, activity event", () => {
     // Coach-logged workout.
     expect(
@@ -134,10 +157,10 @@ describe.each(REFERENCE_INSTANTS)("capture client rows at %s", (now) => {
     expect(
       one(`select logged_by_role, last_edited_by_role, last_edited_by_user_id, record_version, session_rpe from workout_executions where id = '${execIdOf(dates.coachEdited)}'`),
     ).toEqual(["trainee", "coach", trainerId, 1, 8]);
-    // Coach-logged snack, weight and waist.
+    // Coach-logged dinner, weight and waist.
     const meal = one(
       `select c.id, c.logged_by_role, c.logged_by_user_id from meal_compliance c join meal_assignments m on m.id = c.assignment_id
-       where c.coaching_relationship_id = '${relId}' and c.logged_by_role = 'coach' and m.meal_name = 'Snack'`,
+       where c.coaching_relationship_id = '${relId}' and c.logged_by_role = 'coach' and m.meal_name = 'Dinner'`,
     );
     expect(meal.slice(1)).toEqual(["coach", trainerId]);
     const measurements = q(

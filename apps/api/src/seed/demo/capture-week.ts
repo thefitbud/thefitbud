@@ -13,7 +13,7 @@
  *   Tuesday (fewer than two earlier days this week) the previous week's last
  *   days stand in;
  * - a coach-logged workout, a coach-logged
- *   snack, and a coach-logged weight and waist, each with its `log_edit_events`
+ *   dinner, and a coach-logged weight and waist, each with its `log_edit_events`
  *   audit row (the activity-feed event).
  *
  * Left out on purpose: the trainee's `coach_log_updated` inbox rows (their
@@ -29,7 +29,12 @@
  * first sync pull bootstraps the log from the tables only while the trainee has
  * none (domain/sync.ts), and no other seeded record writes one.
  */
-import { materializePlanContent, missedWorkoutCandidate } from "@fitbud/core";
+import {
+  materializePlanContent,
+  missedWorkoutCandidate,
+  resolveCompletedWorkoutStatus,
+  setCompletionIsModified,
+} from "@fitbud/core";
 import type { PlanContent } from "@fitbud/contracts";
 import { resolveSetLoad } from "../../domain/load-parser.js";
 import {
@@ -62,7 +67,7 @@ export type CaptureWeekDates = {
   coachLogged: string;
   /** The completed workout's day: the coach edited that trainee entry. */
   coachEdited: string;
-  /** Coach-logged snack, weight and waist. */
+  /** Coach-logged dinner, weight and waist. */
   mealDay: string;
   measurementDay: string;
 };
@@ -111,7 +116,22 @@ type SetState = {
   prescribedLoadLabel: string | null;
   actualReps: number | null;
   actualLoadLabel: string | null;
+  /** Same rule as the route: reps or load off the prescription read "modified". */
+  status: "completed" | "modified";
+  /** Set only on a set the coach changed. */
+  editedAt: string | null;
 };
+
+function setStatus(set: Pick<SetState, "prescribedReps" | "prescribedLoadLabel" | "actualReps" | "actualLoadLabel">) {
+  return setCompletionIsModified(set) ? ("modified" as const) : ("completed" as const);
+}
+
+/** The coach changes a set's reps; status follows the same rule the edit route applies. */
+function editReps(set: SetState, reps: number, editedAt: string) {
+  set.actualReps = reps;
+  set.status = setStatus(set);
+  set.editedAt = editedAt;
+}
 
 type ExerciseState = {
   id: string;
@@ -137,6 +157,8 @@ function buildExercises(execId: string, day: WorkoutDay): ExerciseState[] {
         prescribedLoadLabel: target.loadLabel,
         actualReps: target.reps,
         actualLoadLabel: target.loadLabel,
+        status: "completed" as const,
+        editedAt: null,
       })),
     };
   });
@@ -150,7 +172,7 @@ function snapshotParts(exercises: ExerciseState[]) {
         id: s.id,
         exerciseExecutionId: e.id,
         order: s.order,
-        status: "completed",
+        status: s.status,
         actualReps: s.actualReps,
         actualLoadLabel: s.actualLoadLabel,
       })),
@@ -243,7 +265,7 @@ export function buildCaptureWeekSql(input: {
   const executionRow = (input2: {
     execId: string;
     date: string;
-    status: "completed";
+    status: "completed" | "modified";
     startedAt: string;
     completedAt: string;
     rpe: number;
@@ -301,7 +323,7 @@ export function buildCaptureWeekSql(input: {
           exercise_execution_id: exercise.id,
           set_target_id: set.targetId,
           order: set.order,
-          status: "completed",
+          status: set.status,
           prescribed_reps: set.prescribedReps,
           prescribed_load_label: set.prescribedLoadLabel,
           actual_reps: set.actualReps,
@@ -311,7 +333,7 @@ export function buildCaptureWeekSql(input: {
           load_kind: load.loadKind,
           completed_at: stamps.completedAt,
           created_at: stamps.createdAt,
-          updated_at: stamps.updatedAt,
+          updated_at: set.editedAt ?? stamps.updatedAt,
         });
       }
     }
@@ -405,17 +427,17 @@ export function buildCaptureWeekSql(input: {
       execution: { status: "completed", completedAt, sessionRpe: 7 },
       ...snapshotParts(before),
     });
-    // The coach fixes two sets the client under-reported and the session RPE.
+    // The coach fixes two sets the client under-reported, and the session RPE.
+    // Statuses come from the route's rules, so the execution reads "modified".
     const after = buildExercises(execId, days.completed);
-    const first = after[0]!.sets[2]!;
-    first.actualReps = (first.prescribedReps ?? 10) - 2;
-    const second = after[1]!.sets[0]!;
-    second.actualReps = (second.prescribedReps ?? 10) + 1;
+    editReps(after[0]!.sets[2]!, (after[0]!.sets[2]!.prescribedReps ?? 10) - 2, editedAt);
+    editReps(after[1]!.sets[0]!, (after[1]!.sets[0]!.prescribedReps ?? 10) + 1, editedAt);
+    const afterStatus = resolveCompletedWorkoutStatus(after.flatMap((e) => e.sets.map((x) => x.status)));
     executionRow({
-      execId, date, status: "completed", startedAt, completedAt, rpe: 8,
+      execId, date, status: afterStatus, startedAt, completedAt, rpe: 8,
       createdAt: startedAt, updatedAt: editedAt, coach: { loggedBy: false, editedAt },
     });
-    exerciseRows(after, { createdAt: startedAt, updatedAt: editedAt, completedAt }, execId);
+    exerciseRows(after, { createdAt: startedAt, updatedAt: completedAt, completedAt }, execId);
     audit({
       action: "edit",
       entityType: "workout_execution",
@@ -423,22 +445,23 @@ export function buildCaptureWeekSql(input: {
       before: beforeSnapshot,
       after: workoutLogSnapshot({
         assignment: { localDate: date, workoutDayName: days.completed.name },
-        execution: { status: "completed", completedAt, sessionRpe: 8 },
+        execution: { status: afterStatus, completedAt, sessionRpe: 8 },
         ...snapshotParts(after),
       }),
       at: editedAt,
     });
   }
 
-  // Coach-logged snack (optional meal, so no exception ever rides on it).
+  // Coach-logged dinner: a required meal the client had logged on the day; the
+  // coach's entry replaces it (a normal trainee log would be refused as read-only).
   {
-    const snack = content.mealPrescriptions.find((m) => m.id === MEAL_PRESCRIPTION_IDS.snack)!;
-    const mealAssignmentId = demoUuid("meal-assignment", email, dates.mealDay, snack.id);
+    const dinner = content.mealPrescriptions.find((m) => m.id === MEAL_PRESCRIPTION_IDS.dinner)!;
+    const mealAssignmentId = demoUuid("meal-assignment", email, dates.mealDay, dinner.id);
     const complianceId = demoUuid("meal-compliance", mealAssignmentId, "coach");
-    const windowStart = localDayStartIso(dates.mealDay, snack.localTime ?? "17:00", tz);
+    const windowStart = localDayStartIso(dates.mealDay, dinner.localTime ?? "20:00", tz);
     const windowEnd = iso(Date.parse(windowStart) + 12 * 3_600_000);
-    const loggedAt = between(iso(Date.parse(windowStart) + 2 * 3_600_000), windowStart, now);
-    const macros = mealMacros(snack);
+    const loggedAt = between(iso(Date.parse(windowStart) + 90 * 60_000), windowStart, now);
+    const macros = mealMacros(dinner);
     lines.push(`DELETE FROM meal_compliance WHERE assignment_id = ${sqlQuote(mealAssignmentId)};`);
     rows.add("meal_compliance", {
       id: complianceId,
@@ -477,7 +500,7 @@ export function buildCaptureWeekSql(input: {
       entityId: complianceId,
       before: null,
       after: mealLogSnapshot({
-        assignment: { localDate: dates.mealDay, mealName: snack.name },
+        assignment: { localDate: dates.mealDay, mealName: dinner.name },
         compliance: {
           outcome: "confirmed",
           deviationKind: null,
@@ -493,7 +516,7 @@ export function buildCaptureWeekSql(input: {
     });
   }
 
-  // Coach-logged weight and waist, the morning after the snack day.
+  // Coach-logged weight and waist, the morning after the dinner day.
   {
     const cfg = personaConfig(email);
     const entries = [
