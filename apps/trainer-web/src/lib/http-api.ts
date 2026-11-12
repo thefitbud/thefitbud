@@ -58,7 +58,9 @@ export async function listPlanTemplatesExtended(query?: {
   if (query?.templateType) params.set("templateType", query.templateType);
   if (query?.scope && query.scope !== "all") params.set("scope", query.scope);
   if (query?.q) params.set("q", query.q);
-  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  // Not `params.size`: banned repo-wide (Z11b-1), Expo's native URLSearchParams lacks it.
+  const encoded = params.toString();
+  const suffix = encoded ? `?${encoded}` : "";
   return authedJson(`/templates${suffix}`, (json) =>
     planTemplateListResponseSchema.parse(json),
   );

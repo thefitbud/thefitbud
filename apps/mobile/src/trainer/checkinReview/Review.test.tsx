@@ -262,3 +262,104 @@ describe("CheckinReviewScreen", () => {
     expect(reportError).toHaveBeenCalledWith("checkinReview.save", boom);
   });
 });
+
+/**
+ * Z11b-1: Firoz opened Ananya's "Weekly check-in · Mon 16 Nov" from the client
+ * screen and saw only the "Workouts · Meals logged" line. That card opens the
+ * next check-in when nothing waits for review, and the seed's next check-in is
+ * an unsubmitted draft with no answers. Fixtures below use the demo seed's
+ * pinned form (rahul.coach-cf2) and its answer shape.
+ */
+describe("CheckinReviewScreen on the demo seed's form", () => {
+  const SEED_FORM_ID = "9eda0f4d-0fdc-4602-9a08-901227d9d149";
+  const seedForm = checkinFormVersionSchema.parse({
+    id: SEED_FORM_ID,
+    templateId: "fd316b02-9490-4b83-b560-9127bb510b6b",
+    key: "rahul.coach-cf2",
+    version: 1,
+    scope: "trainer",
+    createdAt: "2026-05-26T05:00:00.000Z",
+    fields: [
+      { id: "body_weight", label: "Average morning weight this week", type: "measurement", measurementType: "body_weight_kg", required: false },
+      { id: "top_squat", label: "Top squat set", type: "number", unit: "kg", required: false },
+      { id: "sessions_done", label: "How many planned workouts did you complete?", type: "single_choice", required: false, options: [
+        { id: "all", label: "All" },
+        { id: "most", label: "Most" },
+        { id: "some", label: "Some" },
+        { id: "none", label: "None" },
+      ] },
+      { id: "training_feel", label: "How did training feel?", type: "scale_1_5", required: false, lowLabel: "Very easy", highLabel: "Very hard" },
+      { id: "sleep", label: "Sleep quality", type: "scale_1_5", required: false, lowLabel: "Poor", highLabel: "Great" },
+      { id: "pain", label: "Any pain or niggles?", type: "yes_no", required: false },
+      { id: "wellbeing", label: "One line: how was the week?", type: "short_text", required: true, maxLength: 1000 },
+      { id: "notes", label: "Anything you need from me?", type: "long_text", required: false, maxLength: 2000 },
+    ],
+  });
+
+  function seedContext(kind: "submitted" | "next"): CheckinReviewContext {
+    const base = context(false);
+    const submitted = kind === "submitted";
+    return checkinReviewContextSchema.parse({
+      ...base,
+      pinnedForm: seedForm,
+      photos: [],
+      measurements: [],
+      checkin: {
+        ...base.checkin,
+        localDate: submitted ? "2026-11-09" : "2026-11-16",
+        windowStartsAt: submitted ? "2026-11-09T03:30:00.000Z" : "2026-11-16T03:30:00.000Z",
+        windowEndsAt: submitted ? "2026-11-11T03:30:00.000Z" : "2026-11-18T03:30:00.000Z",
+        checkinFormVersionId: SEED_FORM_ID,
+        recordStatus: submitted ? "submitted" : "draft",
+        recordVersion: submitted ? 1 : 0,
+        status: submitted ? "submitted" : "scheduled",
+        submittedAt: submitted ? "2026-11-09T12:30:00.000Z" : null,
+        review: null,
+        answers: submitted
+          ? {
+              wellbeing: "Positive week, felt in control of food",
+              notes: "Weight is stuck for 2 weeks, what to do?",
+              bodyWeightKg: 55.7,
+              fieldAnswers: {
+                body_weight: 55.7,
+                sessions_done: "all",
+                training_feel: 4,
+                sleep: 2,
+                pain: false,
+                wellbeing: "Positive week, felt in control of food",
+              },
+            }
+          : null,
+      },
+    });
+  }
+
+  it("renders the submitted check-in's answers, measurement and review sheet", async () => {
+    api.getCheckinReviewContext.mockImplementation(async () => seedContext("submitted"));
+    render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    expect(await screen.findByText("How did training feel?")).toBeTruthy();
+    expect(screen.getByText("4 of 5")).toBeTruthy();
+    expect(screen.getByText("2 of 5")).toBeTruthy();
+    expect(screen.getByText("How many planned workouts did you complete?")).toBeTruthy();
+    expect(screen.getByText("All")).toBeTruthy();
+    expect(screen.getByText("Any pain or niggles?")).toBeTruthy();
+    expect(screen.getByText("No")).toBeTruthy();
+    expect(screen.getByText("Positive week, felt in control of food")).toBeTruthy();
+    expect(screen.getByText("Weight is stuck for 2 weeks, what to do?")).toBeTruthy();
+    expect(screen.getByText("55.7 kg")).toBeTruthy();
+    expect(screen.getByText("Save review")).toBeTruthy();
+    expect(screen.queryByText(/not submitted yet/)).toBeNull();
+  });
+
+  it("the next, unsubmitted check-in says so and offers no review it cannot save", async () => {
+    api.getCheckinReviewContext.mockImplementation(async () => seedContext("next"));
+    api.recordCheckinReview.mockClear();
+    render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    expect(await screen.findByText("Due Mon 16 Nov · not submitted yet")).toBeTruthy();
+    expect(screen.getByText(/Meals logged/)).toBeTruthy();
+    expect(screen.queryByText("Save review")).toBeNull();
+    expect(screen.queryByLabelText("Add a note for Rohan")).toBeNull();
+    expect(screen.queryByText("Check-in item closed in Attention")).toBeNull();
+    expect(api.recordCheckinReview).not.toHaveBeenCalled();
+  });
+});

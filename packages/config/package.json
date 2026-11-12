@@ -8,6 +8,7 @@
     "./tsconfig/library.json": "./tsconfig/library.json",
     "./tsconfig/react.json": "./tsconfig/react.json",
     "./eslint/base": "./eslint/base.js",
+    "./eslint/no-urlsearchparams-size": "./eslint/no-urlsearchparams-size.js",
     "./slo-guardrails": "./slo-guardrails.js"
   },
   "scripts": {

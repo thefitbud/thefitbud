@@ -202,6 +202,19 @@ export function buildNutritionRings(
   ];
 }
 
+/**
+ * Only the meals planned for `localDate` (Z11b-1). The meal list is requested
+ * for one day, but on device a dropped query string returned every meal since
+ * the plan started ("676 of 747 meals logged"). Today, Diet and the kcal
+ * summary never count another day's rows, whatever the list holds.
+ */
+export function mealsForDay<T extends { localDate: string }>(
+  items: readonly T[],
+  localDate: string,
+): T[] {
+  return items.filter((item) => item.localDate === localDate);
+}
+
 export function mealsLoggedSummary(meals: readonly MealAssignment[]): string {
   const total = meals.length;
   const logged = meals.filter((m) => isMealLoggedForCount(m.status)).length;
@@ -231,9 +244,13 @@ export type DayKcalSummary = {
  * total. The summary number is therefore always the sum of the logged rows.
  */
 export function dayKcalSummary(
-  assignments: readonly MealAssignment[],
+  allAssignments: readonly MealAssignment[],
   dayTotals?: MeDayResponse["totals"] | null,
+  /** The selected day; rows of any other day are ignored (Z11b-1). */
+  localDate?: string,
 ): DayKcalSummary {
+  const assignments =
+    localDate === undefined ? allAssignments : mealsForDay(allAssignments, localDate);
   const perMeal = new Map(
     (dayTotals?.perMeal ?? []).map((row) => [row.slotKey, row.kcalScaled]),
   );

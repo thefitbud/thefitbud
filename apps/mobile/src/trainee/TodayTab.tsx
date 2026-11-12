@@ -59,6 +59,7 @@ import { subscribeAll } from "./dataCache";
 import {
   buildNutritionRings,
   dayKcalSummary,
+  mealsForDay,
   isMealLoggedForCount,
   nutrientsFromMealPrescription,
 } from "./nutrition";
@@ -367,7 +368,9 @@ export function TodayTab({
           (item) => item.localDate === selectedDate,
         ) ?? null,
       );
-      setMeals(sortMealsByTime(scheduledAssignments(mealList.items)));
+      setMeals(
+        sortMealsByTime(mealsForDay(scheduledAssignments(mealList.items), selectedDate)),
+      );
       setCheckin(pickTodayCheckin(checkins.items));
       setOfflineHint(false);
       setLockStateKnown(true);

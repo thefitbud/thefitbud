@@ -59,6 +59,7 @@ import { mealDueStatusLabel, nextUp } from "./nextUp";
 import {
   buildNutritionRings,
   dayKcalSummary,
+  mealsForDay,
   isMealLoggedForCount,
   mealsLoggedSummary,
   nutrientsFromMealPrescription,
@@ -245,7 +246,9 @@ export function DietTab({
         }),
         s1.getMeDay(selectedDate).catch(() => null),
       ]);
-      const scheduled = sortMealsByTime(scheduledAssignments(listed.items));
+      const scheduled = sortMealsByTime(
+        mealsForDay(scheduledAssignments(listed.items), selectedDate),
+      );
       let pendingIds = new Set<string>();
       try {
         const outbox = await sync.store.listOutbox();

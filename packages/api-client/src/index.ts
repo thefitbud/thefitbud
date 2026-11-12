@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { queryString } from "./query-string.js";
 import {
   apiErrorBodySchema,
   acceptInvitationRequestSchema,
@@ -470,7 +471,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/invitations${suffix}`,
@@ -555,7 +556,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/relationships${suffix}`,
@@ -632,7 +633,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/onboarding/form-templates${suffix}`,
@@ -874,7 +875,7 @@ export class FitBudApiClient {
     if (query?.versionStatus) params.set("versionStatus", query.versionStatus);
     if (query?.effectiveFrom) params.set("effectiveFrom", query.effectiveFrom);
     if (query?.effectiveTo) params.set("effectiveTo", query.effectiveTo);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/plans/relationships/${relationshipId}${suffix}`,
@@ -1043,7 +1044,7 @@ export class FitBudApiClient {
     if (query?.scope) params.set("scope", query.scope);
     if (query?.templateType) params.set("templateType", query.templateType);
     if (query?.q) params.set("q", query.q);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/templates${suffix}`,
@@ -1138,7 +1139,7 @@ export class FitBudApiClient {
     for (const renewal of query?.renewal ?? []) params.append("renewal", renewal);
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/clients${suffix}`,
@@ -1178,7 +1179,7 @@ export class FitBudApiClient {
     if (query?.muscleGroup) params.set("muscleGroup", query.muscleGroup);
     if (query?.equipment) params.set("equipment", query.equipment);
     if (query?.difficulty) params.set("difficulty", query.difficulty);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/libraries/exercises${suffix}`,
@@ -1230,7 +1231,7 @@ export class FitBudApiClient {
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
     if (query?.q) params.set("q", query.q);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/libraries/foods${suffix}`,
@@ -1275,7 +1276,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.fromDate) params.set("fromDate", query.fromDate);
     if (query?.toDate) params.set("toDate", query.toDate);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/workouts/relationships/${relationshipId}/assignments${suffix}`,
@@ -1305,7 +1306,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.fromDate) params.set("fromDate", query.fromDate);
     if (query?.toDate) params.set("toDate", query.toDate);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/workouts/relationships/${relationshipId}/adherence${suffix}`,
@@ -1421,7 +1422,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.fromDate) params.set("fromDate", query.fromDate);
     if (query?.toDate) params.set("toDate", query.toDate);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/meals/relationships/${relationshipId}/assignments${suffix}`,
@@ -1451,7 +1452,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.fromDate) params.set("fromDate", query.fromDate);
     if (query?.toDate) params.set("toDate", query.toDate);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/meals/relationships/${relationshipId}/compliance${suffix}`,
@@ -1525,7 +1526,7 @@ export class FitBudApiClient {
     if (query?.toDate) params.set("toDate", query.toDate);
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/checkins/relationships/${relationshipId}${suffix}`,
@@ -1656,7 +1657,7 @@ export class FitBudApiClient {
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
     if (query?.scope) params.set("scope", query.scope);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/checkins/form-templates${suffix}`,
@@ -1773,7 +1774,7 @@ export class FitBudApiClient {
   }): Promise<AttentionFeedResponse> {
     const params = new URLSearchParams();
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/exceptions/attention${suffix}`,
@@ -1851,7 +1852,7 @@ export class FitBudApiClient {
   ): Promise<ExceptionListResponse> {
     const params = new URLSearchParams();
     if (query?.status) params.set("status", query.status);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/exceptions/relationships/${relationshipId}${suffix}`,
@@ -1945,7 +1946,7 @@ export class FitBudApiClient {
     if (query?.kind) params.set("kind", query.kind);
     if (query?.occurredFrom) params.set("occurredFrom", query.occurredFrom);
     if (query?.occurredTo) params.set("occurredTo", query.occurredTo);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/history/relationships/${relationshipId}${suffix}`,
@@ -1961,7 +1962,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/progress/relationships/${relationshipId}/measurements${suffix}`,
@@ -1991,7 +1992,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/progress/relationships/${relationshipId}/entries${suffix}`,
@@ -2107,7 +2108,7 @@ export class FitBudApiClient {
     const params = new URLSearchParams();
     if (query?.cursor) params.set("cursor", query.cursor);
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request("GET", `/sync/pull${suffix}`, syncPullResponseSchema, {
       auth: true,
     });
