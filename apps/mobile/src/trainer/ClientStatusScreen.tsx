@@ -3,9 +3,12 @@ import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
+  Checkin,
   ClientWorkspace,
   MealAssignment,
+  ResponsivenessResponse,
   TrainerNote,
+  WeekReadModel,
   WorkoutAssignment,
 } from "@fitbud/contracts";
 import {
@@ -15,7 +18,7 @@ import {
   formatRelative,
   labelFor,
 } from "@fitbud/core";
-import { colors, fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
@@ -23,9 +26,20 @@ import { StatusChip } from "../components/StatusChip";
 import { Snackbar } from "../components/Snackbar";
 import { initialsFromName, WhatsAppGlyph } from "../components/m2";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { addDays, localDateInTimezone, startOfWeekMonday, weekDatesFrom, weekdayShort } from "../lib/dates";
-import { isMealLoggedForCount, loggedMacrosForMeal } from "../trainee/nutrition";
+import { addDays, localDateInTimezone, startOfWeekMonday, weekDatesFrom } from "../lib/dates";
+import { isMealLoggedForCount } from "../trainee/nutrition";
+import { reportError } from "../lib/reportError";
 import { readTrainerCache, writeTrainerCache } from "./cache";
+import { clientStatusApi } from "./clientStatus/api";
+import { EndedSummary } from "./clientStatus/EndedSummary";
+import {
+  buildEndedSummary,
+  kcalTileValue,
+  weekDayCells,
+  type EndedInput,
+} from "./clientStatus/model";
+import { RemindersCard } from "./clientStatus/RemindersCard";
+import { WeekCard } from "./clientStatus/WeekCard";
 import { openContextualWhatsApp } from "./whatsapp";
 
 type Props = {
@@ -42,8 +56,29 @@ type Snapshot = {
   workouts: WorkoutAssignment[];
   meals: MealAssignment[];
   notes: TrainerNote[];
+  /** Week read model: today's kcal against the plan, same source as web. */
+  week?: WeekReadModel | null;
+  responsiveness?: ResponsivenessResponse | null;
+  responsivenessFailed?: boolean;
   savedAt: string;
 };
+
+async function loadAllCheckins(
+  api: ReturnType<typeof useAuth>["api"],
+  relationshipId: string,
+  fromDate: string,
+  toDate: string,
+): Promise<Checkin[]> {
+  const items: Checkin[] = [];
+  let cursor: string | undefined;
+  for (let page = 0; page < 10; page += 1) {
+    const res = await api.listCheckins(relationshipId, { fromDate, toDate, cursor, limit: 100 });
+    items.push(...res.items);
+    if (!res.nextCursor) break;
+    cursor = res.nextCursor;
+  }
+  return items;
+}
 
 function coachingWeek(startedAt: string | null | undefined): number | null {
   if (!startedAt) return null;
@@ -80,6 +115,9 @@ export function ClientStatusScreen({
   const [noteBody, setNoteBody] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
   const [acting, setActing] = useState(false);
+  const [endedData, setEndedData] = useState<Omit<EndedInput, "zone" | "startedAt" | "endedAt"> | null>(null);
+  const [endedError, setEndedError] = useState(false);
+  const [summaryEpoch, setSummaryEpoch] = useState(0);
 
   const load = useCallback(async () => {
     setError(null);
@@ -96,11 +134,32 @@ export function ClientStatusScreen({
         }),
         api.listTrainerNotes(relationshipId),
       ]);
+      const isEnded =
+        workspace.header.onboardingStatus === "ended" || Boolean(workspace.header.endedAt);
+      let week: WeekReadModel | null = null;
+      let responsiveness: ResponsivenessResponse | null = null;
+      let responsivenessFailed = false;
+      if (!isEnded) {
+        [week, responsiveness] = await Promise.all([
+          clientStatusApi(api).getWorkspaceWeek(relationshipId, weekStart).catch((err: unknown) => {
+            reportError("client-status.week", err);
+            return null;
+          }),
+          clientStatusApi(api).getResponsiveness(relationshipId).catch((err: unknown) => {
+            reportError("client-status.responsiveness", err);
+            responsivenessFailed = true;
+            return null;
+          }),
+        ]);
+      }
       const snapshot: Snapshot = {
         workspace,
         workouts: workoutPage.items,
         meals: mealPage.items,
         notes: notePage.items,
+        week,
+        responsiveness,
+        responsivenessFailed,
         savedAt: new Date().toISOString(),
       };
       setData(snapshot);
@@ -133,18 +192,64 @@ export function ClientStatusScreen({
   const planTitle = header?.effectivePlan?.title ?? null;
   const weekNumber = coachingWeek(header?.startedAt);
   const weekLabel = weekNumber != null ? `week ${weekNumber}` : null;
-  const meta = [header?.goalShort, planTitle, weekLabel].filter(Boolean).join(" · ");
+  const startedAt = header?.startedAt ?? null;
+  const endedAt = header?.endedAt ?? null;
+  // Ended-path dates are the client's own calendar (web's ended overview does the same).
+  const clientZone = header?.traineeTimezone ?? zone;
+  const endDate = endedAt ? localDateInTimezone(clientZone, new Date(endedAt)) : null;
+  const startDate = startedAt ? localDateInTimezone(clientZone, new Date(startedAt)) : null;
+  const coachedLabel =
+    startDate && endDate ? `coached ${formatCivilDate(startDate)} — ${formatCivilDate(endDate)}` : null;
+  const meta = ended
+    ? [header?.goalShort, coachedLabel].filter(Boolean).join(" · ")
+    : [header?.goalShort, planTitle, weekLabel].filter(Boolean).join(" · ");
 
-  const weekDates = useMemo(() => weekDatesFrom(weekStart), [weekStart]);
-  const workoutsByDate = useMemo(() => {
-    const map = new Map<string, WorkoutAssignment[]>();
-    for (const item of data?.workouts ?? []) {
-      const list = map.get(item.localDate) ?? [];
-      list.push(item);
-      map.set(item.localDate, list);
-    }
-    return map;
-  }, [data?.workouts]);
+  useEffect(() => {
+    if (!ended || !startedAt || !endedAt || !startDate || !endDate) return;
+    let cancelled = false;
+    setEndedError(false);
+    void Promise.all([
+      api.getProgressMetrics(relationshipId, {
+        keys: ["weight"],
+        range: "custom",
+        from: startDate,
+        to: endDate,
+      }),
+      api.getWorkoutAdherence(relationshipId, { fromDate: startDate, toDate: endDate }),
+      api.getMealCompliance(relationshipId, { fromDate: startOfWeekMonday(endDate), toDate: endDate }),
+      loadAllCheckins(api, relationshipId, startDate, endDate),
+    ])
+      .then(([metrics, adherence, compliance, checkins]) => {
+        if (cancelled) return;
+        setEndedData({
+          weights: metrics.series.find((series) => series.key === "weight")?.points ?? [],
+          workouts: adherence.items,
+          meals: compliance.items,
+          checkins,
+        });
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        reportError("client-status.ended-summary", err);
+        setEndedError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, relationshipId, ended, startedAt, endedAt, startDate, endDate, summaryEpoch]);
+
+  const endedSummary = useMemo(
+    () =>
+      endedData && startedAt && endedAt
+        ? buildEndedSummary({ ...endedData, zone: clientZone, startedAt, endedAt })
+        : null,
+    [endedData, startedAt, endedAt, clientZone],
+  );
+
+  const weekCells = useMemo(
+    () => weekDayCells(zone, weekDatesFrom(weekStart), data?.workouts ?? []),
+    [zone, weekStart, data?.workouts],
+  );
 
   const weekWorkouts = data?.workouts ?? [];
   const doneWorkouts = weekWorkouts.filter(
@@ -152,15 +257,6 @@ export function ClientStatusScreen({
   ).length;
   const weekMeals = data?.meals ?? [];
   const loggedMeals = weekMeals.filter((item) => isMealLoggedForCount(item.status)).length;
-  const todayMeals = weekMeals.filter((item) => item.localDate === today);
-  const todayKcal = todayMeals.reduce((sum, meal) => {
-    if (!isMealLoggedForCount(meal.status)) return sum;
-    return sum + loggedMacrosForMeal(meal).kcal;
-  }, 0);
-  const assignedKcal = todayMeals.reduce((sum, meal) => {
-    return sum + (loggedMacrosForMeal({ ...meal, status: "confirmed" }).kcal || 0);
-  }, 0);
-
   const checkin =
     data?.workspace.overview.pendingReviewCheckin ??
     data?.workspace.overview.nextCheckin ??
@@ -210,6 +306,7 @@ export function ClientStatusScreen({
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
+        setSummaryEpoch((n) => n + 1);
         void load().finally(() => setRefreshing(false));
       }}
     >
@@ -226,14 +323,6 @@ export function ClientStatusScreen({
         <View>
           <View style={styles.skeleton} />
           <View style={styles.skeleton} />
-        </View>
-      ) : null}
-      {ended ? (
-        <View style={styles.ended}>
-          <Text style={styles.endedText}>
-            Coaching ended{" "}
-            {header?.endedAt ? formatCivilDate(header.endedAt.slice(0, 10)) : ""} · read-only
-          </Text>
         </View>
       ) : null}
       <View style={styles.header}>
@@ -255,6 +344,16 @@ export function ClientStatusScreen({
         <Text style={styles.tz}>
           {first}'s time {formatClockTime(new Date().toISOString(), header.traineeTimezone)}
         </Text>
+      ) : null}
+      {ended ? (
+        <View>
+          <View style={styles.ended} accessibilityRole="summary">
+            <Text style={styles.endedText}>
+              Coaching ended{endDate ? ` on ${formatCivilDate(endDate)}` : ""}. Everything here is
+              read-only.
+            </Text>
+          </View>
+        </View>
       ) : null}
       {ended ? null : (
         <View style={styles.actions}>
@@ -294,6 +393,9 @@ export function ClientStatusScreen({
         <Text style={styles.hint}>No WhatsApp number on file</Text>
       ) : null}
       {open && !ended ? (
+        <Text style={[styles.section, styles.sectionGap]}>Needs attention</Text>
+      ) : null}
+      {open && !ended ? (
         <View style={styles.alert}>
           <View style={styles.cardTop}>
             <StatusChip kind="severity" value={open.severity} />
@@ -312,37 +414,33 @@ export function ClientStatusScreen({
           </Pressable>
         </View>
       ) : null}
-      <View style={styles.sectionHead}>
-        <Text style={styles.section}>This week</Text>
-        <Text style={styles.sectionMeta}>
-          {formatCivilDate(weekStart)} – {formatCivilDate(weekEnd)}
-        </Text>
-      </View>
-      <View style={styles.week}>
-        {weekDates.map((date) => {
-          const day = workoutsByDate.get(date) ?? [];
-          const done = day.filter(
-            (item) => item.status === "completed" || item.status === "modified",
-          ).length;
-          return (
-            <View key={date} style={styles.day}>
-              <Text style={styles.dayLabel}>{weekdayShort(zone, date).slice(0, 1)}</Text>
-              <Text style={styles.dayCount}>
-                {day.length === 0 ? "–" : `${done}/${day.length}`}
-              </Text>
-            </View>
-          );
-        })}
-      </View>
-      <View style={styles.tiles}>
-        <Tile value={`${doneWorkouts} of ${weekWorkouts.length || 0}`} label="Workouts" />
-        <Tile value={`${loggedMeals} of ${weekMeals.length || 0}`} label="Meals logged" />
-        <Tile
-          value={`${todayKcal.toLocaleString("en-IN")} of ${Math.max(assignedKcal, todayKcal).toLocaleString("en-IN")}`}
-          label="kcal today"
-        />
-      </View>
-      {checkin ? (
+      {ended ? (
+        endedSummary ? (
+          <EndedSummary summary={endedSummary} />
+        ) : endedError ? (
+          <Text style={styles.meta}>Couldn't load the coaching summary. Pull to try again.</Text>
+        ) : (
+          <View style={styles.skeleton} />
+        )
+      ) : (
+        <View>
+          <View style={styles.sectionHead}>
+            <Text style={styles.section}>This week</Text>
+            <Text style={styles.sectionMeta}>
+              {formatCivilDate(weekStart)} – {formatCivilDate(weekEnd)}
+            </Text>
+          </View>
+          <WeekCard
+            cells={weekCells}
+            tiles={[
+              { value: `${doneWorkouts} of ${weekWorkouts.length || 0}`, label: "Workouts" },
+              { value: `${loggedMeals} of ${weekMeals.length || 0}`, label: "Meals logged" },
+              { value: kcalTileValue(data?.week?.todayNutrition), label: "kcal today" },
+            ]}
+          />
+        </View>
+      )}
+      {checkin && !ended ? (
         <View style={styles.card}>
           <Text style={styles.section}>
             Check-in · {formatCivilDate(checkin.localDate)}
@@ -363,15 +461,26 @@ export function ClientStatusScreen({
           ) : null}
         </View>
       ) : null}
-      <Text style={styles.section}>Recent activity</Text>
-      {(data?.workspace.overview.recentActivity ?? []).map((item) => (
-        <View key={item.id} style={styles.activity}>
-          <Text style={styles.name}>{item.title}</Text>
-          <Text style={styles.meta}>
-            {formatCivilDate(item.localDate)} · {formatRelative(item.occurredAt)}
-          </Text>
+      {ended ? null : (
+        <View>
+          <RemindersCard
+            data={data?.responsiveness ?? null}
+            failed={Boolean(data?.responsivenessFailed)}
+          />
+          <Text style={[styles.section, styles.sectionGap]}>Recent activity</Text>
+          {(data?.workspace.overview.recentActivity ?? []).length === 0 ? (
+            <Text style={styles.meta}>Nothing logged yet.</Text>
+          ) : null}
+          {(data?.workspace.overview.recentActivity ?? []).map((item) => (
+            <View key={item.id} style={styles.activity}>
+              <Text style={styles.name}>{item.title}</Text>
+              <Text style={styles.meta}>
+                {formatCivilDate(item.localDate)} · {formatRelative(item.occurredAt)}
+              </Text>
+            </View>
+          ))}
         </View>
-      ))}
+      )}
       <View style={styles.sectionHead}>
         <Text style={styles.section}>Coach notes</Text>
         {!ended ? (
@@ -422,15 +531,6 @@ export function ClientStatusScreen({
       ) : null}
       {toast ? <Snackbar message={toast} onDismiss={() => setToast(null)} /> : null}
     </Screen>
-  );
-}
-
-function Tile({ value, label }: { value: string; label: string }) {
-  return (
-    <View style={styles.tile}>
-      <Text style={styles.tileValue}>{value}</Text>
-      <Text style={styles.tileLabel}>{label}</Text>
-    </View>
   );
 }
 
@@ -521,29 +621,7 @@ const styles = StyleSheet.create({
   section: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
   sectionMeta: { color: colors.midGrey, fontSize: 13 },
   link: { color: colors.indigo, fontFamily: fontFamilySemiBold, fontSize: 15 },
-  week: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: "row",
-    marginTop: 8,
-    paddingVertical: 10,
-  },
-  day: { alignItems: "center", flex: 1 },
-  dayLabel: { color: colors.midGrey, fontSize: 12 },
-  dayCount: { color: colors.deepNavy, fontFamily: fontFamilyMedium, fontSize: 12, marginTop: 6 },
-  tiles: { flexDirection: "row", gap: 8, marginTop: 8 },
-  tile: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 16,
-    borderWidth: 1,
-    flex: 1,
-    padding: 10,
-  },
-  tileValue: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 14 },
-  tileLabel: { color: colors.midGrey, fontSize: 12, marginTop: 4 },
+  sectionGap: { marginTop: 18 },
   activity: { marginTop: 10 },
   name: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 15 },
   input: {

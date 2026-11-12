@@ -25,20 +25,24 @@ import type { RestWindow } from "../notifications/liveActivity";
 import { useWorkoutLiveActivity } from "../notifications/liveActivitySession";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { SetKeypad } from "./workout/SetKeypad";
 import {
+  SetEntryHeader,
+  SetEntryRow,
+  SetKeypad,
   backspace,
-  initialDraft,
-  isBodyweightLabel,
-  plainKgFromLabel,
-  prescribedLoadText,
+  displayLoad,
+  draftForSet,
+  isDraftModified,
   loadBody,
+  loadCellIsKg,
+  loadCellText,
   loadLabelForDraft,
   pressKey,
+  prescribedLoadText,
   stepValue,
   type KeypadField,
   type SetDraft,
-} from "./workout/setEntry";
+} from "../workout/shared";
 import {
   exerciseInstructionsFor,
   loadPreviousSetHistory,
@@ -81,13 +85,6 @@ function exerciseComplete(execution: WorkoutExecution, exerciseIndex: number) {
 function formatElapsedMinutes(totalSeconds: number): string {
   const m = Math.max(0, Math.floor(totalSeconds / 60));
   return `${m} min`;
-}
-
-function displayLoad(label: string | null | undefined): string {
-  const raw = label?.trim() ?? "";
-  if (isBodyweightLabel(raw)) return "BW";
-  const kg = plainKgFromLabel(raw);
-  return kg !== "" ? kg : raw;
 }
 
 function exercisePrescriptionLine(
@@ -198,52 +195,6 @@ function tryActivateKeepAwake() {
   } catch {
     return undefined;
   }
-}
-
-function draftForSet(
-  set: ExerciseExecution["sets"][number],
-  drafts: Record<string, SetDraft>,
-): SetDraft {
-  return drafts[set.id] ?? initialDraft(set.prescribedLoadLabel, set.prescribedReps);
-}
-
-function isDraftModified(
-  set: ExerciseExecution["sets"][number],
-  draft: SetDraft,
-): boolean {
-  const reps =
-    draft.reps.trim() === ""
-      ? null
-      : Number.parseInt(draft.reps.trim(), 10);
-  const repsChanged =
-    reps != null &&
-    Number.isFinite(reps) &&
-    set.prescribedReps != null &&
-    reps !== set.prescribedReps;
-  const initial = initialDraft(set.prescribedLoadLabel, set.prescribedReps);
-  const loadChanged =
-    draft.bodyweight !== initial.bodyweight ||
-    (!draft.bodyweight &&
-      draft.load.trim() !== "" &&
-      Number.parseFloat(draft.load) !== Number.parseFloat(initial.load));
-  return repsChanged || loadChanged;
-}
-
-/** True when the load cell shows a kg number (so it carries the "kg" unit). */
-function loadCellIsKg(draft: SetDraft): boolean {
-  return !draft.bodyweight && draft.load.trim() !== "";
-}
-
-/** What the load cell of the current row shows. */
-function loadCellText(
-  set: ExerciseExecution["sets"][number],
-  draft: SetDraft,
-): string {
-  if (draft.bodyweight) return "Bodyweight";
-  if (draft.load.trim() !== "") return draft.load;
-  // Switched to kg on a bodyweight set: nothing typed yet.
-  if (isBodyweightLabel(set.prescribedLoadLabel)) return "—";
-  return displayLoad(set.prescribedLoadLabel);
 }
 
 export function ActiveWorkoutScreen({
@@ -913,141 +864,23 @@ export function ActiveWorkoutScreen({
                     );
                   })()}
                 <View style={styles.stab}>
-                  <View style={styles.stabTh}>
-                    <Text style={styles.thCell}>Set</Text>
-                    <Text style={[styles.thCell, styles.thWide]}>Previous</Text>
-                    <Text style={[styles.thCell, styles.thCenter]}>Load</Text>
-                    <Text style={[styles.thCell, styles.thCenter]}>Reps</Text>
-                    <Text style={styles.thCell} />
-                  </View>
+                  <SetEntryHeader />
                   {ex.sets.map((set) => {
                     const isNow = currentSet?.id === set.id;
-                    const isOk = set.status !== "pending";
                     const draft = draftForSet(set, drafts);
-                    const rowModified =
-                      isNow && isDraftModified(set, draft);
                     return (
-                      <View
+                      <SetEntryRow
                         key={set.id}
-                        style={[
-                          styles.stabTr,
-                          isOk ? styles.trOk : null,
-                          isNow ? styles.trNow : null,
-                          !isOk && !isNow ? styles.trPend : null,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.stabNo,
-                            isNow ? styles.stabNoNow : null,
-                          ]}
-                        >
-                          {set.order}
-                        </Text>
-                        <Text style={styles.stabPrev} numberOfLines={1}>
-                          {previousSetLabel(ex, set, previousByKey)}
-                        </Text>
-                        {isNow ? (
-                          <View style={styles.valEditWrap}>
-                            <Pressable
-                              accessibilityRole="button"
-                              accessibilityLabel={`Set ${set.order} load: ${loadCellText(set, draft)}${loadCellIsKg(draft) ? " kg" : ""}`}
-                              onPress={() => openKeypad("load")}
-                              style={[
-                                styles.valInput,
-                                draft.bodyweight ? styles.valBw : null,
-                                keypad?.field === "load" ? styles.valActive : null,
-                              ]}
-                            >
-                              <Text
-                                style={[
-                                  styles.valInputText,
-                                  draft.bodyweight ? styles.valBwText : null,
-                                ]}
-                                numberOfLines={1}
-                              >
-                                {loadCellText(set, draft)}
-                                {!loadCellIsKg(draft) ? "" : (
-                                  <Text style={styles.valUnit}> kg</Text>
-                                )}
-                              </Text>
-                            </Pressable>
-                            {rowModified ? (
-                              <Text style={styles.modBadge}>EDITED</Text>
-                            ) : null}
-                          </View>
-                        ) : (
-                          <Text
-                            style={[
-                              styles.valStatic,
-                              isBodyweightLabel(
-                                isOk
-                                  ? set.actualLoadLabel ?? set.prescribedLoadLabel
-                                  : set.prescribedLoadLabel,
-                              )
-                                ? styles.valStaticBw
-                                : null,
-                            ]}
-                          >
-                            {isBodyweightLabel(
-                              isOk
-                                ? set.actualLoadLabel ?? set.prescribedLoadLabel
-                                : set.prescribedLoadLabel,
-                            )
-                              ? "Bodyweight"
-                              : displayLoad(
-                                  isOk
-                                    ? set.actualLoadLabel ?? set.prescribedLoadLabel
-                                    : set.prescribedLoadLabel,
-                                )}
-                          </Text>
-                        )}
-                        {isNow ? (
-                          <Pressable
-                            accessibilityRole="button"
-                            accessibilityLabel={`Set ${set.order} reps: ${draft.reps || "none"}`}
-                            onPress={() => openKeypad("reps")}
-                            style={[
-                              styles.valInput,
-                              styles.valReps,
-                              keypad?.field === "reps" ? styles.valActive : null,
-                            ]}
-                          >
-                            <Text style={styles.valInputText}>{draft.reps}</Text>
-                          </Pressable>
-                        ) : (
-                          <Text style={styles.valStatic}>
-                            {isOk
-                              ? set.actualReps ?? set.prescribedReps ?? "—"
-                              : set.prescribedReps ?? "—"}
-                          </Text>
-                        )}
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            isOk
-                              ? `Set ${set.order} logged`
-                              : `Log set ${set.order}`
-                          }
-                          disabled={
-                            !isNow ||
-                            execution.status === "paused" ||
-                            set.status !== "pending"
-                          }
-                          onPress={() => completeSet(set.id)}
-                          style={[
-                            styles.ck,
-                            isOk ? styles.ckOk : null,
-                            isNow ? styles.ckNow : null,
-                          ]}
-                        >
-                          <Check
-                            color={isOk || isNow ? colors.white : colors.midGrey}
-                            size={22}
-                            strokeWidth={2.6}
-                          />
-                        </Pressable>
-                      </View>
+                        set={set}
+                        isNow={isNow}
+                        draft={draft}
+                        modified={isNow && isDraftModified(set, draft)}
+                        activeField={keypad?.field ?? null}
+                        previousLabel={previousSetLabel(ex, set, previousByKey)}
+                        onOpenField={openKeypad}
+                        onComplete={() => completeSet(set.id)}
+                        completeDisabled={execution.status === "paused"}
+                      />
                     );
                   })}
                 </View>
@@ -1388,123 +1221,6 @@ const styles = StyleSheet.create({
   stab: {
     paddingBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
-  },
-  stabTh: {
-    flexDirection: "row",
-    gap: 6,
-    paddingBottom: 4,
-    paddingHorizontal: 6,
-  },
-  thCell: {
-    color: colors.midGrey,
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-    width: 34,
-  },
-  thWide: {
-    flex: 1,
-    width: undefined,
-  },
-  thCenter: {
-    textAlign: "center",
-    width: 76,
-  },
-  stabTr: {
-    alignItems: "center",
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 6,
-    marginTop: 4,
-    minHeight: 56,
-    paddingHorizontal: 6,
-  },
-  trOk: {
-    backgroundColor: "#F9F7FF",
-  },
-  trNow: {
-    backgroundColor: colors.white,
-    borderColor: colors.indigo,
-    borderWidth: 1.5,
-  },
-  trPend: {},
-  stabNo: {
-    color: colors.midGrey,
-    fontSize: 15,
-    fontWeight: "700",
-    textAlign: "center",
-    width: 34,
-  },
-  stabNoNow: {
-    color: colors.indigo,
-  },
-  stabPrev: {
-    color: colors.midGrey,
-    flex: 1,
-    fontSize: 14,
-  },
-  valStatic: {
-    color: colors.midGrey,
-    fontSize: 17,
-    fontWeight: "600",
-    textAlign: "center",
-    width: 76,
-  },
-  valEditWrap: {
-    alignItems: "center",
-    width: 76,
-  },
-  valInput: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    color: colors.deepNavy,
-    fontSize: 18,
-    fontWeight: "700",
-    height: 44,
-    justifyContent: "center",
-    width: 76,
-  },
-  valInputText: {
-    color: colors.deepNavy,
-    fontSize: 18,
-    fontWeight: "700",
-    textAlign: "center",
-  },
-  valUnit: { fontSize: 12, fontWeight: "600" },
-  valActive: { borderColor: colors.indigo, borderWidth: 2 },
-  valBw: { backgroundColor: "#ECE9FF", borderColor: "#ECE9FF" },
-  valBwText: { color: colors.indigo, fontSize: 14 },
-  valStaticBw: { fontSize: 14 },
-  valReps: {
-    fontSize: 17,
-    width: 64,
-  },
-  modBadge: {
-    color: colors.indigo,
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-    marginTop: 2,
-  },
-  ck: {
-    alignItems: "center",
-    borderColor: colors.lightGrey,
-    borderRadius: 14,
-    borderWidth: 1.5,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  ckOk: {
-    backgroundColor: colors.deepNavy,
-    borderColor: colors.deepNavy,
-  },
-  ckNow: {
-    backgroundColor: colors.indigo,
-    borderColor: colors.indigo,
   },
   sh: {
     marginBottom: 10,
