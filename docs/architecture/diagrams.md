@@ -217,29 +217,34 @@ stateDiagram-v2
 ## B1 · C4 System Context
 
 ```mermaid
-C4Context
-  title FitBud — System Context
-  Person(trainer, "Trainer", "Independent personal trainer; configures plans, reviews exceptions")
-  Person(trainee, "Trainee (client)", "Executes workouts, logs meals, steps, check-ins")
-  Person(ops, "Owner / Ops (Firoz)", "Deploys, runs migrations, manages secrets and store consoles")
-  System(fitbud, "FitBud", "Coaching app: Trainer Web + Role-aware Mobile App + API on Cloudflare")
-  System_Ext(firebase, "Firebase Auth (Google)", "Identity Toolkit + Secure Token: ID/refresh tokens")
-  System_Ext(expo, "Expo Push Service", "Push ticket + receipts; forwards to APNs/FCM")
-  System_Ext(zepto, "ZeptoMail (Zoho, India)", "Transactional email: OTP, invite, alerts")
-  System_Ext(wa, "WhatsApp Cloud API (Meta)", "Built, flags off; webhook for status/STOP")
-  System_Ext(sentry, "Sentry", "Crash reporting (staging/prod)")
-  System_Ext(health, "Apple HealthKit / Android Health Connect", "On-device step data")
-  System_Ext(stores, "TestFlight / Google Play / EAS", "Mobile distribution and builds")
-  Rel(trainer, fitbud, "Uses", "HTTPS")
-  Rel(trainee, fitbud, "Uses", "HTTPS / WSS")
-  Rel(ops, fitbud, "Deploys & operates", "wrangler (manual)")
-  Rel(fitbud, firebase, "Mint/exchange/refresh tokens", "HTTPS")
-  Rel(fitbud, expo, "Send push, read receipts", "HTTPS")
-  Rel(fitbud, zepto, "Send email", "HTTPS")
-  Rel(fitbud, wa, "Send/receive (flagged off)", "HTTPS webhook")
-  Rel(fitbud, sentry, "Report errors", "HTTPS")
-  Rel(health, fitbud, "Steps read by Mobile App on device", "native SDK")
-  Rel(stores, trainee, "Installs app")
+flowchart TB
+  trainer(["<b>Trainer</b><br/>[Person]<br/>Configures plans, reviews exceptions"])
+  trainee(["<b>Trainee (client)</b><br/>[Person]<br/>Executes workouts, logs meals, steps, check-ins"])
+  ops(["<b>Owner / Ops</b><br/>[Person]<br/>Deploys, migrations, secrets, store consoles"])
+  fitbud["<b>FitBud</b><br/>[Software System]<br/>Trainer Web + role-aware Mobile App + API on Cloudflare"]
+  firebase["<b>Firebase Auth</b><br/>[External]<br/>ID and refresh tokens"]
+  expo["<b>Expo Push Service</b><br/>[External]<br/>Push tickets and receipts"]
+  zepto["<b>ZeptoMail (Zoho IN)</b><br/>[External]<br/>OTP, invite, alert email"]
+  wa["<b>WhatsApp Cloud API</b><br/>[External, flags off]"]
+  sentry["<b>Sentry</b><br/>[External]<br/>Crash reports"]
+  health["<b>HealthKit / Health Connect</b><br/>[External, on device]"]
+  stores["<b>TestFlight / Play / EAS</b><br/>[External]<br/>Distribution"]
+  trainer -- "HTTPS" --> fitbud
+  trainee -- "HTTPS / WSS" --> fitbud
+  ops -- "wrangler (manual)" --> fitbud
+  fitbud -- "HTTPS: mint, exchange, refresh" --> firebase
+  fitbud -- "HTTPS: send, receipts" --> expo
+  fitbud -- "HTTPS: send mail" --> zepto
+  fitbud <-- "HTTPS + webhook" --> wa
+  fitbud -- "HTTPS: errors" --> sentry
+  health -- "native SDK (steps)" --> fitbud
+  stores -- "install" --> trainee
+  classDef person fill:#08427b,color:#fff,stroke:#052e56
+  classDef sys fill:#1168bd,color:#fff,stroke:#0b4884
+  classDef ext fill:#999,color:#fff,stroke:#6b6b6b
+  class trainer,trainee,ops person
+  class fitbud sys
+  class firebase,expo,zepto,wa,sentry,health,stores ext
 ```
 
 ---
@@ -247,44 +252,50 @@ C4Context
 ## B2 · C4 Container
 
 ```mermaid
-C4Container
-  title FitBud — Containers
-  Person(trainer, "Trainer")
-  Person(trainee, "Trainee")
-  System_Boundary(cf, "Cloudflare account (one per env: staging, production)") {
-    Container(web, "Web Worker", "Cloudflare Worker + static assets", "Serves Trainer Web SPA; proxies /api/* and /i/* to API via service binding")
-    Container(api, "API Worker", "Hono / TypeScript Worker", "All auth, authorization, domain logic, sync, jobs (fetch, scheduled, queue handlers)")
-    ContainerDb(d1, "D1 DB", "SQLite (Drizzle)", "Authoritative state, 100+ tables")
-    ContainerDb(r2, "R2 MEDIA", "Object storage", "Progress/meal/check-in photos, avatars")
-    ContainerQueue(q, "REMINDER_QUEUE", "Cloudflare Queue + DLQ", "Reminder delivery jobs")
-    Container(do, "RelationshipRealtimeRoom", "Durable Object (SQLite class, WS hibernation)", "Per-relationship change-hint fan-out")
-    Container(cron, "Cron Trigger", "*/5 * * * *", "Scheduled jobs entry")
-  }
-  Container(spa, "Trainer Web SPA", "React/Vite (browser)", "Online-only trainer UI")
-  Container(mobile, "Mobile App", "Expo / React Native (iOS+Android)", "Trainer + trainee roles; sync outbox; push; Live Activity; steps")
-  System_Ext(fb, "Firebase Auth")
-  System_Ext(expo, "Expo Push")
-  System_Ext(zm, "ZeptoMail")
-  System_Ext(wa, "WhatsApp Cloud API")
-  System_Ext(sn, "Sentry")
-  Rel(trainer, spa, "HTTPS")
-  Rel(trainer, mobile, "Touch")
-  Rel(trainee, mobile, "Touch")
-  Rel(spa, web, "HTTPS GET assets; /api/* REST+JSON; WSS /api/realtime", "cookie + Bearer")
-  Rel(web, api, "Service binding fetch (path /api stripped)", "sync RPC-style fetch")
-  Rel(mobile, api, "HTTPS REST+JSON via api-client; WSS", "Bearer; X-FitBud-Role")
-  Rel(api, d1, "Drizzle SQL", "binding")
-  Rel(api, r2, "get/put objects", "binding")
-  Rel(api, q, "send({notificationId, deliveryId})", "async")
-  Rel(q, api, "queue() batch ≤10, ≤3 retries", "async")
-  Rel(cron, api, "scheduled()", "async")
-  Rel(api, do, "POST /broadcast; WS upgrade", "stub.fetch")
-  Rel(api, fb, "signInWithCustomToken, token refresh; JWT verify", "HTTPS")
-  Rel(api, expo, "push/send, getReceipts", "HTTPS")
-  Rel(api, zm, "send mail", "HTTPS")
-  Rel(api, wa, "Graph API v21.0 (flagged)", "HTTPS")
-  Rel(wa, api, "POST /webhooks/whatsapp", "HTTPS webhook")
-  Rel(api, sn, "errors", "HTTPS")
+flowchart TB
+  trainer(["Trainer"]) 
+  trainee(["Trainee"])
+  spa["<b>Trainer Web SPA</b><br/>[React 19 / Vite, browser]<br/>Online-only trainer UI"]
+  mobile["<b>Mobile App</b><br/>[Expo / React Native]<br/>Trainer + trainee roles, sync outbox, push, steps"]
+  subgraph cf["Cloudflare account (per env: staging, production)"]
+    web["<b>Web Worker</b><br/>[Worker + static assets]<br/>Serves SPA, proxies /api/* and /i/*"]
+    api["<b>API Worker</b><br/>[Hono / TypeScript]<br/>Authn, authz, domain, sync, jobs"]
+    d1[("<b>D1 DB</b><br/>[SQLite, Drizzle]<br/>Authoritative state")]
+    r2[("<b>R2 MEDIA</b><br/>[Object storage]<br/>Photos, avatars")]
+    q[["<b>REMINDER_QUEUE</b><br/>[Queue + DLQ]"]]
+    do["<b>RelationshipRealtimeRoom</b><br/>[Durable Object, WS hibernation]<br/>Change-hint fan-out"]
+    cron["<b>Cron Trigger</b><br/>[*/5 * * * *]"]
+  end
+  fb["Firebase Auth"]
+  expo["Expo Push"]
+  zm["ZeptoMail"]
+  wa["WhatsApp Cloud API"]
+  sn["Sentry"]
+  trainer --> spa
+  trainer --> mobile
+  trainee --> mobile
+  spa -- "HTTPS /api/*, WSS (cookie + Bearer)" --> web
+  web -- "service binding fetch" --> api
+  mobile -- "HTTPS REST, WSS (Bearer, X-FitBud-Role)" --> api
+  api -- "Drizzle SQL" --> d1
+  api -- "get / put" --> r2
+  api -. "send job (async)" .-> q
+  q -. "queue() batch 10, 3 retries" .-> api
+  cron -. "scheduled()" .-> api
+  api -- "POST /broadcast, WS upgrade" --> do
+  do -. "WSS hints" .-> spa
+  do -. "WSS hints" .-> mobile
+  api -- "HTTPS tokens" --> fb
+  api -- "HTTPS push, receipts" --> expo
+  api -- "HTTPS mail" --> zm
+  api <-- "HTTPS / webhook (flagged)" --> wa
+  api -- "HTTPS errors" --> sn
+  classDef int fill:#438dd5,color:#fff,stroke:#2e6295
+  classDef ext fill:#999,color:#fff,stroke:#6b6b6b
+  classDef per fill:#08427b,color:#fff
+  class spa,mobile,web,api,d1,r2,q,do,cron int
+  class fb,expo,zm,wa,sn ext
+  class trainer,trainee per
 ```
 
 ---
