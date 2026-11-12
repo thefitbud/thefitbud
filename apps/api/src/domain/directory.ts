@@ -253,6 +253,11 @@ export async function loadClientDirectory(
       renewsOn: renewal?.renewsOn ?? null,
       startedAt: relationship.startedAt,
       endedAt: relationship.endedAt ?? null,
+      // Z10-21 (D-W10-8): civil dates in the trainer's zone.
+      startedOn: formatLocalDate(new Date(relationship.startedAt), trainerZone),
+      endedOn: relationship.endedAt
+        ? formatLocalDate(new Date(relationship.endedAt), trainerZone)
+        : null,
       week: coachingWeekNumber(relationship.startedAt, input.nowIso),
       city:
         traineeZone && traineeZone !== trainerZone
@@ -361,6 +366,8 @@ export async function loadClientDirectory(
       renewsOn: item.renewsOn,
       startedAt: item.startedAt ?? null,
       endedAt: item.endedAt ?? undefined,
+      startedOn: item.startedOn ?? null,
+      endedOn: item.endedOn ?? null,
       week: item.week ?? null,
       city: item.city ?? null,
       updatedAt: item.updatedAt,

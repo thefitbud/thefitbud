@@ -417,6 +417,7 @@ export function WorkspaceHeader({
             {ended && !pendingReactivation ? (
               <Button
                 variant="primary"
+                className="wsh-reactivate"
                 disabled={!online}
                 onClick={() => onOpenModal({ type: "reactivate" })}
               >
