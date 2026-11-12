@@ -24,6 +24,7 @@ import {
 } from "../dev/captureBridge";
 import { stage1Api } from "../lib/stage1Api";
 import { roleForLinkKind } from "../navigation/resolveRoute";
+import { backOverlays, pushOverlay, startOverlays } from "./overlayStack";
 
 type TrainerTab = "attention" | "clients" | "checkins" | "more";
 
@@ -35,7 +36,13 @@ type Overlay =
       displayName: string;
       onboardingStatusLabelText: string;
     }
-  | { kind: "checkin"; checkinId: string; relationshipId: string }
+  | {
+      kind: "checkin";
+      checkinId: string;
+      relationshipId: string;
+      // Opened from a push with no screen below it: Back goes to the client page.
+      cold?: boolean;
+    }
   | { kind: "notifications" }
   | { kind: "profile" };
 
@@ -59,7 +66,20 @@ export function TrainerShell() {
   } = useAuth();
   const s1 = stage1Api(api);
   const [tab, setTab] = useState<TrainerTab>("attention");
-  const [overlay, setOverlay] = useState<Overlay | null>(null);
+  // Back stack of detail screens over the current tab (see overlayStack.ts).
+  const [overlays, setOverlays] = useState<Overlay[]>([]);
+  const overlay: Overlay | null = overlays[overlays.length - 1] ?? null;
+  const open = (next: Overlay) => setOverlays((stack) => pushOverlay(stack, next));
+  const startAt = (next: Overlay) => setOverlays(startOverlays(next));
+  const closeAll = () => setOverlays([]);
+  const goBack = (resolvedRelationshipId?: string) => {
+    const result = backOverlays(overlays, resolvedRelationshipId);
+    if (result.kind === "client") {
+      void openClientById(result.relationshipId, undefined, "start");
+      return;
+    }
+    setOverlays(result.stack);
+  };
   const [clientsSegment, setClientsSegment] = useState<"clients" | "activity">(
     "clients",
   );
@@ -71,7 +91,7 @@ export function TrainerShell() {
 
   function openClientFromRow(row: ClientDirectoryRow) {
     if (!row.relationshipId) return;
-    setOverlay({
+    startAt({
       kind: "client",
       relationshipId: row.relationshipId,
       displayName: row.name,
@@ -79,7 +99,11 @@ export function TrainerShell() {
     });
   }
 
-  async function openClientById(relationshipId: string, push?: number) {
+  async function openClientById(
+    relationshipId: string,
+    push?: number,
+    mode: "push" | "start" = "push",
+  ) {
     let displayName = "Client";
     let statusLabelText = "Unknown";
     try {
@@ -99,16 +123,18 @@ export function TrainerShell() {
     }
     // A newer push opened something else while the client list loaded.
     if (push !== undefined && push !== latestPushRef.current) return;
-    setOverlay({
+    const next: Overlay = {
       kind: "client",
       relationshipId,
       displayName,
       onboardingStatusLabelText: statusLabelText,
-    });
+    };
+    if (mode === "start") startAt(next);
+    else open(next);
   }
 
   function openCheckin(item: TrainerCheckinInboxItem) {
-    setOverlay({
+    startAt({
       kind: "checkin",
       checkinId: item.checkin.id,
       relationshipId: item.coachingRelationshipId,
@@ -127,17 +153,18 @@ export function TrainerShell() {
     switch (route.kind) {
       case "checkin":
         // The review screen reads the relationship from the fetched check-in.
-        setOverlay({
+        startAt({
           kind: "checkin",
           checkinId: route.checkinId,
           relationshipId: "",
+          cold: true,
         });
         return;
       case "client":
-        void openClientById(route.relationshipId, push);
+        void openClientById(route.relationshipId, push, "start");
         return;
       case "attention":
-        setOverlay(null);
+        closeAll();
         setTab("attention");
         return;
     }
@@ -156,14 +183,14 @@ export function TrainerShell() {
     setClientsSegment("clients");
     switch (link.kind) {
       case "exception":
-        setOverlay({ kind: "exception", exceptionId: link.id });
+        startAt({ kind: "exception", exceptionId: link.id });
         return;
       case "client":
-        void openClientById(link.id, push);
+        void openClientById(link.id, push, "start");
         return;
       default:
         // Asks are answered under the Attention tab's Asked filter.
-        setOverlay(null);
+        closeAll();
         setTab("attention");
         return;
     }
@@ -175,7 +202,7 @@ export function TrainerShell() {
       setTab,
       signOut,
       clearOverlay() {
-        setOverlay(null);
+        closeAll();
         setClientsSegment("clients");
       },
       openActivity() {
@@ -190,14 +217,14 @@ export function TrainerShell() {
             item.onboardingStatus === "active",
         );
         if (ready) {
-          openClientById(ready.id);
+          openClientById(ready.id, undefined, "start");
         }
       },
       async openFirstException() {
         const groups = await s1.getAttentionGroups();
         const first = groups.groups[0]?.items?.[0];
         if (first?.id) {
-          setOverlay({ kind: "exception", exceptionId: first.id });
+          startAt({ kind: "exception", exceptionId: first.id });
         }
       },
       async openFirstCheckin() {
@@ -216,7 +243,7 @@ export function TrainerShell() {
       <ExceptionReviewScreen
         key={refreshNonce}
         exceptionId={overlay.exceptionId}
-        onBack={() => setOverlay(null)}
+        onBack={() => goBack()}
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
@@ -229,12 +256,12 @@ export function TrainerShell() {
         relationshipId={overlay.relationshipId}
         displayName={overlay.displayName}
         onboardingStatusLabelText={overlay.onboardingStatusLabelText}
-        onBack={() => setOverlay(null)}
+        onBack={() => goBack()}
         onOpenException={(exceptionId) =>
-          setOverlay({ kind: "exception", exceptionId })
+          open({ kind: "exception", exceptionId })
         }
         onOpenCheckin={(checkinId) =>
-          setOverlay({
+          open({
             kind: "checkin",
             checkinId,
             relationshipId: overlay.relationshipId,
@@ -250,7 +277,7 @@ export function TrainerShell() {
         key={refreshNonce}
         checkinId={overlay.checkinId}
         relationshipId={overlay.relationshipId}
-        onBack={() => setOverlay(null)}
+        onBack={goBack}
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
@@ -258,12 +285,12 @@ export function TrainerShell() {
 
   if (overlay?.kind === "notifications") {
     return (
-      <TrainerNotificationSettingsScreen onBack={() => setOverlay(null)} />
+      <TrainerNotificationSettingsScreen onBack={() => goBack()} />
     );
   }
 
   if (overlay?.kind === "profile") {
-    return <TrainerProfileScreen onBack={() => setOverlay(null)} />;
+    return <TrainerProfileScreen onBack={() => goBack()} />;
   }
 
   return (
@@ -273,7 +300,7 @@ export function TrainerShell() {
           <AttentionTab
             key={refreshNonce}
             onReviewException={(exceptionId) =>
-              setOverlay({ kind: "exception", exceptionId })
+              startAt({ kind: "exception", exceptionId })
             }
             onReviewCheckin={openCheckin}
             onOpenClients={() => setTab("clients")}
@@ -294,8 +321,8 @@ export function TrainerShell() {
 
         {tab === "more" ? (
           <TrainerMoreScreen
-            onOpenNotifications={() => setOverlay({ kind: "notifications" })}
-            onOpenProfile={() => setOverlay({ kind: "profile" })}
+            onOpenNotifications={() => startAt({ kind: "notifications" })}
+            onOpenProfile={() => startAt({ kind: "profile" })}
           />
         ) : null}
       </View>
