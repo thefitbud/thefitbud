@@ -30,6 +30,8 @@ import { addDays, localDateInTimezone, startOfWeekMonday, weekDatesFrom } from "
 import { isMealLoggedForCount } from "../trainee/nutrition";
 import { reportError } from "../lib/reportError";
 import { readTrainerCache, writeTrainerCache } from "./cache";
+import { ClientLogWorkoutScreen } from "./clientlog/ClientLogWorkoutScreen";
+import { dateStrip } from "./clientlog/model";
 import { clientStatusApi } from "./clientStatus/api";
 import { EndedSummary } from "./clientStatus/EndedSummary";
 import {
@@ -118,6 +120,7 @@ export function ClientStatusScreen({
   const [endedData, setEndedData] = useState<Omit<EndedInput, "zone" | "startedAt" | "endedAt"> | null>(null);
   const [endedError, setEndedError] = useState(false);
   const [summaryEpoch, setSummaryEpoch] = useState(0);
+  const [logging, setLogging] = useState<{ date?: string } | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
@@ -298,6 +301,24 @@ export function ClientStatusScreen({
     }
   }
 
+  if (logging) {
+    return (
+      <ClientLogWorkoutScreen
+        relationshipId={relationshipId}
+        displayName={header?.traineeDisplayName || displayName}
+        ended={ended}
+        clientZone={clientZone}
+        initialDate={logging.date}
+        onBack={() => setLogging(null)}
+        onSaved={(message) => {
+          setLogging(null);
+          setToast(message);
+          void load();
+        }}
+      />
+    );
+  }
+
   return (
     <Screen
       title=""
@@ -383,6 +404,14 @@ export function ClientStatusScreen({
             style={styles.secondary}
           >
             <Text style={styles.secondaryText}>Nudge…</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={offline}
+            onPress={() => setLogging({})}
+            style={styles.secondary}
+          >
+            <Text style={styles.secondaryText}>Log workout</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={() => void copyPlanLink()} style={styles.iconBtn}>
             <Text style={styles.secondaryText}>Edit</Text>
@@ -477,6 +506,19 @@ export function ClientStatusScreen({
               <Text style={styles.meta}>
                 {formatCivilDate(item.localDate)} · {formatRelative(item.occurredAt)}
               </Text>
+              {item.type === "workout" &&
+              (item.state === "completed" || item.state === "modified") &&
+              !offline &&
+              dateStrip(localDateInTimezone(clientZone)).includes(item.localDate) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Edit ${item.title}`}
+                  onPress={() => setLogging({ date: item.localDate })}
+                  style={styles.editLink}
+                >
+                  <Text style={styles.link}>Edit</Text>
+                </Pressable>
+              ) : null}
             </View>
           ))}
         </View>
@@ -551,7 +593,7 @@ const styles = StyleSheet.create({
   h1: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 28 },
   meta: { color: colors.midGrey, fontSize: 14, lineHeight: 20, marginTop: 2 },
   chipRow: { flexDirection: "row", gap: 6, marginTop: 8 },
-  actions: { flexDirection: "row", gap: 8, marginTop: 16 },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
   secondary: {
     alignItems: "center",
     borderColor: "#E7E9F2",
@@ -621,6 +663,7 @@ const styles = StyleSheet.create({
   section: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
   sectionMeta: { color: colors.midGrey, fontSize: 13 },
   link: { color: colors.indigo, fontFamily: fontFamilySemiBold, fontSize: 15 },
+  editLink: { alignSelf: "flex-start", justifyContent: "center", minHeight: 44 },
   sectionGap: { marginTop: 18 },
   activity: { marginTop: 10 },
   name: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 15 },
