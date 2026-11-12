@@ -53,7 +53,12 @@ vi.mock("./config", () => ({
   isWhatsAppOtpEnabled: () => true,
   isStepsEnabled: () => false,
 }));
+vi.mock("../trainer/HelpSheet", () => ({
+  HelpSheet: "HelpSheet",
+  openSupportMailOrFallback: vi.fn(),
+}));
 vi.mock("./support", () => ({
+  buildSupportMailto: vi.fn(),
   openSupportEmail: vi.fn(),
   DEFAULT_SUPPORT_EMAIL: "",
 }));

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Modal, Pressable, StyleSheet, View } from "react-native";
 import {
   ArrowLeftRight,
   Bell,
@@ -29,7 +29,8 @@ import { useConfig } from "../providers/ConfigProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { Screen } from "../components/Screen";
 import { reportError } from "../lib/reportError";
-import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../lib/support";
+import { buildSupportMailto, DEFAULT_SUPPORT_EMAIL } from "../lib/support";
+import { HelpSheet, openSupportMailOrFallback } from "./HelpSheet";
 import {
   DEFAULT_TRAINER_WEB_URL,
   legalUrl,
@@ -87,6 +88,8 @@ export function TrainerMoreScreen({
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
   // null until the phone answers, so the card never flashes the wrong state.
   const [pushOn, setPushOn] = useState<boolean | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
 
   useEffect(() => {
     void Notifications.getPermissionsAsync()
@@ -316,11 +319,14 @@ export function TrainerMoreScreen({
             label="Email FitBud support"
             hint="We'll get back to you within a day."
             onPress={() => {
-              void openSupportEmail({
-                supportEmail,
-                screenId: "TM-07",
-                role: "trainer",
-              });
+              void openSupportMailOrFallback(
+                buildSupportMailto({
+                  supportEmail,
+                  screenId: "TM-07",
+                  role: "trainer",
+                }),
+                () => setHelpOpen(true),
+              );
             }}
           />
           <M2Row
@@ -335,15 +341,142 @@ export function TrainerMoreScreen({
             label="Sign out"
             labelColor={semantic.critical.text}
             showChevron={false}
-            onPress={signOut}
+            onPress={() => setConfirmSignOut(true)}
           />
         </M2Group>
       </View>
+      <HelpSheet
+        visible={helpOpen}
+        onDismiss={() => setHelpOpen(false)}
+        supportEmail={supportEmail}
+        screen="More"
+      />
+      <SignOutConfirm
+        visible={confirmSignOut}
+        onCancel={() => setConfirmSignOut(false)}
+        onConfirm={() => {
+          setConfirmSignOut(false);
+          signOut();
+        }}
+      />
     </Screen>
   );
 }
 
+/**
+ * Frame 57: an action sheet with the question, the one destructive action and
+ * Cancel. Copy is the frame's, verbatim.
+ */
+export function SignOutConfirm({
+  visible,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal
+      transparent
+      animationType="fade"
+      visible={visible}
+      onRequestClose={onCancel}
+    >
+      <View style={styles.confirmRoot}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+          style={styles.confirmScrim}
+          onPress={onCancel}
+        />
+        <View style={styles.confirmGroup}>
+          <View style={styles.confirmHead}>
+            <Text style={styles.confirmTitle} accessibilityRole="header">
+              Sign out of FitBud?
+            </Text>
+            <Text style={styles.confirmMsg}>
+              You'll need your password or an email code to sign back in.
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            onPress={onConfirm}
+            style={styles.confirmBtn}
+          >
+            <Text
+              style={[styles.confirmBtnText, { color: semantic.critical.text }]}
+            >
+              Sign out
+            </Text>
+          </Pressable>
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+          onPress={onCancel}
+          style={[styles.confirmGroup, styles.confirmCancel]}
+        >
+          <Text style={[styles.confirmBtnText, { color: brand.indigo }]}>
+            Cancel
+          </Text>
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
 const styles = StyleSheet.create({
+  confirmRoot: {
+    flex: 1,
+    gap: 8,
+    justifyContent: "flex-end",
+    padding: 8,
+    paddingBottom: spacing.lg,
+  },
+  confirmScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(15, 17, 21, 0.45)",
+  },
+  confirmGroup: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 14,
+    overflow: "hidden",
+  },
+  confirmHead: {
+    borderBottomColor: ink[200],
+    borderBottomWidth: 1,
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  confirmTitle: {
+    color: brand.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    textAlign: "center",
+  },
+  confirmMsg: {
+    color: ink[500],
+    fontSize: 15,
+    lineHeight: 21,
+    textAlign: "center",
+  },
+  confirmBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 56,
+  },
+  confirmCancel: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 56,
+  },
+  confirmBtnText: {
+    fontFamily: fontFamilySemiBold,
+    fontSize: 20,
+  },
   heading: {
     // Screen's own title block is off (showHeader={false}) because Screen pads
     // spacing.xl and exposes no inset prop; CU7 may not change Screen.tsx, which
