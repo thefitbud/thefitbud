@@ -294,6 +294,19 @@ describe("no ISO dates on Today or Diet", () => {
     expect(view.container.textContent).not.toMatch(/Skipped\s*·/);
   });
 
+  it("Today keeps its ring after an online load then an offline refresh", async () => {
+    meals = partial();
+    offline = false;
+    dayTotals = dayOf(1000, [[SLOT1, 461], [SLOT2, 532]]);
+    const view = renderToday(TODAY);
+    await waitFor(() => expect(view.container.textContent).toMatch(/993/));
+    offline = true;
+    invalidateRelationshipDayData(REL);
+    await waitFor(() => expect(view.container.textContent).toMatch(/Saved on phone|Couldn't refresh/));
+    expect(view.container.textContent).toMatch(/993/);
+    expect(view.container.textContent).toMatch(/2 of 3/);
+  });
+
   it("goes offline after an online load and keeps the same kcal", async () => {
     meals = partial();
     offline = false;

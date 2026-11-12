@@ -375,7 +375,9 @@ export function TodayTab({
       setError("Couldn't refresh · pull to try again.");
       setOfflineHint(true);
       setWorkout(null);
-      setMeals([]);
+      // Keep the last-loaded meals of this day (as Diet does) so the ring and
+      // rows still agree offline; a different day's meals are dropped.
+      setMeals((prev) => prev.filter((m) => m.localDate === selectedDate));
       setLockStateKnown(false);
       // The whole day load failed, so there is no week to show either. It
       // settles on `unavailable` rather than staying `loading` for ever:
