@@ -124,13 +124,14 @@ export function WorkspaceHeader({
     .map((p) => p.charAt(0).toUpperCase())
     .join("");
 
-  // Frame 179: civil dates in the client's timezone, like the ended Overview body.
-  const traineeTz = resolveTraineeTimezone(header).timezone;
+  // Frame 179: civil dates in the trainer's timezone, like the Clients list.
+  // Until the trainer's zone is known, render no date (no wrong-zone flash).
+  const trainerTz = me?.timezone ?? null;
   const civilDay = (iso: string | null | undefined): string | null => {
-    if (!iso) return null;
+    if (!iso || !trainerTz) return null;
     const at = new Date(iso);
     if (Number.isNaN(at.getTime())) return null;
-    return formatCivilDate(formatLocalDate(at, traineeTz));
+    return formatCivilDate(formatLocalDate(at, trainerTz));
   };
   const endedOn = ended ? civilDay(header.endedAt) : null;
   const coachedFrom = ended ? civilDay(header.startedAt) : null;

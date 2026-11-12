@@ -121,7 +121,7 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
 }
 
 export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
-  const { me, api, refreshSession } = useAuth();
+  const { me, api, reloadMe } = useAuth();
   const profile = me?.trainerProfile;
   const [name, setName] = useState(profile?.displayName ?? "");
   const [mobile, setMobile] = useState(profile?.whatsappE164 ?? "");
@@ -155,8 +155,8 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
         whatsappE164: mobile.trim() || null,
         timezone,
       });
-      // Reload `me` so More shows the new name (this briefly reloads the session).
-      await refreshSession();
+      // Reload `me` quietly so More shows the new name without leaving the tab.
+      await reloadMe();
       onBack();
     } catch (err) {
       if (err instanceof ApiClientError) {

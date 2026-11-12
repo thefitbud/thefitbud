@@ -27,7 +27,9 @@ import {
   flushPersistedSession,
   loadNativeSession,
   loadPersistedSession,
+  loadRememberRole,
   persistRefreshState,
+  persistRememberRole,
   persistSession,
   persistTokenState,
 } from "./sessionStorage";
@@ -276,6 +278,112 @@ describe("mobile session storage", () => {
         refreshToken: null,
         expiresAt: null,
       });
+    });
+
+    describe("Remember my choice (Z11-14)", () => {
+      afterEach(async () => {
+        platform.OS = "android";
+        clearPersistedSession();
+        await flushPersistedSession();
+      });
+
+      it("defaults to remembered and round trips the role", async () => {
+        platform.OS = "android";
+        persistSession({ accessToken: firebaseIdToken, selectedRole: "trainer", userId });
+        await flushPersistedSession();
+        expect(loadRememberRole()).toBe(true);
+        const loaded = await loadNativeSession();
+        expect(loaded.selectedRole).toBe("trainer");
+        expect(loadRememberRole()).toBe(true);
+      });
+
+      it("off is stored in fitbud.session, drops the role and survives a reload", async () => {
+        platform.OS = "ios";
+        persistSession({ accessToken: firebaseIdToken, selectedRole: "trainee", userId });
+        persistRememberRole(false);
+        // A later write (a token refresh, a role switch) must not store the role.
+        persistSession({ accessToken: firebaseIdToken, selectedRole: "trainer", userId });
+        await flushPersistedSession();
+
+        const meta = JSON.parse(secure.map.get("fitbud.session") ?? "{}");
+        expect(meta).toMatchObject({ v: 1, userId, selectedRole: null, rememberRole: false });
+        const loaded = await loadNativeSession();
+        expect(loaded.selectedRole).toBeNull();
+        expect(loadRememberRole()).toBe(false);
+      });
+
+      it("a stored role next to rememberRole false is never restored", async () => {
+        platform.OS = "android";
+        secure.map.set(
+          "fitbud.session",
+          JSON.stringify({ v: 1, userId, tokenKind: "firebase_id_token", selectedRole: "trainer", rememberRole: false }),
+        );
+        expect((await loadNativeSession()).selectedRole).toBeNull();
+        expect(loadRememberRole()).toBe(false);
+      });
+
+      it("sign-out resets it to remembered", async () => {
+        platform.OS = "android";
+        persistSession({ accessToken: firebaseIdToken, selectedRole: "trainer", userId });
+        persistRememberRole(false);
+        clearPersistedSession();
+        await flushPersistedSession();
+        expect(loadRememberRole()).toBe(true);
+        expect(secure.map.has("fitbud.session")).toBe(false);
+      });
+    });
+  });
+
+  describe("web: Remember my choice (Z11-14)", () => {
+    it("defaults to remembered when nothing is stored", () => {
+      platform.OS = "web";
+      expect(loadRememberRole()).toBe(true);
+      persistSession({ accessToken: "id-1", selectedRole: "trainee" });
+      expect(loadPersistedSession().selectedRole).toBe("trainee");
+    });
+
+    it("off removes the stored role and keeps it out of later writes", () => {
+      platform.OS = "web";
+      persistSession({ accessToken: "id-1", selectedRole: "trainee" });
+      persistRememberRole(false);
+      expect(storage.getItem("fitbud.selectedRole")).toBeNull();
+      expect(storage.getItem("fitbud.rememberRole")).toBe("0");
+
+      persistTokenState({ accessToken: "id-2", refreshToken: "refresh-2", expiresAt: 42 }, "trainer");
+      persistSession({ accessToken: "id-2", selectedRole: "trainer" });
+      expect(loadRememberRole()).toBe(false);
+      expect(loadPersistedSession()).toEqual({
+        accessToken: "id-2",
+        selectedRole: null,
+        refreshToken: "refresh-2",
+        expiresAt: 42,
+      });
+    });
+
+    it("a role left in storage next to the off flag is not restored", () => {
+      platform.OS = "web";
+      storage.setItem("fitbud.accessToken", "id-1");
+      storage.setItem("fitbud.selectedRole", "trainer");
+      storage.setItem("fitbud.rememberRole", "0");
+      expect(loadPersistedSession().selectedRole).toBeNull();
+    });
+
+    it("on again removes the flag and stores the next role", () => {
+      platform.OS = "web";
+      persistRememberRole(false);
+      persistRememberRole(true);
+      expect(storage.getItem("fitbud.rememberRole")).toBeNull();
+      persistSession({ accessToken: "id-1", selectedRole: "trainer" });
+      expect(loadPersistedSession().selectedRole).toBe("trainer");
+    });
+
+    it("clearing the session clears the flag", () => {
+      platform.OS = "web";
+      persistSession({ accessToken: "id-1", selectedRole: "trainer" });
+      persistRememberRole(false);
+      clearPersistedSession();
+      expect(storage.length).toBe(0);
+      expect(loadRememberRole()).toBe(true);
     });
   });
 });

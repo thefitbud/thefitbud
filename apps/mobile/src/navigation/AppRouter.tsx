@@ -8,11 +8,12 @@ import { SpecimensScreen } from "../dev/SpecimensScreen";
 import { AcceptInviteScreen } from "../screens/AcceptInviteScreen";
 import { AuthScreen } from "../screens/AuthScreen";
 import { IntakeScreen } from "../screens/IntakeScreen";
-import { RoleSelectScreen } from "../screens/RoleSelectScreen";
+import { RoleSelectScreen, SwitchRoleSheet } from "../screens/RoleSelectScreen";
 import { UnsupportedRoleScreen } from "../screens/UnsupportedRoleScreen";
 import { WaitingReviewScreen } from "../screens/WaitingReviewScreen";
 import { TrainerShell } from "../trainer/TrainerShell";
 import { TraineeShell } from "../trainee/TraineeShell";
+import { coachLinkSubject, type AppRoute } from "./resolveRoute";
 import { routerView } from "./routerView";
 
 function isSpecimensPath(): boolean {
@@ -21,7 +22,16 @@ function isSpecimensPath(): boolean {
 }
 
 export function AppRouter() {
-  const { route, errorMessage, refreshSession, signOut, clearError } = useAuth();
+  const {
+    route,
+    errorMessage,
+    refreshSession,
+    signOut,
+    clearError,
+    pendingRoleSwitch,
+    confirmRoleSwitch,
+    cancelRoleSwitch,
+  } = useAuth();
 
   if (isSpecimensPath()) {
     return <SpecimensScreen />;
@@ -56,7 +66,26 @@ export function AppRouter() {
     );
   }
 
-  const current = view.route;
+  const screen = routeScreen(view.route);
+  if (!pendingRoleSwitch) return screen;
+  // Frame 61 (Z11-14): over the trainee screen, a coach link asks first.
+  return (
+    <>
+      {screen}
+      <SwitchRoleSheet
+        visible
+        targetRole={pendingRoleSwitch.targetRole}
+        subject={coachLinkSubject(pendingRoleSwitch.linkKind)}
+        onCancel={cancelRoleSwitch}
+        onSwitch={() => {
+          void confirmRoleSwitch();
+        }}
+      />
+    </>
+  );
+}
+
+function routeScreen(current: Exclude<AppRoute, { name: "loading" }>) {
   switch (current.name) {
     case "auth":
       return <AuthScreen />;

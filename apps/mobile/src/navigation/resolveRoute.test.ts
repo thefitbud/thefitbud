@@ -5,6 +5,8 @@ import type {
   OnboardingStatus,
 } from "@fitbud/contracts";
 import {
+  coachLinkSubject,
+  coachViewSwitchPrompt,
   resolveAppRoute,
   roleForLinkKind,
   roleSwitchPrompt,
@@ -261,5 +263,73 @@ describe("roleSwitchPrompt (frame 61)", () => {
         linkKind: "exception",
       }),
     ).toBeNull();
+  });
+});
+
+describe("roleSelectRequested (trainer More, Switch role, Z11-14)", () => {
+  const base = {
+    accessToken: "test.token",
+    bootstrapping: false,
+    needsAccountLink: false,
+    relationships: [relationship("coaching_ready")],
+  };
+
+  it("shows role select over the trainer shell for a dual-role account", () => {
+    expect(
+      resolveAppRoute({ ...base, me: meDual, selectedRole: "trainer", roleSelectRequested: true }).name,
+    ).toBe("role_select");
+    expect(
+      resolveAppRoute({ ...base, me: meDual, selectedRole: "trainer", roleSelectRequested: false }).name,
+    ).toBe("trainer_shell");
+  });
+
+  it("is ignored for a single-role account", () => {
+    expect(
+      resolveAppRoute({ ...base, me: meTrainerOnly, selectedRole: "trainer", roleSelectRequested: true }).name,
+    ).toBe("trainer_shell");
+  });
+
+  it("never beats loading or a signed-out state", () => {
+    expect(
+      resolveAppRoute({ ...base, bootstrapping: true, me: meDual, selectedRole: "trainer", roleSelectRequested: true }).name,
+    ).toBe("loading");
+    expect(
+      resolveAppRoute({ ...base, accessToken: null, me: meDual, selectedRole: "trainer", roleSelectRequested: true }).name,
+    ).toBe("auth");
+  });
+});
+
+describe("coachViewSwitchPrompt (frame 61, Z11-14)", () => {
+  const dual = ["trainer", "trainee"] as const;
+
+  it("prompts for every coach link opened in trainee mode", () => {
+    for (const linkKind of ["exception", "ask", "client"]) {
+      expect(
+        coachViewSwitchPrompt({ selectedRole: "trainee", permittedRoles: dual, linkKind }),
+      ).toEqual({ targetRole: "trainer" });
+    }
+  });
+
+  it("never prompts for a trainee link in trainer mode (no client-view frame)", () => {
+    for (const linkKind of ["meal", "workout", "today", "progress", "note", "reactivate"]) {
+      expect(
+        coachViewSwitchPrompt({ selectedRole: "trainer", permittedRoles: dual, linkKind }),
+      ).toBeNull();
+    }
+  });
+
+  it("never prompts for a link both roles open, or a trainee-only account", () => {
+    expect(
+      coachViewSwitchPrompt({ selectedRole: "trainee", permittedRoles: dual, linkKind: "checkin" }),
+    ).toBeNull();
+    expect(
+      coachViewSwitchPrompt({ selectedRole: "trainee", permittedRoles: ["trainee"], linkKind: "exception" }),
+    ).toBeNull();
+  });
+
+  it("names what the link opens without a client name", () => {
+    expect(coachLinkSubject("exception")).toBe("a client's exception");
+    expect(coachLinkSubject("ask")).toBe("a client's question");
+    expect(coachLinkSubject("client")).toBe("a client's profile");
   });
 });
