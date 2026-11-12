@@ -56,6 +56,7 @@ import {
 import { z } from "zod";
 import { trainerNoteSchema } from "@fitbud/contracts";
 import type { FitBudApiClient } from "./index.js";
+import { queryString } from "./query-string.js";
 
 export function installStage1ClientMethods(
   Client: new (...args: never[]) => FitBudApiClient,
@@ -208,7 +209,7 @@ proto.getActivityFeed = async function getActivityFeed(query?: {
   if (query?.rid) params.set("rid", query.rid);
   if (query?.since) params.set("since", query.since);
   if (query?.types) params.set("types", query.types);
-  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  const suffix = queryString(params);
   return this.request("GET", `/activity/feed${suffix}`, activityFeedResponseSchema, {
     auth: true,
   });
@@ -254,7 +255,7 @@ proto.listCoachAsks = async function listCoachAsks(query?: {
 }) {
   const params = new URLSearchParams();
   if (query?.status) params.set("status", query.status);
-  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  const suffix = queryString(params);
   return this.request("GET", `/coach-asks${suffix}`, coachAskListResponseSchema, {
     auth: true,
   });
@@ -345,7 +346,7 @@ proto.searchMeFoods = async function searchMeFoods(query: {
   const params = new URLSearchParams();
   if (query.q) params.set("q", query.q);
   if (query.limit !== undefined) params.set("limit", String(query.limit));
-  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  const suffix = queryString(params);
   return this.request(
     "GET",
     `/me/foods/search${suffix}`,
@@ -496,7 +497,7 @@ proto.listCheckinFormTemplates = async function listCheckinFormTemplates(
   if (query?.scope) params.set("scope", query.scope);
   if (query?.cursor) params.set("cursor", query.cursor);
   if (query?.limit !== undefined) params.set("limit", String(query.limit));
-  const suffix = params.size > 0 ? `?${params.toString()}` : "";
+  const suffix = queryString(params);
   return this.request(
     "GET",
     `/checkins/form-templates${suffix}`,

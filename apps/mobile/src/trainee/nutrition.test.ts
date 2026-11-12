@@ -5,6 +5,7 @@ import {
   buildNutritionRings,
   dayKcalSummary,
   isMealLoggedForCount,
+  mealsForDay,
   mealsLoggedSummary,
 } from "./nutrition";
 
@@ -222,5 +223,51 @@ describe("dayKcalSummary (D-W11-6)", () => {
     const out = dayKcalSummary([slot("m1", S1, "pending"), slot("m2", S2, "overdue")], null);
     expect(out.loggedTotal).toBe(0);
     expect(out.rows.every((r) => r.kind === "planned")).toBe(true);
+  });
+});
+
+/**
+ * Z11b-1: on device the dropped query string made listMealAssignments return
+ * every meal since June, and Today/Diet showed "676 of 747 meals logged". Only
+ * the selected day's rows may count, whatever the list holds.
+ */
+describe("selected day only (Z11b-1)", () => {
+  const DAY = "2026-11-12";
+  function dayMeal(id: string, localDate: string, status: MealAssignment["status"], slotId: string) {
+    const m = meal({ id, status, localDate });
+    return { ...m, prescription: { ...m.prescription, id: slotId } } as MealAssignment;
+  }
+  // Four meals today (2 logged) among 30 older days of 4 meals, all confirmed.
+  const today = [
+    dayMeal("t1", DAY, "confirmed", "slot-1"),
+    dayMeal("t2", DAY, "modified", "slot-2"),
+    dayMeal("t3", DAY, "pending", "slot-3"),
+    dayMeal("t4", DAY, "overdue", "slot-4"),
+  ];
+  const history = Array.from({ length: 30 }, (_, day) =>
+    Array.from({ length: 4 }, (_, n) =>
+      dayMeal(`h${day}-${n}`, `2026-10-${String(day + 1).padStart(2, "0")}`, "confirmed", `slot-${n + 1}`),
+    ),
+  ).flat();
+  const listed = [...history.slice(0, 60), ...today, ...history.slice(60)];
+
+  it("mealsForDay keeps only the selected day's rows", () => {
+    expect(mealsForDay(listed, DAY).map((m) => m.id)).toEqual(["t1", "t2", "t3", "t4"]);
+    expect(mealsLoggedSummary(mealsForDay(listed, DAY))).toBe("2 of 4 meals logged");
+    // What the device showed before the fix:
+    expect(mealsLoggedSummary(listed)).toBe("122 of 124 meals logged");
+  });
+
+  it("the kcal summary and rings count the selected day only", () => {
+    const out = dayKcalSummary(listed, null, DAY);
+    expect(out.rows.map((r) => r.id)).toEqual(["t1", "t2", "t3", "t4"]);
+    // t1 confirmed 500 + t2 "modified" with no logged foods falls back to its plan (500).
+    expect(out.loggedTotal).toBe(1000);
+    // Before the fix the 120 older confirmed meals were summed in too.
+    expect(dayKcalSummary(listed, null).loggedTotal).toBe(61000);
+    expect(out.plannedTotal).toBe(2000);
+    expect(dayKcalSummary(listed, null).plannedTotal).toBe(62000);
+    const kcal = buildNutritionRings(mealsForDay(listed, DAY)).find((r) => r.key === "kcal");
+    expect(kcal?.assigned).toBe(2000);
   });
 });
