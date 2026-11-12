@@ -2,6 +2,7 @@ import type { FitBudApiClient } from "@fitbud/api-client";
 import type { DeviceTokenPlatform, DeviceTokenProvider } from "@fitbud/contracts";
 import Constants from "expo-constants";
 import { Platform } from "react-native";
+import { reportError } from "../lib/reportError";
 import { localInstallationId } from "./routing";
 
 /**
@@ -48,6 +49,45 @@ type ExpoNotificationsModule = {
 /** Loaded lazily: the native module must not be required on Expo web. */
 async function loadNotifications(): Promise<ExpoNotificationsModule> {
   return (await import("expo-notifications")) as unknown as ExpoNotificationsModule;
+}
+
+/**
+ * Android 13+ shows the POST_NOTIFICATIONS prompt (frame 54) only once the app
+ * has created a notification channel, so the channels go in first. The
+ * permission itself is declared by the expo-notifications plugin already in the
+ * build config; nothing native changes here. Loaded lazily like the module.
+ */
+async function prepareForPermissionPrompt(
+  platform: DeviceTokenPlatform,
+): Promise<void> {
+  if (platform !== "android") return;
+  const { ensureAndroidNotificationChannels } = await import("./androidChannels");
+  await ensureAndroidNotificationChannels();
+}
+
+export type PushPermissionResult = "granted" | "denied" | "blocked";
+
+/**
+ * Ask for notification permission from a screen (the More card, enabling a
+ * category). `blocked` means the system will not show a prompt again, so the
+ * caller sends the person to phone settings. Never throws; an error reads as
+ * `denied`.
+ */
+export async function requestPushPermission(
+  platform: DeviceTokenPlatform = defaultPlatform(),
+): Promise<PushPermissionResult> {
+  try {
+    const notifications = await loadNotifications();
+    const current = await notifications.getPermissionsAsync();
+    if (current.granted) return "granted";
+    if (!current.canAskAgain) return "blocked";
+    await prepareForPermissionPrompt(platform);
+    const asked = await notifications.requestPermissionsAsync();
+    return asked.granted ? "granted" : "denied";
+  } catch (err) {
+    reportError("push-permission", err);
+    return "denied";
+  }
 }
 
 /** In-memory only. Never logged, never handed to callers. */
@@ -178,6 +218,7 @@ export async function registerDeviceTokenForPush(
     const current = await notifications.getPermissionsAsync();
     if (!current.granted) {
       if (!current.canAskAgain) return { status: "permission_denied" };
+      await prepareForPermissionPrompt(platform);
       const asked = await notifications.requestPermissionsAsync();
       if (!asked.granted) return { status: "permission_denied" };
     }

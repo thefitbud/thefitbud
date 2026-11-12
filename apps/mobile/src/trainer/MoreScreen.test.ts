@@ -2,9 +2,16 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Linking } from "react-native";
 
 // Render the screen as a plain function: hooks are stubbed, no renderer needed.
+const hooks = vi.hoisted(() => ({
+  state: undefined as unknown,
+  set: vi.fn(),
+}));
 vi.mock("react", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react")>()),
-  useState: (initial: unknown) => [initial, () => undefined],
+  useState: (initial: unknown) => [
+    hooks.state !== undefined ? hooks.state : initial,
+    hooks.set,
+  ],
   useEffect: () => undefined,
 }));
 
@@ -15,17 +22,18 @@ vi.mock("react-native", () => ({
   View: "View",
   Pressable: "Pressable",
 }));
+vi.mock("../notifications/register", () => ({ requestPushPermission: vi.fn() }));
 vi.mock("lucide-react-native", () => {
   const icon = (name: string) => name;
   return {
-    ArrowLeftRight: icon("ArrowLeftRight"), Bell: icon("Bell"), ChevronRight: icon("ChevronRight"),
+    ArrowLeftRight: icon("ArrowLeftRight"), BellOff: icon("BellOff"), BellRing: icon("BellRing"), CircleCheck: icon("CircleCheck"), Bell: icon("Bell"), ChevronRight: icon("ChevronRight"),
     Copyright: icon("Copyright"), ExternalLink: icon("ExternalLink"), FileText: icon("FileText"),
     LogOut: icon("LogOut"), Mail: icon("Mail"), Monitor: icon("Monitor"), Shield: icon("Shield"),
     User: icon("User"),
   };
 });
 vi.mock("@fitbud/tokens", () => ({
-  brand: {}, ink: {}, semantic: { critical: { text: "red" } },
+  brand: {}, ink: {}, semantic: { critical: { text: "red" }, positive: {}, attention: {} },
 }));
 vi.mock("../trainee/settings/m2", () => ({ M2Card: "M2Card", M2Group: "M2Group", M2Row: "M2Row" }));
 vi.mock("expo-notifications", () => ({ getPermissionsAsync: vi.fn() }));
@@ -49,6 +57,7 @@ vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth }));
 vi.mock("../lib/support", () => ({ openSupportEmail: vi.fn(), DEFAULT_SUPPORT_EMAIL: "" }));
 
 import { spacing } from "@fitbud/ui-mobile";
+import { requestPushPermission } from "../notifications/register";
 import { openSupportEmail } from "../lib/support";
 import {
   DEFAULT_TRAINER_WEB_URL,
@@ -258,5 +267,61 @@ describe("trainer More heading alignment (CU7, frame 51)", () => {
     // Frame 51 at 393x852: card box 16.0pt, heading text box 20pt (ink 22.3pt).
     expect(stackInset).toBe(16);
     expect(headingInset).toBe(20);
+  });
+});
+
+function findByA11y(node: unknown, label: string): Element | null {
+  return (
+    flatten(node).find((el) => el.props.accessibilityLabel === label) ?? null
+  );
+}
+
+describe("trainer More notifications card (Z10-12, frames 51, 53, 54)", () => {
+  afterEach(() => {
+    hooks.state = undefined;
+    hooks.set.mockClear();
+    vi.mocked(requestPushPermission).mockReset();
+    vi.mocked(Linking.openSettings).mockClear();
+  });
+
+  it("shows nothing until the phone has answered", () => {
+    const tree = render();
+    expect(findByA11y(tree, "Open settings")).toBeNull();
+    expect(findByA11y(tree, "Notifications are on")).toBeNull();
+  });
+
+  it("shows the On chip, with no Open settings button, when allowed", () => {
+    hooks.state = true;
+    const tree = render();
+    expect(findByA11y(tree, "Notifications are on")).not.toBeNull();
+    expect(findByA11y(tree, "Open settings")).toBeNull();
+  });
+
+  it("shows Open settings when off, and asks the system before leaving the app", async () => {
+    hooks.state = false;
+    vi.mocked(requestPushPermission).mockResolvedValue("denied");
+    const button = findByA11y(render(), "Open settings")!;
+    (button.props.onPress as () => void)();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(requestPushPermission).toHaveBeenCalledTimes(1);
+    expect(Linking.openSettings).not.toHaveBeenCalled();
+  });
+
+  it("opens phone settings only when the system will not ask again", async () => {
+    hooks.state = false;
+    vi.mocked(requestPushPermission).mockResolvedValue("blocked");
+    const button = findByA11y(render(), "Open settings")!;
+    (button.props.onPress as () => void)();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(Linking.openSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("turns the card to On after the person allows", async () => {
+    hooks.state = false;
+    vi.mocked(requestPushPermission).mockResolvedValue("granted");
+    const button = findByA11y(render(), "Open settings")!;
+    (button.props.onPress as () => void)();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(hooks.set).toHaveBeenCalledWith(true);
   });
 });
