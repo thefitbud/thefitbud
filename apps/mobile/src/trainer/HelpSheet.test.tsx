@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("react-native", () => ({
   Linking: { openURL: vi.fn() },
   Platform: { OS: "ios" },
-  Share: { share: vi.fn(), dismissedAction: "dismissedAction" },
+  Clipboard: { setString: vi.fn() },
   StyleSheet: { create: (styles: unknown) => styles },
   View: "View",
   Pressable: "Pressable",
@@ -22,7 +22,9 @@ vi.mock("expo-constants", () => ({
 vi.mock("../components/BottomSheet", () => ({ BottomSheet: "BottomSheet" }));
 vi.mock("../components/Text", () => ({ Text: "Text" }));
 vi.mock("@fitbud/ui-mobile", () => ({
-  fontFamilyBold: "b", fontFamilySemiBold: "s", spacing: { md: 12 },
+  fontFamilyBold: "b",
+  fontFamilySemiBold: "s",
+  spacing: { md: 12 },
 }));
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 vi.mock("@fitbud/tokens", () => ({
@@ -31,6 +33,7 @@ vi.mock("@fitbud/tokens", () => ({
   surface: {},
 }));
 
+import { Clipboard, Platform } from "react-native";
 import {
   buildHelpDetails,
   copyText,
@@ -75,19 +78,25 @@ describe("openSupportMailOrFallback", () => {
 });
 
 describe("copyText", () => {
-  it("uses the browser clipboard when there is one", async () => {
+  it("uses the built-in Clipboard on the phone", async () => {
+    expect(await copyText("tech@thefitbud.com")).toBe(true);
+    expect(Clipboard.setString).toHaveBeenCalledWith("tech@thefitbud.com");
+  });
+
+  it("uses the browser clipboard on web", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { clipboard: { writeText } });
+    (Platform as { OS: string }).OS = "web";
     expect(await copyText("tech@thefitbud.com")).toBe(true);
     expect(writeText).toHaveBeenCalledWith("tech@thefitbud.com");
+    (Platform as { OS: string }).OS = "ios";
     vi.unstubAllGlobals();
   });
 
   it("reports failure instead of claiming a copy", async () => {
-    vi.stubGlobal("navigator", {
-      clipboard: { writeText: vi.fn().mockRejectedValue(new Error("denied")) },
+    vi.mocked(Clipboard.setString).mockImplementationOnce(() => {
+      throw new Error("no clipboard");
     });
     expect(await copyText("x")).toBe(false);
-    vi.unstubAllGlobals();
   });
 });

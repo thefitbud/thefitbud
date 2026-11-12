@@ -1,9 +1,9 @@
 import { useState } from "react";
 import {
+  Clipboard,
   Linking,
   Platform,
   Pressable,
-  Share,
   StyleSheet,
   View,
 } from "react-native";
@@ -31,24 +31,27 @@ export function deviceLabel(os: string, isPad = false): string {
 }
 
 /**
- * Copies text. Web uses the browser clipboard. The app has no clipboard module
- * (adding one is native config, frozen in W10, D-W10-5), so on a phone this
- * hands the text to the system share sheet, which has Copy in it. Returns false
- * when nothing could be done, so the row never claims a copy that did not happen.
+ * Copies text. Web uses the browser clipboard; the phone uses react-native's
+ * built-in `Clipboard` (still exported in 0.76, so no native config change; it
+ * logs a one-time dev deprecation warning). Returns false when the copy failed,
+ * so the row never shows a tick for a copy that did not happen.
  */
 export async function copyText(text: string): Promise<boolean> {
   try {
-    const clipboard = (
-      globalThis as {
-        navigator?: { clipboard?: { writeText: (v: string) => Promise<void> } };
-      }
-    ).navigator?.clipboard;
-    if (clipboard) {
+    if (Platform.OS === "web") {
+      const clipboard = (
+        globalThis as {
+          navigator?: {
+            clipboard?: { writeText: (v: string) => Promise<void> };
+          };
+        }
+      ).navigator?.clipboard;
+      if (!clipboard) return false;
       await clipboard.writeText(text);
       return true;
     }
-    const result = await Share.share({ message: text });
-    return result.action !== Share.dismissedAction;
+    Clipboard.setString(text);
+    return true;
   } catch (err) {
     reportError("trainer-help-copy", err);
     return false;
@@ -69,8 +72,11 @@ export async function openSupportMailOrFallback(
   try {
     await open(mailto);
     return "opened";
-  } catch {
-    // Not an error to report: this is the expected no-mail-app answer.
+  } catch (err) {
+    // The expected no-mail-app answer: logged in dev only, never reported.
+    if (typeof __DEV__ !== "undefined" && __DEV__) {
+      reportError("trainer-help-mailto", err);
+    }
     onNoMailApp();
     return "fallback";
   }

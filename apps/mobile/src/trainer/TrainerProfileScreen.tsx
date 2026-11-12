@@ -19,9 +19,12 @@ import type {
   TrainerProfile,
   UpdateTrainerProfileRequest,
 } from "@fitbud/contracts";
-import { PasswordScreen } from "../trainee/settings/PasswordScreen";
+import { Screen } from "../components/Screen";
+import { Field } from "../components/Field";
+import { PrimaryButton } from "../components/PrimaryButton";
+import { stage1Api } from "../lib/stage1Api";
 
-/** Installed on the client at runtime (api-client stage1-augment), not in its type. */
+/** `PUT /me/trainer-profile` is installed on the client at runtime (api-client stage1-augment) but is not in the typed wrappers. */
 type ProfileWriter = {
   updateTrainerProfile(
     body: UpdateTrainerProfileRequest,
@@ -34,12 +37,87 @@ type Props = {
   onChangePassword?: () => void;
 };
 
-/** Frame 55 shows "India (IST)". Other zones show their city, never the raw id. */
+/** Frame 55 shows "India (IST)". Other zones show their zone name as stored (no picker exists yet). */
 export function timezoneLabel(zone: string | null | undefined): string {
   if (!zone) return "—";
   if (zone === "Asia/Kolkata" || zone === "Asia/Calcutta") return "India (IST)";
-  const city = zone.split("/").pop() ?? zone;
-  return city.replace(/_/g, " ");
+  return zone;
+}
+
+/** Frame 55: "Current password, then a new one". Calls the signed-in password change. */
+export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
+  const { api } = useAuth();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  async function onSubmit() {
+    if (current.length < 8 || next.length < 8) {
+      setError("Use at least 8 characters.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await stage1Api(api).setPassword({
+        currentPassword: current,
+        newPassword: next,
+      });
+      setDone(true);
+    } catch (err) {
+      if (err instanceof ApiClientError) {
+        // The API's own curated message (INVALID_CREDENTIALS says the current password is wrong).
+        setError(err.message);
+      } else {
+        reportError("trainer-password-change", err);
+        setError("PASSWORD-SAVE");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Screen title="Change password" subtitle="Current password, then a new one">
+      {error ? <ErrorBanner message={error} /> : null}
+      {done ? (
+        <View style={styles.formStack}>
+          <Text style={styles.pwHint}>Password updated.</Text>
+          <PrimaryButton label="Done" onPress={onBack} />
+        </View>
+      ) : (
+        <View style={styles.formStack}>
+          <Field
+            label="Current password"
+            value={current}
+            onChangeText={setCurrent}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="current-password"
+          />
+          <Field
+            label="New password"
+            value={next}
+            onChangeText={setNext}
+            secureTextEntry
+            autoCapitalize="none"
+            autoComplete="new-password"
+            hint="At least 8 characters"
+          />
+          <PrimaryButton
+            label="Update password"
+            loading={saving}
+            onPress={() => {
+              void onSubmit();
+            }}
+          />
+          <PrimaryButton label="Cancel" variant="ghost" onPress={onBack} />
+        </View>
+      )}
+    </Screen>
+  );
 }
 
 export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
@@ -52,7 +130,7 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
   const [passwordOpen, setPasswordOpen] = useState(false);
 
   if (passwordOpen) {
-    return <PasswordScreen onBack={() => setPasswordOpen(false)} />;
+    return <ChangePasswordForm onBack={() => setPasswordOpen(false)} />;
   }
 
   const timezone = me?.timezone ?? null;
@@ -64,6 +142,11 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
 
   async function onSave() {
     if (!canSave || timezone === null) return;
+    const mobileTrim = mobile.trim();
+    if (mobileTrim && (mobileTrim.length < 8 || mobileTrim.length > 20)) {
+      setError("Enter a mobile number with 8 to 20 characters.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -242,6 +325,7 @@ const styles = StyleSheet.create({
     width: 40,
   },
   flex: { flex: 1 },
+  formStack: { gap: spacing.md },
   pwTitle: { color: brand.deepNavy, fontFamily: fontFamilyBold, fontSize: 19 },
   pwHint: { color: ink[500], fontSize: 16 },
 });
