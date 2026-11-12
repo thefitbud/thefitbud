@@ -127,7 +127,7 @@ function insertRelationship(input: {
   endedAt?: string | null;
 }): string {
   const id = relId(input.trainerEmail, input.traineeEmail);
-  return `INSERT INTO coaching_relationships (id, trainer_user_id, trainee_user_id, status, invitation_id, started_at, ended_at, ended_by_user_id, end_reason, reactivated_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(userId(input.trainerEmail))}, ${sqlQuote(userId(input.traineeEmail))}, ${sqlQuote(input.status)}, NULL, ${sqlQuote(input.startedAt)}, ${input.endedAt ? sqlQuote(input.endedAt) : "NULL"}, NULL, NULL, NULL, ${sqlQuote(input.endedAt ? input.startedAt : input.now)}, ${sqlQuote(input.endedAt ?? input.now)});`;
+  return `INSERT INTO coaching_relationships (id, trainer_user_id, trainee_user_id, status, invitation_id, started_at, ended_at, ended_by_user_id, end_reason, reactivated_at, created_at, updated_at) VALUES (${sqlQuote(id)}, ${sqlQuote(userId(input.trainerEmail))}, ${sqlQuote(userId(input.traineeEmail))}, ${sqlQuote(input.status)}, NULL, ${sqlQuote(input.startedAt)}, ${input.endedAt ? sqlQuote(input.endedAt) : "NULL"}, NULL, NULL, NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.endedAt ?? input.now)});`;
 }
 
 function buildTrainerTemplates(now: string, lib: DemoLibraryIndex): string {
@@ -243,9 +243,11 @@ function buildPlanAndSubscription(input: {
           ? addDaysFromLocalDate(input.refDate, 20)
           : addDaysFromLocalDate(input.refDate, 25);
   const planTitle = demoPlanTitle(input.traineeEmail);
+  // v1 is created, published and effective on the start day: created <= published <= effective (Z11-5 X5).
+  const v1Start = `${startedLocal}T00:00:00.000Z`;
   const lines = [
-    `INSERT INTO plans (id, coaching_relationship_id, title, created_at, updated_at) VALUES (${sqlQuote(planId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planTitle)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
-    `INSERT INTO plan_versions (id, plan_id, version_number, status, record_version, content_json, creation_source, source_template_id, published_at, effective_from, effective_to, created_at, updated_at) VALUES (${sqlQuote(v1Id)}, ${sqlQuote(planId)}, 1, 'superseded', 0, ${jsonQuote(v1Content)}, 'blank', NULL, ${sqlQuote(input.startedAt)}, ${sqlQuote(`${startedLocal}T00:00:00.000Z`)}, ${sqlQuote(v2Effective)}, ${sqlQuote(input.startedAt)}, ${sqlQuote(input.now)});`,
+    `INSERT INTO plans (id, coaching_relationship_id, title, created_at, updated_at) VALUES (${sqlQuote(planId)}, ${sqlQuote(input.relId)}, ${sqlQuote(planTitle)}, ${sqlQuote(v1Start)}, ${sqlQuote(input.now)});`,
+    `INSERT INTO plan_versions (id, plan_id, version_number, status, record_version, content_json, creation_source, source_template_id, published_at, effective_from, effective_to, created_at, updated_at) VALUES (${sqlQuote(v1Id)}, ${sqlQuote(planId)}, 1, 'superseded', 0, ${jsonQuote(v1Content)}, 'blank', NULL, ${sqlQuote(v1Start)}, ${sqlQuote(v1Start)}, ${sqlQuote(v2Effective)}, ${sqlQuote(v1Start)}, ${sqlQuote(input.now)});`,
     `INSERT INTO plan_versions (id, plan_id, version_number, status, record_version, content_json, creation_source, source_template_id, published_at, effective_from, effective_to, created_at, updated_at) VALUES (${sqlQuote(v2Id)}, ${sqlQuote(planId)}, 2, 'effective', 0, ${jsonQuote(v2Content)}, 'previous_version', NULL, ${sqlQuote(v2Effective)}, ${sqlQuote(v2Effective)}, NULL, ${sqlQuote(v2Effective)}, ${sqlQuote(input.now)});`,
     `INSERT INTO subscription_versions (id, coaching_relationship_id, version_number, plan_name, payment_frequency, starts_on, renews_on, created_at) VALUES (${sqlQuote(demoUuid("subscription", input.relId))}, ${sqlQuote(input.relId)}, 1, 'Monthly coaching', 'monthly', ${sqlQuote(input.startedAt.slice(0, 10))}, ${sqlQuote(renewsOn)}, ${sqlQuote(input.startedAt)});`,
   ];
@@ -404,7 +406,7 @@ function buildAssignmentsAndLogs(input: {
         input.state !== "food_deviations" ||
         localDate < input.activityUntilDate;
       lines.push(
-        `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("checkin-schedule", input.relId))}, ${sqlQuote(localDate)}, ${sqlQuote(cStart)}, ${sqlQuote(cEnd)}, ${submitted ? "'submitted'" : "'draft'"}, 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${submitted ? `'{"wellbeing":"OK"}'` : "NULL"}, ${submitted ? sqlQuote(submittedAt) : "NULL"}, ${sqlQuote(cStart)}, ${sqlQuote(cStart)});`,
+        `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(checkinId)}, ${sqlQuote(input.relId)}, ${sqlQuote(demoUuid("checkin-schedule", input.relId))}, ${sqlQuote(localDate)}, ${sqlQuote(cStart)}, ${sqlQuote(cEnd)}, ${submitted ? "'submitted'" : "'draft'"}, 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, ${submitted ? `'{"wellbeing":"OK"}'` : "NULL"}, ${submitted ? sqlQuote(submittedAt) : "NULL"}, ${sqlQuote(cStart)}, ${sqlQuote(submitted ? submittedAt : cStart)});`,
       );
       if (submitted && input.state === "active_on_track") {
         lines.push(
@@ -417,8 +419,9 @@ function buildAssignmentsAndLogs(input: {
             86_400_000,
         );
         const weightKg = Number((76.8 - dayOffset * 0.05).toFixed(1));
+        // Inside the check-in window (opens 09:00 local), never before it (Z11-5 C6).
         const observedAt = clampIsoToNow(
-          localDayStartIso(localDate, "08:30", input.timezone),
+          localDayStartIso(localDate, "09:30", input.timezone),
           input.now,
         );
         lines.push(
@@ -1308,7 +1311,7 @@ function buildRealisticWorld(input: HistoryInput): string {
     if (startedAt.slice(0, 10) >= windowStart) continue;
     sql.push(
       `UPDATE coaching_relationships SET started_at = ${sqlQuote(startedAt)}, created_at = ${sqlQuote(startedAt)} WHERE id = ${sqlQuote(rid)};`,
-      `UPDATE plans SET created_at = ${sqlQuote(startedAt)} WHERE id = ${sqlQuote(planId)};`,
+      `UPDATE plans SET created_at = ${sqlQuote(`${startedAt.slice(0, 10)}T00:00:00.000Z`)} WHERE id = ${sqlQuote(planId)};`,
       `UPDATE subscription_versions SET starts_on = ${sqlQuote(startedAt.slice(0, 10))} WHERE id = ${sqlQuote(demoUuid("subscription", rid))} AND starts_on > ${sqlQuote(startedAt.slice(0, 10))};`,
     );
     const n = chain.length;
@@ -1318,7 +1321,7 @@ function buildRealisticWorld(input: HistoryInput): string {
       const v2Id = demoUuid("plan-version", rid, "v2");
       sql.push(
         `UPDATE plan_versions SET version_number = ${n} WHERE id = ${sqlQuote(v2Id)};`,
-        `UPDATE plan_versions SET version_number = ${n - 1}, effective_from = MIN(effective_from, ${sqlQuote(`${v1.fromDate}T00:00:00.000Z`)}), published_at = MIN(published_at, ${sqlQuote(`${v1.fromDate}T00:00:00.000Z`)}) WHERE id = ${sqlQuote(v1Id)};`,
+        `UPDATE plan_versions SET version_number = ${n - 1}, effective_from = MIN(effective_from, ${sqlQuote(`${v1.fromDate}T00:00:00.000Z`)}), published_at = MIN(published_at, ${sqlQuote(`${v1.fromDate}T00:00:00.000Z`)}), created_at = MIN(created_at, ${sqlQuote(`${v1.fromDate}T00:00:00.000Z`)}) WHERE id = ${sqlQuote(v1Id)};`,
       );
       for (const version of chain.slice(0, n - 2)) {
         const isLastHistoric = version.number === n - 2;
