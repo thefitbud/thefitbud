@@ -119,6 +119,9 @@ describe("app.config.js variants", () => {
       expect(config.ios.config.usesNonExemptEncryption).toBe(false);
       expect(config.ios.entitlements["aps-environment"]).toBe(aps);
       expect(config.ios.entitlements[APP_GROUPS]).toHaveLength(1);
+      expect(config.ios.infoPlist.LSApplicationQueriesSchemes).toContain("mailto");
+      // The App Group key set by withLiveActivity survives the merge.
+      expect(config.ios.infoPlist.FitBudAppGroup).toBeTruthy();
 
       const entry = config.plugins.find(
         (p: unknown) => Array.isArray(p) && p[0] === "expo-notifications",
