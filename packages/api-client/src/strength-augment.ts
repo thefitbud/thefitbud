@@ -4,6 +4,7 @@ import {
   type StrengthReadModel,
 } from "@fitbud/contracts";
 import type { FitBudApiClient } from "./index.js";
+import { queryString } from "./query-string.js";
 
 declare module "./index.js" {
   interface FitBudApiClient {
@@ -23,7 +24,7 @@ export function installStrengthClientMethods(
     if (query?.range) params.set("range", query.range);
     if (query?.from) params.set("from", query.from);
     if (query?.to) params.set("to", query.to);
-    const suffix = params.size > 0 ? `?${params.toString()}` : "";
+    const suffix = queryString(params);
     return this.request(
       "GET",
       `/strength/relationships/${encodeURIComponent(relationshipId)}${suffix}`,

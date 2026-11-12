@@ -5,6 +5,7 @@ import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CheckinReviewContext, CheckinReviewOutcome } from "@fitbud/contracts";
 import {
+  canRecordCheckinReview,
   deviceTimeZone,
   formatCivilDate,
   formatClockTime,
@@ -103,6 +104,20 @@ export function CheckinReviewScreen({
   const first = name.split(" ")[0] || "them";
   const savedNote = context ? noteForCheckin(context.previousNotes, checkinId) : null;
   const savedReview = context?.checkin.review ?? null;
+  // Z11b-1: the client screen's check-in card can open the next, unsubmitted
+  // check-in (its `nextCheckin`). It has no answers yet and the API refuses a
+  // review for it (CHECKIN_NOT_REVIEWABLE), so say so instead of an empty body
+  // above a Save review sheet that cannot succeed.
+  const canReview = context
+    ? canRecordCheckinReview({
+        recordStatus: context.checkin.recordStatus,
+        hasReview: Boolean(context.checkin.review),
+      })
+    : false;
+  const notSubmittedLine =
+    context && !reviewed && context.checkin.recordStatus !== "submitted"
+      ? notSubmittedText(context.checkin)
+      : null;
   const rows = context
     ? checkinReviewRows({
         fields: context.pinnedForm.fields,
@@ -112,7 +127,7 @@ export function CheckinReviewScreen({
     : { ratings: [], measures: [], texts: [] };
 
   async function save() {
-    if (!context || reviewed || offline) return;
+    if (!context || reviewed || offline || !canReview) return;
     setActing(true);
     setError(null);
     let recorded = false;
@@ -200,7 +215,7 @@ export function CheckinReviewScreen({
       </View>
     ) : null;
 
-  const sheet = reviewed || !context ? savedSheet : (
+  const sheet = reviewed || !context ? savedSheet : !canReview ? null : (
     <View style={styles.sheet}>
       <View style={styles.handle} />
       <View style={styles.outcomes}>
@@ -303,6 +318,7 @@ export function CheckinReviewScreen({
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
       {loading && !context ? <View style={styles.skeleton} accessibilityLabel="Loading" /> : null}
+      {notSubmittedLine ? <Text style={styles.notSubmitted}>{notSubmittedLine}</Text> : null}
       {rows.ratings.length > 0 || rows.texts.length > 0 ? (
         <View style={styles.card}>
           {rows.ratings.length > 0 ? (
@@ -368,6 +384,18 @@ export function CheckinReviewScreen({
       ) : null}
     </Screen>
   );
+}
+
+/**
+ * Unsubmitted check-in line. Mirrors trainer web's check-in list row detail
+ * for a due/overdue check-in (ClientCheckinsPage: `Due <date> · not submitted
+ * yet`). Not the web review page's "Due by <date>, 11:59 pm": the window does
+ * not end at 11:59 pm, and its "has started but not submitted" would also
+ * claim a start for the system-created next draft, which nobody has opened.
+ * Only reached for a draft, whose derived status is scheduled, due or overdue.
+ */
+function notSubmittedText(checkin: CheckinReviewContext["checkin"]): string {
+  return `Due ${formatCivilDate(checkin.localDate)} · not submitted yet`;
 }
 
 function Measure({ item }: { item: ReviewMeasureTile }) {
@@ -524,4 +552,5 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.45 },
   skeleton: { backgroundColor: "#E7E9F2", borderRadius: 20, height: 180 },
   offline: { color: colors.deepNavy, fontSize: 14, marginBottom: 8 },
+  notSubmitted: { color: colors.midGrey, fontSize: 15, lineHeight: 22, marginTop: 8 },
 });
