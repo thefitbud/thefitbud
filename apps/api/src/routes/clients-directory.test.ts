@@ -7,7 +7,7 @@ import { eq } from "drizzle-orm";
 import type { ClientDirectoryItem } from "@fitbud/contracts";
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
-import { coachingRelationships } from "../db/schema.js";
+import { coachingRelationships, users } from "../db/schema.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
@@ -152,5 +152,41 @@ describe("GET /clients startedAt (Z9-15)", () => {
     for (const item of rahul) {
       expect(priyaIds.has(item.relationshipId)).toBe(false);
     }
+  });
+
+  // Z10-21 (D-W10-8): civil dates come from the trainer's zone.
+  async function setEndInstant(endedAt: string) {
+    const row = await persistedRelationship("rahul.coach", "kavya.ended");
+    await db
+      .update(coachingRelationships)
+      .set({ startedAt: "2026-08-02T19:00:00.000Z", endedAt })
+      .where(eq(coachingRelationships.id, row.id));
+    return row.id;
+  }
+
+  async function setTrainerZone(zone: string) {
+    const id = demoUuid("user", "rahul.coach@demo.fitbud.test");
+    await db.update(users).set({ timezone: zone }).where(eq(users.id, id));
+  }
+
+  it("returns startedOn/endedOn as civil dates in an Asia/Kolkata trainer's zone", async () => {
+    await setTrainerZone("Asia/Kolkata");
+    const id = await setEndInstant("2026-10-21T18:30:00.000Z");
+    const items = await listClients(await login("rahul.coach@demo.fitbud.test"));
+    const item = items.find((i) => i.relationshipId === id)!;
+    expect(item.endedAt).toBe("2026-10-21T18:30:00.000Z");
+    expect(item.endedOn).toBe("2026-10-22");
+    expect(item.startedOn).toBe("2026-08-03");
+    const active = items.find((i) => i.status === "active" && i.startedAt)!;
+    expect(active.endedOn ?? null).toBeNull();
+  });
+
+  it("returns the previous civil day for a UTC-negative trainer zone", async () => {
+    await setTrainerZone("America/Los_Angeles");
+    const id = await setEndInstant("2026-10-22T05:00:00.000Z");
+    const items = await listClients(await login("rahul.coach@demo.fitbud.test"));
+    const item = items.find((i) => i.relationshipId === id)!;
+    expect(item.endedOn).toBe("2026-10-21");
+    expect(item.startedOn).toBe("2026-08-02");
   });
 });

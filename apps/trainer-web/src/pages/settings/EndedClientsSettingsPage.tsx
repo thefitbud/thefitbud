@@ -14,7 +14,9 @@ export function EndedClientsSettingsPage() {
   const [error, setError] = useState<string | null>(null);
   const [reactivateId, setReactivateId] = useState<string | null>(null);
   const [nameById, setNameById] = useState<Map<string, string>>(new Map());
-  const [planById, setPlanById] = useState<Map<string, string | null>>(new Map());
+  const [planById, setPlanById] = useState<Map<string, string | null>>(
+    new Map(),
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -62,7 +64,8 @@ export function EndedClientsSettingsPage() {
     <div className="settings-panel" data-testid="screen-TW-30">
       <h2>Ended clients</h2>
       <p className="muted">
-        Coaching you ended stays read-only until you reactivate with the same client.
+        Coaching you ended stays read-only until you reactivate with the same
+        client.
       </p>
       {loading ? <p className="muted">Loading…</p> : null}
       {error ? (
@@ -79,36 +82,40 @@ export function EndedClientsSettingsPage() {
       ) : null}
       {!loading && !error && items.length > 0 ? (
         <ul className="ended-client-list">
-          {items.map((item) => (
-            <li key={item.relationshipId!}>
-              <div>
-                <strong>{item.traineeDisplayName}</strong>
-                {item.endedAt ? (
-                  <span className="status-chip status-chip-xs">
-                    {" "}
-                    Ended {formatCivilDate(item.endedAt.slice(0, 10))}
-                  </span>
-                ) : (
-                  <span className="muted"> · Ended</span>
-                )}
-              </div>
-              <div className="button-row">
-                <Link
-                  className="button-secondary"
-                  to={`/clients/${item.relationshipId}/overview`}
-                >
-                  View history
-                </Link>
-                <button
-                  type="button"
-                  className="button-primary"
-                  onClick={() => setReactivateId(item.relationshipId!)}
-                >
-                  Reactivate
-                </button>
-              </div>
-            </li>
-          ))}
+          {items.map((item) => {
+            // Z10-21: trainer-zone civil date; UTC slice only as a fallback.
+            const endedOn = item.endedOn ?? item.endedAt?.slice(0, 10) ?? null;
+            return (
+              <li key={item.relationshipId!}>
+                <div>
+                  <strong>{item.traineeDisplayName}</strong>
+                  {endedOn ? (
+                    <span className="status-chip status-chip-xs">
+                      {" "}
+                      Ended {formatCivilDate(endedOn)}
+                    </span>
+                  ) : (
+                    <span className="muted"> · Ended</span>
+                  )}
+                </div>
+                <div className="button-row">
+                  <Link
+                    className="button-secondary"
+                    to={`/clients/${item.relationshipId}/overview`}
+                  >
+                    View history
+                  </Link>
+                  <button
+                    type="button"
+                    className="button-primary"
+                    onClick={() => setReactivateId(item.relationshipId!)}
+                  >
+                    Reactivate
+                  </button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
       {reactivateId ? (
