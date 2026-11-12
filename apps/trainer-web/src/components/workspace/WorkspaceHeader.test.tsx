@@ -6,8 +6,11 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { ClientWorkspace } from "@fitbud/contracts";
 
+const auth = vi.hoisted(() => ({
+  me: null as { timezone: string } | null,
+}));
 vi.mock("../../auth/AuthProvider", () => ({
-  useAuth: () => ({ me: null }),
+  useAuth: () => ({ me: auth.me }),
 }));
 vi.mock("../../lib/http-api", () => ({
   cancelReactivation: vi.fn(),
@@ -96,6 +99,7 @@ function openMenu() {
 
 afterEach(() => {
   cleanup();
+  auth.me = null;
 });
 
 describe("WorkspaceHeader ⋯ menu (CE2)", () => {
@@ -212,6 +216,7 @@ describe("WorkspaceHeader ended state (frame 179)", () => {
   };
 
   it("shows the Ended · date pill, coached dates and Reactivate; no banner or adherence chip", () => {
+    auth.me = { timezone: "Asia/Kolkata" };
     const { onOpenModal } = renderHeader(workspace("ended", null, ENDED));
     const pill = document.querySelector('.status-chip[data-kind="lifecycle"]');
     expect(pill?.textContent).toMatch(/^Ended · Sat 3 Oct( 2026)?$/);
@@ -239,10 +244,34 @@ describe("WorkspaceHeader ended state (frame 179)", () => {
   });
 
   it("without endedAt the pill reads Ended and the meta has no coached dates", () => {
+    auth.me = { timezone: "Asia/Kolkata" };
     renderHeader(workspace("ended", null, { startedAt: "2026-07-06T04:30:00.000Z" }));
     const pill = document.querySelector('.status-chip[data-kind="lifecycle"]');
     expect(pill?.textContent).toBe("Ended");
     expect(screen.queryByText(/^Coached /)).toBeNull();
+  });
+
+  it("near midnight the header shows the trainer's day, not the client's", () => {
+    // 2026-10-03 20:00Z is Sun 4 Oct 01:30 in Kolkata but Sat 3 Oct 13:00 in Los Angeles.
+    auth.me = { timezone: "America/Los_Angeles" };
+    renderHeader(
+      workspace("ended", null, {
+        ...ENDED,
+        startedAt: "2026-07-06T03:00:00.000Z",
+        endedAt: "2026-10-03T20:00:00.000Z",
+      }),
+    );
+    expect(screen.getByText(/^Coached Sun 5 Jul( 2026)? — Sat 3 Oct( 2026)?$/)).toBeTruthy();
+    expect(document.querySelector('.status-chip[data-kind="lifecycle"]')?.textContent).toMatch(
+      /^Ended · Sat 3 Oct( 2026)?$/,
+    );
+  });
+
+  it("with the trainer's profile not loaded no Coached line renders", () => {
+    auth.me = null;
+    renderHeader(workspace("ended", null, ENDED));
+    expect(screen.queryByText(/^Coached /)).toBeNull();
+    expect(document.querySelector('.status-chip[data-kind="lifecycle"]')?.textContent).toBe("Ended");
   });
 
   it("pending reactivation keeps the waiting line, Remind on WhatsApp and Cancel request", () => {
