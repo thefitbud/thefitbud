@@ -3,7 +3,10 @@ import { Linking, Pressable, StyleSheet, View } from "react-native";
 import {
   ArrowLeftRight,
   Bell,
+  BellOff,
+  BellRing,
   ChevronRight,
+  CircleCheck,
   Copyright,
   ExternalLink,
   FileText,
@@ -24,8 +27,8 @@ import {
 import { Text } from "../components/Text";
 import { useConfig } from "../providers/ConfigProvider";
 import { useAuth } from "../auth/AuthProvider";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { reportError } from "../lib/reportError";
 import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../lib/support";
 import {
   DEFAULT_TRAINER_WEB_URL,
@@ -82,15 +85,31 @@ export function TrainerMoreScreen({
   const { me, signOut, selectRole } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
-  const [permission, setPermission] = useState<string>("…");
+  // null until the phone answers, so the card never flashes the wrong state.
+  const [pushOn, setPushOn] = useState<boolean | null>(null);
 
   useEffect(() => {
-    void Notifications.getPermissionsAsync().then((settings) => {
-      setPermission(
-        settings.status === "granted" ? "On" : "Off · Open settings",
-      );
-    });
+    void Notifications.getPermissionsAsync()
+      .then((settings) => setPushOn(settings.status === "granted"))
+      .catch(() => undefined);
   }, []);
+
+  // Frame 54: Android 13+ shows its own prompt first. Only when the system will
+  // not ask again does this send the person to phone settings.
+  async function onOpenSettings() {
+    try {
+      // Loaded on tap: this is the only path that needs the push module, and
+      // the screen's tests render without it.
+      const { requestPushPermission } = await import(
+        "../notifications/register"
+      );
+      const result = await requestPushPermission();
+      if (result === "granted") setPushOn(true);
+      else if (result === "blocked") void Linking.openSettings();
+    } catch (err) {
+      reportError("trainer-more-notifications", err);
+    }
+  }
 
   const email = me?.email ?? null;
   const displayName =
@@ -124,18 +143,63 @@ export function TrainerMoreScreen({
           </Pressable>
         </M2Card>
 
-        <View style={styles.permissionCard}>
-          <Text style={styles.permissionTitle}>
-            Notifications: {permission}
-          </Text>
-          <PrimaryButton
-            label="Open phone notification settings"
-            variant="secondary"
-            onPress={() => {
-              void Linking.openSettings();
-            }}
-          />
-        </View>
+        {pushOn !== null ? (
+          <M2Card>
+            <View style={styles.permRow}>
+              <View
+                style={[
+                  styles.permTile,
+                  pushOn ? styles.permTileOn : styles.permTileOff,
+                ]}
+              >
+                {pushOn ? (
+                  <BellRing
+                    color={semantic.positive.text}
+                    size={20}
+                    strokeWidth={1.75}
+                  />
+                ) : (
+                  <BellOff
+                    color={semantic.attention.text}
+                    size={20}
+                    strokeWidth={1.75}
+                  />
+                )}
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.profName}>Notifications</Text>
+                <Text style={styles.profSub} numberOfLines={1}>
+                  {pushOn ? "On for this phone" : "Off in phone settings"}
+                </Text>
+              </View>
+              {pushOn ? (
+                <View
+                  style={styles.onChip}
+                  accessible
+                  accessibilityLabel="Notifications are on"
+                >
+                  <CircleCheck
+                    color={semantic.positive.text}
+                    size={16}
+                    strokeWidth={1.75}
+                  />
+                  <Text style={styles.onChipText}>On</Text>
+                </View>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open settings"
+                  onPress={() => {
+                    void onOpenSettings();
+                  }}
+                  style={styles.openBtn}
+                >
+                  <Text style={styles.openBtnText}>Open settings</Text>
+                </Pressable>
+              )}
+            </View>
+          </M2Card>
+        ) : null}
 
         <View>
           <Text style={styles.groupLabel} accessibilityRole="header">
@@ -146,6 +210,7 @@ export function TrainerMoreScreen({
               tile="neutral"
               icon={<Bell color={ink[500]} size={17} strokeWidth={1.75} />}
               label="Notifications"
+              hint="Categories and quiet hours"
               onPress={onOpenNotifications}
             />
             <M2Row
@@ -297,16 +362,49 @@ const styles = StyleSheet.create({
     // Screen pads spacing.xl; frames and the trainee More use moreGutter.
     marginHorizontal: -(spacing.xl - moreGutter),
   },
-  permissionCard: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 12,
-    gap: spacing.sm,
-    padding: spacing.lg,
+  permRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    minHeight: 72,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
-  permissionTitle: {
-    color: colors.deepNavy,
+  permTile: {
+    alignItems: "center",
+    borderRadius: 12,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  permTileOn: { backgroundColor: semantic.positive.fill },
+  permTileOff: { backgroundColor: semantic.attention.fill },
+  onChip: {
+    alignItems: "center",
+    backgroundColor: semantic.positive.fill,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 32,
+    paddingHorizontal: 12,
+  },
+  onChipText: {
+    color: semantic.positive.text,
+    fontFamily: fontFamilySemiBold,
     fontSize: 15,
-    fontWeight: "600",
+  },
+  openBtn: {
+    alignItems: "center",
+    backgroundColor: brand.paleLavender,
+    borderRadius: 12,
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 16,
+  },
+  openBtnText: {
+    color: brand.indigo,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
   },
   groupLabel: {
     color: ink[500],

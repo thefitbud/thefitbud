@@ -36,7 +36,13 @@ const notificationsMock = {
 };
 vi.mock("expo-notifications", () => notificationsMock);
 
+const ensureChannels = vi.fn(async () => undefined);
+vi.mock("./androidChannels", () => ({
+  ensureAndroidNotificationChannels: ensureChannels,
+}));
+
 import {
+  requestPushPermission,
   currentPushRegistration,
   installationIdForToken,
   registerDeviceTokenForPush,
@@ -440,5 +446,69 @@ describe("signOutPushRegistration", () => {
     // the signed-out user's session.
     expect(pushListeners).toHaveLength(0);
     expect(api.registerDeviceToken).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Android 13 notification permission", () => {
+  beforeEach(() => {
+    ensureChannels.mockClear();
+    notificationsMock.getPermissionsAsync.mockResolvedValue({
+      granted: false,
+      canAskAgain: true,
+    });
+  });
+
+  it("creates the channels before the system prompt on Android", async () => {
+    const order: string[] = [];
+    ensureChannels.mockImplementationOnce(async () => {
+      order.push("channels");
+    });
+    notificationsMock.requestPermissionsAsync.mockImplementationOnce(async () => {
+      order.push("prompt");
+      return { granted: true };
+    });
+    expect(await requestPushPermission("android")).toBe("granted");
+    expect(order).toEqual(["channels", "prompt"]);
+  });
+
+  it("does the same on the registration path", async () => {
+    const api = fakeApi();
+    const outcome = await registerDeviceTokenForPush(api.client, {
+      platform: "android",
+    });
+    expect(outcome.status).toBe("registered");
+    expect(ensureChannels).toHaveBeenCalledTimes(1);
+    expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not touch channels on iOS", async () => {
+    await requestPushPermission("ios");
+    expect(ensureChannels).not.toHaveBeenCalled();
+    expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("reports denied when the person taps Don't allow", async () => {
+    notificationsMock.requestPermissionsAsync.mockResolvedValueOnce({
+      granted: false,
+    });
+    expect(await requestPushPermission("android")).toBe("denied");
+  });
+
+  it("reports blocked, without prompting, when the system will not ask again", async () => {
+    notificationsMock.getPermissionsAsync.mockResolvedValue({
+      granted: false,
+      canAskAgain: false,
+    });
+    expect(await requestPushPermission("android")).toBe("blocked");
+    expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+
+  it("reports granted without prompting when already allowed", async () => {
+    notificationsMock.getPermissionsAsync.mockResolvedValue({
+      granted: true,
+      canAskAgain: true,
+    });
+    expect(await requestPushPermission("android")).toBe("granted");
+    expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
   });
 });

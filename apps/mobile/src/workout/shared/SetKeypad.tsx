@@ -16,6 +16,10 @@ type Props = {
   onPrimary: () => void;
   onClose: () => void;
   disabled?: boolean;
+  /** Label of the primary key; defaults to "Next: reps" (load) or "Log set N" (reps). */
+  primaryLabel?: string;
+  /** Hint under the title; defaults to the trainee wording. */
+  hint?: string;
 };
 
 const ROWS = [
@@ -36,19 +40,22 @@ export function SetKeypad({
   onPrimary,
   onClose,
   disabled = false,
+  primaryLabel,
+  hint: hintOverride,
 }: Props) {
   const isLoad = field === "load";
   // A bodyweight set has no kg to type.
   const keysOff = disabled || (isLoad && bodyweight);
   const stepLabel = isLoad ? "2.5" : "1";
   const title = isLoad ? `Set ${setOrder} · load` : `Set ${setOrder} · reps`;
-  const hint = isLoad
+  const primaryText = primaryLabel ?? (isLoad ? "Next: reps" : `Log set ${setOrder}`);
+  const hint = hintOverride ?? (isLoad
     ? bodyweight
       ? "No weight used"
       : "Weight used, in kg"
     : bodyweight
       ? "Holding weights? Switch to kg"
-      : "Reps you did";
+      : "Reps you did");
 
   return (
     <View style={styles.sheet}>
@@ -133,14 +140,12 @@ export function SetKeypad({
           />
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={isLoad ? "Next: reps" : `Log set ${setOrder}`}
+            accessibilityLabel={primaryText}
             disabled={disabled}
             onPress={onPrimary}
             style={[styles.primary, disabled ? styles.off : null]}
           >
-            <Text style={styles.primaryText}>
-              {isLoad ? "Next: reps" : `Log set ${setOrder}`}
-            </Text>
+            <Text style={styles.primaryText}>{primaryText}</Text>
             <Text style={styles.primaryText}>›</Text>
           </Pressable>
         </View>
