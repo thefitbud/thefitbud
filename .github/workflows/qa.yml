@@ -139,8 +139,6 @@ on:
         type: choice
         default: full
         options: [smoke, full]
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: read
