@@ -130,51 +130,86 @@ describe("overlay slot timezone (QS6)", () => {
 });
 
 /**
- * Z11-4: an unlogged meal evaluated 30 minutes before its window closes is
- * still open for an IST client and for a client moved to another zone, and the
- * same item is overdue just after the close. The window comes from the seeded
- * row, so the check holds only if the seed built it in the client's own zone.
+ * Z11-4: close minus 30 minutes, derived independently of the seed. For an IST
+ * client and a New York client, the reference instant is the local close of that
+ * day's lunch (plan local time + 12 h, read in the client's own zone) minus 30
+ * minutes, and the seed runs at that instant. The seeded window must close at
+ * exactly that local clock time, and the item is still open: no exception on it
+ * at seed time or when evaluated at the reference instant. Forcing the windows
+ * into IST moves the New York client's close by hours and fails.
  */
+function zonedInstant(localDate: string, hhmm: string, zone: string): number {
+  // Find the instant whose clock in `zone` reads localDate hhmm (no DST edge on these dates).
+  const target = Date.parse(`${localDate}T${hhmm}:00.000Z`);
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: zone, dateStyle: "short", timeStyle: "short", hourCycle: "h23" });
+  const clock = (ms: number) => fmt.format(new Date(ms)).replace(",", "");
+  let guess = target;
+  for (let i = 0; i < 3; i += 1) {
+    const [d, t] = clock(guess).split(" ");
+    const shown = Date.parse(`${d}T${t}:00.000Z`);
+    guess += target - shown;
+  }
+  return guess;
+}
+
 describe("close minus 30 minutes in two zones (Z11-4)", () => {
-  const SEED_NOW = "2026-10-22T12:37:00.000Z";
+  const PROBE_NOW = "2026-10-22T12:37:00.000Z";
+  const LOCAL_DATE = "2026-10-20";
   const CASES = [
+    { email: "pooja.silent@demo.fitbud.test", zone: "Asia/Kolkata" },
     { email: "arjun.attention@demo.fitbud.test", zone: "America/New_York" },
-    { email: "pooja.silent@demo.fitbud.test", zone: legacyTimezoneFor("pooja.silent@demo.fitbud.test") },
   ];
-  let handle: MemoryDbHandle;
-  const q = (sql: string) => handle.sqlite.exec(sql)[0]?.values ?? [];
-
-  beforeAll(async () => {
-    handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
-    const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
-    handle.sqlite.exec(buildDemoSeedSql({ referenceInstant: SEED_NOW, passwordHash: "z11-4-tz-test-hash", libraryIndex }));
-  }, 60_000);
-  afterAll(() => handle?.close());
-
-  it("covers an IST and a non-IST client", () => {
-    expect(CASES.map((c) => c.zone)).toContain("Asia/Kolkata");
-    expect(CASES.map((c) => c.zone)).toContain("America/New_York");
-  });
-
-  it.each(CASES)("is open at close - 30 min and overdue after close for $email ($zone)", async ({ email, zone }) => {
-    expect(q(`select u.timezone from users u join user_identities i on i.user_id = u.id where i.email = '${email}'`)[0]?.[0]).toBe(zone);
-    const row = q(
-      `select m.id, m.coaching_relationship_id, m.window_starts_at, m.window_ends_at
+  const seed = async (referenceInstant: string) => {
+    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    handle.sqlite.exec(buildDemoSeedSql({ referenceInstant, passwordHash: "z11-4-tz-test-hash", libraryIndex: loadDemoLibraryIndex(handle.sqlite) }));
+    return handle;
+  };
+  const lunchOf = (handle: MemoryDbHandle, email: string, localDate: string) =>
+    handle.sqlite.exec(
+      `select m.id, m.coaching_relationship_id, m.window_starts_at, m.window_ends_at, m.meal_prescription_json
          from meal_assignments m join coaching_relationships r on r.id = m.coaching_relationship_id
          join user_identities i on i.user_id = r.trainee_user_id
-         where i.email = '${email}' and r.status = 'active'
-           and m.window_ends_at < '${SEED_NOW}'
-           and not exists (select 1 from meal_compliance c where c.assignment_id = m.id)
-           and not exists (select 1 from exceptions e where e.source_entity_id = m.id)
-         order by m.window_ends_at desc limit 1`,
-    )[0];
-    expect(row, "an unlogged, past meal assignment with no exception").toBeDefined();
-    const [id, rel, opens, closes] = row!.map(String);
-    const open = new Date(Date.parse(closes!) - 30 * 60_000).toISOString();
-    expect(open > opens!).toBe(true);
-    const during = await evaluateRelationshipExceptions(handle.db, rel!, open);
-    expect(during.exceptions.filter((e) => e.sourceEntityId === id)).toEqual([]);
-    const after = await evaluateRelationshipExceptions(handle.db, rel!, new Date(Date.parse(closes!) + 60_000).toISOString());
-    expect(after.exceptions.filter((e) => e.sourceEntityId === id && e.type === "overdue_meal").length).toBe(1);
-  }, 60_000);
+         where i.email = '${email}' and r.status = 'active' and m.local_date = '${localDate}' and m.meal_name like 'Lunch%'`,
+    )[0]?.values[0];
+
+  it("covers an IST and a non-IST client", () => {
+    expect(CASES.map((c) => c.zone)).toEqual(["Asia/Kolkata", "America/New_York"]);
+  });
+
+  it.each(CASES)("closes at the local clock time and is open at close - 30 min for $email ($zone)", async ({ email, zone }) => {
+    // 1. The plan's lunch local time, from a probe seed.
+    const probe = await seed(PROBE_NOW);
+    let lunchTime: string;
+    try {
+      expect(probe.sqlite.exec(`select u.timezone from users u join user_identities i on i.user_id = u.id where i.email = '${email}'`)[0]?.values[0]?.[0]).toBe(zone);
+      const row = lunchOf(probe, email, LOCAL_DATE);
+      expect(row, "a lunch assignment on the probe date").toBeDefined();
+      const json = JSON.parse(String(row![4])) as { localTime?: string };
+      lunchTime = json.localTime ?? "";
+      expect(lunchTime).toMatch(/^\d\d:\d\d$/);
+    } finally {
+      probe.close();
+    }
+    // 2. Expected close and reference instant, computed here in the client's zone.
+    const opens = zonedInstant(LOCAL_DATE, lunchTime, zone);
+    const closes = opens + 12 * 3_600_000;
+    const reference = new Date(closes - 30 * 60_000).toISOString();
+    // 3. Seed at that instant.
+    const handle = await seed(reference);
+    try {
+      const row = lunchOf(handle, email, LOCAL_DATE);
+      expect(row, "a lunch assignment on the local date").toBeDefined();
+      const [id, rel, startsAt, endsAt] = row!.map(String);
+      expect(startsAt).toBe(new Date(opens).toISOString());
+      expect(endsAt).toBe(new Date(closes).toISOString());
+      expect(reference > startsAt! && reference < endsAt!).toBe(true);
+      const onItem = (sourceId: string | undefined) => handle.sqlite.exec(`select type, status from exceptions where source_entity_id = '${sourceId}'`)[0]?.values ?? [];
+      expect(onItem(id)).toEqual([]);
+      const during = await evaluateRelationshipExceptions(handle.db, rel!, reference);
+      expect(during.exceptions.filter((e) => e.sourceEntityId === id)).toEqual([]);
+      expect(onItem(id)).toEqual([]);
+    } finally {
+      handle.close();
+    }
+  }, 120_000);
 });

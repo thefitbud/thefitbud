@@ -701,7 +701,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const deviationMeal = rohanSlots.meal(MEAL_PRESCRIPTION_IDS.lunch, "opened");
   const overdueCheckinId = demoUuid("checkin", rohanEmail, addDaysFromLocalDate(refDate, -7));
   const overdueCheckinDate = addDaysFromLocalDate(refDate, -7);
-  // Same window as every Rohan check-in (09:00 IST + 48 h), so the exception is
+  // Same window as every Rohan check-in (09:00 client-local + 48 h), so the exception is
   // detected only after it closed (QS5, QA-PR28 F3).
   const overdueCheckinStart = localDayStartIso(overdueCheckinDate, "09:00", legacyTimezoneFor(rohanEmail));
   const overdueCheckinSlot: OverlaySlot = {
@@ -793,7 +793,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const meeraRel = relId("rahul.coach@demo.fitbud.test", "meera.ack@demo.fitbud.test");
   const ackMealId = demoUuid("meal-assignment", "meera.ack@demo.fitbud.test", addDaysFromLocalDate(refDate, -2), MEAL_PRESCRIPTION_IDS.lunch);
   const ackExceptionId = MEERA_ACK_EXCEPTION_ID;
-  // Overdue only exists once the lunch window has closed (13:00 IST + 12h).
+  // Overdue only exists once the lunch window has closed (13:00 client-local + 12h).
   const meeraDetected = hoursAfter(
     localDayStartIso(addDaysFromLocalDate(refDate, -2), "13:00", legacyTimezoneFor("meera.ack@demo.fitbud.test")),
     12.5,
