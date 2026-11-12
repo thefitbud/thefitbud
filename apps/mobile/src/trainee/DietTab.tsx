@@ -13,9 +13,11 @@ import {
   Check,
   Clock,
   Coffee,
+  CloudUpload,
   Ellipsis,
   Lock,
   Moon,
+  WifiOff,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
@@ -25,6 +27,7 @@ import { rings } from "@fitbud/tokens";
 import {
   colors,
   radii,
+  semanticColors,
   spacing,
   type DateNavigatorDay,
 } from "@fitbud/ui-mobile";
@@ -37,10 +40,14 @@ import { plannedSummaryLine } from "../lib/plannedMealItems";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
+import { useDeviceOffline } from "./today/queuedLogs";
 import {
   attachMealPhotoBestEffort,
   confirmMealAssignment,
+  isMealLogPending,
   MealSyncError,
+  pendingMealLogIds,
+  plannedUntilSentNote,
 } from "./mealActions";
 import {
   canShowMealLogActions,
@@ -140,6 +147,26 @@ function mealTileIcon(meal: MealAssignment, variant: "due" | "logged" | "later" 
   return <Moon size={19} color={colors.midGrey} />;
 }
 
+type MealPillKind = "logged" | "waiting" | "later";
+
+/** Right-hand status pill of a compact meal row (frame 86). */
+function MealPill({ kind }: { kind: MealPillKind }) {
+  const palette =
+    kind === "logged" ? semanticColors.positive : semanticColors.neutral;
+  const label =
+    kind === "logged" ? "Logged" : kind === "waiting" ? "Waiting to send" : "Later";
+  const Icon = kind === "logged" ? Check : kind === "waiting" ? CloudUpload : Clock;
+  return (
+    <View
+      style={[styles.pill, { backgroundColor: palette.fill, borderColor: palette.text + "33" }]}
+      accessibilityLabel={label}
+    >
+      <Icon size={14} color={palette.text} strokeWidth={1.75} />
+      <Text style={[styles.pillLabel, { color: palette.text }]}>{label}</Text>
+    </View>
+  );
+}
+
 export function DietTab({
   relationship,
   selectedDate,
@@ -162,6 +189,7 @@ export function DietTab({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
+  const deviceOffline = useDeviceOffline();
   const [actingId, setActingId] = useState<string | null>(null);
   const [dayTotals, setDayTotals] = useState<Awaited<
     ReturnType<typeof s1.getMeDay>
@@ -173,6 +201,9 @@ export function DietTab({
   } | null>(null);
   const optimisticStatus = useRef(
     new Map<string, MealAssignment["status"]>(),
+  );
+  const [pendingSendIds, setPendingSendIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
   );
   const [photoPromptId, setPhotoPromptId] = useState<string | null>(null);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
@@ -218,19 +249,11 @@ export function DietTab({
       let pendingIds = new Set<string>();
       try {
         const outbox = await sync.store.listOutbox();
-        pendingIds = new Set(
-          outbox
-            .filter(
-              (row) =>
-                (row.status === "pending" || row.status === "in_flight") &&
-                (row.operation === "meal.confirm" ||
-                  row.operation === "meal.skip"),
-            )
-            .map((row) => row.recordId),
-        );
+        pendingIds = pendingMealLogIds(outbox);
       } catch {
         pendingIds = new Set(optimisticStatus.current.keys());
       }
+      setPendingSendIds(pendingIds);
       setAssignments(
         scheduled.map((meal) => {
           const next = optimisticStatus.current.get(meal.id);
@@ -311,6 +334,14 @@ export function DietTab({
     () => new Map(kcalSummary.rows.map((row) => [row.id, row])),
     [kcalSummary],
   );
+  const showOffline = offline || deviceOffline;
+  // Pills and the offline copy follow frame 86; online with nothing queued the
+  // rows stay as frame 07 draws them.
+  const pillMode = showOffline || pendingSendIds.size > 0;
+  const plannedNote = useMemo(
+    () => plannedUntilSentNote(assignments, pendingSendIds),
+    [assignments, pendingSendIds],
+  );
   const proteinRing = nutritionRings.find((r) => r.key === "protein");
   const carbsRing = nutritionRings.find((r) => r.key === "carbs");
   const fatRing = nutritionRings.find((r) => r.key === "fat");
@@ -361,7 +392,13 @@ export function DietTab({
         coachName,
       );
       invalidateRelationshipDayData(relationship.id);
-      setPhotoPromptId(assignment.id);
+      if (await isMealLogPending(sync, assignment.id)) {
+        // Saved on this phone, not sent (frame 86): it counts as planned until
+        // the server has it, and a photo can only follow once it is sent.
+        setPendingSendIds((ids) => new Set(ids).add(assignment.id));
+      } else {
+        setPhotoPromptId(assignment.id);
+      }
       await load();
     } catch (err) {
       setError(
@@ -442,7 +479,9 @@ export function DietTab({
                 ? labelFor("meal_assignment_status", "skipped")
                 : meal.status === "modified"
                   ? "Changed"
-                  : "Logged"}
+                  : pillMode
+                    ? "As planned"
+                    : "Logged"}
               {meal.status !== "skipped" && loggedKcal != null
                 ? ` · ${formatKcal(loggedKcal)}`
                 : ""}
@@ -479,6 +518,12 @@ export function DietTab({
           >
             <Text style={styles.changeBtnText}>Change</Text>
           </Pressable>
+        ) : pendingSendIds.has(meal.id) && isLogged && meal.status !== "skipped" ? (
+          <MealPill kind="waiting" />
+        ) : pillMode && isLogged && meal.status !== "skipped" ? (
+          <MealPill kind="logged" />
+        ) : pillMode && isLater ? (
+          <MealPill kind="later" />
         ) : isLater && kcal != null ? (
           <View style={styles.lrowRight}>
             <Text style={styles.laterKcal}>{formatKcal(kcal)}</Text>
@@ -534,23 +579,6 @@ export function DietTab({
                     {mealDueStatusLabel(meal, timeZone)}
                   </Text>
                 </View>
-                {canLog ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Something different"
-                    onPress={() =>
-                      onOpenOverlay({
-                        screen: "something_different",
-                        assignmentId: meal.id,
-                      })
-                    }
-                    hitSlop={8}
-                  >
-                    <Text style={styles.mealHdrMetaLinkText} numberOfLines={1}>
-                      Something different
-                    </Text>
-                  </Pressable>
-                ) : null}
               </View>
             )}
           </View>
@@ -675,6 +703,17 @@ export function DietTab({
           Diet
         </Text>
         <View style={styles.headerActions}>
+          {pendingSendIds.size > 0 ? (
+            <View
+              style={styles.waitChip}
+              accessibilityLabel={`Waiting to send ${pendingSendIds.size}`}
+            >
+              <CloudUpload size={14} color={semanticColors.attention.text} strokeWidth={1.75} />
+              <Text style={styles.waitChipText}>
+                Waiting to send {pendingSendIds.size}
+              </Text>
+            </View>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Meal plan"
@@ -733,8 +772,14 @@ export function DietTab({
       {weekState.status === "unavailable" ? (
         <ErrorBanner message={WEEK_UNAVAILABLE_MESSAGE} />
       ) : null}
-      {offline ? (
-        <Text style={styles.offline}>Saved on phone · Not sent yet</Text>
+      {showOffline ? (
+        <View style={styles.offlineBanner} accessibilityRole="alert">
+          <WifiOff size={20} color={semanticColors.attention.text} strokeWidth={1.75} />
+          <Text style={styles.offlineBannerText}>
+            You&apos;re offline. Your logs are saved on this phone and sent to{" "}
+            {coachName} when you&apos;re online.
+          </Text>
+        </View>
       ) : null}
 
       <View style={styles.daysum2}>
@@ -749,7 +794,13 @@ export function DietTab({
               of {formatNumber(kcalSummary.plannedTotal)} kcal
             </Text>
           </Text>
-          <Text style={styles.daysumSub}>{assignments.length === 0 ? mealsLoggedSummary(assignments) : `${mealsLoggedSummary(assignments)} today`}</Text>
+          <Text style={styles.daysumSub}>
+            {assignments.length === 0
+              ? mealsLoggedSummary(assignments)
+              : plannedNote
+                ? `${mealsLoggedSummary(assignments)} · ${plannedNote}`
+                : `${mealsLoggedSummary(assignments)} today`}
+          </Text>
           <View style={styles.mac3}>
             <MacroBar
               label="Protein"
@@ -1333,11 +1384,53 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "600",
   },
-  offline: {
-    color: colors.midGrey,
+  offlineBanner: {
+    alignItems: "center",
+    backgroundColor: semanticColors.attention.fill,
+    borderColor: "#FDE68A",
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: spacing.sm,
+    padding: 12,
+  },
+  offlineBannerText: {
+    color: semanticColors.attention.text,
+    flex: 1,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  waitChip: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: semanticColors.attention.fill,
+    borderColor: "#FDE68A",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    marginRight: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  waitChipText: {
+    color: semanticColors.attention.text,
     fontSize: 13,
     fontWeight: "600",
-    marginBottom: spacing.sm,
+  },
+  pill: {
+    alignItems: "center",
+    borderRadius: radii.pill,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  pillLabel: {
+    fontSize: 13,
+    fontWeight: "600",
   },
   muted: {
     color: colors.midGrey,
