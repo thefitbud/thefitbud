@@ -128,3 +128,88 @@ describe("overlay slot timezone (QS6)", () => {
     expect(source).not.toMatch(/overlaySlotFinder\(\{[^}]*timezone/);
   });
 });
+
+/**
+ * Z11-4: close minus 30 minutes, derived independently of the seed. For an IST
+ * client and a New York client, the reference instant is the local close of that
+ * day's lunch (plan local time + 12 h, read in the client's own zone) minus 30
+ * minutes, and the seed runs at that instant. The seeded window must close at
+ * exactly that local clock time, and the item is still open: no exception on it
+ * at seed time or when evaluated at the reference instant. Forcing the windows
+ * into IST moves the New York client's close by hours and fails.
+ */
+function zonedInstant(localDate: string, hhmm: string, zone: string): number {
+  // Find the instant whose clock in `zone` reads localDate hhmm (no DST edge on these dates).
+  const target = Date.parse(`${localDate}T${hhmm}:00.000Z`);
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: zone, dateStyle: "short", timeStyle: "short", hourCycle: "h23" });
+  const clock = (ms: number) => fmt.format(new Date(ms)).replace(",", "");
+  let guess = target;
+  for (let i = 0; i < 3; i += 1) {
+    const [d, t] = clock(guess).split(" ");
+    const shown = Date.parse(`${d}T${t}:00.000Z`);
+    guess += target - shown;
+  }
+  return guess;
+}
+
+describe("close minus 30 minutes in two zones (Z11-4)", () => {
+  const PROBE_NOW = "2026-10-22T12:37:00.000Z";
+  const LOCAL_DATE = "2026-10-20";
+  const CASES = [
+    { email: "pooja.silent@demo.fitbud.test", zone: "Asia/Kolkata" },
+    { email: "arjun.attention@demo.fitbud.test", zone: "America/New_York" },
+  ];
+  const seed = async (referenceInstant: string) => {
+    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    handle.sqlite.exec(buildDemoSeedSql({ referenceInstant, passwordHash: "z11-4-tz-test-hash", libraryIndex: loadDemoLibraryIndex(handle.sqlite) }));
+    return handle;
+  };
+  const lunchOf = (handle: MemoryDbHandle, email: string, localDate: string) =>
+    handle.sqlite.exec(
+      `select m.id, m.coaching_relationship_id, m.window_starts_at, m.window_ends_at, m.meal_prescription_json
+         from meal_assignments m join coaching_relationships r on r.id = m.coaching_relationship_id
+         join user_identities i on i.user_id = r.trainee_user_id
+         where i.email = '${email}' and r.status = 'active' and m.local_date = '${localDate}' and m.meal_name like 'Lunch%'`,
+    )[0]?.values[0];
+
+  it("covers an IST and a non-IST client", () => {
+    expect(CASES.map((c) => c.zone)).toEqual(["Asia/Kolkata", "America/New_York"]);
+  });
+
+  it.each(CASES)("closes at the local clock time and is open at close - 30 min for $email ($zone)", async ({ email, zone }) => {
+    // 1. The plan's lunch local time, from a probe seed.
+    const probe = await seed(PROBE_NOW);
+    let lunchTime: string;
+    try {
+      expect(probe.sqlite.exec(`select u.timezone from users u join user_identities i on i.user_id = u.id where i.email = '${email}'`)[0]?.values[0]?.[0]).toBe(zone);
+      const row = lunchOf(probe, email, LOCAL_DATE);
+      expect(row, "a lunch assignment on the probe date").toBeDefined();
+      const json = JSON.parse(String(row![4])) as { localTime?: string };
+      lunchTime = json.localTime ?? "";
+      expect(lunchTime).toMatch(/^\d\d:\d\d$/);
+    } finally {
+      probe.close();
+    }
+    // 2. Expected close and reference instant, computed here in the client's zone.
+    const opens = zonedInstant(LOCAL_DATE, lunchTime, zone);
+    const closes = opens + 12 * 3_600_000;
+    const reference = new Date(closes - 30 * 60_000).toISOString();
+    // 3. Seed at that instant.
+    const handle = await seed(reference);
+    try {
+      const row = lunchOf(handle, email, LOCAL_DATE);
+      expect(row, "a lunch assignment on the local date").toBeDefined();
+      const [id, rel, startsAt, endsAt] = row!.map(String);
+      expect(startsAt).toBe(new Date(opens).toISOString());
+      expect(endsAt).toBe(new Date(closes).toISOString());
+      expect(reference > startsAt! && reference < endsAt!).toBe(true);
+      const onItem = (sourceId: string | undefined) => handle.sqlite.exec(`select type, status from exceptions where source_entity_id = '${sourceId}'`)[0]?.values ?? [];
+      expect(onItem(id)).toEqual([]);
+      const during = await evaluateRelationshipExceptions(handle.db, rel!, reference);
+      expect(during.exceptions.filter((e) => e.sourceEntityId === id)).toEqual([]);
+      expect(onItem(id)).toEqual([]);
+    } finally {
+      handle.close();
+    }
+  }, 120_000);
+});
