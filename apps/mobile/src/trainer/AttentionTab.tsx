@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState, Pressable, StyleSheet, View } from "react-native";
-import { Check, ChevronRight, CircleCheck } from "lucide-react-native";
+import { Check, ChevronRight } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -23,6 +23,12 @@ import {
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { isNetworkFailure } from "./attention/offline";
+import {
+  AttentionEmptyState,
+  AttentionErrorState,
+  AttentionOfflineBanner,
+} from "./attention/states";
 import { Screen } from "../components/Screen";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { reportError } from "../lib/reportError";
@@ -122,14 +128,6 @@ function avatarTone(name: string): (typeof AVATARS)[number] {
 
 const CACHE_KEY = "trainer:attention";
 
-function isOfflineError(err: unknown): boolean {
-  if (err instanceof TypeError) return true;
-  if (err instanceof ApiClientError) {
-    return err.status === 0 || err.code === "NETWORK_ERROR";
-  }
-  return err instanceof Error && /fetch|network|offline/i.test(err.message);
-}
-
 export function AttentionTab({
   onReviewException,
   onReviewCheckin,
@@ -155,6 +153,9 @@ export function AttentionTab({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
+  // No data on screen and the load failed: the frame 45 state with Retry.
+  const [loadFailed, setLoadFailed] = useState(false);
+  const hasData = useRef(false);
   const [toast, setToast] = useState<string | null>(null);
   const [undoTarget, setUndoTarget] = useState<ReviewedUndoItem[] | null>(null);
   const [reviewSheet, setReviewSheet] = useState<ReviewSheetState | null>(null);
@@ -211,19 +212,30 @@ export function AttentionTab({
         savedAt: new Date().toISOString(),
       };
       applySnapshot(snapshot);
+      hasData.current = true;
       writeTrainerCache(CACHE_KEY, snapshot);
       setOfflineAt(null);
+      setLoadFailed(false);
     } catch (err) {
       const cached = readTrainerCache<Snapshot>(CACHE_KEY);
-      if (isOfflineError(err) && cached) {
+      if (isNetworkFailure(err) && cached) {
+        // Proven network failure with a cached list: frame 44.
         applySnapshot(cached);
+        hasData.current = true;
         setOfflineAt(cached.savedAt);
-        setError(null);
-      } else if (isOfflineError(err)) {
-        setOfflineAt(new Date().toISOString());
+        setLoadFailed(false);
         setError(null);
       } else {
-        setError("Couldn't load. Pull to try again.");
+        // Offline with nothing cached, or any other error, is a failed load:
+        // never an empty list and never called "offline" without proof.
+        if (!isNetworkFailure(err)) reportError("attention.load", err);
+        // The offline line and an error never show together.
+        setOfflineAt(null);
+        if (hasData.current) {
+          setError("Couldn't load. Pull to try again.");
+        } else {
+          setLoadFailed(true);
+        }
       }
     } finally {
       setLoading(false);
@@ -253,6 +265,12 @@ export function AttentionTab({
 
   const offline = offlineAt != null;
   const todayLabel = formatCivilDate(localDateInTimezone(trainerZone));
+  const showEmpty =
+    !loading &&
+    !loadFailed &&
+    segment === "needs_you" &&
+    needsYouCards.length === 0 &&
+    reviewedCards.length === 0;
   const sections = attentionSectionModel({
     dateLabel: todayLabel,
     needsYouCount: needsYouCards.length,
@@ -594,34 +612,33 @@ export function AttentionTab({
         ) : undefined
       }
     >
-      <Text style={styles.eyebrow}>{sections.subtitle}</Text>
+      {offline ? (
+        <AttentionOfflineBanner
+          updatedAt={formatClockTime(offlineAt!, trainerZone)}
+        />
+      ) : null}
+      <Text style={styles.eyebrow}>
+        {showEmpty ? todayLabel : sections.subtitle}
+      </Text>
       <Text style={styles.screenTitle} accessibilityRole="header">
         {sections.title}
       </Text>
 
-      {offline ? (
-        <View style={styles.offline}>
-          <Text style={styles.offlineText}>
-            You're offline. Showing the last update from{" "}
-            {formatClockTime(offlineAt!, trainerZone)}.
-          </Text>
-        </View>
-      ) : null}
       {error ? <ErrorBanner message={error} /> : null}
 
       <View style={styles.chips}>
         <FilterChip
-          label={`Needs you ${needsYouCards.length}`}
+          label={loadFailed ? "Needs you" : `Needs you ${needsYouCards.length}`}
           selected={segment === "needs_you"}
           onPress={() => setSegment("needs_you")}
         />
         <FilterChip
-          label={`Asked ${asks.length}`}
+          label={loadFailed ? "Asked" : `Asked ${asks.length}`}
           selected={segment === "asked"}
           onPress={() => setSegment("asked")}
         />
         <FilterChip
-          label={`Check-ins ${checkins.length}`}
+          label={loadFailed ? "Check-ins" : `Check-ins ${checkins.length}`}
           selected={segment === "checkins"}
           onPress={() => setSegment("checkins")}
         />
@@ -635,15 +652,16 @@ export function AttentionTab({
         </View>
       ) : null}
 
-      {segment === "needs_you" &&
-      !loading &&
-      !sections.needsYou &&
-      !sections.reviewed ? (
-        <View style={styles.empty}>
-          <CircleCheck color={colors.indigo} size={28} />
-          <Text style={styles.emptyTitle}>All caught up.</Text>
-        </View>
+      {loadFailed && !loading ? (
+        <AttentionErrorState
+          onRetry={() => {
+            setLoading(true);
+            void load();
+          }}
+        />
       ) : null}
+
+      {showEmpty ? <AttentionEmptyState /> : null}
 
       {segment === "needs_you" && sections.needsYou ? (
         <View style={styles.section}>
@@ -1105,23 +1123,10 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   disabled: { opacity: 0.45 },
-  empty: { alignItems: "center", gap: 8, paddingVertical: 48 },
-  emptyTitle: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 18,
-  },
   skeleton: {
     backgroundColor: "#E7E9F2",
     borderRadius: 20,
     height: 148,
     marginBottom: 12,
   },
-  offline: {
-    backgroundColor: "#F3F1FA",
-    borderRadius: 12,
-    marginBottom: 12,
-    padding: 12,
-  },
-  offlineText: { color: colors.deepNavy, fontSize: 14, lineHeight: 20 },
 });
