@@ -243,9 +243,12 @@ test.describe("TW-B auth flows", () => {
     expect(code).toBeTruthy();
     await enterOtp(code!);
     await page.getByRole("button", { name: /^verify code$/i }).click();
-    await expect(page.getByText(/choose a new password/i)).toBeVisible({
-      timeout: 20_000,
-    });
+    // Exact match: the page lead ("...then you choose a new password.") also
+    // contains this phrase, so a regex would match it on every step.
+    await expect(
+      page.getByText("Choose a new password.", { exact: true }),
+    ).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('input[autocomplete="new-password"]')).toBeVisible();
     const newPass = `FitBud-reset-${Date.now().toString().slice(-4)}aA1!`;
     await page.locator('input[autocomplete="new-password"]').fill(newPass);
     await page.getByRole("button", { name: /save password and sign in/i }).click();

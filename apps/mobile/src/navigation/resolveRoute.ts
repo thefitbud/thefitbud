@@ -28,6 +28,11 @@ export function resolveAppRoute(input: {
   /** True when /me returned 401 (no FitBud user yet) while a token is held. */
   needsAccountLink: boolean;
   relationships: CoachingRelationship[] | null;
+  /**
+   * Trainer More's "Switch role" asked for role select (frame 59, Z11-14).
+   * Honoured only while the account has both mobile roles.
+   */
+  roleSelectRequested?: boolean;
 }): AppRoute {
   if (!input.accessToken) {
     return { name: "auth" };
@@ -48,6 +53,10 @@ export function resolveAppRoute(input: {
   const mobileRoles = mobilePermittedRoles(input.me.permittedRoles);
   if (mobileRoles.length === 0) {
     return { name: "unsupported_role" };
+  }
+
+  if (input.roleSelectRequested && mobileRoles.length > 1) {
+    return { name: "role_select" };
   }
 
   if (!input.selectedRole || !mobileRoles.includes(input.selectedRole)) {
@@ -170,4 +179,37 @@ export function roleSwitchPrompt(input: {
     return null;
   }
   return { targetRole: needed };
+}
+
+/**
+ * Z11-14: the switch prompt the app shows today. Only a link that needs the
+ * trainer role, opened in trainee mode, asks (frame 61, coach view). A trainee
+ * link in trainer mode has no frame for its client-view sheet, so it gets no
+ * prompt and keeps its earlier behaviour.
+ */
+export function coachViewSwitchPrompt(input: {
+  selectedRole: Role | null;
+  permittedRoles: readonly Role[];
+  linkKind: string;
+}): { targetRole: "trainer" } | null {
+  const prompt = roleSwitchPrompt(input);
+  return prompt?.targetRole === "trainer" ? { targetRole: "trainer" } : null;
+}
+
+/**
+ * What a coach-view link opens, for frame 61's "This link is for {subject},
+ * which you review as a coach." The link carries an id only, and trainer data
+ * cannot be read under the trainee role, so no client name is shown.
+ */
+export function coachLinkSubject(linkKind: string): string {
+  switch (linkKind) {
+    case "exception":
+      return "a client's exception";
+    case "ask":
+      return "a client's question";
+    case "client":
+      return "a client's profile";
+    default:
+      return "a coach screen";
+  }
 }
