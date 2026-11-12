@@ -239,9 +239,9 @@ export function dayKcalSummary(
   );
   const rows: DayKcalRow[] = [];
   let loggedTotal = 0;
-  let plannedTotal = 0;
+  // Rounded once over all items, the same figure the rings call `assigned`.
+  const plannedTotal = dayNutritionFromMeals([...assignments]).assigned.kcal;
   for (const meal of assignments) {
-    plannedTotal += nutrientsFromMealPrescription(meal).kcal;
     if (isMealLoggedForCount(meal.status)) {
       let kcal: number;
       const serverScaled = perMeal.get(meal.prescription.id);
