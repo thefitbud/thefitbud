@@ -2131,6 +2131,26 @@
   min-height: 44px;
 }
 
+/* Reactivate (frame 179, D-W10-7): about 36 px visual height at desktop widths
+   with a fine pointer; the invisible pseudo-element keeps the hit area at
+   44 px. At 1024 px and below, or on touch, tap-targets.css keeps the full
+   44 px. Scoped to this button only. */
+@media (min-width: 1025px) and (pointer: fine) {
+  .wsh-acts .button-primary.wsh-reactivate {
+    position: relative;
+    min-height: 36px;
+    height: 36px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .wsh-acts .button-primary.wsh-reactivate::after {
+    content: "";
+    position: absolute;
+    inset: -5px 0; /* border-box 36 + 2 * 4 = 44 (1 px border offsets the padding box) */
+  }
+}
+
 /* Header ⋯ trigger: 44 px square beside the header buttons (frame 208). */
 .wsh-acts .overflow-menu-trigger {
   display: inline-flex;

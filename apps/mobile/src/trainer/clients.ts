@@ -5,7 +5,7 @@ import type {
   Invitation,
   OnboardingStatus,
 } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { formatCivilDate, formatCount, formatLocalDate, labelFor } from "@fitbud/core";
 
 export type ClientDirectoryRow = {
   key: string;
@@ -134,6 +134,53 @@ export function clientListQueryForChip(
   }
 }
 
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+
+export function isEndedClient(item: ClientDirectoryItem): boolean {
+  return item.status === "ended";
+}
+
+/** Whole weeks a coaching relationship ran, at least 1; null when dates are missing. */
+export function endedWeeks(item: ClientDirectoryItem): number | null {
+  if (!item.startedAt || !item.endedAt) return null;
+  const span = new Date(item.endedAt).getTime() - new Date(item.startedAt).getTime();
+  if (!Number.isFinite(span) || span < 0) return null;
+  return Math.max(1, Math.floor(span / MS_PER_WEEK));
+}
+
+/** "Ended Sat 3 Oct" for the ended-roster chip, in the trainer's zone. */
+export function endedChipLabel(
+  item: ClientDirectoryItem,
+  timeZone: string,
+  now?: Date,
+): string {
+  if (!item.endedAt) return labelFor("onboarding_status", "ended");
+  const date = new Date(item.endedAt);
+  if (Number.isNaN(date.getTime())) return labelFor("onboarding_status", "ended");
+  return `Ended ${formatCivilDate(formatLocalDate(date, timeZone), { now })}`;
+}
+
+/**
+ * Ended clients show only under the Ended filter; check-in due narrows to
+ * clients with a check-in waiting on someone.
+ */
+export function applyClientListFilter(
+  items: ClientDirectoryItem[],
+  chip: ClientListFilter,
+): ClientDirectoryItem[] {
+  if (chip === "ended") return items.filter(isEndedClient);
+  const live = items.filter((item) => !isEndedClient(item));
+  if (chip === "checkin_due") {
+    return live.filter((item) => isCheckinDue(item));
+  }
+  return live;
+}
+
+export function isCheckinDue(item: ClientDirectoryItem): boolean {
+  const status = item.nextCheckin?.status;
+  return status === "due" || status === "overdue" || status === "submitted";
+}
+
 export function clientSubtitle(item: ClientDirectoryItem): string {
   const goal = item.goalShort?.trim() ?? "";
   if (!goal) {
@@ -141,10 +188,17 @@ export function clientSubtitle(item: ClientDirectoryItem): string {
       ? "No goal set yet"
       : onboardingStatusLabel(item.status);
   }
+  const weeks = isEndedClient(item) ? endedWeeks(item) : null;
   const parts = [
     goal,
     item.city?.trim() || null,
-    item.week != null ? `week ${item.week}` : null,
+    isEndedClient(item)
+      ? weeks != null
+        ? formatCount(weeks, "week")
+        : null
+      : item.week != null
+        ? `week ${item.week}`
+        : null,
   ].filter((part): part is string => Boolean(part));
   return parts.join(" · ");
 }

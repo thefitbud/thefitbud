@@ -12,6 +12,7 @@ import {
   type MealAssignment,
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor, fireEvent, act } from "../test/render";
+import { formatCivilDate } from "@fitbud/core";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
@@ -149,6 +150,7 @@ let stepsToday: unknown = { localDate: TODAY, steps: null, target: 8000 };
 let notifications: unknown[] = [];
 let coachNoteItems: unknown[] = [];
 let reminderStatus: unknown = null;
+let executionDetail: unknown = null;
 let checkinItems: unknown[] = [];
 const markRead = vi.fn(async () => null);
 const resume = vi.fn(async () => ({ mode: "normal", pausedUntil: null }));
@@ -178,6 +180,7 @@ const api = new Proxy(
       if (key === "markNotificationRead") return markRead;
       if (key === "resumeReminders") return resume;
       if (key === "getStepsToday") return async () => stepsToday;
+      if (key === "getWorkoutExecution") return async () => executionDetail;
       if (key === "then") return undefined;
       return async () => null;
     },
@@ -214,6 +217,7 @@ vi.mock("../sync/SyncProvider", async () => {
           if (failOutbox) throw new Error("storage");
           return outboxRows;
         }),
+        getMeta: vi.fn(async () => ({ cursor: null, lastSyncedAt: null })),
       },
       enqueue: vi.fn(),
     }),
@@ -259,7 +263,10 @@ let openOverlay = vi.fn();
 
 let onSelectDate = vi.fn();
 
-function renderToday(selectedDate: string = TODAY) {
+function renderToday(
+  selectedDate: string = TODAY,
+  extra: Partial<React.ComponentProps<typeof TodayTab>> = {},
+) {
   return render(
     <TodayTab
       relationship={relationship}
@@ -272,6 +279,7 @@ function renderToday(selectedDate: string = TODAY) {
       onOpenCheckin={() => undefined}
       onRefreshPlan={() => undefined}
       onOpenOverlay={openOverlay}
+      {...extra}
     />,
   );
 }
@@ -283,6 +291,7 @@ beforeEach(() => {
   notifications = [];
   coachNoteItems = [];
   reminderStatus = null;
+  executionDetail = null;
   checkinItems = [];
   markRead.mockClear();
   resume.mockClear();
@@ -809,5 +818,108 @@ describe("Today v3 past day, loading and offline", () => {
       await screen.findByText("Rahul has a note for you");
       screen.getByText('"Keep protein up on rest days."');
     });
+  });
+});
+
+describe("Today header, past notice and done card (Z10-20)", () => {
+  it("header: date eyebrow, Today title, bell with unread dot opens notifications", async () => {
+    renderToday(TODAY, { unreadNotifications: 2 });
+    await screen.findByText("Meals");
+    expect(screen.getByRole("heading", { name: "Today" })).toBeTruthy();
+    expect(screen.getAllByText(formatCivilDate(TODAY)).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    expect(openOverlay).toHaveBeenCalledWith({ screen: "notifications" });
+  });
+
+  it("header: sync button opens the sync overlay", async () => {
+    renderToday();
+    await screen.findByText("Meals");
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Sync status, Synced" }),
+    );
+    expect(openOverlay).toHaveBeenCalledWith({ screen: "sync" });
+  });
+
+  it("header: a failed outbox row changes the sync button's label", async () => {
+    outboxRows = [{ status: "rejected", payloadJson: "{}" }];
+    renderToday();
+    await screen.findByText("Meals");
+    expect(
+      await screen.findByRole("button", {
+        name: "Sync status, Couldn't send",
+      }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sync status, Synced" })).toBeNull();
+  });
+
+  it("header: queued rows read 'Saved on phone'", async () => {
+    outboxRows = [{ status: "pending", payloadJson: "{}" }];
+    renderToday();
+    expect(
+      await screen.findByRole("button", {
+        name: "Sync status, Saved on phone",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("past day: the title is the date and exactly one past-day notice shows", async () => {
+    const past = dayBefore(TODAY, 2);
+    const view = renderToday(past);
+    await screen.findByLabelText(/^Past day\./);
+    expect(
+      screen.getByRole("heading", {
+        name: formatCivilDate(past).replace(" ", ", "),
+      }),
+    ).toBeTruthy();
+    expect(screen.getAllByLabelText(/^Past day\./)).toHaveLength(1);
+    expect(view.container.textContent).not.toMatch(/read-only except late logging/);
+    // The banner carries the way back; the strip's own Today pill is off.
+    expect(screen.queryByRole("button", { name: "Go to today" })).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Back to today" })).toHaveLength(1);
+  });
+
+  it("done card: executed of planned, and View summary hands the execution id on", async () => {
+    workouts = [completedWorkout];
+    const exerciseIds = completedWorkout.workoutDay.exercises.map((e) => e.id);
+    executionDetail = {
+      ...completedWorkout.execution,
+      exercises: exerciseIds.map((exerciseId, i) => ({
+        id: `00000000-0000-4000-8000-00000000090${i}`,
+        workoutExecutionId: completedWorkout.execution!.id,
+        exerciseId,
+        name: `Exercise ${i + 1}`,
+        order: i + 1,
+        status: i === 0 ? "completed" : "pending",
+        sets: [
+          {
+            id: `00000000-0000-4000-8000-00000000091${i}`,
+            exerciseExecutionId: `00000000-0000-4000-8000-00000000090${i}`,
+            setTargetId: completedWorkout.workoutDay.exercises[i]!.setTargets[0]!.id,
+            order: 1,
+            status: i === 0 ? "completed" : "pending",
+            prescribedReps: 8,
+            prescribedLoadLabel: null,
+            actualReps: i === 0 ? 8 : null,
+            actualLoadLabel: null,
+            completedAt: i === 0 ? `${TODAY}T13:30:00.000Z` : null,
+            createdAt: `${TODAY}T13:00:00.000Z`,
+            updatedAt: `${TODAY}T13:52:00.000Z`,
+          },
+        ],
+        createdAt: `${TODAY}T13:00:00.000Z`,
+        updatedAt: `${TODAY}T13:52:00.000Z`,
+      })),
+    };
+    const onViewSummary = vi.fn();
+    renderToday(TODAY, { onViewSummary });
+    expect(await screen.findByText("1 of 2 exercises · 52 min")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "View summary" }));
+    expect(onViewSummary).toHaveBeenCalledWith(completedWorkout.execution!.id);
+  });
+
+  it("done card keeps 'N exercises' when the full execution cannot be read", async () => {
+    workouts = [completedWorkout];
+    renderToday(TODAY, { onViewSummary: () => undefined });
+    expect(await screen.findByText("2 exercises · 52 min")).toBeTruthy();
   });
 });

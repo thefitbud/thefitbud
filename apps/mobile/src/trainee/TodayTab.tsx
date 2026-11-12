@@ -13,8 +13,6 @@ import {
   formatClockTime,
   formatKcal,
   formatNumber,
-  formatPersonName,
-  greetingFor,
 } from "@fitbud/core";
 import {
   WeeklyConsistency,
@@ -78,6 +76,7 @@ import {
   type StepsChipState,
 } from "./today/TodaySummaryCard";
 import { INFO_BORDER, PastDayBanner } from "./today/PastDayBanner";
+import { TodayHeader } from "./today/TodayHeader";
 import { TodaySkeleton } from "./today/TodaySkeleton";
 import {
   queuedLogsLabel,
@@ -266,6 +265,8 @@ export function TodayTab({
   onOpenCheckin,
   onRefreshPlan,
   onOpenOverlay,
+  unreadNotifications = 0,
+  onViewSummary,
 }: {
   relationship: CoachingRelationship;
   /** Three-state, never a nullable plan: see `EffectivePlanState` above. */
@@ -279,6 +280,13 @@ export function TodayTab({
   onOpenCheckin: (checkin: Checkin) => void;
   onRefreshPlan: () => void;
   onOpenOverlay: TraineeOverlayOpener;
+  /** Unread count for the title-row bell (frame 04). */
+  unreadNotifications?: number;
+  /**
+   * "View summary" on the done card: the shell switches to Workout and opens
+   * that execution's summary (D-W10-9).
+   */
+  onViewSummary?: (executionId: string) => void;
 }) {
   const { api, me } = useAuth();
   const sync = useSyncEngine();
@@ -425,6 +433,41 @@ export function TodayTab({
   const doneMinutes = workout?.execution
     ? durationMinutesFromExecution(workout.execution)
     : null;
+  // "N of M" on the done card (frame 04 done): exercises the trainee executed
+  // out of the planned ones. The day's execution here is a summary without
+  // exercises, so the full one is read through the API client; when that
+  // cannot be read the card keeps its plain "N exercises" label.
+  const doneExecutionId =
+    workout &&
+    (workout.status === "completed" || workout.status === "modified")
+      ? (workout.execution?.id ?? null)
+      : null;
+  const [doneExecuted, setDoneExecuted] = useState<number | null>(null);
+  useEffect(() => {
+    setDoneExecuted(null);
+    if (!doneExecutionId) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getWorkoutExecution(doneExecutionId))
+      .then((execution) => {
+        // An execution with no exercise rows (nothing was recorded per
+        // exercise) is no source for a count: keep the plain label.
+        if (cancelled || execution.exercises.length === 0) return;
+        setDoneExecuted(
+          // Same rule as the summary screen's "Exercises N of M": an exercise
+          // counts once none of its sets is still pending.
+          execution.exercises.filter((ex) =>
+            ex.sets.every((set) => set.status !== "pending"),
+          ).length,
+        );
+      })
+      .catch((err) => {
+        reportError("TodayTab.getWorkoutExecution", err);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, doneExecutionId, refreshNonce]);
   const restDay =
     planState.status === "loaded" && !loading && lockStateKnown && !workout;
   useEffect(() => {
@@ -538,22 +581,6 @@ export function TodayTab({
     }
   }
 
-  const allDone =
-    isToday &&
-    planState.status === "loaded" &&
-    meals.length > 0 &&
-    meals.every((m) => isMealLoggedForCount(m.status)) &&
-    (!workout ||
-      workout.status === "completed" ||
-      workout.status === "skipped");
-
-  const displayName = useMemo(() => {
-    const email = me?.email ?? "";
-    const local = email.split("@")[0] ?? "";
-    const first = local.split(".")[0] ?? "";
-    return formatPersonName(first) || "there";
-  }, [me?.email]);
-
   const workoutSets = (workout?.workoutDay.exercises ?? []).reduce(
     (sum, ex) => sum + ex.setTargets.length,
     0,
@@ -577,36 +604,13 @@ export function TodayTab({
       }}
     >
       <View style={styles.stack}>
-        {isToday ? (
-          <View style={styles.greet}>
-            <Text style={styles.greetTitle} accessibilityRole="header">
-              {allDone
-                ? "That's everything for today."
-                : greetingFor(displayName, timeZone || "Asia/Kolkata")}
-            </Text>
-            {/*
-              Gated on the plan's OWN load state (CU22, D-W3b-24). It used to
-              be gated on nothing but `planReady`, which was false while the
-              plan was still loading, so this line claimed the coach had
-              published nothing whenever it rendered first — which it always
-              did, because the shell's plan load awaits a sync pull and
-              `TodayTab`'s day load does not. While the plan is loading this
-              says nothing at all; the day's own loading card below is the
-              honest signal.
-            */}
-            {planState.status === "loading" ||
-            planState.status === "unavailable" ? null : (
-              <Text style={styles.greetSub}>
-                {allDone
-                  ? "Nicely done."
-                  : planState.status === "loaded"
-                    ? "Here's your day."
-                    : `${coachName} is preparing your plan.`}
-              </Text>
-            )}
-          </View>
-        ) : null}
-
+        <TodayHeader
+          selectedDate={selectedDate}
+          isToday={isToday}
+          unreadNotifications={unreadNotifications}
+          onOpenSync={() => onOpenOverlay({ screen: "sync" })}
+          onOpenNotifications={() => onOpenOverlay({ screen: "notifications" })}
+        />
         {/*
           The strip renders this screen's own week state (CU23 review fix).
           It used to fetch `GET /me/week` a second time for the same week and
@@ -739,9 +743,23 @@ export function TodayTab({
             </View>
             <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
             <Text style={styles.heroItems}>
-              {exerciseCountLabel(workout.workoutDay.exercises.length)}
+              {doneExecuted != null
+                ? `${doneExecuted} of ${workout.workoutDay.exercises.length} exercises`
+                : exerciseCountLabel(workout.workoutDay.exercises.length)}
               {doneMinutes != null ? ` · ${doneMinutes} min` : ""}
             </Text>
+            {workout.execution && onViewSummary ? (
+              <View style={styles.heroBtns}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="View summary"
+                  onPress={() => onViewSummary(workout.execution!.id)}
+                  style={styles.heroPrimary}
+                >
+                  <Text style={styles.heroPrimaryLabel}>View summary</Text>
+                </Pressable>
+              </View>
+            ) : null}
           </View>
         ) : null}
 
@@ -1102,21 +1120,6 @@ const styles = StyleSheet.create({
   stack: {
     gap: spacing.md,
     paddingTop: spacing.sm,
-  },
-  greet: {
-    gap: 2,
-    marginBottom: spacing.xs,
-  },
-  greetTitle: {
-    color: colors.deepNavy,
-    fontSize: 28,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-  },
-  greetSub: {
-    color: colors.midGrey,
-    fontSize: 16,
-    lineHeight: 22,
   },
   offlineHint: {
     color: colors.midGrey,

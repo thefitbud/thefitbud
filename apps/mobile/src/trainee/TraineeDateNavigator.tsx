@@ -186,7 +186,6 @@ export function TraineeDateNavigator({
   const { me } = useAuth();
   const timeZone = me?.timezone ?? "UTC";
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
-  const isToday = selectedDate === today;
   const isFuture = selectedDate > today;
 
   const weekStart = useMemo(
@@ -210,11 +209,9 @@ export function TraineeDateNavigator({
   if (Platform.OS === "web") {
     return (
       <>
-        {showPreviewBanner && !isToday ? (
+        {showPreviewBanner && isFuture ? (
           <Text style={styles.previewBanner}>
-            {isFuture
-              ? `Preview · ${formatHeadingDate(timeZone, selectedDate)}`
-              : `Viewing ${formatHeadingDate(timeZone, selectedDate)} · read-only except late logging`}
+            {`Preview · ${formatHeadingDate(timeZone, selectedDate)}`}
           </Text>
         ) : null}
         {/*
@@ -237,19 +234,23 @@ export function TraineeDateNavigator({
 
   return (
     <>
-      {showPreviewBanner && !isToday ? (
+      {/*
+        A past day's notice is the host's PastDayBanner (frame 04 past); this
+        component no longer repeats it, and its "Today" pill shows only for
+        a future day (the past banner has "Back to today").
+      */}
+      {showPreviewBanner && isFuture ? (
         <Text style={styles.previewBanner}>
-          {isFuture
-            ? `Preview · ${formatHeadingDate(timeZone, selectedDate)}`
-            : `Viewing ${formatHeadingDate(timeZone, selectedDate)} · read-only except late logging`}
-          </Text>
-        ) : null}
+          {`Preview · ${formatHeadingDate(timeZone, selectedDate)}`}
+        </Text>
+      ) : null}
       <DateNavigator
         days={navigatorDays}
         selectedDate={selectedDate}
         todayDate={today}
         onSelect={onSelectDate}
         onToday={() => onSelectDate(today)}
+        showTodayPill={isFuture}
       />
     </>
   );
