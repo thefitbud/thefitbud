@@ -31,15 +31,20 @@ import {
   clearPersistedSession,
   loadNativeSession,
   loadPersistedSession,
+  loadRememberRole,
+  persistRememberRole,
   persistSession,
   persistTokenState,
 } from "../lib/sessionStorage";
+import { reportError } from "../lib/reportError";
 import {
   OFFLINE_MESSAGE,
   SIGNED_OUT_MESSAGE,
   restoreSession,
 } from "./sessionRestore";
 import {
+  coachViewSwitchPrompt,
+  mobilePermittedRoles,
   resolveAppRoute,
   selectInitialMobileRole,
   type AppRoute,
@@ -53,6 +58,7 @@ import {
 } from "../notifications/register";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { deepLinkFromNotificationPayload } from "../notifications/routing";
+import { clearTrainerCache, setTrainerCacheOwner } from "../trainer/cache";
 
 type AuthContextValue = {
   accessToken: string | null;
@@ -63,12 +69,32 @@ type AuthContextValue = {
   errorMessage: string | null;
   api: FitBudApiClient;
   pendingNotificationLink: NotificationDeepLink | null;
+  /**
+   * A parsed link for the shells to open. Null while `pendingRoleSwitch` asks
+   * first, so the trainee shell never opens a coach link itself.
+   */
   pendingDeepLink: ParsedDeepLink | null;
+  /** Frame 61: a link needs the trainer role while in trainee mode (Z11-14). */
+  pendingRoleSwitch: { targetRole: "trainer"; linkKind: ParsedDeepLink["kind"] } | null;
+  /** Switch to the trainer role; the trainer shell then opens the link. */
+  confirmRoleSwitch: () => Promise<void>;
+  /** Drop the link and stay in the current role. */
+  cancelRoleSwitch: () => void;
+  /** "Remember my choice" as stored (frame 59); ticked after every sign-in. */
+  rememberRole: boolean;
+  /** Trainer More's "Switch role": show role select (frame 59). */
+  requestRoleSelect: () => void;
   signInWithToken: (token: string, refresh?: SessionRefresh) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
   refreshSession: () => Promise<void>;
-  selectRole: (role: Role) => Promise<void>;
+  /**
+   * Reload `/me` without the loading state, so the current screen and tab
+   * stay put (profile Save, Z11-14). Never shows an error screen.
+   */
+  reloadMe: () => Promise<void>;
+  /** `remember` stores "Remember my choice"; omitted keeps the stored value. */
+  selectRole: (role: Role, options?: { remember?: boolean }) => Promise<void>;
   setActiveRelationship: (relationship: CoachingRelationship) => void;
   /** Handle a push notification open. Payload is routing only — not domain state. */
   handleNotificationOpen: (rawPayload: unknown) => NotificationDeepLink | null;
@@ -86,6 +112,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  */
 function messageFromError(error: unknown): string {
   return authErrorCopy(error, "general", "messageFromError");
+}
+
+/**
+ * Every path that ends the session drops the trainer's offline snapshots and
+ * the cache owner, so the next person on this phone never reads them (Z11-8).
+ */
+function endTrainerCacheSession(): void {
+  clearTrainerCache();
+  setTrainerCacheOwner(null);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -111,6 +146,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useState<NotificationDeepLink | null>(null);
   const [pendingDeepLink, setPendingDeepLink] =
     useState<ParsedDeepLink | null>(null);
+  const [rememberRole, setRememberRole] = useState(() => loadRememberRole());
+  const [roleSelectRequested, setRoleSelectRequested] = useState(false);
   // Native reads SecureStore asynchronously (D-W3-11): hold the splash until
   // that restore has answered, so sign-in never flashes for a signed-in user.
   const [restorePhase, setRestorePhase] = useState<"restoring" | "offline" | "done">(
@@ -224,6 +261,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         preferredRole && meResponse.permittedRoles.includes(preferredRole)
           ? preferredRole
           : autoRole;
+      // The cache owner comes only from the server's `/me`, never from cached
+      // data (Z11-8). Set before any trainer screen can mount and read.
+      setTrainerCacheOwner(meResponse.userId);
       setMe(meResponse);
       setSelectedRole(role);
       selectedRoleRef.current = role;
@@ -266,6 +306,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const clearSession = () => {
       tokens.clear();
       clearPersistedSession();
+      endTrainerCacheSession();
     };
     const result = await restoreSession({
       load: loadNativeSession,
@@ -274,6 +315,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       fetchMe: () => api.me(),
       clearSession,
     });
+    // Native knows the stored "Remember my choice" only once it has loaded.
+    setRememberRole(loadRememberRole());
 
     if (result.status === "signed_in") {
       try {
@@ -322,6 +365,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSessionHydrated(true);
   }, [api, applyMe, tokens]);
 
+  /** `/me` answered 401 after the client's own refresh: the session is gone. */
+  const dropRefusedSession = useCallback(() => {
+    setMe(null);
+    setSelectedRole(null);
+    selectedRoleRef.current = null;
+    tokens.clear();
+    clearPersistedSession();
+    endTrainerCacheSession();
+    setRelationships([]);
+    setRelationshipsLoaded(true);
+    setNeedsAccountLink(true);
+    setRoleSelectRequested(false);
+  }, [tokens]);
+
   const refreshSession = useCallback(async () => {
     if (restorePhaseRef.current === "offline") {
       // Retry after "Can't reach FitBud": run the whole restore again.
@@ -344,14 +401,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       // The client already tried one refresh before this 401 reached us.
       if (error instanceof ApiClientError && error.status === 401) {
-        setMe(null);
-        setSelectedRole(null);
-        selectedRoleRef.current = null;
-        tokens.clear();
-        clearPersistedSession();
-        setRelationships([]);
-        setRelationshipsLoaded(true);
-        setNeedsAccountLink(true);
+        dropRefusedSession();
       } else {
         setErrorMessage(messageFromError(error));
       }
@@ -359,7 +409,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBootstrapping(false);
       setSessionHydrated(true);
     }
-  }, [api, applyMe, runRestore, tokens]);
+  }, [api, applyMe, dropRefusedSession, runRestore, tokens]);
+
+  const reloadMe = useCallback(async () => {
+    if (!tokens.getAccessToken() || restorePhaseRef.current !== "done") {
+      return;
+    }
+    try {
+      const meResponse = await api.me();
+      const role = selectedRoleRef.current;
+      if (role && meResponse.permittedRoles.includes(role)) {
+        // Same role: only `me` changes, so no screen remounts.
+        setTrainerCacheOwner(meResponse.userId);
+        setMe(meResponse);
+      } else {
+        // The server no longer permits the role: resolve it as a launch would.
+        await applyMe(meResponse, role, api);
+      }
+      persistSession({
+        accessToken: tokens.getAccessToken(),
+        selectedRole: selectedRoleRef.current,
+        userId: meResponse.userId,
+      });
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        dropRefusedSession();
+        return;
+      }
+      // Quiet: the screen keeps the `me` it has; nothing blames the user.
+      reportError("auth-reload-me", error);
+    }
+  }, [api, applyMe, dropRefusedSession, tokens]);
 
   useEffect(() => {
     if (Platform.OS !== "web") {
@@ -373,7 +453,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const selectRole = useCallback(
-    async (role: Role) => {
+    async (role: Role, options?: { remember?: boolean }) => {
       if (!me || !me.permittedRoles.includes(role)) {
         setErrorMessage("That role is not permitted for this account.");
         return;
@@ -386,15 +466,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Re-fetch /me with the role header so selectedRole is authoritative.
         const meResponse = await api.me();
         await applyMe(meResponse, role, api);
-        // Native only: remember the chosen role for the next cold start. Web
-        // keeps its existing behaviour.
-        if (Platform.OS !== "web") {
-          persistSession({
-            accessToken: tokens.getAccessToken(),
-            selectedRole: selectedRoleRef.current,
-            userId: meResponse.userId,
-          });
+        // "Remember my choice" first: when it is off, the role below is not
+        // stored and the next launch asks again (frame 59, Z11-14).
+        if (options?.remember !== undefined) {
+          persistRememberRole(options.remember);
+          setRememberRole(options.remember);
         }
+        persistSession({
+          accessToken: tokens.getAccessToken(),
+          selectedRole: selectedRoleRef.current,
+          userId: meResponse.userId,
+        });
+        setRoleSelectRequested(false);
       } catch (error) {
         setErrorMessage(messageFromError(error));
       } finally {
@@ -412,6 +495,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       selectedRoleRef.current = null;
+      // No owner until this sign-in's `/me` answers (Z11-8).
+      setTrainerCacheOwner(null);
       tokens.signIn(trimmed, refresh);
       persistSession({ accessToken: trimmed, selectedRole: null });
       setBootstrapping(true);
@@ -422,6 +507,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       selectedRoleRef.current = null;
       setRelationships([]);
       setRelationshipsLoaded(false);
+      setRoleSelectRequested(false);
+      setRememberRole(loadRememberRole());
 
       try {
         // Probe without a role first so single-role users resolve selectedRole.
@@ -441,6 +528,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           tokens.clear();
           clearPersistedSession();
+          endTrainerCacheSession();
           setErrorMessage(messageFromError(error));
         }
       } finally {
@@ -488,7 +576,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRestorePhase("done");
     setPendingNotificationLink(null);
     setPendingDeepLink(null);
+    setRoleSelectRequested(false);
     clearPersistedSession();
+    // Cleared with the session: the next sign-in starts ticked.
+    setRememberRole(true);
+    endTrainerCacheSession();
   }, [tokens]);
   onExpiredRef.current = signOut;
 
@@ -523,6 +615,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
   useAppDeepLinks(onDeepLink);
 
+  // Frame 61 (Z11-14): a coach link in trainee mode asks before switching.
+  const pendingRoleSwitch = useMemo(() => {
+    if (!pendingDeepLink || !me) return null;
+    const prompt = coachViewSwitchPrompt({
+      selectedRole,
+      permittedRoles: me.permittedRoles,
+      linkKind: pendingDeepLink.kind,
+    });
+    return prompt
+      ? { targetRole: prompt.targetRole, linkKind: pendingDeepLink.kind }
+      : null;
+  }, [pendingDeepLink, me, selectedRole]);
+  const visibleDeepLink = pendingRoleSwitch ? null : pendingDeepLink;
+
+  const confirmRoleSwitch = useCallback(async () => {
+    // The link stays pending; once the role is trainer it is no longer held
+    // back, and the trainer shell opens it.
+    await selectRole("trainer");
+  }, [selectRole]);
+
+  const cancelRoleSwitch = useCallback(() => {
+    setPendingDeepLink(null);
+  }, []);
+
+  const requestRoleSelect = useCallback(() => {
+    if (!me || mobilePermittedRoles(me.permittedRoles).length < 2) return;
+    setRoleSelectRequested(true);
+  }, [me]);
+
   const resolvedRoute = resolveAppRoute({
     accessToken,
     bootstrapping: bootstrapping || !sessionHydrated,
@@ -530,6 +651,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     selectedRole,
     needsAccountLink,
     relationships: relationshipsLoaded ? relationships : null,
+    roleSelectRequested,
   });
   // Native restore (AB3). While SecureStore and the refresh answer, show the
   // splash, never sign-in. If the network failed, any route other than "auth"
@@ -554,11 +676,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       errorMessage,
       api,
       pendingNotificationLink,
-      pendingDeepLink,
+      pendingDeepLink: visibleDeepLink,
+      pendingRoleSwitch,
+      confirmRoleSwitch,
+      cancelRoleSwitch,
+      rememberRole,
+      requestRoleSelect,
       signInWithToken,
       signOut,
       clearError: () => setErrorMessage(null),
       refreshSession,
+      reloadMe,
       selectRole,
       setActiveRelationship,
       handleNotificationOpen,
@@ -574,10 +702,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       errorMessage,
       api,
       pendingNotificationLink,
-      pendingDeepLink,
+      visibleDeepLink,
+      pendingRoleSwitch,
+      confirmRoleSwitch,
+      cancelRoleSwitch,
+      rememberRole,
+      requestRoleSelect,
       signInWithToken,
       signOut,
       refreshSession,
+      reloadMe,
       selectRole,
       setActiveRelationship,
       handleNotificationOpen,

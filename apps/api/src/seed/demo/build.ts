@@ -158,6 +158,42 @@ function insertUser(input: {
   return lines.join("\n");
 }
 
+/** (table, timestamp) facts of a relationship that must not predate its started_at (Z11-5 A2). */
+const RELATIONSHIP_ACTIVITY_ANCHORS: Array<[table: string, column: string]> = [
+  ["meal_assignments", "created_at"],
+  ["meal_assignments", "window_starts_at"],
+  ["workout_assignments", "created_at"],
+  ["workout_assignments", "window_starts_at"],
+  ["workout_executions", "started_at"],
+  ["checkins", "window_starts_at"],
+  ["checkins", "submitted_at"],
+  ["measurements", "observed_at"],
+  ["exceptions", "detected_at"],
+  ["plans", "created_at"],
+];
+
+/**
+ * The history builders seed each relationship at 06:00Z of its start date, but
+ * the start day's own meal and workout windows open earlier and long-tenure
+ * personas carry weigh-ins from before that. Move started_at (and created_at,
+ * which never follows it) back to the earliest fact the relationship owns, so
+ * nothing is logged before the relationship starts. Deterministic: derived from
+ * the seeded rows. Runs before accounts are backdated, which follows started_at.
+ * Subscription versions that predate their relationship are lifted to its created_at.
+ */
+function alignRelationshipStartsSql(): string {
+  const earliest = RELATIONSHIP_ACTIVITY_ANCHORS.map(
+    ([table, column]) =>
+      `coalesce((SELECT min(${column}) FROM ${table} WHERE coaching_relationship_id = coaching_relationships.id), coaching_relationships.started_at)`,
+  );
+  const start = `min(coaching_relationships.started_at, ${earliest.join(", ")})`;
+  return [
+    `UPDATE coaching_relationships SET started_at = ${start}, created_at = min(created_at, ${start});`,
+    // A first subscription version is recorded when the relationship is, never before (Z11-5 X7).
+    "UPDATE subscription_versions SET created_at = (SELECT max(subscription_versions.created_at, r.created_at) FROM coaching_relationships r WHERE r.id = subscription_versions.coaching_relationship_id);",
+  ].join("\n");
+}
+
 /** (table, user column, timestamp) facts that can come before a relationship starts. */
 const ACCOUNT_ANCHORS: Array<[table: string, userColumn: string, column: string]> = [
   ["coaching_relationships", "trainer_user_id", "started_at"],
@@ -262,6 +298,7 @@ export function buildDemoSeedSql(input: DemoSeedInput): string {
     }),
   );
 
+  parts.push(alignRelationshipStartsSql());
   parts.push(backdateAccountsSql(now));
 
   for (const account of DEMO_ALL_ACCOUNTS) {

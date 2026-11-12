@@ -8,6 +8,11 @@ const ROLE_KEY = "fitbud.selectedRole";
 const REFRESH_TOKEN_KEY = "fitbud.refreshToken";
 /** Epoch milliseconds when the access token expires. */
 const EXPIRES_AT_KEY = "fitbud.accessTokenExpiresAt";
+/**
+ * Web: "0" when the user unticked "Remember my choice" (frame 59). Absent
+ * means remembered, the default after every sign-in (Z11-14).
+ */
+const REMEMBER_ROLE_KEY = "fitbud.rememberRole";
 
 type SessionRole = Extract<Role, "trainee" | "trainer">;
 
@@ -52,11 +57,20 @@ function warn(message: string): void {
 // order, so a late write can never undo a later clear.
 let nativeQueue: Promise<void> = Promise.resolve();
 // Mirror of fitbud.session, so partial updates merge without a read.
-let nativeMeta: {
+type NativeMeta = {
   userId: string | null;
   tokenKind: NativeTokenKind | null;
   selectedRole: SessionRole | null;
-} = { userId: null, tokenKind: null, selectedRole: null };
+  /** "Remember my choice" (frame 59). Off: no role is stored for the next launch. */
+  rememberRole: boolean;
+};
+const EMPTY_NATIVE_META: NativeMeta = {
+  userId: null,
+  tokenKind: null,
+  selectedRole: null,
+  rememberRole: true,
+};
+let nativeMeta: NativeMeta = { ...EMPTY_NATIVE_META };
 
 function enqueue(job: () => Promise<void>): void {
   nativeQueue = nativeQueue.then(job).catch(() => {
@@ -101,6 +115,7 @@ export async function loadNativeSession(): Promise<NativeStoredSession> {
   let userId: string | null = null;
   let tokenKind: NativeTokenKind | null = null;
   let selectedRole: SessionRole | null = null;
+  let rememberRole = true;
   if (sessionRaw) {
     try {
       const parsed = JSON.parse(sessionRaw) as Record<string, unknown> | null;
@@ -112,12 +127,15 @@ export async function loadNativeSession(): Promise<NativeStoredSession> {
         if (parsed.selectedRole === "trainee" || parsed.selectedRole === "trainer") {
           selectedRole = parsed.selectedRole;
         }
+        if (parsed.rememberRole === false) rememberRole = false;
       }
     } catch {
       // Unreadable metadata only costs the remembered role.
     }
   }
-  nativeMeta = { userId, tokenKind, selectedRole };
+  // Not remembered: the next launch asks again (frame 59), whatever was stored.
+  if (!rememberRole) selectedRole = null;
+  nativeMeta = { userId, tokenKind, selectedRole, rememberRole };
   return {
     refreshToken: refreshToken || null,
     testToken: testToken || null,
@@ -153,8 +171,9 @@ export function loadPersistedSession(): {
   }
   const accessToken = storage.getItem(TOKEN_KEY);
   const roleRaw = storage.getItem(ROLE_KEY);
+  const remembered = storage.getItem(REMEMBER_ROLE_KEY) !== "0";
   const selectedRole: SessionRole | null =
-    roleRaw === "trainee" || roleRaw === "trainer" ? roleRaw : null;
+    remembered && (roleRaw === "trainee" || roleRaw === "trainer") ? roleRaw : null;
   const refreshToken = storage.getItem(REFRESH_TOKEN_KEY);
   const expiresRaw = storage.getItem(EXPIRES_AT_KEY);
   const expiresNumber = expiresRaw ? Number(expiresRaw) : NaN;
@@ -202,9 +221,11 @@ export function persistSession(input: {
       userId: input.userId ?? nativeMeta.userId,
       tokenKind: isTestIdToken(input.accessToken) ? "test_id_token" : "firebase_id_token",
       selectedRole:
-        input.selectedRole === "trainee" || input.selectedRole === "trainer"
+        nativeMeta.rememberRole &&
+        (input.selectedRole === "trainee" || input.selectedRole === "trainer")
           ? input.selectedRole
           : null,
+      rememberRole: nativeMeta.rememberRole,
     };
     writeNativeMeta();
     return;
@@ -214,8 +235,8 @@ export function persistSession(input: {
   if (input.accessToken) storage.setItem(TOKEN_KEY, input.accessToken);
   else storage.removeItem(TOKEN_KEY);
   if (
-    input.selectedRole === "trainee" ||
-    input.selectedRole === "trainer"
+    storage.getItem(REMEMBER_ROLE_KEY) !== "0" &&
+    (input.selectedRole === "trainee" || input.selectedRole === "trainer")
   ) {
     storage.setItem(ROLE_KEY, input.selectedRole);
   } else {
@@ -248,10 +269,50 @@ export function persistTokenState(
   persistRefreshState({ refreshToken: state.refreshToken, expiresAt: state.expiresAt });
 }
 
-/** Sign out, a definitive refusal and (when it exists) account deletion all call this. */
+/**
+ * "Remember my choice" (frame 59, Z11-14). True unless the user unticked it in
+ * this session or a previous one. Native answers from what `loadNativeSession`
+ * read (call it after the restore); web reads localStorage.
+ */
+export function loadRememberRole(): boolean {
+  if (isNative()) return nativeMeta.rememberRole;
+  const storage = webStorage();
+  if (!storage) return true;
+  return storage.getItem(REMEMBER_ROLE_KEY) !== "0";
+}
+
+/**
+ * Store "Remember my choice". Off drops any stored role at once, so the next
+ * launch shows role select; the role in memory still applies to this session.
+ * Native keeps the flag in the same `fitbud.session` record as the role.
+ */
+export function persistRememberRole(remember: boolean): void {
+  if (isNative()) {
+    nativeMeta = {
+      ...nativeMeta,
+      rememberRole: remember,
+      selectedRole: remember ? nativeMeta.selectedRole : null,
+    };
+    writeNativeMeta();
+    return;
+  }
+  const storage = webStorage();
+  if (!storage) return;
+  if (remember) {
+    storage.removeItem(REMEMBER_ROLE_KEY);
+  } else {
+    storage.setItem(REMEMBER_ROLE_KEY, "0");
+    storage.removeItem(ROLE_KEY);
+  }
+}
+
+/**
+ * Sign out, a definitive refusal and (when it exists) account deletion all call
+ * this. It also resets "Remember my choice", so the next sign-in starts ticked.
+ */
 export function clearPersistedSession(): void {
   if (isNative()) {
-    nativeMeta = { userId: null, tokenKind: null, selectedRole: null };
+    nativeMeta = { ...EMPTY_NATIVE_META };
     for (const key of NATIVE_KEYS) {
       enqueue(() => secureDelete(key));
     }
@@ -259,4 +320,5 @@ export function clearPersistedSession(): void {
   }
   persistSession({ accessToken: null, selectedRole: null });
   persistRefreshState({ refreshToken: null, expiresAt: null });
+  webStorage()?.removeItem(REMEMBER_ROLE_KEY);
 }

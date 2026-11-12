@@ -249,6 +249,77 @@ describe.each(REFERENCE_INSTANTS)("demo seed timestamps at %s", (now) => {
   });
 });
 
+/**
+ * Z11-5 (v13 A2, C3, C6, R1, X5, X7): ordering invariants between a record and the
+ * relationship / check-in / plan it hangs off. Instants are compared with julianday
+ * so a mix of `Z` and `.000Z` spellings cannot hide a violation.
+ */
+describe("demo seed ordering invariants (Z11-5)", () => {
+  let handle: MemoryDbHandle;
+  const now = "2026-10-22T14:30:00.000Z";
+  const q = (sql: string) => handle.sqlite.exec(sql)[0]?.values ?? [];
+
+  beforeAll(async () => {
+    handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
+    handle.sqlite.exec(buildDemoSeedSql({ referenceInstant: now, passwordHash: "z11-5-test-hash", libraryIndex }));
+  }, 60_000);
+
+  afterAll(() => handle?.close());
+
+  it("A2: no activity row is stamped before its relationship started_at", () => {
+    const tables = ["meal_assignments", "workout_assignments", "workout_executions", "meal_logs", "checkins", "measurements", "exceptions", "plans"];
+    const bad: string[] = [];
+    let checked = 0;
+    for (const table of tables) {
+      const columns = (q(`select name from pragma_table_info('${table}')`) as string[][]).map((r) => r[0]!);
+      if (!columns.includes("coaching_relationship_id")) continue;
+      for (const column of ["created_at", "window_starts_at", "started_at", "observed_at", "detected_at", "submitted_at", "logged_at"].filter((c) => columns.includes(c))) {
+        checked++;
+        const rows = q(`select t.rowid, t."${column}", r.started_at from ${table} t join coaching_relationships r on r.id = t.coaching_relationship_id
+          where t."${column}" is not null and julianday(t."${column}") < julianday(r.started_at)`) as string[][];
+        for (const [rowId, value, startedAt] of rows) bad.push(`${table}.${column} rowid ${rowId} = ${value} < relationship started ${startedAt}`);
+      }
+    }
+    expect(checked).toBeGreaterThan(10);
+    expect(bad.slice(0, 20)).toEqual([]);
+  });
+
+  it("C3: a check-in is never submitted after it was last updated", () => {
+    expect(q("select id, submitted_at, updated_at from checkins where submitted_at is not null and julianday(submitted_at) > julianday(updated_at)")).toEqual([]);
+    expect(Number(q("select count(*) from checkins where submitted_at is not null")[0]?.[0])).toBeGreaterThan(20);
+  });
+
+  it("C6: a measurement linked to a check-in is observed inside that check-in's window", () => {
+    expect(
+      q(`select m.id, m.type, m.observed_at, c.window_starts_at, c.window_ends_at from measurements m join checkins c on c.id = m.checkin_id
+        where julianday(m.observed_at) < julianday(c.window_starts_at) or julianday(m.observed_at) > julianday(c.window_ends_at)`),
+    ).toEqual([]);
+    expect(Number(q("select count(*) from measurements where checkin_id is not null")[0]?.[0])).toBeGreaterThan(0);
+  });
+
+  it("R1: a relationship is created no later than it started", () => {
+    expect(q("select id, created_at, started_at from coaching_relationships where julianday(created_at) > julianday(started_at)")).toEqual([]);
+    expect(Number(q("select count(*) from coaching_relationships")[0]?.[0])).toBeGreaterThan(10);
+  });
+
+  it("X5: a plan version is created, then published, then effective", () => {
+    expect(
+      q(`select id, created_at, published_at, effective_from from plan_versions
+        where published_at is not null and (julianday(created_at) > julianday(published_at) or (effective_from is not null and julianday(published_at) > julianday(effective_from)))`),
+    ).toEqual([]);
+    expect(Number(q("select count(*) from plan_versions where published_at is not null and effective_from is not null")[0]?.[0])).toBeGreaterThan(10);
+  });
+
+  it("X7: a subscription version is created no earlier than its relationship", () => {
+    expect(
+      q(`select s.id, s.created_at, r.created_at from subscription_versions s join coaching_relationships r on r.id = s.coaching_relationship_id
+        where julianday(s.created_at) < julianday(r.created_at)`),
+    ).toEqual([]);
+    expect(Number(q("select count(*) from subscription_versions")[0]?.[0])).toBeGreaterThan(10);
+  });
+});
+
 describe("demo seed timezone rule (QS5)", () => {
   it("keeps the legacy Deepak → Dubai rule in one helper", () => {
     const sources = ["./history.ts", "./build.ts"].map((f) => readFileSync(new URL(f, import.meta.url), "utf8")).join("\n");
