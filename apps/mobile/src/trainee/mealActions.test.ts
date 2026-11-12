@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { MealAssignment } from "@fitbud/contracts";
 import { NUTRIENT_SCALE, type MeDayResponse } from "@fitbud/contracts";
 import { dayKcalSummary } from "./nutrition";
-import type { SyncEngine } from "../sync/engine";
+import { enqueueAndPush } from "../sync/actions";
+import { createMemorySyncStore, createSyncEngine, type SyncEngine } from "../sync/engine";
 import { isMealLogPending, pendingMealLogIds, plannedUntilSentNote } from "./mealActions";
 
 const SLOT = "00000000-0000-4000-8000-0000000000a1";
@@ -63,7 +64,7 @@ describe("pending outbox helpers", () => {
     const ids = pendingMealLogIds([
       row("meal.confirm", "pending", "a"),
       row("meal.skip", "in_flight", "b"),
-      row("meal.confirm", "applied", "c"),
+      row("meal.confirm", "acked", "c"),
       row("workout.start", "pending", "d"),
     ]);
     expect([...ids].sort()).toEqual(["a", "b"]);
@@ -80,25 +81,43 @@ describe("pending outbox helpers", () => {
 });
 
 describe("isMealLogPending", () => {
-  const engine = (rows: unknown[] | "throw") =>
-    ({
-      store: {
-        listOutbox: async () => {
-          if (rows === "throw") throw new Error("store unavailable");
-          return rows;
-        },
-      },
-    }) as unknown as SyncEngine;
+  const offlineApi = {
+    pushSync: async () => {
+      throw new Error("offline");
+    },
+    pullSync: async () => {
+      throw new Error("offline");
+    },
+  };
 
-  it("is true while the confirm is still in the outbox", async () => {
-    const rows = [{ operation: "meal.confirm", status: "pending", recordId: "m1" }];
-    expect(await isMealLogPending(engine(rows), "m1")).toBe(true);
-    expect(await isMealLogPending(engine(rows), "m2")).toBe(false);
+  it("is true after an offline confirm is queued, false for another meal", async () => {
+    const engine = createSyncEngine(createMemorySyncStore(), offlineApi);
+    const m = lunch("pending");
+    await enqueueAndPush(engine, {
+      recordId: m.id,
+      operation: "meal.confirm",
+      payload: { assignmentId: m.id, body: { photoIntent: null } },
+    });
+    expect(await isMealLogPending(engine, m.id)).toBe(true);
+    expect(await isMealLogPending(engine, "other")).toBe(false);
   });
 
-  it("is false once sent, or when the store cannot be read", async () => {
-    const sent = [{ operation: "meal.confirm", status: "applied", recordId: "m1" }];
-    expect(await isMealLogPending(engine(sent), "m1")).toBe(false);
-    expect(await isMealLogPending(engine("throw"), "m1")).toBe(false);
+  it("is false once the server acknowledged it, or when the store cannot be read", async () => {
+    const engine = createSyncEngine(createMemorySyncStore(), offlineApi);
+    const { mutationId } = await enqueueAndPush(engine, {
+      recordId: "m1",
+      operation: "meal.confirm",
+      payload: { assignmentId: "m1", body: { photoIntent: null } },
+    });
+    await engine.store.updateOutboxStatus(mutationId, "acked");
+    expect(await isMealLogPending(engine, "m1")).toBe(false);
+    const broken = {
+      store: {
+        listOutbox: async () => {
+          throw new Error("store unavailable");
+        },
+      },
+    } as unknown as SyncEngine;
+    expect(await isMealLogPending(broken, "m1")).toBe(false);
   });
 });
