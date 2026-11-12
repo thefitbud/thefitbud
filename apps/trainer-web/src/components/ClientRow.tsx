@@ -68,18 +68,20 @@ export function ClientRow({
   const href = directoryWorkspaceHref(item);
   const goal = item.goalShort?.trim() || null;
   const planTitle = item.effectivePlan?.title?.trim() || null;
+  // Z10-21: trainer-zone civil dates from the API; the UTC slice is only a
+  // fallback for payloads that predate the fields.
+  const endedOn = item.endedOn ?? item.endedAt?.slice(0, 10) ?? null;
+  const startedOn = item.startedOn ?? item.startedAt?.slice(0, 10) ?? null;
   const endedLabel =
-    item.status === "ended" && item.endedAt
-      ? `Ended ${formatCivilDate(item.endedAt.slice(0, 10))}`
+    item.status === "ended" && endedOn
+      ? `Ended ${formatCivilDate(endedOn)}`
       : null;
   // Coached range (frame 140): same civil-date formatting as the ended chip,
   // so the range end and the chip always agree. Shown only when both ends
   // are known; a missing start leaves the cell empty.
   const coachedRange =
-    item.status === "ended" && item.startedAt && item.endedAt
-      ? `${formatCivilDate(item.startedAt.slice(0, 10))} – ${formatCivilDate(
-          item.endedAt.slice(0, 10),
-        )}`
+    item.status === "ended" && startedOn && endedOn
+      ? `${formatCivilDate(startedOn)} – ${formatCivilDate(endedOn)}`
       : null;
   // One chip: "Ended Sat 3 Oct" when the end date is known (frame 140).
   const lifecycleChip = (
