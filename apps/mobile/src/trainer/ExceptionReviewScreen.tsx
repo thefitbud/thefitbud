@@ -4,7 +4,14 @@ import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ExceptionDetail } from "@fitbud/contracts";
 import type { NoteSaveInput } from "./sheets/NoteSheet";
-import { colors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { deviceTimeZone } from "@fitbud/core";
+import { Ban, CircleCheck, FileQuestion, WifiOff } from "lucide-react-native";
+import {
+  colors,
+  semanticColors,
+  spacing,
+  touchTargetMin,
+} from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
@@ -17,6 +24,13 @@ import { firstNameOf } from "./sheets/exceptionSheetContent";
 import { MoreSheet } from "./sheets/MoreSheet";
 import { NoteSheet } from "./sheets/NoteSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
+import {
+  endedBannerText,
+  isNetworkFailure,
+  isNotFound,
+  offlineBannerText,
+  resolvedBannerText,
+} from "./sheets/exceptionStateContent";
 import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
 
 type Props = {
@@ -41,7 +55,18 @@ export function ExceptionReviewScreen({
     null,
   );
   const [traineeName, setTraineeName] = useState("");
-  const [ended, setEnded] = useState(false);
+  // "unknown" until the client workspace answers: live actions stay hidden
+  // so an ended client is never offered Acknowledge, Note or Nudge.
+  const [coaching, setCoaching] = useState<"unknown" | "active" | "ended">(
+    "unknown",
+  );
+  const [endedAt, setEndedAt] = useState<string | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [offline, setOffline] = useState(false);
+  const [lastUpdateAt, setLastUpdateAt] = useState<string | null>(null);
+  const trainerZone = deviceTimeZone();
+  const ended = coaching === "ended";
+  const canAct = coaching === "active" && !offline;
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [nudgeOpen, setNudgeOpen] = useState(false);
@@ -54,25 +79,47 @@ export function ExceptionReviewScreen({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNotFound(false);
     try {
       const result = await api.getException(exceptionId);
       setDetail(result);
+      setOffline(false);
+      setLastUpdateAt(new Date().toISOString());
       try {
         const workspace = await api.getClientWorkspace(
           result.coachingRelationshipId,
         );
         setClientWhatsappE164(workspace.header.clientWhatsappE164 ?? null);
         setTraineeName(workspace.header.traineeDisplayName);
-        setEnded(Boolean(workspace.header.endedAt));
-      } catch {
+        setEndedAt(workspace.header.endedAt ?? null);
+        setCoaching(workspace.header.endedAt ? "ended" : "active");
+      } catch (err) {
+        // Ended-ness is unknown: keep live actions hidden until a retry works.
         setClientWhatsappE164(null);
+        setCoaching("unknown");
+        if (isNetworkFailure(err)) {
+          setOffline(true);
+        } else {
+          reportError("trainer.exception.workspace", err);
+          setError("Could not check the client's status. (EXC-WS)");
+        }
       }
     } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load exception.",
-      );
+      if (isNotFound(err)) {
+        setDetail(null);
+        setNotFound(true);
+      } else if (isNetworkFailure(err)) {
+        setOffline(true);
+      } else {
+        if (!(err instanceof ApiClientError)) {
+          reportError("trainer.exception.load", err);
+        }
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not load exception. (EXC-LOAD)",
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -96,11 +143,18 @@ export function ExceptionReviewScreen({
       setNote("");
       await load();
     } catch (err) {
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not acknowledge exception.",
-      );
+      if (isNetworkFailure(err)) {
+        setOffline(true);
+      } else {
+        if (!(err instanceof ApiClientError)) {
+          reportError("trainer.exception.acknowledge", err);
+        }
+        setError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not acknowledge exception. (ACK-ERR)",
+        );
+      }
     } finally {
       setActing(false);
     }
@@ -128,14 +182,19 @@ export function ExceptionReviewScreen({
       setMessage("Resolved. Source signals were not changed.");
       await load();
     } catch (err) {
-      if (!(err instanceof ApiClientError)) {
-        reportError("trainer.exception.resolve", err);
+      if (isNetworkFailure(err)) {
+        setResolveOpen(false);
+        setOffline(true);
+      } else {
+        if (!(err instanceof ApiClientError)) {
+          reportError("trainer.exception.resolve", err);
+        }
+        setResolveError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not resolve exception. (RES-ERR)",
+        );
       }
-      setResolveError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not resolve exception.",
-      );
     } finally {
       setActing(false);
     }
@@ -161,28 +220,57 @@ export function ExceptionReviewScreen({
           : "Saved privately",
       );
     } catch (err) {
-      if (!(err instanceof ApiClientError)) {
-        reportError("trainer.exception.note", err);
+      if (isNetworkFailure(err)) {
+        setNoteOpen(false);
+        setOffline(true);
+      } else {
+        if (!(err instanceof ApiClientError)) {
+          reportError("trainer.exception.note", err);
+        }
+        setNoteError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not save note. (NOTE-ERR)",
+        );
       }
-      setNoteError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not save note. (NOTE-ERR)",
-      );
     } finally {
       setActing(false);
     }
   }
+
+  if (notFound) {
+    return (
+      <Screen title="Exception" showHeader={false}>
+        <View style={styles.gone}>
+          <View style={styles.goneIcon}>
+            <FileQuestion size={32} color={colors.indigo} strokeWidth={1.75} />
+          </View>
+          <Text style={styles.goneTitle}>This item is no longer available</Text>
+          <Text style={styles.goneBody}>
+            It may have been replaced by a plan change, so there's nothing to
+            review here.
+          </Text>
+          <View style={styles.goneAction}>
+            <PrimaryButton label="Back to Attention" onPress={onBack} />
+          </View>
+        </View>
+      </Screen>
+    );
+  }
+
+  const resolved = detail?.status === "resolved";
+  const open =
+    detail?.status === "detected" || detail?.status === "active";
 
   return (
     <Screen
       title="Exception"
       subtitle="Review the signal, then acknowledge or resolve. Plan edits stay on web."
       footer={
-        <PrimaryButton label="Back to attention" variant="ghost" onPress={onBack} />
+        <PrimaryButton label="Back to Attention" variant="ghost" onPress={onBack} />
       }
     >
-      {detail && !ended ? (
+      {detail && canAct ? (
         <View style={styles.moreRow}>
           <Pressable
             accessibilityRole="button"
@@ -194,24 +282,52 @@ export function ExceptionReviewScreen({
           </Pressable>
         </View>
       ) : null}
+      {offline ? (
+        <StateBanner
+          tone="attention"
+          Icon={WifiOff}
+          text={offlineBannerText(detail ? lastUpdateAt : null, trainerZone)}
+          actionLabel="Try again"
+          onAction={() => {
+            void load();
+          }}
+        />
+      ) : null}
+      {ended && detail ? (
+        <StateBanner
+          tone="neutral"
+          Icon={Ban}
+          text={endedBannerText(
+            firstNameOf(traineeName),
+            endedAt,
+            trainerZone,
+          )}
+        />
+      ) : null}
       {error ? <ErrorBanner message={error} /> : null}
       {message ? <Text style={styles.success}>{message}</Text> : null}
 
-      {loading || !detail ? (
-        <Text style={styles.muted}>Loading exception…</Text>
+      {!detail ? (
+        loading ? (
+          <LoadingSkeleton />
+        ) : null
       ) : (
         <View style={styles.stack}>
+          {resolved ? (
+            <StateBanner
+              tone="positive"
+              Icon={CircleCheck}
+              text={resolvedBannerText(detail, trainerZone)}
+            />
+          ) : null}
           <View style={styles.banner}>
             <Text style={styles.meta}>
               {labelFor("exception_status", detail.status)} · {labelFor("exception_type", detail.type)}
             </Text>
             <Text style={styles.summary}>{detail.summary}</Text>
-            <Text style={styles.muted}>
-              Source {detail.sourceEntityType} · Rule {detail.ruleVersion}
-            </Text>
           </View>
 
-          {(detail.status === "detected" || detail.status === "active") && (
+          {open && canAct ? (
             <>
               <Field
                 label="Note (optional)"
@@ -231,9 +347,12 @@ export function ExceptionReviewScreen({
                 }}
               />
             </>
-          )}
+          ) : null}
+          {open && offline && coaching === "active" ? (
+            <PrimaryButton label="Acknowledge" disabled />
+          ) : null}
 
-          {detail.status === "acknowledged" && !ended && (
+          {detail.status === "acknowledged" && canAct ? (
             <>
               <Text style={styles.sectionLabel}>
                 Resolve — close this after you've followed up.
@@ -246,7 +365,10 @@ export function ExceptionReviewScreen({
                 }}
               />
             </>
-          )}
+          ) : null}
+          {detail.status === "acknowledged" && offline && coaching === "active" ? (
+            <PrimaryButton label="Resolve" disabled />
+          ) : null}
 
           <PrimaryButton
             label="Open client status"
@@ -262,11 +384,21 @@ export function ExceptionReviewScreen({
             </Text>
           </View>
 
-          {detail.status !== "resolved" && !ended ? (
+          {!resolved && coaching === "active" ? (
             <PrimaryButton
               label="Nudge on WhatsApp"
               variant="ghost"
+              disabled={!canAct}
               onPress={() => setNudgeOpen(true)}
+            />
+          ) : null}
+          {coaching === "unknown" && !offline ? (
+            <PrimaryButton
+              label="Try again"
+              variant="secondary"
+              onPress={() => {
+                void load();
+              }}
             />
           ) : null}
         </View>
@@ -324,7 +456,128 @@ export function ExceptionReviewScreen({
   );
 }
 
+type BannerTone = "attention" | "neutral" | "positive";
+
+function StateBanner({
+  tone,
+  Icon,
+  text,
+  actionLabel,
+  onAction,
+}: {
+  tone: BannerTone;
+  Icon: typeof Ban;
+  text: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  const palette = semanticColors[tone];
+  return (
+    <View
+      accessibilityRole="alert"
+      style={[
+        styles.stateBanner,
+        { backgroundColor: palette.fill, borderColor: `${palette.text}33` },
+      ]}
+    >
+      <Icon size={20} color={palette.text} strokeWidth={1.75} />
+      <View style={styles.stateBannerBody}>
+        <Text style={[styles.stateBannerText, { color: palette.text }]}>
+          {text}
+        </Text>
+        {actionLabel && onAction ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={onAction}
+            style={styles.stateBannerAction}
+          >
+            <Text style={[styles.stateBannerActionText, { color: palette.text }]}>
+              {actionLabel}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/** Frame 38: placeholder cards while the exception loads. */
+function LoadingSkeleton() {
+  return (
+    <View
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading exception"
+      style={styles.stack}
+    >
+      <View style={styles.skelCard}>
+        <View style={[styles.skelBar, { width: "45%" }]} />
+        <View style={[styles.skelBar, { width: "80%" }]} />
+      </View>
+      <View style={styles.skelCard}>
+        <View style={[styles.skelBar, { width: "70%" }]} />
+        <View style={[styles.skelBar, { width: "90%" }]} />
+        <View style={[styles.skelBar, { width: "60%" }]} />
+        <View style={[styles.skelBar, { width: "100%" }]} />
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  stateBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+  },
+  stateBannerBody: { flex: 1, gap: spacing.xs },
+  stateBannerText: { fontSize: 15, lineHeight: 22 },
+  stateBannerAction: {
+    minHeight: 44,
+    justifyContent: "center",
+  },
+  stateBannerActionText: { fontSize: 15, fontWeight: "600" },
+  skelCard: {
+    backgroundColor: colors.card,
+    borderRadius: 20,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  skelBar: {
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.lightGrey,
+    opacity: 0.6,
+  },
+  gone: {
+    alignItems: "center",
+    gap: spacing.lg,
+    paddingTop: spacing.xxxl,
+  },
+  goneAction: { alignSelf: "stretch" },
+  goneIcon: {
+    alignItems: "center",
+    justifyContent: "center",
+    width: 88,
+    height: 88,
+    borderRadius: 24,
+    backgroundColor: semanticColors.brandSelected.fill,
+  },
+  goneTitle: {
+    color: colors.deepNavy,
+    fontSize: 24,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  goneBody: {
+    color: colors.midGrey,
+    fontSize: 16,
+    lineHeight: 24,
+    textAlign: "center",
+  },
   moreRow: { alignItems: "flex-end" },
   more: {
     alignItems: "center",
