@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildDemoSeedSql } from "./build.js";
 import { PERSONA_CONFIGS } from "./generator/personas.js";
@@ -92,4 +93,82 @@ describe.each(LAG_INSTANTS)(`demo seed with Pooja in ${VARIANT_TIMEZONE} at %s`,
     // CLEARED_LOOKBACK), which is what blocks detection from re-creating it.
     expect(rows(`select status from exceptions where type = 'overdue_checkin' and coaching_relationship_id = '${poojaRel()}'`)).toEqual(["resolved"]);
   }, 60_000);
+});
+
+/**
+ * Z11-4: the history overlays for Meera, Lakshmi, Farhan and Rohan used to
+ * build their times in a literal IST zone. With those clients in New York the
+ * seeded local clock times must be the ones the IST run has, and history.ts
+ * must not name a zone of its own.
+ */
+describe("history overlays follow the persona's zone (Z11-4)", () => {
+  const NOW = "2026-10-28T12:00:00.000Z";
+  const EMAILS = [
+    "meera.ack@demo.fitbud.test",
+    "lakshmi.foods@demo.fitbud.test",
+    "farhan.paused@demo.fitbud.test",
+    "rohan.slipping@demo.fitbud.test",
+  ];
+  const NY = "America/New_York";
+
+  const localClock = (iso: string, zone: string) =>
+    new Intl.DateTimeFormat("en-GB", { timeZone: zone, dateStyle: "short", timeStyle: "short", hourCycle: "h23" }).format(new Date(iso));
+
+  async function localTimes(): Promise<string[]> {
+    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    try {
+      const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
+      handle.sqlite.exec(buildDemoSeedSql({ referenceInstant: NOW, passwordHash: "z11-4-tz-hash", libraryIndex }));
+      const owned = `(select r.id from coaching_relationships r join user_identities i on i.user_id = r.trainee_user_id where i.email in (${EMAILS.map((e) => `'${e}'`).join(", ")}))`;
+      const zones = new Map(
+        (handle.sqlite.exec(`select i.email, u.timezone from users u join user_identities i on i.user_id = u.id`)[0]?.values ?? []).map((r) => [String(r[0]), String(r[1])]),
+      );
+      const out: string[] = [];
+      const collect = (label: string, sql: string, email: (row: unknown[]) => string) => {
+        for (const row of handle.sqlite.exec(sql)[0]?.values ?? []) {
+          out.push(`${label} ${String(row[0])} ${localClock(String(row[1]), zones.get(email(row)) ?? "UTC")}`);
+        }
+      };
+      const emailOfRel = new Map(
+        (handle.sqlite.exec(`select r.id, i.email from coaching_relationships r join user_identities i on i.user_id = r.trainee_user_id`)[0]?.values ?? []).map((r) => [String(r[0]), String(r[1])]),
+      );
+      collect("measurement", `select type || coalesce(id, ''), observed_at, coaching_relationship_id from measurements where coaching_relationship_id in ${owned} order by id`, (r) => emailOfRel.get(String(r[2])) ?? "");
+      collect("checkin-start", `select id, window_starts_at, coaching_relationship_id from checkins where coaching_relationship_id in ${owned} and window_starts_at is not null and window_starts_at <> '2026-10-28T10:00:00.000Z' order by id`, (r) => emailOfRel.get(String(r[2])) ?? "");
+      collect("note", `select id, created_at, coaching_relationship_id from trainer_notes where coaching_relationship_id in ${owned} order by id`, (r) => emailOfRel.get(String(r[2])) ?? "");
+      return out;
+    } finally {
+      handle.close();
+    }
+  }
+
+  it("keeps the IST clock times when the clients move to New York", async () => {
+    // Meera's open check-in starts at now - 2h by design (an instant, not a local clock time), so it is left out of the comparison.
+    const baseline = await localTimes();
+    const configs = EMAILS.map((email) => {
+      const cfg = PERSONA_CONFIGS.find((p) => p.email === email);
+      if (!cfg) throw new Error(`no persona ${email}`);
+      return { cfg, original: cfg.timezone };
+    });
+    let moved: string[];
+    try {
+      for (const { cfg } of configs) cfg.timezone = NY;
+      moved = await localTimes();
+    } finally {
+      for (const { cfg, original } of configs) cfg.timezone = original;
+    }
+    // Not vacuous: rows from all three families exist, and they were really in IST.
+    expect(baseline.length).toBeGreaterThan(10);
+    for (const family of ["measurement", "checkin-start", "note"]) {
+      expect(baseline.some((line) => line.startsWith(family))).toBe(true);
+    }
+    expect(moved.filter((l, i) => l !== baseline[i]).slice(0, 8)).toEqual([]);
+    expect(moved).toEqual(baseline);
+  }, 120_000);
+
+  it("names no zone literal outside the timezone helper", () => {
+    const source = readFileSync(new URL("./history.ts", import.meta.url), "utf8");
+    const lines = source.split("\n").filter((line) => line.includes('"Asia/Kolkata"'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("personaConfig(email)?.timezone");
+  });
 });

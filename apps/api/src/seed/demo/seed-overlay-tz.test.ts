@@ -128,3 +128,53 @@ describe("overlay slot timezone (QS6)", () => {
     expect(source).not.toMatch(/overlaySlotFinder\(\{[^}]*timezone/);
   });
 });
+
+/**
+ * Z11-4: an unlogged meal evaluated 30 minutes before its window closes is
+ * still open for an IST client and for a client moved to another zone, and the
+ * same item is overdue just after the close. The window comes from the seeded
+ * row, so the check holds only if the seed built it in the client's own zone.
+ */
+describe("close minus 30 minutes in two zones (Z11-4)", () => {
+  const SEED_NOW = "2026-10-22T12:37:00.000Z";
+  const CASES = [
+    { email: "arjun.attention@demo.fitbud.test", zone: "America/New_York" },
+    { email: "pooja.silent@demo.fitbud.test", zone: legacyTimezoneFor("pooja.silent@demo.fitbud.test") },
+  ];
+  let handle: MemoryDbHandle;
+  const q = (sql: string) => handle.sqlite.exec(sql)[0]?.values ?? [];
+
+  beforeAll(async () => {
+    handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    const libraryIndex = loadDemoLibraryIndex(handle.sqlite);
+    handle.sqlite.exec(buildDemoSeedSql({ referenceInstant: SEED_NOW, passwordHash: "z11-4-tz-test-hash", libraryIndex }));
+  }, 60_000);
+  afterAll(() => handle?.close());
+
+  it("covers an IST and a non-IST client", () => {
+    expect(CASES.map((c) => c.zone)).toContain("Asia/Kolkata");
+    expect(CASES.map((c) => c.zone)).toContain("America/New_York");
+  });
+
+  it.each(CASES)("is open at close - 30 min and overdue after close for $email ($zone)", async ({ email, zone }) => {
+    expect(q(`select u.timezone from users u join user_identities i on i.user_id = u.id where i.email = '${email}'`)[0]?.[0]).toBe(zone);
+    const row = q(
+      `select m.id, m.coaching_relationship_id, m.window_starts_at, m.window_ends_at
+         from meal_assignments m join coaching_relationships r on r.id = m.coaching_relationship_id
+         join user_identities i on i.user_id = r.trainee_user_id
+         where i.email = '${email}' and r.status = 'active'
+           and m.window_ends_at < '${SEED_NOW}'
+           and not exists (select 1 from meal_compliance c where c.assignment_id = m.id)
+           and not exists (select 1 from exceptions e where e.source_entity_id = m.id)
+         order by m.window_ends_at desc limit 1`,
+    )[0];
+    expect(row, "an unlogged, past meal assignment with no exception").toBeDefined();
+    const [id, rel, opens, closes] = row!.map(String);
+    const open = new Date(Date.parse(closes!) - 30 * 60_000).toISOString();
+    expect(open > opens!).toBe(true);
+    const during = await evaluateRelationshipExceptions(handle.db, rel!, open);
+    expect(during.exceptions.filter((e) => e.sourceEntityId === id)).toEqual([]);
+    const after = await evaluateRelationshipExceptions(handle.db, rel!, new Date(Date.parse(closes!) + 60_000).toISOString());
+    expect(after.exceptions.filter((e) => e.sourceEntityId === id && e.type === "overdue_meal").length).toBe(1);
+  }, 60_000);
+});

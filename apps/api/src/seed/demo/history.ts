@@ -795,7 +795,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   const ackExceptionId = MEERA_ACK_EXCEPTION_ID;
   // Overdue only exists once the lunch window has closed (13:00 IST + 12h).
   const meeraDetected = hoursAfter(
-    localDayStartIso(addDaysFromLocalDate(refDate, -2), "13:00", "Asia/Kolkata"),
+    localDayStartIso(addDaysFromLocalDate(refDate, -2), "13:00", legacyTimezoneFor("meera.ack@demo.fitbud.test")),
     12.5,
   );
   const meeraAcked = new Date(
@@ -962,7 +962,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     `INSERT INTO exceptions (id, coaching_relationship_id, type, severity, status, rule_version, source_entity_type, source_entity_id, summary, detected_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("exception", "lakshmi-deviation"))}, ${sqlQuote(lakshmiRel)}, 'meal_deviation', 'attention', 'active', 'demo-v1', 'meal_assignment', ${sqlQuote(lakshmiLunchId)}, 'Logged different foods', ${sqlQuote(lakshmiLoggedAt)}, ${sqlQuote(lakshmiLoggedAt)}, ${sqlQuote(now)});`,
   );
   lines.push(
-    `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "lakshmi-today"))}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("checkin-schedule", lakshmiRel))}, ${sqlQuote(refDate)}, ${sqlQuote(localDayStartIso(refDate, "09:00", "Asia/Kolkata"))}, ${sqlQuote(new Date(Date.parse(now) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+    `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "lakshmi-today"))}, ${sqlQuote(lakshmiRel)}, ${sqlQuote(demoUuid("checkin-schedule", lakshmiRel))}, ${sqlQuote(refDate)}, ${sqlQuote(localDayStartIso(refDate, "09:00", legacyTimezoneFor("lakshmi.foods@demo.fitbud.test")))}, ${sqlQuote(new Date(Date.parse(now) + 48 * 3_600_000).toISOString())}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
   );
 
   // Upcoming weekly check-in drafts, staggered across the week (not all Sunday).
@@ -1005,14 +1005,14 @@ function buildPersonaOverlays(input: HistoryInput): string {
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "meera-due"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(demoUuid("checkin-schedule", meeraRel))}, ${sqlQuote(refDate)}, ${sqlQuote(dueStart)}, ${sqlQuote(dueEnd)}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
       // Prior weight so TR-14 step 1 shows "Last: …".
-      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "meera-weight", "latest"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'body_weight_kg', 62.4, 'kg', ${sqlQuote(localDayStartIso(addDaysFromLocalDate(refDate, -7), "08:15", "Asia/Kolkata"))}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "meera-weight", "latest"))}, ${sqlQuote(meeraRel)}, ${sqlQuote(userId("meera.ack@demo.fitbud.test"))}, 'body_weight_kg', 62.4, 'kg', ${sqlQuote(localDayStartIso(addDaysFromLocalDate(refDate, -7), "08:15", legacyTimezoneFor("meera.ack@demo.fitbud.test")))}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
     const farhanRel = relId(
       "rahul.coach@demo.fitbud.test",
       "farhan.paused@demo.fitbud.test",
     );
     const overdueDate = addDaysFromLocalDate(refDate, -2);
-    const overdueStart = localDayStartIso(overdueDate, "09:00", "Asia/Kolkata");
+    const overdueStart = localDayStartIso(overdueDate, "09:00", legacyTimezoneFor("farhan.paused@demo.fitbud.test"));
     const overdueEnd = new Date(Date.parse(now) - 6 * 3_600_000).toISOString();
     lines.push(
       `INSERT INTO checkins (id, coaching_relationship_id, checkin_schedule_id, local_date, window_starts_at, window_ends_at, record_status, record_version, definition_version, checkin_form_version_id, answers_json, submitted_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("checkin", "farhan-overdue"))}, ${sqlQuote(farhanRel)}, ${sqlQuote(demoUuid("checkin-schedule", farhanRel))}, ${sqlQuote(overdueDate)}, ${sqlQuote(overdueStart)}, ${sqlQuote(overdueEnd)}, 'draft', 0, 1, ${sqlQuote(DEMO_CHECKIN_FORM_VERSION_ID)}, NULL, NULL, ${sqlQuote(now)}, ${sqlQuote(now)});`,
@@ -1021,9 +1021,9 @@ function buildPersonaOverlays(input: HistoryInput): string {
 
   // Rohan: latest weekly (Friday) check-in submitted and reviewed (Today + Progress).
   const rohanCheckinDate = previousWeekdayBefore(refDate, 5);
-  const rohanCheckinStart = localDayStartIso(rohanCheckinDate, "09:00", "Asia/Kolkata");
+  const rohanCheckinStart = localDayStartIso(rohanCheckinDate, "09:00", legacyTimezoneFor("rohan.slipping@demo.fitbud.test"));
   const rohanSubmittedAt = clampIsoToNow(
-    localDayStartIso(rohanCheckinDate, "21:30", "Asia/Kolkata"),
+    localDayStartIso(rohanCheckinDate, "21:30", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")),
     now,
   );
   lines.push(
@@ -1038,18 +1038,18 @@ function buildPersonaOverlays(input: HistoryInput): string {
   {
     const waistDate = previousWeekdayBefore(refDate, 5);
     const waistAt = clampIsoToNow(
-      localDayStartIso(waistDate, "08:25", "Asia/Kolkata"),
+      localDayStartIso(waistDate, "08:25", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")),
       now,
     );
     const startWaistAt = clampIsoToNow(
-      localDayStartIso(addDaysFromLocalDate(waistDate, -49), "08:25", "Asia/Kolkata"),
+      localDayStartIso(addDaysFromLocalDate(waistDate, -49), "08:25", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")),
       now,
     );
     lines.push(
       `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "start"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 97, 'cm', ${sqlQuote(startWaistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(startWaistAt)}, ${sqlQuote(startWaistAt)});`,
       `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "latest"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 94, 'cm', ${sqlQuote(waistAt)}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(waistAt)}, ${sqlQuote(waistAt)});`,
-      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "prev"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 95, 'cm', ${sqlQuote(localDayStartIso(addDaysFromLocalDate(waistDate, -7), "08:25", "Asia/Kolkata"))}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
-      `INSERT INTO trainer_notes (id, coaching_relationship_id, trainer_user_id, checkin_id, body, visibility, subject_type, subject_id, shared_at, unshared_at, seen_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("note", "rohan-knee"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, NULL, 'Knee felt sore on walking lunges. Swapped to step-ups until the next check-in.', 'private', NULL, NULL, NULL, NULL, NULL, ${sqlQuote(localDayStartIso(addDaysFromLocalDate(refDate, -5), "10:00", "Asia/Kolkata"))}, ${sqlQuote(now)});`,
+      `INSERT INTO measurements (id, coaching_relationship_id, trainee_user_id, type, value, unit, observed_at, source, checkin_id, media_asset_id, record_version, created_at, updated_at) VALUES (${sqlQuote(demoUuid("measurement", "rohan-waist", "prev"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rohan.slipping@demo.fitbud.test"))}, 'waist_cm', 95, 'cm', ${sqlQuote(localDayStartIso(addDaysFromLocalDate(waistDate, -7), "08:25", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")))}, 'trainee_entry', NULL, NULL, 0, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO trainer_notes (id, coaching_relationship_id, trainer_user_id, checkin_id, body, visibility, subject_type, subject_id, shared_at, unshared_at, seen_at, created_at, updated_at) VALUES (${sqlQuote(demoUuid("note", "rohan-knee"))}, ${sqlQuote(rohanRel)}, ${sqlQuote(userId("rahul.coach@demo.fitbud.test"))}, NULL, 'Knee felt sore on walking lunges. Swapped to step-ups until the next check-in.', 'private', NULL, NULL, NULL, NULL, NULL, ${sqlQuote(localDayStartIso(addDaysFromLocalDate(refDate, -5), "10:00", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")))}, ${sqlQuote(now)});`,
     );
   }
 
@@ -1058,7 +1058,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
     const localDate = addDaysFromLocalDate(rohanCheckinDate, -7 * weeksAgo);
     const weightKg = Number((86.4 + weeksAgo * 0.5).toFixed(1));
     const observedAt = clampIsoToNow(
-      localDayStartIso(localDate, "08:20", "Asia/Kolkata"),
+      localDayStartIso(localDate, "08:20", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")),
       now,
     );
     const measurementId = demoUuid(
@@ -1076,15 +1076,15 @@ function buildPersonaOverlays(input: HistoryInput): string {
   // Rohan inbox mix (TR-15): coach note, check-in review, workout — not only meals.
   {
     const coachNoteAt = clampIsoToNow(
-      localDayStartIso(refDate, "01:08", "Asia/Kolkata"),
+      localDayStartIso(refDate, "01:08", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")),
       now,
     );
     const workoutAt = clampIsoToNow(
-      localDayStartIso(addDaysFromLocalDate(refDate, -1), "18:40", "Asia/Kolkata"),
+      localDayStartIso(addDaysFromLocalDate(refDate, -1), "18:40", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")),
       now,
     );
     const checkinAt = clampIsoToNow(
-      localDayStartIso(rohanCheckinDate, "20:05", "Asia/Kolkata"),
+      localDayStartIso(rohanCheckinDate, "20:05", legacyTimezoneFor("rohan.slipping@demo.fitbud.test")),
       now,
     );
     lines.push(
@@ -1112,7 +1112,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
           ? "13:00"
           : "20:00";
     const sentAt = new Date(
-      Date.parse(localDayStartIso(day, slotTime, "Asia/Kolkata")) - 10 * 60_000,
+      Date.parse(localDayStartIso(day, slotTime, legacyTimezoneFor("rohan.slipping@demo.fitbud.test"))) - 10 * 60_000,
     ).toISOString();
     const openedAt = opened
       ? new Date(Date.parse(sentAt) + 4 * 60_000).toISOString()
