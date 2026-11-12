@@ -20,7 +20,7 @@ import {
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
-import { formatClockTime, formatKcal, formatNumber } from "@fitbud/core";
+import { formatClockTime, formatKcal, formatNumber, labelFor } from "@fitbud/core";
 import { rings } from "@fitbud/tokens";
 import {
   colors,
@@ -45,13 +45,13 @@ import {
 import {
   canShowMealLogActions,
   cleanFoodLabel,
-  mealKcalFromDayTotals,
   mealLockCopy,
 } from "./mealHelpers";
 import { invalidateRelationshipDayData, subscribeAll } from "./dataCache";
 import { mealDueStatusLabel, nextUp } from "./nextUp";
 import {
   buildNutritionRings,
+  dayKcalSummary,
   isMealLoggedForCount,
   mealsLoggedSummary,
   nutrientsFromMealPrescription,
@@ -302,7 +302,15 @@ export function DietTab({
     () => buildNutritionRings(assignments, dayTotals?.totals ?? null),
     [assignments, dayTotals],
   );
-  const kcalRing = nutritionRings.find((r) => r.key === "kcal");
+  // One kcal source for the ring and the meal rows (D-W11-6).
+  const kcalSummary = useMemo(
+    () => dayKcalSummary(assignments, dayTotals?.totals ?? null),
+    [assignments, dayTotals],
+  );
+  const kcalRowById = useMemo(
+    () => new Map(kcalSummary.rows.map((row) => [row.id, row])),
+    [kcalSummary],
+  );
   const proteinRing = nutritionRings.find((r) => r.key === "protein");
   const carbsRing = nutritionRings.find((r) => r.key === "carbs");
   const fatRing = nutritionRings.find((r) => r.key === "fat");
@@ -388,12 +396,10 @@ export function DietTab({
 
   function renderCompactRow(meal: MealAssignment, index: number) {
     const lockCopy = lockStateKnown ? mealLockCopy(meal, coachName) : null;
-    const kcal = mealKcalFromDayTotals(meal, dayTotals?.totals.perMeal);
+    const kcalRow = kcalRowById.get(meal.id);
+    const kcal = kcalRow?.kcal ?? null;
     const planKcal = nutrientsFromMealPrescription(meal).kcal;
-    const loggedKcal =
-      meal.status === "modified" && meal.compliance?.loggedTotals?.energyKcal != null
-        ? meal.compliance.loggedTotals.energyKcal
-        : kcal;
+    const loggedKcal = kcalRow?.kind === "logged" ? kcalRow.kcal : null;
     const timeLabel = formatClockTime(meal.windowStartsAt, timeZone);
     const isLocked = Boolean(lockCopy);
     const isLogged = isMealLoggedForCount(meal.status) && meal.id !== photoPromptId;
@@ -432,9 +438,17 @@ export function DietTab({
             <Text style={styles.mealSub}>{lockCopy}</Text>
           ) : isLogged ? (
             <Text style={styles.mealSub}>
-              {meal.status === "modified" ? "Changed" : "Logged"}
-              {loggedKcal != null ? ` · ${formatKcal(loggedKcal)}` : ""}
-              {planKcal > 0 ? ` · plan ${formatKcal(planKcal)}` : ""}
+              {meal.status === "skipped"
+                ? labelFor("meal_assignment_status", "skipped")
+                : meal.status === "modified"
+                  ? "Changed"
+                  : "Logged"}
+              {meal.status !== "skipped" && loggedKcal != null
+                ? ` · ${formatKcal(loggedKcal)}`
+                : ""}
+              {meal.status !== "skipped" && planKcal > 0 && planKcal !== loggedKcal
+                ? ` · plan ${formatKcal(planKcal)}`
+                : ""}
             </Text>
           ) : (
             <Text style={styles.mealSub} numberOfLines={1}>
@@ -483,7 +497,7 @@ export function DietTab({
       meal,
       unresolvedExceptionCount: unresolvedExceptions,
     });
-    const kcal = mealKcalFromDayTotals(meal, dayTotals?.totals.perMeal);
+    const kcal = kcalRowById.get(meal.id)?.kcal ?? null;
     const macros = nutrientsFromMealPrescription(meal);
     const itemsLine = plannedSummaryLine(meal);
     const showPhotoPrompt =
@@ -725,17 +739,17 @@ export function DietTab({
 
       <View style={styles.daysum2}>
         <KcalRing
-          logged={kcalRing?.logged ?? 0}
-          assigned={kcalRing?.assigned ?? 0}
+          logged={kcalSummary.loggedTotal}
+          assigned={kcalSummary.plannedTotal}
         />
         <View style={styles.daysumBody}>
           <Text style={styles.daysumHead}>
-            {formatNumber(kcalRing?.logged ?? 0)}{" "}
+            {formatNumber(kcalSummary.loggedTotal)}{" "}
             <Text style={styles.daysumOf}>
-              of {formatNumber(kcalRing?.assigned ?? 0)} kcal
+              of {formatNumber(kcalSummary.plannedTotal)} kcal
             </Text>
           </Text>
-          <Text style={styles.daysumSub}>{mealsLoggedSummary(assignments)} today</Text>
+          <Text style={styles.daysumSub}>{assignments.length === 0 ? mealsLoggedSummary(assignments) : `${mealsLoggedSummary(assignments)} today`}</Text>
           <View style={styles.mac3}>
             <MacroBar
               label="Protein"
