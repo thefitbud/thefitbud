@@ -345,7 +345,7 @@ Trainer web reuses the 01/03 shell (240 px sidebar), workspace header and tabs. 
 2. P-MEAL in the spec lists "Eaten as planned · Snooze"; the saved decision (Open + Snooze only, no logging from notifications) was followed, and "Eaten as planned" was also dropped from P-NUDGE. Confirm the spec should be updated.
 3. TR-17 says skipped reminders aren't saved, while Snooze resends; frames assume a snoozed reminder resends once and a skipped one is not stored. Confirm.
 4. Reminder line shows one workout reminder at 8:15 pm (spec: 1 a day) where MD2 mentioned "2 reminders". Which count is right?
-5. Ended clients: MD1 dec. 5 shows no actions on mobile, but web TW-30 offers Reactivate. Is Reactivate web-only?
+5. Ended clients: MD1 dec. 5 shows no actions on mobile, but web TW-30 offers Reactivate. Is Reactivate web-only? **Answered (Firoz, 12 Nov 2026, W10 report):** yes. For the MVP, Reactivate is web-only; the mobile ended client screen stays read-only.
 6. Steps frames (93–95) are drawn behind steps_enabled (off). Keep them in the MVP handoff or move them to P2?
 
 ---
