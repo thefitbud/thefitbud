@@ -53,6 +53,7 @@ import {
 } from "../notifications/register";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { deepLinkFromNotificationPayload } from "../notifications/routing";
+import { clearTrainerCache, setTrainerCacheOwner } from "../trainer/cache";
 
 type AuthContextValue = {
   accessToken: string | null;
@@ -86,6 +87,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
  */
 function messageFromError(error: unknown): string {
   return authErrorCopy(error, "general", "messageFromError");
+}
+
+/**
+ * Every path that ends the session drops the trainer's offline snapshots and
+ * the cache owner, so the next person on this phone never reads them (Z11-8).
+ */
+function endTrainerCacheSession(): void {
+  clearTrainerCache();
+  setTrainerCacheOwner(null);
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -224,6 +234,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         preferredRole && meResponse.permittedRoles.includes(preferredRole)
           ? preferredRole
           : autoRole;
+      // The cache owner comes only from the server's `/me`, never from cached
+      // data (Z11-8). Set before any trainer screen can mount and read.
+      setTrainerCacheOwner(meResponse.userId);
       setMe(meResponse);
       setSelectedRole(role);
       selectedRoleRef.current = role;
@@ -266,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const clearSession = () => {
       tokens.clear();
       clearPersistedSession();
+      endTrainerCacheSession();
     };
     const result = await restoreSession({
       load: loadNativeSession,
@@ -349,6 +363,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         selectedRoleRef.current = null;
         tokens.clear();
         clearPersistedSession();
+        endTrainerCacheSession();
         setRelationships([]);
         setRelationshipsLoaded(true);
         setNeedsAccountLink(true);
@@ -412,6 +427,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
       selectedRoleRef.current = null;
+      // No owner until this sign-in's `/me` answers (Z11-8).
+      setTrainerCacheOwner(null);
       tokens.signIn(trimmed, refresh);
       persistSession({ accessToken: trimmed, selectedRole: null });
       setBootstrapping(true);
@@ -441,6 +458,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } else {
           tokens.clear();
           clearPersistedSession();
+          endTrainerCacheSession();
           setErrorMessage(messageFromError(error));
         }
       } finally {
@@ -489,6 +507,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingNotificationLink(null);
     setPendingDeepLink(null);
     clearPersistedSession();
+    endTrainerCacheSession();
   }, [tokens]);
   onExpiredRef.current = signOut;
 
