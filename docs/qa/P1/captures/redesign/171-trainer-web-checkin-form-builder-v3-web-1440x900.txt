@@ -1,0 +1,98 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Templates
+Search clients
+⌘K
+← Check-in forms
+Monthly maintenance review
+
+Mine · Draft · will save as v2
+
+Save version
+STANDARD QUESTIONS
+Charted in Progress, same wording for every client
+
+No standard questions on this form.
+
+Add a standard question
+Choose…
+Body weight
+Body measurements
+Progress photos
+Energy
+Sleep quality
+Stress
+Hunger
+Notes
+YOUR OWN QUESTIONS
+Shown in check-in review. Not charted.
+⋮⋮
+Average morning weight this week
+measurement · optional
+Charted
+⋮⋮
+Waist at navel
+measurement · optional
+Charted
+⋮⋮
+Latest BP reading
+short text · optional
+Not charted
+⋮⋮
+Fasting sugar
+number · optional
+Not charted
+⋮⋮
+Average daily steps
+number · optional
+Not charted
+⋮⋮
+How closely did you follow the meal plan?
+scale 1–5 · optional
+Not charted
+⋮⋮
+One line: how was the week?
+short text · required
+Not charted
+⋮⋮
+Goal for next month
+short text · optional
+Not charted
+⋮⋮
+Anything you need from me?
+long text · optional
+Not charted
++
+Add your own question
+
+Monthly maintenance review
+
+Average morning weight this week
+Waist at navel
+Latest BP reading
+e.g. 128/82
+Fasting sugar (mg/dL)
+Average daily steps (steps)
+How closely did you follow the meal plan?
+1
+2
+3
+4
+5
+
+1 · Not at all … 5 · 100 %
+
+One line: how was the week? *
+Goal for next month
+Anything you need from me?

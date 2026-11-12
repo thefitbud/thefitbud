@@ -1,0 +1,36 @@
+Back
+Your meal times
+Reminders follow these times. Rahul will see that you changed them.
+Breakfast
+Reminder about 8:40 am
+−
+8:00 am
++
+Every day
+Weekdays
+Weekends
+Lunch
+Reminder about 1:40 pm
+−
+1:00 pm
++
+Every day
+Weekdays
+Weekends
+Snack
+Reminder about 5:40 pm
+−
+5:00 pm
++
+Every day
+Weekdays
+Weekends
+Dinner
+Reminder about 8:40 pm
+−
+8:00 pm
++
+Every day
+Weekdays
+Weekends
+Save

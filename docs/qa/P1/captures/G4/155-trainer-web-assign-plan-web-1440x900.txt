@@ -1,0 +1,538 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Clients
+Search clients
+⌘K
+← Back to plan
+Workout builder · Fat loss · Phase 2
+Plan title
+
+Draft v3 · Saved
+
+Workout
+Nutrition
+Undo
+Preview as client
+Publish…
+Days
+MON
+Upper body A
+4 exercises
+TUE
+Lower body A
+4 exercises
+WED
+Rest
++
+THU
+Upper body B
+3 exercises
+FRI
+Rest
++
+SAT
+Lower body B
+6 exercises
+SUN
+Rest
++
++ Add session
+Delete selected session
+Session title
+M
+T
+W
+T
+F
+S
+S
+Instructions for the session
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set
+Exercise library
+
+Reps, load and rest are set in the session, not in the library.
+
+Name
+Muscle group
+Any muscle
+Chest
+Upper back
+Lower back
+Lats
+Shoulders
+Front delts
+Rear delts
+Side delts
+Biceps
+Triceps
+Forearms
+Core
+Abs
+Glutes
+Quads
+Hamstrings
+Calves
+Full body
+Legs
+Back
+Equipment
+Any equipment
+Barbell
+Dumbbell
+Kettlebell
+Machine
+Cable
+Bodyweight
+Band
+Smith machine
+Medicine ball
+Other
+None
+Difficulty
+Any difficulty
+Beginner
+Intermediate
+Advanced
+
+1 to 2 Box Jump
+
+Global · Beginner · Quads · also Abs, Adductors, Calves, Glutes, Hamstrings, Hip flexors
+
+Add to session
+
+1-Board Bench Press
+
+Global · Intermediate · Chest · also Shoulders, Triceps
+
+Add to session
+
+2 to 1 Box Jump
+
+Global · Beginner · Quads · also Abs, Adductors, Calves, Glutes, Hamstrings, Hip flexors
+
+Add to session
+
+2 to 1 Exercise Ball Hamstring Curl
+
+Global · Advanced · Hamstrings · also Abs, Calves, Glutes
+
+Add to session
+
+2-Board Bench Press
+
+Global · Intermediate · Chest · also Shoulders, Triceps
+
+Add to session
+
+3-Board Bench Press
+
+Global · Intermediate · Chest · also Shoulders, Triceps
+
+Add to session
+
+3-D Band Pull Apart
+
+Global · Intermediate · Rear delts · also Abs, Upper back
+
+Add to session
+
+3-Month Position Kettlebell Pullover
+
+Global · Beginner · Abs
+
+Add to session
+
+45-Degree Calf Raise (Toes In)
+
+Global · Beginner · Calves
+
+Add to session
+
+45-Degree Calf Raise (Toes Out)
+
+Global · Beginner · Calves
+
+Add to session
+
+45-Degree Leg Press Calf Raise
+
+Global · Beginner · Calves
+
+Add to session
+
+45-Degree Lying Triceps Extension
+
+Global · Beginner · Triceps
+
+Add to session
+
+45-Degree Toe Raise
+
+Global · Beginner · Calves
+
+Add to session
+
+90/90 Hamstring Stretch
+
+Global · Beginner · Hamstrings · also Calves
+
+Add to session
+
+90/90 Hip Crossover
+
+Global · Beginner · Lower back · also Glutes, Shoulders, Upper back
+
+Add to session
+
+90/90 Piriformis Stretch
+
+Global · Beginner · Glutes
+
+Add to session
+
+Ab Crunch
+
+Global · Beginner · Abs
+
+Add to session
+
+Ab Crunch Machine
+
+Global · Intermediate · Abs
+
+Add to session
+
+Ab Roller
+
+Global · Intermediate · Abs · also Front delts
+
+Add to session
+
+Abdominal Pendulum
+
+Global · Beginner · Abs
+
+Add to session
+
+Adductor Groin Stretch
+
+Global · Intermediate · Adductors
+
+Add to session
+
+Air Bike
+
+Global · Beginner · Abs
+
+Add to session
+
+Alternate Dumbbell Bench Press (High Start)
+
+Global · Intermediate · Chest · also Shoulders, Triceps
+
+Add to session
+
+Alternate Hammer Curl
+
+Global · Beginner · Biceps · also Forearms
+
+Add to session
+
+Alternate Heel Touchers
+
+Global · Beginner · Abs
+
+Add to session
+
+Alternate Seated Dumbbell Press
+
+Global · Beginner · Shoulders · also Traps, Triceps
+
+Add to session
+
+Alternate Straight Leg Lower
+
+Global · Beginner · Abs
+
+Add to session
+
+Alternating Bent-Over Dumbbell Kickback
+
+Global · Beginner · Triceps
+
+Add to session
+
+Alternating Big Waves Battling Ropes
+
+Global · Beginner · Shoulders · also Abs, Forearms, Lats, Triceps
+
+Add to session
+
+Alternating Decline Dumbbell Fly
+
+Global · Beginner · Chest · also Shoulders
+
+Add to session
+
+Alternating Dumbbell Bench Press (Low Start)
+
+Global · Beginner · Chest · also Shoulders, Triceps
+
+Add to session
+
+Alternating Dumbbell Bench Press on Exercise Ball
+
+Global · Intermediate · Chest · also Shoulders, Triceps
+
+Add to session
+
+Alternating Dumbbell Floor Press
+
+Global · Beginner · Triceps · also Chest, Shoulders
+
+Add to session
+
+Alternating Dumbbell Fly
+
+Global · Beginner · Chest · also Shoulders
+
+Add to session
+
+Alternating Dumbbell Front Raise
+
+Global · Beginner · Front delts
+
+Add to session
+
+Alternating Dumbbell Hammer Preacher Curl
+
+Global · Beginner · Biceps · also Forearms
+
+Add to session
+
+Alternating Dumbbell Lateral Raise
+
+Global · Beginner · Side delts
+
+Add to session
+
+Alternating Dumbbell Preacher Curl
+
+Global · Beginner · Biceps
+
+Add to session
+
+Alternating Dumbbell Reverse-Grip Curl
+
+Global · Beginner · Forearms · also Biceps
+
+Add to session
+
+Alternating Incline Dumbbell Curl
+
+Global · Beginner · Biceps
+
+Add to session
+
+Alternating Incline Dumbbell Fly
+
+Global · Beginner · Chest · also Shoulders
+
+Add to session
+
+Alternating Incline Hammer Curl
+
+Global · Beginner · Biceps · also Forearms
+
+Add to session
+
+Alternating Incline Rear Delt Fly
+
+Global · Beginner · Rear delts
+
+Add to session
+
+Alternating Lying Dumbbell Extension
+
+Global · Intermediate · Triceps
+
+Add to session
+
+Alternating Lying Leg Raise
+
+Global · Beginner · Abs · also Hip flexors
+
+Add to session
+
+Alternating Lying Rear Delt Fly
+
+Global · Beginner · Rear delts
+
+Add to session
+
+Alternating Medicine Ball Push-up
+
+Global · Advanced · Chest · also Abs, Shoulders, Triceps
+
+Add to session
+
+Alternating Reach Push-up
+
+Global · Intermediate · Chest · also Abs, Shoulders, Triceps
+
+Add to session
+
+Alternating Reach and Catch
+
+Global · Beginner · Abs
+
+Add to session
+
+Alternating Rear Delt Fly
+
+Global · Beginner · Rear delts
+
+Add to session
+Load more exercises
+When does this plan start?
+
+Dates use Rohan's time · Kolkata
+
+3 days have no session · Wed, Fri, Sun are rest days. Is that intended?
+Configuration expects 3 sessions/week; plan has 4
+Effective from
+Ongoing
+Stays in place until you replace it.
+End on a date
+Choose the last day
+
+Validity is separate from the first schedule window.
+
+First schedule window
+Next 7 days
+Today, Thu 12 Nov → Wed 18 Nov
+Next calendar week
+Mon 16 Nov → Sun 22 Nov
+Custom dates
+Choose an inclusive range
+
+After this, FitBud keeps the next 7 days scheduled automatically.
+
+Preview
+Thu 12 Nov
+Upper body B
+4 meals
+Fri 13 Nov
+Rest
+4 meals
+Sat 14 Nov
+Lower body B
+4 meals
+Sun 15 Nov
+Rest
+4 meals
+Mon 16 Nov
+Upper body A
+4 meals
+Tue 17 Nov
+Lower body A
+4 meals
+Wed 18 Nov
+Rest
+4 meals
+
+From Thu 12 Nov, this replaces Fat loss · Phase 2 v2. 0 upcoming workouts and 2 meals that haven't started will be replaced. Anything already logged stays as it is.
+
+Notify client
+Cancel
+Publish & schedule

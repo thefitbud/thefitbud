@@ -1,0 +1,317 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Clients
+Search clients
+⌘K
+Clients
+
+20 clients · 16 active
+
+Add client
+Search
+Status
+Adherence
+Goal
+Renewal
+Current
+20
+Ended
+2
+Client	Status	Adherence	Next check-in	Plan	Renewal	
+Action
+
+
+AB
+
+Ananya Bose
+
+First pull-up
+
+	
+Active
+	
+On track
+	in 4 d	
+First pull-up
+	
+Upcoming
+	Open
+
+DN
+
+Deepak Nair
+
+Lose 8 kg
+
+	
+Active
+	
+Needs attention
+	in 2 d	
+Coaching plan
+	—	Open
+
+PA
+
+Pooja Agarwal
+
+Lose post-pregnancy weight
+
+	
+Active
+	
+No recent data
+	4 d ago	
+Home fit
+	
+Expired
+	Open
+
+PS
+
+Priya Sharma
+
+Stay consistent
+
+	
+Active
+	
+Needs attention
+	in 3 d	
+Coaching plan
+	—	Open
+
+RM
+
+Rohan Mehta
+
+Lose 6 kg
+
+	
+Active
+	
+Needs attention
+	Tomorrow	
+Fat loss · Phase 2
+	
+Expired
+	Open
+
+RP
+
+Rajesh Pillai
+
+Mobility + BP control
+
+	
+Active
+	
+On track
+	Sat 5 Dec	
+Active ageing
+	—	Open
+
+SJ
+
+Siddharth Jain
+
+Reverse prediabetes
+
+	
+Active
+	
+On track
+	in 10 d	
+Metabolic health
+	—	Open
+
+AK
+
+Arjun Kapoor
+
+Build strength
+
+	
+Active
+	
+Needs attention
+	in 6 d	
+Coaching plan
+	—	Open
+
+FQ
+
+Farhan Qureshi
+
+Maintain muscle while traveling
+
+	
+Active
+	
+Needs attention
+	2 d ago	
+Coaching plan
+	—	Open
+
+IS
+
+Imran Sheikh
+
+Lose 8 kg
+
+	
+Active
+	
+Needs attention
+	Yesterday	
+Shift-proof fat loss
+	
+Due
+	Open
+
+NR
+
+Neha Reddy
+
+Lose 4 kg
+
+	
+Active
+	
+Needs attention
+	in 7 d	
+Coaching plan
+	—	Open
+
+SK
+
+Sneha Kulkarni
+
+—
+
+	
+Awaiting review
+	
+Not available
+	—	—	—	Review intake
+
+HS
+
+Harpreet Singh
+
+—
+
+	
+Ready to coach
+	
+Not available
+	—	—	—	Set up plan
+
+FK
+
+Fatima Khan
+
+Glute & strength focus
+
+	
+Active
+	
+On track
+	in 2 d	
+Glute focus
+	—	Open
+
+MI
+
+Meera Iyer
+
+PCOS-friendly fat loss
+
+	
+Active
+	
+Needs attention
+	Today	
+Coaching plan
+	
+Due
+	Open
+
+AS
+
+Aarav Shah
+
+Lean bulk
+
+	
+Active
+	
+On track
+	in 6 d	
+Coaching plan
+	—	Open
+
+VR
+
+Vikram Rao
+
+—
+
+	
+Onboarding
+	
+Not available
+	—	—	—	View onboarding
+
+IB
+
+Ishita Banerjee
+
+Rebuild morning routine
+
+	
+Active
+	
+Needs attention
+	in 4 d	
+Coaching plan
+	—	Open
+
+DN
+
+Divya Nair
+
+Lose 5 kg before wedding
+
+	
+Active
+	
+On track
+	in 3 d	
+Bridal 12-week
+	
+Upcoming
+	Open
+
+AD
+
+Anita Desai
+
+—
+
+	
+Invited
+	
+Not available
+	—	—	—	Resend invite

@@ -1,0 +1,197 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Templates
+Search clients
+⌘K
+Templates
+
+Reusable workouts, diets, forms, and your exercise and food libraries.
+
+Workouts
+Diets
+Full plans
+Check-ins
+Onboarding
+Libraries
+Libraries
+
+Exercises and foods used in plan builders. Global items are read-only.
+
+Exercises
+Foods
+Search exercises
+Muscle
+All muscles
+Chest
+Upper back
+Lower back
+Lats
+Shoulders
+Biceps
+Triceps
+Core
+Glutes
+Quads
+Hamstrings
+Calves
+Full body
+Legs
+Back
+Equipment
+All equipment
+Barbell
+Dumbbell
+Kettlebell
+Machine
+Cable
+Bodyweight
+Band
+Smith machine
+Medicine ball
+Other
+None
+Difficulty
+All levels
+Beginner
+Intermediate
+Advanced
+New exercise
+NAME	PRIMARY MUSCLES	SECONDARY	EQUIPMENT	DIFFICULTY	MEDIA	OWNER	
+ACTIONS
+
+
+1 to 2 Box Jump
+	Quads	Abs, Adductors, Calves, Glutes, Hamstrings, Hip flexors	Plyo box	Beginner	—	FitBud	
+⋯
+
+
+1-Board Bench Press
+	Chest	Shoulders, Triceps	Barbell, Bench	Intermediate	—	FitBud	
+⋯
+
+
+2 to 1 Box Jump
+	Quads	Abs, Adductors, Calves, Glutes, Hamstrings, Hip flexors	Plyo box	Beginner	—	FitBud	
+⋯
+
+
+2 to 1 Exercise Ball Hamstring Curl
+	Hamstrings	Abs, Calves, Glutes	Exercise ball	Advanced	—	FitBud	
+⋯
+
+
+2-Board Bench Press
+	Chest	Shoulders, Triceps	Barbell, Bench	Intermediate	—	FitBud	
+⋯
+
+
+3-Board Bench Press
+	Chest	Shoulders, Triceps	Barbell, Bench	Intermediate	—	FitBud	
+⋯
+
+
+3-D Band Pull Apart
+	Rear delts	Abs, Upper back	Resistance band	Intermediate	—	FitBud	
+⋯
+
+
+3-Month Position Kettlebell Pullover
+	Abs	—	Kettlebell	Beginner	—	FitBud	
+⋯
+
+
+45-Degree Calf Raise (Toes In)
+	Calves	—	Machine	Beginner	—	FitBud	
+⋯
+
+
+45-Degree Calf Raise (Toes Out)
+	Calves	—	Machine	Beginner	—	FitBud	
+⋯
+
+
+45-Degree Leg Press Calf Raise
+	Calves	—	Machine	Beginner	—	FitBud	
+⋯
+
+
+45-Degree Lying Triceps Extension
+	Triceps	—	Barbell	Beginner	—	FitBud	
+⋯
+
+
+45-Degree Toe Raise
+	Calves	—	Machine	Beginner	—	FitBud	
+⋯
+
+
+90/90 Hamstring Stretch
+	Hamstrings	Calves	Bodyweight	Beginner	—	FitBud	
+⋯
+
+
+90/90 Hip Crossover
+	Lower back	Glutes, Shoulders, Upper back	Bodyweight	Beginner	—	FitBud	
+⋯
+
+
+90/90 Piriformis Stretch
+	Glutes	—	Bodyweight	Beginner	—	FitBud	
+⋯
+
+
+Ab Crunch
+	Abs	—	Bodyweight	Beginner	—	FitBud	
+⋯
+
+
+Ab Crunch Machine
+	Abs	—	Machine	Intermediate	—	FitBud	
+⋯
+
+
+Ab Roller
+	Abs	Front delts	Other	Intermediate	—	FitBud	
+⋯
+
+
+Abdominal Pendulum
+	Abs	—	Bodyweight	Beginner	—	FitBud	
+⋯
+
+
+Adductor Groin Stretch
+	Adductors	—	Bodyweight	Intermediate	—	FitBud	
+⋯
+
+
+Air Bike
+	Abs	—	Stationary bike	Beginner	—	FitBud	
+⋯
+
+
+Alternate Dumbbell Bench Press (High Start)
+	Chest	Shoulders, Triceps	Dumbbell, Bench	Intermediate	—	FitBud	
+⋯
+
+
+Alternate Hammer Curl
+	Biceps	Forearms	Dumbbell	Beginner	—	FitBud	
+⋯
+
+
+Alternate Heel Touchers
+	Abs	—	Bodyweight	Beginner	—	FitBud	
+⋯
+Load more

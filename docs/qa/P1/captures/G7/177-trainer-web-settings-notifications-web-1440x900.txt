@@ -1,0 +1,54 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+More
+Search clients
+⌘K
+Settings
+Profile
+Notifications
+Ended clients
+Units & language
+Help
+Privacy & data
+Sign out
+Notifications
+
+Choose which coaching events notify you. Critical and meal-time alerts merge into at most one push every 15 minutes.
+
+Channels
+Web bellAlways on in trainer web while you're signed in.
+Mobile pushWhen the FitBud trainer app is installed on your phone.
+
+Turn on notifications in the FitBud app on your phone if push is off.
+
+Categories
+Client asked you on WhatsAppWhen a client opens WhatsApp from an item.
+Check-in submittedWhen a client submits a check-in for review.
+Critical itemsSend at most one summary per hour.
+Intake submittedWhen a client finishes onboarding intake.
+Renewals dueUpcoming and overdue subscription renewals.
+Client changed meal timesBatched into the 15-minute digest.
+Morning summary at 8:00 amA daily overview of who needs you.
+Quiet hours
+
+Trainer push is held during quiet hours (your timezone). Default 10:00 pm – 7:00 am.
+
+10:00 pm – 7:00 am
+
+From
+10:00 pm
+To
+7:00 am
+
+Saved

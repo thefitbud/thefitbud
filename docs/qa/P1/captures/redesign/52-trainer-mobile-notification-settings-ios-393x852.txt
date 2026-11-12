@@ -1,0 +1,24 @@
+FITBUD
+Notifications
+‹ More
+Notifications: Off in phone settings
+Open phone settings
+Send me a push when
+Clients asked you on WhatsApp
+Merged when several ask within 15 min
+Check-ins submitted
+One push per check-in, merged within 15 min
+Critical items
+At most one summary an hour
+Intake submitted
+When a new client finishes their intake
+Renewals due
+When coaching renews today or has lapsed
+Client changed meal times
+Added to the 15-minute batch
+Morning summary at 8:00 am
+Who needs you and check-ins to review
+Quiet hours
+No pushes
+10:00 pm — 7:00 am ›
+The web bell always shows everything. At most one push every 15 min.
