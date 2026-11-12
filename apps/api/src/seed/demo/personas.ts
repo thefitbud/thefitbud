@@ -68,6 +68,12 @@ export const DEMO_DEVIATION_FOOD_SLUGS = [
 export type DemoLibraryIndex = {
   foods: Record<string, DemoLibraryFood>;
   exercises: Record<string, DemoLibraryExercise>;
+  /**
+   * The database the index was read from has coach-log authorship (migration
+   * 0039: `log_edit_events` and the `logged_by_*` columns), so the seed may
+   * write coach-logged entries (Z10-22).
+   */
+  coachLog?: boolean;
 };
 
 /** Every slug the seed resolves (base personas + template catalogue + deviations). */
@@ -227,7 +233,14 @@ export function loadDemoLibraryIndex(
     };
   }
 
-  return { foods, exercises };
+  const coachLog =
+    Number(
+      sqlite.exec(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'log_edit_events'",
+      )[0]?.values[0]?.[0] ?? 0,
+    ) > 0;
+
+  return { foods, exercises, coachLog };
 }
 
 /** SQL subquery for a global food id by slug (wrangler path without TS index). */

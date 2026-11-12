@@ -6,6 +6,7 @@ import {
 } from "@fitbud/core";
 import { NUTRIENT_SCALE, type PlanContent } from "@fitbud/contracts";
 import { DEMO_ACCOUNTS } from "./spec.js";
+import { buildCaptureWeekSql } from "./capture-week.js";
 import {
   DEMO_ANITA_PENDING_INVITE_TOKEN,
   DEMO_CHECKIN_FORM_VERSION_ID,
@@ -1273,6 +1274,8 @@ export function buildDemoHistorySql(input: HistoryInput): string {
 
   lines.push(buildPersonaOverlays(input));
   lines.push(buildRealisticWorld(input));
+  // Last: it replaces a few of Lakshmi's legacy-window workout days (Z10-22).
+  if (input.libraryIndex.coachLog) lines.push(buildCaptureWeekSql(input));
 
   return lines.join("\n");
 }
