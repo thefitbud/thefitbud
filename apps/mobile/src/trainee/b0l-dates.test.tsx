@@ -315,7 +315,7 @@ describe("no ISO dates on Today or Diet", () => {
     await waitFor(() => expect(view.container.textContent).toMatch(/993\s*of\s*1,200\s*kcal/));
     offline = true;
     invalidateRelationshipDayData(REL);
-    await waitFor(() => expect(view.container.textContent).toMatch(/Saved on phone/));
+    await waitFor(() => expect(view.container.textContent).toMatch(/You're offline\. Your logs are saved on this phone/));
     expect(view.container.textContent).toMatch(/993\s*of\s*1,200\s*kcal/);
   });
 });
