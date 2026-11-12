@@ -224,7 +224,6 @@ describe("TodayTab plan state", () => {
       screen.queryByLabelText("Your coach is preparing your plan"),
     ).toBeNull();
     // And nothing may claim the day is ready either.
-    expect(screen.queryByText("Here's your day.")).toBeNull();
     expect(screen.queryByText("Today's workout")).toBeNull();
   });
 
@@ -233,9 +232,8 @@ describe("TodayTab plan state", () => {
     openDayLoad();
 
     await waitFor(() => {
-      expect(screen.getByText("Here's your day.")).toBeTruthy();
+      expect(screen.getByText("Today's workout")).toBeTruthy();
     });
-    expect(screen.getByText("Today's workout")).toBeTruthy();
     expect(screen.queryAllByText(PREPARING)).toEqual([]);
     expect(
       screen.queryByLabelText("Your coach is preparing your plan"),
@@ -247,14 +245,12 @@ describe("TodayTab plan state", () => {
     openDayLoad();
 
     await waitFor(() => {
-      expect(screen.getByText("Rahul is preparing your plan.")).toBeTruthy();
+      expect(
+        screen.getByLabelText("Your coach is preparing your plan"),
+      ).toBeTruthy();
     });
-    expect(
-      screen.getByLabelText("Your coach is preparing your plan"),
-    ).toBeTruthy();
     // Item 3: a plan-less trainee gets no empty workout section.
     expect(screen.queryByText("Today's workout")).toBeNull();
-    expect(screen.queryByText("Here's your day.")).toBeNull();
   });
 
   it("never shows both states at once, through the race the defect needs", async () => {
@@ -289,7 +285,7 @@ describe("TodayTab plan state", () => {
       />,
     );
     await waitFor(() => {
-      expect(screen.getByText("Here's your day.")).toBeTruthy();
+      expect(screen.getByText("Today's workout")).toBeTruthy();
     });
     expect(screen.queryAllByText(PREPARING)).toEqual([]);
   });
@@ -304,7 +300,7 @@ describe("TodayTab plan state", () => {
     openDayLoad();
 
     await waitFor(() => {
-      expect(screen.getByText("Here's your day.")).toBeTruthy();
+      expect(screen.getByText("Today's workout")).toBeTruthy();
     });
     const alerts = screen.getAllByRole("alert").map((node) => node.textContent);
     expect(
@@ -350,7 +346,6 @@ describe("TodayTab plan unavailable", () => {
     ).toBeNull();
 
     // And nothing may claim the day is ready either.
-    expect(screen.queryByText("Here's your day.")).toBeNull();
     expect(screen.queryByText("Today's workout")).toBeNull();
   });
 

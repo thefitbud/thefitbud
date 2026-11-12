@@ -33,6 +33,10 @@ export const clientDirectoryItemSchema = z.object({
   startedAt: isoDateTimeSchema.nullable().optional(),
   /** When coaching ended (ISO instant), for ended roster chips. */
   endedAt: isoDateTimeSchema.nullable().optional(),
+  /** `startedAt` as a civil date in the trainer's timezone (Z10-21). */
+  startedOn: localDateSchema.nullable().optional(),
+  /** `endedAt` as a civil date in the trainer's timezone (Z10-21). */
+  endedOn: localDateSchema.nullable().optional(),
   /** Weeks since coaching started, counted from the relationship start. */
   week: z.number().int().positive().nullable().optional(),
   /** City label only when the trainee timezone differs from the trainer. */
