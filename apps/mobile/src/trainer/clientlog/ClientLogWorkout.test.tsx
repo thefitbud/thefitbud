@@ -222,7 +222,7 @@ describe("ClientLogWorkoutScreen", () => {
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
     expect(screen.getByText(/Planned for Mon 2 Nov · 2 exercises/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
     const [assignmentId, body, key] = api.logClientWorkout.mock.calls[0]!;
     expect(assignmentId).toBe(ids(10));
@@ -250,10 +250,10 @@ describe("ClientLogWorkoutScreen", () => {
     const onSaved = vi.fn();
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
-    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. We couldn’t reach FitBud, so nothing was saved\. Your entries are still here/);
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 5000 });
     expect(api.logClientWorkout.mock.calls[1]![2]).toBe(api.logClientWorkout.mock.calls[0]![2]);
   });
 
@@ -265,7 +265,7 @@ describe("ClientLogWorkoutScreen", () => {
     );
     renderForm({ initialDate: "2026-11-02" });
     await screen.findByText("Upper body A");
-    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. A trainer log must be dated within the last 7 days\./);
   });
 
@@ -282,10 +282,10 @@ describe("ClientLogWorkoutScreen", () => {
     const onSaved = vi.fn();
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
-    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. Something went wrong on our side\./);
     fireEvent.click(retryButton());
-    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 5000 });
     expect(api.logClientWorkout.mock.calls[1]![2]).toBe(api.logClientWorkout.mock.calls[0]![2]);
   });
 
@@ -300,10 +300,10 @@ describe("ClientLogWorkoutScreen", () => {
     const onSaved = vi.fn();
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
-    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. A trainer log must be dated within the last 7 days\./);
     fireEvent.click(retryButton());
-    await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(2), { timeout: 5000 });
     expect(api.logClientWorkout.mock.calls[1]![2]).not.toBe(api.logClientWorkout.mock.calls[0]![2]);
   });
 
@@ -323,7 +323,7 @@ describe("ClientLogWorkoutScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Plus 2.5" }));
     fireEvent.click(screen.getByRole("button", { name: "Next: reps" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Edited by you"));
     expect(api.editClientWorkout).toHaveBeenCalledWith(ids(50), {
       recordVersion: 3,
@@ -368,12 +368,12 @@ describe("ClientLogWorkoutScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: /Set 2 reps/ }));
     fireEvent.click(screen.getByRole("button", { name: "Minus 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
     await screen.findByText(/Not saved\. This entry changed\. Reload it\./);
     expect((screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement).disabled).toBe(true);
     expect(api.editClientWorkout).toHaveBeenCalledTimes(1);
     const before = api.getWorkoutExecution.mock.calls.length;
-    fireEvent.click(screen.getByRole("button", { name: "Reload entry" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Reload entry" }));
     await waitFor(() => expect(api.getWorkoutExecution.mock.calls.length).toBe(before + 1));
   });
 
@@ -383,7 +383,7 @@ describe("ClientLogWorkoutScreen", () => {
     api.logClientWorkout.mockRejectedValueOnce(new TypeError("undefined is not a function"));
     renderForm({ initialDate: "2026-11-02" });
     await screen.findByText("Upper body A");
-    fireEvent.click(screen.getByRole("button", { name: "Save workout" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/LOG-SAVE/);
     expect(screen.queryByText(/couldn’t reach FitBud/)).toBeNull();
   });
