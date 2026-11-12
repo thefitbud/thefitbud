@@ -208,3 +208,61 @@ export function mealsLoggedSummary(meals: readonly MealAssignment[]): string {
   if (total === 0) return "No meals planned today.";
   return `${logged} of ${total} meals logged`;
 }
+
+export type DayKcalRow = {
+  id: string;
+  kcal: number;
+  kind: "logged" | "planned";
+};
+
+export type DayKcalSummary = {
+  rows: DayKcalRow[];
+  /** Sum of the `logged` rows only. The Diet ring and day summary show this. */
+  loggedTotal: number;
+  /** Sum of the planned kcal of every meal of the day. */
+  plannedTotal: number;
+};
+
+/**
+ * Single kcal source for the Diet day summary and the meal rows (D-W11-6).
+ * A logged meal contributes its logged kcal (actual foods for "something
+ * different", the server per-meal total or the plan otherwise, 0 when skipped);
+ * a meal not logged yet shows its planned kcal and adds nothing to the logged
+ * total. The summary number is therefore always the sum of the logged rows.
+ */
+export function dayKcalSummary(
+  assignments: readonly MealAssignment[],
+  dayTotals?: MeDayResponse["totals"] | null,
+): DayKcalSummary {
+  const perMeal = new Map(
+    (dayTotals?.perMeal ?? []).map((row) => [row.slotKey, row.kcalScaled]),
+  );
+  const rows: DayKcalRow[] = [];
+  let loggedTotal = 0;
+  // Rounded once over all items, the same figure the rings call `assigned`.
+  const plannedTotal = dayNutritionFromMeals([...assignments]).assigned.kcal;
+  for (const meal of assignments) {
+    if (isMealLoggedForCount(meal.status)) {
+      let kcal: number;
+      const serverScaled = perMeal.get(meal.prescription.id);
+      if (meal.status === "skipped") {
+        kcal = 0;
+      } else if (meal.status === "modified") {
+        kcal = loggedMacrosForMeal(meal).kcal;
+      } else if (serverScaled != null && serverScaled > 0) {
+        kcal = Math.round(unscaleNutrient(serverScaled));
+      } else {
+        kcal = loggedMacrosForMeal(meal).kcal;
+      }
+      rows.push({ id: meal.id, kcal, kind: "logged" });
+      loggedTotal += kcal;
+    } else {
+      rows.push({
+        id: meal.id,
+        kcal: nutrientsFromMealPrescription(meal).kcal,
+        kind: "planned",
+      });
+    }
+  }
+  return { rows, loggedTotal, plannedTotal };
+}
