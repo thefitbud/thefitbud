@@ -184,7 +184,13 @@ export function DietTab({
   const { api, me } = useAuth();
   const s1 = stage1Api(api);
   const sync = useSyncEngine();
-  const [assignments, setAssignments] = useState<MealAssignment[]>([]);
+  const [loadedAssignments, setAssignments] = useState<MealAssignment[]>([]);
+  // Z11b-1: every count, ring and row reads the selected day's meals only, even
+  // while the last-loaded list still holds another day (offline day switch).
+  const assignments = useMemo(
+    () => mealsForDay(loadedAssignments, selectedDate),
+    [loadedAssignments, selectedDate],
+  );
   const [loading, setLoading] = useState(true);
   const [lockStateKnown, setLockStateKnown] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -296,6 +302,8 @@ export function DietTab({
             : "Couldn't refresh diet. Pull to try again.",
         );
       }
+      // Keep the last-loaded meals of this day only; a different day's are dropped.
+      setAssignments((prev) => mealsForDay(prev, selectedDate));
       setLockStateKnown(false);
     } finally {
       setLoading(false);
@@ -330,8 +338,8 @@ export function DietTab({
   );
   // One kcal source for the ring and the meal rows (D-W11-6).
   const kcalSummary = useMemo(
-    () => dayKcalSummary(assignments, dayTotals?.totals ?? null),
-    [assignments, dayTotals],
+    () => dayKcalSummary(assignments, dayTotals?.totals ?? null, selectedDate),
+    [assignments, dayTotals, selectedDate],
   );
   const kcalRowById = useMemo(
     () => new Map(kcalSummary.rows.map((row) => [row.id, row])),

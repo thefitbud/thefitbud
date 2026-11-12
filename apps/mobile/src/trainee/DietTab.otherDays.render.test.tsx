@@ -86,13 +86,21 @@ const otherDays = Array.from({ length: 20 }, (_, day) =>
 ).flat();
 const items = [...otherDays.slice(0, 40), ...today, ...otherDays.slice(40)];
 
+let network: "online" | "offline" = "online";
+
 const api = new Proxy(
   {},
   {
     get(_t, key: string) {
       if (key === "then") return undefined;
-      // Ignores its fromDate/toDate on purpose, like the API did without a query string.
-      if (key === "listMealAssignments") return async () => ({ items, nextCursor: null });
+      if (key === "listMealAssignments") {
+        return async () => {
+          // The phone lost its connection (offline day switch test).
+          if (network === "offline") throw new TypeError("Network request failed");
+          // Ignores its fromDate/toDate on purpose, like the API did without a query string.
+          return { items, nextCursor: null };
+        };
+      }
       if (key === "getMeDay") return async () => null;
       if (key === "getMeWeek") return async () => null;
       return async () => ({ items: [], nextCursor: null });
@@ -150,5 +158,31 @@ describe("DietTab counts the selected day only (Z11b-1)", () => {
     );
     await waitFor(() => expect(screen.getByText("2 of 4 meals logged today")).toBeTruthy());
     expect(screen.queryByText(/of 84 meals/)).toBeNull();
+  });
+
+  it("an offline switch to another day drops the previous day's meals", async () => {
+    network = "online";
+    const view = render(
+      <DietTab
+        relationship={relationship}
+        selectedDate={DATE}
+        onSelectDate={() => undefined}
+        onOpenOverlay={() => undefined}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("2 of 4 meals logged today")).toBeTruthy());
+    network = "offline";
+    view.rerender(
+      <DietTab
+        relationship={relationship}
+        selectedDate={daysBefore(-1)}
+        onSelectDate={() => undefined}
+        onOpenOverlay={() => undefined}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("No meals planned today.")).toBeTruthy());
+    expect(screen.queryByText(/of 4 meals/)).toBeNull();
+    expect(screen.queryByText("Breakfast")).toBeNull();
+    network = "online";
   });
 });

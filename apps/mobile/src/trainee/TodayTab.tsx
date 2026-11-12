@@ -298,7 +298,13 @@ export function TodayTab({
   const isFuture = selectedDate > today;
 
   const [workout, setWorkout] = useState<WorkoutAssignment | null>(null);
-  const [meals, setMeals] = useState<MealAssignment[]>([]);
+  const [loadedMeals, setMeals] = useState<MealAssignment[]>([]);
+  // Z11b-1: counts, rings and rows read the selected day's meals only, even
+  // while the last-loaded list still holds another day.
+  const meals = useMemo(
+    () => mealsForDay(loadedMeals, selectedDate),
+    [loadedMeals, selectedDate],
+  );
   const [checkin, setCheckin] = useState<Checkin | null>(null);
   const [loading, setLoading] = useState(true);
   /** False until listMealAssignments returns derived loggingLocked flags. */
@@ -380,7 +386,7 @@ export function TodayTab({
       setWorkout(null);
       // Keep the last-loaded meals of this day (as Diet does) so the ring and
       // rows still agree offline; a different day's meals are dropped.
-      setMeals((prev) => prev.filter((m) => m.localDate === selectedDate));
+      setMeals((prev) => mealsForDay(prev, selectedDate));
       setLockStateKnown(false);
       // The whole day load failed, so there is no week to show either. It
       // settles on `unavailable` rather than staying `loading` for ever:
@@ -514,8 +520,8 @@ export function TodayTab({
   // logged rows. dayKcalSummary covers meals the server has not counted yet by
   // their own logged value, which is what buildNutritionRings' "extras" did.
   const kcalSummary = useMemo(
-    () => dayKcalSummary(meals, dayTotals?.totals ?? null),
-    [meals, dayTotals],
+    () => dayKcalSummary(meals, dayTotals?.totals ?? null, selectedDate),
+    [meals, dayTotals, selectedDate],
   );
   const kcalRowById = useMemo(
     () => new Map(kcalSummary.rows.map((row) => [row.id, row])),

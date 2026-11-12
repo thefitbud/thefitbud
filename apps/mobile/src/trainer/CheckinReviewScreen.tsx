@@ -385,16 +385,16 @@ export function CheckinReviewScreen({
   );
 }
 
-/** Same copy as trainer web's check-in list and review page for an unsubmitted check-in. */
+/**
+ * Unsubmitted check-in line. Mirrors trainer web's check-in list row detail
+ * for a due/overdue check-in (ClientCheckinsPage: `Due <date> · not submitted
+ * yet`). Not the web review page's "Due by <date>, 11:59 pm": the window does
+ * not end at 11:59 pm, and its "has started but not submitted" would also
+ * claim a start for the system-created next draft, which nobody has opened.
+ * Only reached for a draft, whose derived status is scheduled, due or overdue.
+ */
 function notSubmittedText(checkin: CheckinReviewContext["checkin"]): string {
-  if (
-    checkin.status === "scheduled" ||
-    checkin.status === "due" ||
-    checkin.status === "overdue"
-  ) {
-    return `Due ${formatCivilDate(checkin.localDate)} · not submitted yet`;
-  }
-  return "No answers submitted yet.";
+  return `Due ${formatCivilDate(checkin.localDate)} · not submitted yet`;
 }
 
 function Measure({ item }: { item: ReviewMeasureTile }) {
