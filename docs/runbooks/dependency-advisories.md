@@ -16,7 +16,7 @@ pnpm audit --audit-level critical
 | | critical | high | moderate | low |
 |---|---|---|---|---|
 | Before | 4 | 52 | 45 | 12 |
-| After | 3 | 29 | 19 | 1 |
+| After | 3 | 37 | 30 | 4 |
 
 `pnpm audit --audit-level critical` still exits non-zero: the 3 critical advisories left (`tinypool` x2, `tar`) each need a major upgrade (see below), which D-W11-10 rules out.
 
@@ -50,7 +50,7 @@ Every override is scoped to the vulnerable range and its target stays inside eve
 | high | `zod` 3.x instance only | `apps/api > @fitbud/contracts > zod@3.25.76` | Major needed (3 to 4). Every contract schema is affected. (The zod 4 instance under `@scalar/types` is fixed by the override above.) | A dedicated zod 4 migration task. |
 | high | `sharp` | `apps/api > @sentry/cloudflare > wrangler > miniflare > sharp@0.35.4` | Package with native code, so not touched under D-W11-F2. Only reached through the local wrangler dev tooling, not deployed. | Update `wrangler` / `miniflare` (brings `sharp` 0.35.5) once native packages may change. |
 
-Moderate and low advisories were not triaged in Z11-7; re-run `pnpm audit` for the list (19 moderate, 1 low after this task). Most are the same Expo / React Native chains.
+Moderate and low advisories were not triaged in Z11-7; re-run `pnpm audit` for the list (30 moderate, 4 low after this task). Most are the same Expo / React Native chains.
 
 ## Checks run for Z11-7
 
