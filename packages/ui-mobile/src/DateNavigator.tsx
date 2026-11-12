@@ -1,5 +1,5 @@
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
-import { formatCivilDate, labelFor } from "@fitbud/core";
+import { Pressable, StyleSheet, View } from "react-native";
+import { addDaysToLocalDate, formatCivilDate, labelFor } from "@fitbud/core";
 import { FitText as Text } from "./FitText.js";
 import { colors, radii, spacing, touchTargetMin } from "./theme.js";
 import { typeScale } from "./typography.js";
@@ -17,6 +17,8 @@ type Props = {
   todayDate: string;
   onSelect: (localDate: string) => void;
   onToday: () => void;
+  /** Hosts with their own way back to today (a past-day banner) pass false. */
+  showTodayPill?: boolean;
 };
 
 function dotColor(state: DateNavigatorDay["state"]): string {
@@ -64,13 +66,14 @@ export function DateNavigator({
   todayDate,
   onSelect,
   onToday,
+  showTodayPill: allowTodayPill = true,
 }: Props) {
-  const showTodayPill = selectedDate !== todayDate;
+  const showTodayPill = allowTodayPill && selectedDate !== todayDate;
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.header}>
-        {showTodayPill ? (
+      {showTodayPill ? (
+        <View style={styles.header}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Go to today"
@@ -79,55 +82,63 @@ export function DateNavigator({
           >
             <Text style={styles.todayPillText}>Today</Text>
           </Pressable>
-        ) : (
-          <View />
-        )}
-      </View>
-      <View style={styles.stripCard}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.strip}
+        </View>
+      ) : null}
+      <View style={styles.stripRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Previous week"
+          hitSlop={{ top: 0, bottom: 0, left: 2, right: 2 }}
+          onPress={() => onSelect(addDaysToLocalDate(selectedDate, -7))}
+          style={styles.chevron}
         >
-          <View style={styles.stripRow}>
-            {days.map((day) => {
-              const selected = day.localDate === selectedDate;
-              return (
-                <Pressable
-                  key={day.localDate}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected }}
-                  accessibilityLabel={`${formatCivilDate(day.localDate)}, ${stateLabel(day.state)}`}
-                  onPress={() => onSelect(day.localDate)}
-                  style={[styles.day, selected ? styles.daySelected : null]}
-                >
-                  <Text
-                    style={[
-                      styles.weekday,
-                      selected ? styles.textSelected : null,
-                    ]}
-                  >
-                    {String(day.weekdayLabel)}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.dayNum,
-                      selected ? styles.textSelected : null,
-                    ]}
-                  >
-                    {String(day.dayLabel)}
-                  </Text>
-                  <View
-                    style={[
-                      styles.dot,
-                      { backgroundColor: dotColor(day.state) },
-                    ]}
-                  />
-                </Pressable>
-              );
-            })}
-          </View>
-        </ScrollView>
+          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u2039"}</Text>
+        </Pressable>
+        {days.map((day) => {
+          const selected = day.localDate === selectedDate;
+          const isToday = day.localDate === todayDate;
+          return (
+            <Pressable
+              key={day.localDate}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={`${formatCivilDate(day.localDate)}, ${stateLabel(day.state)}`}
+              onPress={() => onSelect(day.localDate)}
+              style={[
+                styles.day,
+                isToday && !selected ? styles.dayToday : null,
+                selected ? styles.daySelected : null,
+              ]}
+            >
+              <Text
+                style={[styles.weekday, selected ? styles.textSelected : null]}
+              >
+                {isToday && selected ? "Today" : String(day.weekdayLabel)}
+              </Text>
+              <Text
+                style={[styles.dayNum, selected ? styles.textSelected : null]}
+              >
+                {String(day.dayLabel)}
+              </Text>
+              <View
+                style={[
+                  styles.dot,
+                  selected ? styles.dotOnSelected : null,
+                  { backgroundColor: dotColor(day.state) },
+                ]}
+              />
+            </Pressable>
+          );
+        })}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Next week"
+          hitSlop={{ top: 0, bottom: 0, left: 2, right: 2 }}
+          onPress={() => onSelect(addDaysToLocalDate(selectedDate, 7))}
+          style={styles.chevron}
+        >
+          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u203A"}</Text>
+        </Pressable>
       </View>
     </View>
   );
@@ -137,65 +148,87 @@ const styles = StyleSheet.create({
   wrap: {
     marginBottom: spacing.sm,
   },
+  // Full bleed: the host's 24 pt gutters would leave day cells under 44 pt
+  // at 393 wide, so the row takes them back (day cells >= 44 pt, chevrons
+  // 44 pt effective).
   stripRow: {
+    alignItems: "center",
     flexDirection: "row",
+    marginHorizontal: -spacing.xl,
   },
   header: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    minHeight: touchTargetMin / 2,
+    marginBottom: spacing.xs,
   },
   todayPill: {
     backgroundColor: colors.paleLavender,
     borderRadius: radii.pill,
+    justifyContent: "center",
+    minHeight: touchTargetMin,
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
   },
   todayPillText: {
     color: colors.indigo,
     fontSize: typeScale.caption,
     fontWeight: "600",
   },
-  stripCard: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
-    borderWidth: 1,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+  // 40 wide plus 2 pt of hit slop each side is 44 effective; the strip runs
+  // edge to edge (see `stripRow`) so seven day cells still get 44 or more.
+  chevron: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: touchTargetMin,
+    width: 40,
   },
-  strip: {
-    paddingVertical: spacing.xs,
+  chevronGlyph: {
+    color: colors.midGrey,
+    fontSize: 28,
+    lineHeight: 32,
   },
   day: {
     alignItems: "center",
-    borderRadius: radii.control,
-    marginRight: spacing.sm,
-    minHeight: touchTargetMin,
+    borderColor: "transparent",
+    borderRadius: 999,
+    borderWidth: 1.5,
+    flex: 1,
+    justifyContent: "center",
+    minHeight: 76,
     minWidth: 44,
-    paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
   },
+  dayToday: {
+    borderColor: colors.indigo,
+  },
   daySelected: {
-    backgroundColor: colors.white,
+    backgroundColor: colors.indigo,
+    borderColor: colors.indigo,
   },
   weekday: {
     color: colors.midGrey,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
   },
   dayNum: {
     color: colors.deepNavy,
-    fontSize: typeScale.body,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "600",
   },
   textSelected: {
-    color: colors.indigo,
+    color: colors.white,
   },
   dot: {
     borderRadius: 4,
     height: 6,
-    marginTop: 2,
+    marginTop: 4,
     width: 6,
+  },
+  // A white ring keeps the state colour readable on the indigo pill; the
+  // state is also in the day's spoken label, never colour alone.
+  dotOnSelected: {
+    borderColor: colors.white,
+    borderWidth: 1,
+    height: 8,
+    width: 8,
   },
 });

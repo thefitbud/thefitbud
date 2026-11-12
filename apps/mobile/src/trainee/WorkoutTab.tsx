@@ -191,6 +191,8 @@ export function WorkoutTab({
   onAutoStartConsumed,
   pendingStartAssignmentId = null,
   onPendingStartConsumed,
+  pendingSummaryExecutionId = null,
+  onPendingSummaryConsumed,
   onImmersiveChange,
   coachName: coachNameProp,
   unreadNotifications = 0,
@@ -212,6 +214,13 @@ export function WorkoutTab({
   onAutoStartConsumed?: () => void;
   pendingStartAssignmentId?: string | null;
   onPendingStartConsumed?: () => void;
+  /**
+   * Opens this execution's summary (or the coach-logged view) once the week
+   * has loaded, then calls `onPendingSummaryConsumed`. Set by Today's "View
+   * summary" (D-W10-9), as `pendingStartAssignmentId` is set by its start.
+   */
+  pendingSummaryExecutionId?: string | null;
+  onPendingSummaryConsumed?: () => void;
   /** True while active workout or summary fills the tab (hide shell tab bar). */
   onImmersiveChange?: (immersive: boolean) => void;
   /** Optional override; defaults to relationship.trainerDisplayName. */
@@ -464,6 +473,17 @@ export function WorkoutTab({
     }
     onPendingStartConsumed?.();
   }, [pendingStartAssignmentId, loading, assignments, onPendingStartConsumed]);
+
+  useEffect(() => {
+    if (!pendingSummaryExecutionId || loading) return;
+    const assignment = assignments.find(
+      (item) => item.execution?.id === pendingSummaryExecutionId,
+    );
+    if (assignment) {
+      void viewLoggedWorkout(assignment);
+    }
+    onPendingSummaryConsumed?.();
+  }, [pendingSummaryExecutionId, loading, assignments, onPendingSummaryConsumed]);
 
   /** A coach-logged workout is read-only: open it instead of the start flow (R1). */
   async function viewLoggedWorkout(assignment: WorkoutAssignment) {
