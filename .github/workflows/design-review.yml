@@ -1,0 +1,89 @@
+# Design review of the QA screenshots (W11 Z11-1, D-W11-2, D-W11-3).
+#
+# After a QA run on main finishes (the nightly one, or any run of `qa.yml`, whose workflow
+# `name:` is "QA"), this workflow downloads that run's `qa-report` artifact, which carries
+# the Android (`screenshots/mobile/`), iOS (`screenshots/ios/`) and web (`screenshots/web/`)
+# screenshots, sets each beside its locked design frame with ImageMagick (preinstalled on
+# ubuntu-latest) and uploads the result as the `design-review` artifact: `summary.md`
+# (worst first) and `side-by-side/*.png`.
+#
+# Advisory: it is not a required check and never fails a pull request (it does not run on
+# pull requests at all). No secret is used. `qa.yml` is not edited: the two workflows meet
+# only at the artifact. How to read the report: docs/runbooks/design-review.md.
+name: Design review
+
+on:
+  workflow_run:
+    workflows: ["QA"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run-id:
+        description: Id of the QA workflow run whose `qa-report` artifact to review
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: design-review-${{ github.event.workflow_run.id || inputs.run-id }}
+  cancel-in-progress: false
+
+jobs:
+  design-review:
+    name: design-review
+    # A cancelled QA run uploads no report. Anything else, pass or fail, does.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Check ImageMagick
+        run: |
+          # Preinstalled on ubuntu-latest. If it ever is not, diff.mjs reports
+          # "ImageMagick not available" in summary.md and exits 0.
+          compare -version | head -n 1 || echo "::warning::ImageMagick is not installed; scores will be skipped"
+
+      # The artifact belongs to the QA run, not to this one, so it is fetched by run id with
+      # the workflow's own read-only token (actions: read).
+      - name: Download the QA report
+        uses: actions/download-artifact@v5
+        with:
+          name: qa-report
+          path: qa-report
+          run-id: ${{ github.event.workflow_run.id || inputs.run-id }}
+          github-token: ${{ github.token }}
+
+      - name: Build the design review
+        run: node scripts/qa/visual/diff.mjs --artifact qa-report --out design-review
+
+      - name: Job summary
+        if: ${{ always() }}
+        run: |
+          if [ -f design-review/summary.md ]; then
+            cat design-review/summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No design-review/summary.md was written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload the design review
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v5
+        with:
+          name: design-review
+          path: design-review
+          retention-days: 14
+          if-no-files-found: ignore
