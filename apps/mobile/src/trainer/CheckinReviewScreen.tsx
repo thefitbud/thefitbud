@@ -37,7 +37,8 @@ const OUTCOMES: Array<{ value: CheckinReviewOutcome; label: string }> = [
 type Props = {
   checkinId: string;
   relationshipId: string;
-  onBack: () => void;
+  // The resolved relationship id lets a cold-opened review go back to the client page.
+  onBack: (relationshipId?: string) => void;
   onOpenClient: (relationshipId: string) => void;
 };
 
@@ -298,7 +299,7 @@ export function CheckinReviewScreen({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
-          onPress={onBack}
+          onPress={() => onBack(context?.checkin.coachingRelationshipId)}
           style={styles.back}
         >
           <Text style={styles.backText}>‹</Text>
