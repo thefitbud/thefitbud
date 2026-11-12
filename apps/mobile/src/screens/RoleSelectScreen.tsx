@@ -32,19 +32,22 @@ function firstName(fullName: string | null | undefined): string | null {
 
 /** Frame 59: pick a role, optionally remembered for the next launch. */
 export function RoleSelectScreen() {
-  const { me, selectRole } = useAuth();
+  const { me, selectRole, selectedRole, rememberRole } = useAuth();
   const roles = me ? mobilePermittedRoles(me.permittedRoles) : [];
   const options = OPTIONS.filter((option) => roles.includes(option.role));
+  // Opened from More (Z11-14): start on the role in use.
+  const current = options.find((option) => option.role === selectedRole);
   const [choice, setChoice] = useState<PickableRole>(
-    options[0]?.role ?? "trainer",
+    current?.role ?? options[0]?.role ?? "trainer",
   );
+  const [remember, setRemember] = useState(rememberRole !== false);
   const [busy, setBusy] = useState(false);
   const name = firstName(me?.trainerProfile?.displayName);
 
   async function onContinue() {
     setBusy(true);
     try {
-      await selectRole(choice);
+      await selectRole(choice, { remember });
     } finally {
       setBusy(false);
     }
@@ -74,6 +77,7 @@ export function RoleSelectScreen() {
               key={option.role}
               accessibilityRole="radio"
               accessibilityState={{ checked: selected }}
+              aria-checked={selected}
               accessibilityLabel={`${option.title}. ${option.hint}`}
               onPress={() => setChoice(option.role)}
               style={[styles.option, selected ? styles.optionSelected : null]}
@@ -95,14 +99,16 @@ export function RoleSelectScreen() {
 
       <Pressable
         accessibilityRole="checkbox"
-        accessibilityState={{ checked: true, disabled: true }}
+        accessibilityState={{ checked: remember }}
+        // react-native-web reads aria-checked, not accessibilityState.checked.
+        aria-checked={remember}
         accessibilityLabel="Remember my choice"
-        disabled
+        onPress={() => setRemember((value) => !value)}
         style={styles.remember}
       >
-        {/* Always remembered: turning it off needs AuthProvider (follow-up). */}
-        <View style={[styles.box, styles.boxOn]}>
-          <Check size={16} color={colors.white} />
+        {/* Off: this session keeps the role; the next launch asks again. */}
+        <View style={[styles.box, remember ? styles.boxOn : null]}>
+          {remember ? <Check size={16} color={colors.white} /> : null}
         </View>
         <Text style={styles.rememberLabel}>Remember my choice</Text>
       </Pressable>
@@ -122,7 +128,7 @@ type SwitchRoleSheetProps = {
 
 /**
  * Frame 61: asks before a link that needs the other role switches the view.
- * The entry wiring (More, deep-link handlers) belongs to the callers.
+ * AppRouter shows it for a coach link opened in trainee mode (Z11-14).
  */
 export function SwitchRoleSheet({
   visible,
