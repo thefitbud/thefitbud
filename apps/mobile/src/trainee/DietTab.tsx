@@ -40,7 +40,10 @@ import { useSyncEngine } from "../sync/SyncProvider";
 import {
   attachMealPhotoBestEffort,
   confirmMealAssignment,
+  isMealLogPending,
   MealSyncError,
+  pendingMealLogIds,
+  plannedUntilSentNote,
 } from "./mealActions";
 import {
   canShowMealLogActions,
@@ -174,6 +177,9 @@ export function DietTab({
   const optimisticStatus = useRef(
     new Map<string, MealAssignment["status"]>(),
   );
+  const [pendingSendIds, setPendingSendIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [photoPromptId, setPhotoPromptId] = useState<string | null>(null);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
   const coachName =
@@ -218,19 +224,11 @@ export function DietTab({
       let pendingIds = new Set<string>();
       try {
         const outbox = await sync.store.listOutbox();
-        pendingIds = new Set(
-          outbox
-            .filter(
-              (row) =>
-                (row.status === "pending" || row.status === "in_flight") &&
-                (row.operation === "meal.confirm" ||
-                  row.operation === "meal.skip"),
-            )
-            .map((row) => row.recordId),
-        );
+        pendingIds = pendingMealLogIds(outbox);
       } catch {
         pendingIds = new Set(optimisticStatus.current.keys());
       }
+      setPendingSendIds(pendingIds);
       setAssignments(
         scheduled.map((meal) => {
           const next = optimisticStatus.current.get(meal.id);
@@ -311,6 +309,10 @@ export function DietTab({
     () => new Map(kcalSummary.rows.map((row) => [row.id, row])),
     [kcalSummary],
   );
+  const plannedNote = useMemo(
+    () => plannedUntilSentNote(assignments, pendingSendIds),
+    [assignments, pendingSendIds],
+  );
   const proteinRing = nutritionRings.find((r) => r.key === "protein");
   const carbsRing = nutritionRings.find((r) => r.key === "carbs");
   const fatRing = nutritionRings.find((r) => r.key === "fat");
@@ -361,7 +363,13 @@ export function DietTab({
         coachName,
       );
       invalidateRelationshipDayData(relationship.id);
-      setPhotoPromptId(assignment.id);
+      if (await isMealLogPending(sync, assignment.id)) {
+        // Saved on this phone, not sent (frame 86): it counts as planned until
+        // the server has it, and a photo can only follow once it is sent.
+        setPendingSendIds((ids) => new Set(ids).add(assignment.id));
+      } else {
+        setPhotoPromptId(assignment.id);
+      }
       await load();
     } catch (err) {
       setError(
@@ -442,7 +450,9 @@ export function DietTab({
                 ? labelFor("meal_assignment_status", "skipped")
                 : meal.status === "modified"
                   ? "Changed"
-                  : "Logged"}
+                  : pendingSendIds.has(meal.id)
+                    ? "Waiting to send"
+                    : "Logged"}
               {meal.status !== "skipped" && loggedKcal != null
                 ? ` · ${formatKcal(loggedKcal)}`
                 : ""}
@@ -534,23 +544,6 @@ export function DietTab({
                     {mealDueStatusLabel(meal, timeZone)}
                   </Text>
                 </View>
-                {canLog ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Something different"
-                    onPress={() =>
-                      onOpenOverlay({
-                        screen: "something_different",
-                        assignmentId: meal.id,
-                      })
-                    }
-                    hitSlop={8}
-                  >
-                    <Text style={styles.mealHdrMetaLinkText} numberOfLines={1}>
-                      Something different
-                    </Text>
-                  </Pressable>
-                ) : null}
               </View>
             )}
           </View>
@@ -750,6 +743,7 @@ export function DietTab({
             </Text>
           </Text>
           <Text style={styles.daysumSub}>{assignments.length === 0 ? mealsLoggedSummary(assignments) : `${mealsLoggedSummary(assignments)} today`}</Text>
+          {plannedNote ? <Text style={styles.daysumSub}>{plannedNote}</Text> : null}
           <View style={styles.mac3}>
             <MacroBar
               label="Protein"

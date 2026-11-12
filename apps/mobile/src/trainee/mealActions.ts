@@ -119,3 +119,48 @@ export async function deviateMealAssignment(
   assertSyncOk(results, coachName);
   if (relationshipId) afterMealMutation(relationshipId);
 }
+
+/** Meal ids whose log is still in the outbox (saved on this phone, not sent). */
+export function pendingMealLogIds(
+  outbox: ReadonlyArray<{ status: string; operation: string; recordId: string }>,
+): Set<string> {
+  return new Set(
+    outbox
+      .filter(
+        (row) =>
+          (row.status === "pending" || row.status === "in_flight") &&
+          (row.operation === "meal.confirm" || row.operation === "meal.skip"),
+      )
+      .map((row) => row.recordId),
+  );
+}
+
+/**
+ * Day-summary note for confirmed meals the server has not received yet
+ * (frame 86): they already count their planned kcal, and the figure is
+ * corrected from the server totals after sync. Skipped meals add nothing, so
+ * they are not named.
+ */
+export function plannedUntilSentNote(
+  meals: ReadonlyArray<{ id: string; mealName: string; status: string }>,
+  pendingIds: ReadonlySet<string>,
+): string | null {
+  const names = meals
+    .filter((m) => pendingIds.has(m.id) && m.status !== "skipped")
+    .map((m) => m.mealName);
+  if (names.length === 0) return null;
+  const who = names.length === 1 ? names[0] : `${names.length} meals`;
+  return `${who} ${names.length === 1 ? "is" : "are"} counted as planned until ${names.length === 1 ? "it's" : "they're"} sent`;
+}
+
+/** True while this meal's log is still in the outbox (offline or not yet acknowledged). */
+export async function isMealLogPending(
+  sync: SyncEngine,
+  assignmentId: string,
+): Promise<boolean> {
+  try {
+    return pendingMealLogIds(await sync.store.listOutbox()).has(assignmentId);
+  } catch {
+    return false;
+  }
+}
