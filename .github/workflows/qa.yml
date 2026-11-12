@@ -7,11 +7,9 @@
 #       then the staging API smoke (QT6), the staging Playwright suite (QT5), the
 #       Maestro Android suite (QT3), the same Maestro flows on an iOS simulator
 #       (CU19) and the repo's unit run as JUnit
-#   pull requests touching apps/mobile/** or packages/ui-mobile/**   the Maestro `smoke`
-#       tag only, on both platforms, advisory: deliberately not required checks
-#       (D-QA1-10). `ios` is not a required check either (D-W3b-14).
-#   pull requests touching scripts/qa/**   the report builder's own tests, which no
-#       other check can see (see the `qa-scripts` job)
+#   No pull_request trigger (Z11-9, Firoz 12 Nov 2026): QA runs only on schedule and
+#       workflow_dispatch. The `pull_request` expressions left below are dead but harmless;
+#       scripts/qa/staging-queue.test.mjs and seed-serial.test.mjs assert their text.
 #
 # Every run, pass or fail, uploads one `qa-report` artifact built by scripts/qa/summarize.mjs
 # (QT8). How to read it: docs/runbooks/qa-nightly.md.
@@ -113,9 +111,8 @@
 # pass (Z5-6). Re-dispatch stays deliberate and by hand. The "Staging queue" step in
 # `report` writes how android and ios took their turn into the run summary every time.
 #
-# `qa-scripts` is a required check on main (D-W3b-1) and a job inside a concurrency
-# group can be left Pending, or cancelled when a newer run queues, so a required
-# check must never sit in one.
+# `qa-scripts` is off main's required checks for good (Firoz, 12 Nov 2026); it still
+# stays outside every concurrency group so it is never left Pending or cancelled.
 #
 # Artifacts never carry qa-results/web/test-output/**: Playwright writes error-context.md
 # there on every failure, holding a full aria snapshot of the page including a typed
@@ -139,16 +136,13 @@ on:
         type: choice
         default: full
         options: [smoke, full]
-  pull_request:
-    branches: [main]
 
 permissions:
   contents: read
 
 jobs:
-  # Decides what this run does. Pull requests are classified by changed paths, the same
-  # way ci.yml does it; schedule and workflow_dispatch always run everything they are
-  # asked for.
+  # Decides what this run does. Schedule and workflow_dispatch run everything they are
+  # asked for (the pull-request path classification below is dead since Z11-9).
   changes:
     name: changes
     runs-on: ubuntu-latest
@@ -242,8 +236,7 @@ jobs:
   # ESLint config above it and declares no turbo task, so `pnpm lint`, `pnpm typecheck`
   # and `pnpm test` all walk straight past it. QT8 merged with three failing tests and a
   # fixture that reported `pass` where it should have failed, because nothing ran them.
-  # This job is that signal, and it runs on any PR that touches scripts/qa/** even though
-  # the rest of this workflow is nightly and mobile-scoped.
+  # This job is that signal on every nightly and dispatched run (no PR runs since Z11-9).
   qa-scripts:
     name: qa-scripts
     needs: changes
