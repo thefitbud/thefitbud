@@ -57,6 +57,8 @@ vi.mock("../lib/sessionStorage", () => ({
   clearPersistedSession: vi.fn(),
   loadNativeSession: vi.fn(async () => ({ ...h.nativeSession })),
   loadPersistedSession: vi.fn(() => ({ ...h.persisted })),
+  loadRememberRole: vi.fn(() => true),
+  persistRememberRole: vi.fn(),
   persistSession: vi.fn(),
   persistTokenState: vi.fn(),
 }));

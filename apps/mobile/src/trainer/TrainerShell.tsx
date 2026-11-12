@@ -23,6 +23,7 @@ import {
   registerTrainerCaptureNav,
 } from "../dev/captureBridge";
 import { stage1Api } from "../lib/stage1Api";
+import { roleForLinkKind } from "../navigation/resolveRoute";
 
 type TrainerTab = "attention" | "clients" | "checkins" | "more";
 
@@ -52,6 +53,8 @@ export function TrainerShell() {
     signOut,
     pendingNotificationLink,
     clearPendingNotificationLink,
+    pendingDeepLink,
+    clearPendingDeepLink,
     refreshSession,
   } = useAuth();
   const s1 = stage1Api(api);
@@ -139,6 +142,32 @@ export function TrainerShell() {
         return;
     }
   }, [pendingNotificationLink]);
+
+  // Z11-14: a coach link (exception, ask, client), opened here directly or
+  // after frame 61's Switch. A trainee link is left for the trainee shell, as
+  // before. The link carries an id only; each screen fetches its own data.
+  useEffect(() => {
+    if (!pendingDeepLink) return;
+    if (roleForLinkKind(pendingDeepLink.kind) !== "trainer") return;
+    const link = pendingDeepLink;
+    clearPendingDeepLink(); // Navigate once per link.
+    const push = ++latestPushRef.current;
+    setRefreshNonce((n) => n + 1);
+    setClientsSegment("clients");
+    switch (link.kind) {
+      case "exception":
+        setOverlay({ kind: "exception", exceptionId: link.id });
+        return;
+      case "client":
+        void openClientById(link.id, push);
+        return;
+      default:
+        // Asks are answered under the Attention tab's Asked filter.
+        setOverlay(null);
+        setTab("attention");
+        return;
+    }
+  }, [pendingDeepLink]);
 
   useEffect(() => {
     if (!isCaptureModeEnabled()) return;

@@ -38,6 +38,7 @@ import {
   trainerWebUrl,
 } from "../lib/legalLinks";
 import { M2Card, M2Group, M2Row } from "../trainee/settings/m2";
+import { mobilePermittedRoles } from "../navigation/resolveRoute";
 
 /**
  * The trainer-web base URL now lives in `lib/legalLinks.ts`, which the legal rows
@@ -83,7 +84,7 @@ export function TrainerMoreScreen({
   onOpenNotifications,
   onOpenProfile,
 }: Props) {
-  const { me, signOut, selectRole } = useAuth();
+  const { me, signOut, requestRoleSelect } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
   // null until the phone answers, so the card never flashes the wrong state.
@@ -115,6 +116,8 @@ export function TrainerMoreScreen({
   }
 
   const email = me?.email ?? null;
+  // Only an account with both mobile roles can switch (frame 59, Z11-14).
+  const dualRole = me ? mobilePermittedRoles(me.permittedRoles).length > 1 : false;
   const displayName =
     me?.trainerProfile?.displayName?.trim() || email || "Your profile";
 
@@ -244,23 +247,23 @@ export function TrainerMoreScreen({
                 void Linking.openURL(trainerWebUrl());
               }}
             />
+            {/*
+              Frame 59 says "You can switch later in More"; frame 51 has no
+              such row, so it is a known difference (Z11-14). It opens role
+              select, not frame 61's link sheet.
+            */}
+            {dualRole ? (
+              <M2Row
+                tile="neutral"
+                icon={
+                  <ArrowLeftRight color={ink[500]} size={17} strokeWidth={1.75} />
+                }
+                label="Switch role"
+                onPress={requestRoleSelect}
+              />
+            ) : null}
           </M2Group>
         </View>
-
-        {me?.permittedRoles.includes("trainee") ? (
-          <M2Group>
-            <M2Row
-              tile="neutral"
-              icon={
-                <ArrowLeftRight color={ink[500]} size={17} strokeWidth={1.75} />
-              }
-              label="Switch to client view"
-              onPress={() => {
-                void selectRole("trainee");
-              }}
-            />
-          </M2Group>
-        ) : null}
 
         <View>
           <Text style={styles.groupLabel} accessibilityRole="header">

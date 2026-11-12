@@ -53,7 +53,7 @@ vi.mock("../providers/ConfigProvider", () => ({ useConfig: () => ({ config: null
 const auth = vi.hoisted(() => ({
   me: null as null | { permittedRoles: string[]; email?: string },
   signOut: vi.fn(),
-  selectRole: vi.fn(),
+  requestRoleSelect: vi.fn(),
 }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth }));
 vi.mock("../lib/support", () => ({ buildSupportMailto: vi.fn(() => "mailto:x"), DEFAULT_SUPPORT_EMAIL: "" }));
@@ -190,23 +190,47 @@ describe("trainer More grouped layout (BT3d, D-W3-14)", () => {
     expect(row.props.hint).toBe("Opens app-staging.thefitbud.com/privacy");
   });
 
-  it("hides Switch to client view without the trainee role, shows it with", () => {
+  it("shows Switch role only for an account with both mobile roles (Z11-14)", () => {
     auth.me = { permittedRoles: ["trainer"] };
-    expect(findByLabel(render(), "Switch to client view")).toBeNull();
+    expect(findByLabel(render(), "Switch role")).toBeNull();
+    auth.me = { permittedRoles: ["trainer", "admin"] };
+    expect(findByLabel(render(), "Switch role")).toBeNull();
     auth.me = { permittedRoles: ["trainer", "trainee"] };
-    const row = findByLabel(render(), "Switch to client view")!;
-    (row.props.onPress as () => void)();
-    expect(auth.selectRole).toHaveBeenCalledWith("trainee");
+    expect(findByLabel(render(), "Switch role")).not.toBeNull();
+    // The old one-tap row is gone; role select replaces it.
+    expect(findByLabel(render(), "Switch to client view")).toBeNull();
   });
 
-  it("orders Settings, Switch to client view, Legal, then support and Sign out", () => {
+  it("Switch role opens role select (frame 59), not a direct switch", () => {
+    auth.me = { permittedRoles: ["trainer", "trainee"] };
+    auth.requestRoleSelect.mockClear();
+    const row = findByLabel(render(), "Switch role")!;
+    expect(row.props.onPress).toBe(auth.requestRoleSelect);
+    (row.props.onPress as () => void)();
+    expect(auth.requestRoleSelect).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts Switch role last in the Settings group", () => {
+    auth.me = { permittedRoles: ["trainer", "trainee"] };
+    const settingsGroup = flatten(render()).find(
+      (el) =>
+        el.type === "M2Group" &&
+        findByLabel(el.props.children, "Profile") !== null,
+    )!;
+    const rows = flatten(settingsGroup.props.children).filter((el) => el.type === "M2Row");
+    expect(rows.map((el) => el.props.label)).toEqual([
+      "Notifications", "Profile", "Open FitBud on web", "Switch role",
+    ]);
+  });
+
+  it("orders Settings, Switch role, Legal, then support and Sign out", () => {
     auth.me = { permittedRoles: ["trainer", "trainee"] };
     const labels = flatten(render())
       .map((el) => el.props.label ?? el.props.children)
       .filter((v): v is string => typeof v === "string");
     const order = [
       "Settings", "Notifications", "Profile", "Open FitBud on web",
-      "Switch to client view", "Legal", "Privacy policy", "Terms of use",
+      "Switch role", "Legal", "Privacy policy", "Terms of use",
       "Credits and licences", "Email FitBud support", "Sign out",
     ];
     const positions = order.map((l) => labels.indexOf(l));
