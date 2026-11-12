@@ -35,8 +35,9 @@ concurrency:
 jobs:
   design-review:
     name: design-review
-    # A cancelled QA run uploads no report. Anything else, pass or fail, does.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion != 'cancelled' }}
+    # A cancelled QA run uploads no report. Anything else, pass or fail, does. Runs from
+    # pull requests or forks (a fork branch named main passes the branches filter) are skipped.
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion != 'cancelled' && github.event.workflow_run.event != 'pull_request' && github.event.workflow_run.head_repository.full_name == github.repository) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -60,6 +61,8 @@ jobs:
       # The artifact belongs to the QA run, not to this one, so it is fetched by run id with
       # the workflow's own read-only token (actions: read).
       - name: Download the QA report
+        # A missing artifact is reported by diff.mjs (missing folder) instead of failing here.
+        continue-on-error: true
         uses: actions/download-artifact@v5
         with:
           name: qa-report

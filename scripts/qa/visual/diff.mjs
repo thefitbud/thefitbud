@@ -41,7 +41,14 @@ const IM_MISSING = "ImageMagick not available";
 // ---------- ImageMagick ----------
 
 /** Resolve an ImageMagick tool: IM6 binary on PATH, else IM7 `magick <tool>`. */
+const toolCache = new Map();
 export function resolveTool(tool) {
+  const key = `${process.env.PATH}\0${tool}`;
+  if (!toolCache.has(key)) toolCache.set(key, probeTool(tool));
+  return toolCache.get(key);
+}
+
+function probeTool(tool) {
   const direct = spawnSync(tool, ["-version"], { encoding: "utf8" });
   if (!direct.error && direct.status === 0) return [tool];
   const m7 = spawnSync("magick", [tool, "-version"], { encoding: "utf8" });
@@ -57,6 +64,15 @@ function run(tool, args) {
   const cmd = resolveTool(tool);
   if (!cmd) throw new Error(IM_MISSING);
   return spawnSync(cmd[0], [...cmd.slice(1), ...args], { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+}
+
+/** Width probe for the tap-target scale; an unreadable image is reported later by processPair. */
+function safeWidth(file) {
+  try {
+    return imageSize(file).w;
+  } catch {
+    return null;
+  }
 }
 
 export function imageSize(file) {
@@ -415,7 +431,7 @@ export function runTask(taskId, opts) {
       }
       const { viewport } = stripCapture(name);
       const logical = viewport ? Number(viewport.split("x")[0]) : null;
-      const img = magick ? imageSize(file).w : null;
+      const img = magick ? safeWidth(file) : null;
       const scale = logical && img ? logical / img : 1;
       const notes = [];
       if (!pick.exact) notes.push(pick.candidates > 1 ? `paired by number prefix, ${pick.candidates} candidate frames` : "paired by number prefix");
@@ -483,7 +499,7 @@ export function runArtifact(dir, opts) {
         frame = candidates.find((c) => platformOf(c.frame.replace(/\.png$/, "")) === platform)?.frame ?? frame;
       }
       const logical = suite === "ios" ? 393 : suite === "mobile" ? 412 : suite === "web" ? 1440 : null;
-      const img = magick ? imageSize(file).w : null;
+      const img = magick ? safeWidth(file) : null;
       const scale = logical && img ? logical / img : 1;
       const safe = rel.replace(/\.png$/i, "").replace(/[^\w.-]+/g, "_");
       rows.push(
@@ -521,6 +537,7 @@ export function parseArgs(argv) {
     if (!k || argv[i + 1] === undefined) throw new Error(`bad argument: ${argv[i]}`);
     o[k] = argv[++i];
   }
+  if (o.task && !/^[A-Za-z0-9-]+$/.test(o.task)) throw new Error("--task must be a task id such as Z11-1");
   if (Boolean(o.task) === Boolean(o.artifact)) throw new Error("give exactly one of --task <ID> or --artifact <dir>");
   return o;
 }

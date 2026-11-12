@@ -199,3 +199,27 @@ test("bad arguments exit 1, a normal run exits 0", () => {
     console.log = log;
   }
 });
+
+test("a zero-byte PNG gives a 'compare failed' row and exit 0", { skip: skipIM }, () => {
+  const l = layout();
+  const art = tmp();
+  fs.mkdirSync(path.join(art, "screenshots", "ios"), { recursive: true });
+  fs.writeFileSync(path.join(art, "screenshots/ios/shot-a__empty.png"), "");
+  const map = path.join(art, "map.json");
+  fs.writeFileSync(map, JSON.stringify({ "shot-a__empty": "01-fixture-screen-ios.png" }));
+  const out = path.join(art, "out");
+  const log = console.log;
+  console.log = () => {};
+  let code;
+  try {
+    code = main(["--artifact", art, "--out", out, "--map", map, "--frames-dir", l.frames]);
+  } finally {
+    console.log = log;
+  }
+  assert.equal(code, 0);
+  assert.match(fs.readFileSync(path.join(out, "summary.md"), "utf8"), /compare failed/);
+});
+
+test("--task rejects path traversal", () => {
+  assert.throws(() => parseArgs(["--task", "../etc"]), /task id/);
+});
