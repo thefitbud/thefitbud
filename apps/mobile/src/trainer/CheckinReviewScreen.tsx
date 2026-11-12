@@ -245,13 +245,14 @@ export function CheckinReviewScreen({
               : "Only you see this note"}
           </Text>
         </View>
-        <Switch
-          value={visible}
-          onValueChange={setVisible}
-          accessibilityLabel={`Visible to ${first}`}
-          trackColor={{ false: "#E7E9F2", true: colors.indigo }}
-          thumbColor={colors.white}
-        />
+        {/* Display only: the row Pressable is the single handler. */}
+        <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
+          <Switch
+            value={visible}
+            trackColor={{ false: "#E7E9F2", true: colors.indigo }}
+            thumbColor={colors.white}
+          />
+        </View>
       </Pressable>
       <Pressable
         accessibilityRole="button"

@@ -138,6 +138,9 @@ const api = {
 const auth = mockAuth({ api, me: { timezone: "Asia/Kolkata" } });
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => auth }));
 
+const reportError = vi.fn();
+vi.mock("../../lib/reportError", () => ({ reportError: (...args: unknown[]) => reportError(...args) }));
+
 const { CheckinReviewScreen } = await import("../CheckinReviewScreen");
 
 describe("saved review helpers", () => {
@@ -222,5 +225,35 @@ describe("CheckinReviewScreen", () => {
     expect(screen.queryByText(/shared with Rohan/)).toBeNull();
     expect(screen.queryByText("Visible to Rohan")).toBeNull();
     expect(screen.queryByText("Save review")).toBeNull();
+  });
+
+  it("one press on the Visible to row toggles exactly once", async () => {
+    api.getCheckinReviewContext.mockImplementation(async () => context(false));
+    render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    await screen.findByText("Visible to Rohan");
+    expect(screen.getByText("He'll see this note on his Today screen")).toBeTruthy();
+    fireEvent.click(screen.getByText("Visible to Rohan"));
+    expect(screen.getByText("Only you see this note")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("switch")[0]!);
+    expect(screen.getByText("He'll see this note on his Today screen")).toBeTruthy();
+  });
+
+  it("partial save reports a non-API note failure", async () => {
+    let saved = false;
+    const boom = new Error("boom");
+    api.recordCheckinReview.mockImplementationOnce(async () => {
+      saved = true;
+      return {};
+    });
+    api.createTrainerNote.mockRejectedValueOnce(boom);
+    api.getCheckinReviewContext.mockImplementation(async () => context(saved, false));
+    reportError.mockClear();
+    render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    fireEvent.change(await screen.findByLabelText("Add a note for Rohan"), {
+      target: { value: "Weekend leg day works." },
+    });
+    fireEvent.click(screen.getByText("Save review"));
+    await waitFor(() => expect(screen.getByText("Review saved. The note wasn't shared.")).toBeTruthy());
+    expect(reportError).toHaveBeenCalledWith("checkinReview.save", boom);
   });
 });
