@@ -9,7 +9,7 @@ type O = {
 };
 const client: O = { kind: "client", id: "rel-1" };
 const checkin: O = { kind: "checkin", id: "chk-1", relationshipId: "rel-1" };
-const coldCheckin: O = { kind: "checkin", id: "chk-2", relationshipId: "", cold: true };
+const coldCheckin: O = { kind: "checkin", id: "chk-2", cold: true };
 const exception: O = { kind: "exception", id: "exc-1" };
 
 describe("trainer detail back stack", () => {

@@ -14,12 +14,12 @@ export type OverlayKind = "exception" | "client" | "checkin" | "notifications" |
 
 export type OverlayBase = { kind: OverlayKind };
 
-/** An opened screen replaces the stack when it comes from a link, else it is pushed. */
+/** Opening a screen from another detail screen pushes it on top of the stack. */
 export function pushOverlay<T extends OverlayBase>(stack: readonly T[], next: T): T[] {
   return [...stack, next];
 }
 
-/** A push or deep link starts a fresh stack: there is no previous screen. */
+/** Opening from a tab, a push or a deep link starts a fresh stack: no previous screen. */
 export function startOverlays<T extends OverlayBase>(next: T): T[] {
   return [next];
 }
@@ -33,15 +33,18 @@ export type BackResult<T> =
  * from a push or link) goes to its client's page when the client is known.
  * Otherwise every overlay closes and the tab the trainer was on shows.
  */
-export function backOverlays<T extends OverlayBase & { cold?: boolean; relationshipId?: string }>(
+export function backOverlays<T extends OverlayBase & { cold?: boolean }>(
   stack: readonly T[],
   resolvedRelationshipId?: string,
 ): BackResult<T> {
   if (stack.length > 1) return { kind: "stack", stack: stack.slice(0, -1) };
   const top = stack[0];
   if (top?.kind === "checkin" && top.cold) {
-    const rid = top.relationshipId || resolvedRelationshipId;
-    if (rid) return { kind: "client", relationshipId: rid };
+    // A cold check-in has no relationship id of its own; the review screen
+    // reports the one it read from the fetched check-in.
+    if (resolvedRelationshipId) {
+      return { kind: "client", relationshipId: resolvedRelationshipId };
+    }
   }
   return { kind: "stack", stack: [] };
 }

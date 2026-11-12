@@ -75,7 +75,7 @@ export function TrainerShell() {
   const goBack = (resolvedRelationshipId?: string) => {
     const result = backOverlays(overlays, resolvedRelationshipId);
     if (result.kind === "client") {
-      void openClientById(result.relationshipId, undefined, "start");
+      void openClientById(result.relationshipId, latestPushRef.current, "start");
       return;
     }
     setOverlays(result.stack);
@@ -183,6 +183,8 @@ export function TrainerShell() {
     setClientsSegment("clients");
     switch (link.kind) {
       case "exception":
+        // Back from a warm exception link shows Attention ("Back to Attention").
+        setTab("attention");
         startAt({ kind: "exception", exceptionId: link.id });
         return;
       case "client":
