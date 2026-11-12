@@ -21,7 +21,9 @@ vi.mock("react-native", () => ({
   StyleSheet: { create: (styles: unknown) => styles },
   View: "View",
   Pressable: "Pressable",
+  Modal: "Modal",
 }));
+vi.mock("./HelpSheet", () => ({ HelpSheet: "HelpSheet", openSupportMailOrFallback: vi.fn() }));
 vi.mock("../notifications/register", () => ({ requestPushPermission: vi.fn() }));
 vi.mock("lucide-react-native", () => {
   const icon = (name: string) => name;
@@ -54,11 +56,12 @@ const auth = vi.hoisted(() => ({
   selectRole: vi.fn(),
 }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth }));
-vi.mock("../lib/support", () => ({ openSupportEmail: vi.fn(), DEFAULT_SUPPORT_EMAIL: "" }));
+vi.mock("../lib/support", () => ({ buildSupportMailto: vi.fn(() => "mailto:x"), DEFAULT_SUPPORT_EMAIL: "" }));
 
 import { spacing } from "@fitbud/ui-mobile";
 import { requestPushPermission } from "../notifications/register";
-import { openSupportEmail } from "../lib/support";
+import { buildSupportMailto } from "../lib/support";
+import { openSupportMailOrFallback } from "./HelpSheet";
 import {
   DEFAULT_TRAINER_WEB_URL,
   TrainerMoreScreen,
@@ -81,6 +84,20 @@ function findByLabel(node: unknown, label: string): Element | null {
   const element = node as Element;
   if (element.props.label === label) return element;
   return findByLabel(element.props.children, label);
+}
+
+function findByProp(node: unknown, prop: string): Element | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const hit = findByProp(child, prop);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (!node || typeof node !== "object" || !("props" in node)) return null;
+  const element = node as Element;
+  if (prop in element.props) return element;
+  return findByProp(element.props.children, prop);
 }
 
 function tapOpenOnWeb() {
@@ -197,13 +214,27 @@ describe("trainer More grouped layout (BT3d, D-W3-14)", () => {
     expect([...positions].sort((a, b) => a - b)).toEqual(positions);
   });
 
-  it("keeps the support email on screen id TM-07 and Sign out wired", () => {
+  it("keeps the support email on screen id TM-07", () => {
     const tree = render();
     (findByLabel(tree, "Email FitBud support")!.props.onPress as () => void)();
-    expect(openSupportEmail).toHaveBeenCalledWith(
+    expect(buildSupportMailto).toHaveBeenCalledWith(
       expect.objectContaining({ screenId: "TM-07", role: "trainer" }),
     );
-    expect(findByLabel(tree, "Sign out")!.props.onPress).toBe(auth.signOut);
+    expect(openSupportMailOrFallback).toHaveBeenCalledWith(
+      "mailto:x",
+      expect.any(Function),
+    );
+  });
+
+  it("asks before signing out (frame 57) and signs out only on confirm", () => {
+    const tree = render();
+    (findByLabel(tree, "Sign out")!.props.onPress as () => void)();
+    expect(auth.signOut).not.toHaveBeenCalled();
+    expect(hooks.set).toHaveBeenCalledWith(true);
+    const confirm = findByProp(tree, "onConfirm");
+    expect(confirm).not.toBeNull();
+    (confirm!.props.onConfirm as () => void)();
+    expect(auth.signOut).toHaveBeenCalledTimes(1);
   });
 });
 
