@@ -146,6 +146,7 @@ export function ClientLogMeasurementScreen({ relationshipId, displayName, ended,
           </Pressable>
         </View>
       ) : null}
+      {items == null && !loadFailed ? <View style={[shared.card, { marginTop: 16, minHeight: 80 }]} /> : null}
       {onDate.length > 0 ? (
         <>
           <Text style={[shared.label, shared.labelGap]}>Logged on {formatCivilDate(date)}</Text>

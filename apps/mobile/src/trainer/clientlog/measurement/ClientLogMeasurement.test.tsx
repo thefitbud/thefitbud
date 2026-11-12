@@ -92,7 +92,7 @@ describe("ClientLogMeasurementScreen", () => {
     renderForm({ onSaved });
     await screen.findByText("Date · up to 7 days back");
     fireEvent.change(screen.getByLabelText("Value"), { target: { value: "72,4" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save measurement" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save measurement" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
     const [rid, body, key] = api.createMeasurement.mock.calls[0]!;
     expect(rid).toBe(RID);
@@ -107,7 +107,7 @@ describe("ClientLogMeasurementScreen", () => {
     renderForm({ onSaved });
     fireEvent.click(await screen.findByRole("button", { name: "Body weight 72.4 kg" }));
     fireEvent.change(screen.getByLabelText("Value"), { target: { value: "71.9" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Edited by you"));
     const [method, path, , opts] = api.request.mock.calls[0]!;
     expect(method).toBe("PATCH");

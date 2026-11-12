@@ -72,12 +72,15 @@ export function ClientLogMealScreen({ relationshipId, displayName, ended, client
   const existing = meal?.compliance ?? null;
   const foodList = isFoodListEntry(existing);
 
-  useEffect(() => {
+  // A different meal or version is a different logical entry: reset the draft and the
+  // idempotency key during render, so no click can land between a render and a reset.
+  const formKey = `${meal?.id ?? "none"}:${existing?.recordVersion ?? "new"}`;
+  const [seenKey, setSeenKey] = useState(formKey);
+  if (seenKey !== formKey) {
+    setSeenKey(formKey);
     setDraft(startDraft(existing));
-    // A different entry is a different logical log.
     newEntry();
-    // existing identity changes with each reload; the meal and its version are what matter
-  }, [meal?.id, existing?.id, existing?.recordVersion]);
+  }
 
   function change(next: MealDraft) {
     setDraft(next);

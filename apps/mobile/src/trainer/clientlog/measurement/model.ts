@@ -37,7 +37,7 @@ export function valueText(n: number): string {
 /** Measurements the trainer can edit: dated `date` in the client's zone, not from a check-in. */
 export function measurementsOn(items: Measurement[], date: string, zone: string): Measurement[] {
   return items
-    .filter((m) => m.source !== "checkin" && localDateInTimezone(zone, new Date(m.observedAt)) === date)
+    .filter((m) => m.source !== "checkin" && m.checkinId == null && localDateInTimezone(zone, new Date(m.observedAt)) === date)
     .sort((a, b) => a.observedAt.localeCompare(b.observedAt));
 }
 
