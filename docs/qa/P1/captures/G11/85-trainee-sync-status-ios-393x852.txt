@@ -1,0 +1,12 @@
+Back
+Sync status
+Your logs are saved on this phone and sent to Rahul when you're online.
+All saved
+Last synced just now
+Nothing waiting.
+Couldn't send (0)
+Nothing failed.
+Sync now
+Diagnostics
+FitBud on this phone
+Email support

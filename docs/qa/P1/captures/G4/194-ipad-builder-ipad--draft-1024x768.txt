@@ -1,0 +1,130 @@
+Skip to content
+RV
+Clients
+Search clients
+⌘K
+← Back to plan
+Workout builder · Fat loss · Phase 2
+Plan title
+
+Draft v3 · Saved
+
+Workout
+Nutrition
+Library
+Undo
+Preview as client
+Publish…
+Days
+MON
+Upper body A
+4 exercises
+TUE
+Lower body A
+4 exercises
+WED
+Rest
++
+THU
+Upper body B
+3 exercises
+FRI
+Rest
++
+SAT
+Lower body B
+6 exercises
+SUN
+Rest
++
++ Add session
+Delete selected session
+Session title
+M
+T
+W
+T
+F
+S
+S
+Instructions for the session
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set
+Exercise name
+Up
+Down
+Duplicate
+Delete
+
+From library · snapshot
+
+SET	REPS	LOAD	RPE	REST	NOTES	
+ACTIONS
+
+1						
+⋯
+
+2						
+⋯
+
+3						
+⋯
++ Add set

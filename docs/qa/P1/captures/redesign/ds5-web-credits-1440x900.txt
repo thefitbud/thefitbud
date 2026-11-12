@@ -1,0 +1,38 @@
+FitBud
+Back to sign in
+
+LEGAL
+
+Privacy policy
+Terms of use
+Credits and licences
+
+Questions? tech@thefitbud.com
+
+Credits and licences
+
+The sources behind the exercise and food library, and the licence each one is used under.
+
+Exercise drawings
+
+919 drawings for 460 exercises, all under Creative Commons BY-SA. Edited versions of a drawing are shared under the same licence, with the same credit.
+
+AUTHOR	DRAWINGS	LICENCE	WHERE FROM
+Everkinetic (everkinetic.com)	912	CC BY-SA 4.0 / CC BY-SA 3.0	Everkinetic, Wikimedia Commons, wger
+CFCF	4	CC BY-SA 4.0	Wikimedia Commons
+wger.de	2	CC BY-SA 3.0	wger
+hans	1	CC BY-SA 4.0	wger
+
+Of the Everkinetic drawings, 574 are CC BY-SA 4.0 and 338 are CC BY-SA 3.0, as recorded with each file.
+
+Food data
+Indian Nutrient Databank (INDB)
+Nutrient data: Indian Nutrient Databank (INDB), Vijayakumar et al. 2024, CC BY 4.0.
+CC BY 4.0
+USDA FoodData Central
+U.S. Department of Agriculture, Agricultural Research Service. FoodData Central, fdc.nal.usda.gov.
+Public domain / CC0 1.0
+Exercise text
+free-exercise-db (yuhonas)
+Exercise names, steps, muscles, equipment
+The Unlicense (public domain)

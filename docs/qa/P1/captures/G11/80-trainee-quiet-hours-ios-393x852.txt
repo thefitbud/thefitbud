@@ -1,0 +1,25 @@
+Back
+Quiet hours
+No notifications during these hours.
+12 am
+6 am
+12 pm
+6 pm
+12 am
+Shaded: no notifications (10:00 pm – 7:00 am)
+Night
+10:00 pm – 7:00 am
+Late night
+11:00 pm – 6:00 am
+Custom
+Pick your own start and end
+From
+−
+10:00 pm
++
+To
+−
+7:00 am
++
+FitBud never sends reminders after 10:00 pm.
+Save

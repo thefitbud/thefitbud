@@ -1,0 +1,130 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Templates
+Search clients
+⌘K
+← Onboarding forms
+Quick intake — returning client
+
+Mine · Draft · will save as v2
+
+Save version
+⋮⋮
+Up
+Down
+Duplicate
+Delete
+Label
+Help text
+Type
+Short text
+Long text
+Single choice
+Multiple choice
+Number
+Yes / no
+Required
+Highlight for coach
+Max length
+⋮⋮
+Up
+Down
+Duplicate
+Delete
+Label
+Help text
+Type
+Short text
+Long text
+Single choice
+Multiple choice
+Number
+Yes / no
+Required
+Highlight for coach
+Unit
+⋮⋮
+Up
+Down
+Duplicate
+Delete
+Label
+Help text
+Type
+Short text
+Long text
+Single choice
+Multiple choice
+Number
+Yes / no
+Required
+Highlight for coach
+Max length
+⋮⋮
+Up
+Down
+Duplicate
+Delete
+Label
+Help text
+Type
+Short text
+Long text
+Single choice
+Multiple choice
+Number
+Yes / no
+Required
+Highlight for coach
+Unit
+⋮⋮
+Up
+Down
+Duplicate
+Delete
+Label
+Help text
+Type
+Short text
+Long text
+Single choice
+Multiple choice
+Number
+Yes / no
+Required
+Highlight for coach
+Choices
+Remove
+Remove
+Remove
+Remove
+Remove
+Remove
+Add option
+Add question
+
+Quick intake — returning client
+
+What changed since we last worked together? *
+Current weight * (kg)
+Any new injuries or pain?
+Days you can realistically train * (days)
+Main goal now *
+Choose…
+Lose fat
+Build muscle
+Get stronger
+Health markers (sugar, BP, PCOS)
+Sport / test prep
+Build a routine
