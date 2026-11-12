@@ -1427,6 +1427,12 @@ jobs:
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web')
           && needs.seed-web.result == 'success' }}
     runs-on: ubuntu-latest
+    # Z10-25 (11 Nov 2026): same as ci.yml since W9b Z9b-0. Runner apt mirrors are unreachable, so
+    # `playwright install --with-deps` failed. The official Playwright image ships the system
+    # dependencies and browsers; keep its tag equal to the locked playwright version.
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      options: --ipc=host
     timeout-minutes: 45
     # One writer per QA world at a time; see the note at the top of this file.
     concurrency:
@@ -1469,7 +1475,7 @@ jobs:
         run: pnpm build:packages
 
       - name: Install Playwright browser
-        run: pnpm --filter @fitbud/trainer-web exec playwright install --with-deps chromium
+        run: pnpm --filter @fitbud/trainer-web exec playwright install chromium
 
       # As in api-smoke: the web suite's offline specs run with or without secrets, so
       # an unset secret would read as a pass with no staging coverage.

@@ -80,7 +80,15 @@ describe("DateNavigator spoken day labels", () => {
       }),
     );
     expect(labels).toContain("Go to today");
-    const dayLabels = labels.filter((label) => label !== "Go to today");
+    // The week chevrons are controls, not days (Z10-20).
+    expect(labels).toContain("Previous week");
+    expect(labels).toContain("Next week");
+    const dayLabels = labels.filter(
+      (label) =>
+        label !== "Go to today" &&
+        label !== "Previous week" &&
+        label !== "Next week",
+    );
     expect(dayLabels).toEqual([
       "Mon 12 Oct, Done",
       "Tue 13 Oct, Partial",

@@ -230,7 +230,11 @@ describe("WorkspaceHeader ended state (frame 179)", () => {
     expect(screen.getByTestId("screen-TW-30")).toBeTruthy();
 
     expect(screen.queryByRole("button", { name: /Reactivate coaching/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Reactivate" }));
+    const reactivate = screen.getByRole("button", { name: "Reactivate" });
+    // Frame 179 draws Reactivate as the filled primary button (see PR note).
+    expect(reactivate.className).toContain("button-primary");
+    expect(reactivate.className).toContain("wsh-reactivate");
+    fireEvent.click(reactivate);
     expect(onOpenModal).toHaveBeenCalledWith({ type: "reactivate" });
   });
 
