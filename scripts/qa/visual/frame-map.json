@@ -1,0 +1,275 @@
+{
+  "auth-sign-in-code__start": {
+    "frames": [
+      "06-trainee-signin-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "auth-sign-in-code__code-requested": {
+    "frames": [
+      "06b-trainee-signin-code-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "auth-sign-in-code__signed-in": {
+    "frames": [
+      "04-trainee-today-android-v3-partial.png",
+      "04-trainee-today-ios-v3-partial.png"
+    ],
+    "viewport": "412x915"
+  },
+  "auth-sign-in-password__start": {
+    "frames": [
+      "06-trainee-signin-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "auth-sign-in-password__signed-in": {
+    "frames": [
+      "05-trainer-mobile-needs-you-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "auth-role-select__trainer-skip": {
+    "frames": [
+      "05-trainer-mobile-needs-you-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "auth-role-select__trainee-skip": {
+    "frames": [
+      "04-trainee-today-android-v3-partial.png",
+      "04-trainee-today-ios-v3-partial.png"
+    ],
+    "viewport": "412x915"
+  },
+  "trainee-today__loaded": {
+    "frames": [
+      "04-trainee-today-android-v3-partial.png",
+      "04-trainee-today-ios-v3-partial.png"
+    ],
+    "viewport": "412x915"
+  },
+  "trainee-workout-log__workout-tab": {
+    "frames": [
+      "10-trainee-workout-overview-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-workout-log__active": {
+    "frames": [
+      "11-trainee-active-workout-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-workout-log__rest": {
+    "frames": [
+      "11b-trainee-active-workout-rest-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-workout-log__summary": {
+    "frames": [
+      "12-trainee-workout-summary-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-meal-log__diet": {
+    "frames": [
+      "07-trainee-diet-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-meal-log__something-different": {
+    "frames": [
+      "08-trainee-something-different-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-meal-log__food-search": {
+    "frames": [
+      "09-trainee-food-search-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-meal-log__logged": {
+    "frames": [
+      "07-trainee-diet-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-checkin__form": {
+    "frames": [
+      "14-trainee-check-in-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-checkin__sent": {
+    "frames": [
+      "100-trainee-checkin-sent-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-progress__loaded": {
+    "frames": [
+      "13-trainee-progress-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-settings__more": {
+    "frames": [
+      "16-trainee-more-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainee-settings__reminders": {
+    "frames": [
+      "79-trainee-reminder-settings-android.png"
+    ],
+    "viewport": "412x915"
+  },
+  "trainee-settings__signed-out": {
+    "frames": [
+      "06-trainee-signin-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-clients__list": {
+    "frames": [
+      "17-trainer-mobile-clients-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-client-status__loaded": {
+    "frames": [
+      "18-trainer-mobile-client-status-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-attention__inbox": {
+    "frames": [
+      "05-trainer-mobile-needs-you-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-attention__review-sheet": {
+    "frames": [
+      "31-trainer-mobile-review-sheet-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-attention__after-resolve": {
+    "frames": [
+      "05-trainer-mobile-needs-you-v3-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-checkin-review__inbox": {
+    "frames": [
+      "50-trainer-mobile-checkins-android.png"
+    ],
+    "viewport": "412x915"
+  },
+  "trainer-checkin-review__review": {
+    "frames": [
+      "19-trainer-mobile-check-in-review-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-notes__composer": {
+    "frames": [
+      "36-trainer-mobile-note-composer-sheet-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "trainer-more__loaded": {
+    "frames": [
+      "51-trainer-mobile-more-ios.png"
+    ],
+    "viewport": "393x852"
+  },
+  "web-signin__form": {
+    "frames": [
+      "01-trainer-web-signin.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-clients__list": {
+    "frames": [
+      "136-trainer-web-clients-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-home__attention": {
+    "frames": [
+      "02-trainer-web-home-panel-v3-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-exception__panel": {
+    "frames": [
+      "02-trainer-web-home-panel-v3-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-exception__resolve-form": {
+    "frames": [
+      "02-trainer-web-home-panel-v3-resolve-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-exception__resolved": {
+    "frames": [
+      "02-trainer-web-home-panel-v3-resolved-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-client-overview__rohan": {
+    "frames": [
+      "03-trainer-web-client-rohan.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-client-overview__aarav": {
+    "frames": [
+      "03-trainer-web-client-rohan.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-checkins__inbox": {
+    "frames": [
+      "166-trainer-web-checkins-inbox-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-checkin-review__open": {
+    "frames": [
+      "163-trainer-web-checkin-review-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-checkin-review__reviewed": {
+    "frames": [
+      "164-trainer-web-checkin-reviewed-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-notes__composer": {
+    "frames": [
+      "188-trainer-web-note-composer-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-settings__profile": {
+    "frames": [
+      "176-trainer-web-settings-profile-web.png"
+    ],
+    "viewport": "1440x900"
+  },
+  "web-settings__notifications": {
+    "frames": [
+      "177-trainer-web-settings-notifications-web.png"
+    ],
+    "viewport": "1440x900"
+  }
+}
