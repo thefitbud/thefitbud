@@ -45,8 +45,9 @@ export function CheckinReviewScreen({
   relationshipId,
   onBack,
 }: Props) {
-  const { api, me } = useAuth();
-  const zone = me?.timezone ?? deviceTimeZone();
+  const { api } = useAuth();
+  // D-W3b-11 (b): trainer screens display in the device zone (resolver), never the stored profile zone.
+  const zone = deviceTimeZone();
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
   const [name, setName] = useState("Client");
   const [outcome, setOutcome] = useState<CheckinReviewOutcome>("needs_follow_up");
