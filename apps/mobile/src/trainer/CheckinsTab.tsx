@@ -1,14 +1,22 @@
-import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Platform, StyleSheet } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
-import { formatCivilDate } from "@fitbud/core";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { deviceTimeZone, formatCivilDate } from "@fitbud/core";
+import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
-import { labelFor } from "./labels";
+import { localDateInTimezone } from "../lib/dates";
+import { reportError } from "../lib/reportError";
+import { CheckinsList } from "./checkinsList/List";
+import {
+  buildCheckinListModel,
+  type CheckinListRow,
+  type CheckinListSegment,
+} from "./checkinsList/model";
+import { openContextualWhatsApp } from "./whatsapp";
 
 type Props = {
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
@@ -16,12 +24,14 @@ type Props = {
 
 export function CheckinsTab({ onReviewCheckin }: Props) {
   const { api, refreshSession } = useAuth();
+  const trainerZone = deviceTimeZone();
   const [items, setItems] = useState<TrainerCheckinInboxItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [segment, setSegment] = useState<CheckinListSegment>("to_review");
 
   const load = useCallback(async () => {
-    setLoading(true);
     setError(null);
     try {
       const inbox = await api.listTrainerCheckinInbox();
@@ -41,95 +51,68 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
     void load();
   }, [load]);
 
+  const today = localDateInTimezone(trainerZone);
+  const model = useMemo(
+    () => buildCheckinListModel(items, { trainerZone, today }),
+    [items, trainerZone, today],
+  );
+
+  async function nudge(row: CheckinListRow) {
+    // The phone number lives on the client workspace; a lookup failure still
+    // opens WhatsApp with the draft so the trainer can pick the contact.
+    let phone: string | null = null;
+    try {
+      const workspace = await api.getClientWorkspace(row.relationshipId);
+      phone = workspace.header.clientWhatsappE164 ?? null;
+    } catch (err) {
+      reportError("trainer.checkins.whatsappLookup", err);
+      phone = null;
+    }
+    await openContextualWhatsApp({
+      phoneE164: phone,
+      draftText: `Hi ${row.firstName}, `,
+    });
+  }
+
   return (
     <Screen
       title="Check-ins"
-      subtitle="Due, overdue, and submitted check-ins across your clients."
-      refreshing={loading}
+      chrome="app"
+      showHeader={false}
+      refreshing={refreshing}
       onRefresh={() => {
+        setRefreshing(true);
         void refreshSession?.();
-        void load();
+        void load().finally(() => setRefreshing(false));
       }}
     >
-      {error ? <ErrorBanner message={error} /> : null}
-
-      {loading ? (
-        <Text style={styles.muted}>Loading check-ins…</Text>
-      ) : items.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No check-ins need attention</Text>
-          <Text style={styles.muted}>
-            Schedule check-ins from trainer web, or wait for a due submission.
-          </Text>
-        </View>
-      ) : (
-        <View style={styles.list}>
-          {items.map((item) => (
-            <Pressable
-              key={item.checkin.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Review check-in due ${formatCivilDate(item.checkin.localDate)}`}
-              onPress={() => onReviewCheckin(item)}
-              style={styles.card}
-            >
-              <Text style={styles.who}>
-                Due {formatCivilDate(item.checkin.localDate)}
-              </Text>
-              <Text style={styles.meta}>
-                {labelFor("checkin_status", item.checkin.status)} · Client
-              </Text>
-              <Text style={styles.action}>Review</Text>
-            </Pressable>
-          ))}
-        </View>
+      {/* Frame 50 (Android) has no date line above the title. */}
+      {Platform.OS === "android" ? null : (
+        <Text style={styles.eyebrow}>{formatCivilDate(today)}</Text>
       )}
+      <Text style={styles.title} accessibilityRole="header">
+        Check-ins
+      </Text>
+      {error ? <ErrorBanner message={error} /> : null}
+      <CheckinsList
+        loading={loading}
+        model={model}
+        segment={segment}
+        onSegmentChange={setSegment}
+        onReview={(row) => onReviewCheckin(row.item)}
+        onWhatsApp={(row) => void nudge(row)}
+      />
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  muted: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-    marginTop: spacing.lg,
-  },
-  empty: {
-    marginTop: spacing.xl,
-    gap: spacing.sm,
-  },
-  emptyTitle: {
+  eyebrow: { color: colors.midGrey, fontSize: 15, lineHeight: 20 },
+  title: {
     color: colors.deepNavy,
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  list: {
-    marginTop: spacing.xl,
-    gap: spacing.md,
-  },
-  card: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.lightGrey,
-    borderRadius: 14,
-    padding: spacing.lg,
-    gap: spacing.sm,
-    minHeight: 48,
-  },
-  who: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  meta: {
-    color: colors.indigo,
-    fontSize: 13,
-    fontWeight: "500",
-    textTransform: "capitalize",
-  },
-  action: {
-    color: colors.indigo,
-    fontSize: 14,
-    fontWeight: "600",
+    fontFamily: fontFamilySemiBold,
+    fontSize: 30,
+    letterSpacing: -0.4,
+    marginTop: 2,
   },
 });
