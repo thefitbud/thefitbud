@@ -59,6 +59,7 @@ import {
 import type { NotificationDeepLink } from "../notifications/routing";
 import { deepLinkFromNotificationPayload } from "../notifications/routing";
 import { clearTrainerCache, setTrainerCacheOwner } from "../trainer/cache";
+import { isNetworkFailure } from "../trainer/attention/offline";
 
 type AuthContextValue = {
   accessToken: string | null;
@@ -159,6 +160,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const selectedRoleRef = useRef<Role | null>(persisted.selectedRole);
   selectedRoleRef.current = selectedRole;
+  // Whether the app already shows a loaded account, read by refreshSession
+  // when `/me` fails mid-session (Z11b-7).
+  const accountLoadedRef = useRef(false);
+  accountLoadedRef.current = me !== null && relationshipsLoaded;
   // Set once signOut exists; the token session calls it when refresh is refused.
   const onExpiredRef = useRef<() => void>(() => undefined);
 
@@ -388,6 +393,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!tokens.getAccessToken()) {
       return;
     }
+    // Read before the call: applyMe may set `me` before a later step fails.
+    const accountLoaded = accountLoadedRef.current;
     setBootstrapping(true);
     setErrorMessage(null);
     try {
@@ -402,6 +409,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // The client already tried one refresh before this 401 reached us.
       if (error instanceof ApiClientError && error.status === 401) {
         dropRefusedSession();
+      } else if (accountLoaded && isNetworkFailure(error)) {
+        // Offline mid-session (pull to refresh, a notification tap, coaching
+        // resume): keep the session and the `me` already on screen, and let
+        // the screens' own offline handling show (Z11b-7). Any other failure,
+        // or no account yet, still gets the error screen.
+        reportError("auth-refresh-offline", error);
       } else {
         setErrorMessage(messageFromError(error));
       }
