@@ -17,10 +17,8 @@ import type {
   WorkoutExecution,
 } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
-import { AppTopBar } from "../components/AppTopBar";
 import {
   addDays,
-  formatHeadingDate,
   localDateInTimezone,
   startOfWeekMonday,
 } from "../lib/dates";
@@ -77,14 +75,6 @@ const TABS: Array<{
   { id: "progress", label: "Progress", Icon: CalendarDays },
   { id: "more", label: "More", Icon: CircleUserRound },
 ];
-
-const TAB_TITLES: Record<TraineeTab, string> = {
-  today: "Today",
-  workout: "Workout",
-  diet: "Diet",
-  progress: "Progress",
-  more: "More",
-};
 
 /**
  * What the effective-plan load produced: a four-state plan, plus the
@@ -921,34 +911,9 @@ export function TraineeShell({
     );
   }
 
-  const headingDate = formatHeadingDate(timeZone, selectedDate);
-  const topTitle =
-    tab === "today"
-      ? `Today · ${headingDate}`
-      : tab === "diet"
-        ? `Diet · ${headingDate}`
-        : TAB_TITLES[tab];
-
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        {!hideTabBar &&
-        tab !== "today" &&
-        tab !== "workout" &&
-        tab !== "diet" &&
-        tab !== "more" ? (
-          <View style={styles.topPad}>
-            <AppTopBar
-              title={topTitle}
-              unreadNotifications={unreadNotifications}
-              onOpenNotifications={() =>
-                openOverlay({ screen: "notifications" })
-              }
-              onOpenSync={() => openOverlay({ screen: "sync" })}
-            />
-          </View>
-        ) : null}
-
         {tab === "today" ? (
           <TodayTab
             relationship={relationship}
@@ -1132,10 +1097,6 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-  },
-  topPad: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.lg,
   },
   tabBar: {
     flexDirection: "row",

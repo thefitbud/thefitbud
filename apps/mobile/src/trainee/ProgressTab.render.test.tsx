@@ -105,3 +105,51 @@ describe("ProgressTab fetch count", () => {
     expect(screen.queryByText("Could not load progress.")).toBeNull();
   });
 });
+
+/*
+ * Z11b-6: Aarav's seed has two weigh-ins on the same civil day (08:12 and
+ * 21:00 IST). Keys built from the date collided, which React reports through
+ * console.error ("two children with the same key") and LogBox shows as the red
+ * toast on a dev build.
+ */
+describe("ProgressTab chart with two weigh-ins on one day", () => {
+  it("renders without a duplicate-key error and one point per day", async () => {
+    const day = (iso: string, value: number, n: number) => ({
+      id: `00000000-0000-4000-8000-0000000000${String(n).padStart(2, "0")}`,
+      type: "body_weight_kg",
+      value,
+      unit: "kg",
+      observedAt: iso,
+      source: "trainee_logged",
+    });
+    const recent = (daysAgo: number, hhmmUtc: string) => {
+      const d = new Date();
+      d.setUTCDate(d.getUTCDate() - daysAgo);
+      return `${d.toISOString().slice(0, 10)}T${hhmmUtc}:00.000Z`;
+    };
+    api.getProgressSummary.mockResolvedValueOnce({
+      measurements: [
+        day(recent(14, "02:42"), 82.4, 1),
+        day(recent(14, "15:30"), 82.0, 2),
+        day(recent(7, "02:42"), 81.6, 3),
+        day(recent(7, "15:30"), 81.2, 4),
+        day(recent(1, "02:42"), 80.8, 5),
+      ],
+      entries: [],
+      media: [],
+    } as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      render(<ProgressTab relationship={relationship} />);
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Started with Rahul/)).toBeTruthy();
+      });
+      const sameKey = errorSpy.mock.calls.filter((c) =>
+        c.some((a) => typeof a === "string" && /same key/.test(a)),
+      );
+      expect(sameKey).toEqual([]);
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});
