@@ -146,6 +146,9 @@ export function weightSeriesLast12Weeks(
     }, []);
 }
 
+/** Minimum distance in px between two month labels on the x-axis. */
+const MONTH_TICK_MIN_GAP = 36;
+
 /** The first point of each distinct month, in order. */
 export function monthTickPoints<T extends { date: string }>(points: T[]): T[] {
   const seen = new Set<string>();
@@ -237,7 +240,16 @@ function WeightTrendChart({
     y: chartBottom - ((v - min) / range) * (chartBottom - chartTop),
   }));
 
-  const monthTicks = monthTickPoints(points);
+  // One tick per month, and a tick that would sit on top of the previous label
+  // is left out rather than overprinted.
+  const monthTicks = monthTickPoints(points).reduce<typeof points>(
+    (kept, p) => {
+      const last = kept[kept.length - 1];
+      if (!last || p.x - last.x >= MONTH_TICK_MIN_GAP) kept.push(p);
+      return kept;
+    },
+    [],
+  );
 
   const markerLeft = clampMarkerLeft(marker.x, pillWidth, width);
 
