@@ -1,3 +1,4 @@
+import { requireOptionalNativeModule } from "expo-modules-core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
@@ -177,24 +178,43 @@ function applySetCompleteLocally(
   };
 }
 
-function tryActivateKeepAwake() {
+const KEEP_AWAKE_TAG = "fitbud-active-workout";
+
+type KeepAwakeNative = {
+  activate(tag: string): Promise<boolean>;
+  deactivate(tag: string): Promise<boolean>;
+};
+
+/**
+ * Keeps the screen on during a workout through the `ExpoKeepAwake` native
+ * module that `expo` autolinks. `expo-keep-awake` is not a dependency of this
+ * app, so `require("expo-keep-awake")` cannot be resolved under pnpm and Metro
+ * reports it as a fatal error that a try/catch never sees (Z11b-3).
+ * `requireOptionalNativeModule` returns null where the module is missing (web,
+ * tests), and then this does nothing.
+ */
+export function activateWorkoutKeepAwake(): () => void {
+  let native: KeepAwakeNative | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const keepAwake = require("expo-keep-awake") as {
-      activateKeepAwakeAsync?: (tag?: string) => Promise<void>;
-      deactivateKeepAwake?: (tag?: string) => void;
-    };
-    void keepAwake.activateKeepAwakeAsync?.("fitbud-active-workout");
-    return () => {
-      try {
-        keepAwake.deactivateKeepAwake?.("fitbud-active-workout");
-      } catch {
-        // ignore
-      }
-    };
+    native = requireOptionalNativeModule<KeepAwakeNative>("ExpoKeepAwake");
   } catch {
-    return undefined;
+    native = null;
   }
+  if (!native) return () => undefined;
+  const keepAwake = native;
+  // Keep-awake is best effort: neither call may fail the screen.
+  try {
+    void keepAwake.activate(KEEP_AWAKE_TAG)?.catch(() => undefined);
+  } catch {
+    // ignore
+  }
+  return () => {
+    try {
+      void keepAwake.deactivate(KEEP_AWAKE_TAG)?.catch(() => undefined);
+    } catch {
+      // ignore
+    }
+  };
 }
 
 export function ActiveWorkoutScreen({
@@ -297,10 +317,7 @@ export function ActiveWorkoutScreen({
   }, [restRemaining]);
 
   useEffect(() => {
-    const deactivate = tryActivateKeepAwake();
-    return () => {
-      deactivate?.();
-    };
+    return activateWorkoutKeepAwake();
   }, []);
 
   useEffect(() => {
