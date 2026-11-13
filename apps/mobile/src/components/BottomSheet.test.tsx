@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactElement } from "react";
+import { Children, isValidElement } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 const platform = vi.hoisted(() => ({ OS: "ios" }));
 
@@ -36,6 +37,19 @@ function modalProps(): Record<string, unknown> {
   return el.props;
 }
 
+function avoidingView(): ReactElement<Record<string, unknown>> {
+  const modal = BottomSheet({
+    visible: true,
+    onDismiss: () => {},
+    children: null,
+  }) as ReactElement<{ children: ReactNode }>;
+  const found = Children.toArray(modal.props.children).find(
+    (c) => isValidElement(c) && c.type === "KeyboardAvoidingView",
+  );
+  expect(found).toBeDefined();
+  return found as ReactElement<Record<string, unknown>>;
+}
+
 describe("BottomSheet Modal presentation", () => {
   beforeEach(() => {
     platform.OS = "ios";
@@ -56,17 +70,26 @@ describe("BottomSheet Modal presentation", () => {
     }
   });
 
+  it("sets statusBarTranslucent on Android only", () => {
+    const values: Record<string, unknown> = {};
+    for (const os of ["ios", "android", "web"]) {
+      platform.OS = os;
+      values[os] = modalProps().statusBarTranslucent;
+    }
+    expect(values).toEqual({ ios: false, android: true, web: false });
+  });
+
   it("pads for the keyboard on iOS only", () => {
     const behaviour = (os: string) => {
       platform.OS = os;
-      const modal = BottomSheet({
-        visible: true,
-        onDismiss: () => {},
-        children: null,
-      }) as ReactElement<{ children: ReactElement<{ behavior?: string }> }>;
-      return modal.props.children.props.behavior;
+      return avoidingView().props.behavior;
     };
     expect(behaviour("ios")).toBe("padding");
     expect(behaviour("android")).toBeUndefined();
+    expect(behaviour("web")).toBeUndefined();
+  });
+
+  it("marks the sheet as modal so VoiceOver cannot reach the screen behind it", () => {
+    expect(avoidingView().props.accessibilityViewIsModal).toBe(true);
   });
 });

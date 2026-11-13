@@ -43,8 +43,9 @@ export function BottomSheet({
       onRequestClose={onDismiss}
     >
       {/* iOS does not resize a transparent modal for the keyboard, so pad the
-          bottom-anchored sheet by the keyboard height (ask coach, ate out). */}
+          bottom-anchored sheet by the keyboard height (ate out, portion, resolve and note sheets). */}
       <KeyboardAvoidingView
+        accessibilityViewIsModal
         behavior={isIos ? "padding" : undefined}
         style={[styles.root, !isWeb ? styles.rootNative : null]}
       >
