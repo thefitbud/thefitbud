@@ -409,15 +409,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // The client already tried one refresh before this 401 reached us.
       if (error instanceof ApiClientError && error.status === 401) {
         dropRefusedSession();
-      } else if (accountLoaded) {
-        // Mid-session (pull to refresh, a notification tap, coaching resume):
-        // keep the session and the `me` already on screen, and let the
-        // screens' own offline handling show (Z11b-7). Only a launch with no
-        // account yet gets the error screen.
-        reportError(
-          isNetworkFailure(error) ? "auth-refresh-offline" : "auth-refresh",
-          error,
-        );
+      } else if (accountLoaded && isNetworkFailure(error)) {
+        // Offline mid-session (pull to refresh, a notification tap, coaching
+        // resume): keep the session and the `me` already on screen, and let
+        // the screens' own offline handling show (Z11b-7). Any other failure,
+        // or no account yet, still gets the error screen.
+        reportError("auth-refresh-offline", error);
       } else {
         setErrorMessage(messageFromError(error));
       }

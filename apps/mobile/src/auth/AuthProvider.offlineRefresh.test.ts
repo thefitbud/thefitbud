@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "@fitbud/api-client";
+import { meResponseSchema } from "@fitbud/contracts";
 import type { CoachingRelationship, MeResponse } from "@fitbud/contracts";
 import { NET_COPY } from "../lib/authErrors";
 import { createTestIdToken } from "../lib/testToken";
@@ -196,12 +197,46 @@ describe("refreshSession mid-session (Z11b-7)", () => {
     expect(auth!.relationships.map((r) => r.id)).toEqual([RELATIONSHIP]);
   });
 
-  it("a server error with the account loaded also keeps the app and reports it", async () => {
+  it("a server error with the account loaded still shows the error screen", async () => {
     await signedInOnTraineeShell();
     h.client.me.mockRejectedValueOnce(apiError(503, "SERVICE_UNAVAILABLE"));
     await refresh();
-    expectStillOnTraineeShell();
-    expect(h.reportError.mock.calls[0]![0]).toBe("auth-refresh");
+    expect(view()).toMatchObject({ view: "error" });
+    expect(auth!.errorMessage).toBeTruthy();
+    expect(h.reportError).not.toHaveBeenCalledWith("auth-refresh-offline", expect.anything());
+  });
+
+  it("a response that fails the schema shows AUTH-PARSE, never a quiet keep", async () => {
+    await signedInOnTraineeShell();
+    const parsed = meResponseSchema.safeParse({ userId: 42 });
+    expect(parsed.success).toBe(false);
+    h.client.me.mockRejectedValueOnce(parsed.error);
+    await refresh();
+    expect(auth!.errorMessage).toContain("AUTH-PARSE");
+    expect(view()).toMatchObject({ view: "error" });
+  });
+
+  it("decides from the account as it was when the refresh started", async () => {
+    await signedInOnTraineeShell();
+    let fail: (error: unknown) => void = () => undefined;
+    h.client.me.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          fail = reject;
+        }),
+    );
+    let pending: Promise<void> = Promise.resolve();
+    act(() => {
+      pending = auth!.refreshSession();
+    });
+    // Signed out while `/me` is in flight, then the call fails offline.
+    act(() => auth!.signOut());
+    await act(async () => {
+      fail(new TypeError("Network request failed"));
+      await pending;
+    });
+    expect(auth!.route.name).toBe("auth");
+    expect(auth!.errorMessage).toBeNull();
   });
 
   it("the next refresh after reconnecting loads /me as usual", async () => {
