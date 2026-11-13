@@ -121,7 +121,11 @@ function earliestOfType(
   return rows[0] ?? null;
 }
 
-function weightSeriesLast12Weeks(
+/**
+ * One point per civil day: the last reading of the day wins. Two weigh-ins on
+ * one day would otherwise draw two dots on one date and collide as React keys.
+ */
+export function weightSeriesLast12Weeks(
   measurements: Measurement[],
   timeZone: string,
 ): Array<{ date: string; value: number }> {
@@ -133,10 +137,44 @@ function weightSeriesLast12Weeks(
       (m) => m.type === "body_weight_kg" && m.observedAt >= cutoffIso,
     )
     .sort((a, b) => a.observedAt.localeCompare(b.observedAt))
-    .map((m) => ({
-      date: civilFromObservedAt(m.observedAt, timeZone),
-      value: m.value,
-    }));
+    .reduce<Array<{ date: string; value: number }>>((days, m) => {
+      const date = civilFromObservedAt(m.observedAt, timeZone);
+      const last = days[days.length - 1];
+      if (last && last.date === date) last.value = m.value;
+      else days.push({ date, value: m.value });
+      return days;
+    }, []);
+}
+
+/** Minimum distance in px between two month labels on the x-axis. */
+const MONTH_TICK_MIN_GAP = 36;
+
+/** The first point of each distinct month, in order. */
+export function monthTickPoints<T extends { date: string }>(points: T[]): T[] {
+  const seen = new Set<string>();
+  const ticks: T[] = [];
+  for (const p of points) {
+    const month = p.date.slice(0, 7);
+    if (seen.has(month)) continue;
+    seen.add(month);
+    ticks.push(p);
+  }
+  return ticks;
+}
+
+/**
+ * Left edge of the start-marker pill: centred on the marker, then clamped so
+ * the pill stays inside [0, chartWidth - pillWidth]. Before the pill has been
+ * measured (pillWidth 0) it is only kept off the left edge.
+ */
+export function clampMarkerLeft(
+  markerX: number,
+  pillWidth: number,
+  chartWidth: number,
+): number {
+  const centred = markerX - pillWidth / 2;
+  const max = Math.max(0, chartWidth - pillWidth);
+  return Math.min(Math.max(0, centred), max);
 }
 
 function monthLabel(civilDate: string): string {
@@ -155,6 +193,7 @@ function WeightTrendChart({
   startedAt: string;
   timeZone: string;
 }) {
+  const [pillWidth, setPillWidth] = useState(0);
   const width = 329;
   const height = 150;
   const padLeft = 8;
@@ -190,6 +229,8 @@ function WeightTrendChart({
   const areaPath = `${linePath} L${points[points.length - 1]!.x.toFixed(1)},${chartBottom} L${points[0]!.x.toFixed(1)},${chartBottom} Z`;
 
   const startCivil = civilFromObservedAt(startedAt, timeZone);
+  // A start date before the 12-week window pins the marker to the first
+  // point; the pill then sits on the left edge with the same copy.
   const startIndex = points.findIndex((p) => p.date >= startCivil);
   const markerIndex = startIndex >= 0 ? startIndex : 0;
   const marker = points[markerIndex]!;
@@ -199,18 +240,24 @@ function WeightTrendChart({
     y: chartBottom - ((v - min) / range) * (chartBottom - chartTop),
   }));
 
-  const monthTicks = [
-    points[0],
-    points[Math.floor(points.length / 2)],
-    points[points.length - 1],
-  ].filter((p): p is (typeof points)[number] => p != null);
+  // One tick per month, and a tick that would sit on top of the previous label
+  // is left out rather than overprinted.
+  const monthTicks = monthTickPoints(points).reduce<typeof points>(
+    (kept, p) => {
+      const last = kept[kept.length - 1];
+      if (!last || p.x - last.x >= MONTH_TICK_MIN_GAP) kept.push(p);
+      return kept;
+    },
+    [],
+  );
 
-  const markerLeftPct = (marker.x / width) * 100;
+  const markerLeft = clampMarkerLeft(marker.x, pillWidth, width);
 
   return (
     <View style={styles.chartWrap}>
       <View
-        style={[styles.chartMarker, { left: `${markerLeftPct}%` }]}
+        style={[styles.chartMarker, { left: markerLeft }]}
+        onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
         accessibilityLabel={`Started with ${coachName}`}
       >
         <Text style={styles.chartMarkerText}>
@@ -225,9 +272,9 @@ function WeightTrendChart({
             <Stop offset="1" stopColor={colors.indigo} stopOpacity={0} />
           </LinearGradient>
         </Defs>
-        {yTicks.map((tick) => (
+        {yTicks.map((tick, i) => (
           <Line
-            key={tick.value}
+            key={`grid-${i}`}
             x1={padLeft}
             x2={width - padRight}
             y1={tick.y}
@@ -236,9 +283,9 @@ function WeightTrendChart({
             strokeWidth={1}
           />
         ))}
-        {yTicks.map((tick) => (
+        {yTicks.map((tick, i) => (
           <SvgText
-            key={`lbl-${tick.value}`}
+            key={`lbl-${i}`}
             x={width - 4}
             y={tick.y + 4}
             fontSize={11}
@@ -269,7 +316,7 @@ function WeightTrendChart({
         />
         {points.map((p, i) => (
           <Circle
-            key={p.date}
+            key={`pt-${i}-${p.date}`}
             cx={p.x}
             cy={p.y}
             r={i === points.length - 1 ? 5 : 3}
@@ -279,9 +326,9 @@ function WeightTrendChart({
             opacity={i === points.length - 1 ? 1 : 0.55}
           />
         ))}
-        {monthTicks.map((p) => (
+        {monthTicks.map((p, i) => (
           <SvgText
-            key={`m-${p.date}`}
+            key={`m-${i}-${p.date}`}
             x={p.x}
             y={height - 6}
             fontSize={11}
@@ -599,7 +646,7 @@ export function ProgressTab({
       chrome="app"
       title="Progress"
       showHeader={false}
-      refreshing={refreshing || loading}
+      refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
         void refreshSession?.();
@@ -1034,7 +1081,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     position: "absolute",
     top: -24,
-    transform: [{ translateX: -80 }],
     zIndex: 1,
   },
   chartMarkerText: {
