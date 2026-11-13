@@ -37,6 +37,31 @@ tags:
     timeout: 10000
 - takeScreenshot: trainee-meal-log__something-different
 - runFlow: ../../common/assert-no-crash.yaml
+# Ate out and Changed the portion open inside the sheet (Z11b-5): title and
+# Save must be visible, then Back returns to the menu.
+- tapOn: "Ate out"
+- extendedWaitUntil:
+    visible: "What did you eat?"
+    timeout: 10000
+- assertVisible: "Ate out"
+- assertVisible: "Save"
+- takeScreenshot: trainee-meal-log__ate-out
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Changed the portion"
+    timeout: 10000
+- tapOn: "Changed the portion"
+- extendedWaitUntil:
+    visible: "Save"
+    timeout: 10000
+- assertVisible: "Changed the portion"
+- takeScreenshot: trainee-meal-log__portion
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Log it myself"
+    timeout: 10000
 - tapOn: "Log it myself"
 - extendedWaitUntil:
     visible: "Search foods"
