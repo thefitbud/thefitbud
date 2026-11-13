@@ -1,5 +1,13 @@
 import type { ReactNode } from "react";
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import { Text } from "./Text";
 import { brand, surface } from "@fitbud/tokens";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
@@ -29,13 +37,17 @@ export function BottomSheet({
   return (
     <Modal
       animationType="slide"
-      transparent={isWeb || Platform.OS === "android"}
-      presentationStyle={isIos ? "pageSheet" : undefined}
+      transparent
       statusBarTranslucent={Platform.OS === "android"}
       visible={visible}
       onRequestClose={onDismiss}
     >
-      <View style={[styles.root, !isWeb ? styles.rootNative : null]}>
+      {/* iOS does not resize a transparent modal for the keyboard, so pad the
+          bottom-anchored sheet by the keyboard height (ask coach, ate out). */}
+      <KeyboardAvoidingView
+        behavior={isIos ? "padding" : undefined}
+        style={[styles.root, !isWeb ? styles.rootNative : null]}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss sheet"
@@ -58,7 +70,7 @@ export function BottomSheet({
             {children}
           </ScrollView>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
