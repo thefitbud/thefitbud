@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Svg, { Path } from "react-native-svg";
@@ -107,6 +108,19 @@ export function SomethingDifferentSheet({
   onAskCoach,
 }: Props) {
   const sync = useSyncEngine();
+  const { height: windowHeight } = useWindowDimensions();
+  // In the sheet, BottomSheet hosts children in a flexGrow:0 ScrollView, so a
+  // flex:1 sub-screen collapses to 0. Give it a real height there (Z11b-5).
+  const subScreenStyle =
+    variant === "sheet"
+      ? [
+          styles.subScreen,
+          {
+            flex: 0,
+            height: Math.min(520, Math.max(320, windowHeight * 0.75)),
+          },
+        ]
+      : styles.subScreen;
   const coachShort = coachName.split(/\s+/)[0] ?? coachName;
 
   const [screen, setScreen] = useState<ScreenId>("menu");
@@ -210,7 +224,9 @@ export function SomethingDifferentSheet({
   }
 
   async function savePortion() {
-    const active = portionRows.filter((row) => !row.removed && row.quantity > 0);
+    const active = portionRows.filter(
+      (row) => !row.removed && row.quantity > 0,
+    );
     if (active.length === 0) {
       setError("Keep at least one food, or use another option.");
       return;
@@ -278,7 +294,9 @@ export function SomethingDifferentSheet({
         {sheetNav(showBack)}
         <View style={styles.titleBlock}>
           <Text style={styles.sheetTitle}>{title}</Text>
-          {subtitle ? <Text style={styles.sheetSubtitle}>{subtitle}</Text> : null}
+          {subtitle ? (
+            <Text style={styles.sheetSubtitle}>{subtitle}</Text>
+          ) : null}
         </View>
       </>
     );
@@ -304,7 +322,12 @@ export function SomethingDifferentSheet({
 
   function WhatsAppGlyph() {
     return (
-      <Svg width={20} height={20} viewBox="0 0 24 24" accessibilityElementsHidden>
+      <Svg
+        width={20}
+        height={20}
+        viewBox="0 0 24 24"
+        accessibilityElementsHidden
+      >
         <Path
           fill="#25D366"
           d="M12.05 0C5.5 0 .16 5.34.16 11.89c0 2.1.55 4.14 1.59 5.95L.06 24l6.3-1.65a11.88 11.88 0 0 0 5.68 1.45h.01c6.55 0 11.89-5.34 11.89-11.9 0-3.18-1.24-6.16-3.48-8.41A11.82 11.82 0 0 0 12.05 0Z"
@@ -398,7 +421,7 @@ export function SomethingDifferentSheet({
   );
 
   const ateOutBody = (
-    <View style={styles.subScreen}>
+    <View testID="something-different-subscreen" style={subScreenStyle}>
       <ScrollView
         style={styles.subScroll}
         contentContainerStyle={styles.subScrollContent}
@@ -448,16 +471,20 @@ export function SomethingDifferentSheet({
           onPress={openFoodSearch}
           style={styles.linkRow}
         >
-          <Text style={styles.linkText}>Know the foods? Log it myself instead</Text>
+          <Text style={styles.linkText}>
+            Know the foods? Log it myself instead
+          </Text>
         </Pressable>
         {error ? <ErrorBanner message={error} /> : null}
       </ScrollView>
-      <View style={styles.stickySave}>{saveButton("Save", () => void saveAteOut())}</View>
+      <View style={styles.stickySave}>
+        {saveButton("Save", () => void saveAteOut())}
+      </View>
     </View>
   );
 
   const portionBody = (
-    <View style={styles.subScreen}>
+    <View testID="something-different-subscreen" style={subScreenStyle}>
       <ScrollView
         style={styles.subScroll}
         contentContainerStyle={styles.subScrollContent}
