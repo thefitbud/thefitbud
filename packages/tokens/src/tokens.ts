@@ -1,4 +1,5 @@
 /** Design tokens — source of truth for web and mobile (Stage 1, PLAN A1). */
+import { v3DarkColors, v3LightColors, v3TypeScale } from "./v3.generated.js";
 
 export const tagline = "Progress, guided." as const;
 
@@ -70,3 +71,52 @@ export const success = semantic.positive.text;
 export const warning = semantic.attention.text;
 /** @deprecated Use semantic.critical */
 export const error = semantic.critical.text;
+
+/* ---------------------------------------------------------------------------
+ * v3 (W12, Z12-36). Colours and type scale are generated from the design kit
+ * (docs/design/v3/kit-v3.css + the "v3 additions" block of src/kit.css): see
+ * scripts/generate-v3.ts and src/v3.generated.ts. Never hand-edit a v3 colour;
+ * change the kit and regenerate (src/v3.test.ts fails on drift). The v2
+ * exports above stay until trainer web moves (Z12-37) and the last mobile
+ * screen migrates off them.
+ * ------------------------------------------------------------------------- */
+
+export { v3DarkColors, v3LightColors, v3TypeScale };
+
+export type ColorScheme = "light" | "dark";
+
+/** One theme's colour tokens; light and dark share the keys. */
+export type ColorTokens = { readonly [K in keyof typeof v3LightColors]: string };
+
+export type ColorToken = keyof ColorTokens;
+
+export const colorTokens: Readonly<Record<ColorScheme, ColorTokens>> = {
+  light: v3LightColors,
+  dark: v3DarkColors,
+};
+
+export type TypeToken = keyof typeof v3TypeScale;
+
+/** v3 radii (DESIGN-SYSTEM-v3 §4 and the kit-v3.css component rules). */
+export const v3Radii = {
+  card: 18,
+  group: 16,
+  meal: 16,
+  button: 14,
+  buttonSm: 12,
+  input: 12,
+  segment: 10,
+  tag: 6,
+  sheet: 22,
+  dialog: 20,
+  toast: 14,
+  tabCapsule: 31,
+  tab: 26,
+  chip: 17,
+  pill: 16,
+  full: 999,
+} as const;
+
+/** v3 font stack for CSS contexts; native uses the expo-font family names. */
+export const v3FontFamily =
+  'Inter, "Noto Sans Devanagari", system-ui, sans-serif';

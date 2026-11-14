@@ -121,6 +121,9 @@ importers:
       '@bacons/apple-targets':
         specifier: 0.2.1
         version: 0.2.1
+      '@expo-google-fonts/inter':
+        specifier: ^0.4.1
+        version: 0.4.2
       '@expo-google-fonts/noto-sans-devanagari':
         specifier: ^0.4.1
         version: 0.4.1
@@ -1961,6 +1964,9 @@ packages:
   '@eslint/plugin-kit@0.4.1':
     resolution: {integrity: sha512-43/qtrDUokr7LJqoF2c3+RInu/t4zfrpYdoSDfYyhg52rwLV6TnOvdG4fXm7IkSB3wErkcmJS9iEhjVtOSEjjA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@expo-google-fonts/inter@0.4.2':
+    resolution: {integrity: sha512-syfiImMaDmq7cFi0of+waE2M4uSCyd16zgyWxdPOY7fN2VBmSLKEzkfbZgeOjJq61kSqPBNNtXjggiQiSD6gMQ==}
 
   '@expo-google-fonts/noto-sans-devanagari@0.4.1':
     resolution: {integrity: sha512-26boYPNKGP1r4R5MxsMAY/zCQOwiXLOJzX8sh1a2oEWyQurQsyniaCv4992c+9jjwshEEt2NNVv5GcnyzaL7QQ==}
@@ -7714,6 +7720,8 @@ snapshots:
     dependencies:
       '@eslint/core': 0.17.0
       levn: 0.4.1
+
+  '@expo-google-fonts/inter@0.4.2': {}
 
   '@expo-google-fonts/noto-sans-devanagari@0.4.1': {}
 

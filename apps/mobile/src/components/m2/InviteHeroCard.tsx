@@ -1,10 +1,16 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import {
   Calendar,
   ChartLine,
   CircleCheck,
 } from "lucide-react-native";
-import { colors, fontFamilyBold, spacing } from "@fitbud/ui-mobile";
+import { fontFamilyBold, spacing } from "@fitbud/ui-mobile";
+import {
+  createThemedStyles,
+  shadowColor,
+  useTheme,
+  withAlpha,
+} from "../../providers/ThemeProvider";
 import { Text } from "../Text";
 
 type Props = {
@@ -18,6 +24,8 @@ const BULLETS = [
 ] as const;
 
 export function InviteHeroCard({ coachName }: Props) {
+  const styles = useStyles();
+  const theme = useTheme();
   const coachFirst = coachName.split(/\s+/)[0] ?? coachName;
   return (
     <View style={styles.card} accessibilityRole="summary">
@@ -46,7 +54,7 @@ export function InviteHeroCard({ coachName }: Props) {
               : bullet.text;
           return (
             <View key={line} style={styles.bulletRow}>
-              <Icon size={18} color="#B7A9F5" strokeWidth={1.75} />
+              <Icon size={18} color={withAlpha(theme.colors.heroFg, 0.72)} strokeWidth={1.75} />
               <Text style={styles.bulletText}>{line}</Text>
             </View>
           );
@@ -56,16 +64,19 @@ export function InviteHeroCard({ coachName }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   card: {
-    backgroundColor: colors.deepNavy,
+    // v3 hero surface: navy in light, a raised charcoal card in dark (DESIGN-SYSTEM-v3 §9).
+    backgroundColor: t.colors.heroB,
     borderRadius: 22,
+    borderWidth: t.scheme === "dark" ? 1 : 0,
+    borderColor: t.colors.edge,
     marginTop: spacing.lg,
     overflow: "hidden",
     padding: 18,
-    shadowColor: "#1A1248",
+    shadowColor: shadowColor(t),
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.55,
+    shadowOpacity: t.scheme === "dark" ? 0 : 0.3,
     shadowRadius: 24,
   },
   row: {
@@ -75,19 +86,19 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: "center",
-    backgroundColor: "rgba(255,255,255,0.14)",
+    backgroundColor: withAlpha(t.colors.heroFg, 0.14),
     borderRadius: 24,
     height: 48,
     justifyContent: "center",
     width: 48,
   },
   avatarText: {
-    color: colors.white,
+    color: t.colors.heroFg,
     fontSize: 17,
     fontWeight: "700",
   },
   title: {
-    color: colors.white,
+    color: t.colors.heroFg,
     flex: 1,
     fontFamily: fontFamilyBold,
     fontSize: 21,
@@ -105,9 +116,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   bulletText: {
-    color: "rgba(255,255,255,0.88)",
+    color: withAlpha(t.colors.heroFg, 0.88),
     flex: 1,
     fontSize: 15,
     lineHeight: 21,
   },
-});
+}));
