@@ -72,7 +72,9 @@ No new accounts were needed. The three personas the W12 tasks ask for already ex
 
 ## Quick reseed (`pnpm db:reseed`)
 
-`pnpm db:reseed` wipes and reloads **only the demo data** (accounts, plans, logs, trainer-owned templates). It does not touch migrations or the exercise/food library, and it refuses with a clear message when the local D1 is behind the committed migrations or the library is not loaded (then run `pnpm db:reset`). It writes straight into the local D1 file in one transaction, with no wrangler process, so it takes a few seconds on Linux and also on Windows. Stop `pnpm api` first if you can; the write waits up to 30 s for the database lock.
+`pnpm db:reseed` wipes and reloads **only the demo data** (accounts, plans, logs, trainer-owned templates). It does not touch migrations or the exercise/food library, and it refuses with a clear message when the local D1 is behind the committed migrations or the library is not loaded (then run `pnpm db:reset`). It writes straight into the local D1 file in one transaction, with no wrangler process, so it takes a few seconds on Linux and also on Windows. It is safe to run while `pnpm api` is up: the running API sees the new data on its next request, with no restart and no lock error (checked on port 8797). The write waits up to 30 s for the database lock.
+
+`pnpm db:reset` is different: it deletes the D1 files, so **stop the API first**. A running API keeps the deleted database open (Linux) or blocks the delete (Windows). The script checks port 8787 and `FITBUD_API_PORT` and stops with a message if something is listening there (`FITBUD_RESET_IGNORE_API=1` skips the check). It now also loads the library straight into SQLite, so a full reset takes well under a minute (migrations are most of it).
 
 "Today" is the run date (IST). Every client with a plan has meal and workout rows from 27 days back to today, and from Z12-34 on also **6 days ahead** (assignments only, nothing logged), so the app has past, current and future days. Ended clients stop at their end date.
 
@@ -135,7 +137,7 @@ Forms: onboarding **FitBud Intake** (v1, v2) and **Quick intake — returning cl
 ### Seed commands
 
 ```sh
-pnpm db:reset          # migrate + v2 library + demo world (~2.5 min on Linux)
+pnpm db:reset          # migrate + v2 library + demo world (~40 s on Linux)
 pnpm db:seed:local     # re-seed demo world only (wipes app data, keeps library)
 ```
 

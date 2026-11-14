@@ -24,23 +24,37 @@ Run `pnpm db:reset`"), then restoring it.
 Chunked files and multi-row inserts were not needed: the single transaction is already a few
 seconds, so the seed SQL generator is unchanged apart from the data fixes below.
 
-## Timings (wall clock, this container)
+## Timings (wall clock, this container, 4 cores)
 
-| Command | Before | After |
+| Step | Before | After |
 |---|---|---|
-| `pnpm db:reset` total | 6 m 11 s (371 s) | 6 m 00 s (360 s) |
-| of which `db:migrate:local` | not split out | 31 s |
-| of which `db:seed:library` | not split out | 320 s |
-| of which demo seed | 23.5 s (`pnpm seed:demo`, wrangler path) | 6.0 s |
-| `pnpm db:reseed` (demo only) | none (`seed:demo` was the nearest: 23.5 s) | 6.0 s, 8.2 s on a second run; the transaction itself is 1.1 to 1.3 s; the rest is SQL generation |
+| `db:reset` total | 371 s | 37.6 s |
+| `db:migrate:local` | not split out | 28.7 s (unchanged, wrangler) |
+| library load | 320 s (wrangler) | 2.1 s (`scripts/library-seed-local.ts`, direct SQLite) |
+| demo seed | 23.5 s | 4.4 s |
+| `pnpm db:reseed` | none (`seed:demo` 23.5 s) | 5.6 to 6.0 s (transaction 1.0 s, rest is SQL generation) |
 
-Target met: reseed is far under 2 minutes. Honest caveat: the demo seed was already only 23 s on
-Linux, so the 20 minutes on Windows cannot be reproduced here; the gain there should be larger
-than the 4x seen here because it removes the wrangler per-statement cost. **`db:reset` itself is
-still ~6 minutes on Linux because the library load (about 36 MB, still through wrangler,
-shared with the remote/staging path and its tests) takes 320 s.** It was outside this task's
-"demo seed" scope. Follow-up if wanted: load the local library through the same direct-SQLite route.
-`db:reset` now prints per-step timings.
+The library load (the 36 MB, thousands of statements) was the real cost. `db:reset` now calls
+`library-seed-local.ts`, which runs the same files in the same order as `library-seed.ts` local
+mode, one transaction per file, straight into the local D1 file. `library-seed.ts` and the
+remote/staging path are untouched (`pnpm db:seed:library` still uses wrangler).
+
+### Library equality (before vs after)
+
+Per-table row count and sha256 of the sorted row JSON, for all 35 tables the demo seed does not
+write (library, lookups, global templates, migrations; FTS shadow tables skipped). Before = the
+wrangler-loaded DB, after = the direct load. 33 of 35 identical; the two that differ are
+`_cf_METADATA` and `d1_migrations`, which hold the apply timestamps. Row counts match (for
+example 1,362 exercises, 1,243 foods, 32,946 food nutrients, 919 exercise media). FTS queries
+work after the load ("dal" 20 foods, "squat" 121 exercises).
+
+### With the API running (port 8797)
+
+- `db:reseed`: safe. Changing a client name by hand showed in `/clients` immediately, and after
+  `db:reseed` the API returned the reseeded name with no restart and no lock error.
+- `db:reset`: not safe. The API kept serving the deleted database (stale/empty data), and on
+  Windows the delete would fail. `db-reset.ts` now checks port 8787 and `FITBUD_API_PORT` and
+  refuses with a clear message; `FITBUD_RESET_IGNORE_API=1` skips it. Verified with a listener on 8787.
 
 ## Seed fixes
 
