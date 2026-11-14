@@ -36,20 +36,22 @@ env:
 # Step 3: Attention, Clients and one client, each loaded. The client screen is waited
 # for by its back control, which is always at the top (the "This week" heading can sit
 # below the fold on a 393x852 screen, run 43625661111).
+# A client row is matched as a row ("RM Rohan Mehta …" on iOS, "RM, Rohan Mehta, …" or the
+# name's own text on Android), never with a bare ".*name.*": on iOS that also matches the
+# whole list container, whose label holds every row, so the tap lands on the container
+# and nothing opens (run 43634854529).
+# Attention's order varies, so its loaded state is the anchor, not one client's card.
 - extendedWaitUntil:
     visible: "${ATTENTION_LOADED}"
-    timeout: 30000
-- extendedWaitUntil:
-    visible: ".*${RAHUL_CLIENT}.*"
     timeout: 30000
 - takeScreenshot: rahul-attention
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Clients"
-- extendedWaitUntil:
-    visible: ".*${RAHUL_CLIENT}.*"
+- scrollUntilVisible:
+    element: "[A-Z]{2},? ${RAHUL_CLIENT}.*|${RAHUL_CLIENT}"
     timeout: 30000
 - takeScreenshot: rahul-clients
-- tapOn: ".*${RAHUL_CLIENT}.*"
+- tapOn: "[A-Z]{2},? ${RAHUL_CLIENT}.*|${RAHUL_CLIENT}"
 - extendedWaitUntil:
     visible: "‹ Clients"
     timeout: 30000
@@ -98,14 +100,14 @@ env:
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Clients"
 - extendedWaitUntil:
-    visible: ".*${PRIYA_CLIENT}.*"
+    visible: "[A-Z]{2},? ${PRIYA_CLIENT}.*|${PRIYA_CLIENT}"
     timeout: 30000
 - assertNotVisible: ".*${RAHUL_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_THIRD_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_FOURTH_CLIENT}.*"
 - takeScreenshot: priya-clients
-- tapOn: ".*${PRIYA_CLIENT}.*"
+- tapOn: "[A-Z]{2},? ${PRIYA_CLIENT}.*|${PRIYA_CLIENT}"
 - extendedWaitUntil:
     visible: "‹ Clients"
     timeout: 30000

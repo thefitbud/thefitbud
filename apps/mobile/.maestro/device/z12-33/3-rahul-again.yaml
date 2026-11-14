@@ -14,6 +14,12 @@ env:
 # the same install. Continues from 2-offline-priya.yaml.
 - launchApp:
     stopApp: false
+# If the previous flow stopped on a client screen, go back to the tabs first.
+- runFlow:
+    when:
+      visible: "‹ Clients"
+    commands:
+      - tapOn: "‹ Clients"
 - tapOn: "More"
 - scrollUntilVisible:
     element: "Sign out"
@@ -35,9 +41,6 @@ env:
 - extendedWaitUntil:
     visible: "${ATTENTION_LOADED}"
     timeout: 30000
-- extendedWaitUntil:
-    visible: ".*${RAHUL_CLIENT}.*"
-    timeout: 30000
 - assertNotVisible: ".*${PRIYA_CLIENT}.*"
 - assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
 - takeScreenshot: rahul-again-attention
@@ -45,8 +48,8 @@ env:
 # Load Rahul's roster online too, so 4-offline-rahul.yaml has his own snapshot to show
 # offline (and must never show Priya's).
 - tapOn: "Clients"
-- extendedWaitUntil:
-    visible: ".*${RAHUL_CLIENT}.*"
+- scrollUntilVisible:
+    element: "[A-Z]{2},? ${RAHUL_CLIENT}.*|${RAHUL_CLIENT}"
     timeout: 30000
 - assertNotVisible: ".*${PRIYA_CLIENT}.*"
 - assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"

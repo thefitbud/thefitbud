@@ -17,11 +17,17 @@ env:
 # offline, Attention and Clients never show Priya's rows.
 - launchApp:
     stopApp: false
+# If the previous flow stopped on a client screen, go back to the tabs first.
+- runFlow:
+    when:
+      visible: "‹ Clients"
+    commands:
+      - tapOn: "‹ Clients"
 # Precondition: Rahul is the one signed in (his roster, loaded online in
 # 3-rahul-again.yaml, shows from the cache).
 - tapOn: "Clients"
-- extendedWaitUntil:
-    visible: ".*${RAHUL_CLIENT}.*"
+- scrollUntilVisible:
+    element: "[A-Z]{2},? ${RAHUL_CLIENT}.*|${RAHUL_CLIENT}"
     timeout: 20000
 - tapOn: "Attention"
 - swipe:

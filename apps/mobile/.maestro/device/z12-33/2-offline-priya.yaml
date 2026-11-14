@@ -18,12 +18,18 @@ env:
 # brought to the front, not relaunched.
 - launchApp:
     stopApp: false
+# If the previous flow stopped on a client screen, go back to the tabs first.
+- runFlow:
+    when:
+      visible: "‹ Clients"
+    commands:
+      - tapOn: "‹ Clients"
 # Precondition: Priya is the one signed in (her own cached roster shows). If
 # 1-two-trainers.yaml failed before the switch, this fails here, as a broken
 # precondition, rather than reporting Rahul's rows as a leak (run 43625661111).
 - tapOn: "Clients"
 - extendedWaitUntil:
-    visible: ".*${PRIYA_CLIENT}.*"
+    visible: "[A-Z]{2},? ${PRIYA_CLIENT}.*|${PRIYA_CLIENT}"
     timeout: 20000
 - tapOn: "Attention"
 - swipe:
