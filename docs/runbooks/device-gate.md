@@ -18,7 +18,7 @@ gh workflow run device.yml --repo thefitbud/thefitbud --ref main \
 
 | Input | Use |
 |---|---|
-| `ref` | the branch, tag or SHA whose app to build; empty = the branch the workflow runs from. The harness always comes from the workflow's own commit, so a branch made before the harness changed still gets today's gate |
+| `ref` | the branch, tag or SHA whose app to build; empty = the branch the workflow runs from. `scripts/qa` (the harness) always comes from the workflow's own commit, so a branch made before the harness changed still gets today's gate. Maestro flows come from your ref: your own `common/` and `device/` files win, and the harness only adds flow files your branch does not have |
 | `flows` | a Maestro tag (`smoke`, `full`, your task's tag), several tags (`smoke,z12-44`), or path globs under `apps/mobile/.maestro` (`flows/v3/F08*.yaml`) |
 | `roles` | optional filter: `trainee`, `trainer`, `dual` |
 | `platforms`, `themes` | `both` unless you are re-running one side |
@@ -52,7 +52,7 @@ gh run watch <run id> --repo thefitbud/thefitbud                          # neve
 ```bash
 gh run download <run id> --repo thefitbud/thefitbud --pattern 'device-*' --dir /tmp/device-run
 scripts/qa/device/copy-shots.sh /tmp/device-run docs/qa/<task ID>
-node scripts/qa/device/parity-gen.mjs        # adds missing parity rows, keeps filled cells
+node scripts/qa/device/parity-gen.mjs        # adds only missing rows, to their section's table; never rewrites a row
 ```
 
 Then fill your rows in `docs/qa/W12/parity.md` and list `screen ID → control → result` in

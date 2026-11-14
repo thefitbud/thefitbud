@@ -8,6 +8,8 @@ tags:
 env:
   RAHUL_CLIENT: Rohan Mehta
   RAHUL_OTHER_CLIENT: Aarav Shah
+  RAHUL_THIRD_CLIENT: Meera Iyer
+  RAHUL_FOURTH_CLIENT: Ishita Banerjee
   PRIYA_CLIENT: Lakshmi Iyer
 ---
 # Z12-33 step 7. Tagged device-offline: the harness takes the device offline before
@@ -33,6 +35,8 @@ env:
     timeout: 30000
 - assertNotVisible: ".*${RAHUL_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_THIRD_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_FOURTH_CLIENT}.*"
 - takeScreenshot: priya-offline-attention
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Clients"
@@ -44,5 +48,7 @@ env:
     timeout: 30000
 - assertNotVisible: ".*${RAHUL_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_THIRD_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_FOURTH_CLIENT}.*"
 - takeScreenshot: priya-offline-clients
 - runFlow: ../../common/assert-no-crash.yaml

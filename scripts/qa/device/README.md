@@ -23,6 +23,7 @@ gh workflow run device.yml --repo thefitbud/thefitbud --ref <branch> \
 
 | Input | Values | Default | What it does |
 |---|---|---|---|
+| `ref` | a branch, tag or SHA | empty (the dispatched branch) | the app to build. `scripts/qa` comes from the workflow's commit; Maestro flows from `ref`, with harness flows added only where `ref` has none |
 | `platforms` | `both`, `ios`, `android` | `both` | which jobs run |
 | `themes` | `both`, `light`, `dark` | `both` | system themes the flows run in, one after the other |
 | `flows` | a Maestro tag, or comma-separated path globs under `apps/mobile/.maestro` | `smoke` | `smoke`, `full`, `device`, `trainee` …, or e.g. `flows/v3/F08*.yaml,flows/trainee/today.yaml` (`*` stays in a folder, `**` crosses folders) |
@@ -43,7 +44,7 @@ their own job, `device-harness-tests`):
 
 1. **Local seeded API** (`local-api.sh start`, in the background while the app builds):
    `pnpm db:reset` (or `pnpm db:reseed` once Z12-34 adds it, with `DEVICE_DB=reseed`),
-   then `wrangler dev --local` on `0.0.0.0:8787`. Never staging, never a remote D1
+   then `wrangler dev --local` on `127.0.0.1:8787` (the emulator reaches it as 10.0.2.2). Never staging, never a remote D1
    command.
 2. **Build** (`build-app.sh`): the nightly build scripts, unchanged in behaviour
    (`scripts/qa/build-ios-sim.sh`, `scripts/qa/build-android-apk.sh`: staging variant,
@@ -233,8 +234,8 @@ screenshots and the raw screen dumps under `lockscreen/`.
 React's dev-only warnings (keys, nested lists, two children) are not emitted by a
 Release build at all; they are caught in a dev build by
 `apps/mobile/.maestro/common/assert-no-crash.yaml` (now including those five strings)
-and in unit tests by `apps/mobile/src/test/fail-on-console.ts`, which fails any mobile
-vitest test that calls `console.error`.
+and in unit tests by the shared `packages/config/vitest/fail-on-console.js`, which fails any
+vitest test, in every workspace, that calls `console.error` (D-W12-28).
 
 **Allow-list:** `allowlist.json`, `[{ "pattern": "<regex>", "platform":
 "ios|android|both", "reason": "<why>" }]`. An entry without a written reason (20+
@@ -267,12 +268,13 @@ scripts/qa/device/copy-shots.sh /tmp/device-run docs/qa/Z12-44  # or a task's ow
 
 ## Parity matrix rows
 
-`parity-gen.mjs` writes one row per screen ID × theme of `docs/design/v3/screen-profile.md`
-(185 screens, 370 rows) into `docs/qa/W12/parity.md`, in the §3 row template. It is
-idempotent and non-destructive: it finds the existing table by its header, matches
-columns by name, keeps every filled cell and every row the profile no longer lists, and
-only fills empty cells (screenshot and mock paths have defaults). `--check` exits 1 when
-rows are missing and writes nothing; `--stdout` prints instead of writing.
+`parity-gen.mjs` keeps `docs/qa/W12/parity.md` holding one row per screen ID × theme of
+`docs/design/v3/screen-profile.md` (185 screens, 370 rows). It reads every table with a
+screen-ID and a theme column (the committed file has a Trainee and a Trainer table with
+different columns), never rewrites an existing row, `—` placeholders included, and appends
+only missing rows, each to its own section's table (TM- rows to Trainer) in that table's
+columns. On the committed file it changes nothing. `--check` exits 1 when rows are
+missing and writes nothing; `--stdout` prints instead of writing.
 
 ## Files
 

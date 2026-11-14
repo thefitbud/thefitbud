@@ -8,6 +8,7 @@ tags:
 env:
   PRIYA_CLIENT: Lakshmi Iyer
   PRIYA_OTHER_CLIENT: Karan Mehra
+  RAHUL_CLIENT: Rohan Mehta
 ---
 # Z12-33 step 8, offline part. Tagged device-offline (see 2-offline-priya.yaml).
 # Departure from the README's step 8, recorded in docs/qa/Z12-35/README.md: Attention
@@ -20,7 +21,7 @@ env:
 # 3-rahul-again.yaml, shows from the cache).
 - tapOn: "Clients"
 - extendedWaitUntil:
-    visible: ".*Rohan Mehta.*"
+    visible: ".*${RAHUL_CLIENT}.*"
     timeout: 20000
 - tapOn: "Attention"
 - swipe:

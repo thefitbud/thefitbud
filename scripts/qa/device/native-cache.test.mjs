@@ -94,7 +94,10 @@ test("the real repository fingerprints, with the build scripts as inputs and no 
 test("swap-bundle guards the Hermes bytecode version and re-signs what it changed", () => {
   const src = fs.readFileSync(path.join(here, "swap-bundle.sh"), "utf8");
   assert.match(src, /hbc_version\(\) \{\n {2}od -An -t u4 -j 8 -N 4/);
-  assert.match(src, /\[ "\$old" = "\$new" \] \|\| device_die "Hermes bytecode version/);
+  assert.match(src, /\[ "\$old" = "\$new" \] \|\| needs_native "Hermes bytecode version/);
+  assert.match(src, /needs_native\(\) \{[\s\S]*?exit 3\n\}/, "a mismatch asks for a full native build (exit 3)");
+  assert.match(src, /"\$AAPT2" dump resources "\$APK"/, "Android checks the bundle's assets against the cached APK's resources");
+  assert.match(src, /needs_native "the new bundle requires assets the cached APK does not have/);
   assert.match(src, /sign_ios_simulator_app "\$APP" "\$BUNDLE_ID"/);
   assert.match(src, /zipalign" -f -p 4/);
   assert.match(src, /apksigner" verify/);
@@ -118,4 +121,5 @@ test("build-app.sh swaps the bundle only on a reported hit with a cached app, an
   assert.match(src, /"\$DEVICE_LIB_DIR\/swap-bundle\.sh" "\$PLATFORM" "\$app"/);
   assert.match(src, /cp -R "\$app" "\$CACHE_DIR\/"/);
   assert.match(src, /build-\$PLATFORM\.json/);
+  assert.match(src, /if \[ "\$swap" -eq 3 \]; then[\s\S]*?full_build/, "a refused swap falls back to a full build");
 });

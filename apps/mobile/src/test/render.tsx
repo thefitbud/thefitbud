@@ -132,7 +132,7 @@ vi.mock("expo-font", () => ({
  * `ChevronLeft` -> `<svg-chevron-left>`). The old stand-in was the bare export
  * name (`<ChevronLeft>`), which React DOM reports with console.error ("incorrect
  * casing", "unrecognized tag", unknown `accessibilityLabel` prop) and which the
- * Z12-35 console gate (`./fail-on-console.ts`) would fail. Custom elements take
+ * Z12-35 console gate (`packages/config/vitest/fail-on-console.js`) would fail. Custom elements take
  * any props without a warning, and children still render.
  */
 const svgStandIns = new Map<string, (props: Record<string, unknown>) => unknown>();

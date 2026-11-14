@@ -22,8 +22,13 @@
 #      Android: replaces assets/index.android.bundle, drops the old signature files,
 #      zipaligns and signs with the debug keystore, exactly like the full Release build
 #      (Expo's template signs release with the debug key). Images are compiled into the
-#      APK's resources and cannot be added here; native-fingerprint.mjs therefore hashes
-#      every image and font, so a changed asset is a cache miss, not a broken screen.
+#      APK's resources and cannot be added here: native-fingerprint.mjs hashes every image
+#      and font in the repository, and this script checks that every asset the new bundle
+#      requires is already a resource of the cached APK (aapt2 dump), exiting 3 for a
+#      full native build when one is not (an existing npm image newly required by JS).
+#
+# Exit 3 = this commit needs a full native build (bytecode or asset mismatch);
+# build-app.sh then builds natively instead.
 #
 # Known, accepted staleness: expo-constants' embedded app config keeps the cached build's
 # `extra.bundleCommit` (the dev-only commit badge; never shown in a Release build).
@@ -56,6 +61,13 @@ case "$(uname -s)" in
 esac
 [ -x "$HERMESC" ] || device_die "no hermesc at $HERMESC."
 
+# Exit 3 tells build-app.sh to fall back to a full native build: the cached binary
+# cannot run this bundle as it is.
+needs_native() {
+  echo "device[swap-bundle]: $* - a full native build is needed" >&2
+  exit 3
+}
+
 # Hermes bytecode: 8-byte magic, then the bytecode version as a little-endian uint32.
 hbc_version() {
   od -An -t u4 -j 8 -N 4 "$1" | tr -d '[:space:]'
@@ -78,7 +90,7 @@ case "$PLATFORM" in
     old="$(hbc_version "$APP/main.jsbundle")"
     bundle ios "$WORK/main.jsbundle" "$APP"
     new="$(hbc_version "$WORK/main.jsbundle")"
-    [ "$old" = "$new" ] || device_die "Hermes bytecode version $new does not match the cached app's $old; rebuild natively."
+    [ "$old" = "$new" ] || needs_native "Hermes bytecode version $new does not match the cached app's $old"
     cp "$WORK/main.jsbundle" "$APP/main.jsbundle"
     BUNDLE_ID="$(plutil -extract CFBundleIdentifier raw "$APP/Info.plist")"
     # shellcheck source=../sign-ios-simulator-app.sh
@@ -97,7 +109,23 @@ case "$PLATFORM" in
     mkdir -p "$WORK/stage/assets" "$WORK/res"
     bundle android "$WORK/stage/assets/index.android.bundle" "$WORK/res"
     new="$(hbc_version "$WORK/stage/assets/index.android.bundle")"
-    [ "$old" = "$new" ] || device_die "Hermes bytecode version $new does not match the cached APK's $old; rebuild natively."
+    [ "$old" = "$new" ] || needs_native "Hermes bytecode version $new does not match the cached APK's $old"
+    # Every asset the new bundle requires must already be a resource of the cached APK:
+    # images and fonts are compiled into resources at build time and cannot be swapped in.
+    # A JS-only change can newly require an existing file (even one from an unchanged npm
+    # package), which the fingerprint cannot see, so check by resource type/name.
+    AAPT2="$BT/aapt2"
+    [ -x "$AAPT2" ] || device_die "no aapt2 under $BT."
+    "$AAPT2" dump resources "$APK" 2>/dev/null | sed -n 's/^ *resource 0x[0-9a-f]* \([^ ]*\).*/\1/p' | sort -u >"$WORK/apk-resources.txt"
+    missing=""
+    while IFS= read -r asset; do
+      [ -n "$asset" ] || continue
+      dir="$(basename "$(dirname "$asset")")"
+      name="$(basename "$asset")"
+      entry="${dir%%-*}/${name%.*}"
+      grep -Fxq "$entry" "$WORK/apk-resources.txt" || missing="$missing $entry"
+    done < <(cd "$WORK/res" && find . -type f | sort)
+    [ -z "$missing" ] || needs_native "the new bundle requires assets the cached APK does not have:$missing"
     cp "$APK" "$WORK/app.apk"
     zip -q -d "$WORK/app.apk" 'META-INF/MANIFEST.MF' 'META-INF/*.SF' 'META-INF/*.RSA' 'META-INF/*.EC' 2>/dev/null || true
     (cd "$WORK/stage" && zip -q -0 -X "$WORK/app.apk" assets/index.android.bundle)

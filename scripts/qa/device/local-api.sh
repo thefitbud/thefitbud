@@ -14,7 +14,8 @@
 # DEVICE_DB=skip serves whatever is there.
 #
 # The server is `wrangler dev --local --persist-to .wrangler/state`, exactly what
-# `pnpm api` runs, bound to 0.0.0.0 so the Android emulator reaches it at 10.0.2.2.
+# `pnpm api` runs, but bound to 127.0.0.1 only: the Android emulator's 10.0.2.2 is an alias
+# for the host's loopback, and the iOS simulator shares it, so nothing needs a wider bind.
 # Its output goes to $DEVICE_RESULTS/logs/api.log. `stop` is also the iOS "offline"
 # switch (network.sh): the simulator shares the Mac's network, so the gate takes the
 # API away instead of the network.
@@ -62,7 +63,7 @@ serve() {
     device_log "an API already answers on port $DEVICE_API_PORT"
     return 0
   fi
-  device_log "starting wrangler dev on 0.0.0.0:$DEVICE_API_PORT (log: $API_LOG)"
+  device_log "starting wrangler dev on 127.0.0.1:$DEVICE_API_PORT (log: $API_LOG)"
   # Detached so it outlives this step; `setsid` where it exists (Linux) so the whole
   # process group can be stopped, plain nohup on macOS.
   local launcher=(nohup)
@@ -70,7 +71,7 @@ serve() {
   (
     cd "$API_DIR"
     "${launcher[@]}" pnpm exec wrangler dev src/index.ts --local --persist-to .wrangler/state \
-      --ip 0.0.0.0 --port "$DEVICE_API_PORT" >>"$API_LOG" 2>&1 </dev/null &
+      --ip 127.0.0.1 --port "$DEVICE_API_PORT" >>"$API_LOG" 2>&1 </dev/null &
     echo $! >"$PID_FILE"
   )
 }

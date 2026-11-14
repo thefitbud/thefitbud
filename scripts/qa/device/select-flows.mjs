@@ -72,9 +72,12 @@ export function selectFlows({ flows, roles = "", root = MAESTRO_DIR }) {
   if (/^[A-Za-z0-9_-]+(\s*,\s*[A-Za-z0-9_-]+)*$/.test(spec)) {
     // One tag or a comma-separated list of tags: the union, in path order.
     const tags = spec.split(",").map((t) => t.trim());
-    picked = all.filter(
-      (f) => (f.rel.startsWith("flows/") || f.rel.startsWith("device/")) && f.tags.some((t) => tags.includes(t)),
-    );
+    const candidates = all.filter((f) => f.rel.startsWith("flows/") || f.rel.startsWith("device/"));
+    // A typo in one tag of a list must not silently drop that part of the gate.
+    for (const t of tags) {
+      if (!candidates.some((f) => f.tags.includes(t))) throw new Error(`tag "${t}" matches no flow`);
+    }
+    picked = candidates.filter((f) => f.tags.some((t) => tags.includes(t)));
   } else {
     const globs = spec.split(",").map((g) => g.trim()).filter(Boolean).map(globToRegExp);
     picked = all.filter((f) => globs.some((g) => g.test(f.rel)));

@@ -10,7 +10,8 @@
 //   extras/*.json              push, lock-screen and offline evidence (optional)
 //   flows.txt                  the flow files that were selected
 // Writes summary.json and summary.md next to them and exits 1 when the gate fails:
-//   * any Maestro flow failed, or a theme has no report, or Maestro exited non-zero;
+//   * any Maestro flow failed or was skipped, a theme has no report, the reports hold a
+//     different number of flows than were selected, or Maestro exited non-zero;
 //   * the device-log scan failed (crash, red box, LogBox, JS console.error/warn, React
 //     warning, or a log that never showed the app starting).
 // Extras are evidence, reported but not part of the verdict: each task names the push,
@@ -38,7 +39,7 @@ export function themeResult(dir, theme, expectedReports = null) {
   const themeDir = path.join(dir, theme);
   const exitFile = path.join(themeDir, "maestro-exit");
   const exit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : null;
-  const r = { theme, maestroExit: exit, total: 0, passed: 0, failed: 0, failures: [], error: null };
+  const r = { theme, maestroExit: exit, total: 0, passed: 0, failed: 0, skipped: 0, failures: [], error: null };
   const reports = fs.existsSync(themeDir)
     ? fs.readdirSync(themeDir).filter((f) => /^junit(-\d+)?\.xml$/.test(f)).sort()
     : [];
@@ -59,6 +60,7 @@ export function themeResult(dir, theme, expectedReports = null) {
           r.failed++;
           r.failures.push({ flow: c.name, message: c.message.split("\n")[0].slice(0, 300) });
         } else if (c.status === "pass") r.passed++;
+        else r.skipped++;
       }
     } catch (err) {
       r.error = r.error ? `${r.error}; ${err.message}` : err.message;
@@ -88,6 +90,10 @@ export function buildGateSummary({ dir, platform }) {
   for (const r of results) {
     if (r.error) reasons.push(`${r.theme}: ${r.error}`);
     if (r.failed) reasons.push(`${r.theme}: ${r.failed} of ${r.total} flows failed`);
+    if (r.skipped) reasons.push(`${r.theme}: ${r.skipped} flow(s) skipped (a skipped flow proves nothing)`);
+    if (!r.error && flows.length && r.total !== flows.length) {
+      reasons.push(`${r.theme}: ${r.total} flow results for ${flows.length} selected flows`);
+    }
     if (!r.error && !r.failed && r.maestroExit !== 0) reasons.push(`${r.theme}: Maestro exited ${r.maestroExit}`);
   }
   if (!scan) reasons.push("no device-log scan");

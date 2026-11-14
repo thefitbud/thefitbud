@@ -16,8 +16,9 @@
  * Each entry needs a written reason and the ID of the task that removes it. Nothing else
  * is allowed.
  *
- * 1. React DOM's `validateDOMNesting`, `<button>` inside `<button>` only (apps/mobile
- *    render tests). react-native-web renders a Pressable with role "button" as an HTML
+ * 1. React DOM's `validateDOMNesting`, `<button>` inside `<button>`, and only when the
+ *    component stack runs through `WorkoutTab` (apps/mobile render tests).
+ *    react-native-web renders a Pressable with role "button" as an HTML
  *    `<button>`, and HTML forbids nesting them; on a device the nesting is legal React
  *    Native, so this message never reaches a device log. It still points at something
  *    worth fixing: in `WorkoutTab` the `OverflowMenu` button sits inside the day card's
@@ -37,7 +38,11 @@ export const ALLOWED = [
       typeof args[0] === "string" &&
       args[0].startsWith("Warning: validateDOMNesting(...): %s cannot appear as a descendant of <%s>.") &&
       args[1] === "<button>" &&
-      args[2] === "button",
+      args[2] === "button" &&
+      // Only inside WorkoutTab (React's component stack, the last argument, names it):
+      // its day card nests the OverflowMenu and other Pressables in a Pressable.
+      typeof args[3] === "string" &&
+      /\n\s+at WorkoutTab \(/.test(args[3]),
   },
 ];
 

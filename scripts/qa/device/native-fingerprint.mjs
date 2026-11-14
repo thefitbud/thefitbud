@@ -6,8 +6,9 @@
 //   node scripts/qa/device/native-fingerprint.mjs --platform ios|android [--extra <text>]... [--manifest <out.json>]
 //
 // Prints a cache key, `device-native-<platform>-<hash>`. Inputs:
-//   * apps/mobile app.json, app.config.js, eas.json, package.json (the variant, plugins,
-//     native config and the dependency list);
+//   * apps/mobile app.json, app.config.js, eas.json, package.json, and react-native.config.js
+//     and .npmrc (here and at the root) when present: the variant, plugins, native config,
+//     autolinking and the dependency list / install layout;
 //   * apps/mobile/plugins/**, targets/** and modules/** minus their JS/TS (config
 //     plugins, the Live Activity target, the local native module);
 //   * every external package in apps/mobile's installed dependency closure, as
@@ -17,8 +18,8 @@
 //   * every image and font file under apps/mobile and packages/* (Android compiles
 //     bundled images into resources, which a JS-bundle swap cannot add);
 //   * the build and patch scripts (scripts/qa/build-*.sh, ios-build-helpers.sh,
-//     sign-ios-simulator-app.sh, simulator-keychain-entitlements.mjs,
-//     device/patch-native.sh, device/swap-bundle.sh) and this file;
+//     sign-ios-simulator-app.sh, simulator-keychain-entitlements.mjs, device/patch-native.sh,
+//     device/swap-bundle.sh, device/build-app.sh, device/lib.sh) and this file;
 //   * --extra values: the workflow passes the Xcode version (iOS), the Java version
 //     (Android) and the runner image.
 // What is deliberately NOT an input: JS/TS source and EXPO_PUBLIC_* values (both live in
@@ -94,7 +95,10 @@ export function fingerprint({ platform, extras = [], repo = REPO }) {
   const mobile = path.join(repo, "apps/mobile");
   const rel = (p) => path.relative(repo, p).split(path.sep).join("/");
   const files = [
-    ...["app.json", "app.config.js", "eas.json", "package.json"].map((f) => path.join(mobile, f)),
+    ...["app.json", "app.config.js", "eas.json", "package.json", "react-native.config.js", ".npmrc"].map((f) =>
+      path.join(mobile, f),
+    ),
+    path.join(repo, ".npmrc"),
     ...walk(path.join(mobile, "plugins"), { skipNative: false }),
     ...walk(path.join(mobile, "targets"), { skipNative: false }),
     ...walk(path.join(mobile, "modules"), { skipJs: true, skipNative: false }),
@@ -108,6 +112,8 @@ export function fingerprint({ platform, extras = [], repo = REPO }) {
       "scripts/qa/simulator-keychain-entitlements.mjs",
       "scripts/qa/device/patch-native.sh",
       "scripts/qa/device/swap-bundle.sh",
+      "scripts/qa/device/build-app.sh",
+      "scripts/qa/device/lib.sh",
       "scripts/qa/device/native-fingerprint.mjs",
     ].map((f) => path.join(repo, f)),
   ].filter((f) => fs.existsSync(f));

@@ -7,6 +7,8 @@ tags:
 env:
   PRIYA_CLIENT: Lakshmi Iyer
   PRIYA_OTHER_CLIENT: Karan Mehra
+  RAHUL_CLIENT: Rohan Mehta
+  ATTENTION_LOADED: "Needs you [0-9]+"
 ---
 # Z12-33 step 8, online part: back online, Priya signs out, Rahul signs in again on
 # the same install. Continues from 2-offline-priya.yaml.
@@ -31,7 +33,10 @@ env:
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
 - extendedWaitUntil:
-    notVisible: ".*Loading.*"
+    visible: "${ATTENTION_LOADED}"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: ".*${RAHUL_CLIENT}.*"
     timeout: 30000
 - assertNotVisible: ".*${PRIYA_CLIENT}.*"
 - assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
@@ -41,7 +46,7 @@ env:
 # offline (and must never show Priya's).
 - tapOn: "Clients"
 - extendedWaitUntil:
-    visible: ".*Rohan Mehta.*"
+    visible: ".*${RAHUL_CLIENT}.*"
     timeout: 30000
 - assertNotVisible: ".*${PRIYA_CLIENT}.*"
 - assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"

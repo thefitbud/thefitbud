@@ -20,7 +20,8 @@
 # Cache hit (DEVICE_NATIVE_CACHE=hit and the cached app restored): the cached native
 # build is reused and only this commit's JS bundle is rebuilt and swapped in
 # (swap-bundle.sh). Every task in W12 except Z12-57 is JS-only, so this is the normal
-# path once the cache is warm.
+# path once the cache is warm. When swap-bundle.sh exits 3 (the bundle needs an asset
+# the cached APK lacks, or a different Hermes), this falls back to a full build.
 #
 # Outputs land where the nightly scripts put them (qa-results/mobile-build/...); the
 # app's path goes to $DEVICE_RESULTS/<platform>-app-path and the build mode and time to
@@ -51,6 +52,26 @@ cached_app() {
   esac
 }
 
+full_build() {
+  device_log "full native build of the $PLATFORM app against $QA_API_BASE_URL (local seeded API, never staging)"
+  case "$PLATFORM" in
+    ios)
+      "$DEVICE_ROOT/scripts/qa/build-ios-sim.sh"
+      app="$(find "$IOS_APP_DIR" -maxdepth 1 -name '*.app' -type d | sort | sed -n 1p)"
+      [ -n "$app" ] || device_die "build-ios-sim.sh produced no .app."
+      ;;
+    android)
+      "$DEVICE_ROOT/scripts/qa/build-android-apk.sh"
+      app="$APK"
+      [ -f "$app" ] || device_die "build-android-apk.sh produced no APK at $app."
+      ;;
+  esac
+  rm -rf "$CACHE_DIR"
+  mkdir -p "$CACHE_DIR"
+  cp -R "$app" "$CACHE_DIR/"
+  device_log "copied the native build to $CACHE_DIR for the cache"
+}
+
 mode="full"
 cached="$(cached_app || true)"
 if [ "${DEVICE_NATIVE_CACHE:-miss}" = "hit" ] && [ -n "$cached" ]; then
@@ -69,26 +90,21 @@ if [ "${DEVICE_NATIVE_CACHE:-miss}" = "hit" ] && [ -n "$cached" ]; then
       app="$APK"
       ;;
   esac
+  set +e
   "$DEVICE_LIB_DIR/swap-bundle.sh" "$PLATFORM" "$app"
+  swap=$?
+  set -e
+  if [ "$swap" -eq 3 ]; then
+    # The cached binary cannot run this bundle (an asset it lacks, or another Hermes).
+    device_warn "the cached $PLATFORM build cannot take this JS bundle; doing a full native build"
+    mode="full (cache hit refused by swap-bundle)"
+    full_build
+  elif [ "$swap" -ne 0 ]; then
+    device_die "swap-bundle.sh failed (exit $swap)."
+  fi
 else
   [ "${DEVICE_NATIVE_CACHE:-}" = "hit" ] && device_warn "the native cache reported a hit but holds no app; doing a full build"
-  device_log "full native build of the $PLATFORM app against $QA_API_BASE_URL (local seeded API, never staging)"
-  case "$PLATFORM" in
-    ios)
-      "$DEVICE_ROOT/scripts/qa/build-ios-sim.sh"
-      app="$(find "$IOS_APP_DIR" -maxdepth 1 -name '*.app' -type d | sort | sed -n 1p)"
-      [ -n "$app" ] || device_die "build-ios-sim.sh produced no .app."
-      ;;
-    android)
-      "$DEVICE_ROOT/scripts/qa/build-android-apk.sh"
-      app="$APK"
-      [ -f "$app" ] || device_die "build-android-apk.sh produced no APK at $app."
-      ;;
-  esac
-  rm -rf "$CACHE_DIR"
-  mkdir -p "$CACHE_DIR"
-  cp -R "$app" "$CACHE_DIR/"
-  device_log "copied the native build to $CACHE_DIR for the cache"
+  full_build
 fi
 
 seconds=$(( $(date +%s) - started ))

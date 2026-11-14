@@ -11,15 +11,16 @@
 // ID is the file-name prefix: `TR-26e-custom-food` -> `TR-26e`, `W-03b-active-end-of-list`
 // -> `W-03b`.
 //
-// Idempotent and non-destructive. The generator owns no cell that a person or an
-// agent has filled in:
-//   * an existing table is found by its header and its columns are matched by name,
-//     so the column order and wording of the committed file win;
-//   * an existing row (same screen ID and theme) keeps every non-empty cell; only an
-//     empty cell is filled, and only the screenshot and mock columns have defaults;
-//   * a row the profile no longer lists is kept, after the generated rows, and named
-//     on stderr;
-//   * text before and after the table is kept byte for byte.
+// Idempotent and non-destructive. The generator owns no row that exists:
+//   * every table whose header has a screen-ID and a theme column is read (the
+//     committed matrix has two, Trainee and Trainer, with different columns);
+//   * an existing row is never rewritten, `—` placeholders included;
+//   * a missing screen x theme row is appended to its own section's table (the table
+//     that already holds rows with the same ID prefix: TM- rows go to Trainer), built
+//     from that table's columns, `—` for anything not known yet;
+//   * a row the profile no longer lists stays where it is and is named on stderr;
+//   * text outside the tables is kept byte for byte.
+// On the committed docs/qa/W12/parity.md it changes nothing and `--check` exits 0.
 // Running it twice gives the same file.
 //
 // Node built-ins only, like the rest of scripts/qa, so the qa-scripts job runs its
@@ -153,95 +154,119 @@ function formatRow(cells) {
   return `| ${cells.map(escapeCell).join(" | ")} |`;
 }
 
+
+/** A cell nobody has filled: empty or the matrix's `—` placeholder. */
+export function isPlaceholder(cell) {
+  const v = String(cell ?? "").trim();
+  return v === "" || v === "—" || v === "-";
+}
+
 /**
- * Finds the parity table: the first table whose header maps both an id and a theme
- * column. Returns null when there is none.
+ * Every parity table in the file: each table whose header maps both an id and a theme
+ * column (the committed matrix has two, Trainee and Trainer, with different columns).
  */
-export function findTable(lines) {
+export function findTables(lines) {
+  const tables = [];
   for (let i = 0; i + 1 < lines.length; i++) {
     if (!isTableLine(lines[i]) || !isSeparator(lines[i + 1])) continue;
-    const keys = splitRow(lines[i]).map(columnKey);
-    if (!keys.includes("id") || !keys.includes("theme")) continue;
+    const header = splitRow(lines[i]);
+    const keys = header.map(columnKey);
     let end = i + 2;
     while (end < lines.length && isTableLine(lines[end])) end++;
-    return { start: i, end, header: splitRow(lines[i]), separator: lines[i + 1], keys };
+    if (keys.includes("id") && keys.includes("theme")) tables.push({ start: i, end, header, keys });
+    i = end - 1;
   }
-  return null;
+  return tables;
+}
+
+/** The first parity table, for callers that only need one. */
+export function findTable(lines) {
+  return findTables(lines)[0] ?? null;
+}
+
+function prefixOf(id) {
+  return id.split("-")[0];
 }
 
 /**
  * Merges the generated rows into `existing` (the current parity.md text, or "").
- * Returns { text, added, kept, orphans }.
+ *
+ * Existing rows are never rewritten: the generator only appends the screen x theme rows
+ * that are missing, each to the table of its own section (the table already holding rows
+ * with the same ID prefix, e.g. TM- rows to the Trainer table), built from that table's
+ * own columns. Text outside the tables is kept byte for byte. A row the profile no longer
+ * lists stays where it is and is reported. Returns { text, added, kept, orphans }.
  */
 export function mergeParity(existing, screens, options = {}) {
-  const lines = existing ? existing.split("\n") : [];
-  const table = lines.length ? findTable(lines) : null;
-
-  const header = table ? table.header : COLUMNS.map((c) => c.title);
-  const keys = table ? table.keys : COLUMNS.map((c) => c.key);
-  const separator = table ? table.separator : `|${COLUMNS.map(() => "---").join("|")}|`;
-
-  // Existing rows, keyed by "ID theme". A row with a key we cannot read is kept as-is.
-  const existingRows = new Map();
-  const unreadable = [];
-  if (table) {
-    for (const line of lines.slice(table.start + 2, table.end)) {
-      const cells = splitRow(line);
-      const id = cells[keys.indexOf("id")]?.replace(/`/g, "").trim();
-      const theme = cells[keys.indexOf("theme")]?.trim().toLowerCase();
-      if (!id || !theme) {
-        unreadable.push(line);
-        continue;
+  if (!existing) {
+    const header = COLUMNS.map((c) => c.title);
+    const rows = [];
+    for (const screen of screens) {
+      for (const theme of THEMES) {
+        const g = defaultRow(screen, theme, options);
+        rows.push(formatRow(COLUMNS.map((c) => (isPlaceholder(g[c.key]) ? "—" : g[c.key]))));
       }
-      const k = `${id} ${theme}`;
-      if (existingRows.has(k)) throw new Error(`parity table has two rows for ${id} ${theme}`);
-      existingRows.set(k, cells);
     }
+    const sep = `|${COLUMNS.map(() => "---").join("|")}|`;
+    return { text: `${PREAMBLE}${[formatRow(header), sep, ...rows].join("\n")}\n`, added: rows.length, kept: 0, orphans: [] };
   }
 
-  const out = [];
+  const lines = existing.split("\n");
+  let tables = findTables(lines);
+  if (tables.length === 0) {
+    // A file with prose but no table: add one at the end, then merge into it.
+    const header = COLUMNS.map((c) => c.title);
+    lines.push(...(lines.at(-1) === "" ? [] : [""]), formatRow(header), `|${COLUMNS.map(() => "---").join("|")}|`);
+    tables = findTables(lines);
+  }
+
+  const present = new Map(); // "ID theme" -> table index
+  const prefixes = tables.map(() => new Set());
+  tables.forEach((t, ti) => {
+    const idCol = t.keys.indexOf("id");
+    const themeCol = t.keys.indexOf("theme");
+    for (const line of lines.slice(t.start + 2, t.end)) {
+      const cells = splitRow(line);
+      const id = cells[idCol]?.replace(/`/g, "").trim();
+      const theme = cells[themeCol]?.trim().toLowerCase();
+      if (!id || !theme) continue;
+      const k = `${id} ${theme}`;
+      if (present.has(k)) throw new Error(`parity tables have two rows for ${id} ${theme}`);
+      present.set(k, ti);
+      prefixes[ti].add(prefixOf(id));
+    }
+  });
+
+  const additions = tables.map(() => []);
+  const wanted = new Set();
   let added = 0;
-  let kept = 0;
-  const used = new Set();
   for (const screen of screens) {
     for (const theme of THEMES) {
       const k = `${screen.id} ${theme}`;
-      const generated = defaultRow(screen, theme, options);
-      const prior = existingRows.get(k);
-      if (prior) {
-        kept++;
-        used.add(k);
-      } else {
-        added++;
-      }
-      const cells = header.map((_, col) => {
-        const current = prior?.[col] ?? "";
-        if (current !== "") return current;
-        const key = keys[col];
-        return key ? escapeCell(generated[key]) : "";
+      wanted.add(k);
+      if (present.has(k)) continue;
+      let ti = prefixes.findIndex((p) => p.has(prefixOf(screen.id)));
+      if (ti < 0) ti = 0;
+      const g = defaultRow(screen, theme, options);
+      const t = tables[ti];
+      const cells = t.keys.map((key) => {
+        const v = key ? g[key] : "";
+        if (isPlaceholder(v)) return "—";
+        return key === "mock" ? `\`${v}\`` : v;
       });
-      out.push(`| ${cells.join(" | ")} |`);
+      additions[ti].push(formatRow(cells));
+      added++;
     }
   }
-  const orphans = [];
-  for (const [k, cells] of existingRows) {
-    if (used.has(k)) continue;
-    orphans.push(k);
-    out.push(`| ${cells.join(" | ")} |`);
-  }
-  out.push(...unreadable);
 
-  const tableLines = [table ? lines[table.start] : formatRow(header), separator, ...out];
-  let text;
-  if (table) {
-    text = [...lines.slice(0, table.start), ...tableLines, ...lines.slice(table.end)].join("\n");
-  } else if (existing) {
-    text = `${existing.replace(/\n*$/, "\n\n")}${tableLines.join("\n")}\n`;
-  } else {
-    text = `${PREAMBLE}${tableLines.join("\n")}\n`;
+  // Insert from the last table up, so earlier indices stay valid.
+  for (let ti = tables.length - 1; ti >= 0; ti--) {
+    if (additions[ti].length) lines.splice(tables[ti].end, 0, ...additions[ti]);
   }
-  return { text, added, kept, orphans };
+  const orphans = [...present.keys()].filter((k) => !wanted.has(k));
+  return { text: lines.join("\n"), added, kept: present.size - orphans.length, orphans };
 }
+
 
 function parseArgs(argv) {
   const args = { check: false, stdout: false };

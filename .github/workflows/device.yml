@@ -29,7 +29,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Optional: the branch, tag or SHA whose app to build (default: the branch the workflow runs from). The harness itself always comes from the workflow's own commit."
+        description: "Optional: the branch, tag or SHA whose app to build (default: the branch the workflow runs from). scripts/qa comes from the workflow's commit; Maestro flows from this ref, plus any harness flow it lacks."
         type: string
         default: ""
       platforms:
@@ -137,7 +137,20 @@ jobs:
           APP_REF: ${{ inputs.ref }}
         run: |
           git fetch --no-tags --depth=1 origin "$HARNESS_SHA"
-          git checkout "$HARNESS_SHA" -- scripts/qa apps/mobile/.maestro/common apps/mobile/.maestro/device packages/config/vitest
+          # The harness always comes from this commit.
+          git checkout "$HARNESS_SHA" -- scripts/qa
+          # Flows: the app ref's own files win (a task may change a subflow, e.g. a v3
+          # sign-in); harness files are added only where the app ref has none, so a branch
+          # that predates a harness flow (Z12-33's and device/z12-33) still gets it.
+          for dir in apps/mobile/.maestro/common apps/mobile/.maestro/device; do
+            git ls-tree -r --name-only "$HARNESS_SHA" -- "$dir" | while IFS= read -r f; do
+              if [ ! -e "$f" ]; then
+                mkdir -p "$(dirname "$f")"
+                git show "$HARNESS_SHA:$f" > "$f"
+                echo "added from the harness: $f"
+              fi
+            done
+          done
           echo "app: $(git rev-parse HEAD) ($APP_REF); harness: $HARNESS_SHA"
           git status --short | sed -n '1,40p'
 
@@ -322,7 +335,20 @@ jobs:
           APP_REF: ${{ inputs.ref }}
         run: |
           git fetch --no-tags --depth=1 origin "$HARNESS_SHA"
-          git checkout "$HARNESS_SHA" -- scripts/qa apps/mobile/.maestro/common apps/mobile/.maestro/device packages/config/vitest
+          # The harness always comes from this commit.
+          git checkout "$HARNESS_SHA" -- scripts/qa
+          # Flows: the app ref's own files win (a task may change a subflow, e.g. a v3
+          # sign-in); harness files are added only where the app ref has none, so a branch
+          # that predates a harness flow (Z12-33's and device/z12-33) still gets it.
+          for dir in apps/mobile/.maestro/common apps/mobile/.maestro/device; do
+            git ls-tree -r --name-only "$HARNESS_SHA" -- "$dir" | while IFS= read -r f; do
+              if [ ! -e "$f" ]; then
+                mkdir -p "$(dirname "$f")"
+                git show "$HARNESS_SHA:$f" > "$f"
+                echo "added from the harness: $f"
+              fi
+            done
+          done
           echo "app: $(git rev-parse HEAD) ($APP_REF); harness: $HARNESS_SHA"
           git status --short | sed -n '1,40p'
 

@@ -202,7 +202,7 @@ function gateDir({ junit = { light: JUNIT_PASS, dark: JUNIT_PASS }, exit = { lig
     write(path.join(dir, t, "maestro-exit"), `${exit[t]}\n`);
   }
   if (scan) write(path.join(dir, "scan.json"), JSON.stringify(scan));
-  write(path.join(dir, "flows.txt"), "/r/apps/mobile/.maestro/flows/trainee/today.yaml\n");
+  write(path.join(dir, "flows.txt"), "/r/apps/mobile/.maestro/flows/trainee/today.yaml\n/r/apps/mobile/.maestro/flows/trainer/clients.yaml\n");
   write(path.join(dir, "extras/push.json"), JSON.stringify({ method: "simctl-push", note: "n" }));
   return dir;
 }
@@ -210,7 +210,7 @@ function gateDir({ junit = { light: JUNIT_PASS, dark: JUNIT_PASS }, exit = { lig
 test("the gate passes only when every theme's flows pass and the log is clean", () => {
   const s = buildGateSummary({ dir: gateDir(), platform: "ios" });
   assert.equal(s.status, "pass");
-  assert.deepEqual(s.flows, ["flows/trainee/today.yaml"]);
+  assert.deepEqual(s.flows, ["flows/trainee/today.yaml", "flows/trainer/clients.yaml"]);
   assert.match(toMarkdown(s), /Device gate · ios · PASS/);
   assert.match(toMarkdown(s), /push: simctl-push/);
 });
@@ -237,15 +237,25 @@ test("a failed flow, a missing report, a non-zero exit or a dirty log fails the 
   assert.deepEqual(noScan.reasons, ["no device-log scan"]);
 });
 
+const one = (body) => `<?xml version="1.0"?><testsuites><testsuite name="s" tests="1">${body}</testsuite></testsuites>`;
+
 test("flows run one at a time write one report each; a missing report fails the theme", () => {
   const dir = gateDir({ junit: {}, exit: { light: 0 } });
   write(path.join(dir, "flows.txt"), "a.yaml\nb.yaml\nc.yaml\n");
-  write(path.join(dir, "light/junit-01.xml"), JUNIT_PASS);
-  write(path.join(dir, "light/junit-02.xml"), JUNIT_FAIL);
+  write(path.join(dir, "light/junit-01.xml"), one('<testcase id="a" name="A" time="1"/>'));
+  write(path.join(dir, "light/junit-02.xml"), one('<testcase id="b" name="B" time="1"><failure message="boom"/></testcase>'));
   const s = buildGateSummary({ dir, platform: "android" });
-  assert.equal(s.themes[0].total, 4);
+  assert.equal(s.themes[0].total, 2);
   assert.equal(s.themes[0].failed, 1);
-  assert.deepEqual(s.reasons, ["light: 1 of 3 flows wrote no JUnit report", "light: 1 of 4 flows failed"]);
+  assert.deepEqual(s.reasons, ["light: 1 of 3 flows wrote no JUnit report", "light: 1 of 2 flows failed"]);
+});
+
+test("a skipped flow, or fewer results than selected flows, fails the gate", () => {
+  const skipped = gateDir({ junit: { light: one('<testcase id="a" name="A" time="0"><skipped/></testcase>') }, exit: { light: 0 } });
+  write(path.join(skipped, "flows.txt"), "a.yaml\n");
+  assert.deepEqual(buildGateSummary({ dir: skipped, platform: "ios" }).reasons, ["light: 1 flow(s) skipped (a skipped flow proves nothing)"]);
+  const short = gateDir({ junit: { light: one('<testcase id="a" name="A" time="1"/>') }, exit: { light: 0 } });
+  assert.deepEqual(buildGateSummary({ dir: short, platform: "ios" }).reasons, ["light: 1 flow results for 2 selected flows"]);
 });
 
 test("run-gate runs device-offline flows one at a time, offline, and the Z12-33 check is tagged for it", () => {
@@ -311,7 +321,8 @@ test("flows resolve by tag or glob, roles narrow them, and common/ is never sele
   assert.deepEqual(rel(selectFlows({ flows: "smoke", roles: "trainer", root })), ["flows/trainer/b.yaml"]);
   assert.deepEqual(rel(selectFlows({ flows: "flows/v3/F0*.yaml", root })), ["flows/v3/F08-custom-food.yaml"]);
   assert.deepEqual(rel(selectFlows({ flows: "**/*.yaml", root })), ["flows/auth/a.yaml", "flows/trainer/b.yaml", "flows/v3/F08-custom-food.yaml"]);
-  assert.deepEqual(selectFlows({ flows: "nope", root }), []);
+  assert.throws(() => selectFlows({ flows: "nope", root }), /tag "nope" matches no flow/);
+  assert.throws(() => selectFlows({ flows: "trainer,nope", root }), /tag "nope" matches no flow/, "one bad tag in a list fails");
   assert.deepEqual(rel(selectFlows({ flows: "trainer, device", root })), ["flows/trainer/b.yaml", "flows/v3/F08-custom-food.yaml"], "a tag list is the union");
   assert.ok(globToRegExp("flows/*.yaml").test("flows/a.yaml"));
   assert.ok(!globToRegExp("flows/*.yaml").test("flows/x/a.yaml"));
@@ -504,7 +515,9 @@ test("device.yml: dispatch plus harness-only pull_request paths, never cancels, 
   for (const input of ["ref", "platforms", "themes", "flows", "roles"]) assert.match(yml, new RegExp(`^ {6}${input}:$`, "m"));
   assert.match(yml, /DEVICE_FLOWS: \$\{\{ inputs\.flows \|\| \(github\.event_name == 'pull_request' && 'smoke,z12-33'\) \|\| 'smoke' \}\}/);
   assert.equal((yml.match(/ref: \$\{\{ inputs\.ref \|\| '' \}\}/g) ?? []).length, 2, "both device jobs build the requested ref");
-  assert.equal((yml.match(/git checkout "\$HARNESS_SHA" -- scripts\/qa /g) ?? []).length, 2, "and overlay the harness from the workflow's commit");
+  assert.equal((yml.match(/git checkout "\$HARNESS_SHA" -- scripts\/qa$/gm) ?? []).length, 2, "and overlay the harness scripts from the workflow's commit");
+  assert.equal((yml.match(/if \[ ! -e "\$f" \]; then/g) ?? []).length, 2, "but add harness flows only where the app ref has none");
+  assert.doesNotMatch(yml, /git checkout "\$HARNESS_SHA" -- [^\n]*\.maestro/, "the app ref's own flows are never replaced");
   assert.doesNotMatch(yml, /secrets\./, "no secret is read");
   assert.doesNotMatch(yml, /api-staging|--remote|wrangler deploy|eas (build|submit)/);
   assert.doesNotMatch(yml, /^\s*concurrency:|cancel-in-progress/m, "no run is ever cancelled");

@@ -71,10 +71,10 @@ patch_ios_logging() {
   local delegate
   delegate="$(ios_app_dir)/AppDelegate.mm"
   if [ ! -f "$delegate" ]; then
-    # Expo SDK 52 generates AppDelegate.mm. A Swift AppDelegate (a later SDK) needs
-    # its own patch; until then the gate still sees JS errors, not warnings.
-    device_warn "no AppDelegate.mm under $NATIVE_DIR; JS warnings will not carry a level in the iOS log."
-    return 0
+    # Expo SDK 52 generates AppDelegate.mm. Without the hook the iOS gate would stop
+    # seeing console.warn, so a missing file (a Swift AppDelegate after an SDK upgrade)
+    # fails the build until this patch learns the new file.
+    device_die "no AppDelegate.mm at $delegate; the iOS log patch cannot be applied (a Swift AppDelegate needs its own patch)."
   fi
   if grep -Fq "$GATE_MARKER" "$delegate"; then
     device_log "AppDelegate.mm already patched"
