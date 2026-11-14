@@ -11,7 +11,7 @@
 #                       tag such as smoke or device, or path globs) and roles. It only
 #                       appears in the Actions tab once this file is on the default branch.
 #   pull_request        ONLY when the harness itself changes (scripts/qa/device/**, this
-#                       file, apps/mobile/.maestro/common/**), so the harness tests itself
+#                       file, apps/mobile/.maestro/common/** and device/**), so the harness tests itself
 #                       without running on every mobile PR. Defaults: both platforms,
 #                       both themes, the `smoke` flows, extras on.
 #
@@ -60,6 +60,7 @@ on:
       - "scripts/qa/device/**"
       - ".github/workflows/device.yml"
       - "apps/mobile/.maestro/common/**"
+      - "apps/mobile/.maestro/device/**"
 
 permissions:
   contents: read

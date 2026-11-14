@@ -105,6 +105,36 @@ MAESTRO_ENV=(
   -e "DEVICE_PLATFORM=$PLATFORM"
 )
 
+# run_maestro <theme dir> <junit file> <theme> <flow>... ; appends to <theme dir>/maestro.log
+run_maestro() {
+  local dir="$1" junit="$2" theme="$3"
+  shift 3
+  (
+    cd "$dir" && "${MAESTRO[@]}" test \
+      "${MAESTRO_ENV[@]}" -e "DEVICE_THEME=$theme" \
+      --format junit --output "$junit" \
+      --test-output-dir "$dir/maestro" \
+      "$@"
+  ) >>"$dir/maestro.log" 2>&1
+  local s=$?
+  # Older Maestro builds ignore --output and write ./report.xml.
+  if [ ! -f "$junit" ] && [ -f "$dir/report.xml" ]; then mv "$dir/report.xml" "$junit"; fi
+  return "$s"
+}
+
+# A flow tagged device-offline runs with the device offline (network.sh).
+is_offline_flow() {
+  sed -n '1,/^---/p' "$1" | grep -Eq '^[[:space:]]*-[[:space:]]*device-offline[[:space:]]*$|^tags:.*device-offline'
+}
+
+# Any device-offline flow switches the run to one Maestro invocation per flow, so the
+# network can change between flows. Flows then share the app's state in path order.
+SEQUENTIAL=0
+for f in "${FLOW_FILES[@]}"; do
+  if is_offline_flow "$f"; then SEQUENTIAL=1; fi
+done
+[ "$SEQUENTIAL" = 1 ] && device_log "a device-offline flow is selected: running the flows one at a time, in order"
+
 launch_app() {
   case "$PLATFORM" in
     ios) xcrun simctl launch "$UDID" "$DEVICE_APP_ID" >/dev/null 2>&1 || true ;;
@@ -126,17 +156,31 @@ for theme in $THEMES; do
     continue
   fi
   device_log "theme $theme: running ${#FLOW_FILES[@]} flow(s)"
-  (
-    cd "$dir" && "${MAESTRO[@]}" test \
-      "${MAESTRO_ENV[@]}" -e "DEVICE_THEME=$theme" \
-      --format junit --output "$dir/junit.xml" \
-      --test-output-dir "$dir/maestro" \
-      "${FLOW_FILES[@]}"
-  ) >"$dir/maestro.log" 2>&1
-  status=$?
+  : >"$dir/maestro.log"
+  if [ "$SEQUENTIAL" = 1 ]; then
+    # One invocation per flow, in path order; a device-offline flow runs offline.
+    status=0
+    n=0
+    for flow in "${FLOW_FILES[@]}"; do
+      n=$((n + 1))
+      offline=0
+      if is_offline_flow "$flow"; then
+        offline=1
+        "$DEVICE_LIB_DIR/network.sh" "$PLATFORM" offline >>"$dir/maestro.log" 2>&1 || device_warn "could not go offline before $(basename "$flow")"
+      fi
+      run_maestro "$dir" "$dir/junit-$(printf '%02d' "$n").xml" "$theme" "$flow"
+      s=$?
+      [ "$s" -ne 0 ] && status=$s
+      if [ "$offline" = 1 ]; then
+        "$DEVICE_LIB_DIR/network.sh" "$PLATFORM" online >>"$dir/maestro.log" 2>&1 || device_warn "could not come back online after $(basename "$flow")"
+      fi
+      device_log "theme $theme: $(basename "$flow")$([ "$offline" = 1 ] && echo " (offline)") exited $s"
+    done
+  else
+    run_maestro "$dir" "$dir/junit.xml" "$theme" "${FLOW_FILES[@]}"
+    status=$?
+  fi
   echo "$status" >"$dir/maestro-exit"
-  # Older Maestro builds ignore --output and write ./report.xml.
-  if [ ! -f "$dir/junit.xml" ] && [ -f "$dir/report.xml" ]; then mv "$dir/report.xml" "$dir/junit.xml"; fi
   device_log "theme $theme: maestro exited $status"
   # Maestro can echo -e values. The only one that is not an email is the demo password,
   # which is public, but it is masked anyway before the log is uploaded.

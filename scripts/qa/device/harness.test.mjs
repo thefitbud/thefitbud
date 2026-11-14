@@ -217,6 +217,35 @@ test("a failed flow, a missing report, a non-zero exit or a dirty log fails the 
   assert.deepEqual(noScan.reasons, ["no device-log scan"]);
 });
 
+test("flows run one at a time write one report each; a missing report fails the theme", () => {
+  const dir = gateDir({ junit: {}, exit: { light: 0 } });
+  write(path.join(dir, "flows.txt"), "a.yaml\nb.yaml\nc.yaml\n");
+  write(path.join(dir, "light/junit-01.xml"), JUNIT_PASS);
+  write(path.join(dir, "light/junit-02.xml"), JUNIT_FAIL);
+  const s = buildGateSummary({ dir, platform: "android" });
+  assert.equal(s.themes[0].total, 4);
+  assert.equal(s.themes[0].failed, 1);
+  assert.deepEqual(s.reasons, ["light: 1 of 3 flows wrote no JUnit report", "light: 1 of 4 flows failed"]);
+});
+
+test("run-gate runs device-offline flows one at a time, offline, and the Z12-33 check is tagged for it", () => {
+  const gate = fs.readFileSync(path.join(here, "run-gate.sh"), "utf8");
+  assert.match(gate, /is_offline_flow "\$flow"/);
+  assert.match(gate, /network\.sh" "\$PLATFORM" offline/);
+  assert.match(gate, /network\.sh" "\$PLATFORM" online/);
+  const dirZ = path.join(repo, "apps/mobile/.maestro/device/z12-33");
+  const files = fs.readdirSync(dirZ).sort();
+  assert.deepEqual(files, ["1-two-trainers.yaml", "2-offline-priya.yaml", "3-rahul-again.yaml", "4-offline-rahul.yaml"]);
+  const offline = files.filter((f) => flowTags(fs.readFileSync(path.join(dirZ, f), "utf8")).includes("device-offline"));
+  assert.deepEqual(offline, ["2-offline-priya.yaml", "4-offline-rahul.yaml"]);
+  const sel = selectFlows({ flows: "z12-33" }).map((f) => path.basename(f));
+  assert.deepEqual(sel, files);
+  // Only the first file starts from a clean install; the rest continue its state.
+  for (const f of files.slice(1)) {
+    assert.match(fs.readFileSync(path.join(dirZ, f), "utf8"), /- launchApp:\n {4}stopApp: false\n/, f);
+  }
+});
+
 // ---------- push-payload ----------
 
 const contractsBuilt = fs.existsSync(path.join(repo, "packages/contracts/dist/index.js"));
@@ -382,7 +411,7 @@ test("device.yml: dispatch plus harness-only pull_request paths, never cancels, 
   assert.match(on, /^ {2}workflow_dispatch:/m);
   assert.ok(
     on.endsWith(
-      '  pull_request:\n    paths:\n      - "scripts/qa/device/**"\n      - ".github/workflows/device.yml"\n      - "apps/mobile/.maestro/common/**"',
+      '  pull_request:\n    paths:\n      - "scripts/qa/device/**"\n      - ".github/workflows/device.yml"\n      - "apps/mobile/.maestro/common/**"\n      - "apps/mobile/.maestro/device/**"',
     ),
     "pull_request runs only for the harness's own paths",
   );

@@ -5,7 +5,8 @@
 //   node scripts/qa/device/select-flows.mjs --flows <tag | glob[,glob...]> [--roles trainee,trainer,dual]
 //
 //   flows  a Maestro tag (letters, digits, - and _; e.g. smoke, full, device, trainee):
-//          every flow under apps/mobile/.maestro/flows/ whose `tags:` include it.
+//          every flow under apps/mobile/.maestro/flows/ or device/ whose `tags:` include
+//          it (device/ holds task-specific gate flows the nightly suite never collects).
 //          Anything else is one or more comma-separated path globs relative to
 //          apps/mobile/.maestro (`*` stays inside a directory, `**` crosses them), e.g.
 //          flows/trainee/today.yaml or flows/v3/F0*.yaml.
@@ -68,7 +69,7 @@ export function selectFlows({ flows, roles = "", root = MAESTRO_DIR }) {
     .map((f) => ({ ...f, tags: flowTags(fs.readFileSync(f.file, "utf8")) }));
   let picked;
   if (/^[A-Za-z0-9_-]+$/.test(spec)) {
-    picked = all.filter((f) => f.rel.startsWith("flows/") && f.tags.includes(spec));
+    picked = all.filter((f) => (f.rel.startsWith("flows/") || f.rel.startsWith("device/")) && f.tags.includes(spec));
   } else {
     const globs = spec.split(",").map((g) => g.trim()).filter(Boolean).map(globToRegExp);
     picked = all.filter((f) => globs.some((g) => g.test(f.rel)));

@@ -31,14 +31,15 @@ gh workflow run device.yml --repo thefitbud/thefitbud --ref <branch> \
 | `android_api` | an API level | `36` | the emulator image, `system-images;android-<n>;google_apis;x86_64` |
 
 The workflow also runs on a pull request, **only** when the harness itself changes
-(`scripts/qa/device/**`, `device.yml`, `apps/mobile/.maestro/common/**`), with the
+(`scripts/qa/device/**`, `device.yml`, `apps/mobile/.maestro/common/**` and
+`apps/mobile/.maestro/device/**`), with the
 defaults above. It never runs on other mobile PRs, it is not a required check and must
 not become one, it reads no secret, and it never cancels a run (no concurrency group).
 
 ## What a run does
 
-Per platform (jobs `device-android`, `device-ios`), after `device-harness-tests` style
-unit tests run in their own job:
+Per platform (jobs `device-android` and `device-ios`; the harness's unit tests run in
+their own job, `device-harness-tests`):
 
 1. **Local seeded API** (`local-api.sh start`, in the background while the app builds):
    `pnpm db:reset` (or `pnpm db:reseed` once Z12-34 adds it, with `DEVICE_DB=reseed`),
@@ -90,6 +91,24 @@ unit tests run in their own job:
 | 4. screenshots per mock ID, both themes, both platforms; parity rows | `<screen ID>-<theme>-<platform>.png` in the `device-<platform>` artifact (`shots/`), `copy-shots.sh` into `docs/qa/<task>/` or `docs/qa/W12/shots/`; `parity-gen.mjs` for the rows |
 | 5. lock-screen, push, offline steps done and evidenced | `lockscreen-tap.sh`, `push.sh`, `network.sh`; results under `<platform>/extras/` and the screenshots |
 | 6. what only a phone can prove goes on Firoz's checklist | see "Not covered by a simulator" below |
+
+## Flows that need the device offline
+
+Tag a flow `device-offline` and the harness runs it with the device offline. When any
+selected flow carries that tag, the run switches to one Maestro invocation per flow, in
+path order (`junit-01.xml`, `junit-02.xml` … per theme): `network.sh <platform> offline`
+before a `device-offline` flow, `online` after it. The flows then share the app's state,
+so only the first one should start with `launchApp: clearState: true`; the others use
+`launchApp: stopApp: false` to bring the running app to the front.
+
+Task-specific gate flows live in `apps/mobile/.maestro/device/<task>/`, outside the
+nightly suite's `flows/**`, and are selected by tag or glob.
+
+## Task checks you can dispatch
+
+| Task | Dispatch | What it proves |
+|---|---|---|
+| Z12-33 (trainer cache late-write guard) | `--ref claude/Z12-33-cache-late-write -f flows=z12-33 -f platforms=both` (that branch needs this harness: merge `main` into it once Z12-35 lands) | `device/z12-33/`: Rahul signs in, loads Attention, Clients and a client, pulls to refresh and signs out; Priya signs in on the same install and sees none of Rahul's clients online or offline; Rahul signs back in and sees none of Priya's offline. Screenshots `shots/flows/rahul-*`, `priya-*`. One departure from docs/qa/Z12-33 step 8: Attention is the landing tab, so it loads online as Rahul signs in, before the device can go offline |
 
 ## Offline method per platform
 

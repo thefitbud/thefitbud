@@ -1,0 +1,39 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-33 Rahul signs back in (step 8, online part)
+tags:
+  - device
+  - trainer
+  - z12-33
+env:
+  PRIYA_CLIENT: Lakshmi Iyer
+  PRIYA_OTHER_CLIENT: Karan Mehra
+---
+# Z12-33 step 8, online part: back online, Priya signs out, Rahul signs in again on
+# the same install. Continues from 2-offline-priya.yaml.
+- launchApp:
+    stopApp: false
+- tapOn: "More"
+- scrollUntilVisible:
+    element: "Sign out"
+    timeout: 20000
+- tapOn: "Sign out"
+- extendedWaitUntil:
+    visible: "Sign out of FitBud\\?"
+    timeout: 10000
+- tapOn:
+    text: "Sign out"
+    below: "Sign out of FitBud\\?"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 20000
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading.*"
+    timeout: 30000
+- assertNotVisible: ".*${PRIYA_CLIENT}.*"
+- assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
+- takeScreenshot: rahul-again-attention
+- runFlow: ../../common/assert-no-crash.yaml

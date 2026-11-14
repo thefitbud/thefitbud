@@ -1,0 +1,105 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-33 two trainers on one phone (steps 1-6)
+tags:
+  - device
+  - trainer
+  - z12-33
+env:
+  # Local demo seed (docs/LOCAL_TESTING.md). The device gate passes QA_TRAINER_EMAIL and
+  # QA_PASSWORD; the rest are fixed by the seed.
+  SECOND_TRAINER_EMAIL: priya.coach@demo.fitbud.test
+  RAHUL_CLIENT: Rohan Mehta
+  RAHUL_OTHER_CLIENT: Aarav Shah
+  PRIYA_CLIENT: Lakshmi Iyer
+---
+# Z12-33 device check (docs/qa/Z12-33/README.md), steps 1-6, through the Z12-35 harness.
+# Run by dispatch: flows=device/z12-33/*.yaml. The files run in order, one Maestro
+# invocation each; the two tagged device-offline run with the device offline
+# (scripts/qa/device/README.md, "Flows that need the device offline").
+#
+# Step 1: fresh install state.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+# Step 2: Rahul signs in; a single-role trainer lands on Attention ("Needs you").
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+# Step 3: Attention, Clients and one client, each loaded.
+- extendedWaitUntil:
+    visible: ".*${RAHUL_CLIENT}.*"
+    timeout: 30000
+- takeScreenshot: rahul-attention
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ".*${RAHUL_CLIENT}.*"
+    timeout: 30000
+- assertVisible: ".*${RAHUL_OTHER_CLIENT}.*"
+- takeScreenshot: rahul-clients
+- tapOn: ".*${RAHUL_CLIENT}.*"
+- extendedWaitUntil:
+    visible: "This week"
+    timeout: 30000
+- takeScreenshot: rahul-client
+- runFlow: ../../common/assert-no-crash.yaml
+- scrollUntilVisible:
+    element: "‹ Clients"
+    direction: UP
+    timeout: 20000
+- tapOn: "‹ Clients"
+# Step 4: pull to refresh on Attention and sign out while it may still be loading (the
+# late-write path; if the refresh is too fast to catch, the rest still holds).
+- tapOn: "Attention"
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 80%"
+- tapOn: "More"
+- scrollUntilVisible:
+    element: "Sign out"
+    timeout: 20000
+- tapOn: "Sign out"
+- extendedWaitUntil:
+    visible: "Sign out of FitBud\\?"
+    timeout: 10000
+- tapOn:
+    text: "Sign out"
+    below: "Sign out of FitBud\\?"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 20000
+# Step 5: Priya signs in on the same install.
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${SECOND_TRAINER_EMAIL}
+# Step 6: nothing of Rahul's on Attention, Clients or a client.
+- extendedWaitUntil:
+    notVisible: ".*Loading.*"
+    timeout: 30000
+- assertNotVisible: ".*${RAHUL_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
+- takeScreenshot: priya-attention
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ".*${PRIYA_CLIENT}.*"
+    timeout: 30000
+- assertNotVisible: ".*${RAHUL_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
+- takeScreenshot: priya-clients
+- tapOn: ".*${PRIYA_CLIENT}.*"
+- extendedWaitUntil:
+    visible: "This week"
+    timeout: 30000
+- assertNotVisible: ".*${RAHUL_CLIENT}.*"
+- takeScreenshot: priya-client
+- runFlow: ../../common/assert-no-crash.yaml
+- scrollUntilVisible:
+    element: "‹ Clients"
+    direction: UP
+    timeout: 20000
+- tapOn: "‹ Clients"

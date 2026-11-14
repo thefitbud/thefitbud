@@ -28,26 +28,41 @@ function readJson(file) {
   }
 }
 
-export function themeResult(dir, theme) {
-  const junitFile = path.join(dir, theme, "junit.xml");
-  const exitFile = path.join(dir, theme, "maestro-exit");
+/**
+ * One theme's Maestro result: junit.xml, or junit-01.xml, junit-02.xml ... when the
+ * flows ran one at a time (a device-offline flow was selected). With one report per
+ * flow, `expectedReports` (the number of selected flows) catches a flow whose run
+ * died before it wrote one.
+ */
+export function themeResult(dir, theme, expectedReports = null) {
+  const themeDir = path.join(dir, theme);
+  const exitFile = path.join(themeDir, "maestro-exit");
   const exit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : null;
   const r = { theme, maestroExit: exit, total: 0, passed: 0, failed: 0, failures: [], error: null };
-  if (!fs.existsSync(junitFile)) {
+  const reports = fs.existsSync(themeDir)
+    ? fs.readdirSync(themeDir).filter((f) => /^junit(-\d+)?\.xml$/.test(f)).sort()
+    : [];
+  if (reports.length === 0) {
     r.error = "no JUnit report (Maestro did not finish)";
     return r;
   }
-  try {
-    const { cases } = parseJUnit(fs.readFileSync(junitFile, "utf8"), `${theme}/junit.xml`);
-    r.total = cases.length;
-    for (const c of cases) {
-      if (c.status === "fail") {
-        r.failed++;
-        r.failures.push({ flow: c.name, message: c.message.split("\n")[0].slice(0, 300) });
-      } else if (c.status === "pass") r.passed++;
+  const perFlow = reports.some((f) => f !== "junit.xml");
+  if (perFlow && expectedReports !== null && reports.length < expectedReports) {
+    r.error = `${expectedReports - reports.length} of ${expectedReports} flows wrote no JUnit report`;
+  }
+  for (const report of reports) {
+    try {
+      const { cases } = parseJUnit(fs.readFileSync(path.join(themeDir, report), "utf8"), `${theme}/${report}`);
+      r.total += cases.length;
+      for (const c of cases) {
+        if (c.status === "fail") {
+          r.failed++;
+          r.failures.push({ flow: c.name, message: c.message.split("\n")[0].slice(0, 300) });
+        } else if (c.status === "pass") r.passed++;
+      }
+    } catch (err) {
+      r.error = r.error ? `${r.error}; ${err.message}` : err.message;
     }
-  } catch (err) {
-    r.error = err.message;
   }
   return r;
 }
@@ -57,15 +72,15 @@ export function buildGateSummary({ dir, platform }) {
     .readdirSync(dir)
     .filter((d) => ["light", "dark"].includes(d) && fs.statSync(path.join(dir, d)).isDirectory())
     .sort((a, b) => (a === "light" ? -1 : b === "light" ? 1 : 0));
-  const results = themes.map((t) => themeResult(dir, t));
+  const flowsFile = path.join(dir, "flows.txt");
+  const flows = fs.existsSync(flowsFile)
+    ? fs.readFileSync(flowsFile, "utf8").split("\n").filter(Boolean).map((f) => f.replace(/^.*apps\/mobile\/\.maestro\//, ""))
+    : [];
+  const results = themes.map((t) => themeResult(dir, t, flows.length || null));
   const scan = readJson(path.join(dir, "scan.json"));
   const extrasDir = path.join(dir, "extras");
   const extras = fs.existsSync(extrasDir)
     ? fs.readdirSync(extrasDir).filter((f) => f.endsWith(".json")).sort().map((f) => ({ file: f, ...readJson(path.join(extrasDir, f)) }))
-    : [];
-  const flowsFile = path.join(dir, "flows.txt");
-  const flows = fs.existsSync(flowsFile)
-    ? fs.readFileSync(flowsFile, "utf8").split("\n").filter(Boolean).map((f) => f.replace(/^.*apps\/mobile\/\.maestro\//, ""))
     : [];
 
   const reasons = [];
