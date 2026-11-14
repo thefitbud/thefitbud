@@ -37,3 +37,12 @@ env:
 - assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
 - takeScreenshot: rahul-again-attention
 - runFlow: ../../common/assert-no-crash.yaml
+# Load Rahul's roster online too, so 4-offline-rahul.yaml has his own snapshot to show
+# offline (and must never show Priya's).
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ".*Rohan Mehta.*"
+    timeout: 30000
+- assertNotVisible: ".*${PRIYA_CLIENT}.*"
+- assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
+- takeScreenshot: rahul-again-clients

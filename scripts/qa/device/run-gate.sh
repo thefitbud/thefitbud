@@ -193,7 +193,15 @@ for theme in $THEMES; do
       fi
       run_maestro "$dir" "$dir/junit-$(printf '%02d' "$n").xml" "$theme" "$flow"
       s=$?
-      [ "$s" -ne 0 ] && status=$s
+      if [ "$s" -ne 0 ]; then
+        status=$s
+        # What was on screen when it failed, in the job log (artifacts are not always at
+        # hand for whoever reads the run).
+        hier="$dir/hierarchy-$(printf '%02d' "$n").json"
+        if "${MAESTRO[@]}" hierarchy >"$hier" 2>/dev/null; then
+          node "$DEVICE_LIB_DIR/find-element.mjs" --format maestro --list "$hier" || true
+        fi
+      fi
       if [ "$offline" = 1 ]; then
         "$DEVICE_LIB_DIR/network.sh" "$PLATFORM" online >>"$dir/maestro.log" 2>&1 || device_warn "could not come back online after $(basename "$flow")"
       fi

@@ -69,6 +69,27 @@ export function parseUiautomator(xml) {
   return out;
 }
 
+/**
+ * Elements from `maestro hierarchy` JSON: a tree of { attributes: { text,
+ * accessibilityText, hintText, bounds: "[x1,y1][x2,y2]" }, children: [...] }.
+ */
+export function parseMaestro(text) {
+  const out = [];
+  const visit = (node) => {
+    if (!node || typeof node !== "object") return;
+    const a = node.attributes ?? {};
+    const b = /\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(a.bounds ?? "");
+    const label = [a.text, a.accessibilityText, a.hintText].filter((v) => typeof v === "string" && v).join(" ");
+    if (b && label) {
+      const [x1, y1, x2, y2] = b.slice(1).map(Number);
+      out.push({ text: label, type: a.class ?? "", package: "", x: x1, y: y1, width: x2 - x1, height: y2 - y1 });
+    }
+    for (const c of node.children ?? []) visit(c);
+  };
+  visit(JSON.parse(text));
+  return out;
+}
+
 /** First element whose text matches; optional type / package filters. */
 export function findElement(elements, { match, type, pkg }) {
   const re = new RegExp(match, "i");
@@ -93,11 +114,12 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (["--format", "--match", "--type", "--package"].includes(a)) args[a.slice(2)] = argv[++i];
+    else if (a === "--list") args.list = true;
     else if (a.startsWith("--")) throw new Error(`unknown argument ${a}`);
     else args.file = a;
   }
-  if (!["idb", "uiautomator"].includes(args.format)) throw new Error("--format must be idb or uiautomator");
-  if (!args.match) throw new Error("--match is required");
+  if (!["idb", "uiautomator", "maestro"].includes(args.format)) throw new Error("--format must be idb, uiautomator or maestro");
+  if (!args.match && !args.list) throw new Error("--match (or --list) is required");
   if (!args.file) throw new Error("a dump file is required");
   return args;
 }
@@ -105,7 +127,13 @@ function parseArgs(argv) {
 export function main(argv) {
   const args = parseArgs(argv);
   const text = fs.readFileSync(args.file, "utf8");
-  const elements = args.format === "idb" ? parseIdb(text) : parseUiautomator(text);
+  const elements =
+    args.format === "idb" ? parseIdb(text) : args.format === "maestro" ? parseMaestro(text) : parseUiautomator(text);
+  if (args.list) {
+    const seen = [...new Set(elements.map((e) => e.text.trim()).filter(Boolean))].slice(0, 40);
+    console.log(`on screen (${elements.length} labelled elements): ${seen.map((t) => JSON.stringify(t.slice(0, 60))).join(", ") || "(none)"}`);
+    return 0;
+  }
   const hit = findElement(elements, { match: args.match, type: args.type, pkg: args.package });
   if (!hit) {
     const seen = [...new Set(elements.map((e) => e.text.trim()).filter(Boolean))].slice(0, 25);

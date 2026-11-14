@@ -8,7 +8,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAllowlist, scanAndroid, scanFiles, scanIos } from "./scan-logs.mjs";
-import { centre, findElement, parseIdb, parseUiautomator } from "./find-element.mjs";
+import { centre, findElement, parseIdb, parseMaestro, parseUiautomator } from "./find-element.mjs";
 import { collect, targetFor } from "./collect-shots.mjs";
 import { buildGateSummary, toMarkdown } from "./gate-summary.mjs";
 import { androidData, buildRouting, iosPayload } from "./push-payload.mjs";
@@ -149,6 +149,24 @@ test("find-element reads a uiautomator dump and skips zero-area nodes", () => {
   const el = findElement(parseUiautomator(xml), { match: "fitbud" });
   assert.deepEqual(centre(el), { x: 540, y: 1000 });
   assert.equal(el.package, "com.android.systemui");
+});
+
+test("find-element reads a maestro hierarchy and lists what is on screen", () => {
+  const tree = JSON.stringify({
+    attributes: {},
+    children: [
+      { attributes: { text: "‹ Clients", bounds: "[16,60][120,104]" }, children: [] },
+      { attributes: { accessibilityText: "Rohan Mehta, slipping", bounds: "[0,200][393,260]" }, children: [{ attributes: { text: "", bounds: "[0,0][1,1]" } }] },
+    ],
+  });
+  const els = parseMaestro(tree);
+  assert.deepEqual(els.map((e) => e.text), ["‹ Clients", "Rohan Mehta, slipping"]);
+  assert.deepEqual(centre(findElement(els, { match: "Rohan" })), { x: 197, y: 230 });
+  const dir = tmp();
+  write(path.join(dir, "h.json"), tree);
+  const r = spawnSync("node", [path.join(here, "find-element.mjs"), "--format", "maestro", "--list", path.join(dir, "h.json")], { encoding: "utf8" });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /on screen \(2 labelled elements\): "‹ Clients", "Rohan Mehta, slipping"/);
 });
 
 // ---------- collect-shots ----------
