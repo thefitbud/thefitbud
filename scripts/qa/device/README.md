@@ -192,7 +192,9 @@ type's label), in Expo's envelope.
 
 Maestro cannot tap the lock screen. `lockscreen-tap.sh` does it:
 
-- **iOS: `idb`** (fb-idb + idb_companion, installed best effort by the workflow):
+- **iOS: `idb`** (fb-idb + idb_companion, installed best effort by the workflow: the
+  Homebrew formula builds only with Xcode 26, so the step builds it with the image's Xcode
+  26 and switches back to 16.4, else falls back to the prebuilt v1.1.8 release binary):
   `idb ui button HOME`, the push, `idb ui button LOCK` (twice if the first press leaves
   the display off), `idb ui describe-all --json` (springboard elements included),
   `find-element.mjs` to locate the entry, `idb ui tap x y`, then `describe-all` again to

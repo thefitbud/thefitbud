@@ -402,11 +402,31 @@ jobs:
         continue-on-error: true
         timeout-minutes: 20
         run: |
+          # The idb-companion formula builds from source and needs Xcode 26 (run
+          # 43616323952), while the app builds with 16.4. Build idb with the newest Xcode
+          # 26 on the image, then switch back whatever happens; if that fails, use the
+          # prebuilt universal binary from idb's GitHub release.
+          trap 'sudo xcode-select --switch "$DEVICE_IOS_XCODE/Contents/Developer"' EXIT
           brew tap facebook/fb
           # Homebrew refuses formulae from a third-party tap until it is trusted.
           brew trust facebook/fb || true
-          brew install idb-companion
+          x26="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -n "$x26" ]; then
+            echo "building idb-companion with $x26"
+            sudo xcode-select --switch "$x26/Contents/Developer"
+            brew install idb-companion || echo "brew install idb-companion failed"
+            sudo xcode-select --switch "$DEVICE_IOS_XCODE/Contents/Developer"
+          fi
+          if ! command -v idb_companion >/dev/null 2>&1; then
+            echo "falling back to the prebuilt idb-companion release"
+            mkdir -p "$RUNNER_TEMP/idbc"
+            curl -fsSL -o "$RUNNER_TEMP/idbc.tar.gz" https://github.com/facebook/idb/releases/download/v1.1.8/idb-companion.universal.tar.gz
+            tar -xzf "$RUNNER_TEMP/idbc.tar.gz" -C "$RUNNER_TEMP/idbc"
+            companion="$(find "$RUNNER_TEMP/idbc" -name idb_companion -type f | sort | sed -n 1p)"
+            [ -n "$companion" ] && echo "$(dirname "$companion")" >> "$GITHUB_PATH"
+          fi
           python -m pip install fb-idb
+          xcodebuild -version
           idb --help >/dev/null && echo "idb installed"
 
       - name: Device gate (iOS simulator)
