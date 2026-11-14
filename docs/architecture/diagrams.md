@@ -830,7 +830,7 @@ flowchart LR
 
 ## D9 · Database ER diagrams (Crow's Foot)
 
-133 foreign keys exist across ~100 tables (`schema.ts`); the diagrams below group them by domain with key columns only. Most owned tables reference `coaching_relationships.id` (28 FKs) or `users.id` (49 FKs) — the ownership paths used for authorization **[C]**.
+133 foreign keys exist across 88 tables (`schema.ts`); the diagrams below group them by domain with key columns only. Most owned tables reference `coaching_relationships.id` (28 FKs) or `users.id` (49 FKs) — the ownership paths used for authorization **[C]**.
 
 ### D9a Identity and relationship core
 

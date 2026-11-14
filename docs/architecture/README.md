@@ -10,7 +10,7 @@ Evidence classes: **Confirmed** = in code/config. **Inferred** = derived logical
 |---|---|
 | BRD / FRD / HLD / LLD | **No such files.** Closest: `docs/spec/00–10*.md` (product rules, flows, API changes), 160+ task specs in `docs/specs/`, batch files `docs/specs/batches/W*.md` (decisions `D-Wn-x`), `docs/spec/{mobile,trainer-web}/*` screen specs. "Technical Architecture" and the guide are Confluence-only (referenced, not in repo). |
 | API specification | Generated OpenAPI served at `/openapi.json` and `/docs` (Scalar); contracts in `packages/contracts` (zod). |
-| DB schema | `apps/api/src/db/schema.ts` (Drizzle, ~100 tables) + `apps/api/drizzle/0001…0041_*.sql`. |
+| DB schema | `apps/api/src/db/schema.ts` (Drizzle, 88 tables) + `apps/api/drizzle/42 files`. |
 | Source code | Full monorepo (pnpm + turbo). |
 | IaC (Terraform/CloudFormation) | **None.** Infra is `wrangler.toml` ×2 (API, trainer-web) plus dashboard-created resources (`docs/runbooks/staging-setup.md`). No Dockerfile/compose. |
 | CI/CD | `.github/workflows/{ci,qa,design-review}.yml`; `apps/mobile/eas.json`; deploy runbooks. |
