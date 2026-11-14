@@ -1,6 +1,6 @@
 # Screen profile — FitBud mobile
 
-Total mobile screens: **180** (trainee 103, trainer 77). Flows: 27. Screens used by at least one flow: 158; reachable-only via tap map (variant/state screens): 22.
+Total mobile screens: **185** (trainee 108, trainer 77). Flows: 28. Screens used by at least one flow: 164; reachable-only via tap map (variant/state screens): 21.
 
 Reference for Fable refinement, then Claude implementation. HTML source: `html/<side>/<id>.html`; scripts in `src/`.
 
@@ -24,13 +24,13 @@ Reference for Fable refinement, then Claude implementation. HTML source: `html/<
 | `TR-06a2-today-scrolled` | today | `png/trainee/TR-06a2-today-scrolled.png` | Today, scrolled: coach note, check-in due, steps | F11 |
 | `TR-06b-today-rest-day` | today | `png/trainee/TR-06b-today-rest-day.png` | Rest day | — (state/variant) |
 | `TR-06c-today-past-day` | today | `png/trainee/TR-06c-today-past-day.png` | Past day, read-only plus late log | F09 |
-| `TR-06d-today-future-day` | today | `png/trainee/TR-06d-today-future-day.png` | Future day preview (plan only) | — (state/variant) |
+| `TR-06d-today-future-day` | today | `png/trainee/TR-06d-today-future-day.png` | Future day preview (plan only) | F29 |
 | `TR-06e-today-offline` | today | `png/trainee/TR-06e-today-offline.png` | Offline, cached, with sync chip | F10 |
 | `TR-06f-today-loading` | today | `png/trainee/TR-06f-today-loading.png` | Loading skeleton | — (state/variant) |
 | `TR-06g-today-refresh-error` | today | `png/trainee/TR-06g-today-refresh-error.png` | Inline refresh error, last good day kept | — (state/variant) |
 | `TR-06h-today-inapp-banner` | today | `png/trainee/TR-06h-today-inapp-banner.png` | In-app banner over Today (coach note) | F13 |
 | `TR-07a-diet-day` | diet | `png/trainee/TR-07a-diet-day.png` | Diet day: ring kept, collapsed meal cards | F07, F09, F10 |
-| `TR-07b-eaten-as-planned-undo` | diet | `png/trainee/TR-07b-eaten-as-planned-undo.png` | Eaten as planned, with Undo | F07, F08 |
+| `TR-07b-eaten-as-planned-undo` | diet | `png/trainee/TR-07b-eaten-as-planned-undo.png` | Eaten as planned, with Undo | F07 |
 | `TR-07c-diet-no-meals-planned` | diet | `png/trainee/TR-07c-diet-no-meals-planned.png` | No meals planned today | — (state/variant) |
 | `TR-07d-diet-offline` | diet | `png/trainee/TR-07d-diet-offline.png` | Offline: logs saved on phone | F10 |
 | `TR-07e-diet-over-budget` | diet | `png/trainee/TR-07e-diet-over-budget.png` | Over the day’s calories | F07 |
@@ -39,6 +39,7 @@ Reference for Fable refinement, then Claude implementation. HTML source: `html/<
 | `TR-07h-delete-log-confirm` | diet | `png/trainee/TR-07h-delete-log-confirm.png` | Delete a meal log confirm | F09 |
 | `TR-07i-diet-load-error` | diet | `png/trainee/TR-07i-diet-load-error.png` | Diet couldn’t load (no cache) | F16 |
 | `TR-07j-planned-meal-detail` | diet | `png/trainee/TR-07j-planned-meal-detail.png` | Planned meal detail (tap a meal not yet logged) | F09 |
+| `TR-07k-diet-future-day` | diet | `png/trainee/TR-07k-diet-future-day.png` | Diet, future day: Rahul’s plan, view only | F29 |
 | `TR-08a-something-different` | diet | `png/trainee/TR-08a-something-different.png` | Something different: choices | F07, F08, F09, F14 |
 | `TR-08b-changed-portion` | diet | `png/trainee/TR-08b-changed-portion.png` | Changed the portion (katori, roti) | F07 |
 | `TR-08c-ate-out` | diet | `png/trainee/TR-08c-ate-out.png` | Ate out: exact kcal only | F07 |
@@ -60,6 +61,7 @@ Reference for Fable refinement, then Claude implementation. HTML source: `html/<
 | `TR-15a-notifications-inbox` | notifications | `png/trainee/TR-15a-notifications-inbox.png` | Notifications inbox | F13 |
 | `TR-15b-notifications-empty` | notifications | `png/trainee/TR-15b-notifications-empty.png` | Notifications empty | F13 |
 | `TR-15c-lockscreen-push` | notifications | `png/trainee/TR-15c-lockscreen-push.png` | Lock-screen push | F13 |
+| `TR-15d-lockscreen-live-activity` | notifications | `png/trainee/TR-15d-lockscreen-live-activity.png` | Lock screen: workout Live Activity, complete, with Log and Open | F13 |
 | `TR-16a-reminders` | more | `png/trainee/TR-16a-reminders.png` | Reminder settings | F15 |
 | `TR-16b-reminders-permission-off` | more | `png/trainee/TR-16b-reminders-permission-off.png` | Reminders: phone notifications off | F15 |
 | `TR-18-ask-coach-sheet` | system | `png/trainee/TR-18-ask-coach-sheet.png` | Ask Rahul sheet (from meal or exercise ⋯) | F14 |
@@ -82,12 +84,15 @@ Reference for Fable refinement, then Claude implementation. HTML source: `html/<
 | `TR-26b-food-search-results-added` | diet | `png/trainee/TR-26b-food-search-results-added.png` | Search results with instant add and the log tray | F08 |
 | `TR-26c-food-detail-katori` | diet | `png/trainee/TR-26c-food-detail-katori.png` | Food detail: amount in katori | F08 |
 | `TR-26d-food-search-empty-offline` | diet | `png/trainee/TR-26d-food-search-empty-offline.png` | Food search: no match, offline index | F08 |
+| `TR-26e-custom-food` | diet | `png/trainee/TR-26e-custom-food.png` | Create a food that isn’t in the list (name, amount, kcal) | F08 |
+| `TR-26f-manual-log-saved` | diet | `png/trainee/TR-26f-manual-log-saved.png` | Manual log saved: Diet shows the meal logged, with a confirmation | F08 |
 | `W-01a-workout-tab-not-started` | workout | `png/trainee/W-01a-workout-tab-not-started.png` | Workout tab, not started | — (state/variant) |
 | `W-01b-workout-tab-in-progress` | workout | `png/trainee/W-01b-workout-tab-in-progress.png` | Workout tab, in progress | — (state/variant) |
 | `W-01c-workout-tab-done` | workout | `png/trainee/W-01c-workout-tab-done.png` | Workout tab, done | F03 |
 | `W-01d-plan-changed-banner` | workout | `png/trainee/W-01d-plan-changed-banner.png` | Plan changed by Rahul (deep link lands on Workout) | F13 |
+| `W-01e-workout-tab-future-day` | workout | `png/trainee/W-01e-workout-tab-future-day.png` | Workout tab, future day: plan preview, no Start | F29 |
 | `W-02-active-start` | workout | `png/trainee/W-02-active-start.png` | Active log, start of session | F03 |
-| `W-03-active-mid` | workout | `png/trainee/W-03-active-mid.png` | Active log, mid-session | F03, F04, F05, F06 |
+| `W-03-active-mid` | workout | `png/trainee/W-03-active-mid.png` | Active log, mid-session | F03, F04, F05, F06, F13 |
 | `W-03b-active-end-of-list` | workout | `png/trainee/W-03b-active-end-of-list.png` | Active log, end of list: add exercise, discard | F03, F04 |
 | `W-04-active-keypad` | workout | `png/trainee/W-04-active-keypad.png` | Compact set keypad, editing kg | F03 |
 | `W-05a-rest-running` | workout | `png/trainee/W-05a-rest-running.png` | Rest running, slim bar | F03, F05 |

@@ -26,6 +26,15 @@ Work done on the box by FitBud UI (Grok Bot), 14 Nov 2026 (IST). Model: Grok Bot
 22. **Text-contrast audit (`textcheck.mjs`) exempts `--ink4`.** Reason: spec §2.3 says `--ink4` is for disabled content only (zero tiles, the resend countdown, unfilled set placeholders).
 23. **PNG compression:** pngquant `--quality=70-95 --speed 3` then oxipng level 2, the same tools as v2.
 
+### W12 additions (14 Nov 2026, IST)
+24. **Future days are view only.** A future day shows the plan with no logging actions and an "Opens on {day}" note (TR-07k, W-01e; TR-06d keeps "Logging opens on the day."). Past days stay loggable as late logs (TR-06c, TR-07f). Decided by FitBud UI, 14 Nov, from Firoz's finding 5.
+25. **Custom food (TR-26e) follows MyFitnessPal's create-food pattern**, trimmed: name, amount, kcal required; macros optional; "Save to my foods" on by default; the coach sees it marked as added by the client. Reason: finding 7, and kcal is all the day ring needs.
+26. **TR-26d: "Ask Rahul to add it" replaced by "Create “Ragi dosa”" and "Log as Ate out".** Reason: the trainee should never be stuck waiting for the coach to log a meal.
+27. **Manual-log confirmation (TR-26f) is a toast plus the updated row and ring**, not a separate success screen. Reason: the user sees the result where it lands; matches the Eaten-as-planned undo toast (TR-07b).
+28. **Live Activity (TR-15d) is a fixed 160 pt tile, each text at most two lines**, with the exercise, set position, last set, target, a Log button and Open. Reason: finding 1 (cut-off tiles) and iOS's Live Activity height limit.
+29. **New flow F29** for the future-day rule, so the device run checks it.
+30. **Priya Sharma renamed Priya Nair** in the trainer mocks to match the W12 seed rename (and avoid two Sharmas next to Aarav Sharma).
+
 ## Left for later
 - Status-tag simplification (spec §11) is still undecided; v3 keeps every v2 tag hue.
 - Exercise pictures and illustrations are still placeholders. The mocks use the iOS frame only, and the dark theme has not been checked on a phone.

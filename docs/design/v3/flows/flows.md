@@ -18,6 +18,7 @@ Nudge = push notification (decided 10 Nov). WhatsApp only for Ask Rahul and Repl
 | Trainee | Progress and weight | F12 |
 | Trainee | Notification deep links incl. Nudge push | F13 |
 | Trainee | Ask Rahul (existing WhatsApp redirect) | F14 |
+| Trainee | Future days view only | F29 |
 | Trainee | Settings, help, sign out | F15 |
 | Trainee | Session expiry, errors, ended coaching | F16 |
 | Karan (dual) | Role select and switch | F17 |
@@ -135,8 +136,10 @@ Sheet: `png/flows/F08.png`
 2. `TR-26a-food-search-default` — Tap: Tap a food
 3. `TR-26c-food-detail-katori` — Tap: Add to evening snack
 4. `TR-26b-food-search-results-added` — Tap: Save
-5. `TR-07b-eaten-as-planned-undo` — System: Logged
-6. `TR-26d-food-search-empty-offline` — Tap: No match → Ate out
+5. `TR-26f-manual-log-saved` — System: Saved: confirmation and logged row
+6. `TR-26d-food-search-empty-offline` — Tap: No match → Create a food
+7. `TR-26e-custom-food` — Tap: Add custom food
+8. `TR-26f-manual-log-saved` — System: Saved
 
 ## F09 · Trainee · Diet: edit, delete, planned meal, locked, late log
 
@@ -194,6 +197,8 @@ Sheet: `png/flows/F13.png`
 5. `TR-15a-notifications-inbox` — Tap: Check-in reply
 6. `TR-14g-checkin-reviewed` — System: Read reply
 7. `TR-15b-notifications-empty` — System: Empty inbox
+8. `TR-15d-lockscreen-live-activity` — Tap: Live Activity on the lock screen: Open
+9. `W-03-active-mid` — System: Back in the workout
 
 ## F14 · Trainee · Ask Rahul (WhatsApp)
 
@@ -360,3 +365,11 @@ Sheet: `png/flows/F28.png`
 8. `TM-15b-coach-logs-workout` — System: Workout
 9. `TM-07f-signout-confirm` — Tap: Sign out
 10. `TR-01a-signin-password` — System: Signed out
+
+## F29 · Trainee · Future days are view only (decided 14 Nov)
+
+Sheet: `png/flows/F29.png`
+
+1. `TR-06d-today-future-day` — System: Today: future day, plan only
+2. `TR-07k-diet-future-day` — System: Diet: plan only, Opens on Mon
+3. `W-01e-workout-tab-future-day` — System: Workout: preview, no Start

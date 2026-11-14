@@ -70,6 +70,6 @@ screen('TR-26c-food-detail-katori','Food detail: amount in katori',f'''<div clas
 screen('TR-26d-food-search-empty-offline','Food search: no match, offline index',f'''<div class="content" style="background:var(--bg-plain);top:0;padding-top:54px;bottom:0">{nav(mealttl,left="Cancel",right='<span class="navbtn dis">Save</span>',sub="Plan 220 kcal")}
 <div class="search" style="color:var(--ink)">{ic("search",18,2,"var(--ink3)")}ragi dosa<span style="margin-left:auto;color:var(--ink4)">{ic("x",16,2.4)}</span></div>
 <div style="margin-top:12px">{banner("Offline. Showing foods saved on your phone.","neutral","wifi-off")}</div>
-<div style="margin-top:60px">{empty("search","No foods match “ragi dosa”","Try a shorter word, like “dosa”. Or log it as Ate out with its kcal.",btn("Log as Ate out","tint",icon="store")+'<div style="margin-top:8px">'+btn("Ask Rahul to add it","textb")+'</div>')}</div></div>''',A)
+<div style="margin-top:60px">{empty("search","No foods match “ragi dosa”","Try a shorter word, like “dosa”. Or create it with its kcal.",btn("Create “Ragi dosa”","tint",icon="plus")+'<div style="margin-top:8px">'+btn("Log as Ate out","textb")+'</div>')}</div></div>''',A)
 screen('TR-07i-diet-load-error','Diet couldn’t load (no cache)',f'''<div class="content">{H()}{week()}<div class="card" style="margin-top:14px;padding:26px 18px">{empty("cloud-off","Couldn’t load your meals","Check your connection. Anything you logged is saved on your phone.",btn("Try again","tint",icon="refresh-cw"))}</div></div>{fade()}{tabbar("Diet")}''',A)
 save_reg()

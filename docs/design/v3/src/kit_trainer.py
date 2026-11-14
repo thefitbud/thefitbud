@@ -9,7 +9,7 @@ C={'Rohan':('RM','var(--av1-bg)','var(--av1-fg)','Rohan Mehta','Fat loss · week
    'Sneha':('SK','var(--av3-bg)','var(--av3-fg)','Sneha Kapoor','Fat loss · week 2'),'Vikram':('VR','var(--av4-bg)','var(--av4-fg)','Vikram Rao','Not started'),
    'Aarav':('AS','var(--av5-bg)','var(--av5-fg)','Aarav Sharma','Fat loss · week 3'),'Deepak':('DN','var(--av6-bg)','var(--av6-fg)','Deepak Nair','Muscle gain · week 8'),
    'Farhan':('FA','var(--fill)','var(--ink2)','Farhan Ali','General fitness · week 5'),'Ishita':('IS','var(--av1-bg)','var(--av1-fg)','Ishita Sen','Fat loss · week 3'),
-   'Priya':('PS','var(--av3-bg)','var(--av3-fg)','Priya Sharma','Fat loss · week 7'),'Neha':('NR','var(--av2-bg)','var(--av2-fg)','Neha Reddy','Strength · week 2'),
+   'Priya':('PN','var(--av3-bg)','var(--av3-fg)','Priya Nair','Fat loss · week 7'),'Neha':('NR','var(--av2-bg)','var(--av2-fg)','Neha Reddy','Strength · week 2'),
    'Kavya':('KM','var(--fill)','var(--ink3)','Kavya Menon','Ended 30 Oct'),'Nikhil':('NJ','var(--fill)','var(--ink3)','Nikhil Joshi','Ended 2 Oct'),'Anita':('AD','var(--fill)','var(--ink3)','Anita Desai','Invite sent 12 Nov')}
 def cav(n,sm=False,size=None):
     i,bg,fg,_,_=C[n]

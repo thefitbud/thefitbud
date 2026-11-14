@@ -2,15 +2,16 @@
 
 | Check | Light | Dark |
 |---|---|---|
-| Screens rendered (trainee + trainer) | 103 + 77 = 180 | 103 + 77 = 180 |
+| Screens rendered (trainee + trainer) | 108 + 77 = 185 | 108 + 77 = 185 |
 | Overflow (`render.mjs`: CLIP, OFFSCREEN, WRAP, OVERLAP) | 0 issues | 0 issues |
 | Contact sheets | 16 | 16 |
 | Text contrast on the live DOM (`textcheck.mjs`, every text leaf vs its background, < 3:1 flagged, `--ink4` exempt) | 0 | 0 |
-| Layout vs v2 (`layoutdiff.mjs`, every element box) | 175 of 180 identical | 175 of 180 identical |
-| Leftover v2 indigo (`scan.py`) | 0 screens (only the TR-15c wallpaper, kept by spec) | 0 screens |
+| Layout vs v2 (`layoutdiff.mjs`, every element box) | 170 of 180 identical (5 new screens have no v2) | 170 of 180 identical |
+| Leftover v2 indigo (`scan.py`) | 0 screens (the TR-15c, TR-15d and TM-13a wallpapers are skipped, kept by spec) | 0 screens |
 
-- **Layout differences** are only the copy fixes: TR-01b (WhatsApp option removed) and TM-04b, TM-04c, TM-04n, TM-04o (one box each: the nudge title text width).
-- **Tap coverage** (light; taps are theme-independent): 180 screens, 1,540 tappables (identical to v2), 0 unresolved; 27 flows, 195 steps, no problems; `locate.mjs` 0 unlocated of 97; `flows/index.md` is byte-identical to v2.
+- **Layout differences** are only the copy fixes: TR-01b (WhatsApp option removed); TM-04b, TM-04c, TM-04n, TM-04o (one box each: the nudge title text width); TR-26d (Create and Ate out buttons, W12); TM-01a2, TM-02a, TM-02f, TM-13b (one box each: "Priya Nair" text width).
+- **Tap coverage** (light; taps are theme-independent): 185 screens, 1,584 tappables, 0 unresolved (TAP GAP 0); 28 flows, 202 steps, no problems; `locate.mjs` 0 unlocated of 100.
+- **W12 re-run (14 Nov, after the 5 new screens and the Priya Nair rename):** overflow 0 in both themes; textcheck 0 for trainee and trainer in both themes (TR-15d's wallpaper text is skipped like TR-15c; the two hits were white lock-screen text measured against the page, not the wallpaper); 16 contact sheets and 16 before/after sheets per theme regenerated; changed PNGs compressed with pngquant + oxipng.
 - **Anchor screens** (TR-06a, W-03, TR-07a, TM-01a, TM-04b) were rendered first in both themes and compared against Firoz's approved renders. The main surface colours match: light `#F4F5F8` / `#FFFFFF`; dark `#0F0F13` / `#1A1A20` / `#26262E`; done row `#11211C` / `#F1FAF5`.
 
 ## Contrast (`python3 src/contrast.py`)

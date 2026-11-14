@@ -12,12 +12,12 @@ Tap coverage = every tappable on the flow's screens resolves to a screen, back, 
 | F05 | Trainee | Exercise detail and rest | 5 | W-03, W-27, W-26, W-05a, W-05b | 18/24/5/0/0/12 | PASS | `png/flows/F05.png` |
 | F06 | Trainee | Interruptions: minimise, kill, pause, offline, discard | 7 | W-03, W-14, W-18, W-19, W-20, TR-19a, W-15 | 38/39/5/1/0/18 | PASS | `png/flows/F06.png` |
 | F07 | Trainee | Diet day: as planned, changed portion, ate out | 6 | TR-07a, TR-07b, TR-08a, TR-08b, TR-08c, TR-07e | 21/38/2/0/0/5 | PASS | `png/flows/F07.png` |
-| F08 | Trainee | Diet: log it myself (search, katori/roti units) | 6 | TR-08a, TR-26a, TR-26c, TR-26b, TR-07b, TR-26d | 25/23/4/0/1/7 | PASS | `png/flows/F08.png` |
+| F08 | Trainee | Diet: log it myself (search, katori/roti units) | 8 | TR-08a, TR-26a, TR-26c, TR-26b, TR-26f, TR-26d, TR-26e | 27/37/5/0/1/7 | PASS | `png/flows/F08.png` |
 | F09 | Trainee | Diet: edit, delete, planned meal, locked, late log | 7 | TR-07a, TR-07g, TR-07h, TR-07j, TR-07f, TR-06c, TR-08a | 41/45/2/0/0/9 | PASS | `png/flows/F09.png` |
 | F10 | Trainee | Offline then sync | 5 | TR-06e, TR-07d, TR-19a, TR-19b, TR-07a | 26/27/1/2/0/3 | PASS | `png/flows/F10.png` |
 | F11 | Trainee | Weekly check-in | 7 | TR-06a2, TR-14a, TR-14b, TR-14c, TR-14d, TR-14e, TR-14f | 17/10/5/0/0/0 | PASS | `png/flows/F11.png` |
 | F12 | Trainee | Progress and weight | 6 | TR-13b, TR-13c, TR-13a, TR-13d, TR-14g, TR-13e | 14/27/3/0/1/4 | PASS | `png/flows/F12.png` |
-| F13 | Trainee | Notifications and deep links (incl. nudge) | 7 | TR-15c, TR-06h, TR-15a, W-01d, TR-14g, TR-15b | 11/12/3/0/0/4 | PASS | `png/flows/F13.png` |
+| F13 | Trainee | Notifications and deep links (incl. nudge) | 9 | TR-15c, TR-06h, TR-15a, W-01d, TR-14g, TR-15b, TR-15d, W-03 | 18/19/4/0/0/8 | PASS | `png/flows/F13.png` |
 | F14 | Trainee | Ask Rahul (WhatsApp) | 4 | W-09, TR-18, TR-08a | 21/17/1/2/0/9 | PASS | `png/flows/F14.png` |
 | F15 | Trainee | Settings, account, help, sign out | 11 | TR-20a, TR-20b, TR-16a, TR-16b, TR-25, TR-20c, TR-20g, TR-20e, TR-20f, TR-19a | 22/30/10/5/2/3 | PASS | `png/flows/F15.png` |
 | F16 | Trainee | Session expiry, errors, ended coaching | 8 | TR-24, TR-01a, TR-21, TR-23, TR-07i, TR-22a, TR-22b, TR-06a | 15/22/2/0/1/0 | PASS | `png/flows/F16.png` |
@@ -31,3 +31,4 @@ Tap coverage = every tappable on the flow's screens resolves to a screen, back, 
 | F26 | Coach | Ended client and reactivation | 5 | TM-02c, TM-03d, TM-03e, TM-04i | 13/10/4/2/0/2 | PASS | `png/flows/F26.png` |
 | F27 | Coach | Offline, loading, errors | 8 | TM-01e, TM-01f, TM-02f, TM-04h, TM-06e, TM-01g, TM-03h, TM-01d | 24/34/3/0/0/1 | PASS | `png/flows/F27.png` |
 | F28 | Coach | Settings, in-person log, sign out | 10 | TM-07a, TM-07b, TM-07c, TM-07d, TR-20g, TM-03i, TM-15a, TM-15b, TM-07f, TR-01a | 27/27/10/4/0/0 | PASS | `png/flows/F28.png` |
+| F29 | Trainee | Future days are view only (decided 14 Nov) | 3 | TR-06d, TR-07k, W-01e | 5/20/0/0/0/0 | PASS | `png/flows/F29.png` |

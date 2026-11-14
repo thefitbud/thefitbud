@@ -13,7 +13,7 @@ def cov(sids):
 GOALS=[('Trainee','First install, invite, intake, reminders','F01'),('Trainee','Sign in / code / reset / auth errors','F02, F02b'),('Trainee','First workout, log sets, rest, PR, finish','F03, F05'),
 ('Trainee','Plan deviation: add set/exercise, swap, skip, note','F04'),('Trainee','Interruptions, offline then sync','F06, F10'),
 ('Trainee','Diet day: as planned, changed portion, logged it myself, ate out, edit, delete, late log, locked','F07, F08, F09'),
-('Trainee','Weekly check-in','F11'),('Trainee','Progress and weight','F12'),('Trainee','Notification deep links incl. Nudge push','F13'),('Trainee','Ask Rahul (existing WhatsApp redirect)','F14'),
+('Trainee','Weekly check-in','F11'),('Trainee','Progress and weight','F12'),('Trainee','Notification deep links incl. Nudge push','F13'),('Trainee','Ask Rahul (existing WhatsApp redirect)','F14'),('Trainee','Future days view only','F29'),
 ('Trainee','Settings, help, sign out','F15'),('Trainee','Session expiry, errors, ended coaching','F16'),('Karan (dual)','Role select and switch','F17'),
 ('Coach','Morning triage on Needs you + Nudge (push)','F20'),('Coach','Resolve / mark reviewed / notes','F21'),('Coach','Reply to a question','F22'),('Coach','Review a check-in','F23'),
 ('Coach','Review a session with trainee-added sets and PRs; diet day','F24'),('Coach','Client detail, activity','F25'),('Coach','Ended / reactivated client','F26'),('Coach','Offline, loading, errors','F27'),('Coach','Settings, log in person, sign out','F28')]

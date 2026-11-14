@@ -33,9 +33,9 @@ RU=[
  ('TR-07','btn','Log what I ate',F('TR-26a')),('TR-07g','btn','Edit foods',F('TR-08b')),('TR-07g','btn','Delete this log',F('TR-07h')),('TR-07h','btn','Delete log',F('TR-07a')),
  ('TR-07g','li','.','STATE:food row → edit (TR-08b)'),('TR-08a','link','Ask Rahul',F('TR-18')),
  ('TR-08b','link','Reset to plan','STATE:reset'),('TR-08b|TR-08c','navbtn','Save',F('TR-07a')),('TR-08b','btn','Save portion',F('TR-07a')),('TR-08b','li','.','STATE:stepper row'),
- ('TR-26','search','.','STATE:typing → TR-26b'),('TR-26a|TR-26b','li','.',F('TR-26c')),('TR-26b','chip','.','STATE:remove from tray'),('TR-26b','btn|navbtn','Save',F('TR-07b')),
+ ('TR-26','search','.','STATE:typing → TR-26b'),('TR-26a|TR-26b','li','.',F('TR-26c')),('TR-26b','chip','.','STATE:remove from tray'),('TR-26b','btn|navbtn','Save',F('TR-26f')),
  ('TR-26c','chip','.','STATE:unit/amount'),('TR-26c','navbtn|btn','^Add|Add to',F('TR-26b')),('TR-26c','navbtn','Results','BACK'),('TR-26c','li','Meal','LATER:meal picker'),
- ('TR-26d','btn','Log as Ate out',F('TR-08c')),('TR-26d','btn','Ask Rahul to add',F('TR-18')),
+ ('TR-26d','btn','Log as Ate out',F('TR-08c')),('TR-26d','btn','^Create',F('TR-26e')),
  # ---------- Workout
  ('W-01|TR-10','btn','Start workout',F('W-02')),('W-01','btn','Continue workout',F('W-03')),('W-01','btn','Finish now',F('W-16')),('W-01','btn','View summary',F('W-17b')),('W-01|TR-10','btn','Log it',F('W-02')),
  ('TR-10b','btn','Message Rahul','EXT:WhatsApp chat'),('W-01','li|crow','.','STATE:next session preview (date in strip)'),
@@ -90,6 +90,10 @@ RU=[
 RU[0:0]=[('TM-03','btn','Nudge…',F('TM-03j')),('TM-04d','btn','^Resolve$',F('TM-04f')),('W-','pill','Finish',F('W-16')),('TR-20a|TR-18|TR-19|TR-20f','chev','.',F('TR-20b')),('TM-07|TM-08c','chev','.',F('TM-07d')),('TR-06c','pill','Log late',F('TR-08a')),('TR-04','circbtn','circle-user',F('TR-20c')),('TR-07j','li','.','INERT:planned food'),('TR-08a','meal|due','.','INERT:behind sheet scrim'),('W-18','btn','Continue workout','INERT:behind dialog scrim'),
  ('.','circbtn','message-circle','EXT:WhatsApp chat'),('TR-22a','link','Enter code',F('TR-01c')),('TR-26a|TR-26d','navbtn','Save','INERT:disabled'),('W-14','circbtn','chevron-up',F('W-03-')),
  ('TM-01e','tmc','.','INERT:skeleton'),('TM-03j','li','.','STATE:select'),('TM-06c','crow','.',F('TM-06a')),('TM-13b','chip','.','STATE:filter')]
+# W12 additions (14 Nov): custom food, saved confirmation, future days view only, Live Activity
+RU[0:0]=[('TR-26e','navbtn|btn','^Add',F('TR-26f')),('TR-26e','li','Save to my foods','STATE:toggle'),('TR-26f','meal','Evening snack',F('TR-07g')),('TR-26f','meal','planned',F('TR-07j')),('TR-26f','meal','.',F('TR-07g')),
+ ('TR-07k','meal','.','STATE:planned meal detail, read only (future day: no log actions)'),
+ ('TR-15d','pill','^Log','STATE:logs the set from the lock screen; tile advances to the next set'),('TR-15d','pill','^Open$',F('W-03-'))]
 # profile cards on More (trainee)
 RU.insert(0,('TR-20a|TR-18|TR-19|TR-20f','.','Aarav Sharma',F('TR-20b')))
 RU.insert(0,('TM-07','.','^RV Rahul Verma|Coach · 10',F('TM-07d')))

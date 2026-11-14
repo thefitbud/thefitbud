@@ -1,9 +1,9 @@
 // Text-contrast audit on the live DOM: every text leaf vs the first solid background behind it. THEME=dark adds body.dark.
-// Usage: [SIDE=trainer] [THEME=dark] node textcheck.mjs  -> prints leaves under 3:1 (--ink4 disabled text is exempt per spec 2.3; lock-screen wallpapers and the TM-06f photo viewer, whose dark backdrop is a sibling layer, are skipped)
+// Usage: [SIDE=trainer] [THEME=dark] node textcheck.mjs  -> prints leaves under 3:1 (--ink4 disabled text is exempt per spec 2.3; lock-screen wallpapers (TR-15c, TR-15d, TM-13a) and the TM-06f photo viewer, whose dark backdrop is a sibling layer, are skipped)
 import { chromium } from '/workspace/fb-main/node_modules/.pnpm/playwright-core@1.64.1/node_modules/playwright-core/index.mjs';
 import fs from 'fs';
 const SIDE=process.env.SIDE||'trainee',DARK=process.env.THEME==='dark';const H=`../html/${SIDE}/`;
-const files=fs.readdirSync(H).filter(f=>f.endsWith('.html')&&!/^(TR-15c|TM-13a|TM-06f)/.test(f));
+const files=fs.readdirSync(H).filter(f=>f.endsWith('.html')&&!/^(TR-15c|TR-15d|TM-13a|TM-06f)/.test(f));
 const b=await chromium.launch({executablePath:'/usr/bin/google-chrome'});const ctx=await b.newContext({viewport:{width:393,height:852}});
 let bad=0;
 for(const f of files){const p=await ctx.newPage();await p.goto('file://'+process.cwd()+'/'+H+f);if(DARK)await p.evaluate(()=>document.body.classList.add('dark'));
