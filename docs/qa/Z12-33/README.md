@@ -29,7 +29,22 @@ Privacy follow-up to Z11-8 (`docs/specs/Z11-8.md`). Non-UI. The device run below
 
 `pnpm build:packages`, `pnpm lint`, `pnpm typecheck`, `pnpm --filter @fitbud/mobile test` (126 files, 1265 tests after the review fix round) and `pnpm test` (17 of 17 tasks, first round): all pass.
 
-## Device check (to run via the Z12-35 harness)
+## Device gate result
+
+**PASS, run 43646702056** (Device gate, dispatched on `main` with `ref=claude/Z12-33-cache-late-write`, `flows=z12-33`): iOS simulator and Android emulator, light and dark, 4 of 4 flows in each, device log clean (`scan-logs`: no findings). Flows: `apps/mobile/.maestro/device/z12-33/` (run in order; 2 and 4 with the device offline).
+
+| Flow | Steps | What it proved |
+|---|---|---|
+| `1-two-trainers` | 1–6 | Rahul signs in on a fresh install and loads Attention, Clients and Rohan Mehta's status screen; pulls to refresh on Attention and signs out while it may still load (the late-write path); Priya signs in on the same install. Attention, Clients and Lakshmi Iyer's screen each render Priya's own data first, and none shows Rohan Mehta, Aarav Shah, Meera Iyer or Ishita Banerjee |
+| `2-offline-priya` | 7 | Offline as Priya, her own roster shows from the cache (Lakshmi Iyer): the guard keeps the signed-in trainer's own writes. Attention and Clients then show "You're offline …" or "Couldn't load", never Rahul's clients |
+| `3-rahul-again` | 8, online | Priya signs out, Rahul signs back in: Attention and Clients show his data and none of Priya's (Lakshmi Iyer, Karan Mehra) |
+| `4-offline-rahul` | 8, offline | Offline as Rahul, his own roster (loaded online in flow 3) shows from the cache; Attention and Clients show the offline line or "Couldn't load", never Priya's clients |
+
+Step 8 departs from the manual steps below in one way (recorded in `docs/qa/Z12-35/README.md`): Attention is the landing tab, so it loads online as Rahul signs in, before the device can go offline. The privacy check still holds.
+
+Earlier run 43642084004 failed on Android only (iOS passed). Root cause was the flows, not the app: on Android a client row's status chip is its own "Attention" text node, so tapping "Attention" from the Clients tab opened that client (Deepak Nair) instead of the tab. Dark flow 1 then could not find "More", and flow 4 could not find "Clients" in both themes. Dark flow 2 failed in cascade: Rahul never signed out, so the offline Clients tab showed Rahul's own snapshot (Rohan Mehta, Priya Nair, …) under Rahul. That is the expected behaviour (A sees A's own snapshot offline), not the guard dropping Priya's write, and the light run's flow 2 showed Priya's own snapshot offline. Fix: the flows reach Attention through More, which has no other "Attention" text. No privacy assertion was removed.
+
+## Device check (manual steps; run via the Z12-35 harness)
 
 Run on one iOS simulator (393×852) against the local API on the demo seed (`pnpm db:reset`, `pnpm api`). Personas from `docs/LOCAL_TESTING.md`.
 
