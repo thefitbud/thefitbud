@@ -1221,6 +1221,9 @@ describe("coaching configuration", () => {
     currentSqlite!.run(
       "CREATE TRIGGER z52_fail_meal_insert BEFORE INSERT ON meal_assignments BEGIN SELECT RAISE(ABORT, 'z52 injected failure'); END",
     );
+    // The injected failure is logged as an unhandled error; the Z12-35 console gate
+    // (D-W12-28) needs the test to expect that log line.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const failed = await activateConfiguration(
       trainerCookie,
       relationshipId,
@@ -1229,6 +1232,8 @@ describe("coaching configuration", () => {
     );
     currentSqlite!.run("DROP TRIGGER z52_fail_meal_insert");
     expect(failed.status).toBe(500);
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"Unhandled API error"'));
+    errors.mockRestore();
     expect(await configurationRows(db, relationshipId)).toEqual(configsBefore);
     expect(configsBefore.map((row) => row.status)).toEqual(["draft"]);
     expect(await workoutRows(db, relationshipId)).toHaveLength(0);
@@ -1280,6 +1285,9 @@ describe("coaching configuration", () => {
     currentSqlite!.run(
       "CREATE TRIGGER z52_fail_retime BEFORE UPDATE OF window_ends_at ON workout_assignments BEGIN SELECT RAISE(ABORT, 'z52 injected failure'); END",
     );
+    // The injected failure is logged as an unhandled error; the Z12-35 console gate
+    // (D-W12-28) needs the test to expect that log line.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const failed = await activateConfiguration(
       trainerCookie,
       relationshipId,
@@ -1288,6 +1296,8 @@ describe("coaching configuration", () => {
     );
     currentSqlite!.run("DROP TRIGGER z52_fail_retime");
     expect(failed.status).toBe(500);
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"Unhandled API error"'));
+    errors.mockRestore();
     expect(await configurationRows(db, relationshipId)).toEqual(configsBefore);
     expect(configsBefore.map((row) => row.status)).toEqual(["active", "draft"]);
     expect(await workoutRows(db, relationshipId)).toEqual(workoutsBefore);

@@ -211,7 +211,7 @@ export const DIET_TEMPLATES: DietTemplate[] = [
   {
     "code": "N03",
     "title": "Jain Veg · Metabolic Health",
-    "forWhom": "prediabetes / Jain (Siddharth, Priya S.)",
+    "forWhom": "prediabetes / Jain (Siddharth, Priya N.)",
     "meals": [
       {
         "name": "Breakfast",

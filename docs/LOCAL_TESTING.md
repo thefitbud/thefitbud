@@ -48,8 +48,9 @@ All passwords are **`FitBud-demo-2026`**. Emails are `@demo.fitbud.test`.
 | `aarav.ontrack@demo.fitbud.test` | Trainee | `active_on_track` | Healthy active coaching, logging, check-ins |
 | `rohan.slipping@demo.fitbud.test` | Trainee | `slipping` | Needs Attention — slipping adherence |
 | `meera.ack@demo.fitbud.test` | Trainee | `acknowledged` | Attention item already acknowledged by trainer |
-| `farhan.paused@demo.fitbud.test` | Trainee | `reminders_paused` | Reminders / quiet-hours style paused state |
-| `ishita.pushoff@demo.fitbud.test` | Trainee | `notifications_off` | Push disabled trainee |
+| `farhan.paused@demo.fitbud.test` | Trainee | `reminders_paused` | **Reminders paused**: `reminder_states.mode = 'paused'` with `paused_until` a few days ahead, active plan, overdue meals. Use for the nudge sheet's "Reminders paused" label |
+| `ishita.pushoff@demo.fitbud.test` | Trainee | `notifications_off` | **Push off**: `notification_preferences.push_enabled = 0` and her only device token is `revoked`. Active plan, open coach ask, workout reminder rule off. Use for the nudge sheet's "Push off" label |
+| `tanvi.attention@demo.fitbud.test` | Trainee | `attention_hole` | **Priya Nair** (the Priya of mocks TM-02a, TM-04l, TM-12b, TM-13b), coached by Rahul: missed workout, overdue check-in. Not the trainer Priya Malhotra (`priya.coach`) |
 | `kavya.ended@demo.fitbud.test` | Trainee | `ended` | Ended coaching relationship |
 | `nikhil.reactivate@demo.fitbud.test` | Trainee | `reactivation_pending` | Reactivation request in flight |
 | `deepak.dubai@demo.fitbud.test` | Trainee | `dubai_meal_times` | Cross-timezone meal-time display vs trainer |
@@ -62,12 +63,24 @@ All passwords are **`FitBud-demo-2026`**. Emails are `@demo.fitbud.test`.
 | `pooja.silent@demo.fitbud.test` | Trainee | `silent_lapsed` | Stopped logging: no recent data, overdue check-in, expired renewal |
 | `rajesh.senior@demo.fitbud.test` | Trainee | `senior_maintenance` | 61-year-old, knee-friendly plan, open pain ask |
 | `fatima.london@demo.fitbud.test` | Trainee | `london_timezone` | Europe/London client: cross-timezone windows |
-| `harpreet.ready@demo.fitbud.test` | Trainee | `coaching_ready` | Approved intake, no plan published yet |
+| `harpreet.ready@demo.fitbud.test` | Trainee | `coaching_ready` | **No-plan trainee**: active relationship (started 4 days ago), approved intake, no plan of any kind, active push token. Use for "no plan yet" states (Z12-46) |
 | `divya.wedding@demo.fitbud.test` | Trainee | `deadline_wedding` | Deadline goal, festival ask, renewal upcoming |
+
+### New in Z12-34
+
+No new accounts were needed. The three personas the W12 tasks ask for already existed and now carry the facts explicitly: no-plan trainee `harpreet.ready`, push-off `ishita.pushoff` (preference off, token revoked) and reminders-paused `farhan.paused`. The trainee Priya is now **Priya Nair** (was "Priya Sharma"); the email `tanvi.attention` and every id are unchanged. Passwords stay `FitBud-demo-2026`.
+
+## Quick reseed (`pnpm db:reseed`)
+
+`pnpm db:reseed` wipes and reloads **only the demo data** (accounts, plans, logs, trainer-owned templates). It does not touch migrations or the exercise/food library, and it refuses with a clear message when the local D1 is behind the committed migrations or the library is not loaded (then run `pnpm db:reset`). It writes straight into the local D1 file in one transaction, with no wrangler process, so it takes a few seconds on Linux and also on Windows. It is safe to run while `pnpm api` is up: the running API sees the new data on its next request, with no restart and no lock error (checked on port 8797). The write waits up to 30 s for the database lock.
+
+`pnpm db:reset` is different: it deletes the D1 files, so **stop the API first**. A running API keeps the deleted database open (Linux) or blocks the delete (Windows). The script checks port 8787 and `FITBUD_API_PORT` and stops with a message if something is listening there (`FITBUD_RESET_IGNORE_API=1` skips the check). It now also loads the library straight into SQLite, so a full reset takes well under a minute (migrations are most of it).
+
+"Today" is the run date (IST). Every client with a plan has meal and workout rows from 27 days back to today, and from Z12-34 on also **6 days ahead** (assignments only, nothing logged), so the app has past, current and future days. Ended clients stop at their end date.
 
 ## Realistic demo world
 
-`pnpm db:reset` (or `pnpm db:seed:local` on an already-migrated DB) builds a deterministic world from [docs/seed/SEED_DESIGN.md](seed/SEED_DESIGN.md). Dates are relative to the reset day in IST, so data is always "fresh"; the same day gives byte-identical SQL. Both commands work from the repo root on Windows PowerShell and Linux/macOS.
+`pnpm db:reset` (or `pnpm db:reseed` on an already-migrated DB) builds a deterministic world from [docs/seed/SEED_DESIGN.md](seed/SEED_DESIGN.md). Dates are relative to the reset day in IST, so data is always "fresh"; the same day gives byte-identical SQL. Both commands work from the repo root on Windows PowerShell and Linux/macOS.
 
 - Up to 8 months of history per client: plan versions, subscriptions/renewals, meal and workout logs (sets, loads), weekly/bi-weekly/monthly check-ins with reviews, weigh-ins, trainer notes, coach asks, reminders.
 - Every exception the API would detect in its 3-day lookback is pre-seeded, so opening the app creates none.
@@ -124,7 +137,7 @@ Forms: onboarding **FitBud Intake** (v1, v2) and **Quick intake — returning cl
 ### Seed commands
 
 ```sh
-pnpm db:reset          # migrate + v2 library + demo world (~2.5 min on Linux)
+pnpm db:reset          # migrate + v2 library + demo world (~40 s on Linux)
 pnpm db:seed:local     # re-seed demo world only (wipes app data, keeps library)
 ```
 

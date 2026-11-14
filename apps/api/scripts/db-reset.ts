@@ -3,8 +3,10 @@
  * Local D1 reset: wipe state, migrate, library seed, demo seed (T25).
  */
 import { rmSync } from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { apiPortToProbe } from "./lib/local-d1.js";
 import { runCommandSync } from "./lib/run-command.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,8 +19,40 @@ if (!allowed.endsWith(`${path.sep}.wrangler${path.sep}state${path.sep}v3${path.s
   process.exit(1);
 }
 
+const timings: string[] = [];
+
 function run(command: string, args: string[]) {
+  const started = Date.now();
   runCommandSync(command, args, { cwd: apiRoot });
+  timings.push(`${[command, ...args].join(" ").padEnd(34)} ${((Date.now() - started) / 1000).toFixed(1)}s`);
+}
+
+/** True when something accepts connections on a local port. */
+function listening(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host: "127.0.0.1" });
+    const done = (value: boolean) => {
+      socket.destroy();
+      resolve(value);
+    };
+    socket.setTimeout(500, () => done(false));
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+  });
+}
+
+// db:reset deletes the D1 files. A running local API keeps the deleted database open (Linux: it
+// goes on serving the old data; Windows: the delete fails), so it has to be stopped first.
+// db:reseed does not have this problem.
+const apiPort = apiPortToProbe(process.env);
+if (process.env.FITBUD_RESET_IGNORE_API !== "1" && (await listening(apiPort))) {
+  console.error(
+    `Something is listening on port ${apiPort}, probably the local API (pnpm api).\n` +
+      "Stop it and run pnpm db:reset again: a running API keeps the old database open.\n" +
+      "To reload only the demo data while the API runs, use pnpm db:reseed.\n" +
+      "(Set FITBUD_RESET_IGNORE_API=1 to skip this check, e.g. if the port is another program.)",
+  );
+  process.exit(1);
 }
 
 run("tsx", ["scripts/ensure-dev-vars.ts"]);
@@ -27,7 +61,8 @@ console.log(`Removing ${allowed}`);
 rmSync(allowed, { recursive: true, force: true });
 
 run("pnpm", ["db:migrate:local"]);
-run("pnpm", ["db:seed:library"]);
+run("tsx", ["scripts/library-seed-local.ts"]);
 run("pnpm", ["seed:demo"]);
 
-console.log("db:reset complete.");
+console.log("\nStep timings:\n  " + timings.join("\n  "));
+console.log("db:reset complete. (For a quick demo-only reload on a current schema, use pnpm db:reseed.)");
