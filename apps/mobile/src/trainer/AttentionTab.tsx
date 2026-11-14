@@ -71,7 +71,7 @@ import {
 } from "./reviewSheetNav";
 import { localDateInTimezone } from "../lib/dates";
 import { openContextualWhatsApp } from "./whatsapp";
-import { readTrainerCache, writeTrainerCache } from "./cache";
+import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
 
 type ReviewSheetState = {
   relationshipId: string;
@@ -176,6 +176,9 @@ export function AttentionTab({
 
   const load = useCallback(async () => {
     setError(null);
+    // Captured before the fetch: if the trainer changes while it is in
+    // flight, the late write is dropped (Z12-33).
+    const cacheEpoch = trainerCacheEpoch();
     try {
       const [attentionGroups, coachAsks, inbox, directory] = await Promise.all([
         s1.getAttentionGroups(),
@@ -213,7 +216,7 @@ export function AttentionTab({
       };
       applySnapshot(snapshot);
       hasData.current = true;
-      writeTrainerCache(CACHE_KEY, snapshot);
+      writeTrainerCache(CACHE_KEY, snapshot, cacheEpoch);
       setOfflineAt(null);
       setLoadFailed(false);
     } catch (err) {
