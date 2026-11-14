@@ -272,3 +272,39 @@ describe("scrubSentryEvent", () => {
     });
   });
 });
+
+describe("scrubSentryEvent exception values", () => {
+  const sql = 'insert into "plan_assignments" ("client_id", "note") values (?, ?)';
+  const secrets = ["asha.verma@example.com", "knee pain after squats"];
+
+  it("rewrites a DrizzleQueryError message so no bound params survive", () => {
+    const event = {
+      exception: {
+        values: [
+          { type: "DrizzleQueryError", value: `Failed query: ${sql}\nparams: ${secrets.join(",")}` },
+          { type: "Error", value: "SQLITE_CONSTRAINT: UNIQUE failed" },
+        ],
+      },
+    };
+    const out = JSON.stringify(scrubSentryEvent(event));
+    for (const secret of secrets) expect(out).not.toContain(secret);
+    expect(out).not.toContain("params:");
+    expect(event.exception.values[0]?.value).toBe("Failed query: [redacted]");
+    expect(event.exception.values[1]?.value).toBe("SQLITE_CONSTRAINT: UNIQUE failed");
+  });
+
+  it("strips a params tail from a non-Drizzle exception value", () => {
+    const event = { exception: { values: [{ type: "Error", value: `boom\nparams: ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(event.exception.values[0]?.value).toBe("boom");
+  });
+
+  it("is applied by beforeSend", () => {
+    const options = sentryOptions(env({ SENTRY_DSN: FAKE_DSN, SENTRY_ENVIRONMENT: "staging" }));
+    const event = {
+      exception: { values: [{ type: "DrizzleQueryError", value: `Failed query: ${sql}\nparams: ${secrets[0]}` }] },
+    } as unknown as ErrorEvent;
+    const out = options.beforeSend?.(event, {}) as ErrorEvent;
+    expect(JSON.stringify(out)).not.toContain(secrets[0]);
+  });
+});

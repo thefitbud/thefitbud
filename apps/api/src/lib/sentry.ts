@@ -98,6 +98,7 @@ export type SentryScrubTarget = {
   contexts?: Record<string, unknown> | null;
   user?: Record<string, unknown> | null;
   breadcrumbs?: SentryBreadcrumb[] | { values?: SentryBreadcrumb[] | null } | null;
+  exception?: { values?: Array<{ type?: string; value?: string }> | null } | null;
 };
 
 /** True when this Worker env should send events to Sentry. */
@@ -202,6 +203,27 @@ function scrubUser(user: Record<string, unknown>): Record<string, unknown> {
   return {};
 }
 
+const DRIZZLE_FAILED_QUERY = /^Failed query:/;
+const PARAMS_TAIL = /\r?\n?params:[\s\S]*$/;
+
+/**
+ * Drizzle's `DrizzleQueryError` message is `Failed query: <sql>\nparams: <bound
+ * values>`, and the bound values are user data. Replaces the whole message with
+ * a static text and strips any `params:` tail from other exception values.
+ */
+function scrubExceptionValues(exception: SentryScrubTarget["exception"]): void {
+  const values = exception?.values;
+  if (!Array.isArray(values)) return;
+  for (const item of values) {
+    if (!item || typeof item.value !== "string") continue;
+    if (item.type === "DrizzleQueryError" || DRIZZLE_FAILED_QUERY.test(item.value)) {
+      item.value = "Failed query: [redacted]";
+    } else if (PARAMS_TAIL.test(item.value)) {
+      item.value = item.value.replace(PARAMS_TAIL, "").trimEnd();
+    }
+  }
+}
+
 /**
  * Drops request bodies, cookies, `Authorization` and query strings, and removes
  * emails, names, notes and health fields from `extra` and `contexts`.
@@ -230,6 +252,7 @@ export function scrubSentryEvent<T extends SentryScrubTarget>(event: T): T {
     event.user = scrubUser(event.user);
   }
   if (event.breadcrumbs) scrubBreadcrumbs(event.breadcrumbs);
+  scrubExceptionValues(event.exception);
   return event;
 }
 
