@@ -12,7 +12,7 @@ import { addDaysToLocalDate, formatLocalDate, localDateTimeToUtcIso } from "@fit
 import { app } from "../index.js";
 import { setTestDbOverride, type Db } from "../db/client.js";
 import * as schema from "../db/schema.js";
-import { GENTLE_NUDGE_BODY } from "../domain/reminders.js";
+import { GENTLE_NUDGE_BODY, nudgeBodyHasLink } from "../domain/reminders.js";
 import { DEMO_PASSWORD_PLAINTEXT } from "../seed/demo/spec.js";
 import type { MemoryDbHandle } from "../test-support/memory-db.js";
 import { dummyD1 } from "../test-support/notification-routes.js";
@@ -247,6 +247,14 @@ describe("coach nudges (Z12-50)", () => {
       });
     }
     expect(await nudgeRows(rohan.relationshipId)).toHaveLength(0);
+    // Ordinary coaching text is not a link.
+    for (const text of [
+      "Weekly data: 3 of 4 done. Lunch at 1:30 pm, e.g. dal and rice.",
+      "Can you log Wed 21 Oct? 2.5 km walk counts too.",
+      "Hotel: breakfast buffet is fine, just log it.",
+    ]) {
+      expect(nudgeBodyHasLink(text), text).toBe(false);
+    }
 
     // Exactly 200 characters after trimming is accepted, and stored trimmed.
     const exact = `  ${"Lunch is waiting. ".repeat(11)}ab  `;

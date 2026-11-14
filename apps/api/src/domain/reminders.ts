@@ -1905,7 +1905,7 @@ const NUDGE_LINK_RE = new RegExp(
   [
     "[a-z][a-z0-9+.-]*://",
     "\\bwww\\.",
-    "\\b(?:mailto|tel|sms|whatsapp|intent|javascript|data|file):",
+    "\\b(?:mailto|tel|sms|whatsapp|intent|javascript):",
     "\\b[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.(?:com|in|net|org|io|co|app|me|ly|link|info|biz|xyz|gl|gg|to|tv|page|site|online|store|shop)(?![a-z0-9-])",
   ].join("|"),
   "i",
