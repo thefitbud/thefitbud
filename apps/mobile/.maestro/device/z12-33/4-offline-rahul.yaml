@@ -16,6 +16,12 @@ env:
 # offline, Attention and Clients never show Priya's rows.
 - launchApp:
     stopApp: false
+# Precondition: Rahul is the one signed in (his roster, loaded online in
+# 3-rahul-again.yaml, shows from the cache).
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ".*Rohan Mehta.*"
+    timeout: 20000
 - tapOn: "Attention"
 - swipe:
     start: "50%, 30%"

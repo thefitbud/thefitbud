@@ -8,6 +8,7 @@ tags:
 env:
   RAHUL_CLIENT: Rohan Mehta
   RAHUL_OTHER_CLIENT: Aarav Shah
+  PRIYA_CLIENT: Lakshmi Iyer
 ---
 # Z12-33 step 7. Tagged device-offline: the harness takes the device offline before
 # this file and back online after it (Android airplane mode; iOS: the local API is
@@ -15,6 +16,13 @@ env:
 # brought to the front, not relaunched.
 - launchApp:
     stopApp: false
+# Precondition: Priya is the one signed in (her own cached roster shows). If
+# 1-two-trainers.yaml failed before the switch, this fails here, as a broken
+# precondition, rather than reporting Rahul's rows as a leak (run 43625661111).
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ".*${PRIYA_CLIENT}.*"
+    timeout: 20000
 - tapOn: "Attention"
 - swipe:
     start: "50%, 30%"

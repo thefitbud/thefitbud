@@ -15,7 +15,8 @@ platforms, and reports.
 | [43613279879](https://github.com/thefitbud/thefitbud/actions/runs/43613279879) | `d4e14846` | same flows; lock-screen tap found the push in the shade and tapped it | same driver failure | theme patch logged; luminance evidence added |
 | [43616323952](https://github.com/thefitbud/thefitbud/actions/runs/43616323952) | `263fb968` | same | **ran end to end**: driver warm-up fixed it; 1/4 flows pass per theme, log clean | **the example run: both platforms, both themes, complete** |
 | [43619775723](https://github.com/thefitbud/thefitbud/actions/runs/43619775723) | `6cd2f93d` | native cache miss: full build 8 min, cache saved | native cache miss, arm64-only build | first run with the native-build cache |
-CACHE_HIT_ROW
+| [43623489626](https://github.com/thefitbud/thefitbud/actions/runs/43623489626) | `31ea770c` | **native cache hit: build 70 s** (was 8–12 min); same results as the full build | **native cache hit: build 98 s** (was 33–44 min); same results; idb installed (built with Xcode 26.3) | **proof of the native-build cache**: identical flow results and a clean log on the swapped bundle |
+Z12_33_ROWS
 
 ## What the example run shows
 
@@ -46,8 +47,29 @@ iOS and Android in both themes:
   or use the prebuilt release). Live Activity: `not-found` (no workout running), as expected.
 - **Offline:** Android airplane mode on/off read back; iOS local API stopped and restarted,
   demo sign-in working again afterwards.
-- **Timing:** iOS full build 44 min (both simulator architectures; now arm64 only),
-  Android 12 min; flows about 15 min per platform for two themes.
+- **Timing:** iOS full build 44 min with both simulator architectures, 33 min arm64-only
+  (run 43619775723); Android 8–12 min. With the native-build cache (run 43623489626): iOS
+  98 s, Android 70 s, i.e. a JS-only task's gate is about 25 min end to end instead of 60+.
+  The flows take about 15 min per platform for the four smoke flows in two themes.
+
+## Native-build cache (proved)
+
+Run 43619775723 missed (first run with the cache) and saved both apps; run 43623489626 hit
+on both platforms, rebuilt only the JS bundle (`expo export:embed` + `hermesc`, bytecode
+version checked against the cached bundle), re-signed (iOS ad hoc; Android zipalign +
+debug keystore + `apksigner verify`) and produced the same results as the full builds:
+password sign-in passes on both platforms in both themes, the same three flow failures,
+a clean device log with `Running "main"` captured. Key inputs and the hit/miss rules:
+`scripts/qa/device/README.md` "Native-build cache".
+
+## iOS lock-screen tap
+
+idb now installs (run 43623489626: built with the image's Xcode 26.3, then back to 16.4).
+The tap found nothing: the lock screen showed only the clock and date after `simctl push`.
+Either the app had no notification authorization at that moment (no flow had asked for it)
+or iOS kept the entry in the lock screen's Notification Center; `b80e0eef` adds a swipe-up
+into Notification Center before giving up. Z12-47 (push routing) should grant notification
+permission in its flow before it relies on this tap.
 
 ## Departures and decisions
 

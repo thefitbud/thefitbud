@@ -28,7 +28,9 @@ env:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
-# Step 3: Attention, Clients and one client, each loaded.
+# Step 3: Attention, Clients and one client, each loaded. The client screen is waited
+# for by its back control, which is always at the top (the "This week" heading can sit
+# below the fold on a 393x852 screen, run 43625661111).
 - extendedWaitUntil:
     visible: ".*${RAHUL_CLIENT}.*"
     timeout: 30000
@@ -38,11 +40,10 @@ env:
 - extendedWaitUntil:
     visible: ".*${RAHUL_CLIENT}.*"
     timeout: 30000
-- assertVisible: ".*${RAHUL_OTHER_CLIENT}.*"
 - takeScreenshot: rahul-clients
 - tapOn: ".*${RAHUL_CLIENT}.*"
 - extendedWaitUntil:
-    visible: "This week"
+    visible: "‹ Clients"
     timeout: 30000
 - takeScreenshot: rahul-client
 - runFlow: ../../common/assert-no-crash.yaml
@@ -93,7 +94,7 @@ env:
 - takeScreenshot: priya-clients
 - tapOn: ".*${PRIYA_CLIENT}.*"
 - extendedWaitUntil:
-    visible: "This week"
+    visible: "‹ Clients"
     timeout: 30000
 - assertNotVisible: ".*${RAHUL_CLIENT}.*"
 - takeScreenshot: priya-client
