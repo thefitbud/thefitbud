@@ -1,0 +1,52 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-36 trainee active workout mid-session (W-03)
+tags:
+  - device
+  - trainee
+  - z12-36
+---
+# Rohan Mehta (slipping, local demo seed) has today's workout planned. The flow starts it
+# (or continues it: the light run already logged a set), logs one set, skips the rest
+# and captures the active workout mid-session. Same opt-in note as 2-trainee-today-diet.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+
+- tapOn: "Workout"
+- extendedWaitUntil:
+    visible: "Start workout|Continue workout|Log it"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Start workout|Continue workout"
+    commands:
+      - tapOn: "Start workout|Continue workout"
+- runFlow:
+    when:
+      notVisible: "Start workout|Continue workout"
+    commands:
+      - tapOn: "Log it"
+- extendedWaitUntil:
+    visible: "Log set [0-9]+ ·.*"
+    timeout: 30000
+- tapOn: "Log set [0-9]+ ·.*"
+- extendedWaitUntil:
+    visible: "REST"
+    timeout: 10000
+- tapOn: "Skip rest"
+- extendedWaitUntil:
+    notVisible: "REST"
+    timeout: 10000
+- takeScreenshot: W-03
+- runFlow: ../../common/assert-no-crash.yaml
+
+- openLink: fitbud://qa/primitives
+- extendedWaitUntil:
+    visible: "Large title 30"
+    timeout: 30000

@@ -1,0 +1,54 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-36 trainer Needs you (TM-01a) and the nudge sheet (TM-04b)
+tags:
+  - device
+  - trainer
+  - z12-36
+env:
+  # "Needs you <n>" shows over the skeleton too (AttentionTab.tsx), so the wait on it is
+  # followed by a wait for "Loading" to go (as in device/z12-33).
+  ATTENTION_LOADED: "Needs you [0-9]+"
+  # Clients with open items in the local demo seed; the order varies, any one will do.
+  # A row's label is "<name>, <issue>"; Android also exposes the name's own text.
+  NEEDS_YOU_ROW: "(Rohan Mehta|Arjun Kapoor|Neha Reddy|Priya Nair)(, .*)?"
+---
+# Same opt-in note as 2-trainee-today-diet: these screens stay light in the dark run
+# until their own W12 task opts them in. The nudge sheet is opened and closed; nothing is
+# sent (WhatsApp is only ever a prefill the trainer sends).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- extendedWaitUntil:
+    visible: "${ATTENTION_LOADED}"
+    timeout: 30000
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 30000
+- takeScreenshot: TM-01a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "${NEEDS_YOU_ROW}"
+- extendedWaitUntil:
+    visible: "Nudge…"
+    timeout: 20000
+- tapOn: "Nudge…"
+- extendedWaitUntil:
+    visible: "Message preview.*"
+    timeout: 20000
+- takeScreenshot: TM-04b
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Close"
+- extendedWaitUntil:
+    notVisible: "Message preview.*"
+    timeout: 10000
+
+- openLink: fitbud://qa/primitives
+- extendedWaitUntil:
+    visible: "Large title 30"
+    timeout: 30000

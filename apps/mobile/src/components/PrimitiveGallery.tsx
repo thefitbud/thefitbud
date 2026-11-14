@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { SafeAreaView, ScrollView, View } from "react-native";
 import {
   Bell,
@@ -54,6 +55,7 @@ export function PrimitiveGallery({ scheme, sheetOpen = false }: Props) {
 
 function GalleryBody({ sheetOpen }: { sheetOpen: boolean }) {
   const styles = useStyles();
+  const [sheet, setSheet] = useState(sheetOpen);
   return (
     <SafeAreaView style={styles.page}>
       <ScrollView
@@ -183,16 +185,23 @@ function GalleryBody({ sheetOpen }: { sheetOpen: boolean }) {
           onSelect={noop}
         />
 
+        <Text variant="label">Sheet</Text>
+        <Button
+          label="Open sheet"
+          variant="outline"
+          onPress={() => setSheet(true)}
+        />
+
         <BottomSheet
-          visible={sheetOpen}
+          visible={sheet}
           title="Sheet title"
           subtitle="Sheet subtitle"
-          onDismiss={noop}
+          onDismiss={() => setSheet(false)}
         >
           <Text variant="body">
             Sheet content on the card surface over the scrim.
           </Text>
-          <Button label="Primary in sheet" onPress={noop} />
+          <Button label="Close sheet" onPress={() => setSheet(false)} />
         </BottomSheet>
       </ScrollView>
     </SafeAreaView>

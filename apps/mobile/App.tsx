@@ -6,6 +6,7 @@ import { initSentry, wrapWithSentry } from "./src/lib/sentry";
 import { AppRouter } from "./src/navigation/AppRouter";
 import { ConfigProvider } from "./src/providers/ConfigProvider";
 import { FontsProvider } from "./src/providers/FontsProvider";
+import { useQaGalleryLink } from "./src/providers/qaGallery";
 import { SystemBars } from "./src/providers/SystemBars";
 import { ThemeProvider, useTheme } from "./src/providers/ThemeProvider";
 import { SyncProvider } from "./src/sync/SyncProvider";
@@ -16,16 +17,25 @@ import { NotificationOpenListener } from "./src/notifications/openListener";
 initSentry();
 
 /**
- * Device check for Z12-36: a dev build started with
- * EXPO_PUBLIC_PRIMITIVE_GALLERY=1 opens on the primitive gallery (opted in to
- * the system theme) instead of the app, so the harness can screenshot every
- * primitive in light and dark. The require sits behind `__DEV__` and the
- * inlined env flag, so Metro's constant folding drops it (and the gallery
- * module) from release bundles.
+ * Primitive gallery for the Z12-36 device check (src/providers/qaGallery.ts).
+ * Loaded only in a dev build started with EXPO_PUBLIC_PRIMITIVE_GALLERY=1 (it
+ * then opens on the gallery) or in a device-gate build, which is made against
+ * the runner's local API (`fitbud://qa/primitives` opens it). Both tests are
+ * on values inlined at bundle time and are written as literal comparisons, so
+ * Metro's constant folding removes the require, and the gallery module, from
+ * every store and EAS build (they point at https://api…thefitbud.com).
  */
 let PrimitiveGallery: ComponentType | null = null;
+let galleryAtStart = false;
 if (__DEV__ && process.env.EXPO_PUBLIC_PRIMITIVE_GALLERY === "1") {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports -- dev-only lazy load, kept out of release bundles
+  galleryAtStart = true;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- QA-only lazy load, kept out of store bundles
+  PrimitiveGallery = require("./src/components/PrimitiveGallery").PrimitiveGallery;
+} else if (
+  process.env.EXPO_PUBLIC_API_BASE_URL === "http://127.0.0.1:8787" ||
+  process.env.EXPO_PUBLIC_API_BASE_URL === "http://10.0.2.2:8787"
+) {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports -- QA-only lazy load, kept out of store bundles
   PrimitiveGallery = require("./src/components/PrimitiveGallery").PrimitiveGallery;
 }
 
@@ -44,6 +54,7 @@ function App() {
     void ensureAndroidNotificationChannels();
     void ensureMealNotificationActions();
   }, []);
+  const showGallery = useQaGalleryLink(PrimitiveGallery !== null, galleryAtStart);
 
   return (
     // Tracks the system scheme live; no in-app switch (D-W12-12). Screens opt in to dark with <Screen v3>.
@@ -51,7 +62,7 @@ function App() {
       <ThemedRoot>
         <SystemBars />
         <FontsProvider>
-          {PrimitiveGallery ? (
+          {showGallery && PrimitiveGallery ? (
             <PrimitiveGallery />
           ) : (
             <ConfigProvider>

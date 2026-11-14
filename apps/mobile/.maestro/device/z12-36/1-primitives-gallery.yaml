@@ -1,0 +1,87 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-36 primitives gallery, light and dark, and the live theme flip
+tags:
+  - device
+  - z12-36
+---
+# Z12-36 device check (docs/qa/Z12-36/README.md "Device check").
+#
+# The gate builds a Release app against the runner's local API; such a build carries
+# the primitive gallery behind `fitbud://qa/primitives` (apps/mobile/src/providers/
+# qaGallery.ts). A store or EAS build never contains it.
+#
+# Live flip (spec: "flip the system theme with the app open"): the flows run one Maestro
+# invocation each, in path order, because 9-gallery-hold.yaml is tagged device-offline.
+# The last flow of the light run leaves the app open on the gallery; theme.sh then flips
+# the system to dark with the app still open; this flow starts WITHOUT stopping or
+# clearing the app, so in the dark run its first screenshot, primitives-live-flip, is the
+# gallery after the flip with no relaunch (a relaunch would land on sign-in). In the light
+# run (first theme) the app is not open yet, so the link opens the gallery instead.
+- launchApp:
+    stopApp: false
+    permissions:
+      all: allow
+- runFlow:
+    when:
+      visible: "Large title 30"
+    commands:
+      - takeScreenshot: primitives-live-flip
+- runFlow:
+    when:
+      notVisible: "Large title 30"
+    commands:
+      - openLink: fitbud://qa/primitives
+- extendedWaitUntil:
+    visible: "Large title 30"
+    timeout: 30000
+- takeScreenshot: primitives-1-type
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Buttons (kit .btn variants, disabled, small).
+- scrollUntilVisible:
+    element: "Quiet danger"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Small"
+    timeout: 20000
+- takeScreenshot: primitives-2-buttons
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Chips, pills, status chips, badge.
+- scrollUntilVisible:
+    element: "3 × 10 @ 40 kg"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Neutral"
+    timeout: 20000
+- takeScreenshot: primitives-3-chips
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Card, due card, grouped list rows.
+- scrollUntilVisible:
+    element: "Sign out"
+    timeout: 20000
+- takeScreenshot: primitives-4-cards
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Field, segmented control, error banner, toast, tab bar.
+- scrollUntilVisible:
+    element: "Meal logged"
+    timeout: 20000
+- scrollUntilVisible:
+    element: "Open sheet"
+    timeout: 20000
+- takeScreenshot: primitives-5-inputs-toast-tabbar
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Sheet over the scrim.
+- tapOn: "Open sheet"
+- extendedWaitUntil:
+    visible: "Sheet title"
+    timeout: 10000
+- takeScreenshot: primitives-6-sheet
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Close sheet"
+- extendedWaitUntil:
+    notVisible: "Sheet title"
+    timeout: 10000
