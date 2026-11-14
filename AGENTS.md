@@ -20,7 +20,7 @@ Build the smallest coherent MVP that connects trainer expectations with low-fric
 
 1. **The task spec**, `docs/specs/<ID>.md`. Together with its batch file's decisions it is self-contained: you need nothing beyond them, the frames it names and the code it names. Its batch file is `docs/specs/batches/Wn.md`.
 2. **Decisions** are written once, in the batch file, as `D-Wn-x` ("decided by <who>, <date>"). Specs cite the ID; they don't copy the text. Where a spec and its batch file disagree, the batch file wins; report the difference.
-3. **Locked frames**, `docs/design/mockups/png/` (index and precedence: `docs/design/README.md`; also read `DESIGN-NOTES.md` and `DECISIONS-21OCT.md` there). Every frame is locked. Refer to a frame by its file name. `docs/spec/mockups*/` and older frames in git history are retired.
+3. **Locked frames**, `docs/design/mockups/png/` (index and precedence: `docs/design/README.md`; also read `DESIGN-NOTES.md` and `DECISIONS-21OCT.md` there). Every frame is locked. Refer to a frame by its file name. `docs/spec/mockups*/` and older frames in git history are retired. **From W12 on, the v3 mocks in `docs/design/v3/` (`png/`, `png-dark/`, refer to them by screen ID) win over any older frame for the same screen (D-W12-8, D-W12-17).**
 4. **Content rules**, `docs/spec/01-product-rules.md` and `docs/spec/banned-strings.json`.
 5. **QA reports**, `docs/qa/` (`QA-<ID or PR>.md`; index in `docs/qa/README.md`).
 6. **Repository** contracts, code, Drizzle schema, migrations and tests for what is implemented.
@@ -87,7 +87,7 @@ PASS means layout, copy and every state match the frame. Tests and CI passing ar
 - External meeting links on calendar entries are fine. No in-app chat, video or voice calling, organization roles or trainer-team permissions.
 - Steps (HealthKit / Health Connect, trainer-visible) and push notifications are in the MVP.
 - Exercise drawings and wger exercise text are CC BY-SA: show the credit wherever they appear (`docs/spec/credits-and-licences.md`).
-- Light theme only; the exploratory dark theme needs a decision first.
+- Theme: on mobile the app follows the system light or dark setting, with no in-app switch (D-W12-12, superseding "light only" for mobile); trainer web stays light only, with dark variables defined but off (D-W12-14).
 - Every visible dynamic value has a defined backend source.
 - Design from domain state and transitions, not from a feature inventory or screen appearance alone. One dominant purpose and primary action per screen or card; progressive disclosure (attention summary → client workspace → history). Prefer clear lists and hierarchy over cards, pills, gradients and decorative analytics; motion only for state, completion, transition or feedback.
 
