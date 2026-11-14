@@ -92,6 +92,35 @@ their own job, `device-harness-tests`):
    the flows and the logs. Each task states which outcome it needs (§3 item 5).
 6. **Logs** (`logs.sh`, `scan-logs.mjs`) and **verdict** (`gate-summary.mjs`).
 
+## Native-build cache
+
+A full native build takes about 45 minutes on iOS (both simulator architectures) and 12 on
+Android, and every W12 mobile task except Z12-57 is JS-only. So each job keys the built
+app on its native inputs and, when nothing native changed, reuses it and swaps in only the
+new JS bundle.
+
+- **Key** (`native-fingerprint.mjs`): `apps/mobile` `app.json`, `app.config.js`,
+  `eas.json`, `package.json`; `plugins/**`, `targets/**`, `modules/**` without their JS/TS;
+  every external package in the installed dependency closure as `name@version` (workspace
+  packages are JS and excluded, so their source changes still hit); every image and font
+  under `apps/mobile` and `packages/*`; the build, signing and patch scripts; the Xcode
+  version (iOS) or Java version (Android) and the runner image. The manifest of inputs is
+  uploaded as `native-fingerprint-<platform>.json`.
+- **Miss**: the full build (`build-app.sh`), then `actions/cache/save` of the `.app` / APK
+  right after the build step, so a failing gate still saves it. iOS builds only the
+  runner's architecture (`QA_IOS_ARCHS=arm64`).
+- **Hit** (`swap-bundle.sh`): `expo export:embed --dev false --minify false` with the same
+  variant environment (so the local API URL is inlined), Hermes bytecode with
+  `react-native/sdks/hermesc` (`-emit-binary -O`, as the Release step), a check that the
+  bytecode version equals the cached bundle's, then iOS: replace `main.jsbundle`, copy the
+  assets, re-sign ad hoc (`sign-ios-simulator-app.sh`); Android: replace
+  `assets/index.android.bundle`, drop the old signature, `zipalign`, sign with the
+  well-known debug keystore (as Expo's Release template does) and `apksigner verify`.
+- **Known staleness on a hit:** expo-constants' embedded config keeps the cached build's
+  `extra.bundleCommit` (the dev-only commit badge, not shown in a Release build).
+  Images cannot be swapped into an APK, which is why they are part of the key.
+- The build mode and time are in the summary (`<platform>/extras/build.json`).
+
 ## How the gate maps to prompt §3
 
 | §3 item | Where |
@@ -257,6 +286,7 @@ rows are missing and writes nothing; `--stdout` prints instead of writing.
 | `shot-luma.mjs` | mean screenshot luminance per theme (did the app switch theme?) |
 | `lockscreen-tap.sh`, `find-element.mjs` | lock-screen notification and Live Activity taps |
 | `select-flows.mjs`, `run-gate.sh`, `gate-summary.mjs` | flow selection, the run, the verdict |
+| `native-fingerprint.mjs`, `swap-bundle.sh` | native-build cache key; JS-bundle swap on a hit |
 | `parity-gen.mjs` | parity matrix rows |
 | `*.test.mjs` | unit tests, run by `node --test "scripts/qa/**/*.test.mjs"` |
 

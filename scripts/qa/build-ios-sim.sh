@@ -43,6 +43,8 @@
 #                      Only the device gate sets it (Z12-35, scripts/qa/device/
 #                      build-app.sh), to point the same staging variant at the local
 #                      seeded API on the runner. Unset: the nightly build is unchanged.
+#   QA_IOS_ARCHS       e.g. arm64: build only these simulator architectures (the
+#                      device gate sets the runner's own). Unset: every architecture.
 #   QA_POST_PREBUILD_HOOK  an executable run as `<hook> ios <apps/mobile/ios>` right
 #                      after expo prebuild, before pod install. The device gate uses
 #                      it to patch the generated, git-ignored project
@@ -163,6 +165,14 @@ node "$ROOT/scripts/qa/simulator-keychain-entitlements.mjs" "$EXPECTED_BUNDLE_ID
   || die "could not write the simulator entitlements plist."
 echo "build-ios-sim: embedding $SIM_ENTITLEMENTS in __TEXT,__entitlements"
 
+# QA_IOS_ARCHS (device gate only): build just the architectures the simulator needs.
+# Unset, xcodebuild builds every simulator architecture, as the nightly always has.
+XCODE_ARCH_ARGS=()
+if [ -n "${QA_IOS_ARCHS:-}" ]; then
+  XCODE_ARCH_ARGS=("ARCHS=$QA_IOS_ARCHS")
+  echo "build-ios-sim: ARCHS=$QA_IOS_ARCHS"
+fi
+
 echo "build-ios-sim: xcodebuild"
 xcodebuild \
   -workspace "$WORKSPACE" \
@@ -175,6 +185,7 @@ xcodebuild \
   CODE_SIGNING_REQUIRED=NO \
   CODE_SIGN_IDENTITY="" \
   LD_ENTITLEMENTS_SECTION="$SIM_ENTITLEMENTS" \
+  ${XCODE_ARCH_ARGS[@]+"${XCODE_ARCH_ARGS[@]}"} \
   build
 
 PRODUCTS="$DERIVED/Build/Products/$CONFIGURATION-iphonesimulator"

@@ -164,6 +164,25 @@ jobs:
       - name: Build packages
         run: pnpm build:packages
 
+      # Native-build cache (Z12-35): the key hashes every native input
+      # (native-fingerprint.mjs). On a hit, build-app.sh reuses the cached app and only
+      # rebuilds and swaps in the JS bundle; on a miss it builds natively and the app is
+      # saved under the key. Restore/save are separate so a failing gate still saves it.
+      - name: Native-build cache key
+        id: native-key
+        run: |
+          key="$(node scripts/qa/device/native-fingerprint.mjs --platform android \
+            --extra "image=${ImageOS:-}-${ImageVersion:-}" --extra "java=$(java -version 2>&1 | sed -n 1p)" \
+            --manifest qa-results/device/native-fingerprint-android.json)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the native build
+        id: native-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: qa-results/device-native-cache/android
+          key: ${{ steps.native-key.outputs.key }}
+
       # Seeds the local D1 and starts `wrangler dev --local` in the background while the
       # APK builds; "Wait for the local API" below joins it.
       - name: Start the local seeded API (background)
@@ -172,7 +191,17 @@ jobs:
           nohup scripts/qa/device/local-api.sh start > qa-results/device/logs/api-start.log 2>&1 &
 
       - name: Build the app against the local API
+        env:
+          DEVICE_NATIVE_CACHE: ${{ steps.native-cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}
+          DEVICE_NATIVE_CACHE_KEY: ${{ steps.native-key.outputs.key }}
         run: scripts/qa/device/build-app.sh android
+
+      - name: Save the native build
+        if: ${{ steps.native-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: qa-results/device-native-cache/android
+          key: ${{ steps.native-key.outputs.key }}
 
       - name: Wait for the local API
         run: |
@@ -313,13 +342,42 @@ jobs:
       - name: Build packages
         run: pnpm build:packages
 
+      # Native-build cache (Z12-35): the key hashes every native input
+      # (native-fingerprint.mjs). On a hit, build-app.sh reuses the cached app and only
+      # rebuilds and swaps in the JS bundle; on a miss it builds natively and the app is
+      # saved under the key. Restore/save are separate so a failing gate still saves it.
+      - name: Native-build cache key
+        id: native-key
+        run: |
+          key="$(node scripts/qa/device/native-fingerprint.mjs --platform ios \
+            --extra "image=${ImageOS:-}-${ImageVersion:-}" --extra "xcode=$(xcodebuild -version | tr '\n' ' ')" \
+            --manifest qa-results/device/native-fingerprint-ios.json)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the native build
+        id: native-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: qa-results/device-native-cache/ios
+          key: ${{ steps.native-key.outputs.key }}
+
       - name: Start the local seeded API (background)
         run: |
           mkdir -p qa-results/device/logs
           nohup scripts/qa/device/local-api.sh start > qa-results/device/logs/api-start.log 2>&1 &
 
       - name: Build the app against the local API
+        env:
+          DEVICE_NATIVE_CACHE: ${{ steps.native-cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}
+          DEVICE_NATIVE_CACHE_KEY: ${{ steps.native-key.outputs.key }}
         run: scripts/qa/device/build-app.sh ios
+
+      - name: Save the native build
+        if: ${{ steps.native-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: qa-results/device-native-cache/ios
+          key: ${{ steps.native-key.outputs.key }}
 
       - name: Wait for the local API
         run: |

@@ -58,6 +58,8 @@ case "$PLATFORM" in
 esac
 rm -rf "$OUT"
 mkdir -p "$OUT/extras" "$SHOTS" "$DEVICE_RESULTS/logs"
+# How the app was built (full native build or native-cache hit), for the summary.
+if [ -f "$DEVICE_RESULTS/build-$PLATFORM.json" ]; then cp "$DEVICE_RESULTS/build-$PLATFORM.json" "$OUT/extras/build.json"; fi
 
 # --- 1. app and API -------------------------------------------------------------
 APP="$(cat "$DEVICE_RESULTS/$PLATFORM-app-path" 2>/dev/null || true)"
