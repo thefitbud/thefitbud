@@ -49,6 +49,8 @@ import {
   evaluateAndEnqueueReminders,
   listRecentNotifications,
   markNotificationRead,
+  nudgeBodyHasLink,
+  nudgeDisplayCopy,
   type ReminderQueue,
 } from "../domain/reminders";
 import { deriveReminderStatus } from "../domain/reminder-status.js";
@@ -70,6 +72,18 @@ export const notificationRoutes = new Hono<{
 }>();
 
 type Db = ReturnType<typeof createDb>;
+
+/**
+ * Adds a nudge's stored title and body (Z12-50) to its presented row, so the
+ * trainee's inbox shows the same text the push carried. Other rows unchanged.
+ */
+function withNudgeCopy<T extends object>(
+  presented: T,
+  row: Parameters<typeof nudgeDisplayCopy>[0],
+): T | (T & { title: string; body: string }) {
+  const copy = nudgeDisplayCopy(row);
+  return copy ? { ...presented, ...copy } : presented;
+}
 
 /**
  * Device-token row → contract shape. Local to these routes because the shared
@@ -720,7 +734,9 @@ notificationRoutes.get(
     return ok(
       c,
       notificationListResponseSchema.parse({
-        items: await presentNotifications(db, rows),
+        items: (await presentNotifications(db, rows)).map((item, index) =>
+          withNudgeCopy(item, rows[index]!),
+        ),
         nextCursor: null,
       }),
     );
@@ -805,7 +821,7 @@ notificationRoutes.post(
     if (!presented) {
       return fail(c, 404, "NOTIFICATION_NOT_FOUND", "Notification not found.");
     }
-    return ok(c, notificationSchema.parse(presented));
+    return ok(c, notificationSchema.parse(withNudgeCopy(presented, updated)));
   },
 );
 
@@ -918,8 +934,12 @@ notificationRoutes.post(
   operation({
     tag: "Notifications",
     summary: "Trainer nudge for one unresolved activity",
-    description:
-      "Sends one activity nudge. Distinct from automatic reminders. Respects client preferences and quiet hours, and does not change execution or adherence.",
+    description: [
+      "Sends one activity nudge (Z12-50). Distinct from automatic reminders; it does not change execution or adherence.",
+      "Copy: the title is fixed, \"{Coach first name} nudged you\", from the coach's profile. `body` is optional (trimmed, 1-200 characters, no links, else 400 NUDGE_BODY_HAS_LINK); absent, the server uses the Gentle template for the activity type. The trainee's push and inbox row carry the same title and body; the push data stays routing only.",
+      "Delivery: reminders paused (the client paused them) → inbox only, `delivery: \"inbox\"`, `inboxReason: \"reminders_paused\"`. FitBud push off, or no active device token → inbox only, `inboxReason: \"push_off\"`. Otherwise `delivery: \"push\"`; inside the client's quiet hours the push is held until they end (`deferredForQuietHours`, `quietHoursEnd`) while the inbox row is written immediately. Reminder categories do not gate a nudge.",
+      "Limits: 2 nudges per client per client civil day (the client's stored zone), across activities and delivery modes → 429 NUDGE_LIMIT (static message, `retryAfter` = seconds to the client's next day). The trainer-wide hourly limit stays → 429 NUDGE_RATE_LIMITED. One nudge per item per client day: a repeat returns the stored nudge with `deduped: true` and does not count again (retry-safe). Ended relationships → 409 RELATIONSHIP_ENDED.",
+    ].join("\n\n"),
     roles: ["trainer"],
     body: nudgeActivityRequestSchema,
     response: nudgeActivityResponseSchema,
@@ -939,6 +959,9 @@ notificationRoutes.post(
       return fail(c, 400, "INVALID_REQUEST", "Invalid nudge request.", {
         issues: parsed.error.issues,
       });
+    }
+    if (parsed.data.body !== undefined && nudgeBodyHasLink(parsed.data.body)) {
+      return fail(c, 400, "NUDGE_BODY_HAS_LINK", "Nudges can't include links.");
     }
     const db = createDb(c.env.DB);
     const relationship = await loadAccessibleRelationship(
@@ -960,6 +983,7 @@ notificationRoutes.post(
       trainerUserId: actor.userId,
       activityType: parsed.data.activityType,
       activityId: parsed.data.activityId,
+      body: parsed.data.body,
       now: c.env.AUTH_MODE === "test" ? parsed.data.now : undefined,
       queue: reminderQueueFromEnv(c.env),
       pushProviderMode: resolvePushProviderMode(c.env.PUSH_PROVIDER_MODE),
@@ -985,13 +1009,13 @@ notificationRoutes.post(
           ? "Ended relationships do not send nudges."
           : result.code === "ACTIVITY_RESOLVED"
             ? "This activity is already resolved."
-            : result.code === "REMINDERS_PAUSED"
-              ? "Client has paused reminders. Nudge isn't available."
-              : result.code === "NUDGE_LIMIT" ||
-                  result.code === "NUDGE_RATE_LIMITED"
+            : result.code === "NUDGE_LIMIT"
+              ? // D-W12-22: static; the sheet composes the TM-04n line.
+                "You can nudge this client again tomorrow."
+              : result.code === "NUDGE_RATE_LIMITED"
                 ? retryMins
                   ? `You can nudge again in ${retryMins} min`
-                  : "Nudge limit reached for this client or activity."
+                  : "Nudge limit reached. Try again later."
                 : "Activity not found.";
       return fail(c, status, result.code, message, {
         retryAfter,
@@ -1000,10 +1024,15 @@ notificationRoutes.post(
     return ok(
       c,
       nudgeActivityResponseSchema.parse({
-        notification: mapNotification(result.notification),
+        notification: withNudgeCopy(
+          mapNotification(result.notification),
+          result.notification,
+        ),
         deduped: result.deduped,
-        deferredForQuietHours: result.deferredForQuietHours ?? false,
-        quietHoursEnd: result.quietHoursEnd ?? null,
+        delivery: result.delivery,
+        inboxReason: result.inboxReason,
+        deferredForQuietHours: result.deferredForQuietHours,
+        quietHoursEnd: result.quietHoursEnd,
       }),
     );
   },

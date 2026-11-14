@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lt, lte } from "drizzle-orm";
 import type {
   EvaluateRemindersResponse,
   NotificationDomainEntityType,
@@ -39,7 +39,6 @@ import {
   reminderDeliveryDecision,
   reminderDeliveryPriority,
   reminderDedupeKey,
-  reminderPreferenceForActivity,
   reminderPreferenceForNotification,
   shouldSkipReminderForBackoff,
   subscriptionRenewalDedupeKey,
@@ -60,6 +59,7 @@ import {
   reminderStates,
   scheduledJobs,
   subscriptionVersions,
+  trainerProfiles,
   users,
   workoutAssignments,
   workoutExecutions,
@@ -320,8 +320,10 @@ export type ActivityNudgeResult =
       ok: true;
       notification: NotificationRow;
       deduped: boolean;
-      deferredForQuietHours?: boolean;
-      quietHoursEnd?: string | null;
+      delivery: NudgeDelivery;
+      inboxReason: NudgeInboxReason | null;
+      deferredForQuietHours: boolean;
+      quietHoursEnd: string | null;
     }
   | {
       ok: false;
@@ -330,9 +332,10 @@ export type ActivityNudgeResult =
         | "RELATIONSHIP_ENDED"
         | "ACTIVITY_NOT_FOUND"
         | "ACTIVITY_RESOLVED"
+        /** Trainer-wide hourly abuse limit. */
         | "NUDGE_RATE_LIMITED"
-        | "NUDGE_LIMIT"
-        | "REMINDERS_PAUSED";
+        /** 2 per client per client civil day (D-W12-22). */
+        | "NUDGE_LIMIT";
       retryAfter?: number;
     };
 
@@ -1580,11 +1583,14 @@ async function rebuildDeferredCandidate(
       row.domainEntityId,
     );
     if (!activity || !activity.unresolved) return null;
+    // Z12-50: a nudge is not an automatic reminder, so reminder categories do
+    // not gate it. Release the held push; delivery decides push vs inbox
+    // (push off, no device, reminders paused) when it runs.
     return {
       ...base,
       type: "activity_nudge",
-      preferenceType: reminderPreferenceForActivity(activity.activityType),
-      categoryAllowed: null,
+      preferenceType: null,
+      categoryAllowed: true,
       domainEntityType: domainEntityTypeForActivity(activity.activityType),
       domainEntityId: activity.activityId,
     };
@@ -1842,6 +1848,145 @@ export async function evaluateReminders(input: {
   });
 }
 
+/**
+ * Z12-50 (D-W12-9, D-W12-10, D-W12-22, D-W12-23): a coach's nudge is always a
+ * FitBud notification with a fixed title and the coach's body.
+ *
+ * - **Cap:** at most `NUDGE_DAILY_CLIENT_LIMIT` nudges per client per client
+ *   civil day (the trainee's stored zone, through the core zone resolver),
+ *   counted across activities and every delivery mode. It replaced the
+ *   per-item 4-hour cooldown. The trainer-wide hourly limit stays as abuse
+ *   protection (`NUDGE_RATE_LIMITED`).
+ * - **One per item per day:** the existing dedupe key (activity + client civil
+ *   day) is kept. A repeat for the same item that day returns the stored nudge
+ *   with `deduped: true` and does not count again, which also makes a retried
+ *   request safe.
+ * - **Delivery:** reminders paused → inbox only (`reminders_paused`); FitBud
+ *   push off or no active device token (the app unregisters it when the OS
+ *   permission is off) → inbox only (`push_off`); otherwise a push, held until
+ *   the client's quiet hours end. The inbox row is written immediately in
+ *   every case.
+ */
+export const NUDGE_DAILY_CLIENT_LIMIT = 2;
+
+export type NudgeDelivery = "push" | "inbox";
+export type NudgeInboxReason = "push_off" | "reminders_paused";
+
+/**
+ * Gentle template (D-W12-23): the body when the request carries none. Generic
+ * per activity type on purpose: it names no item, day or time, so it can never
+ * be wrong about one. The mobile sheet composes the item-specific Gentle text.
+ */
+export const GENTLE_NUDGE_BODY: Readonly<Record<NudgeActivityType, string>> = {
+  workout: "Your workout is waiting. Can you fit it in soon?",
+  meal: "This meal wasn't logged. Can you add it, even roughly?",
+  checkin: "Your check-in is waiting. Can you send it when you get a moment?",
+};
+
+/** Used when the coach has no display name yet: "Your coach nudged you". */
+const NUDGE_TITLE_FALLBACK_NAME = "Your coach";
+
+/** "{Coach first name} nudged you" (D-W12-9). The name comes from the coach's profile only. */
+export function nudgeTitle(coachDisplayName: string | null | undefined): string {
+  const first = coachDisplayName?.trim().split(/\s+/)[0];
+  return `${first || NUDGE_TITLE_FALLBACK_NAME} nudged you`.slice(0, 120);
+}
+
+/**
+ * True when a nudge body contains a link: a scheme (`https://`, `mailto:`,
+ * `tel:` …), `www.`, or a bare domain on a common top-level domain (`wa.me`,
+ * `bit.ly`, `example.com/x`). Nudges carry the coach's words only.
+ */
+export function nudgeBodyHasLink(body: string): boolean {
+  return NUDGE_LINK_RE.test(body);
+}
+
+const NUDGE_LINK_RE = new RegExp(
+  [
+    "[a-z][a-z0-9+.-]*://",
+    "\\bwww\\.",
+    "\\b(?:mailto|tel|sms|whatsapp|intent|javascript|data|file):",
+    "\\b[a-z0-9-]+(?:\\.[a-z0-9-]+)*\\.(?:com|in|net|org|io|co|app|me|ly|link|info|biz|xyz|gl|gg|to|tv|page|site|online|store|shop)(?![a-z0-9-])",
+  ].join("|"),
+  "i",
+);
+
+/** What a nudge row keeps in `notifications.payload_json` (no migration: the column was unused for nudges). */
+type StoredNudge = {
+  title: string;
+  body: string;
+  delivery: NudgeDelivery;
+  inboxReason: NudgeInboxReason | null;
+};
+
+function storedNudge(row: Pick<NotificationRow, "notificationType" | "payloadJson">): StoredNudge | null {
+  if (row.notificationType !== "activity_nudge" || !row.payloadJson) return null;
+  try {
+    const parsed = JSON.parse(row.payloadJson) as { nudge?: Partial<StoredNudge> };
+    const nudge = parsed?.nudge;
+    if (
+      !nudge ||
+      typeof nudge.title !== "string" ||
+      !nudge.title ||
+      typeof nudge.body !== "string" ||
+      !nudge.body
+    ) {
+      return null;
+    }
+    return {
+      title: nudge.title,
+      body: nudge.body,
+      delivery: nudge.delivery === "inbox" ? "inbox" : "push",
+      inboxReason:
+        nudge.inboxReason === "push_off" || nudge.inboxReason === "reminders_paused"
+          ? nudge.inboxReason
+          : null,
+    };
+  } catch (error) {
+    logCaught("reminders.nudge_payload", error);
+    return null;
+  }
+}
+
+/**
+ * The stored title and body of a nudge row, for the inbox and the push. Null
+ * for every other notification and for nudges sent before Z12-50.
+ */
+export function nudgeDisplayCopy(
+  row: Pick<NotificationRow, "notificationType" | "payloadJson">,
+): { title: string; body: string } | null {
+  const nudge = storedNudge(row);
+  return nudge ? { title: nudge.title, body: nudge.body } : null;
+}
+
+async function remindersPausedNow(db: Db, traineeUserId: string, now: string): Promise<boolean> {
+  const [state] = await db
+    .select({ mode: reminderStates.mode, pausedUntil: reminderStates.pausedUntil })
+    .from(reminderStates)
+    .where(eq(reminderStates.traineeUserId, traineeUserId))
+    .limit(1);
+  return state?.mode === "paused" && (!state.pausedUntil || state.pausedUntil > now);
+}
+
+/** Inbox-only reason for a nudge right now, or null when a push may go out. */
+async function nudgeInboxReason(
+  db: Db,
+  traineeUserId: string,
+  prefs: { pushEnabled: boolean },
+  now: string,
+  checkTokens: boolean,
+): Promise<NudgeInboxReason | null> {
+  if (await remindersPausedNow(db, traineeUserId, now)) return "reminders_paused";
+  if (!prefs.pushEnabled) return "push_off";
+  if (!checkTokens) return null;
+  const [token] = await db
+    .select({ id: deviceTokens.id })
+    .from(deviceTokens)
+    .where(and(eq(deviceTokens.userId, traineeUserId), eq(deviceTokens.status, "active")))
+    .limit(1);
+  return token ? null : "push_off";
+}
+
 export async function createActivityNudge(
   db: Db,
   input: {
@@ -1849,13 +1994,15 @@ export async function createActivityNudge(
     trainerUserId: string;
     activityType: NudgeActivityType;
     activityId: string;
+    /** Already trimmed and checked by the route; absent → Gentle template. */
+    body?: string;
     now?: string;
     queue: ReminderQueue | null;
     pushProviderMode: PushProviderMode;
     expoAccessToken?: string;
     deliverInline: boolean;
   },
-): Promise<ActivityNudgeResult & { retryAfter?: number }> {
+): Promise<ActivityNudgeResult> {
   const now = input.now ?? nowIso();
   const relationships = await db
     .select()
@@ -1868,18 +2015,6 @@ export async function createActivityNudge(
     return { ok: false, code: "RELATIONSHIP_ENDED" };
   }
 
-  const [reminderState] = await db
-    .select()
-    .from(reminderStates)
-    .where(eq(reminderStates.traineeUserId, relationship.traineeUserId))
-    .limit(1);
-  if (
-    reminderState?.mode === "paused" &&
-    (!reminderState.pausedUntil || reminderState.pausedUntil > now)
-  ) {
-    return { ok: false, code: "REMINDERS_PAUSED" };
-  }
-
   const activity = await loadNudgeActivity(
     db,
     relationship.id,
@@ -1888,12 +2023,8 @@ export async function createActivityNudge(
   );
   if (!activity) return { ok: false, code: "ACTIVITY_NOT_FOUND" };
 
-  const trainee = await db
-    .select({ timezone: users.timezone })
-    .from(users)
-    .where(eq(users.id, relationship.traineeUserId))
-    .limit(1);
-  const timeZone = trainee[0]?.timezone ?? "UTC";
+  // The client's civil day, in the trainee's stored zone (core resolver, CU17).
+  const timeZone = await recipientTimezone(db, relationship.traineeUserId);
   const localDate = formatLocalDate(new Date(now), timeZone);
   const dedupeKey = activityNudgeDedupeKey(activity.activityId, localDate);
   const deferredKey = deferredReminderDedupeKey(dedupeKey);
@@ -1906,104 +2037,158 @@ export async function createActivityNudge(
     return { ok: false, code: "ACTIVITY_RESOLVED" };
   }
 
-  const existingDelivery = await findByDedupeKey(db, dedupeKey);
-  if (existingDelivery) {
-    return { ok: true, notification: existingDelivery, deduped: true };
-  }
-  const existingDeferred = await findByDedupeKey(db, deferredKey);
-  if (existingDeferred?.state === "deferred") {
-    return { ok: true, notification: existingDeferred, deduped: true };
+  const prefs = await loadOrDefaultPreferences(db, relationship.traineeUserId);
+  const existing =
+    (await findByDedupeKey(db, dedupeKey)) ??
+    (await findByDedupeKey(db, deferredKey));
+  if (existing) return nudgeResult(existing, true, prefs);
+
+  // D-W12-22: the client's civil-day cap, across activities and delivery modes.
+  const dayStart = localDateTimeToUtcIso(localDate, timeZone, 0, 0, 0);
+  const nextDayStart = localDateTimeToUtcIso(addDaysToLocalDate(localDate, 1), timeZone, 0, 0, 0);
+  const sentToday = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .where(
+      and(
+        eq(notifications.coachingRelationshipId, relationship.id),
+        eq(notifications.notificationType, "activity_nudge"),
+        gte(notifications.createdAt, dayStart),
+        lt(notifications.createdAt, nextDayStart),
+      ),
+    );
+  if (sentToday.length >= NUDGE_DAILY_CLIENT_LIMIT) {
+    return {
+      ok: false,
+      code: "NUDGE_LIMIT",
+      retryAfter: Math.max(1, Math.ceil((Date.parse(nextDayStart) - Date.parse(now)) / 1000)),
+    };
   }
 
   const hourAgo = new Date(Date.parse(now) - 60 * 60 * 1000).toISOString();
-  const itemCooldownStart = new Date(
-    Date.parse(now) - 4 * 60 * 60 * 1000,
-  ).toISOString();
-  const [recentForTrainer, recentForItem] = await Promise.all([
-    db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .innerJoin(
-        coachingRelationships,
-        eq(notifications.coachingRelationshipId, coachingRelationships.id),
-      )
-      .where(
-        and(
-          eq(coachingRelationships.trainerUserId, input.trainerUserId),
-          eq(notifications.notificationType, "activity_nudge"),
-          gte(notifications.createdAt, hourAgo),
-        ),
+  const recentForTrainer = await db
+    .select({ id: notifications.id })
+    .from(notifications)
+    .innerJoin(
+      coachingRelationships,
+      eq(notifications.coachingRelationshipId, coachingRelationships.id),
+    )
+    .where(
+      and(
+        eq(coachingRelationships.trainerUserId, input.trainerUserId),
+        eq(notifications.notificationType, "activity_nudge"),
+        gte(notifications.createdAt, hourAgo),
       ),
-    db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.domainEntityId, input.activityId),
-          eq(notifications.notificationType, "activity_nudge"),
-          gte(notifications.createdAt, itemCooldownStart),
-        ),
-      ),
-  ]);
+    );
   if (recentForTrainer.length >= ACTIVITY_NUDGE_HOURLY_LIMIT) {
-    return { ok: false, code: "NUDGE_LIMIT", retryAfter: 3600 };
-  }
-  if (recentForItem.length > 0) {
-    return { ok: false, code: "NUDGE_LIMIT", retryAfter: 14_400 };
+    return { ok: false, code: "NUDGE_RATE_LIMITED", retryAfter: 3600 };
   }
 
-  const counters: ReminderCounters = {
-    notificationsCreated: 0,
-    notificationsDeduped: 0,
-    deliveriesEnqueued: 0,
-    suppressed: 0,
-    deferred: 0,
-  };
-  const result = await persistReminder(
+  const [coach] = await db
+    .select({ displayName: trainerProfiles.displayName })
+    .from(trainerProfiles)
+    .where(eq(trainerProfiles.userId, relationship.trainerUserId))
+    .limit(1);
+  const inboxReason = await nudgeInboxReason(
     db,
-    {
-      type: "activity_nudge",
-      preferenceType: reminderPreferenceForActivity(activity.activityType),
-      categoryAllowed: null,
+    relationship.traineeUserId,
+    prefs,
+    now,
+    true,
+  );
+  const stored: StoredNudge = {
+    title: nudgeTitle(coach?.displayName),
+    body: input.body ?? GENTLE_NUDGE_BODY[activity.activityType],
+    delivery: inboxReason ? "inbox" : "push",
+    inboxReason,
+  };
+  const held =
+    !inboxReason &&
+    isWithinQuietHours({
+      localTimeHhMm: recipientLocalTimeHhMm(now, timeZone),
+      quietHoursStart: prefs.quietHoursStart ?? DEFAULT_QUIET_HOURS_START,
+      quietHoursEnd: prefs.quietHoursEnd ?? DEFAULT_QUIET_HOURS_END,
+    });
+  // Inbox only: the row is the delivery. Held: the deferred row is in the inbox
+  // now and the cron releases the push when quiet hours end. Otherwise queued.
+  const state = inboxReason ? "delivered" : held ? "deferred" : "queued";
+  const notificationId = createId();
+  const inserted = await db
+    .insert(notifications)
+    .values({
+      id: notificationId,
       recipientUserId: relationship.traineeUserId,
       coachingRelationshipId: relationship.id,
+      notificationType: "activity_nudge",
       domainEntityType: domainEntityTypeForActivity(activity.activityType),
       domainEntityId: activity.activityId,
-      dedupeKey,
-    },
-    now,
-    {
-      queue: input.queue,
-      pushProviderMode: input.pushProviderMode,
-      expoAccessToken: input.expoAccessToken,
-      deliverInline: input.deliverInline,
-    },
-    counters,
-  );
-  const notificationId =
-    result.outcome === "stored"
-      ? result.notificationId
-      : (await findByDedupeKey(db, dedupeKey))?.id ??
-        (await findByDedupeKey(db, deferredKey))?.id;
-  if (!notificationId) return { ok: false, code: "NUDGE_RATE_LIMITED" };
-  const stored = await db
+      state,
+      dedupeKey: held ? deferredKey : dedupeKey,
+      createdAt: now,
+      readAt: null,
+      payloadJson: JSON.stringify({ nudge: stored }),
+    })
+    .onConflictDoNothing({ target: notifications.dedupeKey })
+    .returning({ id: notifications.id });
+  if (!inserted[0]) {
+    // A concurrent identical request won the dedupe key: answer with its row.
+    const winner =
+      (await findByDedupeKey(db, dedupeKey)) ??
+      (await findByDedupeKey(db, deferredKey));
+    if (!winner) return { ok: false, code: "ACTIVITY_NOT_FOUND" };
+    return nudgeResult(winner, true, prefs);
+  }
+
+  if (state === "queued") {
+    await enqueueReminderDelivery(db, {
+      notificationId,
+      candidate: {
+        type: "activity_nudge",
+        preferenceType: null,
+        categoryAllowed: true,
+        recipientUserId: relationship.traineeUserId,
+        coachingRelationshipId: relationship.id,
+        domainEntityType: domainEntityTypeForActivity(activity.activityType),
+        domainEntityId: activity.activityId,
+        dedupeKey,
+      },
+      now,
+      options: {
+        queue: input.queue,
+        pushProviderMode: input.pushProviderMode,
+        expoAccessToken: input.expoAccessToken,
+        deliverInline: input.deliverInline,
+      },
+    });
+  }
+
+  const [row] = await db
     .select()
     .from(notifications)
     .where(eq(notifications.id, notificationId))
     .limit(1);
-  if (!stored[0]) return { ok: false, code: "ACTIVITY_NOT_FOUND" };
-  const deferredForQuietHours = stored[0].state === "deferred";
-  let quietHoursEnd: string | null = null;
-  if (deferredForQuietHours) {
-    const prefs = await loadOrDefaultPreferences(db, relationship.traineeUserId);
-    quietHoursEnd = prefs.quietHoursEnd ?? DEFAULT_QUIET_HOURS_END;
-  }
+  if (!row) return { ok: false, code: "ACTIVITY_NOT_FOUND" };
+  return nudgeResult(row, false, prefs);
+}
+
+function nudgeResult(
+  row: NotificationRow,
+  deduped: boolean,
+  prefs: { quietHoursEnd: string | null },
+): Extract<ActivityNudgeResult, { ok: true }> {
+  const nudge = storedNudge(row);
+  const deferredForQuietHours = row.state === "deferred";
   return {
     ok: true,
-    notification: stored[0],
-    deduped: result.outcome === "deduped",
+    notification: row,
+    deduped,
+    // A nudge stored before Z12-50 carries no delivery record: it was a push.
+    delivery: nudge?.delivery ?? "push",
+    inboxReason: nudge?.inboxReason ?? null,
     deferredForQuietHours,
-    quietHoursEnd,
+    quietHoursEnd: deferredForQuietHours
+      ? (prefs.quietHoursEnd ?? DEFAULT_QUIET_HOURS_END)
+      : null,
   };
 }
 
@@ -2134,12 +2319,42 @@ export async function deliverReminderMessage(
   }
 
   const prefs = await loadOrDefaultPreferences(db, notification.recipientUserId);
+  const isNudge = notification.notificationType === "activity_nudge";
+  if (isNudge) {
+    // Z12-50 (D-W12-10): a nudge whose push can no longer go out (push turned
+    // off, or reminders paused since it was held) stays an inbox entry. Its
+    // row is `delivered`, never `suppressed`, which clients read as "already
+    // logged". Missing devices are handled with the token lookup below.
+    const inboxReason = await nudgeInboxReason(
+      db,
+      notification.recipientUserId,
+      prefs,
+      now,
+      false,
+    );
+    if (inboxReason) {
+      await db
+        .update(notificationDeliveries)
+        .set({
+          providerStatus: "skipped",
+          failureCategory: inboxReason === "reminders_paused" ? "reminders_paused" : "preferences",
+          updatedAt: now,
+        })
+        .where(eq(notificationDeliveries.id, delivery.id));
+      await db
+        .update(notifications)
+        .set({ state: "delivered" })
+        .where(eq(notifications.id, notification.id));
+      return;
+    }
+  }
   const preference = reminderPreferenceForNotification({
     notificationType: notification.notificationType,
     domainEntityType: notification.domainEntityType,
   });
-  const categoryOk =
-    preference === "daily_summary"
+  const categoryOk = isNudge
+    ? true
+    : preference === "daily_summary"
       ? prefs.pushEnabled && prefs.categories.dailySummaryReminder
       : preference
         ? isCategoryEnabled({
@@ -2218,10 +2433,12 @@ export async function deliverReminderMessage(
       .where(eq(notificationDeliveries.id, delivery.id));
     await db
       .update(notifications)
-      .set({ state: "failed" })
+      // A nudge with no device is still an inbox entry (push off, Z12-50).
+      .set({ state: isNudge ? "delivered" : "failed" })
       .where(eq(notifications.id, notification.id));
     return;
   }
+  const display = nudgeDisplayCopy(notification) ?? undefined;
 
   const payload = routingPayloadForNotification({
     notificationId: notification.id,
@@ -2267,6 +2484,7 @@ export async function deliverReminderMessage(
       mode: pushMode,
       deviceToken: token.token,
       payload,
+      ...(display ? { display } : {}),
       expoAccessToken: config.expoAccessToken,
     });
     if (result.ok) {

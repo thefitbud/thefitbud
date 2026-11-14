@@ -307,6 +307,14 @@ export const notificationSchema = z.object({
    * Omitted for trainee reminders and multi-client digests.
    */
   clientDisplayName: z.string().min(1).max(320).optional(),
+  /**
+   * Server display copy, stored when the notification was created (Z12-50).
+   * Present on `activity_nudge`: title "{Coach first name} nudged you" and the
+   * coach's body, the same text the push carried. Clients show these as-is
+   * and fall back to their own copy when absent.
+   */
+  title: z.string().min(1).max(120).optional(),
+  body: z.string().min(1).max(200).optional(),
 });
 export type Notification = z.infer<typeof notificationSchema>;
 export type NotificationRecord = Notification;
@@ -378,6 +386,12 @@ export type NudgeActivityType = z.infer<typeof nudgeActivityTypeSchema>;
 export const nudgeActivityRequestSchema = z.object({
   activityType: nudgeActivityTypeSchema,
   activityId: uuidSchema,
+  /**
+   * The coach's message (Z12-50, D-W12-23). Trimmed, 1–200 characters, no
+   * links (the API answers 400 `NUDGE_BODY_HAS_LINK`). Absent → the server's
+   * Gentle template for the activity type.
+   */
+  body: z.string().trim().min(1).max(200).optional(),
   /** Test-only clock override (honored when AUTH_MODE=test). */
   now: isoDateTimeSchema.optional(),
 });
@@ -386,6 +400,14 @@ export type NudgeActivityRequest = z.infer<typeof nudgeActivityRequestSchema>;
 export const nudgeActivityResponseSchema = z.object({
   notification: notificationSchema,
   deduped: z.boolean(),
+  /**
+   * `push`: a FitBud push was sent, or is held until quiet hours end
+   * (`deferredForQuietHours`). `inbox`: in-app inbox only, see `inboxReason`
+   * (D-W12-10). Optional only so a client still parses an older server.
+   */
+  delivery: z.enum(["push", "inbox"]).optional(),
+  /** Why the nudge went to the inbox only; null when `delivery` is `push`. */
+  inboxReason: z.enum(["push_off", "reminders_paused"]).nullable().optional(),
   deferredForQuietHours: z.boolean().optional(),
   /** Client quiet-hours end (HH:mm) when deferred for quiet hours. */
   quietHoursEnd: z.string().nullable().optional(),
