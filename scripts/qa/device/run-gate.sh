@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+#
+# Runs the W12 device gate on one platform (Z12-35, prompt §3). device.yml calls it
+# once per platform, after build-app.sh and with the local API serving.
+#
+#   scripts/qa/device/run-gate.sh ios       # macOS, booted simulator (ios-sim.sh boot)
+#   scripts/qa/device/run-gate.sh android   # a booted emulator on adb
+#
+# Environment (all optional):
+#   DEVICE_FLOWS    Maestro tag, or comma-separated path globs under apps/mobile/.maestro
+#                   (select-flows.mjs). Default: smoke
+#   DEVICE_ROLES    keep only flows tagged with one of these roles (trainee,trainer,dual)
+#   DEVICE_THEMES   "light dark" (default), "light" or "dark"
+#   DEVICE_EXTRAS   all (default): after the flows, the push, lock-screen and offline
+#                   samples; none: flows and logs only
+#
+# What it does, per platform:
+#   1. installs the built app, checks the local API answers;
+#   2. starts the device log stream (logs.sh);
+#   3. for each theme: switches the system theme (theme.sh), runs the selected Maestro
+#      flows signed in as the local demo personas, renames their screenshots to
+#      <screen ID>-<theme>-<platform>.png (collect-shots.mjs);
+#   4. extras, once, in the last theme: a push and a lock-screen tap on it
+#      (lockscreen-tap.sh, which uses push.sh), a lock-screen Live Activity tap attempt,
+#      and an offline -> online round trip (network.sh) with a screenshot of each state;
+#   5. stops the log stream and scans it (scan-logs.mjs);
+#   6. writes summary.json / summary.md (gate-summary.mjs) and exits 1 when a flow
+#      failed or the log shows a crash, red box, LogBox, console.error/warn or a React
+#      warning.
+#
+# Results: $DEVICE_RESULTS/<platform>/ (junit, Maestro output, scan, summary, extras),
+# $DEVICE_RESULTS/shots/ (screenshots) and $DEVICE_RESULTS/logs/ (device logs).
+#
+# Personas: the local demo seed's (docs/LOCAL_TESTING.md), passed to the flows under the
+# variable names the flows already use: QA_TRAINER_EMAIL rahul.coach, QA_ONTRACK_EMAIL
+# aarav.ontrack, QA_SLIPPING_EMAIL rohan.slipping, QA_DUAL_EMAIL karan.dual, QA_PASSWORD
+# the public demo password. The local API has no fixed sign-in code (that is a
+# staging-only QA switch), so a flow that signs in with a code fails here until it reads
+# the code from the local dev mail sink (GET /dev/mail).
+set -uo pipefail
+# shellcheck source=lib.sh
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+PLATFORM="$(device_platform "${1:-}")"
+FLOWS="${DEVICE_FLOWS:-smoke}"
+ROLES="${DEVICE_ROLES:-}"
+THEMES="${DEVICE_THEMES:-light dark}"
+EXTRAS="${DEVICE_EXTRAS:-all}"
+OUT="$DEVICE_RESULTS/$PLATFORM"
+SHOTS="$DEVICE_RESULTS/shots"
+LOG_NAME="$PLATFORM-device"
+export DEVICE_SHOTS_DIR="$SHOTS"
+
+device_require maestro node jq
+case "$PLATFORM" in
+  ios) device_require xcrun plutil ;;
+  android) device_require adb ;;
+esac
+rm -rf "$OUT"
+mkdir -p "$OUT/extras" "$SHOTS" "$DEVICE_RESULTS/logs"
+
+# --- 1. app and API -------------------------------------------------------------
+APP="$(cat "$DEVICE_RESULTS/$PLATFORM-app-path" 2>/dev/null || true)"
+[ -n "$APP" ] && [ -e "$APP" ] || device_die "no built app recorded in $DEVICE_RESULTS/$PLATFORM-app-path; run build-app.sh $PLATFORM first."
+
+case "$PLATFORM" in
+  ios)
+    UDID="$(device_udid)"
+    export DEVICE_UDID="$UDID"
+    xcrun simctl bootstatus "$UDID" -b >/dev/null
+    xcrun simctl install "$UDID" "$APP" || device_die "simctl install failed."
+    MAESTRO=(maestro --device "$UDID")
+    ;;
+  android)
+    adb wait-for-device
+    # shellcheck disable=SC2016  # runs on the device
+    adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+    # shellcheck source=../android-emulator-prep.sh
+    source "$DEVICE_ROOT/scripts/qa/android-emulator-prep.sh"
+    suppress_emulator_error_dialogs || device_warn "could not hide emulator error dialogs"
+    adb install -r -d "$APP" >/dev/null || device_die "adb install failed."
+    MAESTRO=(maestro)
+    ;;
+esac
+"$DEVICE_LIB_DIR/local-api.sh" wait || device_die "the local API is not serving."
+device_log "maestro $(maestro --version 2>/dev/null | tail -n 1)"
+
+# --- flows ----------------------------------------------------------------------
+node "$DEVICE_LIB_DIR/select-flows.mjs" --flows "$FLOWS" --roles "$ROLES" >"$OUT/flows.txt" \
+  || device_die "no flows selected for flows=\"$FLOWS\" roles=\"$ROLES\"."
+FLOW_FILES=()
+while IFS= read -r f; do [ -n "$f" ] && FLOW_FILES+=("$f"); done <"$OUT/flows.txt"
+device_log "${#FLOW_FILES[@]} flow(s): $(sed 's#.*/\.maestro/##' "$OUT/flows.txt" | tr '\n' ' ')"
+
+PASSWORD="$(demo_password)"
+MAESTRO_ENV=(
+  -e QA_TRAINER_EMAIL=rahul.coach@demo.fitbud.test
+  -e QA_ONTRACK_EMAIL=aarav.ontrack@demo.fitbud.test
+  -e QA_SLIPPING_EMAIL=rohan.slipping@demo.fitbud.test
+  -e QA_DUAL_EMAIL=karan.dual@demo.fitbud.test
+  -e "QA_ONTRACK_NAME=Aarav Shah"
+  -e "QA_SLIPPING_NAME=Rohan Mehta"
+  -e "QA_PASSWORD=$PASSWORD"
+  -e QA_OTP_CODE=000000
+  -e "DEVICE_PLATFORM=$PLATFORM"
+)
+
+launch_app() {
+  case "$PLATFORM" in
+    ios) xcrun simctl launch "$UDID" "$DEVICE_APP_ID" >/dev/null 2>&1 || true ;;
+    android) adb shell monkey -p "$DEVICE_APP_ID" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true ;;
+  esac
+}
+
+# --- 2. logs --------------------------------------------------------------------
+"$DEVICE_LIB_DIR/logs.sh" "$PLATFORM" start "$LOG_NAME" || device_die "could not start the device log."
+
+# --- 3. flows per theme ---------------------------------------------------------
+last_theme=""
+for theme in $THEMES; do
+  last_theme="$theme"
+  dir="$OUT/$theme"
+  mkdir -p "$dir"
+  if ! "$DEVICE_LIB_DIR/theme.sh" "$PLATFORM" "$theme"; then
+    echo 1 >"$dir/maestro-exit"
+    continue
+  fi
+  device_log "theme $theme: running ${#FLOW_FILES[@]} flow(s)"
+  (
+    cd "$dir" && "${MAESTRO[@]}" test \
+      "${MAESTRO_ENV[@]}" -e "DEVICE_THEME=$theme" \
+      --format junit --output "$dir/junit.xml" \
+      --test-output-dir "$dir/maestro" \
+      "${FLOW_FILES[@]}"
+  ) >"$dir/maestro.log" 2>&1
+  status=$?
+  echo "$status" >"$dir/maestro-exit"
+  # Older Maestro builds ignore --output and write ./report.xml.
+  if [ ! -f "$dir/junit.xml" ] && [ -f "$dir/report.xml" ]; then mv "$dir/report.xml" "$dir/junit.xml"; fi
+  device_log "theme $theme: maestro exited $status"
+  # Maestro can echo -e values. The only one that is not an email is the demo password,
+  # which is public, but it is masked anyway before the log is uploaded.
+  sed "s/$PASSWORD/***/g" "$dir/maestro.log" >"$dir/maestro.log.tmp" && mv "$dir/maestro.log.tmp" "$dir/maestro.log"
+  tail -n 30 "$dir/maestro.log"
+  node "$DEVICE_LIB_DIR/collect-shots.mjs" --from "$dir" --to "$SHOTS" --theme "$theme" --platform "$PLATFORM" \
+    >"$dir/shots.json" || device_warn "collect-shots failed for $theme"
+done
+
+# --- 4. extras ------------------------------------------------------------------
+if [ "$EXTRAS" = "all" ] && [ -n "$last_theme" ]; then
+  device_log "extras in $last_theme: push + lock-screen tap, Live Activity tap, offline/online"
+  launch_app
+  sleep 5
+  "$DEVICE_LIB_DIR/lockscreen-tap.sh" "$PLATFORM" "$last_theme" notification "FitBud" daily_summary \
+    || jq -n '{outcome: "error", note: "lockscreen-tap.sh failed; see the job log"}' >"$DEVICE_RESULTS/lockscreen-notification-$PLATFORM.json"
+  "$DEVICE_LIB_DIR/lockscreen-tap.sh" "$PLATFORM" "$last_theme" live-activity "Log set|Rest|FitBud Staging" \
+    || jq -n '{outcome: "error", note: "lockscreen-tap.sh failed; see the job log"}' >"$DEVICE_RESULTS/lockscreen-live-activity-$PLATFORM.json"
+  for f in "$DEVICE_RESULTS/push-$PLATFORM.json" "$DEVICE_RESULTS"/lockscreen-*-"$PLATFORM".json; do
+    [ -f "$f" ] && cp "$f" "$OUT/extras/$(basename "$f" | sed "s/-$PLATFORM\.json$/.json/")"
+  done
+
+  offline_result="ok"
+  launch_app
+  sleep 3
+  if "$DEVICE_LIB_DIR/network.sh" "$PLATFORM" offline; then
+    launch_app
+    sleep 8
+    "$DEVICE_LIB_DIR/screenshot.sh" "$PLATFORM" offline-app "$last_theme" >/dev/null || true
+    "$DEVICE_LIB_DIR/network.sh" "$PLATFORM" online || offline_result="online-failed"
+    sleep 8
+    "$DEVICE_LIB_DIR/screenshot.sh" "$PLATFORM" online-app "$last_theme" >/dev/null || true
+  else
+    offline_result="offline-failed"
+    "$DEVICE_LIB_DIR/network.sh" "$PLATFORM" online || true
+  fi
+  if [ "$PLATFORM" = "ios" ]; then method="local API stopped and restarted (the simulator has no airplane mode)"; else method="adb shell cmd connectivity airplane-mode enable/disable"; fi
+  jq -n --arg r "$offline_result" --arg m "$method" '{result: $r, method: $m, note: "screenshots offline-app and online-app"}' >"$OUT/extras/offline.json"
+fi
+
+# --- 5. logs scan ---------------------------------------------------------------
+"$DEVICE_LIB_DIR/logs.sh" "$PLATFORM" stop "$LOG_NAME" || true
+log_files=("$DEVICE_RESULTS/logs/$LOG_NAME.log")
+for crash in "$DEVICE_RESULTS/logs/$LOG_NAME".crash-*.ips; do [ -f "$crash" ] && log_files+=("$crash"); done
+node "$DEVICE_LIB_DIR/scan-logs.mjs" --platform "$PLATFORM" --out "$OUT/scan.json" "${log_files[@]}"
+
+# --- 6. verdict -----------------------------------------------------------------
+node "$DEVICE_LIB_DIR/gate-summary.mjs" --dir "$OUT" --platform "$PLATFORM"
+verdict=$?
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ] && [ -f "$OUT/summary.md" ]; then cat "$OUT/summary.md" >>"$GITHUB_STEP_SUMMARY"; fi
+exit "$verdict"

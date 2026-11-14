@@ -39,6 +39,14 @@
 #                      so a degraded build must not be able to pass unnoticed.
 #   QA_PREBUILD_CLEAN=0  keep an existing apps/mobile/ios instead of regenerating.
 #   QA_IOS_SCHEME      override the discovered Xcode scheme.
+#   QA_API_BASE_URL    replaces eas.json's EXPO_PUBLIC_API_BASE_URL for this build.
+#                      Only the device gate sets it (Z12-35, scripts/qa/device/
+#                      build-app.sh), to point the same staging variant at the local
+#                      seeded API on the runner. Unset: the nightly build is unchanged.
+#   QA_POST_PREBUILD_HOOK  an executable run as `<hook> ios <apps/mobile/ios>` right
+#                      after expo prebuild, before pod install. The device gate uses
+#                      it to patch the generated, git-ignored project
+#                      (scripts/qa/device/patch-native.sh). Unset: nothing runs.
 #
 # Secrets: none. This script reads no secret and prints no value.
 set -euo pipefail
@@ -83,6 +91,9 @@ APP_VARIANT="$(read_env_var APP_VARIANT)"
 EXPO_PUBLIC_API_BASE_URL="$(read_env_var EXPO_PUBLIC_API_BASE_URL)"
 EXPO_PUBLIC_TRAINER_WEB_URL="$(read_env_var EXPO_PUBLIC_TRAINER_WEB_URL)"
 [ "$APP_VARIANT" = "staging" ] || die "eas.json's preview profile is APP_VARIANT=$APP_VARIANT, expected staging."
+if [ -n "${QA_API_BASE_URL:-}" ]; then
+  EXPO_PUBLIC_API_BASE_URL="$QA_API_BASE_URL"
+fi
 export APP_VARIANT EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_TRAINER_WEB_URL
 export CI=1
 # apps/mobile/app.config.js maps APP_VARIANT=staging to this bundle identifier, the
@@ -103,6 +114,11 @@ echo "build-ios-sim: expo prebuild"
 
 IOS_DIR="$MOBILE/ios"
 [ -d "$IOS_DIR" ] || die "expo prebuild produced no apps/mobile/ios."
+
+if [ -n "${QA_POST_PREBUILD_HOOK:-}" ]; then
+  echo "build-ios-sim: post-prebuild hook $QA_POST_PREBUILD_HOOK"
+  "$QA_POST_PREBUILD_HOOK" ios "$IOS_DIR" || die "the post-prebuild hook failed."
+fi
 
 # shellcheck source=ios-build-helpers.sh
 source "$(dirname "${BASH_SOURCE[0]}")/ios-build-helpers.sh"

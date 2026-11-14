@@ -13,6 +13,13 @@
 #   - Expo dev-client error header: "Something went wrong"
 #   - FitBud's own error screen (apps/mobile/src/navigation/AppRouter.tsx):
 #     title "Something went wrong", subtitle "We could not load your coaching account."
+#   - React Native / React warnings that LogBox shows on screen in a dev build
+#     (Z12-35, W12 device gate): "Requiring unknown module" (a missing native or
+#     JS module), "Encountered two children" (duplicate keys), "Each child in a
+#     list" (missing key), "VirtualizedLists should never be nested" and
+#     "Possible unhandled promise" (an unhandled rejection). A release build does
+#     not render these; there the device gate reads them from the device log
+#     instead (scripts/qa/device/scan-logs.mjs).
 # A release-style (preview) build shows no red box, so the caller must also
 # assert a screen-specific anchor with assertVisible (QT3's job).
 # Maestro parses every file reached by `runFlow:` as a flow in its own right
@@ -44,3 +51,8 @@ appId: com.thefitbud.mobile.staging
 - assertNotVisible: ".*Error while updating property.*"
 - assertNotVisible: ".*Something went wrong.*"
 - assertNotVisible: ".*We could not load your coaching account.*"
+- assertNotVisible: ".*Requiring unknown module.*"
+- assertNotVisible: ".*Encountered two children.*"
+- assertNotVisible: ".*Each child in a list.*"
+- assertNotVisible: ".*VirtualizedLists should never be nested.*"
+- assertNotVisible: ".*Possible unhandled promise.*"
