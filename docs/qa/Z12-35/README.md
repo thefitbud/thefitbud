@@ -18,7 +18,8 @@ platforms, and reports.
 | [43623489626](https://github.com/thefitbud/thefitbud/actions/runs/43623489626) | `31ea770c` | **native cache hit: build 70 s** (was 8–12 min); same results as the full build | **native cache hit: build 98 s** (was 33–44 min); same results; idb installed (built with Xcode 26.3) | **proof of the native-build cache**: identical flow results and a clean log on the swapped bundle |
 | [43625661111](https://github.com/thefitbud/thefitbud/actions/runs/43625661111) | `fa967e3a` | cache hit (70 s); Z12-33 chain added (`flows=smoke,z12-33`, one flow at a time, two offline) | cache hit (129 s) | first Z12-33 run on the current app: both platforms failed early in step 3 on flow anchors (a below-the-fold heading; a roster name needing a scroll), so the chained steps after it read the wrong account. Flows fixed |
 | [43630616901](https://github.com/thefitbud/thefitbud/actions/runs/43630616901) | `483127b2` | cache hit (63 s); **Z12-33 steps 1–7 pass in light and dark**: Rahul's Attention, Clients and client load; after his sign-out (mid-refresh) Priya sees none of Rahul's clients online, and offline shows only "You're offline…/Couldn't load", never Rahul's rows. Step 8's precondition was wrong (Rahul's roster never loaded online); fixed | cache hit (98 s); step 3 fails: the client screen's "‹ Clients" anchor is not seen after the row tap, so the chain cascades (the precondition guards now report it as such, not as a leak) | the device logs stayed clean on both platforms |
-| [43634854529](https://github.com/thefitbud/thefitbud/actions/runs/43634854529) | `d22bd687` | in progress at hand-off | in progress | prints the screen's labels when a chained flow fails, to finish the iOS step-3 anchor |
+| [43634854529](https://github.com/thefitbud/thefitbud/actions/runs/43634854529) | `d22bd687` | cache hit; **Z12-33 steps 1–7 pass in light** (dark: a Maestro "device server died" flake in step 7); step 8's precondition hit a leftover client screen (now backed out first) | cache hit; the new screen dumps showed why step 3 failed: `.*Rohan Mehta.*` also matches the iOS list container's label, so the tap opened nothing, and Rohan can sit below the fold on Attention | fixed in `86637e31` (rows matched as rows, Attention's "Needs you <n>" as its loaded anchor); not re-run before hand-off |
+| [43638316887](https://github.com/thefitbud/thefitbud/actions/runs/43638316887) | `a06ed43c` | the review-fix head; a native-cache miss (build-app.sh and lib.sh joined the key) | same | confirming run for the review fixes, in progress at hand-off |
 
 ## What the example run shows
 
@@ -121,10 +122,30 @@ permission in its flow before it relies on this tap.
 - **Z12-33's two-trainer device check** (D-W12-31) is in `apps/mobile/.maestro/device/z12-33/`,
   four chained flows (two `device-offline`). It ran on the current app (main, without
   Z12-33's fix) on every harness PR run from 43625661111: on Android steps 1–7 pass in both
-  themes; on iOS step 3's client-screen anchor still needs finishing (run 43634854529 prints
-  the screen at the failure). For the merge gate, dispatch it on Z12-33's head:
+  themes; on iOS step 3's tap matched the list container, fixed in `86637e31` from run
+  43634854529's screen dump, not yet re-run. For the merge gate, dispatch it on Z12-33's head:
   `gh workflow run device.yml --ref main -f ref=claude/Z12-33-cache-late-write -f flows=z12-33`
   (the harness comes from the workflow's commit, so that branch needs no merge first).
   One departure from docs/qa/Z12-33 step 8: Attention is
   the trainer's landing tab, so it loads online as Rahul signs back in, before the device
   can go offline; the check that offline never shows Priya's rows still holds.
+
+## Review fixes (since `7981c21d`)
+
+- H1 `parity-gen.mjs` reads both committed tables, never rewrites a row, appends only missing
+  rows to their own section's table; `--check` exits 0 on the committed `docs/qa/W12/parity.md`
+  and a plain run leaves it byte for byte. Found on the way: the committed Trainer table's
+  header has a `Flows` column (9) that its rows (8 cells) do not fill; a row the generator adds
+  there follows the header. Follow-up for whoever next edits that file (Z12-58): drop the
+  `Flows` header cell or fill the column.
+- M1 Android cache hits check every asset the new bundle needs against the cached APK's
+  resources (aapt2) and fall back to a full build when one is missing.
+- M2 the `ref` overlay takes `scripts/qa` from the workflow commit and the flows from the ref,
+  adding harness flow files only where the ref has none.
+- L1–L9: fingerprint inputs (build-app.sh, lib.sh, .npmrc, react-native.config.js); Z12-33
+  flows' positive anchors, more names, names from env; skipped or missing flow results fail
+  the gate; a typo in one tag of a list fails; no AppDelegate.mm fails the iOS patch; the local
+  API binds 127.0.0.1; the nested-button allow-list entry needs `WorkoutTab` in the component
+  stack; a stale comment in `render.tsx`.
+- One iOS fix from run 43634854529 (`86637e31`): client rows are matched as rows, and
+  Attention's loaded state is its anchor.
