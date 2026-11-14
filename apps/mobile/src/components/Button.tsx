@@ -2,58 +2,98 @@ import type { ReactNode } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   View,
   type PressableProps,
 } from "react-native";
+import type { Theme } from "@fitbud/ui-mobile";
 import { Text } from "./Text";
-import {
-  colors,
-  fontFamilySemiBold,
-  radii,
-  semanticColors,
-  spacing,
-  touchTargetMin,
-} from "@fitbud/ui-mobile";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
+/**
+ * v3 button variants (DESIGN-SYSTEM-v3 §5, kit `.btn.*`):
+ * - `primary`: brand fill, on-brand label (the text colour inverted; no shadow).
+ * - `secondary`: fill, ink label.
+ * - `tint`: brand tint, brand-ink label.
+ * - `outline`: card with a line2 edge, ink label.
+ * - `danger`: crit fill, on-brand label. `dangerQuiet`: crit tint, crit label.
+ * - `text`: no fill, brand label.
+ * - `whatsapp`: outline with the WhatsApp green edge (a wa.me redirect, never a send).
+ * Legacy names stay for existing call sites: `tinted` → tint, `tertiary` and
+ * `ghost` → text, `destructive` → danger.
+ */
 export type ButtonVariant =
   | "primary"
   | "secondary"
-  | "tertiary"
-  | "destructive"
-  | "tinted"
+  | "tint"
+  | "outline"
+  | "danger"
+  | "dangerQuiet"
+  | "text"
   | "whatsapp"
-  /** @deprecated Alias of tertiary — kept for existing call sites. */
-  | "ghost";
+  /** @deprecated Use tint. */
+  | "tinted"
+  /** @deprecated Use text. */
+  | "tertiary"
+  /** @deprecated Use text. */
+  | "ghost"
+  /** @deprecated Use danger. */
+  | "destructive";
+
+type Resolved = Exclude<ButtonVariant, "tinted" | "tertiary" | "ghost" | "destructive">;
+
+const ALIASES: Partial<Record<ButtonVariant, Resolved>> = {
+  tinted: "tint",
+  tertiary: "text",
+  ghost: "text",
+  destructive: "danger",
+};
 
 type Props = PressableProps & {
   label: string;
   loading?: boolean;
   variant?: ButtonVariant;
+  /** `sm` is the kit's 38 pt button; it keeps a 44 pt tap target. */
+  size?: "md" | "sm";
   /** Optional leading icon (e.g. WhatsApp glyph). */
   icon?: ReactNode;
 };
 
-/**
- * Mobile button hierarchy. Replaces PrimaryButton variants and adds
- * tertiary / destructive / tinted / whatsapp (green outline + icon).
- */
+/** Label colour token per variant. */
+function labelColor(theme: Theme, variant: Resolved, disabled: boolean): string {
+  const c = theme.colors;
+  if (disabled) return c.ink4;
+  switch (variant) {
+    case "primary":
+    case "danger":
+      return c.onBrand;
+    case "tint":
+      return c.brandInk;
+    case "dangerQuiet":
+      return c.crit;
+    case "text":
+      return c.brand;
+    default:
+      return c.ink;
+  }
+}
+
 export function Button({
   label,
   loading = false,
   variant = "primary",
+  size = "md",
   disabled,
   icon,
   style,
   ...rest
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const isDisabled = Boolean(disabled || loading);
-  const resolved =
-    variant === "ghost" ? "tertiary" : variant;
-  const spinnerColor =
-    resolved === "primary" || resolved === "destructive"
-      ? colors.white
-      : colors.indigo;
+  const resolved: Resolved = ALIASES[variant] ?? (variant as Resolved);
+  // Loading keeps the variant's colours; only a real disable greys out.
+  const greyed = Boolean(disabled) && !loading;
+  const color = labelColor(theme, resolved, greyed);
 
   return (
     <Pressable
@@ -63,34 +103,20 @@ export function Button({
       disabled={isDisabled}
       style={(state) => [
         styles.base,
-        resolved === "primary" && styles.primary,
-        resolved === "secondary" && styles.secondary,
-        resolved === "whatsapp" && styles.whatsapp,
-        resolved === "tinted" && styles.tinted,
-        resolved === "tertiary" && styles.tertiary,
-        resolved === "destructive" && styles.destructive,
+        size === "sm" && styles.small,
+        styles[resolved],
+        greyed && resolved !== "text" && styles.disabled,
         state.pressed && !isDisabled && styles.pressed,
-        isDisabled && styles.disabled,
         typeof style === "function" ? style(state) : style,
       ]}
       {...rest}
     >
       {loading ? (
-        <ActivityIndicator color={spinnerColor} />
+        <ActivityIndicator color={color} />
       ) : (
         <View style={styles.row}>
           {icon}
-          <Text
-            style={[
-              styles.label,
-              (resolved === "primary" || resolved === "destructive") &&
-                styles.labelOnFill,
-              (resolved === "secondary" || resolved === "whatsapp") &&
-                styles.labelSecondary,
-              resolved === "tinted" && styles.labelTinted,
-              resolved === "tertiary" && styles.labelTertiary,
-            ]}
-          >
+          <Text style={[styles.label, size === "sm" && styles.labelSmall, { color }]}>
             {label}
           </Text>
         </View>
@@ -102,65 +128,66 @@ export function Button({
 /** @deprecated Prefer Button — kept for existing call sites during Batch 0. */
 export { Button as PrimaryButton };
 
-const WA_GREEN = "#25D366";
-
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   base: {
-    minHeight: touchTargetMin,
-    borderRadius: radii.control,
+    minHeight: 50,
+    borderRadius: t.radii.button,
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: 18,
+    paddingVertical: t.spacing.sm,
+  },
+  small: {
+    minHeight: t.touchTarget,
+    borderRadius: t.radii.buttonSm,
+    paddingHorizontal: 14,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    gap: t.spacing.sm,
   },
   primary: {
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
   },
   secondary: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.fill,
+  },
+  tint: {
+    backgroundColor: t.colors.brandTint,
+  },
+  outline: {
+    backgroundColor: t.colors.card,
     borderWidth: 1,
-    borderColor: colors.lightGrey,
+    borderColor: t.colors.line2,
   },
-  whatsapp: {
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: WA_GREEN,
+  danger: {
+    backgroundColor: t.colors.crit,
   },
-  tinted: {
-    backgroundColor: colors.paleLavender,
+  dangerQuiet: {
+    backgroundColor: t.colors.critTint,
   },
-  tertiary: {
+  text: {
     backgroundColor: "transparent",
   },
-  destructive: {
-    backgroundColor: semanticColors.destructive,
+  whatsapp: {
+    backgroundColor: t.colors.card,
+    borderWidth: 1.5,
+    // WhatsApp's own brand green: a third-party mark, the same in both themes.
+    // eslint-disable-next-line fitbud-theme/no-hard-coded-colour
+    borderColor: "#25D366",
+  },
+  disabled: {
+    backgroundColor: t.colors.fill2,
+    borderColor: t.colors.fill2,
   },
   pressed: {
     opacity: 0.88,
   },
-  disabled: {
-    opacity: 0.5,
-  },
   label: {
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-    fontWeight: "600",
+    ...t.text.bodyStrong.style,
   },
-  labelOnFill: {
-    color: colors.white,
+  labelSmall: {
+    fontSize: 14.5,
   },
-  labelSecondary: {
-    color: colors.deepNavy,
-  },
-  labelTinted: {
-    color: colors.indigo,
-  },
-  labelTertiary: {
-    color: colors.indigo,
-  },
-});
+}));

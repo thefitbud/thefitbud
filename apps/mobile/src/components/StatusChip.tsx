@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Text } from "./Text";
 import {
   AlertOctagon,
@@ -8,7 +8,17 @@ import {
   Info,
 } from "lucide-react-native";
 import { labelFor, sentenceCaseEnum, type LabelNamespace } from "@fitbud/core";
-import { fontFamilySemiBold, radii, semanticColors, spacing } from "@fitbud/ui-mobile";
+import type { ColorToken } from "@fitbud/tokens";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+
+/** Status colour pairs (DESIGN-SYSTEM-v3 §5 Trainer: v2 hues at v3 values). Always icon + word, never colour alone. */
+const TONE_TOKENS: Record<Tone, { fill: ColorToken; text: ColorToken }> = {
+  critical: { fill: "critTint", text: "crit" },
+  attention: { fill: "warnTint", text: "warn" },
+  positive: { fill: "doneTint", text: "done" },
+  info: { fill: "infoTint", text: "info" },
+  neutral: { fill: "fill", text: "ink2" },
+};
 
 export type StatusChipKind =
   | "lifecycle"
@@ -99,33 +109,40 @@ function ChipVisual({ label, tone }: { label: string; tone: Tone }) {
           : tone === "info"
             ? Info
             : CircleDashed;
-  const palette = semanticColors[tone === "critical" ? "critical" : tone === "attention" ? "attention" : tone === "positive" ? "positive" : tone === "info" ? "info" : "neutral"];
+  const theme = useTheme();
+  const styles = useStyles();
+  const fill = theme.colors[TONE_TOKENS[tone].fill];
+  const text = theme.colors[TONE_TOKENS[tone].text];
   return (
     <View
       style={[
         styles.chip,
-        { backgroundColor: palette.fill },
+        { backgroundColor: fill },
       ]}
     >
-      <Icon size={14} color={palette.text} strokeWidth={1.75} />
-      <Text style={[styles.label, { color: palette.text }]}>{label}</Text>
+      <Icon size={14} color={text} strokeWidth={1.75} />
+      <Text style={[styles.label, { color: text }]}>{label}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+/** Kit `.sch` severity chip: 22 pt, 7 pt corners, 12/600. */
+const useStyles = createThemedStyles((t) => ({
   chip: {
     alignSelf: "flex-start",
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    borderRadius: 7,
+    minHeight: 22,
+    paddingLeft: 6,
+    paddingRight: 8,
+    paddingVertical: 2,
   },
   label: {
-    fontFamily: fontFamilySemiBold,
     fontSize: 12,
+    lineHeight: 16,
     fontWeight: "600",
+    color: t.colors.ink2,
   },
-});
+}));

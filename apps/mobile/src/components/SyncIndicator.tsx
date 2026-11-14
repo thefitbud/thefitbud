@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Text } from "./Text";
-import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
+import { createThemedStyles } from "../providers/ThemeProvider";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { indicatorFromCounts, type IndicatorKind } from "../sync/outboxCopy";
 
@@ -10,6 +10,7 @@ type Props = {
 };
 
 export function SyncIndicator({ onPress }: Props) {
+  const styles = useStyles();
   const sync = useSyncEngine();
   const [view, setView] = useState<{
     kind: IndicatorKind;
@@ -80,26 +81,26 @@ export function SyncIndicator({ onPress }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+/** Status dot plus a word (never colour alone): ink3 idle, warn problem, info syncing, done synced. */
+const useStyles = createThemedStyles((t) => ({
   wrap: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.xs,
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
+    gap: t.spacing.xs,
+    minHeight: t.touchTarget,
+    paddingHorizontal: t.spacing.sm,
   },
   dot: {
     borderRadius: 4,
     height: 8,
     width: 8,
   },
-  dotNeutral: { backgroundColor: colors.midGrey },
-  dotProblem: { backgroundColor: colors.warning },
-  dotSyncing: { backgroundColor: colors.indigo },
-  dotSynced: { backgroundColor: colors.indigo },
+  dotNeutral: { backgroundColor: t.colors.ink3 },
+  dotProblem: { backgroundColor: t.colors.warn },
+  dotSyncing: { backgroundColor: t.colors.info },
+  dotSynced: { backgroundColor: t.colors.done },
   text: {
-    color: colors.midGrey,
-    fontSize: typeScale.caption,
-    fontWeight: "500",
+    ...t.text.caption.style,
+    color: t.colors.ink3,
   },
-});
+}));

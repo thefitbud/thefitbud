@@ -1,27 +1,28 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Text } from "./Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { createThemedStyles } from "../providers/ThemeProvider";
 
+/** Kit `.banner.crit`: crit tint with crit-ink text (quiet danger, never a red screen). */
 export function ErrorBanner({ message }: { message: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.banner} accessibilityRole="alert">
-      <Text style={styles.text}>{message}</Text>
+      <Text tone="critInk" style={styles.text}>
+        {message}
+      </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   banner: {
-    backgroundColor: "#FEE2E2",
-    borderColor: colors.error,
-    borderWidth: 1,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
+    backgroundColor: t.colors.critTint,
+    borderRadius: t.radii.toast,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    marginBottom: t.spacing.lg,
   },
   text: {
-    color: colors.nearBlack,
-    fontSize: 14,
-    lineHeight: 20,
+    ...t.text.subhead.style,
   },
-});
+}));

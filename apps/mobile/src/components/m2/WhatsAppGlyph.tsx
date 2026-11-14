@@ -1,3 +1,4 @@
+/* eslint-disable fitbud-theme/no-hard-coded-colour -- WhatsApp's own brand mark (green with a white glyph) is a third-party logo and stays the same in both themes. */
 import Svg, { Path } from "react-native-svg";
 
 type Props = { size?: number };

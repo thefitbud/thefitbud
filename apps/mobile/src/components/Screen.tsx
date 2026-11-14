@@ -6,13 +6,8 @@ import {
   View,
 } from "react-native";
 import type { ReactNode } from "react";
-import {
-  colors,
-  fontFamily,
-  fontFamilyBold,
-  fontFamilySemiBold,
-  spacing,
-} from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { BrandMark } from "./BrandMark";
 import { Text } from "./Text";
 
@@ -38,9 +33,26 @@ type Props = {
    * instead of a manual Refresh button; screens that omit it still render fine.
    */
   onRefresh?: () => void;
+  /**
+   * Opt this screen in to dark (Z12-36): set it once the screen is migrated
+   * to v3 tokens in its own W12 task. Without it the screen renders light
+   * whatever the system says, because unmigrated content still uses v2 light
+   * colours. Z12-58 checks that every screen sets it.
+   */
+  v3?: boolean;
 };
 
-export function Screen({
+/** Screen container. Light unless `v3` opts the screen in to the system theme. */
+export function Screen({ v3 = false, ...props }: Props) {
+  if (!v3) return <ScreenBody {...props} />;
+  return (
+    <ThemeScope scheme="system">
+      <ScreenBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function ScreenBody({
   title,
   subtitle,
   children,
@@ -51,7 +63,9 @@ export function Screen({
   showHeader = true,
   refreshing,
   onRefresh,
-}: Props) {
+}: Omit<Props, "v3">) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <SafeAreaView style={styles.safe} accessibilityRole="summary">
       <ScrollView
@@ -59,7 +73,13 @@ export function Screen({
         keyboardShouldPersistTaps="handled"
         refreshControl={
           onRefresh ? (
-            <RefreshControl refreshing={refreshing ?? false} onRefresh={onRefresh} />
+            <RefreshControl
+              refreshing={refreshing ?? false}
+              onRefresh={onRefresh}
+              tintColor={theme.colors.ink3}
+              colors={[theme.colors.brand]}
+              progressBackgroundColor={theme.colors.card}
+            />
           ) : undefined
         }
       >
@@ -88,6 +108,7 @@ export function Screen({
                   })()
                 : null}
               <Text
+                variant="largeTitle"
                 style={[styles.title, chrome === "app" ? styles.titleApp : null]}
                 accessibilityRole="header"
                 accessibilityLabel={title}
@@ -95,7 +116,7 @@ export function Screen({
                 {title}
               </Text>
               {subtitle ? (
-                <Text style={styles.subtitle} accessibilityRole="text">
+                <Text variant="body" tone="ink2" style={styles.subtitle} accessibilityRole="text">
                   {subtitle}
                 </Text>
               ) : null}
@@ -117,10 +138,10 @@ export function Screen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   safe: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: t.colors.bg,
   },
   content: {
     paddingHorizontal: spacing.xl,
@@ -131,30 +152,19 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   brand: {
-    fontFamily: fontFamilySemiBold,
-    color: colors.indigo,
+    ...t.text.label.style,
+    color: t.colors.brand,
     fontSize: 13,
-    fontWeight: "600",
     letterSpacing: 1.1,
-    textTransform: "uppercase",
     marginBottom: spacing.sm,
   },
   title: {
-    fontFamily: fontFamilyBold,
-    color: colors.deepNavy,
-    fontSize: 28,
-    fontWeight: "700",
     marginBottom: spacing.sm,
-    letterSpacing: -0.4,
   },
   titleApp: {
-    fontSize: 30,
     marginBottom: spacing.xs,
   },
   subtitle: {
-    fontFamily,
-    color: colors.midGrey,
-    fontSize: 16,
     lineHeight: 22,
     marginBottom: spacing.xl,
   },
@@ -165,9 +175,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xl,
     paddingTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.lightGrey,
-    backgroundColor: colors.background,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.colors.line2,
+    backgroundColor: t.colors.bg,
   },
   toastFooter: {
     backgroundColor: "transparent",
@@ -175,4 +185,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 0,
   },
-});
+}));
