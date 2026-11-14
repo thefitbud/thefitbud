@@ -85,6 +85,27 @@ esac
 "$DEVICE_LIB_DIR/local-api.sh" wait || device_die "the local API is not serving."
 device_log "maestro $(maestro --version 2>/dev/null | tail -n 1)"
 
+# iOS: Maestro drives the simulator through an XCTest runner it installs on first use.
+# On a busy macos-15 runner that first start overran Maestro's default timeout ("iOS
+# driver not ready in time"), and the next invocation then found the device
+# "unreachable" (run 43610441275). Give it longer and start it once, with retries,
+# before any flow, so a slow driver start is not reported as a flow failure.
+if [ "$PLATFORM" = "ios" ]; then
+  export MAESTRO_DRIVER_STARTUP_TIMEOUT="${MAESTRO_DRIVER_STARTUP_TIMEOUT:-300000}"
+  xcrun simctl launch "$UDID" "$DEVICE_APP_ID" >/dev/null 2>&1 || true
+  warmed=0
+  for attempt in 1 2 3; do
+    if "${MAESTRO[@]}" hierarchy >"$OUT/maestro-warmup.log" 2>&1; then
+      warmed=1
+      device_log "Maestro's iOS driver is up (attempt $attempt)"
+      break
+    fi
+    device_warn "Maestro's iOS driver did not start (attempt $attempt); see $OUT/maestro-warmup.log"
+    sleep 10
+  done
+  [ "$warmed" = 1 ] || tail -n 20 "$OUT/maestro-warmup.log"
+fi
+
 # --- flows ----------------------------------------------------------------------
 node "$DEVICE_LIB_DIR/select-flows.mjs" --flows "$FLOWS" --roles "$ROLES" >"$OUT/flows.txt" \
   || device_die "no flows selected for flows=\"$FLOWS\" roles=\"$ROLES\"."

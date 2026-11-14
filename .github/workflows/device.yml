@@ -345,6 +345,8 @@ jobs:
         timeout-minutes: 20
         run: |
           brew tap facebook/fb
+          # Homebrew refuses formulae from a third-party tap until it is trusted.
+          brew trust facebook/fb || true
           brew install idb-companion
           python -m pip install fb-idb
           idb --help >/dev/null && echo "idb installed"
