@@ -82,6 +82,11 @@ case "$PLATFORM" in
       record "fcm-broadcast" "FCM data message (Expo's shape) broadcast as root to the app's FirebaseInstanceIdReceiver"
     else
       adb shell cmd notification post -S bigtext -t "'$title'" fitbud-gate "'$message'" >/dev/null
+      if adb shell dumpsys notification 2>/dev/null | grep -Fq 'fitbud-gate'; then
+        device_log "the shell notification is posted (dumpsys notification lists tag fitbud-gate)"
+      else
+        device_warn "dumpsys notification does not list the fitbud-gate notification"
+      fi
       record "shell-notification" "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
     fi
     ;;

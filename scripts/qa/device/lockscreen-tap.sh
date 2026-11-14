@@ -76,12 +76,12 @@ ios_tap() {
   sleep 3
   dump="$DUMP_DIR/ios-$TARGET-locked.json"
   idb ui describe-all --udid "$udid" --json >"$dump" 2>/dev/null || true
-  if ! xy="$(node "$FIND" --format idb --match "$MATCH" "$dump" 2>/dev/null)"; then
+  if ! xy="$(node "$FIND" --format idb --match "$MATCH" "$dump")"; then
     # The first press may have turned the display off; a second press shows the lock screen.
     idb ui button --udid "$udid" LOCK
     sleep 3
     idb ui describe-all --udid "$udid" --json >"$dump" 2>/dev/null || true
-    xy="$(node "$FIND" --format idb --match "$MATCH" "$dump" 2>/dev/null || true)"
+    xy="$(node "$FIND" --format idb --match "$MATCH" "$dump" || true)"
   fi
   shot before
   if [ -z "$xy" ]; then
@@ -101,8 +101,19 @@ ios_tap() {
   fi
 }
 
+# One uiautomator dump of the current screen into $1.
+android_dump() {
+  adb shell uiautomator dump /sdcard/gate-ui.xml >/dev/null 2>&1 || true
+  adb pull /sdcard/gate-ui.xml "$1" >/dev/null 2>&1 || : >"$1"
+}
+
 android_tap() {
   local dump xy focus
+  # Lock-screen notifications on, with their content (the emulator's defaults vary by
+  # image; recent images can show only icons).
+  adb shell settings put secure lock_screen_show_notifications 1 >/dev/null 2>&1 || true
+  adb shell settings put secure lock_screen_allow_private_notifications 1 >/dev/null 2>&1 || true
+  adb shell settings put secure lock_screen_show_only_unseen_notifications 0 >/dev/null 2>&1 || true
   adb shell input keyevent KEYCODE_HOME
   sleep 1
   if [ "$TARGET" = "notification" ]; then
@@ -114,11 +125,20 @@ android_tap() {
   adb shell input keyevent KEYCODE_WAKEUP
   sleep 3
   dump="$DUMP_DIR/android-$TARGET-locked.xml"
-  adb shell uiautomator dump /sdcard/gate-ui.xml >/dev/null 2>&1 || true
-  adb pull /sdcard/gate-ui.xml "$dump" >/dev/null 2>&1 || : >"$dump"
+  android_dump "$dump"
   shot before
-  if ! xy="$(node "$FIND" --format uiautomator --match "$MATCH" "$dump" 2>/dev/null)"; then
-    record not-found "no lock-screen element matches /$MATCH/i (dump: lockscreen/$(basename "$dump"))"
+  if ! xy="$(node "$FIND" --format uiautomator --match "$MATCH" "$dump")"; then
+    # Not on the lock screen itself: pull the notification shade down over the keyguard.
+    adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+    sleep 2
+    dump="$DUMP_DIR/android-$TARGET-locked-shade.xml"
+    android_dump "$dump"
+    shot shade
+    xy="$(node "$FIND" --format uiautomator --match "$MATCH" "$dump" || true)"
+  fi
+  if [ -z "$xy" ]; then
+    record not-found "no lock-screen element matches /$MATCH/i, on the lock screen or in the shade over it (dumps: lockscreen/android-$TARGET-locked*.xml)"
+    adb shell cmd statusbar collapse >/dev/null 2>&1 || true
     adb shell input keyevent KEYCODE_MENU >/dev/null 2>&1 || true
     return 0
   fi

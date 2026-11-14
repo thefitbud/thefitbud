@@ -108,7 +108,10 @@ export function main(argv) {
   const elements = args.format === "idb" ? parseIdb(text) : parseUiautomator(text);
   const hit = findElement(elements, { match: args.match, type: args.type, pkg: args.package });
   if (!hit) {
-    console.error(`find-element: nothing matches /${args.match}/i among ${elements.length} elements`);
+    const seen = [...new Set(elements.map((e) => e.text.trim()).filter(Boolean))].slice(0, 25);
+    console.error(
+      `find-element: nothing matches /${args.match}/i among ${elements.length} elements; texts on screen: ${seen.map((t) => JSON.stringify(t.slice(0, 60))).join(", ") || "(none)"}`,
+    );
     return 1;
   }
   const { x, y } = centre(hit);

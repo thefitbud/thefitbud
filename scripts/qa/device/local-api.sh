@@ -102,10 +102,13 @@ stop() {
     kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
     rm -f "$PID_FILE"
   fi
-  # wrangler starts workerd as a child that can outlive its parent. This only ever
-  # runs on a throwaway runner whose one wrangler is ours.
-  pkill -f 'wrangler.*dev src/index.ts' 2>/dev/null || true
-  pkill -f 'workerd serve' 2>/dev/null || true
+  # wrangler starts workerd as a child that can outlive its parent (macOS has no setsid,
+  # so no process group to kill). Only on a throwaway CI runner, whose one wrangler is
+  # ours: on a shared machine this would stop other people's local APIs.
+  if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    pkill -f 'wrangler.*dev src/index.ts' 2>/dev/null || true
+    pkill -f 'workerd serve' 2>/dev/null || true
+  fi
   local i
   for i in 1 2 3 4 5 6 7 8 9 10; do
     is_up || { device_log "API stopped (port $DEVICE_API_PORT closed)"; return 0; }

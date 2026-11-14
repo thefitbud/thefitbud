@@ -197,7 +197,7 @@ if [ "$EXTRAS" = "all" ] && [ -n "$last_theme" ]; then
   sleep 5
   "$DEVICE_LIB_DIR/lockscreen-tap.sh" "$PLATFORM" "$last_theme" notification "FitBud" daily_summary \
     || jq -n '{outcome: "error", note: "lockscreen-tap.sh failed; see the job log"}' >"$DEVICE_RESULTS/lockscreen-notification-$PLATFORM.json"
-  "$DEVICE_LIB_DIR/lockscreen-tap.sh" "$PLATFORM" "$last_theme" live-activity "Log set|Rest|FitBud Staging" \
+  "$DEVICE_LIB_DIR/lockscreen-tap.sh" "$PLATFORM" "$last_theme" live-activity "Log set [0-9]+|Skip rest|FitBud · " \
     || jq -n '{outcome: "error", note: "lockscreen-tap.sh failed; see the job log"}' >"$DEVICE_RESULTS/lockscreen-live-activity-$PLATFORM.json"
   for f in "$DEVICE_RESULTS/push-$PLATFORM.json" "$DEVICE_RESULTS"/lockscreen-*-"$PLATFORM".json; do
     [ -f "$f" ] && cp "$f" "$OUT/extras/$(basename "$f" | sed "s/-$PLATFORM\.json$/.json/")"
