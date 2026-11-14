@@ -204,7 +204,7 @@ function scrubUser(user: Record<string, unknown>): Record<string, unknown> {
 }
 
 const DRIZZLE_FAILED_QUERY = /^Failed query:/;
-const PARAMS_TAIL = /\r?\n?params:[\s\S]*$/;
+const PARAMS_TAIL = /\r?\nparams:[\s\S]*$/;
 
 /**
  * Drizzle's `DrizzleQueryError` message is `Failed query: <sql>\nparams: <bound

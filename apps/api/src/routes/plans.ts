@@ -1955,7 +1955,7 @@ planRoutes.post(
       // Log the class and driver code only: a Drizzle error message carries the SQL and its bound params.
       const cause = error instanceof Error ? (error as Error & { cause?: { code?: unknown } }).cause : undefined;
       console.error("plan assign failed", {
-        name: error instanceof Error ? error.name : typeof error,
+        errorType: error instanceof Error ? error.name : typeof error,
         code: typeof cause?.code === "string" ? cause.code : undefined,
       });
       return fail(c, 422, "GENERATION_FAILED", "Couldn't create this week's schedule · Retry");

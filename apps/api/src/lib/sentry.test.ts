@@ -299,6 +299,24 @@ describe("scrubSentryEvent exception values", () => {
     expect(event.exception.values[0]?.value).toBe("boom");
   });
 
+  it("detects a failed query by its prefix when the type is not DrizzleQueryError", () => {
+    const event = { exception: { values: [{ type: "Error", value: `Failed query: ${sql} -- ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(JSON.stringify(event)).not.toContain(secrets[0]);
+  });
+
+  it("detects a DrizzleQueryError by type when the message has no prefix", () => {
+    const event = { exception: { values: [{ type: "DrizzleQueryError", value: `${sql} ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(JSON.stringify(event)).not.toContain(secrets[0]);
+  });
+
+  it("leaves a mid-line 'params:' message intact", () => {
+    const event = { exception: { values: [{ type: "Error", value: "Invalid route params: id must be uuid" }] } };
+    scrubSentryEvent(event);
+    expect(event.exception.values[0]?.value).toBe("Invalid route params: id must be uuid");
+  });
+
   it("is applied by beforeSend", () => {
     const options = sentryOptions(env({ SENTRY_DSN: FAKE_DSN, SENTRY_ENVIRONMENT: "staging" }));
     const event = {
