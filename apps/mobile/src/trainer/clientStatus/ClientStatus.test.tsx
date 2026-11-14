@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { clientWorkspaceSchema, responsivenessResponseSchema } from "@fitbud/contracts";
-import { fireEvent, mockAuth, render, screen } from "../../test/render";
+import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
 import { buildEndedSummary, kcalTileValue, reminderLine, weekDayCells } from "./model";
 
 const RID = "1b65e3ad-84cf-4fe1-a546-0d62656c2c79";
@@ -111,6 +111,10 @@ vi.mock("../../components/Screen", () => ({
 }));
 
 const { ClientStatusScreen } = await import("../ClientStatusScreen");
+const { clearTrainerCache, readTrainerCache, setTrainerCacheOwner } = await import("../cache");
+
+const TRAINER_A = "6f1c2a9e-3b4d-4c5e-8f70-1a2b3c4d5e6f";
+const TRAINER_B = "0b9e8d7c-6a5f-4e3d-9c2b-1a0f9e8d7c6b";
 
 function renderScreen() {
   render(
@@ -244,5 +248,34 @@ describe("ClientStatusScreen", () => {
     fireEvent.click(screen.getByText("Pull to refresh"));
     await screen.findByText("Coaching summary");
     expect(api.getWorkoutAdherence.mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+  it("a load started for trainer A that resolves after B signs in writes nothing under B (Z12-33)", async () => {
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+    setTrainerCacheOwner(TRAINER_A);
+    let resolveWorkspace: (value: ReturnType<typeof workspace>) => void = () => undefined;
+    api.getClientWorkspace.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveWorkspace = resolve;
+      }),
+    );
+    renderScreen();
+    await waitFor(() => expect(api.getClientWorkspace).toHaveBeenCalled());
+
+    // A signs out and B signs in while A's fetch is still in flight, in the
+    // order AuthProvider runs them (sign-out clear, then B's `/me`).
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+    setTrainerCacheOwner(TRAINER_B);
+
+    resolveWorkspace(workspace({ ended: false }));
+    // The activity on screen proves the load reached its cache write.
+    await screen.findByText("Lower body A");
+    expect(readTrainerCache(`trainer:client:${RID}`)).toBeNull();
+    for (let index = 0; index < localStorage.length; index += 1) {
+      expect(localStorage.key(index)?.startsWith("trainer:")).toBe(false);
+    }
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
   });
 });
