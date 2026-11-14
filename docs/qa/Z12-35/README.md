@@ -67,11 +67,27 @@ iOS and Android in both themes:
   plugins and native deps untouched): ATS local networking, JS/native warning markers in
   `AppDelegate.mm`, `UIUserInterfaceStyle = Automatic` (orchestrator decision: the shipped
   app follows the system from Z12-57), Android cleartext to the emulator's host only.
-- **Mobile vitest console.error gate** (`apps/mobile/src/test/fail-on-console.ts`). Turning
-  it on failed 206 tests: 202 were the render harness's own SVG stand-ins (PascalCase DOM
-  tags), fixed in `src/test/render.tsx` with custom-element stand-ins; 4 are React DOM's
-  nested-`<button>` rule (react-native-web renders nested Pressables as nested buttons),
-  allow-listed with a written reason. Follow-up for the WorkoutTab owner (Z12-44/45): the
+- **Console-error vitest gate in every vitest workspace** (D-W12-28): one shared setup,
+  `packages/config/vitest/fail-on-console.js` (rules and allow-list in `console-gate.js`),
+  listed in `setupFiles` of `apps/api`, `apps/mobile`, `apps/trainer-web` (new
+  `vitest.config.ts` that merges `vite.config.ts` unchanged) and `packages/{api-client,
+  brand, contracts, core, tokens, ui-mobile}` (new `vitest.config.ts` each). The proof that
+  a `console.error` fails a test is `apps/mobile/src/test/fail-on-console.test.ts`.
+  Offenders when it was turned on, all fixed in test files only:
+  - mobile: 206 tests. 202 were the render harness's own SVG stand-ins (PascalCase DOM
+    tags), fixed in `src/test/render.tsx` with custom-element stand-ins; 4 are React DOM's
+    nested-`<button>` rule (react-native-web renders nested Pressables as nested buttons),
+    allow-listed with a written reason (below).
+  - trainer-web: `ClientRow.test.tsx` rendered a table row outside a table; it now renders
+    it inside `<table><tbody>`, as `ClientsPage` does.
+  - api: 11 tests whose code path logs a structured error by design (fault injection,
+    misconfiguration, a failed spawn). Each now spies on `console.error` and asserts the
+    exact log line (`"message":"Unhandled API error"`, `queue.message_failed`,
+    `account.purge_failed`, `RUNTIME_MISCONFIGURED`, the spawn messages), so the tests got
+    stricter, not weaker. Files: `run-command.test.ts`, `auth-login.test.ts`,
+    `configuration.test.ts` (2), `meals.test.ts`, `workouts.test.ts`, `progress.test.ts`,
+    `reminders.at-most-once.test.ts` (2), `account-purge.test.ts`.
+  `pnpm test`: 17 of 17 tasks green (api 1625, mobile 1252, trainer-web 678, core 244, …). Follow-up for the WorkoutTab owner (Z12-44/45): the
   `OverflowMenu` button sits inside the day card's button, which on iOS hides it from
   VoiceOver; un-nest it and drop the allow-list entry. Tests that hit it:
   `WorkoutTab.render.test.tsx`, `WorkoutTab.week.test.tsx`,

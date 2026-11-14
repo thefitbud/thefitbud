@@ -28,6 +28,10 @@ name: Device gate
 on:
   workflow_dispatch:
     inputs:
+      ref:
+        description: "Optional: the branch, tag or SHA whose app to build (default: the branch the workflow runs from). The harness itself always comes from the workflow's own commit."
+        type: string
+        default: ""
       platforms:
         description: Platforms to run
         type: choice
@@ -67,8 +71,10 @@ permissions:
 
 env:
   TURBO_TELEMETRY_DISABLED: "1"
-  # Inputs are empty on pull_request; every value falls back to the default above.
-  DEVICE_FLOWS: ${{ inputs.flows || 'smoke' }}
+  # Inputs are empty on pull_request; every value falls back to the default above,
+  # except flows: a harness PR also runs the Z12-33 two-trainer check (D-W12-31) on
+  # the current app, so the check itself is exercised before Z12-33's head runs it.
+  DEVICE_FLOWS: ${{ inputs.flows || (github.event_name == 'pull_request' && 'smoke,z12-33') || 'smoke' }}
   DEVICE_ROLES: ${{ inputs.roles || '' }}
   DEVICE_THEMES: ${{ (inputs.themes == 'light' && 'light') || (inputs.themes == 'dark' && 'dark') || 'light dark' }}
   DEVICE_EXTRAS: ${{ inputs.extras || 'all' }}
@@ -119,6 +125,21 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref || '' }}
+
+      # With a `ref` input the app comes from that ref and the harness from this
+      # workflow's commit, so a task branch that predates the harness (or holds an older
+      # copy of it) still runs today's gate.
+      - name: Overlay the harness from the workflow's commit
+        if: ${{ inputs.ref != '' && inputs.ref != null }}
+        env:
+          HARNESS_SHA: ${{ github.sha }}
+          APP_REF: ${{ inputs.ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$HARNESS_SHA"
+          git checkout "$HARNESS_SHA" -- scripts/qa apps/mobile/.maestro/common apps/mobile/.maestro/device packages/config/vitest
+          echo "app: $(git rev-parse HEAD) ($APP_REF); harness: $HARNESS_SHA"
+          git status --short | sed -n '1,40p'
 
       - name: Set up Node (.nvmrc)
         uses: actions/setup-node@v7
@@ -291,6 +312,19 @@ jobs:
         uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref || '' }}
+
+      # See the Android job: app from `ref`, harness from this workflow's commit.
+      - name: Overlay the harness from the workflow's commit
+        if: ${{ inputs.ref != '' && inputs.ref != null }}
+        env:
+          HARNESS_SHA: ${{ github.sha }}
+          APP_REF: ${{ inputs.ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$HARNESS_SHA"
+          git checkout "$HARNESS_SHA" -- scripts/qa apps/mobile/.maestro/common apps/mobile/.maestro/device packages/config/vitest
+          echo "app: $(git rev-parse HEAD) ($APP_REF); harness: $HARNESS_SHA"
+          git status --short | sed -n '1,40p'
 
       - name: Select Xcode
         run: |

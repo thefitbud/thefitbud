@@ -4,7 +4,8 @@
 //
 //   node scripts/qa/device/select-flows.mjs --flows <tag | glob[,glob...]> [--roles trainee,trainer,dual]
 //
-//   flows  a Maestro tag (letters, digits, - and _; e.g. smoke, full, device, trainee):
+//   flows  a Maestro tag, or several comma-separated (letters, digits, - and _; e.g.
+//          smoke, full, device, trainee, or smoke,z12-33 for the union):
 //          every flow under apps/mobile/.maestro/flows/ or device/ whose `tags:` include
 //          it (device/ holds task-specific gate flows the nightly suite never collects).
 //          Anything else is one or more comma-separated path globs relative to
@@ -68,8 +69,12 @@ export function selectFlows({ flows, roles = "", root = MAESTRO_DIR }) {
     .filter((f) => !f.rel.startsWith("common/"))
     .map((f) => ({ ...f, tags: flowTags(fs.readFileSync(f.file, "utf8")) }));
   let picked;
-  if (/^[A-Za-z0-9_-]+$/.test(spec)) {
-    picked = all.filter((f) => (f.rel.startsWith("flows/") || f.rel.startsWith("device/")) && f.tags.includes(spec));
+  if (/^[A-Za-z0-9_-]+(\s*,\s*[A-Za-z0-9_-]+)*$/.test(spec)) {
+    // One tag or a comma-separated list of tags: the union, in path order.
+    const tags = spec.split(",").map((t) => t.trim());
+    picked = all.filter(
+      (f) => (f.rel.startsWith("flows/") || f.rel.startsWith("device/")) && f.tags.some((t) => tags.includes(t)),
+    );
   } else {
     const globs = spec.split(",").map((g) => g.trim()).filter(Boolean).map(globToRegExp);
     picked = all.filter((f) => globs.some((g) => g.test(f.rel)));

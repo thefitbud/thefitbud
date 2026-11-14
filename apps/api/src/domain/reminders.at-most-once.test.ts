@@ -218,6 +218,9 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
   }, 60_000);
 
   it("provider accepted but the acceptance write fails: the retry sends nothing and records uncertain", async () => {
+    // This path logs a structured error by design; the Z12-35 console gate (D-W12-28)
+    // needs the test to expect it.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     await runCron();
     const { message, notification } = await firstQueuedReminder();
     mockExpo();
@@ -261,9 +264,14 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
     expect(expoCalls).toHaveLength(1);
     expect(third.acked).toEqual([message.deliveryId]);
     expect((await state(message)).delivery.providerStatus).toBe("uncertain");
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"queue.message_failed"'));
+    errors.mockRestore();
   }, 60_000);
 
   it("when the attempt marker cannot be written nothing is sent and the message retries", async () => {
+    // This path logs a structured error by design; the Z12-35 console gate (D-W12-28)
+    // needs the test to expect it.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     await runCron();
     const { message } = await firstQueuedReminder();
     mockExpo();
@@ -288,6 +296,8 @@ describe("push delivery is at-most-once on queue retries (X4i)", () => {
     expect(expoCalls.map((m) => m.to)).toEqual([LIVE_TOKEN]);
     expect(second.acked).toEqual([message.deliveryId]);
     expect((await state(message)).delivery).toMatchObject({ providerStatus: "accepted" });
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"queue.message_failed"'));
+    errors.mockRestore();
   }, 60_000);
 
   it("an unanswered request is recorded as failed but keeps the marker, and a redelivery sends nothing", async () => {

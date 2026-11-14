@@ -1,5 +1,5 @@
 import type { SpawnSyncReturns } from "node:child_process";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { formatCommand, failedSpawnExitCode } from "./run-command.js";
 
 function mockSpawnResult(
@@ -34,6 +34,8 @@ describe("failedSpawnExitCode", () => {
   });
 
   it("returns exit code when status is non-zero", () => {
+    // The failure is reported on stderr; the Z12-35 console gate needs the test to expect it.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(
       failedSpawnExitCode(
         mockSpawnResult({ status: 2 }),
@@ -41,9 +43,12 @@ describe("failedSpawnExitCode", () => {
         ["scripts/db-reset.ts"],
       ),
     ).toBe(2);
+    expect(errors).toHaveBeenCalledWith("Command failed (exit 2): tsx scripts/db-reset.ts");
+    errors.mockRestore();
   });
 
   it("returns 1 when spawn error is set", () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     expect(
       failedSpawnExitCode(
         mockSpawnResult({
@@ -55,5 +60,8 @@ describe("failedSpawnExitCode", () => {
         [],
       ),
     ).toBe(1);
+    expect(errors).toHaveBeenCalledWith("Command failed to start: tsx");
+    expect(errors).toHaveBeenCalledWith("spawn tsx ENOENT");
+    errors.mockRestore();
   });
 });

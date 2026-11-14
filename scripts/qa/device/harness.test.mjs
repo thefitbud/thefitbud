@@ -294,6 +294,7 @@ test("flows resolve by tag or glob, roles narrow them, and common/ is never sele
   assert.deepEqual(rel(selectFlows({ flows: "flows/v3/F0*.yaml", root })), ["flows/v3/F08-custom-food.yaml"]);
   assert.deepEqual(rel(selectFlows({ flows: "**/*.yaml", root })), ["flows/auth/a.yaml", "flows/trainer/b.yaml", "flows/v3/F08-custom-food.yaml"]);
   assert.deepEqual(selectFlows({ flows: "nope", root }), []);
+  assert.deepEqual(rel(selectFlows({ flows: "trainer, device", root })), ["flows/trainer/b.yaml", "flows/v3/F08-custom-food.yaml"], "a tag list is the union");
   assert.ok(globToRegExp("flows/*.yaml").test("flows/a.yaml"));
   assert.ok(!globToRegExp("flows/*.yaml").test("flows/x/a.yaml"));
 });
@@ -482,7 +483,10 @@ test("device.yml: dispatch plus harness-only pull_request paths, never cancels, 
     "pull_request runs only for the harness's own paths",
   );
   assert.doesNotMatch(on, /push:|schedule:|pull_request_target:/);
-  for (const input of ["platforms", "themes", "flows", "roles"]) assert.match(yml, new RegExp(`^ {6}${input}:$`, "m"));
+  for (const input of ["ref", "platforms", "themes", "flows", "roles"]) assert.match(yml, new RegExp(`^ {6}${input}:$`, "m"));
+  assert.match(yml, /DEVICE_FLOWS: \$\{\{ inputs\.flows \|\| \(github\.event_name == 'pull_request' && 'smoke,z12-33'\) \|\| 'smoke' \}\}/);
+  assert.equal((yml.match(/ref: \$\{\{ inputs\.ref \|\| '' \}\}/g) ?? []).length, 2, "both device jobs build the requested ref");
+  assert.equal((yml.match(/git checkout "\$HARNESS_SHA" -- scripts\/qa /g) ?? []).length, 2, "and overlay the harness from the workflow's commit");
   assert.doesNotMatch(yml, /secrets\./, "no secret is read");
   assert.doesNotMatch(yml, /api-staging|--remote|wrangler deploy|eas (build|submit)/);
   assert.doesNotMatch(yml, /^\s*concurrency:|cancel-in-progress/m, "no run is ever cancelled");

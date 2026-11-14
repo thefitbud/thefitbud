@@ -1,6 +1,7 @@
 /// <reference types="vitest/config" />
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
@@ -15,10 +16,10 @@ import { defineConfig } from "vitest/config";
  *   render under vitest at all — see `src/test/render.tsx` for why
  *   `@testing-library/react-native` is not used.
  *
- * Both projects load `src/test/fail-on-console.ts`, which fails any test that
+ * Both projects load the shared `packages/config/vitest/fail-on-console.js`, which fails any test that
  * calls `console.error` (Z12-35, the W12 device gate).
  */
-const failOnConsole = "src/test/fail-on-console.ts";
+const failOnConsole = fileURLToPath(new URL("../../packages/config/vitest/fail-on-console.js", import.meta.url));
 // Resolved to an absolute path on purpose: a bare "react-native-web"
 // replacement is re-resolved from each importer, and the workspace packages
 // that import "react-native" (for example @fitbud/ui-mobile) do not have

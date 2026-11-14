@@ -1017,6 +1017,9 @@ describe("account purge (Z6-17)", () => {
     });
 
     it("a Firebase 404 counts as already deleted, and a missing service account leaves the account due", async () => {
+      // This path logs a structured error by design; the Z12-35 console gate (D-W12-28)
+      // needs the test to expect it.
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       const { person, at } = await archivedTrainee("fbmiss");
       vi.stubGlobal(
         "fetch",
@@ -1036,6 +1039,8 @@ describe("account purge (Z6-17)", () => {
         at,
       );
       expect(result).toEqual({ selected: 1, purged: 1, failed: 0 });
+      expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"account.purge_failed"'));
+      errors.mockRestore();
     });
 
     it("skips Firebase only when ENVIRONMENT is local or unset, and refuses to run on a misconfigured Worker", async () => {
