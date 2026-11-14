@@ -21,7 +21,7 @@ import { StatusChip } from "./StatusChip";
 import { TabBar } from "./TabBar";
 import { Text } from "./Text";
 import {
-  ThemeProvider,
+  ThemeScope,
   createThemedStyles,
   type ColorScheme,
 } from "../providers/ThemeProvider";
@@ -45,9 +45,10 @@ type Props = {
  */
 export function PrimitiveGallery({ scheme, sheetOpen = false }: Props) {
   return (
-    <ThemeProvider scheme={scheme}>
+    // Opted in to dark (like a migrated screen) unless a scheme is forced.
+    <ThemeScope scheme={scheme ?? "system"}>
       <GalleryBody sheetOpen={sheetOpen} />
-    </ThemeProvider>
+    </ThemeScope>
   );
 }
 

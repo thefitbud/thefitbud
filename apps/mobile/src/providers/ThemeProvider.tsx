@@ -1,17 +1,25 @@
 /**
  * Theme for the mobile app (Z12-36, D-W12-12).
  *
- * The theme follows the system setting and nothing else: there is no in-app
- * switch. `ThemeProvider` reads `Appearance` and re-renders when the system
- * flips between light and dark while the app is open. Primitives read their
- * colours, radii and text variants through `useTheme()` and build their
- * styles with `createThemedStyles`, so no primitive holds a fixed colour (the
- * `fitbud-theme/no-hex-colour` lint rule enforces that in
- * `src/components/**`).
+ * The system scheme is tracked live (`ThemeProvider` reads `Appearance` and
+ * re-renders when the system flips while the app is open); there is no in-app
+ * switch. Primitives read colours, radii and text variants through
+ * `useTheme()` and build their styles with `createThemedStyles`, so no
+ * primitive holds a fixed colour (`fitbud-theme/no-hard-coded-colour` lint
+ * rule in `src/components/**` and `src/providers/**`).
  *
- * `scheme` on the provider is for previews and tests only (the dev
- * specimens screen renders both themes side by side); the app root never
- * passes it.
+ * **Dark is opt-in per screen (orchestrator, PR #440 review).** Screens that
+ * have not been migrated to v3 still use the v2 light colours, so the
+ * *effective* scheme of a subtree is light unless it opts in:
+ *
+ * - `<Screen v3>` (the usual way), or
+ * - `<ThemeScope scheme="system">…</ThemeScope>` around any other subtree.
+ *
+ * Each screen's own W12 task opts it in once it is migrated; Z12-58 checks
+ * that nothing is left un-opted. Inside an opted-in subtree the theme follows
+ * the system live. The status bar follows the effective scheme of the most
+ * recently mounted opted-in scope (`useBarScheme`, read by `SystemBars`),
+ * else light.
  *
  * iOS note: `app.json` still sets `userInterfaceStyle: "light"`, which pins
  * `Appearance` to light on iOS until Z12-57 changes it to "automatic" (native
@@ -20,6 +28,7 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
@@ -37,32 +46,100 @@ function readScheme(): ColorScheme {
   return Appearance.getColorScheme() === "dark" ? "dark" : "light";
 }
 
-/** The system colour scheme, live. Anything but "dark" (including null) is light. */
-export function useSystemColorScheme(): ColorScheme {
+/** Reads Appearance directly, live. Anything but "dark" (including null) is light. */
+function useAppearanceScheme(): ColorScheme {
   return useSyncExternalStore(subscribe, readScheme, readScheme);
 }
 
+/** The live system scheme, from the root provider (light outside one). */
+const SystemSchemeContext = createContext<ColorScheme>("light");
+
 /**
- * Light outside a provider, so a component rendered on its own (unit and
- * render tests) is deterministic. The app root always mounts ThemeProvider.
+ * The effective theme. Light by default, outside a provider too, so an
+ * un-opted screen and a component rendered on its own are both light.
  */
 const ThemeContext = createContext<Theme>(themes.light);
 
-type Props = {
+/** Root provider: tracks the system scheme. It does not turn dark on by itself. */
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const system = useAppearanceScheme();
+  return (
+    <SystemSchemeContext.Provider value={system}>
+      <ThemeContext.Provider value={themes.light}>
+        {children}
+      </ThemeContext.Provider>
+    </SystemSchemeContext.Provider>
+  );
+}
+
+/** The system colour scheme, live (whatever the effective scheme of this subtree is). */
+export function useSystemColorScheme(): ColorScheme {
+  return useContext(SystemSchemeContext);
+}
+
+/* Status bar: a stack of the effective schemes of mounted opted-in scopes. */
+type BarEntry = { id: number; scheme: ColorScheme };
+let barStack: BarEntry[] = [];
+let nextBarId = 1;
+const barListeners = new Set<() => void>();
+
+function emitBars() {
+  for (const listener of barListeners) listener();
+}
+
+function subscribeBars(listener: () => void): () => void {
+  barListeners.add(listener);
+  return () => barListeners.delete(listener);
+}
+
+function readBarScheme(): ColorScheme {
+  return barStack[barStack.length - 1]?.scheme ?? "light";
+}
+
+/** The scheme the status (and, after Z12-57, navigation) bar should follow. */
+export function useBarScheme(): ColorScheme {
+  return useSyncExternalStore(subscribeBars, readBarScheme, readBarScheme);
+}
+
+type ScopeProps = {
+  /** "system" follows the system live; "light" / "dark" force (previews and tests). */
+  scheme: ColorScheme | "system";
   children: ReactNode;
-  /** Previews and tests only. The app follows the system and never sets this. */
-  scheme?: ColorScheme;
+  /** Whether the status bar follows this scope while it is mounted (default true). */
+  drivesSystemBars?: boolean;
 };
 
-export function ThemeProvider({ children, scheme }: Props) {
+/**
+ * Sets the effective scheme for a subtree. A migrated screen uses
+ * `scheme="system"` (via `<Screen v3>`); nothing else should need to.
+ */
+export function ThemeScope({
+  scheme,
+  children,
+  drivesSystemBars = true,
+}: ScopeProps) {
   const system = useSystemColorScheme();
+  const effective: ColorScheme = scheme === "system" ? system : scheme;
+
+  useEffect(() => {
+    if (!drivesSystemBars) return undefined;
+    const entry: BarEntry = { id: nextBarId++, scheme: effective };
+    barStack = [...barStack, entry];
+    emitBars();
+    return () => {
+      barStack = barStack.filter((item) => item.id !== entry.id);
+      emitBars();
+    };
+  }, [effective, drivesSystemBars]);
+
   return (
-    <ThemeContext.Provider value={themes[scheme ?? system]}>
+    <ThemeContext.Provider value={themes[effective]}>
       {children}
     </ThemeContext.Provider>
   );
 }
 
+/** The effective theme for this subtree (light unless an ancestor opted in). */
 export function useTheme(): Theme {
   return useContext(ThemeContext);
 }

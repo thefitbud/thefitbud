@@ -6,7 +6,7 @@ import { ESLint, RuleTester } from "eslint";
 import tseslint from "typescript-eslint";
 import { describe, expect, it } from "vitest";
 
-import { findColourLiteral, noHardCodedColour } from "./no-hard-coded-colour.mjs";
+import { findColourLiteral, findNamedColour, noHardCodedColour } from "./no-hard-coded-colour.mjs";
 
 RuleTester.describe = describe;
 RuleTester.it = it;
@@ -31,6 +31,12 @@ tester.run("no-hard-coded-colour", noHardCodedColour, {
     { filename, code: "// #FFFFFF in a comment is fine\nconst a = 1;" },
     { filename, code: 'const label = "Week 3";' },
     { filename, code: 'const entity = "&#123;";' },
+    // Named colours: transparent is allowed; module paths and object keys are not colours.
+    { filename, code: '<View style={{ backgroundColor: "transparent" }} />' },
+    { filename, code: 'const s = { color: "currentColor" };' },
+    { filename, code: 'import tan from "tan";' },
+    { filename, code: 'const map = { "white": t.colors.card };' },
+    { filename, code: 'const label = "White rice";' },
   ],
   invalid: [
     {
@@ -65,10 +71,38 @@ tester.run("no-hard-coded-colour", noHardCodedColour, {
     },
     {
       filename,
+      code: 'const s = { color: "white" };',
+      errors: [{ messageId: "colour", data: { value: "white" } }],
+    },
+    {
+      filename,
+      code: '<Check color="Black" />',
+      errors: [{ messageId: "colour", data: { value: "Black" } }],
+    },
+    {
+      filename,
+      code: 'const s = { borderColor: "red", backgroundColor: "rebeccapurple" };',
+      errors: [
+        { messageId: "colour", data: { value: "red" } },
+        { messageId: "colour", data: { value: "rebeccapurple" } },
+      ],
+    },
+    {
+      filename,
       code: "const c = `${x} #A5B4FC`;",
       errors: [{ messageId: "colour", data: { value: "#A5B4FC" } }],
     },
   ],
+});
+
+describe("findNamedColour", () => {
+  it("matches a whole-string CSS named colour, in any case, but not transparent", () => {
+    expect(findNamedColour("white")).toBe("white");
+    expect(findNamedColour(" Navy ")).toBe("Navy");
+    expect(findNamedColour("transparent")).toBeNull();
+    expect(findNamedColour("whiteish")).toBeNull();
+    expect(findNamedColour("Red flag")).toBeNull();
+  });
 });
 
 describe("findColourLiteral", () => {

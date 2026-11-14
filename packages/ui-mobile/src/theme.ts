@@ -4,7 +4,8 @@
  * v3 (Z12-36): `themes.light` / `themes.dark` carry the generated v3 colour
  * tokens (`@fitbud/tokens`, from docs/design/v3/kit-v3.css), the v3 radii and
  * the v3 text variants. The app picks one with `ThemeProvider` / `useTheme()`
- * (apps/mobile/src/providers/ThemeProvider.tsx), following the system setting
+ * (apps/mobile/src/providers/ThemeProvider.tsx): the system setting, for screens
+ * that opt in to dark (`<Screen v3>`; light otherwise until migrated)
  * (D-W12-12). Shared primitives read colours only from there.
  *
  * The v2 exports below (`colors`, `semanticColors`, `radii`, `ringColors`)

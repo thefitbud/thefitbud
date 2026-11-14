@@ -15,7 +15,7 @@ import {
   renderV3Css,
   V3_ADDITIONS_MARKER,
 } from "./kitCss.js";
-import { colorTokens, v3DarkColors, v3LightColors, v3TypeScale } from "./tokens.js";
+import { colorTokens, v3DarkColors, v3LightColors, v3Radii, v3TypeScale } from "./tokens.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "../../..");
@@ -88,6 +88,44 @@ describe("v3 tokens equal the design kit", () => {
   it("kit-v3.css is the same stylesheet as src/kit.css before the additions", () => {
     const before = kitSource.slice(0, kitSource.lastIndexOf("/*", kitSource.indexOf(V3_ADDITIONS_MARKER)));
     expect(parseRules(before)).toEqual(parseRules(kitV3));
+  });
+
+  it("v3Radii equals the border-radius of its kit component rule", () => {
+    // Every radius key names the kit rule it comes from; a new key must be added here.
+    const source: Record<keyof typeof v3Radii, string | null> = {
+      card: ".card",
+      group: ".group",
+      meal: ".meal",
+      button: ".btn",
+      buttonSm: ".btn.sm",
+      input: ".inp",
+      segment: ".seg",
+      tag: ".tag",
+      sheet: ".sheet",
+      dialog: ".dialog",
+      toast: ".toast",
+      tabCapsule: ".tabbar",
+      tab: ".tab",
+      chip: ".chip",
+      pill: ".pill",
+      full: null, // "fully round" (DESIGN-SYSTEM-v3 §4); no kit rule, any value ≥ the largest pill works
+    };
+    expect(Object.keys(source).sort()).toEqual(Object.keys(v3Radii).sort());
+    const rules = parseRules(kitV3);
+    const radiusOf = (selector: string): number => {
+      const rule = rules.find((r) => r.selector === selector);
+      const decl = rule?.body.match(/border-radius:\s*([\d.]+)px/);
+      if (!decl?.[1]) throw new Error(`no border-radius in kit rule ${selector}`);
+      return Number(decl[1]);
+    };
+    for (const [key, selector] of Object.entries(source)) {
+      const value = v3Radii[key as keyof typeof v3Radii];
+      if (selector === null) {
+        expect(value, key).toBeGreaterThanOrEqual(100);
+        continue;
+      }
+      expect(value, `${key} (${selector})`).toBe(radiusOf(selector));
+    }
   });
 
   it("the generated files are up to date (run generate:v3)", () => {

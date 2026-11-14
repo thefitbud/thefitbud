@@ -7,7 +7,7 @@ import {
 } from "react-native";
 import type { ReactNode } from "react";
 import { spacing } from "@fitbud/ui-mobile";
-import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { BrandMark } from "./BrandMark";
 import { Text } from "./Text";
 
@@ -33,9 +33,26 @@ type Props = {
    * instead of a manual Refresh button; screens that omit it still render fine.
    */
   onRefresh?: () => void;
+  /**
+   * Opt this screen in to dark (Z12-36): set it once the screen is migrated
+   * to v3 tokens in its own W12 task. Without it the screen renders light
+   * whatever the system says, because unmigrated content still uses v2 light
+   * colours. Z12-58 checks that every screen sets it.
+   */
+  v3?: boolean;
 };
 
-export function Screen({
+/** Screen container. Light unless `v3` opts the screen in to the system theme. */
+export function Screen({ v3 = false, ...props }: Props) {
+  if (!v3) return <ScreenBody {...props} />;
+  return (
+    <ThemeScope scheme="system">
+      <ScreenBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function ScreenBody({
   title,
   subtitle,
   children,
@@ -46,7 +63,7 @@ export function Screen({
   showHeader = true,
   refreshing,
   onRefresh,
-}: Props) {
+}: Omit<Props, "v3">) {
   const theme = useTheme();
   const styles = useStyles();
   return (
