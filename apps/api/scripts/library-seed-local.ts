@@ -4,7 +4,8 @@
  * `library-seed.ts` in local mode, but straight into the local D1 SQLite file, one transaction per
  * file, with no wrangler process. Remote/staging loading stays in library-seed.ts, unchanged.
  */
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { localD1File } from "./lib/local-d1.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -13,16 +14,14 @@ import { LOCAL_FILES, hasStatements } from "./library-seed.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const apiRoot = path.resolve(__dirname, "..");
 const seedDir = path.join(apiRoot, "seed", "library");
-const d1Dir = path.join(apiRoot, ".wrangler/state/v3/d1/miniflare-D1DatabaseObject");
-
-const dbFile = existsSync(d1Dir)
-  ? readdirSync(d1Dir).find((name) => name.endsWith(".sqlite") && name !== "metadata.sqlite")
-  : undefined;
-if (!dbFile) {
-  console.error("Local D1 database not found. Run pnpm db:migrate:local first (or pnpm db:reset).");
+let d1File: string;
+try {
+  d1File = localD1File(apiRoot);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 }
-const sqlite = new DatabaseSync(path.join(d1Dir, dbFile));
+const sqlite = new DatabaseSync(d1File);
 sqlite.exec("PRAGMA busy_timeout = 30000;");
 console.log("Seeding FitBud library into local D1 (direct SQLite)...");
 for (const rel of LOCAL_FILES) {

@@ -6,6 +6,7 @@ import { rmSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { apiPortToProbe } from "./lib/local-d1.js";
 import { runCommandSync } from "./lib/run-command.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -43,17 +44,15 @@ function listening(port: number): Promise<boolean> {
 // db:reset deletes the D1 files. A running local API keeps the deleted database open (Linux: it
 // goes on serving the old data; Windows: the delete fails), so it has to be stopped first.
 // db:reseed does not have this problem.
-const apiPorts = [...new Set([8787, Number(process.env.FITBUD_API_PORT ?? 0)].filter((p) => p > 0))];
-for (const port of apiPorts) {
-  if (process.env.FITBUD_RESET_IGNORE_API !== "1" && (await listening(port))) {
-    console.error(
-      `Something is listening on port ${port}, probably the local API (pnpm api).\n` +
-        "Stop it and run pnpm db:reset again: a running API keeps the old database open.\n" +
-        "To reload only the demo data while the API runs, use pnpm db:reseed.\n" +
-        "(Set FITBUD_RESET_IGNORE_API=1 to skip this check, e.g. if the port is another program.)",
-    );
-    process.exit(1);
-  }
+const apiPort = apiPortToProbe(process.env);
+if (process.env.FITBUD_RESET_IGNORE_API !== "1" && (await listening(apiPort))) {
+  console.error(
+    `Something is listening on port ${apiPort}, probably the local API (pnpm api).\n` +
+      "Stop it and run pnpm db:reset again: a running API keeps the old database open.\n" +
+      "To reload only the demo data while the API runs, use pnpm db:reseed.\n" +
+      "(Set FITBUD_RESET_IGNORE_API=1 to skip this check, e.g. if the port is another program.)",
+  );
+  process.exit(1);
 }
 
 run("tsx", ["scripts/ensure-dev-vars.ts"]);

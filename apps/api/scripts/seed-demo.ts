@@ -5,7 +5,8 @@
  * Refuses when migrations are not current. Used by `pnpm db:reseed` and by db:reset.
  * Stop the local API first when you can; the write waits up to 30 s for its lock.
  */
-import { existsSync, readdirSync, writeFileSync } from "node:fs";
+import { readdirSync, writeFileSync } from "node:fs";
+import { localD1File } from "./lib/local-d1.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
@@ -24,22 +25,6 @@ const outFile = path.join(apiRoot, ".wrangler", "demo-seed.sql");
 if (process.argv.includes("--remote")) {
   console.error("seed-demo refuses non-local runs.");
   process.exit(1);
-}
-
-function localD1File(): string {
-  const d1Dir = path.join(
-    apiRoot,
-    ".wrangler/state/v3/d1/miniflare-D1DatabaseObject",
-  );
-  const dbFile = existsSync(d1Dir)
-    ? readdirSync(d1Dir).find((name) => name.endsWith(".sqlite") && name !== "metadata.sqlite")
-    : undefined;
-  if (!dbFile) {
-    throw new Error(
-      "Local D1 database not found. Run pnpm db:reset first (migrations + library + demo).",
-    );
-  }
-  return path.join(d1Dir, dbFile);
 }
 
 function fail(message: string): never {
@@ -89,7 +74,12 @@ function applySeed(sqlite: DatabaseSync, sql: string): void {
 
 const referenceInstant = process.env.NOW ?? new Date().toISOString();
 const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
-const d1File = localD1File();
+let d1File: string;
+try {
+  d1File = localD1File(apiRoot);
+} catch (error) {
+  fail(error instanceof Error ? error.message : String(error));
+}
 const sqlite = new DatabaseSync(d1File);
 assertSchemaCurrent(sqlite);
 const libraryIndex = loadDemoLibraryIndex({
