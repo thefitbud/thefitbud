@@ -16,7 +16,9 @@ platforms, and reports.
 | [43616323952](https://github.com/thefitbud/thefitbud/actions/runs/43616323952) | `263fb968` | same | **ran end to end**: driver warm-up fixed it; 1/4 flows pass per theme, log clean | **the example run: both platforms, both themes, complete** |
 | [43619775723](https://github.com/thefitbud/thefitbud/actions/runs/43619775723) | `6cd2f93d` | native cache miss: full build 8 min, cache saved | native cache miss, arm64-only build | first run with the native-build cache |
 | [43623489626](https://github.com/thefitbud/thefitbud/actions/runs/43623489626) | `31ea770c` | **native cache hit: build 70 s** (was 8–12 min); same results as the full build | **native cache hit: build 98 s** (was 33–44 min); same results; idb installed (built with Xcode 26.3) | **proof of the native-build cache**: identical flow results and a clean log on the swapped bundle |
-Z12_33_ROWS
+| [43625661111](https://github.com/thefitbud/thefitbud/actions/runs/43625661111) | `fa967e3a` | cache hit (70 s); Z12-33 chain added (`flows=smoke,z12-33`, one flow at a time, two offline) | cache hit (129 s) | first Z12-33 run on the current app: both platforms failed early in step 3 on flow anchors (a below-the-fold heading; a roster name needing a scroll), so the chained steps after it read the wrong account. Flows fixed |
+| [43630616901](https://github.com/thefitbud/thefitbud/actions/runs/43630616901) | `483127b2` | cache hit (63 s); **Z12-33 steps 1–7 pass in light and dark**: Rahul's Attention, Clients and client load; after his sign-out (mid-refresh) Priya sees none of Rahul's clients online, and offline shows only "You're offline…/Couldn't load", never Rahul's rows. Step 8's precondition was wrong (Rahul's roster never loaded online); fixed | cache hit (98 s); step 3 fails: the client screen's "‹ Clients" anchor is not seen after the row tap, so the chain cascades (the precondition guards now report it as such, not as a leak) | the device logs stayed clean on both platforms |
+| [43634854529](https://github.com/thefitbud/thefitbud/actions/runs/43634854529) | `d22bd687` | in progress at hand-off | in progress | prints the screen's labels when a chained flow fails, to finish the iOS step-3 anchor |
 
 ## What the example run shows
 
@@ -116,8 +118,13 @@ permission in its flow before it relies on this tap.
   `WorkoutTab.pendingSummary.test.tsx`, `workout/coach-logged/WorkoutTab.gating.test.tsx`.
 - **`docs/qa/W12/parity.md` is not committed here** (Z12-32 writes it); only the generator
   `parity-gen.mjs` and its test ship.
-- **Z12-33's two-trainer device check** is in `apps/mobile/.maestro/device/z12-33/`
-  (dispatch `flows=z12-33` against `claude/Z12-33-cache-late-write` once that branch has
-  merged `main` with this harness). One departure from docs/qa/Z12-33 step 8: Attention is
+- **Z12-33's two-trainer device check** (D-W12-31) is in `apps/mobile/.maestro/device/z12-33/`,
+  four chained flows (two `device-offline`). It ran on the current app (main, without
+  Z12-33's fix) on every harness PR run from 43625661111: on Android steps 1–7 pass in both
+  themes; on iOS step 3's client-screen anchor still needs finishing (run 43634854529 prints
+  the screen at the failure). For the merge gate, dispatch it on Z12-33's head:
+  `gh workflow run device.yml --ref main -f ref=claude/Z12-33-cache-late-write -f flows=z12-33`
+  (the harness comes from the workflow's commit, so that branch needs no merge first).
+  One departure from docs/qa/Z12-33 step 8: Attention is
   the trainer's landing tab, so it loads online as Rahul signs back in, before the device
   can go offline; the check that offline never shows Priya's rows still holds.
