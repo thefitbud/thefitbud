@@ -5,9 +5,11 @@ tags:
   - trainee
   - z12-36
 ---
-# Rohan Mehta (slipping, local demo seed) has today's workout planned. The flow starts it
-# (or continues it: the light run already logged a set), logs one set, skips the rest
-# and captures the active workout mid-session. Same opt-in note as 2-trainee-today-diet.
+# Rohan Mehta (slipping, local demo seed). The runner's local day can be a rest day
+# (run 43643116147 ran on Sun 15 Nov IST), so the flow takes today's workout when there
+# is one ("Start workout" / "Continue workout") and otherwise a missed one from this week
+# ("Log it", "Missed · you can still log it"). It logs one set, skips the rest and
+# captures the active workout mid-session. Same opt-in note as 2-trainee-today-diet.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -17,10 +19,22 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
-
-- tapOn: "Workout"
 - extendedWaitUntil:
-    visible: "Start workout|Continue workout|Log it"
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+
+# "Workout" also names a tile on Today; the tab is the later match. If the first tap
+# left Today on screen (its macro summary is still there), tap the tab bar's match.
+- tapOn: "Workout"
+- runFlow:
+    when:
+      visible: ".*of [0-9,]+ kcal"
+    commands:
+      - tapOn:
+          text: "Workout"
+          index: 1
+- scrollUntilVisible:
+    element: "Start workout|Continue workout|Log it"
     timeout: 30000
 - runFlow:
     when:
