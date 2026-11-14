@@ -1029,6 +1029,7 @@ notificationRoutes.post(
           result.notification,
         ),
         deduped: result.deduped,
+        nudgedAt: result.notification.createdAt,
         delivery: result.delivery,
         inboxReason: result.inboxReason,
         deferredForQuietHours: result.deferredForQuietHours,

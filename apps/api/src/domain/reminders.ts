@@ -1853,7 +1853,8 @@ export async function evaluateReminders(input: {
  * FitBud notification with a fixed title and the coach's body.
  *
  * - **Cap:** at most `NUDGE_DAILY_CLIENT_LIMIT` nudges per client per client
- *   civil day (the trainee's stored zone, through the core zone resolver),
+ *   civil day (the trainee's stored `users.timezone`, through core
+ *   `formatLocalDate` / `localDateTimeToUtcIso`),
  *   counted across activities and every delivery mode. It replaced the
  *   per-item 4-hour cooldown. The trainer-wide hourly limit stays as abuse
  *   protection (`NUDGE_RATE_LIMITED`).
@@ -2023,7 +2024,8 @@ export async function createActivityNudge(
   );
   if (!activity) return { ok: false, code: "ACTIVITY_NOT_FOUND" };
 
-  // The client's civil day, in the trainee's stored zone (core resolver, CU17).
+  // The client's civil day: `users.timezone` (default "UTC") through core
+  // `formatLocalDate` / `localDateTimeToUtcIso`.
   const timeZone = await recipientTimezone(db, relationship.traineeUserId);
   const localDate = formatLocalDate(new Date(now), timeZone);
   const dedupeKey = activityNudgeDedupeKey(activity.activityId, localDate);

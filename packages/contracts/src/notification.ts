@@ -399,7 +399,15 @@ export type NudgeActivityRequest = z.infer<typeof nudgeActivityRequestSchema>;
 
 export const nudgeActivityResponseSchema = z.object({
   notification: notificationSchema,
+  /**
+   * True: this item was already nudged today (client civil day). The stored
+   * nudge is returned as it was (`notification.body`, `nudgedAt`) and the new
+   * body was not sent. 200, not an error: without an idempotency key a
+   * network retry and a deliberate resend look the same.
+   */
   deduped: z.boolean(),
+  /** When the returned nudge was sent (equals `notification.createdAt`); TM-04n "at {time}". */
+  nudgedAt: isoDateTimeSchema.optional(),
   /**
    * `push`: a FitBud push was sent, or is held until quiet hours end
    * (`deferredForQuietHours`). `inbox`: in-app inbox only, see `inboxReason`

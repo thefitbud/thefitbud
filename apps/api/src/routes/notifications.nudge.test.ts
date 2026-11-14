@@ -26,6 +26,7 @@ const SEND_URL = "https://exp.host/--/api/v2/push/send";
 type ExpoMessage = { to: string; title: string; body: string; data: Record<string, unknown> };
 type NudgeData = {
   deduped: boolean;
+  nudgedAt: string;
   delivery: "push" | "inbox";
   inboxReason: "push_off" | "reminders_paused" | null;
   deferredForQuietHours: boolean;
@@ -354,6 +355,19 @@ describe("coach nudges (Z12-50)", () => {
     const retryData = ((await retry.json()) as { data: NudgeData }).data;
     expect(retryData.deduped).toBe(true);
     expect(retryData.notification.id).toBe(firstData.notification.id);
+    // The stored nudge, as sent: its body and original time (TM-04n), not the resend's.
+    expect(retryData.notification.body).toBe("Lunch is waiting.");
+    expect(retryData.nudgedAt).toBe(clientClock(rohan.timeZone, 0, 23, 30));
+    expect(firstData.nudgedAt).toBe(firstData.notification.createdAt);
+    const resend = await nudge(rahul, rohan.relationshipId, {
+      activityType: "meal",
+      activityId: a,
+      body: "A different message.",
+      now: clientClock(rohan.timeZone, 0, 23, 32),
+    });
+    const resendData = ((await resend.json()) as { data: NudgeData }).data;
+    expect(resendData).toMatchObject({ deduped: true, nudgedAt: firstData.nudgedAt });
+    expect(resendData.notification.body).toBe("Lunch is waiting.");
 
     const second = await nudge(rahul, rohan.relationshipId, {
       activityType: "meal",
@@ -529,6 +543,169 @@ describe("coach nudges (Z12-50)", () => {
       .from(schema.notifications)
       .where(eq(schema.notifications.id, data.notification.id));
     expect(released?.state).toBe("delivered");
+  });
+
+  it("keeps the trainer-wide hourly limit: 3 nudges across 3 clients in an hour, the 4th is NUDGE_RATE_LIMITED", async () => {
+    const rahul = await login("rahul.coach@demo.fitbud.test", "trainer");
+    const rohan = await client("rohan.slipping@demo.fitbud.test");
+    const ishita = await client("ishita.pushoff@demo.fitbud.test");
+    const farhan = await client("farhan.paused@demo.fitbud.test");
+    const at = (minute: number) => clientClock(rohan.timeZone, 0, 12, minute);
+
+    for (const [index, target] of [rohan, ishita, farhan].entries()) {
+      const res = await nudge(rahul, target.relationshipId, {
+        activityType: "meal",
+        activityId: target.mealIds[0],
+        now: at(index * 10),
+      });
+      expect(res.status, await res.clone().text()).toBe(200);
+    }
+    // Rohan is under his daily cap (1 of 2); the trainer's hour is full.
+    const fourth = await nudge(rahul, rohan.relationshipId, {
+      activityType: "meal",
+      activityId: rohan.mealIds[1],
+      now: at(30),
+    });
+    expect(fourth.status).toBe(429);
+    const error = ((await fourth.json()) as {
+      error: { code: string; message: string; details?: { retryAfter?: number } };
+    }).error;
+    expect(error).toMatchObject({
+      code: "NUDGE_RATE_LIMITED",
+      message: "You can nudge again in 60 min",
+      details: { retryAfter: 3600 },
+    });
+    expect(await nudgeRows(rohan.relationshipId)).toHaveLength(1);
+
+    // Once the first nudge is more than an hour old, the same nudge goes through.
+    const later = await nudge(rahul, rohan.relationshipId, {
+      activityType: "meal",
+      activityId: rohan.mealIds[1],
+      now: at(61),
+    });
+    expect(later.status, await later.clone().text()).toBe(200);
+  });
+
+  it("rejects a trainee calling the nudge endpoint", async () => {
+    const rohanHeaders = await login("rohan.slipping@demo.fitbud.test", "trainee");
+    const rohan = await client("rohan.slipping@demo.fitbud.test");
+    const res = await nudge(rohanHeaders, rohan.relationshipId, {
+      activityType: "meal",
+      activityId: rohan.mealIds[0],
+    });
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as { error: { code: string } }).error.code).toBe("FORBIDDEN_ROLE");
+    expect(await nudgeRows(rohan.relationshipId)).toHaveLength(0);
+  });
+
+  it("counts no active device token as push off even with FitBud pushes on", async () => {
+    const rahul = await login("rahul.coach@demo.fitbud.test", "trainer");
+    const rohan = await client("rohan.slipping@demo.fitbud.test");
+    const [prefs] = await db
+      .select()
+      .from(schema.notificationPreferences)
+      .where(eq(schema.notificationPreferences.userId, rohan.traineeUserId));
+    expect(prefs?.pushEnabled).toBe(true);
+    const tokens = await db
+      .select()
+      .from(schema.deviceTokens)
+      .where(
+        and(
+          eq(schema.deviceTokens.userId, rohan.traineeUserId),
+          eq(schema.deviceTokens.status, "active"),
+        ),
+      );
+    expect(tokens).toHaveLength(0);
+
+    const res = await nudge(rahul, rohan.relationshipId, {
+      activityType: "meal",
+      activityId: rohan.mealIds[0],
+      now: clientClock(rohan.timeZone, 0, 12, 0),
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const data = ((await res.json()) as { data: NudgeData }).data;
+    expect(data).toMatchObject({ delivery: "inbox", inboxReason: "push_off" });
+    expect(data.notification.state).toBe("delivered");
+    expect(await deliveriesFor(data.notification.id)).toHaveLength(0);
+    expect(expoCalls).toHaveLength(0);
+  });
+
+  async function holdThenRelease(change: (rohan: Awaited<ReturnType<typeof client>>) => Promise<void>) {
+    await registerRohanDevice();
+    const rahul = await login("rahul.coach@demo.fitbud.test", "trainer");
+    const rohan = await client("rohan.slipping@demo.fitbud.test");
+    const res = await nudge(rahul, rohan.relationshipId, {
+      activityType: "meal",
+      activityId: rohan.mealIds[0],
+      body: "Can you log lunch when you wake up?",
+      now: clientClock(rohan.timeZone, 0, 22, 40),
+    });
+    expect(res.status, await res.clone().text()).toBe(200);
+    const data = ((await res.json()) as { data: NudgeData }).data;
+    expect(data).toMatchObject({ delivery: "push", deferredForQuietHours: true });
+
+    await change(rohan);
+
+    const releaseAt = clientClock(rohan.timeZone, 1, 7, 0);
+    vi.setSystemTime(new Date(releaseAt));
+    const evaluated = await app.request(
+      "/notifications/reminders/evaluate",
+      { method: "POST", headers: rahul, body: JSON.stringify({ now: releaseAt }) },
+      env(),
+    );
+    expect(evaluated.status, await evaluated.clone().text()).toBe(200);
+    expect(expoCalls.filter((call) => call.data.notificationId === data.notification.id)).toHaveLength(0);
+    const [released] = await db
+      .select()
+      .from(schema.notifications)
+      .where(eq(schema.notifications.id, data.notification.id));
+    // Still the trainee's inbox entry with the coach's text; never "suppressed".
+    expect(released?.state).toBe("delivered");
+    const row = (await inbox("rohan.slipping@demo.fitbud.test")).find(
+      (item) => item.id === data.notification.id,
+    );
+    expect(row).toMatchObject({ title: "Rahul nudged you", body: "Can you log lunch when you wake up?" });
+    return deliveriesFor(data.notification.id);
+  }
+
+  it("delivers a held nudge inbox-only at release when the client turned push off meanwhile", async () => {
+    const deliveries = await holdThenRelease(async () => {
+      const headers = await login("rohan.slipping@demo.fitbud.test", "trainee");
+      const res = await app.request(
+        "/notifications/preferences",
+        { method: "PUT", headers, body: JSON.stringify({ pushEnabled: false }) },
+        env(),
+      );
+      expect(res.status, await res.clone().text()).toBe(200);
+    });
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({ providerStatus: "skipped", failureCategory: "preferences" });
+  });
+
+  it("delivers a held nudge inbox-only at release when the client's reminders were paused meanwhile", async () => {
+    const deliveries = await holdThenRelease(async (rohan) => {
+      // Reminder backoff pauses reminders server-side (as the seed does for Farhan).
+      const now = clientClock(rohan.timeZone, 0, 23, 30);
+      await db
+        .insert(schema.reminderStates)
+        .values({
+          traineeUserId: rohan.traineeUserId,
+          consecutiveIgnores: 5,
+          mode: "paused",
+          pausedUntil: clientClock(rohan.timeZone, 7, 0, 0),
+          lastEvaluatedAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: schema.reminderStates.traineeUserId,
+          set: { mode: "paused", pausedUntil: clientClock(rohan.timeZone, 7, 0, 0), updatedAt: now },
+        });
+    });
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]).toMatchObject({
+      providerStatus: "skipped",
+      failureCategory: "reminders_paused",
+    });
   });
 
   it("rejects a nudge to an ended client and to another trainer's client", async () => {
