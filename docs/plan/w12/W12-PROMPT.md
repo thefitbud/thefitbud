@@ -41,7 +41,7 @@ Repo: `thefitbud/thefitbud`, from `main` (at `6ed1410e` or later). Follow CLAUDE
   - Use Sonnet or Haiku for routine steps (docs, seed, dependency bumps, report).
   - You may switch model when a task really needs it. Validate the result with tests and a fresh review, and record which model you used and why.
 - Be careful with usage. Run at most 3 tasks at once, and wrap up at 92% with what merged and what's left.
-- Don't write "@claude" anywhere: PRs, commits, comments or docs.
+- Never write the Claude mention handle (an at-sign followed by "claude") anywhere: PRs, commits, comments or docs.
 - Captures go in `docs/qa/<task ID>/`. Never claim a pixel match. Grade MATCH, CLOSE or GAP, and list what remains.
 - **Native changes are cleared for this batch (FitBud UI, 14 Nov), but only the ones listed in Z12-57.** They all land in that one PR, so there is a single rebuild. Every other task stays JS-only. If a task finds it needs a native change, it builds a JS fallback, notes it, and adds the change to Z12-57.
 - Serialise anything that touches the local D1 (Z12-34, Z12-39 server part, Z12-43 server part, Z12-50 server part, Z12-58).
