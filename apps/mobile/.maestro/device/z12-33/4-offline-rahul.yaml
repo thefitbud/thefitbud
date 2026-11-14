@@ -29,6 +29,11 @@ env:
 - scrollUntilVisible:
     element: "[A-Z]{2},? ${RAHUL_CLIENT}.*|${RAHUL_CLIENT}"
     timeout: 20000
+# Reach the Attention tab through More: on Android a client row's status chip is its
+# own "Attention" text node, so a bare tap on "Attention" from Clients can open that
+# client instead of the tab (run 43642084004). The More screen has no other
+# "Attention" text; iOS merges each row into one element, so it never collided there.
+- tapOn: "More"
 - tapOn: "Attention"
 - swipe:
     start: "50%, 30%"
