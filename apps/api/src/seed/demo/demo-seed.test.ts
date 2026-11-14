@@ -117,6 +117,44 @@ describe("demo seed", () => {
     vi.useRealTimers();
   });
 
+  it("carries the Z12-34 personas: Priya Nair, a no-plan client, push off, reminders paused, days around today", () => {
+    const one = (sql: string) => sqliteExec(sql)[0]?.values[0]?.[0];
+    const rel = (email: string) =>
+      `(SELECT cr.id FROM coaching_relationships cr JOIN user_identities ui ON ui.user_id = cr.trainee_user_id WHERE ui.email_norm = '${email}')`;
+
+    // The trainee Priya of the mocks; the trainer Priya Malhotra keeps her own name.
+    expect(one("SELECT display_name FROM trainee_profiles WHERE user_id = (SELECT user_id FROM user_identities WHERE email_norm = 'tanvi.attention@demo.fitbud.test')")).toBe("Priya Nair");
+    expect(one("SELECT count(*) FROM trainee_profiles WHERE display_name = 'Priya Sharma'")).toBe(0);
+    expect(one("SELECT display_name FROM trainer_profiles WHERE user_id = (SELECT user_id FROM user_identities WHERE email_norm = 'priya.coach@demo.fitbud.test')")).toBe("Priya Malhotra");
+
+    // No-plan trainee: active relationship, no plan at all.
+    const harpreet = rel("harpreet.ready@demo.fitbud.test");
+    expect(one(`SELECT status FROM coaching_relationships WHERE id = ${harpreet}`)).toBe("active");
+    expect(one(`SELECT count(*) FROM plans WHERE coaching_relationship_id = ${harpreet}`)).toBe(0);
+
+    // Push off: preference off and no usable device token.
+    const ishita = "(SELECT user_id FROM user_identities WHERE email_norm = 'ishita.pushoff@demo.fitbud.test')";
+    expect(one(`SELECT push_enabled FROM notification_preferences WHERE user_id = ${ishita}`)).toBe(0);
+    expect(one(`SELECT count(*) FROM device_tokens WHERE user_id = ${ishita} AND status = 'active'`)).toBe(0);
+
+    // Reminders paused, until a date after the reference instant.
+    const paused = sqliteExec(
+      "SELECT mode, paused_until FROM reminder_states WHERE trainee_user_id = (SELECT user_id FROM user_identities WHERE email_norm = 'farhan.paused@demo.fitbud.test')",
+    )[0]?.values[0];
+    expect(paused?.[0]).toBe("paused");
+    expect(String(paused?.[1]) > FROZEN_REFERENCE_INSTANT).toBe(true);
+
+    // Past and future days exist around the reference day for an active planned client.
+    const aarav = rel("aarav.ontrack@demo.fitbud.test");
+    for (let offset = -3; offset <= 3; offset += 1) {
+      const day = addDays(refDate, offset);
+      expect(
+        Number(one(`SELECT count(*) FROM meal_assignments WHERE coaching_relationship_id = ${aarav} AND local_date = '${day}'`)),
+        `meals on ${day} (${offset})`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
   it(
     "applies twice with stable counts and valid foreign keys",
     async () => {

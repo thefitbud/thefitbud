@@ -17,8 +17,12 @@ if (!allowed.endsWith(`${path.sep}.wrangler${path.sep}state${path.sep}v3${path.s
   process.exit(1);
 }
 
+const timings: string[] = [];
+
 function run(command: string, args: string[]) {
+  const started = Date.now();
   runCommandSync(command, args, { cwd: apiRoot });
+  timings.push(`${[command, ...args].join(" ").padEnd(34)} ${((Date.now() - started) / 1000).toFixed(1)}s`);
 }
 
 run("tsx", ["scripts/ensure-dev-vars.ts"]);
@@ -30,4 +34,5 @@ run("pnpm", ["db:migrate:local"]);
 run("pnpm", ["db:seed:library"]);
 run("pnpm", ["seed:demo"]);
 
-console.log("db:reset complete.");
+console.log("\nStep timings:\n  " + timings.join("\n  "));
+console.log("db:reset complete. (For a quick demo-only reload on a current schema, use pnpm db:reseed.)");

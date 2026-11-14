@@ -1355,7 +1355,7 @@ export const WORKOUT_TEMPLATES: WorkoutTemplate[] = [
   {
     "code": "W10",
     "title": "Duty-Day Express · 25 min · 3x",
-    "forWhom": "shift workers (Priya S., Imran)",
+    "forWhom": "shift workers (Priya N., Imran)",
     "schedule": "3 flexible days; required=false on post-night-shift days",
     "days": [
       {
