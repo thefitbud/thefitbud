@@ -83,6 +83,15 @@ ios_tap() {
     idb ui describe-all --udid "$udid" --json >"$dump" 2>/dev/null || true
     xy="$(node "$FIND" --format idb --match "$MATCH" "$dump" || true)"
   fi
+  if [ -z "$xy" ]; then
+    # Run 43623489626 saw only the clock and date: older notifications sit in the
+    # lock screen's Notification Center, which a swipe up from mid-screen reveals.
+    idb ui swipe --udid "$udid" 196 600 196 300 >/dev/null 2>&1 || true
+    sleep 2
+    dump="$DUMP_DIR/ios-$TARGET-locked-swiped.json"
+    idb ui describe-all --udid "$udid" --json >"$dump" 2>/dev/null || true
+    xy="$(node "$FIND" --format idb --match "$MATCH" "$dump" || true)"
+  fi
   shot before
   if [ -z "$xy" ]; then
     record not-found "no lock-screen element matches /$MATCH/i (dump: lockscreen/$(basename "$dump"))"
