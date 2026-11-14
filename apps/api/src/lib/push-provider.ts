@@ -1,7 +1,7 @@
 import type { PushPayload } from "@fitbud/contracts";
 import { buildSafePushPayload } from "@fitbud/core";
 import { createId } from "./crypto.js";
-import { sendExpoPushMessages } from "./expo-push.js";
+import { sendExpoPushMessages, type PushDisplayText } from "./expo-push.js";
 
 export type PushProviderMode = "test" | "fcm" | "expo";
 
@@ -37,11 +37,16 @@ export async function sendPushToDevice(input: {
   mode: PushProviderMode;
   deviceToken: string;
   payload: PushPayload;
+  /** Stored display text that replaces the generic lock-screen text (a nudge, Z12-50). */
+  display?: PushDisplayText;
   /** Optional Expo access token (Worker secret). Never logged. */
   expoAccessToken?: string;
 }): Promise<PushSendResult> {
   if (input.mode === "expo") {
-    const [result] = await sendExpoPushMessages([{ to: input.deviceToken, payload: input.payload }], {
+    const message = input.display
+      ? { to: input.deviceToken, payload: input.payload, display: input.display }
+      : { to: input.deviceToken, payload: input.payload };
+    const [result] = await sendExpoPushMessages([message], {
       accessToken: input.expoAccessToken,
     });
     if (result?.ok) return { ok: true, providerMessageId: result.ticketId };

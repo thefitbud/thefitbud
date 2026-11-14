@@ -35,9 +35,18 @@ export type ExpoTicketResult =
 
 export type ExpoReceiptResult = { ok: true } | { ok: false; failureCategory: ExpoFailureCategory };
 
+/** Lock-screen text the server stored for one notification (Z12-50: a coach's nudge). */
+export type PushDisplayText = { title: string; body: string };
+
 export type ExpoPushMessage = {
   to: string;
   payload: PushPayload;
+  /**
+   * Overrides the generic lock-screen text. Only for text the notification
+   * already carries for display (a nudge's title and the coach's own body);
+   * `data` stays the routing payload either way.
+   */
+  display?: PushDisplayText;
 };
 
 export type ExpoClientOptions = {
@@ -145,7 +154,7 @@ export async function sendExpoPushMessages(
   for (const part of chunk(messages, EXPO_SEND_CHUNK_SIZE)) {
     const body = part.map((message) => ({
       to: message.to,
-      ...expoNotificationText(message.payload),
+      ...(message.display ?? expoNotificationText(message.payload)),
       data: message.payload,
       sound: "default",
     }));
