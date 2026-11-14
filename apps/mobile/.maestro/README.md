@@ -45,6 +45,10 @@ next to it. The branches that exist today:
     trainee/   today, workout-log, meal-log, checkin, progress, settings
     trainer/   clients, attention, checkin-review, notes-more
   session-persists.yaml         AB3, manual, not part of the suite
+  device/<task>/                W12 device-gate flows for one task (Z12-35); outside
+                                flows/**, so the nightly suite never collects them.
+                                Run by .github/workflows/device.yml, see
+                                scripts/qa/device/README.md
 ```
 
 Every flow starts with `launchApp` with `clearState: true` and `clearKeychain: true`,
