@@ -13,6 +13,8 @@ import { collect, targetFor } from "./collect-shots.mjs";
 import { buildGateSummary, toMarkdown } from "./gate-summary.mjs";
 import { androidData, buildRouting, iosPayload } from "./push-payload.mjs";
 import { flowTags, globToRegExp, selectFlows } from "./select-flows.mjs";
+import { pngLuma, summarise } from "./shot-luma.mjs";
+import zlib from "node:zlib";
 import { findHeadPipes, literalGrepsWithoutF, logicalLines } from "../shell-patterns.test.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -339,6 +341,69 @@ test("patch-native (android) allows cleartext to the emulator's host only, idemp
   assert.equal(fs.readFileSync(manifest, "utf8"), once, "a second run changes nothing");
 });
 
+test("patch-native (android) switches a light-only AppTheme parent to DayNight, and leaves DayNight alone", () => {
+  const dir = tmp();
+  write(path.join(dir, "app/src/main/AndroidManifest.xml"), "<manifest>\n  <application android:name=\".A\">\n  </application>\n</manifest>\n");
+  const styles = path.join(dir, "app/src/main/res/values/styles.xml");
+  write(styles, '<resources>\n  <style name="AppTheme" parent="Theme.AppCompat.Light.NoActionBar">\n  </style>\n</resources>\n');
+  assert.equal(patchNative("android", dir).status, 0);
+  assert.match(fs.readFileSync(styles, "utf8"), /parent="Theme\.AppCompat\.DayNight\.NoActionBar"/);
+  write(styles, '<resources>\n  <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">\n  </style>\n</resources>\n');
+  const before = fs.readFileSync(styles, "utf8");
+  assert.equal(patchNative("android", dir).status, 0);
+  assert.equal(fs.readFileSync(styles, "utf8"), before);
+});
+
+function png(width, height, rgba) {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    return c >>> 0;
+  });
+  const crc = (b) => {
+    let c = 0xffffffff;
+    for (const x of b) c = crcTable[(c ^ x) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const c = Buffer.alloc(4);
+    c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 6;
+  // Filter 2 (Up) on every row after the first, to exercise unfiltering.
+  const rows = [];
+  for (let y = 0; y < height; y++) {
+    const row = Buffer.alloc(width * 4);
+    for (let x = 0; x < width; x++) row.set(rgba, x * 4);
+    rows.push(Buffer.concat([Buffer.from([y === 0 ? 0 : 2]), y === 0 ? row : Buffer.alloc(width * 4)]));
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", zlib.deflateSync(Buffer.concat(rows))),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+test("shot-luma tells a light screenshot from a dark one", () => {
+  assert.ok(Math.abs(pngLuma(png(20, 20, [255, 255, 255, 255]), 1) - 1) < 1e-9);
+  assert.ok(pngLuma(png(20, 20, [10, 10, 10, 255]), 1) < 0.05);
+  assert.equal(pngLuma(Buffer.from("not a png")), null);
+  const dir = tmp();
+  write(path.join(dir, "TR-06a-light-ios.png"), png(8, 8, [250, 250, 250, 255]));
+  write(path.join(dir, "TR-06a-dark-ios.png"), png(8, 8, [20, 20, 20, 255]));
+  const s = summarise([path.join(dir, "TR-06a-light-ios.png"), path.join(dir, "TR-06a-dark-ios.png")]);
+  assert.ok(s.light > 0.9 && s.dark < 0.1);
+});
+
 test("patch-native (android) refuses to overwrite an existing network security config", () => {
   const dir = tmp();
   write(path.join(dir, "app/src/main/AndroidManifest.xml"), '<manifest>\n  <application android:networkSecurityConfig="@xml/other">\n  </application>\n</manifest>\n');
@@ -359,6 +424,7 @@ test("patch-native (ios) sets ATS local networking and adds the level-marking lo
   const r = patchNative("ios", dir, { PLISTBUDDY: fake });
   assert.equal(r.status, 0, r.stderr);
   assert.match(fs.readFileSync(calls, "utf8"), /Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true/);
+  assert.match(fs.readFileSync(calls, "utf8"), /Set :UIUserInterfaceStyle Automatic/, "the app follows the system theme");
   const src = fs.readFileSync(path.join(dir, "FitBudStaging/AppDelegate.mm"), "utf8");
   assert.match(src, /#import "AppDelegate\.h"\n#import <React\/RCTLog\.h>\n/);
   assert.match(src, /\{\n {2}\/\/ FitBud device gate \(Z12-35\)[\s\S]*RCTSetLogThreshold\(RCTLogLevelInfo\);[\s\S]*NSLog\(@"\[fitbud-gate\] %@\.%@ %@", origin, kind, message\);\n {2}\}\);\n {2}self\.moduleName = @"main";/);

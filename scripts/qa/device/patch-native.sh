@@ -23,7 +23,13 @@
 #         [fitbud-gate] js.warn <message>     [fitbud-gate] native.error <message>
 #      scan-logs.mjs fails the run on those markers. The default RN logging is kept.
 #
+#   3. Theme: UIUserInterfaceStyle = Automatic (app.json pins Light), so the app
+#      follows `simctl ui appearance`. Harness-only; the shipped app follows the
+#      system from Z12-57.
+#
 # Android
+#   Theme: checked, and switched to a DayNight AppTheme parent only if prebuild wrote
+#   a light-only one (patch_android_theme). Harness-only, as on iOS.
 #   Cleartext to the local API only: a network security config that permits plain
 #   HTTP to 10.0.2.2, 127.0.0.1 and localhost (the emulator's view of the runner)
 #   and nothing else. A Release build targets SDK 34, where cleartext is off by
@@ -129,12 +135,48 @@ XML
   device_log "manifest: networkSecurityConfig=@xml/$config (cleartext to 10.0.2.2, 127.0.0.1, localhost)"
 }
 
+# Theme (orchestrator decision, 14 Nov 2026). app.json sets userInterfaceStyle "light",
+# which prebuild writes as UIUserInterfaceStyle=Light, so the iOS app ignores
+# `simctl ui appearance dark` and the gate could not prove dark until Z12-57 changes
+# the shipped config. Harness-only: the generated Info.plist follows the system.
+patch_ios_theme() {
+  local plist before
+  plist="$(ios_app_dir)/Info.plist"
+  before="$("$PLISTBUDDY" -c 'Print :UIUserInterfaceStyle' "$plist" 2>/dev/null || echo unset)"
+  "$PLISTBUDDY" -c 'Set :UIUserInterfaceStyle Automatic' "$plist" 2>/dev/null \
+    || "$PLISTBUDDY" -c 'Add :UIUserInterfaceStyle string Automatic' "$plist"
+  device_log "UIUserInterfaceStyle: stock $before, now $("$PLISTBUDDY" -c 'Print :UIUserInterfaceStyle' "$plist") (harness-only; the shipped app follows the system from Z12-57)"
+}
+
+# Android: userInterfaceStyle needs expo-system-ui, which the app does not have, so
+# prebuild writes nothing for it and React Native's Appearance follows the system
+# uiMode (`cmd uimode night yes|no`). The one thing that could pin it light is a
+# light-only AppCompat parent for AppTheme; if prebuild ever writes one, the
+# generated styles.xml is switched to the DayNight parent. Harness-only, as on iOS.
+patch_android_theme() {
+  local styles="$NATIVE_DIR/app/src/main/res/values/styles.xml" parent
+  if [ ! -f "$styles" ]; then
+    device_warn "no $styles; the Android theme was not checked"
+    return 0
+  fi
+  parent="$(sed -n 's/.*<style name="AppTheme" parent="\([^"]*\)".*/\1/p' "$styles" | sed -n 1p)"
+  device_log "AppTheme parent in the generated styles.xml: ${parent:-unknown}"
+  case "$parent" in
+    Theme.AppCompat.Light.*)
+      perl -0pi -e 's{(<style name="AppTheme" parent=")Theme\.AppCompat\.Light\.}{${1}Theme.AppCompat.DayNight.}' "$styles"
+      device_log "AppTheme parent switched to $(sed -n 's/.*<style name="AppTheme" parent="\([^"]*\)".*/\1/p' "$styles" | sed -n 1p) (harness-only)"
+      ;;
+  esac
+}
+
 case "$PLATFORM" in
   ios)
     patch_ios_ats
     patch_ios_logging
+    patch_ios_theme
     ;;
   android)
     patch_android_cleartext
+    patch_android_theme
     ;;
 esac

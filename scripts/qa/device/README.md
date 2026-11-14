@@ -61,6 +61,17 @@ their own job, `device-harness-tests`):
      - Android: a network security config allowing plain HTTP to `10.0.2.2`,
        `127.0.0.1` and `localhost` only. The Release manifest has cleartext off (Expo
        enables it only in the debug manifest).
+     - Theme, **harness-only; the shipped app follows the system from Z12-57**.
+       `apps/mobile/app.json` sets `userInterfaceStyle: "light"`, which prebuild
+       writes as `UIUserInterfaceStyle = Light`, so the iOS app would ignore
+       `simctl ui appearance dark`. The patch sets `UIUserInterfaceStyle = Automatic`
+       in the generated Info.plist. On Android that key needs `expo-system-ui`, which
+       the app does not have, so React Native's `Appearance` already follows
+       `cmd uimode night yes|no`; the patch only logs the generated `AppTheme`
+       parent and switches it to `Theme.AppCompat.DayNight.*` if prebuild ever writes
+       a light-only one. `app.json` / `app.config.js` are not changed. Each run
+       records the mean screenshot luminance per theme (`shot-luma.mjs`,
+       `<platform>/extras/theme.json`) as evidence that the app really switched.
    `app.config.js`, the config plugins and the native dependencies are not touched:
    native changes in W12 belong to Z12-57 only.
 3. **Device**: iOS simulator `iPhone-16` on the newest iOS 18 runtime of Xcode 16.4,
@@ -243,6 +254,7 @@ rows are missing and writes nothing; `--stdout` prints instead of writing.
 | `theme.sh`, `network.sh`, `push.sh`, `push-payload.mjs` | theme, offline/online, push |
 | `screenshot.sh`, `collect-shots.mjs`, `copy-shots.sh` | screenshots and their names |
 | `logs.sh`, `scan-logs.mjs`, `allowlist.json` | device logs and the failure rules |
+| `shot-luma.mjs` | mean screenshot luminance per theme (did the app switch theme?) |
 | `lockscreen-tap.sh`, `find-element.mjs` | lock-screen notification and Live Activity taps |
 | `select-flows.mjs`, `run-gate.sh`, `gate-summary.mjs` | flow selection, the run, the verdict |
 | `parity-gen.mjs` | parity matrix rows |

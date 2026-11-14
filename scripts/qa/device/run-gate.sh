@@ -190,6 +190,14 @@ for theme in $THEMES; do
     >"$dir/shots.json" || device_warn "collect-shots failed for $theme"
 done
 
+# Did the app follow the system theme? Mean luminance of the flows' screenshots per
+# theme (evidence in the summary, not part of the verdict).
+luma_files=()
+for f in "$SHOTS"/*-"$PLATFORM".png "$SHOTS"/flows/*-"$PLATFORM".png; do
+  [ -f "$f" ] && luma_files+=("$f")
+done
+node "$DEVICE_LIB_DIR/shot-luma.mjs" --out "$OUT/extras/theme.json" ${luma_files[@]+"${luma_files[@]}"} || true
+
 # --- 4. extras ------------------------------------------------------------------
 if [ "$EXTRAS" = "all" ] && [ -n "$last_theme" ]; then
   device_log "extras in $last_theme: push + lock-screen tap, Live Activity tap, offline/online"
