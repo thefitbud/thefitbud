@@ -19,8 +19,10 @@
 | G9 | [P1/G9.md](P1/G9.md) | 3 | 7 | 5 | 2 |
 | G10 | [P1/G10.md](P1/G10.md) | 0 | 5 | 0 | 2 |
 | G11 | [P1/G11.md](P1/G11.md) | 0 | 5 | 8 | 6 |
-| redesign | [P1/redesign.md](P1/redesign.md) | 17 | 75 | 13 | 46 |
-| **All** | | **20** | **106** | **65** | **60** |
+| redesign | [P1/redesign.md](P1/redesign.md) | 13 | 79 | 13 | 46 |
+| **All** | | **16** | **110** | **65** | **60** |
+
+Re-graded by Z12-32 (14 Nov 2026): the lenient MATCH rows for frames 31, 31-item2, 45 and `ds5-web-signin-footer` are CLOSE (redesign was 17 MATCH / 75 CLOSE, all was 20 / 106).
 
 G8 is in W7 (Z7-4, D-W12-3); its frames (135, 191 and the DS1 home views) are audited in `redesign.md`. No bucket has more than 40 GAP rows, so no file was split. Frames that are not app screens or are parked (Live Activity, OS notification renderings, Phase 10 sessions/calendar, reference frames) are listed at the end of `redesign.md`.
 
@@ -32,7 +34,7 @@ G8 is in W7 (Z7-4, D-W12-3); its frames (135, 191 and the DS1 home views) are au
 - **Trainer mobile review sheet is half wired (new):** on the v3 sheet `Resolve…` does nothing (no `onResolve` from `AttentionTab.tsx:792`), `Nudge…` opens WhatsApp directly with no sheet (`AttentionTab.tsx:485`) and there is no ⋯ (Add note, WhatsApp). Frames 31-resolved, 31-all-resolved, 33, 34, 35, 36 are unreachable from Needs you.
 - **Trainee Today with no plan shows an API error (new, not a frame state):** a coaching-ready trainee with no plan sees a red banner "An active coaching configuration is required to schedule check-ins." from the check-in card: TodayCheckinCard (rendered at `apps/mobile/src/trainee/TodayTab.tsx:1114`) catches the ensureDueCheckin failure at `CheckinScreen.tsx:1270` and renders an ErrorBanner at `CheckinScreen.tsx:1304`. The design review flags the banned string `active coaching`. Frame 04-empty (a planned trainee with nothing logged) is not audited: no capture of that state.
 - **Mobile trainee W12 screens are close:** G9/G10 are mostly MATCH or CLOSE (onboarding, meal plan, ask coach, diet sheets, workout day/summary, progress, inbox). The real gaps are sign in (06, 06b, 103), the item-unavailable screen (26: production shows only "This meal isn't available anymore.", with no date or replacement and no backend source for them; the capture bridge hard-codes the frame copy), the diet error state (102), reminder and meal-time settings (76, 79, 82–84) and the ended trainee landing on an overlay instead of Today (89).
-- **Redesign (W7–W10) holds up:** 17 MATCH and 75 CLOSE (13 GAP) of the audited frames; GAPs are the mobile review sheet wiring above, the trainee measurement keypad (14c), the reviewed check-in screen (101), the check-in form builder (171, 171b), the iPad 768 drawer (193), Edit basic details fields (210), and the Reactivate dialog (180).
+- **Redesign (W7–W10) holds up:** 13 MATCH and 79 CLOSE (after the Z12-32 re-grade; 17 and 75 before) (13 GAP) of the audited frames; GAPs are the mobile review sheet wiring above, the trainee measurement keypad (14c), the reviewed check-in screen (101), the check-in form builder (171, 171b), the iPad 768 drawer (193), Edit basic details fields (210), and the Reactivate dialog (180).
 - **Account deletion (BP1)** is not built on either platform (Z12-29, Z12-30), as expected.
 - **Seed content:** the check-in scale label "100 %" (`apps/api/src/seed/demo/generator/templates/forms.ts:100`) shows in the form preview (171), a percentage on screen.
 - **Known inputs from the spec:** after Z11-3 and Z5-3 the design review finds no ISO dates and no raw enum values in any captured mobile or web text; the Diet ring and meal rows agree on the captures (Z11-3). Frames 07 and 86 are left as CLOSE with "PR Z9-5 in flight" (Diet buttons); re-check them when Z9-5 merges.

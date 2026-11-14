@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { users } from "../db/schema.js";
+import { classifyCoachLogWriteFailure } from "../domain/coach-log.js";
+import { createMemoryDb } from "../test-support/memory-db.js";
 import type { ErrorEvent } from "@sentry/cloudflare";
 import type { Env } from "../types.js";
 import {
@@ -270,5 +273,115 @@ describe("scrubSentryEvent", () => {
     expect(sent?.data).toEqual({
       url: "https://trainer.thefitbud.com/clients/user-1",
     });
+  });
+});
+
+describe("scrubSentryEvent exception values", () => {
+  const sql = 'insert into "plan_assignments" ("client_id", "note") values (?, ?)';
+  const secrets = ["asha.verma@example.com", "knee pain after squats"];
+
+  it("rewrites a DrizzleQueryError message so no bound params survive", () => {
+    const event = {
+      exception: {
+        values: [
+          { type: "DrizzleQueryError", value: `Failed query: ${sql}\nparams: ${secrets.join(",")}` },
+          { type: "Error", value: "SQLITE_CONSTRAINT: UNIQUE failed" },
+        ],
+      },
+    };
+    const out = JSON.stringify(scrubSentryEvent(event));
+    for (const secret of secrets) expect(out).not.toContain(secret);
+    expect(out).not.toContain("params:");
+    expect(event.exception.values[0]?.value).toBe("Failed query: [redacted]");
+    expect(event.exception.values[1]?.value).toBe("SQLITE_CONSTRAINT: UNIQUE failed");
+  });
+
+  it("strips a params tail from a non-Drizzle exception value", () => {
+    const event = { exception: { values: [{ type: "Error", value: `boom\nparams: ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(event.exception.values[0]?.value).toBe("boom");
+  });
+
+  it("detects a failed query by its prefix when the type is not DrizzleQueryError", () => {
+    const event = { exception: { values: [{ type: "Error", value: `Failed query: ${sql} -- ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(JSON.stringify(event)).not.toContain(secrets[0]);
+  });
+
+  it("detects a DrizzleQueryError by type when the message has no prefix", () => {
+    const event = { exception: { values: [{ type: "DrizzleQueryError", value: `${sql} ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(JSON.stringify(event)).not.toContain(secrets[0]);
+  });
+
+  it("leaves a mid-line 'params:' message intact", () => {
+    const event = { exception: { values: [{ type: "Error", value: "Invalid route params: id must be uuid" }] } };
+    scrubSentryEvent(event);
+    expect(event.exception.values[0]?.value).toBe("Invalid route params: id must be uuid");
+  });
+
+  it("is applied by beforeSend", () => {
+    const options = sentryOptions(env({ SENTRY_DSN: FAKE_DSN, SENTRY_ENVIRONMENT: "staging" }));
+    const event = {
+      exception: { values: [{ type: "DrizzleQueryError", value: `Failed query: ${sql}\nparams: ${secrets[0]}` }] },
+    } as unknown as ErrorEvent;
+    const out = options.beforeSend?.(event, {}) as ErrorEvent;
+    expect(JSON.stringify(out)).not.toContain(secrets[0]);
+  });
+});
+
+describe("scrubSentryEvent with a real Drizzle query error (Z12-55)", () => {
+  it("redacts the SQL and bound params of a unique-constraint failure from the test D1", async () => {
+    const handle = await createMemoryDb({ librarySeed: false });
+    try {
+      const secretUid = "firebase-uid-secret-4f9c1a";
+      const row = {
+        id: "7d5c1f0e-0000-4000-8000-000000000001",
+        firebaseUid: secretUid,
+        createdAt: "2026-11-14T00:00:00.000Z",
+        updatedAt: "2026-11-14T00:00:00.000Z",
+      };
+      await handle.db.insert(users).values(row);
+      const error = await handle.db
+        .insert(users)
+        .values({ ...row, id: "7d5c1f0e-0000-4000-8000-000000000002" })
+        .then(
+          () => null,
+          (e: unknown) => e as Error,
+        );
+      expect(error).toBeInstanceOf(Error);
+      // The shape the scrub targets: drizzle 0.45 wraps the driver error.
+      // `name` stays "Error" in 0.45.4, so the scrub relies on the message prefix.
+      expect(error?.message).toMatch(/^Failed query:/);
+      expect(error?.message).toContain(secretUid);
+      expect((error?.cause as Error | undefined)?.message).toMatch(/UNIQUE constraint failed/);
+
+      const event = {
+        exception: { values: [{ type: error!.name, value: error!.message }] },
+      };
+      scrubSentryEvent(event);
+      expect(event.exception.values[0]?.value).toBe("Failed query: [redacted]");
+      expect(JSON.stringify(event)).not.toContain(secretUid);
+    } finally {
+      handle.close();
+    }
+  });
+
+  it("keeps the coach-log conflict classifier working on the wrapped error", async () => {
+    const handle = await createMemoryDb({ librarySeed: false });
+    try {
+      const now = "2026-11-14T00:00:00.000Z";
+      const row = { id: "7d5c1f0e-0000-4000-8000-000000000011", firebaseUid: "uid-a", createdAt: now, updatedAt: now };
+      await handle.db.insert(users).values(row);
+      const error = await handle.db.insert(users).values({ ...row, firebaseUid: "uid-b" }).then(
+        () => null,
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      // Not a coach-log constraint, so null; the walk over `cause` must not throw.
+      expect(classifyCoachLogWriteFailure(error)).toBeNull();
+    } finally {
+      handle.close();
+    }
   });
 });

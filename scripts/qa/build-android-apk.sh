@@ -17,6 +17,15 @@
 #                          secrets we do not have; it is opt-in, never an automatic
 #                          fallback, so a degraded build can never pass unnoticed.
 #   QA_PREBUILD_CLEAN=0    keep an existing apps/mobile/android instead of regenerating.
+#   QA_API_BASE_URL        replaces eas.json's EXPO_PUBLIC_API_BASE_URL for this build.
+#                          Only the device gate sets it (Z12-35, scripts/qa/device/
+#                          build-app.sh), to point the same staging variant at the
+#                          local seeded API on the runner. Unset: the nightly build is
+#                          unchanged.
+#   QA_POST_PREBUILD_HOOK  an executable run as `<hook> android <apps/mobile/android>`
+#                          right after expo prebuild, before Gradle. The device gate
+#                          uses it to patch the generated, git-ignored project
+#                          (scripts/qa/device/patch-native.sh). Unset: nothing runs.
 #
 # Secrets: none. This script reads no secret and prints no value.
 set -euo pipefail
@@ -57,6 +66,9 @@ APP_VARIANT="$(read_env_var APP_VARIANT)"
 EXPO_PUBLIC_API_BASE_URL="$(read_env_var EXPO_PUBLIC_API_BASE_URL)"
 EXPO_PUBLIC_TRAINER_WEB_URL="$(read_env_var EXPO_PUBLIC_TRAINER_WEB_URL)"
 [ "$APP_VARIANT" = "staging" ] || die "eas.json's preview profile is APP_VARIANT=$APP_VARIANT, expected staging."
+if [ -n "${QA_API_BASE_URL:-}" ]; then
+  EXPO_PUBLIC_API_BASE_URL="$QA_API_BASE_URL"
+fi
 export APP_VARIANT EXPO_PUBLIC_API_BASE_URL EXPO_PUBLIC_TRAINER_WEB_URL
 export CI=1
 
@@ -79,6 +91,11 @@ GRADLE_DIR="$MOBILE/android"
 # Fail here rather than after a 15-minute build if the variant did not take effect.
 if ! grep -Fq -e "applicationId '${EXPECTED_PACKAGE}'" -e "applicationId \"${EXPECTED_PACKAGE}\"" "$GRADLE_DIR/app/build.gradle"; then
   die "android/app/build.gradle does not set applicationId $EXPECTED_PACKAGE; check APP_VARIANT."
+fi
+
+if [ -n "${QA_POST_PREBUILD_HOOK:-}" ]; then
+  echo "build-android-apk: post-prebuild hook $QA_POST_PREBUILD_HOOK"
+  "$QA_POST_PREBUILD_HOOK" android "$GRADLE_DIR" || die "the post-prebuild hook failed."
 fi
 
 echo "build-android-apk: gradle $GRADLE_TASK"

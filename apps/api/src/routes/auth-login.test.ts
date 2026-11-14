@@ -492,6 +492,9 @@ describe("auth login routes", () => {
   });
 
   it("returns 500 RUNTIME_MISCONFIGURED when test auth runs outside local", async () => {
+    // The guard logs the misconfiguration (names only); the Z12-35 console gate needs
+    // the test to expect that log line.
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     const response = await app.request(
       "/auth/login",
       {
@@ -507,6 +510,8 @@ describe("auth login routes", () => {
     expect(response.status).toBe(500);
     const body = (await response.json()) as { error: { code: string } };
     expect(body.error.code).toBe("RUNTIME_MISCONFIGURED");
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"RUNTIME_MISCONFIGURED"'));
+    errors.mockRestore();
   });
 
   it("refuses test bearer tokens outside local with RUNTIME_MISCONFIGURED", async () => {

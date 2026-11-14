@@ -117,6 +117,105 @@ describe("demo seed", () => {
     vi.useRealTimers();
   });
 
+  it("carries the Z12-34 personas: Priya Nair, a no-plan client, push off, reminders paused, days around today", () => {
+    const one = (sql: string) => sqliteExec(sql)[0]?.values[0]?.[0];
+    const rel = (email: string) =>
+      `(SELECT cr.id FROM coaching_relationships cr JOIN user_identities ui ON ui.user_id = cr.trainee_user_id WHERE ui.email_norm = '${email}')`;
+
+    // The trainee Priya of the mocks; the trainer Priya Malhotra keeps her own name.
+    expect(one("SELECT display_name FROM trainee_profiles WHERE user_id = (SELECT user_id FROM user_identities WHERE email_norm = 'tanvi.attention@demo.fitbud.test')")).toBe("Priya Nair");
+    expect(one("SELECT count(*) FROM trainee_profiles WHERE display_name = 'Priya Sharma'")).toBe(0);
+    expect(one("SELECT display_name FROM trainer_profiles WHERE user_id = (SELECT user_id FROM user_identities WHERE email_norm = 'priya.coach@demo.fitbud.test')")).toBe("Priya Malhotra");
+
+    // No-plan trainee: active relationship, no plan at all.
+    const harpreet = rel("harpreet.ready@demo.fitbud.test");
+    expect(one(`SELECT status FROM coaching_relationships WHERE id = ${harpreet}`)).toBe("active");
+    expect(one(`SELECT count(*) FROM plans WHERE coaching_relationship_id = ${harpreet}`)).toBe(0);
+
+    // Push off: preference off and no usable device token.
+    const ishita = "(SELECT user_id FROM user_identities WHERE email_norm = 'ishita.pushoff@demo.fitbud.test')";
+    expect(one(`SELECT push_enabled FROM notification_preferences WHERE user_id = ${ishita}`)).toBe(0);
+    expect(one(`SELECT count(*) FROM device_tokens WHERE user_id = ${ishita} AND status = 'active'`)).toBe(0);
+
+    // Reminders paused, until a date after the reference instant.
+    const paused = sqliteExec(
+      "SELECT mode, paused_until FROM reminder_states WHERE trainee_user_id = (SELECT user_id FROM user_identities WHERE email_norm = 'farhan.paused@demo.fitbud.test')",
+    )[0]?.values[0];
+    expect(paused?.[0]).toBe("paused");
+    expect(String(paused?.[1]) > FROZEN_REFERENCE_INSTANT).toBe(true);
+
+    // Past and future days exist around the reference day for an active planned client.
+    const aarav = rel("aarav.ontrack@demo.fitbud.test");
+    for (let offset = -3; offset <= 3; offset += 1) {
+      const day = addDays(refDate, offset);
+      expect(
+        Number(one(`SELECT count(*) FROM meal_assignments WHERE coaching_relationship_id = ${aarav} AND local_date = '${day}'`)),
+        `meals on ${day} (${offset})`,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("reseeding leaves everything the demo seed does not own (library, lookups, global templates, schema) untouched", async () => {
+    const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+    try {
+      const passwordHash = await hashPassword(DEMO_PASSWORD_PLAINTEXT);
+      const sql = buildDemoSeedSql({
+        referenceInstant: FROZEN_REFERENCE_INSTANT,
+        passwordHash,
+        libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+      });
+      const owned = new Set([...sql.matchAll(/^(?:INSERT INTO|DELETE FROM|UPDATE) (\w+)/gm)].map((m) => m[1]));
+      const rowsOf = (query: string) => (handle.sqlite.exec(query)[0]?.values ?? []).map((r) => JSON.stringify(r));
+      const fingerprint = () => {
+        const tables = rowsOf("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+          .map((r) => String(JSON.parse(r)[0]))
+          .filter((name) => !owned.has(name) && !/_fts_(data|idx|config|docsize|content)$/.test(name));
+        const out: Record<string, string[]> = {
+          schema: rowsOf("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name"),
+        };
+        for (const name of tables) out[name] = rowsOf(`SELECT * FROM "${name}"`).sort();
+        return out;
+      };
+      handle.sqlite.exec(sql);
+      const before = fingerprint();
+      // The library and lookups are really there, so equality below is not vacuous.
+      expect(before.exercise_library_items?.length ?? 0).toBeGreaterThan(100);
+      expect(before.food_library_items?.length ?? 0).toBeGreaterThan(100);
+      handle.sqlite.exec(sql);
+      expect(fingerprint()).toEqual(before);
+    } finally {
+      handle.close();
+    }
+  }, 120_000);
+
+  it("gives the same day offsets whatever the run date (two fake now values)", async () => {
+    const offsetsAt = async (instant: string) => {
+      const handle = await createMemoryDb({ foreignKeys: true, librarySeed: true });
+      try {
+        const sql = buildDemoSeedSql({
+          referenceInstant: instant,
+          passwordHash: await hashPassword(DEMO_PASSWORD_PLAINTEXT),
+          libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+        });
+        handle.sqlite.exec(sql);
+        const ref = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(instant));
+        const days = (handle.sqlite.exec(
+          `SELECT DISTINCT local_date FROM meal_assignments WHERE coaching_relationship_id = (SELECT cr.id FROM coaching_relationships cr JOIN user_identities ui ON ui.user_id = cr.trainee_user_id WHERE ui.email_norm = 'aarav.ontrack@demo.fitbud.test')`,
+        )[0]?.values ?? []).map((r) => String(r[0]));
+        const dayMs = 86_400_000;
+        return days.map((d) => Math.round((Date.parse(d) - Date.parse(ref)) / dayMs)).sort((a, b) => a - b);
+      } finally {
+        handle.close();
+      }
+    };
+    const first = await offsetsAt("2026-10-17T14:30:00.000Z");
+    const second = await offsetsAt("2026-12-03T02:10:00.000Z");
+    expect(second).toEqual(first);
+    expect(first.slice(0, 1)[0]).toBeLessThanOrEqual(-3);
+    expect(first[first.length - 1]).toBe(6);
+    for (let offset = -3; offset <= 3; offset += 1) expect(first).toContain(offset);
+  }, 180_000);
+
   it(
     "applies twice with stable counts and valid foreign keys",
     async () => {

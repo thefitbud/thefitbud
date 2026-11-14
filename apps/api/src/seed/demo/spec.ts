@@ -33,7 +33,7 @@ export const DEMO_ACCOUNTS: DemoAccountSpec[] = [
   // Extra attention clients so Home Needs attention can show ~8 rows (mockup).
   { email: "arjun.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Arjun Kapoor" },
   { email: "neha.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Neha Reddy" },
-  { email: "tanvi.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Priya Sharma" },
+  { email: "tanvi.attention@demo.fitbud.test", role: "trainee", trainerEmail: "rahul.coach@demo.fitbud.test", state: "attention_hole", displayName: "Priya Nair" },
   { email: "lakshmi.foods@demo.fitbud.test", role: "trainee", trainerEmail: "priya.coach@demo.fitbud.test", state: "food_deviations", displayName: "Lakshmi Iyer" },
   { email: "karan.dual@demo.fitbud.test", role: "trainee", trainerEmail: "priya.coach@demo.fitbud.test", state: "dual_role", displayName: "Karan Mehra" },
 ];

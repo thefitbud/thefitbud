@@ -279,6 +279,9 @@ function weekdayFromDate(localDate: string): number {
   return new Date(`${localDate}T12:00:00Z`).getUTCDay();
 }
 
+/** Days past the reference day that get assignments (matches the generated personas). */
+const SEED_FUTURE_DAYS = 6;
+
 function buildAssignmentsAndLogs(input: {
   relId: string;
   traineeEmail: string;
@@ -305,10 +308,16 @@ function buildAssignmentsAndLogs(input: {
   );
   const logCap = input.activityUntilIso;
 
-  for (let offset = 0; offset < 28; offset++) {
+  // Days after the reference day get assignments only (no logs), so the app has future days to
+  // show, like the generated personas; ended clients stop at their end date (Z12-34).
+  const lastDate =
+    input.activityUntilDate >= input.refDate
+      ? addDaysFromLocalDate(input.refDate, SEED_FUTURE_DAYS)
+      : input.activityUntilDate;
+  for (let offset = 0; offset < 28 + SEED_FUTURE_DAYS; offset++) {
     const localDate = addDaysFromLocalDate(historyStart, offset);
-    if (localDate > input.activityUntilDate) continue;
-    if (localDate > input.refDate) continue;
+    if (localDate > lastDate) continue;
+    const isFutureDay = localDate > input.refDate;
     const planVersionForDay =
       input.state === "active_on_track" &&
       localDate < addDaysFromLocalDate(input.refDate, -14)
@@ -336,13 +345,15 @@ function buildAssignmentsAndLogs(input: {
 
       // Never log a meal whose slot time hasn't started yet, and never after end.
       const slotReached = Date.parse(windowStart) <= Date.parse(logCap);
-      const shouldLog = shouldLogMeal(
-        input.state,
-        localDate,
-        input.activityUntilDate,
-        meal.name,
-        adherenceStart,
-      );
+      const shouldLog = isFutureDay
+        ? false
+        : shouldLogMeal(
+            input.state,
+            localDate,
+            input.activityUntilDate,
+            meal.name,
+            adherenceStart,
+          );
       if (shouldLog === "confirm" && slotReached) {
         const complianceId = demoUuid("meal-compliance", assignmentId);
         const macros = mealMacros(meal);
@@ -370,12 +381,14 @@ function buildAssignmentsAndLogs(input: {
       lines.push(
         `INSERT INTO workout_assignments (id, coaching_relationship_id, plan_id, plan_version_id, workout_day_id, workout_day_name, workout_day_json, local_date, window_starts_at, window_ends_at, schedule_status, superseded_at, superseded_by_plan_version_id, created_at, updated_at) VALUES (${sqlQuote(workoutAssignmentId)}, ${sqlQuote(input.relId)}, ${sqlQuote(input.planId)}, ${sqlQuote(planVersionForDay)}, ${sqlQuote(workoutDay.id)}, ${sqlQuote(workoutDay.name)}, ${jsonQuote(workoutDay)}, ${sqlQuote(localDate)}, ${sqlQuote(wStart)}, ${sqlQuote(wEnd)}, 'scheduled', NULL, NULL, ${sqlQuote(clampIsoToNow(wStart, logCap))}, ${sqlQuote(clampIsoToNow(wStart, logCap))});`,
       );
-      const workoutLog = shouldLogWorkout(
-        input.state,
-        localDate,
-        input.activityUntilDate,
-        adherenceStart,
-      );
+      const workoutLog = isFutureDay
+        ? false
+        : shouldLogWorkout(
+            input.state,
+            localDate,
+            input.activityUntilDate,
+            adherenceStart,
+          );
       // Like meals: never start a workout before its slot opens, or after the end.
       if (workoutLog && Date.parse(wStart) <= Date.parse(logCap)) {
         const execId = demoUuid("workout-execution", workoutAssignmentId);
@@ -1125,7 +1138,8 @@ function buildPersonaOverlays(input: HistoryInput): string {
     );
   });
 
-  // Quiet hours stored per client (not only runtime defaults).
+  // Quiet hours stored per client (not only runtime defaults). Ishita is the push-off client:
+  // push disabled in her preferences, and her only device token is revoked (Z12-34).
   const quietHours = [
     ["rohan.slipping@demo.fitbud.test", "22:00", "06:30"],
     ["ishita.pushoff@demo.fitbud.test", "23:00", "07:00"],
@@ -1133,7 +1147,7 @@ function buildPersonaOverlays(input: HistoryInput): string {
   ] as const;
   for (const [email, start, end] of quietHours) {
     lines.push(
-      `INSERT INTO notification_preferences (user_id, push_enabled, workout_reminder, meal_reminder, checkin_reminder, subscription_renewal_reminder, daily_summary_reminder, quiet_hours_start, quiet_hours_end, created_at, updated_at) VALUES (${sqlQuote(userId(email))}, 1, 1, 1, 1, 1, 1, ${sqlQuote(start)}, ${sqlQuote(end)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
+      `INSERT INTO notification_preferences (user_id, push_enabled, workout_reminder, meal_reminder, checkin_reminder, subscription_renewal_reminder, daily_summary_reminder, quiet_hours_start, quiet_hours_end, created_at, updated_at) VALUES (${sqlQuote(userId(email))}, ${email === "ishita.pushoff@demo.fitbud.test" ? 0 : 1}, 1, 1, 1, 1, 1, ${sqlQuote(start)}, ${sqlQuote(end)}, ${sqlQuote(now)}, ${sqlQuote(now)});`,
     );
   }
 

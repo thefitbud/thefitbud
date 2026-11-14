@@ -23,6 +23,7 @@
     "seed:demo": "pnpm --filter @fitbud/api seed:demo",
     "db:seed:local": "pnpm --filter @fitbud/api db:seed:local",
     "db:reset": "pnpm --filter @fitbud/api db:reset",
+    "db:reseed": "pnpm --filter @fitbud/api db:reseed",
     "setup:local": "pnpm --filter @fitbud/api setup:local"
   },
   "devDependencies": {

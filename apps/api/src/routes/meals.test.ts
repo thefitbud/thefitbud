@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../index.js";
 import { drizzle } from "drizzle-orm/d1";
 import { setTestDbOverride, type Db } from "../db/client.js";
@@ -2016,6 +2016,9 @@ describe("meal assignment and compliance", () => {
       sqlite.exec(
         "CREATE TRIGGER z722_fail_meal_audit BEFORE INSERT ON log_edit_events BEGIN SELECT RAISE(ABORT, 'z722 injected failure'); END",
       );
+      // The injected failure is logged as an unhandled error; the Z12-35 console gate
+      // (D-W12-28) needs the test to expect that log line.
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       const failed = await putMeal(
         assignment.id,
         assignment.localDate,
@@ -2025,6 +2028,8 @@ describe("meal assignment and compliance", () => {
       );
       sqlite.exec("DROP TRIGGER z722_fail_meal_audit");
       expect(failed.status).toBe(500);
+      expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"Unhandled API error"'));
+      errors.mockRestore();
       const [row] = await db
         .select()
         .from(schema.mealCompliance)

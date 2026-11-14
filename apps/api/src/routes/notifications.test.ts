@@ -1100,7 +1100,7 @@ describe("notifications and reminders (D4)", () => {
     expect(summaries).toHaveLength(1);
   });
 
-  it("dedupes, rate-limits, and preference-checks activity nudges without completing the activity", async () => {
+  it("dedupes, caps (2 per client day) and quiet-hour-holds activity nudges without completing the activity", async () => {
     const { trainerCookie, traineeToken, relationshipId, today } =
       await reachActiveCheckinConfig("nudge");
     await register(
@@ -1198,12 +1198,15 @@ describe("notifications and reminders (D4)", () => {
       true,
     );
     expect((await nudge(ids[1]!, outsideQuietNudgeNow)).status).toBe(200);
-    expect((await nudge(ids[2]!, outsideQuietNudgeNow)).status).toBe(200);
-    const limited = await nudge(ids[3]!, outsideQuietNudgeNow);
+    // Z12-50 (D-W12-22): the third nudge for this client today is refused.
+    const limited = await nudge(ids[2]!, outsideQuietNudgeNow);
     expect(limited.status).toBe(429);
     expect(
-      ((await limited.json()) as { error: { code: string } }).error.code,
-    ).toBe("NUDGE_LIMIT");
+      ((await limited.json()) as { error: { code: string; message: string } }).error,
+    ).toMatchObject({
+      code: "NUDGE_LIMIT",
+      message: "You can nudge this client again tomorrow.",
+    });
     const stillDraft = await db
       .select()
       .from(schema.checkins)
@@ -1261,6 +1264,15 @@ describe("notifications and reminders (D4)", () => {
     const quietCheckinId = (
       (await quietScheduled.json()) as { data: { checkin: { id: string } } }
     ).data.checkin.id;
+    // A device to push to: without one the nudge is inbox only (push off, Z12-50).
+    await register(
+      { bearer: quietTrainee, role: "trainee" },
+      {
+        token: "fcm-nudge-quiet-token-abc",
+        platform: "ios",
+        installationId: "install-nudge-quiet",
+      },
+    );
     const duringQuietNudgeNow = istWallClockToUtc(quietToday, 23, 0);
     const quietNudge = await app.request(
       `/notifications/relationships/${quietRelationship}/nudges`,
@@ -1289,14 +1301,6 @@ describe("notifications and reminders (D4)", () => {
       .where(eq(schema.checkins.id, quietCheckinId));
     expect(quietCheckin[0]!.recordStatus).toBe("draft");
 
-    await register(
-      { bearer: quietTrainee, role: "trainee" },
-      {
-        token: "fcm-nudge-quiet-token-abc",
-        platform: "ios",
-        installationId: "install-nudge-quiet",
-      },
-    );
     await app.request(
       "/notifications/preferences",
       {
@@ -1379,9 +1383,11 @@ describe("notifications and reminders (D4)", () => {
     );
     expect(suppressedNudge.status).toBe(200);
     const suppressedBody = (await suppressedNudge.json()) as {
-      data: { notification: { state: string; dedupeKey: string } };
+      data: { delivery: string; notification: { state: string; dedupeKey: string } };
     };
-    expect(suppressedBody.data.notification.state).toBe("suppressed");
+    // Z12-50: reminder categories gate automatic reminders, not a coach's nudge.
+    expect(suppressedBody.data.delivery).toBe("push");
+    expect(suppressedBody.data.notification.state).toBe("delivered");
     expect(suppressedBody.data.notification.dedupeKey).toBe(
       activityNudgeDedupeKey(suppressedCheckinId, quietToday),
     );
