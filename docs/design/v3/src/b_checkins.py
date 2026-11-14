@@ -1,0 +1,33 @@
+from kit_trainer import *
+A='checkins'
+def cirow(n,form,chip,when,act=None):
+    a=f'<div class="btn {"tint" if act!="Nudge" else "secondary"} sm" style="flex:none">{act}</div>' if act else f'<span class="chev">{ic("chevron-right",18,2.2)}</span>'
+    return f'<div class="crow">{cav(n)}<div class="f1" style="min-width:0"><div class="t-bodym">{C[n][3]}</div><div class="t-sub" style="font-size:13.5px">{form}</div><div class="row" style="gap:6px;margin-top:5px">{chip}<span class="t-cap">{when}</span></div></div>{a}</div>'
+def inbox(sel,body,extra='',badges=None):
+    return f'<div class="content">{lhdr("Check-ins","Saturday, 14 Nov")}<div style="margin-top:12px">{seg(["To review · 2","Overdue · 1","Reviewed"],sel)}</div>{body}<div style="height:110px"></div></div>{fade()}{ttab("Check-ins",badges)}{extra}'
+TOREV=f'<div class="group" style="margin-top:14px">{cirow("Sneha","Weekly check-in · week 2 · 2 photos",sch("ci"),"1 d ago")}{cirow("Deepak","Weekly check-in · week 8",sch("ci"),"4 h ago")}</div><div class="t-cap" style="margin:10px 2px">Swipe right on a row to mark it reviewed.</div>'
+screen('TM-05a-checkins-to-review','Check-ins: to review',inbox(0,TOREV),A)
+screen('TM-05b-checkins-overdue','Check-ins: overdue, Nudge inline',inbox(1,f'<div class="group" style="margin-top:14px">{cirow("Farhan","Weekly check-in · week 5 · due Fri 13 Nov",sch("over"),"1 d late","Nudge")}</div><div class="t-cap" style="margin:10px 2px">Farhan’s reminders are paused, so he may not have seen it.</div>'),A)
+screen('TM-05c-checkins-empty','Check-ins: nothing to review',inbox(0,f'<div class="card" style="margin-top:14px;padding:26px 18px">{empty("circle-check","No check-ins waiting. Nice.","New check-ins show up here when clients send them.")}</div>',badges={'Needs you':7,'Check-ins':1}).replace("To review · 2","To review · 0"),A)
+screen('TM-05d-checkins-loading','Check-ins loading',inbox(0,'<div class="group" style="margin-top:14px">'+''.join(f'<div class="crow">{skel("40px",40,20)}<div class="f1 col" style="gap:7px">{skel("45%",14)}{skel("70%",11)}{skel("35%",16,7)}</div></div>' for _ in range(3))+'</div>'),A)
+# review TM-06
+def photo(lbl,h=150,tone=('var(--ph-a)','var(--ph-b)')):
+    return f'<div class="f1"><div style="position:relative;height:{h}px;border-radius:12px;overflow:hidden"><div style="position:absolute;inset:0;background:linear-gradient(160deg,{tone[0]},{tone[1]})"></div><svg viewBox="0 0 60 100" style="position:absolute;left:50%;top:12px;width:56px;transform:translateX(-50%)" fill="white" fill-opacity=".4"><circle cx="30" cy="16" r="11"/><path d="M12 36q18-10 36 0l4 64H8z"/></svg></div><div class="t-cap" style="text-align:center;margin-top:5px">{lbl}</div></div>'
+cmprow=lambda k,a,b,d='',dc='var(--ink3)':f'<div class="t-sub">{k}</div><div class="t-sub tnum" style="text-align:right">{a}</div><div class="t-bodym tnum" style="font-size:15px;text-align:right">{b} <span class="t-cap" style="color:{dc}">{d}</span></div>'
+REV1=f'''{chdr("Sneha",sch("ci"),"Week 2 · sent Fri 13 Nov, 8:12 pm")}
+<div class="card" style="padding:12px 16px;margin-top:14px"><div class="cmp" data-wrapok="1" style="grid-template-columns:1.2fr .8fr 1.2fr"><div class="t-label" style="color:var(--ink3)">This week</div><div class="t-label" style="color:var(--ink3);text-align:right">Last</div><div class="t-label" style="color:var(--ink3);text-align:right">Now</div>
+{cmprow("Avg weight","72.1 kg","71.4 kg","−0.7","var(--done)")}{cmprow("Energy","3 / 5","4 / 5","+1","var(--done)")}{cmprow("Sleep","4 / 5","3 / 5","−1","var(--warn)")}{cmprow("Diet followed","3 / 5","4 / 5","+1","var(--done)")}{cmprow("Workouts","2 of 3","3 of 3")}</div></div>
+<div class="row sp" style="margin:18px 2px 8px"><span class="t-head">Photos</span><span class="t-cap">Week 1 vs week 2</span></div><div class="row" style="gap:8px">{photo("Front · wk 1",140,("var(--ph-a2)","var(--ph-b2)"))}{photo("Front · wk 2",140)}{photo("Side · wk 2",140)}</div>
+<div class="card" style="padding:12px 14px;margin-top:14px"><div class="t-cap">Sneha wrote</div><div class="t-body" style="font-size:15px;margin-top:2px">Felt hungry in the evenings. Knee is fine now.</div></div>'''
+screen('TM-06a-checkin-review','Check-in review: this vs last week, photos',page(nav("Check-in",right='<div class="circbtn sm">'+ic("ellipsis",18,2.2)+'</div>'),REV1)+stick2(btn("Reply","secondary",icon="message-circle"),btn("Mark reviewed",icon="check")),A)
+REPLY=f'''<div class="row sp"><span class="navbtn">Cancel</span><span class="t-head">Reply to Sneha</span><span class="navbtn strong">Send</span></div>
+<div class="inp focus" style="margin-top:14px;min-height:96px;align-items:flex-start;padding-top:12px"><span>Great week. Add a katori of sprouts at 5 pm for the evening hunger.<span class="caret"></span></span></div>
+<div class="li" style="--inset:0;padding:12px 0;margin-top:4px"><div class="f1"><div class="t-body">Also mark reviewed</div></div>{toggle(True)}</div>
+<div class="t-cap" data-wrapok="1">Sneha sees your reply on her Today and in the check-in. Private notes go in ⋯ › Add note.</div>'''
+screen('TM-06b-checkin-reply','Reply composer (visible to client), marks reviewed',page(nav("Check-in"),REV1)+sheet(REPLY,style='bottom:291px;border-radius:14px 14px 0 0;padding-bottom:14px')+kb_alpha('return'),A)
+screen('TM-06c-checkin-reviewed-undo','Back in the inbox after review, with Undo',inbox(0,f'<div class="group" style="margin-top:14px">{cirow("Deepak","Weekly check-in · week 8",sch("ci"),"4 h ago")}</div>',toast("Sneha’s check-in reviewed","Undo",96),badges={'Needs you':6,'Check-ins':2}).replace("To review · 2","To review · 1"),A)
+screen('TM-06d-checkin-started-not-sent','Started but not sent: Nudge',page(nav("Check-in"),f'''{chdr("Farhan",sch("over"),"Week 5 · was due Fri 13 Nov")}
+<div class="card" style="padding:16px;margin-top:16px"><div class="t-head">Farhan has started but not sent it</div><div class="t-sub" style="margin-top:4px">He answered 2 of 3 steps yesterday at 9:15 pm. His reminders are paused.</div><div style="margin-top:12px">{btn("Nudge",icon="bell-ring")}</div><div class="t-cap" style="margin-top:8px">Sends Farhan a push notification.</div></div>
+{group([li("Last check-in","Week 4 · reviewed 7 Nov","clipboard-check")],"History")}'''),A)
+screen('TM-06e-checkin-review-offline','Check-in review offline: read cached, actions off',page(nav("Check-in"),f'<div style="margin-bottom:12px">{banner("You’re offline. You can read this check-in, but replying and reviewing need a connection.","neutral","wifi-off")}</div>'+REV1)+stick2(btn("Reply","dis",icon="message-circle"),btn("Mark reviewed","dis",icon="check")),A)
+save_reg()
