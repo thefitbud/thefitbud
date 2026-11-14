@@ -12,7 +12,7 @@ import {
   type CoachingRelationship,
   type WorkoutAssignment,
 } from "@fitbud/contracts";
-import { fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
+import { act, fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 
 /*
  * `WorkoutTab` reaches `modules/live-activity` through the active-workout
@@ -160,10 +160,27 @@ function renderWorkout() {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  // The previous test's tree is already unmounted, but a week load it still had
+  // in flight can resolve after this point and write its assignments into the
+  // shared day cache, where the next test would render them. Let that settle,
+  // then clear the cache, so every test starts from an empty one.
+  await act(async () => {});
   invalidateRelationshipDayData(relationship.id);
   items = [];
 });
+
+/**
+ * Click once React has applied the commit that rendered the button.
+ * react-native-web's Pressable hands `disabled` and `onPress` to its press
+ * responder in a passive effect, which React flushes lazily; a click fired the
+ * moment `findBy*` resolves can reach the responder before that. Flushing
+ * effects first makes the click land on what the user would see.
+ */
+async function press(button: HTMLElement) {
+  await act(async () => {});
+  fireEvent.click(button);
+}
 
 describe("WorkoutTab current week", () => {
   it("summarises the day's workout as exercises and sets", async () => {
@@ -271,7 +288,7 @@ describe("WorkoutTab default focus and bell", () => {
     items = [wed(), fri()];
     render(<WorkoutTab relationship={relationship} onOpenOverlay={vi.fn()} />);
     expect(await screen.findByText("Lower body B")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Wed Upper A" }));
+    await press(screen.getByRole("button", { name: "Wed Upper A" }));
     expect(await screen.findByText("Upper body A")).toBeTruthy();
   });
 
@@ -280,7 +297,7 @@ describe("WorkoutTab default focus and bell", () => {
     render(
       <WorkoutTab relationship={relationship} onOpenOverlay={onOpenOverlay} unreadNotifications={3} />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
+    await press(await screen.findByRole("button", { name: "Notifications" }));
     expect(onOpenOverlay).toHaveBeenCalledWith({ screen: "notifications" });
   });
 });

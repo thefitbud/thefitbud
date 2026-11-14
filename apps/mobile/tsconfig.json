@@ -3,7 +3,7 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "resolveJsonModule": true,
-    "types": ["react"]
+    "types": ["react", "node"]
   },
   "include": ["App.tsx", "index.js", "src", "src/types/**/*.d.ts"]
 }
