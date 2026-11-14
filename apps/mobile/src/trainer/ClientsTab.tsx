@@ -29,7 +29,7 @@ import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
 import { initialsFromName } from "../components/m2";
 import { ActivityFeedScreen } from "./ActivityFeedScreen";
-import { readTrainerCache, writeTrainerCache } from "./cache";
+import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
 import {
   applyClientListFilter,
   clientListQueryForChip,
@@ -157,6 +157,9 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
 
   const load = useCallback(async () => {
     setError(null);
+    // Captured before the fetch: if the trainer changes while it is in
+    // flight, the late write is dropped (Z12-33).
+    const cacheEpoch = trainerCacheEpoch();
     try {
       const [page, allPage, attention] = await Promise.all([
         api.listClients({ ...clientListQueryForChip(chip, query), limit: 50 }),
@@ -178,7 +181,11 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
           ["invited", "onboarding_pending", "onboarding_submitted"].includes(item.status),
         ).length,
       });
-      writeTrainerCache("trainer:clients", { items: applyClientListFilter(page.items, chip), savedAt: new Date().toISOString() });
+      writeTrainerCache(
+        "trainer:clients",
+        { items: applyClientListFilter(page.items, chip), savedAt: new Date().toISOString() },
+        cacheEpoch,
+      );
       setOfflineAt(null);
     } catch (err) {
       const cached = readTrainerCache<{ items: ClientDirectoryItem[]; savedAt: string }>(

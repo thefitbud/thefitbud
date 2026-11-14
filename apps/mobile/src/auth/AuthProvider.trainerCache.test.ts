@@ -8,7 +8,9 @@ import type { MeResponse } from "@fitbud/contracts";
 /**
  * Z11-8: AuthProvider scopes the trainer offline cache to the `/me` user and
  * clears it on every path that ends the session (sign-out, refused refresh,
- * refused restore, a 401 on `/me`, a failed sign-in). Renders the real
+ * refused restore, a 401 on `/me`, a failed sign-in). Z12-33: a fetch started
+ * under one trainer never writes after another signs in, and a new `/me` user
+ * removes the previous trainer's entries even without a sign-out. Renders the real
  * provider with the real token session and the real cache module; only the
  * network client, native storage and push are replaced.
  */
@@ -76,8 +78,14 @@ import {
   clearTrainerCache,
   readTrainerCache,
   setTrainerCacheOwner,
+  trainerCacheEpoch,
   writeTrainerCache,
 } from "../trainer/cache";
+
+/** A cache write whose fetch started now, under the current owner. */
+function writeNow(key: string, value: unknown) {
+  writeTrainerCache(key, value, trainerCacheEpoch());
+}
 
 const TRAINER_A = "6f1c2a9e-3b4d-4c5e-8f70-1a2b3c4d5e6f";
 const TRAINER_B = "0b9e8d7c-6a5f-4e3d-9c2b-1a0f9e8d7c6b";
@@ -136,8 +144,8 @@ function expectCacheCleared() {
 /** Trainer A's snapshot, as a previous session on this phone left it. */
 function seedCacheForA() {
   setTrainerCacheOwner(TRAINER_A);
-  writeTrainerCache("trainer:attention", snapshotA);
-  writeTrainerCache("trainer:clients", { items: [{ id: "client-1" }] });
+  writeNow("trainer:attention", snapshotA);
+  writeNow("trainer:clients", { items: [{ id: "client-1" }] });
   setTrainerCacheOwner(null);
   // And an unscoped key written by a build before Z11-8.
   localStorage.setItem("trainer:attention", JSON.stringify(snapshotA));
@@ -176,7 +184,7 @@ describe("AuthProvider and the trainer cache (Z11-8)", () => {
     await signIn("token-a", trainerMe(TRAINER_A, "Rahul Coach"));
     expect(auth!.me?.userId).toBe(TRAINER_A);
 
-    writeTrainerCache("trainer:attention", snapshotA);
+    writeNow("trainer:attention", snapshotA);
     expect(readTrainerCache("trainer:attention")).toEqual(snapshotA);
     expect(trainerKeysInStorage().every((key) => key.includes(TRAINER_A))).toBe(true);
   });
@@ -184,18 +192,69 @@ describe("AuthProvider and the trainer cache (Z11-8)", () => {
   it("a second trainer signing in on the same phone reads nothing of A's", async () => {
     renderProvider();
     await signIn("token-a", trainerMe(TRAINER_A, "Rahul Coach"));
-    writeTrainerCache("trainer:attention", snapshotA);
+    writeNow("trainer:attention", snapshotA);
 
     await signIn("token-b", trainerMe(TRAINER_B, "Meera Coach"));
     expect(auth!.me?.userId).toBe(TRAINER_B);
     expect(readTrainerCache("trainer:attention")).toBeNull();
+    // Removed when B's `/me` set the owner, though nothing signed A out.
+    expect(trainerKeysInStorage().filter((key) => key.includes(TRAINER_A))).toEqual([]);
+  });
+
+  it("a /me reload that returns a different user removes the previous trainer's entries (Z12-33)", async () => {
+    renderProvider();
+    await signIn("token-a", trainerMe(TRAINER_A, "Rahul Coach"));
+    writeNow("trainer:attention", snapshotA);
+    expect(trainerKeysInStorage()).toHaveLength(1);
+
+    h.client.me.mockResolvedValueOnce(trainerMe(TRAINER_B, "Meera Coach"));
+    await act(async () => {
+      await auth!.refreshSession();
+    });
+
+    expect(auth!.me?.userId).toBe(TRAINER_B);
+    expect(trainerKeysInStorage()).toEqual([]);
+    expect(readTrainerCache("trainer:attention")).toBeNull();
+  });
+
+  it("a /me reload for the same trainer keeps their snapshot and in-flight writes", async () => {
+    renderProvider();
+    await signIn("token-a", trainerMe(TRAINER_A, "Rahul Coach"));
+    writeNow("trainer:attention", snapshotA);
+    const startedAt = trainerCacheEpoch();
+
+    h.client.me.mockResolvedValueOnce(trainerMe(TRAINER_A, "Rahul Coach"));
+    await act(async () => {
+      await auth!.refreshSession();
+    });
+
+    expect(readTrainerCache("trainer:attention")).toEqual(snapshotA);
+    writeTrainerCache("trainer:clients", { items: [{ id: "client-1" }] }, startedAt);
+    expect(readTrainerCache("trainer:clients")).toEqual({ items: [{ id: "client-1" }] });
+  });
+
+  it("a fetch started for A that resolves after A signs out and B signs in writes nothing (Z12-33)", async () => {
+    renderProvider();
+    await signIn("token-a", trainerMe(TRAINER_A, "Rahul Coach"));
+    // A trainer screen starts its fetch while A is signed in.
+    const startedUnderA = trainerCacheEpoch();
+
+    act(() => auth!.signOut());
+    await signIn("token-b", trainerMe(TRAINER_B, "Meera Coach"));
+    expect(auth!.me?.userId).toBe(TRAINER_B);
+
+    // A's response arrives now.
+    writeTrainerCache("trainer:attention", snapshotA, startedUnderA);
+
+    expect(readTrainerCache("trainer:attention")).toBeNull();
+    expect(trainerKeysInStorage()).toEqual([]);
   });
 
   it("sign-out clears every trainer: entry and the owner; B then reads null", async () => {
     renderProvider();
     await signIn("token-a", trainerMe(TRAINER_A, "Rahul Coach"));
-    writeTrainerCache("trainer:attention", snapshotA);
-    writeTrainerCache("trainer:clients", { items: [{ id: "client-1" }] });
+    writeNow("trainer:attention", snapshotA);
+    writeNow("trainer:clients", { items: [{ id: "client-1" }] });
     localStorage.setItem("trainer:attention", JSON.stringify(snapshotA));
     localStorage.setItem("trainer:client:legacy-relationship", "{}");
 
@@ -204,7 +263,7 @@ describe("AuthProvider and the trainer cache (Z11-8)", () => {
     expect(auth!.me).toBeNull();
     // No owner after sign-out: reads are null and writes are dropped.
     expect(readTrainerCache("trainer:attention")).toBeNull();
-    writeTrainerCache("trainer:attention", snapshotA);
+    writeNow("trainer:attention", snapshotA);
     expect(trainerKeysInStorage()).toEqual([]);
 
     await signIn("token-b", trainerMe(TRAINER_B, "Meera Coach"));
@@ -218,7 +277,7 @@ describe("AuthProvider and the trainer cache (Z11-8)", () => {
       refreshToken: "refresh-a",
       expiresIn: 3600,
     });
-    writeTrainerCache("trainer:attention", snapshotA);
+    writeNow("trainer:attention", snapshotA);
     expect(trainerKeysInStorage()).toHaveLength(1);
 
     h.client.refreshAuth.mockRejectedValueOnce(apiError(401, "UNAUTHENTICATED"));

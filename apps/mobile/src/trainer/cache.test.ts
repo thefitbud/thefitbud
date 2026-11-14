@@ -2,8 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
  * Z11-8: the trainer offline cache is scoped to the signed-in trainer and
- * cleared on sign-out. Runs each case against both stores: the memory map
- * alone (native, where `localStorage` does not exist) and web `localStorage`.
+ * cleared on sign-out. Z12-33: a write carries the epoch read when its fetch
+ * started and is dropped once the owner changed or the cache was cleared, and
+ * a new owner removes every other owner's entries. Runs each case against both
+ * stores: the memory map alone (native, where `localStorage` does not exist)
+ * and web `localStorage`.
  */
 
 const TRAINER_A = "6f1c2a9e-3b4d-4c5e-8f70-1a2b3c4d5e6f";
@@ -52,6 +55,12 @@ async function freshCache(): Promise<CacheModule> {
   return import("./cache");
 }
 
+/** A write whose fetch started now, under the current owner. */
+function writeNow(cache: CacheModule) {
+  return (key: string, value: unknown) =>
+    cache.writeTrainerCache(key, value, cache.trainerCacheEpoch());
+}
+
 const stores = [
   { name: "memory store (native)", web: false },
   { name: "localStorage (web)", web: true },
@@ -60,6 +69,7 @@ const stores = [
 describe.each(stores)("trainer cache, $name", ({ web }) => {
   let storage: MemoryStorage | null = null;
   let cache: CacheModule;
+  let write: (key: string, value: unknown) => void;
 
   beforeEach(async () => {
     if (web) {
@@ -69,6 +79,7 @@ describe.each(stores)("trainer cache, $name", ({ web }) => {
       storage = null;
     }
     cache = await freshCache();
+    write = writeNow(cache);
   });
 
   afterEach(() => {
@@ -77,8 +88,8 @@ describe.each(stores)("trainer cache, $name", ({ web }) => {
 
   it("reads back the signed-in trainer's own snapshot", () => {
     cache.setTrainerCacheOwner(TRAINER_A);
-    cache.writeTrainerCache("trainer:attention", attentionA);
-    cache.writeTrainerCache(`trainer:client:${RELATIONSHIP}`, { name: "Priya Sharma" });
+    write("trainer:attention", attentionA);
+    write(`trainer:client:${RELATIONSHIP}`, { name: "Priya Sharma" });
 
     expect(cache.readTrainerCache("trainer:attention")).toEqual(attentionA);
     expect(cache.readTrainerCache(`trainer:client:${RELATIONSHIP}`)).toEqual({
@@ -88,22 +99,98 @@ describe.each(stores)("trainer cache, $name", ({ web }) => {
 
   it("never serves trainer A's snapshot to trainer B, even without a sign-out clear", () => {
     cache.setTrainerCacheOwner(TRAINER_A);
-    cache.writeTrainerCache("trainer:attention", attentionA);
+    write("trainer:attention", attentionA);
 
     cache.setTrainerCacheOwner(TRAINER_B);
     expect(cache.readTrainerCache("trainer:attention")).toBeNull();
 
-    cache.writeTrainerCache("trainer:attention", attentionB);
+    write("trainer:attention", attentionB);
     expect(cache.readTrainerCache("trainer:attention")).toEqual(attentionB);
+  });
+
+  it("a userId change removes the previous owner's entries, not only sign-out (Z12-33)", () => {
+    cache.setTrainerCacheOwner(TRAINER_A);
+    write("trainer:attention", attentionA);
+    write(`trainer:client:${RELATIONSHIP}`, { name: "Priya Sharma" });
+    storage?.setItem("trainer:clients", JSON.stringify({ items: [] }));
+    storage?.setItem("fitbud.accessToken", "kept-by-session-storage");
+
+    // B's `/me` arrives with no sign-out clear in between.
+    cache.setTrainerCacheOwner(TRAINER_B);
+    write("trainer:attention", attentionB);
+
+    // A's entries are gone from both stores, not merely hidden: A signing
+    // back in on this phone finds nothing.
+    if (storage) {
+      expect(storage.keys().filter((key) => key.includes(TRAINER_A))).toEqual([]);
+      expect(storage.getItem("trainer:clients")).toBeNull();
+      expect(storage.getItem("fitbud.accessToken")).toBe("kept-by-session-storage");
+    }
+    cache.setTrainerCacheOwner(TRAINER_A);
+    expect(cache.readTrainerCache("trainer:attention")).toBeNull();
+    expect(cache.readTrainerCache(`trainer:client:${RELATIONSHIP}`)).toBeNull();
+  });
+
+  it("setting the same owner again keeps their entries and in-flight writes (a /me reload)", () => {
+    cache.setTrainerCacheOwner(TRAINER_A);
+    write("trainer:attention", attentionA);
+    const startedAt = cache.trainerCacheEpoch();
 
     cache.setTrainerCacheOwner(TRAINER_A);
+
     expect(cache.readTrainerCache("trainer:attention")).toEqual(attentionA);
+    cache.writeTrainerCache("trainer:clients", { items: [{ id: "client-1" }] }, startedAt);
+    expect(cache.readTrainerCache("trainer:clients")).toEqual({ items: [{ id: "client-1" }] });
+  });
+
+  it("drops a write whose fetch started under A and resolved after A signed out and B signed in (Z12-33)", () => {
+    cache.setTrainerCacheOwner(TRAINER_A);
+    const startedUnderA = cache.trainerCacheEpoch();
+
+    // A signs out (AuthProvider: clear, then no owner); B signs in.
+    cache.clearTrainerCache();
+    cache.setTrainerCacheOwner(null);
+    cache.setTrainerCacheOwner(TRAINER_B);
+
+    cache.writeTrainerCache("trainer:attention", attentionA, startedUnderA);
+
+    expect(cache.readTrainerCache("trainer:attention")).toBeNull();
+    if (storage) expect(storage.length).toBe(0);
+    // B's own fetch, started after B signed in, still writes.
+    write("trainer:attention", attentionB);
+    expect(cache.readTrainerCache("trainer:attention")).toEqual(attentionB);
+  });
+
+  it("drops a late write after a direct switch from A to B with no sign-out", () => {
+    cache.setTrainerCacheOwner(TRAINER_A);
+    const startedUnderA = cache.trainerCacheEpoch();
+    cache.setTrainerCacheOwner(TRAINER_B);
+
+    cache.writeTrainerCache("trainer:attention", attentionA, startedUnderA);
+
+    expect(cache.readTrainerCache("trainer:attention")).toBeNull();
+    if (storage) expect(storage.length).toBe(0);
+  });
+
+  it("drops a late write that resolves after sign-out, even if A signs straight back in", () => {
+    cache.setTrainerCacheOwner(TRAINER_A);
+    const startedBeforeSignOut = cache.trainerCacheEpoch();
+
+    cache.clearTrainerCache();
+    cache.setTrainerCacheOwner(null);
+    cache.writeTrainerCache("trainer:attention", attentionA, startedBeforeSignOut);
+    cache.setTrainerCacheOwner(TRAINER_A);
+    cache.writeTrainerCache("trainer:clients", { items: [] }, startedBeforeSignOut);
+
+    expect(cache.readTrainerCache("trainer:attention")).toBeNull();
+    expect(cache.readTrainerCache("trainer:clients")).toBeNull();
+    if (storage) expect(storage.length).toBe(0);
   });
 
   it("returns null for B after A signs out (clear + no owner) and B signs in", () => {
     cache.setTrainerCacheOwner(TRAINER_A);
-    cache.writeTrainerCache("trainer:attention", attentionA);
-    cache.writeTrainerCache("trainer:clients", { items: [{ id: "client-1" }] });
+    write("trainer:attention", attentionA);
+    write("trainer:clients", { items: [{ id: "client-1" }] });
 
     cache.clearTrainerCache();
     cache.setTrainerCacheOwner(null);
@@ -118,7 +205,7 @@ describe.each(stores)("trainer cache, $name", ({ web }) => {
 
   it("with no owner set, reads return null and writes are dropped", () => {
     expect(cache.readTrainerCache("trainer:attention")).toBeNull();
-    cache.writeTrainerCache("trainer:attention", attentionA);
+    write("trainer:attention", attentionA);
     expect(cache.readTrainerCache("trainer:attention")).toBeNull();
 
     // Nothing reached storage while no owner was set.
@@ -128,7 +215,7 @@ describe.each(stores)("trainer cache, $name", ({ web }) => {
 
     // An empty owner id counts as no owner.
     cache.setTrainerCacheOwner("");
-    cache.writeTrainerCache("trainer:attention", attentionA);
+    write("trainer:attention", attentionA);
     cache.setTrainerCacheOwner(TRAINER_A);
     expect(cache.readTrainerCache("trainer:attention")).toBeNull();
   });
@@ -142,10 +229,10 @@ describe.each(stores)("trainer cache, $name", ({ web }) => {
 
   it("clear removes every trainer: entry, scoped and legacy, and keeps other keys", () => {
     cache.setTrainerCacheOwner(TRAINER_A);
-    cache.writeTrainerCache("trainer:attention", attentionA);
-    cache.writeTrainerCache(`trainer:client:${RELATIONSHIP}`, { name: "Priya Sharma" });
+    write("trainer:attention", attentionA);
+    write(`trainer:client:${RELATIONSHIP}`, { name: "Priya Sharma" });
     cache.setTrainerCacheOwner(TRAINER_B);
-    cache.writeTrainerCache("trainer:clients", { items: [] });
+    write("trainer:clients", { items: [] });
     storage?.setItem("trainer:attention", JSON.stringify(attentionA));
     storage?.setItem(`trainer:client:${RELATIONSHIP}`, "{}");
     storage?.setItem("fitbud.accessToken", "kept-by-session-storage");
@@ -177,9 +264,10 @@ describe("trainer cache, memory store on web", () => {
     };
     vi.stubGlobal("localStorage", storage);
     const cache = await freshCache();
+    const write = writeNow(cache);
 
     cache.setTrainerCacheOwner(TRAINER_A);
-    cache.writeTrainerCache("trainer:attention", attentionA);
+    write("trainer:attention", attentionA);
     expect(cache.readTrainerCache("trainer:attention")).toEqual(attentionA);
 
     cache.clearTrainerCache();
