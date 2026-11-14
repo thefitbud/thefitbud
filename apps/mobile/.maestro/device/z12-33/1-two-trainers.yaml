@@ -13,8 +13,8 @@ env:
   RAHUL_THIRD_CLIENT: Meera Iyer
   RAHUL_FOURTH_CLIENT: Ishita Banerjee
   PRIYA_CLIENT: Lakshmi Iyer
-  # "Needs you <n>" appears only once Attention has loaded (AttentionTab.tsx), so it is
-  # the positive sign that the signed-in trainer's own data rendered.
+  # "Needs you <n>" is the Attention chip; it shows "Needs you 0" over the skeleton
+  # too (AttentionTab.tsx), so each wait on it is followed by a wait for "Loading" to go.
   ATTENTION_LOADED: "Needs you [0-9]+"
 ---
 # Z12-33 device check (docs/qa/Z12-33/README.md), steps 1-6, through the Z12-35 harness.
@@ -43,6 +43,11 @@ env:
 # Attention's order varies, so its loaded state is the anchor, not one client's card.
 - extendedWaitUntil:
     visible: "${ATTENTION_LOADED}"
+    timeout: 30000
+# "Needs you 0" already shows over the skeleton, so also wait for the "Loading"
+# skeleton cards to go before asserting what is (not) on screen.
+- extendedWaitUntil:
+    notVisible: "Loading"
     timeout: 30000
 - takeScreenshot: rahul-attention
 - runFlow: ../../common/assert-no-crash.yaml
@@ -91,6 +96,11 @@ env:
 # seen to render Priya's own data, so "not visible" cannot pass on a half-loaded screen.
 - extendedWaitUntil:
     visible: "${ATTENTION_LOADED}"
+    timeout: 30000
+# "Needs you 0" already shows over the skeleton, so also wait for the "Loading"
+# skeleton cards to go before asserting what is (not) on screen.
+- extendedWaitUntil:
+    notVisible: "Loading"
     timeout: 30000
 - assertNotVisible: ".*${RAHUL_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"

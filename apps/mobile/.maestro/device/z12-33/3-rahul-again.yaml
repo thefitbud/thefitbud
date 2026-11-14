@@ -41,6 +41,11 @@ env:
 - extendedWaitUntil:
     visible: "${ATTENTION_LOADED}"
     timeout: 30000
+# "Needs you 0" already shows over the skeleton, so also wait for the "Loading"
+# skeleton cards to go before asserting what is (not) on screen.
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 30000
 - assertNotVisible: ".*${PRIYA_CLIENT}.*"
 - assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
 - takeScreenshot: rahul-again-attention
