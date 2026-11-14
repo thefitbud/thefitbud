@@ -272,3 +272,57 @@ describe("scrubSentryEvent", () => {
     });
   });
 });
+
+describe("scrubSentryEvent exception values", () => {
+  const sql = 'insert into "plan_assignments" ("client_id", "note") values (?, ?)';
+  const secrets = ["asha.verma@example.com", "knee pain after squats"];
+
+  it("rewrites a DrizzleQueryError message so no bound params survive", () => {
+    const event = {
+      exception: {
+        values: [
+          { type: "DrizzleQueryError", value: `Failed query: ${sql}\nparams: ${secrets.join(",")}` },
+          { type: "Error", value: "SQLITE_CONSTRAINT: UNIQUE failed" },
+        ],
+      },
+    };
+    const out = JSON.stringify(scrubSentryEvent(event));
+    for (const secret of secrets) expect(out).not.toContain(secret);
+    expect(out).not.toContain("params:");
+    expect(event.exception.values[0]?.value).toBe("Failed query: [redacted]");
+    expect(event.exception.values[1]?.value).toBe("SQLITE_CONSTRAINT: UNIQUE failed");
+  });
+
+  it("strips a params tail from a non-Drizzle exception value", () => {
+    const event = { exception: { values: [{ type: "Error", value: `boom\nparams: ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(event.exception.values[0]?.value).toBe("boom");
+  });
+
+  it("detects a failed query by its prefix when the type is not DrizzleQueryError", () => {
+    const event = { exception: { values: [{ type: "Error", value: `Failed query: ${sql} -- ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(JSON.stringify(event)).not.toContain(secrets[0]);
+  });
+
+  it("detects a DrizzleQueryError by type when the message has no prefix", () => {
+    const event = { exception: { values: [{ type: "DrizzleQueryError", value: `${sql} ${secrets[0]}` }] } };
+    scrubSentryEvent(event);
+    expect(JSON.stringify(event)).not.toContain(secrets[0]);
+  });
+
+  it("leaves a mid-line 'params:' message intact", () => {
+    const event = { exception: { values: [{ type: "Error", value: "Invalid route params: id must be uuid" }] } };
+    scrubSentryEvent(event);
+    expect(event.exception.values[0]?.value).toBe("Invalid route params: id must be uuid");
+  });
+
+  it("is applied by beforeSend", () => {
+    const options = sentryOptions(env({ SENTRY_DSN: FAKE_DSN, SENTRY_ENVIRONMENT: "staging" }));
+    const event = {
+      exception: { values: [{ type: "DrizzleQueryError", value: `Failed query: ${sql}\nparams: ${secrets[0]}` }] },
+    } as unknown as ErrorEvent;
+    const out = options.beforeSend?.(event, {}) as ErrorEvent;
+    expect(JSON.stringify(out)).not.toContain(secrets[0]);
+  });
+});
