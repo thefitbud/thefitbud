@@ -9,11 +9,45 @@ platforms, and reports.
 
 ## Example runs
 
-RUNS_TABLE
+| Run | Head | Android | iOS | Notes |
+|---|---|---|---|---|
+| [43610441275](https://github.com/thefitbud/thefitbud/actions/runs/43610441275) | `77adfd8d` | ran end to end: 1/4 flows pass per theme, log clean | built (44 min), Maestro's iOS driver did not start in time | first run; idb tap untrusted |
+| [43613279879](https://github.com/thefitbud/thefitbud/actions/runs/43613279879) | `d4e14846` | same flows; lock-screen tap found the push in the shade and tapped it | same driver failure | theme patch logged; luminance evidence added |
+| [43616323952](https://github.com/thefitbud/thefitbud/actions/runs/43616323952) | `263fb968` | same | **ran end to end**: driver warm-up fixed it; 1/4 flows pass per theme, log clean | **the example run: both platforms, both themes, complete** |
+| [43619775723](https://github.com/thefitbud/thefitbud/actions/runs/43619775723) | `6cd2f93d` | native cache miss: full build 8 min, cache saved | native cache miss, arm64-only build | first run with the native-build cache |
+CACHE_HIT_ROW
 
 ## What the example run shows
 
-FINDINGS
+Run 43616323952, both platforms, light and dark, `smoke` flows, the same four results on
+iOS and Android in both themes:
+
+| Flow | Result | Why (harness or app) |
+|---|---|---|
+| `auth/sign-in-password.yaml` | **PASS** (both platforms, both themes) | the Release app reaches the local seeded API over plain HTTP (ATS / network-security patch), signs in as rahul.coach |
+| `auth/sign-in-code.yaml` | FAIL: `"Today's workout\|Needs you\|Choose mode" is visible` is false | expected: the fixed QA sign-in code is staging-only, the local API emails a random code to its dev mail sink. Needs a flow that reads `GET /dev/mail` (Z12-58) |
+| `trainee/today.yaml` | FAIL: `No visible element found: "Nutrition"` | the nightly flow's QA-seed expectation does not hold for the local demo persona (aarav.ontrack's Today); flow/seed mismatch for Z12-58's v3 flows, not a crash |
+| `trainer/clients.yaml` | FAIL: `".*QA Rohan.*" is visible` is false | the flow's own `env:` default (`QA Rohan`) wins over the harness's `-e QA_SLIPPING_NAME=Rohan Mehta`; the v3 flows (Z12-58) should take names from the runner only |
+
+- **Device logs: clean on both platforms** (no crash, red box, LogBox, console.error /
+  console.warn, React warning; `Running "main"` captured, so the scan had something to
+  scan). Android logcat ~143k lines; iOS app-process log ~398k lines.
+- **Theme:** both devices switched (`simctl ui appearance`, `cmd uimode night` read back),
+  and the iOS Info.plist was patched to `Automatic`. Mean screenshot luminance light 0.865
+  / dark 0.85 (iOS), 0.859 / 0.859 (Android): **the current app has no dark styling**
+  (no `useColorScheme`/`Appearance` anywhere in `apps/mobile/src` or `packages/ui-mobile`),
+  so dark screenshots look light until Z12-37 lands the v3 dark tokens. The luminance line
+  will show the switch from then on.
+- **Push:** iOS `simctl push` delivered (APNs payload in Expo's envelope); Android
+  `shell-notification` posted and confirmed by `dumpsys notification`.
+- **Lock screen:** Android UiAutomator found "FitBud" in the shade over the keyguard and
+  tapped it (`tapped-no-app`, correct for a shell-owned notification). iOS: idb could not be
+  installed (the Homebrew formula needs Xcode 26); fixed in `eb31fe71` (build with Xcode 26
+  or use the prebuilt release). Live Activity: `not-found` (no workout running), as expected.
+- **Offline:** Android airplane mode on/off read back; iOS local API stopped and restarted,
+  demo sign-in working again afterwards.
+- **Timing:** iOS full build 44 min (both simulator architectures; now arm64 only),
+  Android 12 min; flows about 15 min per platform for two themes.
 
 ## Departures and decisions
 
