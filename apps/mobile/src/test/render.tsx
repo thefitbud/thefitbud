@@ -67,6 +67,7 @@
  * state (route resolution, session restore) belongs in that module's own
  * `.test.ts`, against the real logic.
  */
+import { createElement, type ReactNode } from "react";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 import type { AppRoute } from "../navigation/resolveRoute";
@@ -124,14 +125,38 @@ vi.mock("expo-font", () => ({
  * react-native-svg and lucide-react-native ship CommonJS that `require`s
  * react-native directly, which Node executes outside vite's pipeline — so the
  * alias never applies and Node chokes on react-native's Flow syntax. Both are
- * drawing-only, so a component name per export is enough for text, role and
- * label assertions. Same shape as the mocks in `src/lib/legalLinks.test.ts`.
+ * drawing-only, so one stand-in component per export is enough for text, role
+ * and label assertions.
+ *
+ * Each export renders a custom element named after it (`Svg` -> `<svg-svg>`,
+ * `ChevronLeft` -> `<svg-chevron-left>`). The old stand-in was the bare export
+ * name (`<ChevronLeft>`), which React DOM reports with console.error ("incorrect
+ * casing", "unrecognized tag", unknown `accessibilityLabel` prop) and which the
+ * Z12-35 console gate (`./fail-on-console.ts`) would fail. Custom elements take
+ * any props without a warning, and children still render.
  */
+const svgStandIns = new Map<string, (props: Record<string, unknown>) => unknown>();
+
+function svgStandIn(name: string) {
+  let component = svgStandIns.get(name);
+  if (!component) {
+    const tag = `svg-${name.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase()}`;
+    component = ({ children }: Record<string, unknown>) =>
+      createElement(tag, null, children as ReactNode);
+    svgStandIns.set(name, component);
+  }
+  return component;
+}
+
 const svgComponentProxy = new Proxy(
   {},
   {
     get: (_target, key) =>
-      key === "default" ? "Svg" : key === "__esModule" ? true : String(key),
+      key === "__esModule"
+        ? true
+        : typeof key === "symbol" || key === "then"
+          ? undefined
+          : svgStandIn(key === "default" ? "Svg" : String(key)),
     has: () => true,
   },
 );

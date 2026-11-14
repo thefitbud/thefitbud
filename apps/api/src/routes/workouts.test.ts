@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../index.js";
 import { drizzle } from "drizzle-orm/d1";
 import {
@@ -1723,9 +1723,14 @@ describe("workout assignment and execution", () => {
       sqlite.exec(
         "CREATE TRIGGER z722_fail_audit BEFORE INSERT ON log_edit_events BEGIN SELECT RAISE(ABORT, 'z722 injected failure'); END",
       );
+      // The injected failure is logged as an unhandled error; the Z12-35 console gate
+      // (D-W12-28) needs the test to expect that log line.
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       const failed = await postLog(assignment.id, trainerCookie, "z722-rollback-1");
       sqlite.exec("DROP TRIGGER z722_fail_audit");
       expect(failed.status).toBe(500);
+      expect(errors).toHaveBeenCalledWith(expect.stringContaining('"message":"Unhandled API error"'));
+      errors.mockRestore();
       const orphaned = await db
         .select()
         .from(schema.workoutExecutions)

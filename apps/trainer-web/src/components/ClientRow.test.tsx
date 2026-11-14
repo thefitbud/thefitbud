@@ -32,9 +32,15 @@ afterEach(cleanup);
 
 describe("ClientRow ended dates (Z10-21)", () => {
   it("shows the trainer-zone civil dates, not the UTC slice", () => {
+    // ClientsPage renders the row inside a table body; so does the test, or React DOM
+    // reports a <tr> outside a table (Z12-35 console-error gate, D-W12-28).
     render(
       <MemoryRouter>
-        <ClientRow item={ended} variant="ended" />
+        <table>
+          <tbody>
+            <ClientRow item={ended} variant="ended" />
+          </tbody>
+        </table>
       </MemoryRouter>,
     );
     expect(screen.getAllByText(/Ended Thu 22 Oct/).length).toBeGreaterThan(0);

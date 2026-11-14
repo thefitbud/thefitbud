@@ -1,0 +1,48 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-33 Priya offline (step 7)
+tags:
+  - device
+  - trainer
+  - z12-33
+  - device-offline
+env:
+  RAHUL_CLIENT: Rohan Mehta
+  RAHUL_OTHER_CLIENT: Aarav Shah
+  PRIYA_CLIENT: Lakshmi Iyer
+---
+# Z12-33 step 7. Tagged device-offline: the harness takes the device offline before
+# this file and back online after it (Android airplane mode; iOS: the local API is
+# stopped). Continues from 1-two-trainers.yaml, Priya still signed in, so the app is
+# brought to the front, not relaunched.
+- launchApp:
+    stopApp: false
+# Precondition: Priya is the one signed in (her own cached roster shows). If
+# 1-two-trainers.yaml failed before the switch, this fails here, as a broken
+# precondition, rather than reporting Rahul's rows as a leak (run 43625661111).
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ".*${PRIYA_CLIENT}.*"
+    timeout: 20000
+- tapOn: "Attention"
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 80%"
+# Priya's own last snapshot with the offline line, or the "Couldn't load" state.
+- extendedWaitUntil:
+    visible: ".*(You're offline|Couldn't load).*"
+    timeout: 30000
+- assertNotVisible: ".*${RAHUL_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
+- takeScreenshot: priya-offline-attention
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Clients"
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 80%"
+- extendedWaitUntil:
+    visible: ".*(You're offline|Couldn't load).*"
+    timeout: 30000
+- assertNotVisible: ".*${RAHUL_CLIENT}.*"
+- assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
+- takeScreenshot: priya-offline-clients
+- runFlow: ../../common/assert-no-crash.yaml

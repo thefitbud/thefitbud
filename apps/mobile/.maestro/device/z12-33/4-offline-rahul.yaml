@@ -1,0 +1,46 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-33 Rahul offline (step 8, offline part)
+tags:
+  - device
+  - trainer
+  - z12-33
+  - device-offline
+env:
+  PRIYA_CLIENT: Lakshmi Iyer
+  PRIYA_OTHER_CLIENT: Karan Mehra
+---
+# Z12-33 step 8, offline part. Tagged device-offline (see 2-offline-priya.yaml).
+# Departure from the README's step 8, recorded in docs/qa/Z12-35/README.md: Attention
+# is the trainer's landing tab, so it loads online as Rahul signs in (3-rahul-again)
+# before the harness can take the device offline. The check that matters still holds:
+# offline, Attention and Clients never show Priya's rows.
+- launchApp:
+    stopApp: false
+# Precondition: Rahul is the one signed in (his roster, loaded online in
+# 3-rahul-again.yaml, shows from the cache).
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: ".*Rohan Mehta.*"
+    timeout: 20000
+- tapOn: "Attention"
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 80%"
+- extendedWaitUntil:
+    visible: ".*(You're offline|Couldn't load).*"
+    timeout: 30000
+- assertNotVisible: ".*${PRIYA_CLIENT}.*"
+- assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
+- takeScreenshot: rahul-offline-attention
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Clients"
+- swipe:
+    start: "50%, 30%"
+    end: "50%, 80%"
+- extendedWaitUntil:
+    visible: ".*(You're offline|Couldn't load).*"
+    timeout: 30000
+- assertNotVisible: ".*${PRIYA_CLIENT}.*"
+- assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
+- takeScreenshot: rahul-offline-clients
+- runFlow: ../../common/assert-no-crash.yaml

@@ -1,0 +1,479 @@
+# The W12 device gate harness (Z12-35; W12 prompt §2 Z12-35 and §3).
+#
+# Builds the PR head (or the dispatched ref) as a native Release app, runs it on an iOS
+# simulator and an Android emulator against a LOCAL seeded API on the runner, in light
+# and dark, and fails on any crash, red box, LogBox error or warning, JS console.error /
+# console.warn or React warning in the device logs. Scripts and the full description:
+# scripts/qa/device/README.md.
+#
+# Triggers
+#   workflow_dispatch   the gate for a task: pick platforms, themes, the Maestro flows (a
+#                       tag such as smoke or device, or path globs) and roles. It only
+#                       appears in the Actions tab once this file is on the default branch.
+#   pull_request        ONLY when the harness itself changes (scripts/qa/device/**, this
+#                       file, apps/mobile/.maestro/common/** and device/**), so the harness tests itself
+#                       without running on every mobile PR. Defaults: both platforms,
+#                       both themes, the `smoke` flows, extras on.
+#
+# Not a required check, and it must never become one (W12 prompt §1: repo settings need
+# Firoz's OK). No secret is read, no staging URL is used, and nothing runs a remote D1
+# command: the API is `wrangler dev --local` on the runner, seeded by `pnpm db:reset`.
+# No concurrency group at all: a run is never cancelled, by hand or by GitHub evicting a
+# pending run (W12 prompt §1).
+#
+# Runners: ubuntu-latest (KVM) for Android, macos-15 for iOS — both standard GitHub-hosted
+# runners, free for this public repository. No larger runner label may be added.
+name: Device gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Optional: the branch, tag or SHA whose app to build (default: the branch the workflow runs from). The harness itself always comes from the workflow's own commit."
+        type: string
+        default: ""
+      platforms:
+        description: Platforms to run
+        type: choice
+        default: both
+        options: [both, ios, android]
+      themes:
+        description: System themes to run the flows in
+        type: choice
+        default: both
+        options: [both, light, dark]
+      flows:
+        description: "Maestro tag (smoke, full, device, trainee, ...) or comma-separated path globs under apps/mobile/.maestro (e.g. flows/v3/F08*.yaml)"
+        type: string
+        default: smoke
+      roles:
+        description: "Optional: keep only flows tagged with one of these roles (comma-separated: trainee,trainer,dual)"
+        type: string
+        default: ""
+      extras:
+        description: "all: push + lock-screen tap, Live Activity tap attempt and offline/online samples after the flows; none: flows and logs only"
+        type: choice
+        default: all
+        options: [all, none]
+      android_api:
+        description: Android emulator API level (google_apis x86_64 image)
+        type: string
+        default: "36"
+  pull_request:
+    paths:
+      - "scripts/qa/device/**"
+      - ".github/workflows/device.yml"
+      - "apps/mobile/.maestro/common/**"
+      - "apps/mobile/.maestro/device/**"
+
+permissions:
+  contents: read
+
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+  # Inputs are empty on pull_request; every value falls back to the default above,
+  # except flows: a harness PR also runs the Z12-33 two-trainer check (D-W12-31) on
+  # the current app, so the check itself is exercised before Z12-33's head runs it.
+  DEVICE_FLOWS: ${{ inputs.flows || (github.event_name == 'pull_request' && 'smoke,z12-33') || 'smoke' }}
+  DEVICE_ROLES: ${{ inputs.roles || '' }}
+  DEVICE_THEMES: ${{ (inputs.themes == 'light' && 'light') || (inputs.themes == 'dark' && 'dark') || 'light dark' }}
+  DEVICE_EXTRAS: ${{ inputs.extras || 'all' }}
+
+jobs:
+  # The harness's own unit tests, plus the shared scripts/qa tests (the build scripts
+  # gained two optional hooks for the gate and must keep their nightly behaviour).
+  device-harness-tests:
+    name: device-harness-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # push-payload validates against the built @fitbud/contracts schema.
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: scripts/qa tests (device harness included)
+        run: node --test "scripts/qa/**/*.test.mjs"
+
+  device-android:
+    name: device-android
+    if: ${{ inputs.platforms != 'ios' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      DEVICE_ANDROID_API: ${{ inputs.android_api || '36' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || '' }}
+
+      # With a `ref` input the app comes from that ref and the harness from this
+      # workflow's commit, so a task branch that predates the harness (or holds an older
+      # copy of it) still runs today's gate.
+      - name: Overlay the harness from the workflow's commit
+        if: ${{ inputs.ref != '' && inputs.ref != null }}
+        env:
+          HARNESS_SHA: ${{ github.sha }}
+          APP_REF: ${{ inputs.ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$HARNESS_SHA"
+          git checkout "$HARNESS_SHA" -- scripts/qa apps/mobile/.maestro/common apps/mobile/.maestro/device packages/config/vitest
+          echo "app: $(git rev-parse HEAD) ($APP_REF); harness: $HARNESS_SHA"
+          git status --short | sed -n '1,40p'
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache Gradle
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'apps/mobile/package.json') }}
+          restore-keys: |
+            gradle-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      # Native-build cache (Z12-35): the key hashes every native input
+      # (native-fingerprint.mjs). On a hit, build-app.sh reuses the cached app and only
+      # rebuilds and swaps in the JS bundle; on a miss it builds natively and the app is
+      # saved under the key. Restore/save are separate so a failing gate still saves it.
+      - name: Native-build cache key
+        id: native-key
+        run: |
+          key="$(node scripts/qa/device/native-fingerprint.mjs --platform android \
+            --extra "image=${ImageOS:-}-${ImageVersion:-}" --extra "java=$(java -version 2>&1 | sed -n 1p)" \
+            --manifest qa-results/device/native-fingerprint-android.json)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the native build
+        id: native-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: qa-results/device-native-cache/android
+          key: ${{ steps.native-key.outputs.key }}
+
+      # Seeds the local D1 and starts `wrangler dev --local` in the background while the
+      # APK builds; "Wait for the local API" below joins it.
+      - name: Start the local seeded API (background)
+        run: |
+          mkdir -p qa-results/device/logs
+          nohup scripts/qa/device/local-api.sh start > qa-results/device/logs/api-start.log 2>&1 &
+
+      - name: Build the app against the local API
+        env:
+          DEVICE_NATIVE_CACHE: ${{ steps.native-cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}
+          DEVICE_NATIVE_CACHE_KEY: ${{ steps.native-key.outputs.key }}
+        run: scripts/qa/device/build-app.sh android
+
+      - name: Save the native build
+        if: ${{ steps.native-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: qa-results/device-native-cache/android
+          key: ${{ steps.native-key.outputs.key }}
+
+      - name: Wait for the local API
+        run: |
+          if ! scripts/qa/device/local-api.sh wait; then
+            echo "--- api-start.log ---"; tail -n 80 qa-results/device/logs/api-start.log || true
+            exit 1
+          fi
+
+      - name: Install the Maestro CLI
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Cache the AVD
+        uses: actions/cache@v6
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-device-gate-api${{ env.DEVICE_ANDROID_API }}-${{ runner.os }}
+
+      # Retries a corrupt system-image download before emulator-runner needs it (Z5-5).
+      - name: Install the emulator system image
+        env:
+          QA_ANDROID_SYSTEM_IMAGE: system-images;android-${{ env.DEVICE_ANDROID_API }};google_apis;x86_64
+        run: scripts/qa/android-system-image.sh
+
+      - name: Create the AVD snapshot
+        if: ${{ steps.avd-cache.outputs.cache-hit != 'true' }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ env.DEVICE_ANDROID_API }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "AVD created"
+
+      - name: Device gate (Android emulator)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ env.DEVICE_ANDROID_API }}
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          script: scripts/qa/device/run-gate.sh android
+
+      - name: Stop the local API
+        if: always()
+        run: scripts/qa/device/local-api.sh stop || true
+
+      # Screenshots, device logs, JUnit, scan and summary. No secret exists in this job;
+      # the demo password is public and masked in the Maestro log anyway.
+      - name: Upload the device results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: device-android
+          path: qa-results/device
+          retention-days: 14
+
+  device-ios:
+    name: device-ios
+    if: ${{ inputs.platforms != 'android' }}
+    runs-on: macos-15
+    timeout-minutes: 150
+    env:
+      # The newest Xcode this app builds with: Expo SDK 52 / RN 0.76 does not support
+      # the Xcode 26 toolchain (see qa.yml's ios job). ios-sim.sh picks the newest iOS 18
+      # runtime this Xcode has.
+      DEVICE_IOS_XCODE: /Applications/Xcode_16.4.app
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || '' }}
+
+      # See the Android job: app from `ref`, harness from this workflow's commit.
+      - name: Overlay the harness from the workflow's commit
+        if: ${{ inputs.ref != '' && inputs.ref != null }}
+        env:
+          HARNESS_SHA: ${{ github.sha }}
+          APP_REF: ${{ inputs.ref }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$HARNESS_SHA"
+          git checkout "$HARNESS_SHA" -- scripts/qa apps/mobile/.maestro/common apps/mobile/.maestro/device packages/config/vitest
+          echo "app: $(git rev-parse HEAD) ($APP_REF); harness: $HARNESS_SHA"
+          git status --short | sed -n '1,40p'
+
+      - name: Select Xcode
+        run: |
+          if [ ! -d "$DEVICE_IOS_XCODE" ]; then
+            echo "::error title=Xcode missing::$DEVICE_IOS_XCODE is not on this image."; ls -1 /Applications | grep -i '^Xcode' || true
+            exit 1
+          fi
+          sudo xcode-select --switch "$DEVICE_IOS_XCODE/Contents/Developer"
+          xcodebuild -version
+          sw_vers
+
+      # Before the long build, so a missing runtime fails in two minutes, not forty.
+      - name: Boot the simulator
+        run: scripts/qa/device/ios-sim.sh boot
+
+      - name: Set up Node (.nvmrc)
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Enable pnpm via Corepack
+        run: |
+          corepack enable
+          pnpm --version
+
+      - name: Locate pnpm store
+        run: echo "PNPM_STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Cache pnpm store
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.PNPM_STORE_PATH }}
+          key: pnpm-store-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-store-${{ runner.os }}-
+
+      - name: Cache CocoaPods downloads
+        uses: actions/cache@v6
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: pods-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            pods-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      # Native-build cache (Z12-35): the key hashes every native input
+      # (native-fingerprint.mjs). On a hit, build-app.sh reuses the cached app and only
+      # rebuilds and swaps in the JS bundle; on a miss it builds natively and the app is
+      # saved under the key. Restore/save are separate so a failing gate still saves it.
+      - name: Native-build cache key
+        id: native-key
+        run: |
+          key="$(node scripts/qa/device/native-fingerprint.mjs --platform ios \
+            --extra "image=${ImageOS:-}-${ImageVersion:-}" --extra "xcode=$(xcodebuild -version | tr '\n' ' ')" \
+            --manifest qa-results/device/native-fingerprint-ios.json)"
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the native build
+        id: native-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: qa-results/device-native-cache/ios
+          key: ${{ steps.native-key.outputs.key }}
+
+      - name: Start the local seeded API (background)
+        run: |
+          mkdir -p qa-results/device/logs
+          nohup scripts/qa/device/local-api.sh start > qa-results/device/logs/api-start.log 2>&1 &
+
+      - name: Build the app against the local API
+        env:
+          DEVICE_NATIVE_CACHE: ${{ steps.native-cache.outputs.cache-hit == 'true' && 'hit' || 'miss' }}
+          DEVICE_NATIVE_CACHE_KEY: ${{ steps.native-key.outputs.key }}
+        run: scripts/qa/device/build-app.sh ios
+
+      - name: Save the native build
+        if: ${{ steps.native-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v6
+        with:
+          path: qa-results/device-native-cache/ios
+          key: ${{ steps.native-key.outputs.key }}
+
+      - name: Wait for the local API
+        run: |
+          if ! scripts/qa/device/local-api.sh wait; then
+            echo "--- api-start.log ---"; tail -n 80 qa-results/device/logs/api-start.log || true
+            exit 1
+          fi
+
+      - name: Install the Maestro CLI
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      # idb drives the lock screen (lockscreen-tap.sh). Best effort: without it the
+      # lock-screen sample records "unavailable" and the rest of the gate still runs.
+      - name: Set up Python for idb
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install idb (best effort)
+        continue-on-error: true
+        timeout-minutes: 20
+        run: |
+          # The idb-companion formula builds from source and needs Xcode 26 (run
+          # 43616323952), while the app builds with 16.4. Build idb with the newest Xcode
+          # 26 on the image, then switch back whatever happens; if that fails, use the
+          # prebuilt universal binary from idb's GitHub release.
+          trap 'sudo xcode-select --switch "$DEVICE_IOS_XCODE/Contents/Developer"' EXIT
+          brew tap facebook/fb
+          # Homebrew refuses formulae from a third-party tap until it is trusted.
+          brew trust facebook/fb || true
+          x26="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -n 1 || true)"
+          if [ -n "$x26" ]; then
+            echo "building idb-companion with $x26"
+            sudo xcode-select --switch "$x26/Contents/Developer"
+            brew install idb-companion || echo "brew install idb-companion failed"
+            sudo xcode-select --switch "$DEVICE_IOS_XCODE/Contents/Developer"
+          fi
+          if ! command -v idb_companion >/dev/null 2>&1; then
+            echo "falling back to the prebuilt idb-companion release"
+            mkdir -p "$RUNNER_TEMP/idbc"
+            curl -fsSL -o "$RUNNER_TEMP/idbc.tar.gz" https://github.com/facebook/idb/releases/download/v1.1.8/idb-companion.universal.tar.gz
+            tar -xzf "$RUNNER_TEMP/idbc.tar.gz" -C "$RUNNER_TEMP/idbc"
+            companion="$(find "$RUNNER_TEMP/idbc" -name idb_companion -type f | sort | sed -n 1p)"
+            [ -n "$companion" ] && echo "$(dirname "$companion")" >> "$GITHUB_PATH"
+          fi
+          python -m pip install fb-idb
+          xcodebuild -version
+          idb --help >/dev/null && echo "idb installed"
+
+      - name: Device gate (iOS simulator)
+        run: scripts/qa/device/run-gate.sh ios
+
+      - name: Stop the local API
+        if: always()
+        run: scripts/qa/device/local-api.sh stop || true
+
+      - name: Upload the device results
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: device-ios
+          path: qa-results/device
+          retention-days: 14
