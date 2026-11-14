@@ -73,7 +73,7 @@ Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/de
 | `167-trainer-web-checkins-inbox-empty-web.png` | **CLOSE** | `167-trainer-web-checkins-inbox-empty-web-1440x900.png` | 2.9% (matches) | Z7-3 | No "Next due" helper. |
 | `171-trainer-web-checkin-form-builder-v3-web.png` | **GAP** | `171-trainer-web-checkin-form-builder-v3-web-1440x900.png` | 14.2% (likely gap) | new | Opened "Monthly maintenance review". |
 | `171b-trainer-web-checkin-form-measure-picker-v3-web.png` | **GAP** | `171b-trainer-web-checkin-form-measure-picker-v3-web-1440x900.png` | 14.8% (likely gap) | new |  |
-| `ds5-web-signin-footer.png` | **MATCH** | `ds5-web-signin-footer-1440x900.png` | 42.8% (likely gap) | BT3f |  |
+| `ds5-web-signin-footer.png` | **CLOSE** | `ds5-web-signin-footer-1440x900.png` | 42.8% (likely gap) | BT3f | Re-graded by Z12-32: lenient MATCH. |
 | `ds5-web-privacy.png` | **MATCH** | `ds5-web-privacy-1440x900.png` | 6.5% (check by eye) | BT3 |  |
 | `ds5-web-terms.png` | **MATCH** | `ds5-web-terms-1440x900.png` | 6.1% (check by eye) | BT3 |  |
 | `ds5-web-credits.png` | **CLOSE** | `ds5-web-credits-1440x900.png` | 5.8% (check by eye) | BT3 | Adds food data and exercise text sections. |
@@ -110,8 +110,8 @@ Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/de
 | `05-trainer-mobile-needs-you-v3-ios.png` | **CLOSE** | `05-trainer-mobile-needs-you-v3-ios-393x852.png` | 15.1% (likely gap) | Z10-1 | Segments are separate pills; no Sessions tab (Phase 10 parked); no search/bell. |
 | `05-trainer-mobile-needs-you-v3-swipe-ios.png` | **NOT AUDITED** | — | — | Z10-1 | RN swipe gesture is not driven by a mouse drag on Expo web. |
 | `05-trainer-mobile-needs-you-v3-reviewed-toast-ios.png` | **NOT AUDITED** | — | — | Z10-1 | Follows the swipe. |
-| `31-trainer-mobile-review-sheet-v3-ios.png` | **MATCH** | `31-trainer-mobile-review-sheet-v3-ios-393x852.png` | 48.7% (likely gap) | Z10-1 | Opened from the Needs you row. |
-| `31-trainer-mobile-review-sheet-v3-item2-ios.png` | **MATCH** | `31-trainer-mobile-review-sheet-v3-item2-ios-393x852.png` | 50.6% (likely gap) | Z10-1 |  |
+| `31-trainer-mobile-review-sheet-v3-ios.png` | **CLOSE** | `31-trainer-mobile-review-sheet-v3-ios-393x852.png` | 48.7% (likely gap) | Z10-1 | Opened from the Needs you row. Re-graded by Z12-32: lenient MATCH. |
+| `31-trainer-mobile-review-sheet-v3-item2-ios.png` | **CLOSE** | `31-trainer-mobile-review-sheet-v3-item2-ios-393x852.png` | 50.6% (likely gap) | Z10-1 | Re-graded by Z12-32: lenient MATCH. |
 | `31-trainer-mobile-review-sheet-v3-resolved-ios.png` | **GAP** | — | — | new |  |
 | `31-trainer-mobile-review-sheet-v3-all-resolved-ios.png` | **GAP** | — | — | new |  |
 | `33-trainer-mobile-exception-resolve-sheet-ios.png` | **GAP** | — | — | new |  |
@@ -125,7 +125,7 @@ Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/de
 | `41-trainer-mobile-exception-ended-ios.png` | **NOT AUDITED** | — | — | Z10-6 | No open item for an ended client. |
 | `43-trainer-mobile-attention-empty-ios.png` | **MATCH** | `43-trainer-mobile-attention-empty-ios-393x852.png` | 8.2% (check by eye) | Z10-2 |  |
 | `44-trainer-mobile-attention-offline-ios.png` | **CLOSE** | `44-trainer-mobile-attention-offline-ios-393x852.png` | 20.6% (likely gap) | Z10-2 | Offline banner (AttentionTab.tsx:616) did not show on Expo web within 2.5 s; re-check on device. |
-| `45-trainer-mobile-attention-error-ios.png` | **MATCH** | `45-trainer-mobile-attention-error-ios-393x852.png` | 8.2% (check by eye) | Z10-2 | Retry button added. |
+| `45-trainer-mobile-attention-error-ios.png` | **CLOSE** | `45-trainer-mobile-attention-error-ios-393x852.png` | 8.2% (check by eye) | Z10-2 | Retry button added. Re-graded by Z12-32: lenient MATCH. |
 | `46-trainer-mobile-checkins-to-review-ios.png` | **CLOSE** | `46-trainer-mobile-checkins-to-review-ios-393x852.png` | 11.6% (check by eye) | Z10-11 | No "Pull down" footer. |
 | `47-trainer-mobile-checkins-overdue-ios.png` | **CLOSE** | `47-trainer-mobile-checkins-overdue-ios-393x852.png` | 9.1% (check by eye) | Z10-11 |  |
 | `48-trainer-mobile-checkins-empty-ios.png` | **CLOSE** | `48-trainer-mobile-checkins-empty-ios-393x852.png` | 6.9% (check by eye) | Z10-11 | No "Next due" line. |
@@ -161,7 +161,7 @@ Captures: `docs/qa/P1/captures/redesign/`. Design review: [`captures/redesign/de
 | `ds5-ios-terms.png` | **NOT AUDITED** | — | — | BT3d | Opens the system browser. |
 | `ds5-ios-credits.png` | **NOT AUDITED** | — | — | BT3d | Opens the system browser. |
 
-Totals (frames only): 17 MATCH, 75 CLOSE, 13 GAP, 46 not audited. The "(no frame)" row is a finding outside the frame set and is not counted.
+Totals (frames only): 13 MATCH, 79 CLOSE, 13 GAP, 46 not audited (re-graded by Z12-32, 14 Nov 2026: four lenient MATCH rows, frames 31, 31-item2, 45 and `ds5-web-signin-footer`, are CLOSE; before: 17 MATCH, 75 CLOSE). The "(no frame)" row is a finding outside the frame set and is not counted.
 
 ## Gaps (file:line on main 21d76f8)
 
