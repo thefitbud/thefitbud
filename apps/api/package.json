@@ -26,6 +26,7 @@
     "seed:library:production": "tsx scripts/library-seed.ts --env production --remote",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "db:seed:local": "tsx scripts/seed-demo.ts",
+    "db:reseed": "tsx scripts/seed-demo.ts",
     "db:reset": "tsx scripts/db-reset.ts",
     "setup:local": "tsx scripts/ensure-dev-vars.ts"
   },
