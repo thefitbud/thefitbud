@@ -9,10 +9,8 @@ import {
   View,
 } from "react-native";
 import { Text } from "./Text";
-import { brand, surface } from "@fitbud/tokens";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
-
-const SHEET_RADIUS = radii.card;
+import { spacing } from "@fitbud/ui-mobile";
+import { createThemedStyles } from "../providers/ThemeProvider";
 
 type Props = {
   visible: boolean;
@@ -32,6 +30,7 @@ export function BottomSheet({
   onDismiss,
   children,
 }: Props) {
+  const styles = useStyles();
   const isWeb = Platform.OS === "web";
   const isIos = Platform.OS === "ios";
   return (
@@ -58,10 +57,10 @@ export function BottomSheet({
         <View style={[styles.sheet, !isWeb ? styles.sheetNative : null]}>
           <View style={styles.handle} accessibilityElementsHidden />
           {!headerless && title ? (
-            <Text style={styles.title}>{title}</Text>
+            <Text variant="title" style={styles.title}>{title}</Text>
           ) : null}
           {!headerless && subtitle ? (
-            <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text variant="subhead" style={styles.subtitle}>{subtitle}</Text>
           ) : null}
           <ScrollView
             style={styles.scroll}
@@ -76,7 +75,8 @@ export function BottomSheet({
   );
 }
 
-const styles = StyleSheet.create({
+/** Kit `.sheet`: card over the scrim, 22 pt top corners, a fill2 grab handle. */
+const useStyles = createThemedStyles((t) => ({
   root: {
     flex: 1,
     justifyContent: "flex-end",
@@ -86,12 +86,15 @@ const styles = StyleSheet.create({
   },
   scrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15, 17, 21, 0.45)",
+    backgroundColor: t.colors.scrim,
   },
   sheet: {
-    backgroundColor: surface.card,
-    borderTopLeftRadius: SHEET_RADIUS,
-    borderTopRightRadius: SHEET_RADIUS,
+    backgroundColor: t.colors.card,
+    borderTopLeftRadius: t.radii.sheet,
+    borderTopRightRadius: t.radii.sheet,
+    // Dark has no shadows: depth is the card on the scrim plus a 1 px edge (DESIGN-SYSTEM-v3 §4).
+    borderTopWidth: t.scheme === "dark" ? 1 : 0,
+    borderColor: t.colors.edge,
     maxHeight: "92%",
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
@@ -103,21 +106,14 @@ const styles = StyleSheet.create({
   },
   handle: {
     alignSelf: "center",
-    backgroundColor: colors.lightGrey,
-    borderRadius: 999,
-    height: 4,
-    marginBottom: spacing.md,
-    width: 40,
+    backgroundColor: t.colors.fill2,
+    borderRadius: 3,
+    height: 5,
+    marginBottom: 10,
+    width: 36,
   },
-  title: {
-    color: brand.deepNavy,
-    fontSize: 20,
-    fontWeight: "700",
-  },
+  title: {},
   subtitle: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
     marginBottom: spacing.md,
     marginTop: spacing.xs,
   },
@@ -128,4 +124,4 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingBottom: spacing.lg,
   },
-});
+}));

@@ -14,15 +14,21 @@ vi.mock("react-native", () => ({
   KeyboardAvoidingView: "KeyboardAvoidingView",
 }));
 vi.mock("./Text", () => ({ Text: "Text" }));
-vi.mock("@fitbud/tokens", () => ({
-  brand: { deepNavy: "#000" },
-  surface: { card: "#fff" },
-}));
 vi.mock("@fitbud/ui-mobile", () => ({
-  colors: { lightGrey: "#ddd", midGrey: "#888" },
-  radii: { card: 16 },
   spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
 }));
+// The sheet is called as a plain function below (no React render), so the
+// themed-styles hook is replaced by one that builds the light styles directly.
+vi.mock("../providers/ThemeProvider", () => {
+  const theme = {
+    scheme: "light",
+    colors: new Proxy({}, { get: (_t, key) => `token:${String(key)}` }),
+    radii: { sheet: 22 },
+  };
+  return {
+    createThemedStyles: (factory: (t: unknown) => unknown) => () => factory(theme),
+  };
+});
 
 import { BottomSheet } from "./BottomSheet";
 
