@@ -1,0 +1,3 @@
+Device gate run 43718038556, attempt 2
+App ref: claude/Z12-41-offline-sync
+Run: https://github.com/thefitbud/thefitbud/actions/runs/43718038556

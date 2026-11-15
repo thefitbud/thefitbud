@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - BD6305A1-7F8C-4F2A-B717-8B73E80CD49D" tests="1" failures="0" time="105.891" timestamp="2026-11-15T23:32:28">
+    <testcase id="F10 offline sync, part 2 (offline; log, sync status TR-19a, kill and relaunch)" name="F10 offline sync, part 2 (offline; log, sync status TR-19a, kill and relaunch)" classname="F10 offline sync, part 2 (offline; log, sync status TR-19a, kill and relaunch)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F10b-offline-sync-offline.yaml" time="105.783" timestamp="2026-11-15T23:32:28" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-41, device-offline"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
