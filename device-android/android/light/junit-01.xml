@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="85.934" timestamp="2026-11-15T04:57:29">
+    <testcase id="Z12-36 primitives gallery, light and dark, and the live theme flip" name="Z12-36 primitives gallery, light and dark, and the live theme flip" classname="Z12-36 primitives gallery, light and dark, and the live theme flip" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/1-primitives-gallery.yaml" time="85.895" timestamp="2026-11-15T04:57:29" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, z12-36"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
