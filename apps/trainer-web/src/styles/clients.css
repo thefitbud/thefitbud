@@ -166,7 +166,8 @@
 .roster-filter-label {
   flex: 0 0 auto;
   min-width: 5.5rem;
-  color: #5c6578;
+  color: var(--ink3);
+  white-space: nowrap;
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -292,7 +293,8 @@
 .checkins-page .inbox-card-when {
   margin: 0.45rem 0 0.65rem;
   font-size: 0.875rem;
-  color: #5c6578;
+  color: var(--ink3);
+  white-space: nowrap;
 }
 
 .checkins-page .inbox-more {
@@ -332,7 +334,8 @@
 
 .roster-table th {
   background: var(--white);
-  color: #5c6578;
+  color: var(--ink3);
+  white-space: nowrap;
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -497,7 +500,7 @@
 }
 
 .roster-table .adherence-not_available {
-  background: #f4f5f8;
+  background: var(--bg);
   color: var(--mid-grey);
 }
 
@@ -975,7 +978,8 @@
 .clients-table th {
   font-size: 12px;
   font-weight: 600;
-  color: #5c6578;
+  color: var(--ink3);
+  white-space: nowrap;
   background: #fafbfe;
 }
 
@@ -1124,13 +1128,13 @@
   font-weight: 700;
 }
 
-.av-c1 { background: #e9e5ff; color: var(--coach-ink); }
-.av-c2 { background: #e0f2f1; color: #0f5f5a; }
+.av-c1 { background: var(--coach-tint); color: var(--coach-ink); }
+.av-c2 { background: var(--av6-bg); color: var(--av6-fg); }
 .av-c3 { background: var(--coral-tint); color: var(--coral-ink); }
-.av-c4 { background: var(--warn-tint); color: #8a4b06; }
-.av-c5 { background: #e3eefd; color: #1e4b9e; }
-.av-c6 { background: #eaf5e4; color: #2f6b1e; }
-.av-c7 { background: #f1e8fa; color: #6b2a93; }
+.av-c4 { background: var(--av3-bg); color: var(--av3-fg); }
+.av-c5 { background: var(--av4-bg); color: var(--av4-fg); }
+.av-c6 { background: var(--av2-bg); color: var(--av2-fg); }
+.av-c7 { background: var(--av5-bg); color: var(--av5-fg); }
 .av-c8 { background: var(--fill); color: var(--ink2); }
 
 .client-name {

@@ -73,7 +73,7 @@
   font-size: 0.75rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  background: #e9e5ff;
+  background: var(--coach-tint);
   color: var(--coach-ink);
 }
 
@@ -566,11 +566,11 @@
 }
 
 .workspace-client-status.is-active {
-  color: #15803d;
+  color: var(--done);
 }
 
 .workspace-client-status.is-active .workspace-status-dot {
-  background: #16a34a;
+  background: var(--done);
 }
 
 .workspace-client-status.is-onboarding {
@@ -595,11 +595,11 @@
 }
 
 .workspace-adherence.is-on-track {
-  color: #15803d;
+  color: var(--done);
 }
 
 .workspace-adherence.is-needs-attention {
-  color: #c2410c;
+  color: var(--warn);
 }
 
 .workspace-adherence.is-no-recent-data,
@@ -632,13 +632,13 @@
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
   background: var(--warn-tint);
-  color: #c2410c;
+  color: var(--warn);
   font-size: 0.75rem;
   font-weight: 700;
 }
 
 .workspace-next-checkin {
-  color: #c2410c;
+  color: var(--warn);
 }
 
 .workspace-menu {
@@ -2160,7 +2160,7 @@
   height: 44px;
   border: 1px solid var(--border-default, var(--line));
   border-radius: 12px;
-  background: var(--white, var(--white));
+  background: var(--white);
   color: var(--indigo, var(--coach-ink));
 }
 

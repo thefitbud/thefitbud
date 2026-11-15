@@ -200,7 +200,7 @@ a.hv-row:focus-visible {
   border-radius: 50%;
   font-size: 12px;
   font-weight: 600;
-  background: #e9e5ff;
+  background: var(--coach-tint);
   color: var(--coach-ink);
 }
 

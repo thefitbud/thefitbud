@@ -894,7 +894,7 @@ body.is-offline .button-destructive {
   padding: 0.875rem 1rem;
   border-radius: 8px;
   background: var(--info-tint);
-  color: #1e3a8a;
+  color: var(--info-ink);
   border: 1px solid #bfdbfe;
 }
 

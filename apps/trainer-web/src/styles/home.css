@@ -338,7 +338,7 @@ a.home-tile:focus-visible {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  background: #e9e5ff;
+  background: var(--coach-tint);
   color: var(--coach-ink);
 }
 
