@@ -1,20 +1,19 @@
 import type { ReactNode } from "react";
 import {
   Pressable,
-  StyleSheet,
   TextInput,
   View,
   type TextInputProps,
 } from "react-native";
 import { Minus, Plus } from "lucide-react-native";
 import {
-  colors,
   defaultTextStyle,
   fontFamilyMedium,
   fontFamilySemiBold,
   spacing,
 } from "@fitbud/ui-mobile";
 import { Text } from "../Text";
+import { createThemedStyles, shadowColor, useTheme } from "../../providers/ThemeProvider";
 
 export function M2Field({
   label,
@@ -25,6 +24,7 @@ export function M2Field({
   children: ReactNode;
   help?: string;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -53,6 +53,8 @@ export function M2InputRow({
   focused,
   inputProps,
 }: InputProps) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View
       style={[
@@ -68,7 +70,9 @@ export function M2InputRow({
         <TextInput
           value={value}
           onChangeText={onChangeText}
-          placeholderTextColor={colors.midGrey}
+          placeholderTextColor={theme.colors.ink3}
+          selectionColor={theme.colors.brand}
+          keyboardAppearance={theme.scheme}
           style={styles.inputText}
           {...inputProps}
         />
@@ -93,6 +97,7 @@ export function RadioCard({
   onPress,
   disabled,
 }: RadioProps) {
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="radio"
@@ -123,6 +128,7 @@ export function DayPills({
   onToggle: (day: string) => void;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.dayRow}>
       {DAY_LABELS.map((day) => {
@@ -163,6 +169,8 @@ export function NumberStepper({
   onChange: (next: number) => void;
   disabled?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.stepperCard}>
       <Text style={styles.stepperValue}>
@@ -177,7 +185,7 @@ export function NumberStepper({
           onPress={() => onChange(Math.max(min, value - step))}
           style={styles.stepperBtn}
         >
-          <Minus size={18} color={colors.indigo} strokeWidth={2.2} />
+          <Minus size={18} color={theme.colors.ink} strokeWidth={2.2} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -186,7 +194,7 @@ export function NumberStepper({
           onPress={() => onChange(Math.min(max, value + step))}
           style={styles.stepperBtn}
         >
-          <Plus size={18} color={colors.indigo} strokeWidth={2.2} />
+          <Plus size={18} color={theme.colors.ink} strokeWidth={2.2} />
         </Pressable>
       </View>
     </View>
@@ -202,6 +210,7 @@ export function YesNoToggle({
   onChange: (next: boolean) => void;
   disabled?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.ynRow}>
       {(["Yes", "No"] as const).map((label) => {
@@ -232,6 +241,7 @@ export function QuestionHeading({
   children: string;
   hint?: string;
 }) {
+  const styles = useStyles();
   return (
     <Text style={styles.qh}>
       {children}
@@ -241,6 +251,7 @@ export function QuestionHeading({
 }
 
 export function NoteCallout({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
+  const styles = useStyles();
   return (
     <View style={styles.note}>
       {icon}
@@ -256,15 +267,16 @@ export function Card2({
   children: ReactNode;
   style?: object;
 }) {
+  const styles = useStyles();
   return <View style={[styles.c2, style]}>{children}</View>;
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   field: {
     marginTop: spacing.md,
   },
   fieldLabel: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontFamily: fontFamilyMedium,
     fontSize: 14,
     fontWeight: "600",
@@ -272,7 +284,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 2,
   },
   fieldHelp: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     marginHorizontal: 2,
@@ -280,8 +292,8 @@ const styles = StyleSheet.create({
   },
   inputRow: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#D5D6DE",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -290,24 +302,24 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   inputRowRo: {
-    backgroundColor: colors.background,
-    color: colors.midGrey,
+    backgroundColor: t.colors.fill,
+    color: t.colors.ink3,
   },
   inputRowFocus: {
-    borderColor: colors.indigo,
+    borderColor: t.colors.brand,
     borderWidth: 1.5,
   },
   inputText: {
     ...defaultTextStyle,
-    color: colors.nearBlack,
+    color: t.colors.ink,
     flex: 1,
     fontSize: 16,
     paddingVertical: spacing.sm,
   },
   radc: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#D5D6DE",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -317,34 +329,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   radcOn: {
-    backgroundColor: "#F7F5FF",
-    borderColor: colors.indigo,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.brand,
     borderWidth: 2,
   },
   radioDot: {
-    borderColor: "#D5D6DE",
+    borderColor: t.colors.line2,
     borderRadius: 11,
     borderWidth: 2,
     height: 22,
     width: 22,
   },
   radioDotOn: {
-    borderColor: colors.indigo,
+    borderColor: t.colors.brand,
     borderWidth: 6,
   },
   radcText: {
     flex: 1,
   },
   radcTitle: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   radcTitleOn: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
   },
   radcSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "500",
     marginTop: 1,
@@ -357,7 +369,7 @@ const styles = StyleSheet.create({
   },
   dayPill: {
     alignItems: "center",
-    borderColor: "#D5D6DE",
+    borderColor: t.colors.line2,
     borderRadius: 14,
     borderWidth: 1,
     height: 44,
@@ -365,22 +377,23 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   dayPillOn: {
-    backgroundColor: "#EDE9FF",
-    borderColor: "#C9BEFF",
-    borderWidth: 2,
+    // v3: a selected chip is an ink fill with on-brand text.
+    backgroundColor: t.colors.ink,
+    borderColor: t.colors.ink,
+    borderWidth: 1,
   },
   dayPillText: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
   },
   dayPillTextOn: {
-    color: colors.indigo,
+    color: t.colors.onBrand,
   },
   stepperCard: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
@@ -390,17 +403,17 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   stepperValue: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 22,
     fontWeight: "700",
   },
   stepperUnit: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     fontWeight: "600",
   },
   stepper: {
-    borderColor: "#E7E9F2",
+    borderColor: t.colors.line,
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
@@ -419,8 +432,8 @@ const styles = StyleSheet.create({
   },
   ynBtn: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#D5D6DE",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
     borderRadius: 16,
     borderWidth: 1,
     flex: 1,
@@ -428,19 +441,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   ynBtnOn: {
-    backgroundColor: "#EDE9FF",
-    borderColor: "#C9BEFF",
+    backgroundColor: t.colors.ink,
+    borderColor: t.colors.ink,
   },
   ynText: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "700",
   },
   ynTextOn: {
-    color: colors.indigo,
+    color: t.colors.onBrand,
   },
   qh: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
     fontWeight: "700",
@@ -449,13 +462,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   qhHint: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "500",
   },
   note: {
-    backgroundColor: "#F7F5FF",
-    borderColor: "#E4DEFF",
+    backgroundColor: t.colors.brandTint,
+    borderColor: t.colors.brandTint,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -465,20 +478,20 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   noteText: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     flex: 1,
     fontSize: 15,
     lineHeight: 21,
   },
   c2: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     padding: spacing.lg,
-    shadowColor: "#1A1248",
+    shadowColor: shadowColor(t),
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
+    shadowOpacity: t.scheme === "dark" ? 0 : 0.06,
     shadowRadius: 3,
   },
-});
+}));

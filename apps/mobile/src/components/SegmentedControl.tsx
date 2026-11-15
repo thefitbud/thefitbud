@@ -1,6 +1,6 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Text } from "./Text";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import { createThemedStyles } from "../providers/ThemeProvider";
 
 type Props<T extends string> = {
   options: Array<{ id: T; label: string }>;
@@ -13,6 +13,7 @@ export function SegmentedControl<T extends string>({
   value,
   onChange,
 }: Props<T>) {
+  const styles = useStyles();
   return (
     <View accessibilityRole="tablist" style={styles.wrap}>
       {options.map((option) => {
@@ -37,32 +38,37 @@ export function SegmentedControl<T extends string>({
   );
 }
 
-const styles = StyleSheet.create({
+/** Kit `.seg`: fill track, the selected segment raised on card with ink text. */
+const useStyles = createThemedStyles((t) => ({
   wrap: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.control,
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.segment,
     flexDirection: "row",
     gap: 2,
     padding: 2,
   },
   segment: {
     alignItems: "center",
-    borderRadius: radii.control - 2,
+    borderRadius: t.radii.segment - 2,
     flex: 1,
     justifyContent: "center",
     minHeight: 36,
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: t.spacing.sm,
   },
   segmentSelected: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
+    shadowColor: `rgb(${t.colors.sh})`,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: t.scheme === "dark" ? 0 : 0.12,
+    shadowRadius: 3,
+    elevation: t.scheme === "dark" ? 0 : 1,
   },
   label: {
-    color: colors.midGrey,
-    fontSize: 13,
-    fontWeight: "500",
-  },
-  labelSelected: {
-    color: colors.indigo,
+    color: t.colors.ink2,
+    fontSize: 14,
     fontWeight: "600",
   },
-});
+  labelSelected: {
+    color: t.colors.ink,
+  },
+}));
