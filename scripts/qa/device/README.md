@@ -18,7 +18,7 @@ shows up there once `device.yml` is on `main`.) From a terminal:
 
 ```bash
 gh workflow run device.yml --repo thefitbud/thefitbud --ref <branch> \
-  -f platforms=both -f themes=both -f flows=smoke -f roles= -f extras=all
+  -f platforms=both -f themes=both -f flows=launch -f roles= -f extras=all
 ```
 
 | Input | Values | Default | What it does |
@@ -26,7 +26,7 @@ gh workflow run device.yml --repo thefitbud/thefitbud --ref <branch> \
 | `ref` | a branch, tag or SHA | empty (the dispatched branch) | the app to build. `scripts/qa` comes from the workflow's commit; Maestro flows from `ref`, with harness flows added only where `ref` has none |
 | `platforms` | `both`, `ios`, `android` | `both` | which jobs run |
 | `themes` | `both`, `light`, `dark` | `both` | system themes the flows run in, one after the other |
-| `flows` | a Maestro tag, or comma-separated path globs under `apps/mobile/.maestro` | `smoke` | `smoke`, `full`, `device`, `trainee` …, or e.g. `flows/v3/F08*.yaml,flows/trainee/today.yaml` (`*` stays in a folder, `**` crosses folders) |
+| `flows` | comma-separated Maestro tags and/or path globs under `apps/mobile/.maestro` (union; an item matching nothing fails) | `launch` | `launch`, `full`, `device`, `trainee` …, or e.g. `flows/v3/F08*.yaml,flows/trainee/today.yaml` (`*` stays in a folder, `**` crosses folders) |
 | `roles` | comma-separated `trainee`, `trainer`, `dual`, `auth` | empty | keeps only the selected flows tagged with one of these |
 | `extras` | `all`, `none` | `all` | after the flows: push + lock-screen tap, Live Activity tap attempt, offline → online |
 | `android_api` | an API level | `36` | the emulator image, `system-images;android-<n>;google_apis;x86_64` |
@@ -34,8 +34,26 @@ gh workflow run device.yml --repo thefitbud/thefitbud --ref <branch> \
 The workflow also runs on a pull request, **only** when the harness itself changes
 (`scripts/qa/device/**`, `device.yml`, `apps/mobile/.maestro/common/**` and
 `apps/mobile/.maestro/device/**`), with the
-defaults above. It never runs on other mobile PRs, it is not a required check and must
+defaults above, except `flows=launch` (the launch smoke flows only). It never runs on other mobile PRs, it is not a required check and must
 not become one, it reads no secret, and it never cancels a run (no concurrency group).
+
+## Scoped task runs (Firoz, 15 Nov 2026)
+
+A W12 task's device run covers only the flows for the screens it changed, plus the **launch
+smoke test** on iOS and Android: the app opens, sign-in works, Today loads
+(`apps/mobile/.maestro/device/launch/`, tag `launch`: the demo trainee reaches a loaded
+Today, the demo trainer `rahul.coach` reaches a loaded Attention). The older `smoke` flows
+fail on the current app and are not part of this.
+
+- Dispatch with `flows=launch,<task tag or flow globs>`. The list may mix tags and globs: an item
+  with only letters, digits, `-` or `_` is a tag, anything else (a `/` or `*`) is a glob; the run
+  is their union, and a tag or glob that matches no flow fails the dispatch, for example
+  `-f flows=launch,z12-44` or `-f flows=launch,flows/v3/F08*.yaml`.
+- Record in the PR which flows ran and why they cover the change.
+- Before any device run, run typecheck, lint and the unit tests, and do the Expo web
+  screenshot check against the v3 mocks (393x852, light and dark; method in
+  `docs/qa/QT9/README.md` and `docs/qa/BT3d/QA-BT3d.md`).
+- Z12-58 alone runs the full suite.
 
 ## What a run does
 
