@@ -343,6 +343,23 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   assert.match(signIn, /visible: "Today's workout\.\*\|/);
 });
 
+test("flows lists may mix tags and globs; an item with no match is an error", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "sel-mix-"));
+  const write = (f, tags) => {
+    fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+    fs.writeFileSync(path.join(root, f), `appId: x\ntags:\n${tags.map((t) => `  - ${t}`).join("\n")}\n---\n`);
+  };
+  write("device/launch/a.yaml", ["launch"]);
+  write("flows/v3/F29a.yaml", ["full"]);
+  write("flows/v3/F30a.yaml", ["full"]);
+  const rel = (fl) => fl.map((f) => path.relative(root, f));
+  assert.deepEqual(rel(selectFlows({ flows: "launch,flows/v3/F29*.yaml", root })), ["device/launch/a.yaml", "flows/v3/F29a.yaml"]);
+  // duplicates collapse, order is path order
+  assert.deepEqual(rel(selectFlows({ flows: "flows/v3/F29a.yaml,launch,flows/v3/F2*.yaml", root })), ["device/launch/a.yaml", "flows/v3/F29a.yaml"]);
+  assert.throws(() => selectFlows({ flows: "launch,nosuchtag", root }), /tag "nosuchtag" matches no flow/);
+  assert.throws(() => selectFlows({ flows: "launch,flows/v9/*.yaml", root }), /glob "flows\/v9\/\*\.yaml" matches no flow/);
+});
+
 // ---------- patch-native ----------
 
 const APP_DELEGATE = `#import "AppDelegate.h"

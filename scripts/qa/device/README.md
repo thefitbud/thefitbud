@@ -45,7 +45,9 @@ smoke test** on iOS and Android: the app opens, sign-in works, Today loads
 Today, the demo trainer `rahul.coach` reaches a loaded Attention). The older `smoke` flows
 fail on the current app and are not part of this.
 
-- Dispatch with `flows=launch,<task tag or flow globs>`, for example
+- Dispatch with `flows=launch,<task tag or flow globs>`. The list may mix tags and globs: an item
+  with only letters, digits, `-` or `_` is a tag, anything else (a `/` or `*`) is a glob; the run
+  is their union, and a tag or glob that matches no flow fails the dispatch, for example
   `-f flows=launch,z12-44` or `-f flows=launch,flows/v3/F08*.yaml`.
 - Record in the PR which flows ran and why they cover the change.
 - Before any device run, run typecheck, lint and the unit tests, and do the Expo web
