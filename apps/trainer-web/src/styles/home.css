@@ -18,18 +18,18 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 4px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   font-size: 13px;
   font-weight: 500;
 }
 
 .home-title {
   margin: 0;
-  font-family: var(--font-family, Satoshi, "Noto Sans", system-ui, sans-serif);
+  font-family: var(--font-family, Inter, "Noto Sans Devanagari", system-ui, sans-serif);
   font-size: 22px;
   font-weight: 500;
   line-height: 28px;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
   letter-spacing: -0.02em;
 }
 
@@ -40,7 +40,7 @@ h1.home-title:focus {
 }
 
 h1.home-title:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--indigo, var(--coach-ink));
   outline-offset: 2px;
 }
 
@@ -48,7 +48,7 @@ h1.home-title:focus-visible {
   margin: 4px 0 0;
   font-size: 14px;
   line-height: 20px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .home-tiles {
@@ -69,8 +69,8 @@ h1.home-title:focus-visible {
   gap: 12px;
   padding: 14px 16px;
   border-radius: 16px;
-  background: #fff;
-  border: 1px solid #e7e9f2;
+  background: var(--white);
+  border: 1px solid var(--line);
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
   text-align: left;
   text-decoration: none;
@@ -85,7 +85,7 @@ a.home-tile:hover {
 }
 
 a.home-tile:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--indigo, var(--coach-ink));
   outline-offset: 2px;
 }
 
@@ -93,7 +93,7 @@ a.home-tile:focus-visible {
 .home-tile.is-zero {
   cursor: default;
   opacity: 1;
-  background: var(--page-bg, #f3f5fb);
+  background: var(--page-bg, var(--bg));
   box-shadow: none;
 }
 
@@ -116,7 +116,7 @@ a.home-tile:focus-visible {
   font-size: 13px;
   line-height: 16px;
   font-weight: 600;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
   white-space: nowrap;
 }
 
@@ -127,20 +127,20 @@ a.home-tile:focus-visible {
   line-height: 28px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 
 .home-tile.is-zero .home-tile-num,
 .home-tile:disabled .home-tile-num {
-  color: #858b96;
+  color: var(--ink3);
 }
 
 .home-tile-arrow {
   margin-left: auto;
   flex: none;
-  color: #858b96;
+  color: var(--ink3);
 }
 
 .home-tile-zero {
@@ -149,14 +149,14 @@ a.home-tile:focus-visible {
   bottom: 10px;
   font-size: 12px;
   line-height: 16px;
-  color: #858b96;
+  color: var(--ink3);
   white-space: nowrap;
 }
 
 /* DS4: a touch screen has no hover. The tint is the pressed state only. */
 @media (hover: none) {
   a.home-tile:hover {
-    border-color: #e7e9f2;
+    border-color: var(--line);
     box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
   }
 
@@ -172,7 +172,7 @@ a.home-tile:focus-visible {
 
   .home-row:active,
   .home-li.is-target:active {
-    background: #f7f8fc;
+    background: var(--bg);
   }
 }
 
@@ -191,8 +191,8 @@ a.home-tile:focus-visible {
 }
 
 .home-card {
-  background: #fff;
-  border: 1px solid #e7e9f2;
+  background: var(--white);
+  border: 1px solid var(--line);
   border-radius: 16px;
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
 }
@@ -216,7 +216,7 @@ a.home-tile:focus-visible {
   font-size: 18px;
   line-height: 26px;
   font-weight: 600;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
   letter-spacing: -0.01em;
 }
 
@@ -233,8 +233,8 @@ a.home-tile:focus-visible {
   height: 20px;
   padding: 0 7px;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: var(--ink-700, #25262b);
+  background: var(--fill);
+  color: var(--ink-700, var(--ink2));
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -246,11 +246,11 @@ a.home-tile:focus-visible {
   gap: 6px;
   font-size: 12px;
   font-weight: 500;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .home-rows {
-  border-top: 1px solid #e7e9f2;
+  border-top: 1px solid var(--line);
 }
 
 .home-row {
@@ -261,7 +261,7 @@ a.home-tile:focus-visible {
   min-height: 60px;
   height: auto;
   padding: 8px 12px 8px 16px;
-  border-bottom: 1px solid #e7e9f2;
+  border-bottom: 1px solid var(--line);
   outline: none;
   cursor: pointer;
 }
@@ -272,13 +272,13 @@ a.home-tile:focus-visible {
 
 .home-row:hover,
 .home-row.is-focused {
-  background: #f7f8fc;
+  background: var(--bg);
 }
 
 .home-row:focus-visible,
 .home-li.is-target:focus-visible {
   outline: none;
-  box-shadow: inset 0 0 0 2px var(--indigo, #4527c6);
+  box-shadow: inset 0 0 0 2px var(--indigo, var(--coach-ink));
   border-radius: 10px;
 }
 
@@ -315,7 +315,7 @@ a.home-tile:focus-visible {
 .home-who b {
   font-size: 14px;
   font-weight: 600;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
   white-space: nowrap;
   overflow: visible;
   text-overflow: clip;
@@ -339,23 +339,23 @@ a.home-tile:focus-visible {
   font-weight: 700;
   letter-spacing: 0.02em;
   background: #e9e5ff;
-  color: #3b23a8;
+  color: var(--coach-ink);
 }
 
 .home-av.c2 { background: #e0f2f1; color: #0f5f5a; }
-.home-av.c3 { background: #fdecef; color: #a3243f; }
-.home-av.c4 { background: #fff1db; color: #8a4b06; }
+.home-av.c3 { background: var(--coral-tint); color: var(--coral-ink); }
+.home-av.c4 { background: var(--warn-tint); color: #8a4b06; }
 .home-av.c5 { background: #e3eefd; color: #1e4b9e; }
 .home-av.c6 { background: #eaf5e4; color: #2f6b1e; }
 .home-av.c7 { background: #f1e8fa; color: #6b2a93; }
-.home-av.c8 { background: #eceef2; color: #374151; }
+.home-av.c8 { background: var(--fill); color: var(--ink2); }
 
 .home-issue {
   display: flex;
   align-items: center;
   min-width: 0;
   font-size: 14px;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
 }
 
 .home-issue-txt {
@@ -370,15 +370,15 @@ a.home-tile:focus-visible {
   margin-left: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-500, #5b616b);
-  background: #f3f4f6;
+  color: var(--ink-500, var(--ink3));
+  background: var(--fill);
   border-radius: 6px;
   padding: 2px 6px;
 }
 
 .home-age {
   font-size: 13px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -388,12 +388,12 @@ a.home-tile:focus-visible {
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  border-top: 1px solid #e7e9f2;
+  border-top: 1px solid var(--line);
   font-size: 13px;
 }
 
 .home-list {
-  border-top: 1px solid #e7e9f2;
+  border-top: 1px solid var(--line);
 }
 
 .home-li {
@@ -402,7 +402,7 @@ a.home-tile:focus-visible {
   flex-wrap: wrap;
   gap: 8px 12px;
   padding: 12px 16px;
-  border-bottom: 1px solid #e7e9f2;
+  border-bottom: 1px solid var(--line);
 }
 
 .home-li.is-target {
@@ -410,7 +410,7 @@ a.home-tile:focus-visible {
 }
 
 .home-li.is-target:hover {
-  background: #f7f8fc;
+  background: var(--bg);
 }
 
 .home-li:last-child {
@@ -427,7 +427,7 @@ a.home-tile:focus-visible {
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .home-li-name {
@@ -439,7 +439,7 @@ a.home-tile:focus-visible {
 }
 
 .home-li-name:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--indigo, var(--coach-ink));
   outline-offset: 2px;
 }
 
@@ -447,7 +447,7 @@ a.home-tile:focus-visible {
   display: block;
   font-size: 13px;
   line-height: 18px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .home-topic {
@@ -456,8 +456,8 @@ a.home-tile:focus-visible {
   height: 22px;
   padding: 0 8px;
   border-radius: 6px;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--fill);
+  color: var(--ink2);
   font-size: 12px;
   font-weight: 600;
   margin-left: 4px;
@@ -468,7 +468,7 @@ a.home-tile:focus-visible {
 .home-skel {
   display: block;
   border-radius: 8px;
-  background: linear-gradient(90deg, #eef0f6 0%, #f7f8fc 50%, #eef0f6 100%);
+  background: linear-gradient(90deg, var(--fill) 0%, var(--bg) 50%, var(--fill) 100%);
   background-size: 200% 100%;
   animation: home-skel-shine 1.2s ease-in-out infinite;
 }
@@ -548,7 +548,7 @@ a.home-tile:focus-visible {
 }
 
 .home-collapsed:hover {
-  background: #f7f8fc;
+  background: var(--bg);
 }
 
 .home-note {
@@ -557,8 +557,8 @@ a.home-tile:focus-visible {
   gap: 8px;
   padding: 10px 20px 12px;
   font-size: 12px;
-  color: var(--ink-500, #5b616b);
-  border-top: 1px solid #e7e9f2;
+  color: var(--ink-500, var(--ink3));
+  border-top: 1px solid var(--line);
   background: #fcfcfe;
   border-radius: 0 0 16px 16px;
 }
@@ -573,7 +573,7 @@ a.home-tile:focus-visible {
 
 .home-feed {
   padding: 6px 16px 12px;
-  border-top: 1px solid #e7e9f2;
+  border-top: 1px solid var(--line);
 }
 
 .home-ev {
@@ -583,7 +583,7 @@ a.home-tile:focus-visible {
   padding: 9px 0;
   font-size: 13px;
   line-height: 18px;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
   position: relative;
 }
 
@@ -592,8 +592,8 @@ a.home-tile:focus-visible {
   height: 8px;
   border-radius: 50%;
   margin: 5px 4px 0;
-  background: #e6e8eb;
-  box-shadow: 0 0 0 3px #fff;
+  background: var(--fill2);
+  box-shadow: 0 0 0 3px var(--white);
   position: relative;
   z-index: 1;
 }
@@ -605,18 +605,18 @@ a.home-tile:focus-visible {
   top: 18px;
   bottom: -9px;
   width: 1px;
-  background: #e7e9f2;
+  background: var(--line);
 }
 
 .home-ev b {
   font-weight: 600;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .home-ev-when {
   display: block;
   font-size: 12px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   margin-top: 1px;
   font-variant-numeric: tabular-nums;
 }
@@ -626,8 +626,8 @@ a.home-tile:focus-visible {
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--deep-navy, #1a1248);
-  color: #fff;
+  background: var(--deep-navy, var(--ink));
+  color: var(--white);
   padding: 12px 16px;
   border-radius: 12px;
   display: flex;
@@ -640,7 +640,7 @@ a.home-tile:focus-visible {
 .home-toast button {
   background: transparent;
   border: 0;
-  color: #fff;
+  color: var(--white);
   font-weight: 700;
   text-decoration: underline;
   cursor: pointer;
@@ -660,7 +660,7 @@ a.home-tile:focus-visible {
 .drawer-panel {
   width: min(520px, 100vw);
   height: 100%;
-  background: #fff;
+  background: var(--white);
   box-shadow: 0 8px 24px rgb(26 18 72 / 10%);
   display: flex;
   flex-direction: column;
@@ -689,7 +689,7 @@ a.home-tile:focus-visible {
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  border-bottom: 1px solid #e7e9f2;
+  border-bottom: 1px solid var(--line);
 }
 
 .drawer-head h2 {
@@ -697,7 +697,7 @@ a.home-tile:focus-visible {
   flex: 1;
   font-size: 18px;
   font-weight: 600;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .drawer-body {
@@ -711,21 +711,21 @@ a.home-tile:focus-visible {
 
 .drawer-foot {
   padding: 16px 20px;
-  border-top: 1px solid #e7e9f2;
+  border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #fff;
+  background: var(--white);
 }
 
 .drawer-helper {
   margin: 0;
   font-size: 12px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .drawer-source {
-  border: 1px solid #e7e9f2;
+  border: 1px solid var(--line);
   border-radius: 12px;
   padding: 14px 16px;
   background: #fafbfd;
@@ -739,7 +739,7 @@ a.home-tile:focus-visible {
   flex-direction: column;
   gap: 8px;
   font-size: 13px;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
 }
 
 /* Trainer resolve confirmation (frames 02 / 132). */
@@ -749,8 +749,8 @@ a.home-tile:focus-visible {
   gap: 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: var(--semantic-positive-fill, #ecfdf5);
-  color: var(--semantic-positive-text, #047857);
+  background: var(--semantic-positive-fill, var(--done-tint));
+  color: var(--semantic-positive-text, var(--done));
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
@@ -765,7 +765,7 @@ a.home-tile:focus-visible {
   margin-left: auto;
   border: 0;
   background: transparent;
-  color: var(--semantic-positive-text, #047857);
+  color: var(--semantic-positive-text, var(--done));
   font: inherit;
   font-size: 13px;
   font-weight: 600;
@@ -782,8 +782,8 @@ a.home-tile:focus-visible {
 }
 
 .drawer-outcomes button {
-  border: 1px solid #d9dce8;
-  background: #fff;
+  border: 1px solid var(--line2);
+  background: var(--white);
   border-radius: 999px;
   padding: 6px 12px;
   font: inherit;
@@ -793,9 +793,9 @@ a.home-tile:focus-visible {
 }
 
 .drawer-outcomes button.is-on {
-  background: #edeaff;
+  background: var(--coach-tint);
   border-color: transparent;
-  color: var(--indigo, #4527c6);
+  color: var(--indigo, var(--coach-ink));
   font-weight: 600;
 }
 
@@ -983,8 +983,8 @@ a.home-tile:focus-visible {
   height: 56px;
   margin-bottom: 8px;
   border-radius: 14px;
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--done-tint);
+  color: var(--done);
 }
 
 .home-clear-ttl {
@@ -992,7 +992,7 @@ a.home-tile:focus-visible {
   font-size: 17px;
   font-weight: 500;
   line-height: 24px;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .home-clear-copy {
@@ -1000,7 +1000,7 @@ a.home-tile:focus-visible {
   margin: 0;
   font-size: 14px;
   line-height: 20px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .home-clear-line {
@@ -1008,7 +1008,7 @@ a.home-tile:focus-visible {
   padding: 0 20px 18px;
   font-size: 14px;
   line-height: 20px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 @media (max-width: 767px) {

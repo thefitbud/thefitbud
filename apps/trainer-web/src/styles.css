@@ -1,8 +1,55 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap");
 @import "@fitbud/tokens/tokens.css";
+@import "@fitbud/tokens/tokens-v3.css";
+
+/*
+ * Z12-37: trainer web reads the v3 tokens (tokens-v3.css) and Inter, light only (D-W12-14).
+ * tokens-v3.css also defines :root[data-theme="dark"]; nothing in trainer web sets
+ * data-theme and there is no prefers-color-scheme styling, so dark stays off.
+ * The legacy names below keep the existing rules working and point at the v3 tokens.
+ */
+:root {
+  --font-family: Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --near-black: var(--ink);
+  --dark-grey: var(--ink2);
+  --mid-grey: var(--ink3);
+  --light-grey: var(--fill2);
+  --page-bg: var(--bg);
+  --surface: var(--card);
+  --border: var(--line);
+  --deep-navy: var(--brand);
+  --indigo: var(--coach-ink);
+  --pale-lavender: var(--coach-tint);
+  --success: var(--done);
+  --warning: var(--warn);
+  --error: var(--crit);
+  --ink-900: var(--ink);
+  --ink-700: var(--ink2);
+  --ink-500: var(--ink3);
+  --ink-200: var(--fill2);
+  --border-default: var(--line);
+  --surface-page-web: var(--bg);
+  --surface-card: var(--card);
+  --brand-indigo: var(--coach-ink);
+  --brand-deep-navy: var(--brand);
+  --semantic-critical-fill: var(--crit-tint);
+  --semantic-critical-text: var(--crit);
+  --semantic-attention-fill: var(--warn-tint);
+  --semantic-attention-text: var(--warn);
+  --semantic-positive-fill: var(--done-tint);
+  --semantic-positive-text: var(--done);
+  --semantic-success-fill: var(--done-tint);
+  --semantic-success-text: var(--done);
+  --semantic-info-fill: var(--info-tint);
+  --semantic-info-text: var(--info);
+  --semantic-neutral-fill: var(--fill);
+  --semantic-neutral-text: var(--ink2);
+  --semantic-brand-selected-fill: var(--coach-tint);
+  --semantic-brand-selected-text: var(--coach-ink);
+  --semantic-destructive: var(--crit);
+}
 
 :root {
-  --white: #ffffff;
   --shadow: 0 8px 24px rgb(26 18 72 / 5%);
   --radius: 16px;
   --font: var(--font-family);
@@ -203,8 +250,8 @@ input {
 }
 
 .offline-banner {
-  background: #fffbeb;
-  color: #b45309;
+  background: var(--warn-tint);
+  color: var(--warn);
   border-bottom: 1px solid #fbe3b0;
   padding: 10px 16px;
   font-size: 14px;
@@ -362,13 +409,13 @@ body.is-offline .button-destructive {
 }
 
 .status-config-draft {
-  background: #fff7ed;
-  color: #b45309;
+  background: var(--warn-tint);
+  color: var(--warn);
 }
 
 .status-config-active {
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--done-tint);
+  color: var(--done);
 }
 
 .button-primary,
@@ -385,7 +432,7 @@ body.is-offline .button-destructive {
   padding: 0 0.875rem;
   border-radius: 10px;
   border: 1px solid transparent;
-  font-family: var(--font-family, Satoshi, "Noto Sans", "Noto Sans Devanagari", system-ui, sans-serif);
+  font-family: var(--font-family, Inter, "Noto Sans Devanagari", system-ui, sans-serif);
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1;
@@ -426,17 +473,17 @@ body.is-offline .button-destructive {
 .button-secondary {
   background: var(--white);
   color: var(--ink-700, var(--deep-navy));
-  border-color: var(--border-strong, #d9dce8);
+  border-color: var(--border-strong, var(--line2));
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
 }
 
 .button-secondary:hover,
 .button-secondary:focus-visible {
-  background: var(--hover, #f7f8fc);
+  background: var(--hover, var(--bg));
 }
 
 .button-tinted {
-  background: var(--pale-lavender, #edeaff);
+  background: var(--pale-lavender, var(--coach-tint));
   color: var(--indigo);
 }
 
@@ -453,13 +500,13 @@ body.is-offline .button-destructive {
 
 .button-ghost:hover,
 .button-ghost:focus-visible {
-  background: var(--pale-lavender, #edeaff);
+  background: var(--pale-lavender, var(--coach-tint));
 }
 
 .button-destructive,
 .button-danger {
-  background: #b91c1c;
-  color: #fff;
+  background: var(--crit);
+  color: var(--white);
   border-color: transparent;
 }
 
@@ -468,7 +515,7 @@ body.is-offline .button-destructive {
 .button-danger:hover,
 .button-danger:focus-visible {
   filter: brightness(1.05);
-  outline: 2px solid #b91c1c;
+  outline: 2px solid var(--crit);
   outline-offset: 2px;
 }
 
@@ -509,39 +556,39 @@ body.is-offline .button-destructive {
 }
 
 .status-chip-critical {
-  background: var(--semantic-critical-fill, #fef2f2);
-  color: var(--semantic-critical-text, #b91c1c);
+  background: var(--semantic-critical-fill, var(--crit-tint));
+  color: var(--semantic-critical-text, var(--crit));
   border-color: #fecaca;
 }
 
 .status-chip-attention {
-  background: var(--semantic-attention-fill, #fffbeb);
-  color: var(--semantic-attention-text, #b45309);
+  background: var(--semantic-attention-fill, var(--warn-tint));
+  color: var(--semantic-attention-text, var(--warn));
   border-color: #fde68a;
 }
 
 .status-chip-positive {
-  background: var(--semantic-positive-fill, #ecfdf5);
-  color: var(--semantic-positive-text, #047857);
+  background: var(--semantic-positive-fill, var(--done-tint));
+  color: var(--semantic-positive-text, var(--done));
   border-color: #a7f3d0;
 }
 
 .status-chip-info {
-  background: var(--semantic-info-fill, #eff6ff);
-  color: var(--semantic-info-text, #1d4ed8);
+  background: var(--semantic-info-fill, var(--info-tint));
+  color: var(--semantic-info-text, var(--info));
   border-color: #bfdbfe;
 }
 
 .status-chip-neutral,
 .status-chip-brand-selected {
-  background: var(--semantic-neutral-fill, #f3f4f6);
-  color: var(--semantic-neutral-text, #374151);
+  background: var(--semantic-neutral-fill, var(--fill));
+  color: var(--semantic-neutral-text, var(--ink2));
   border-color: #e5e7eb;
 }
 
 .status-chip-brand-selected {
-  background: var(--semantic-brand-selected-fill, #edeaff);
-  color: var(--semantic-brand-selected-text, #4527c6);
+  background: var(--semantic-brand-selected-fill, var(--coach-tint));
+  color: var(--semantic-brand-selected-text, var(--coach-ink));
   border-color: #d4ccff;
 }
 
@@ -557,7 +604,7 @@ body.is-offline .button-destructive {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   font-size: 1.25rem;
   font-weight: 700;
   line-height: 1;
@@ -566,8 +613,8 @@ body.is-offline .button-destructive {
 
 .overflow-menu-trigger:hover,
 .overflow-menu-trigger:focus-visible {
-  color: var(--deep-navy, #1a1248);
-  background: #f3f4f6;
+  color: var(--deep-navy, var(--ink));
+  background: var(--fill);
   outline: none;
 }
 
@@ -605,7 +652,7 @@ body.is-offline .button-destructive {
 }
 
 .overflow-menu-item-destructive {
-  color: var(--semantic-critical-text, #b91c1c);
+  color: var(--semantic-critical-text, var(--crit));
 }
 
 .button-link:focus-visible {
@@ -704,18 +751,18 @@ body.is-offline .button-destructive {
 }
 
 .status-onboarding_pending {
-  background: #fff7ed;
-  color: #b45309;
+  background: var(--warn-tint);
+  color: var(--warn);
 }
 
 .status-onboarding_submitted {
-  background: #eff6ff;
+  background: var(--info-tint);
   color: var(--info);
 }
 
 .status-coaching_ready {
-  background: #ecfdf5;
-  color: #047857;
+  background: var(--done-tint);
+  color: var(--done);
 }
 
 .empty-state {
@@ -846,7 +893,7 @@ body.is-offline .button-destructive {
   margin: 0;
   padding: 0.875rem 1rem;
   border-radius: 8px;
-  background: #eff6ff;
+  background: var(--info-tint);
   color: #1e3a8a;
   border: 1px solid #bfdbfe;
 }
@@ -1139,14 +1186,14 @@ body.is-offline .button-destructive {
 .status-pill.status-confirmed,
 .status-pill.status-modified {
   background: rgb(16 185 129 / 14%);
-  color: #047857;
+  color: var(--done);
 }
 
 .status-pill.status-missed,
 .status-pill.status-overdue,
 .status-pill.status-skipped {
   background: rgb(239 68 68 / 12%);
-  color: #b91c1c;
+  color: var(--crit);
 }
 
 .status-pill.status-in_progress,
@@ -1158,12 +1205,12 @@ body.is-offline .button-destructive {
 .status-pill.status-active,
 .status-pill.status-acknowledged {
   background: rgb(59 130 246 / 12%);
-  color: #1d4ed8;
+  color: var(--info);
 }
 
 .status-pill.status-resolved {
   background: rgb(16 185 129 / 12%);
-  color: #047857;
+  color: var(--done);
 }
 
 .attention-list {
@@ -1200,7 +1247,7 @@ body.is-offline .button-destructive {
 }
 
 .form-success {
-  color: #047857;
+  color: var(--done);
   background: rgb(16 185 129 / 12%);
   border-radius: 8px;
   padding: 0.75rem 1rem;
@@ -1436,13 +1483,13 @@ body.is-offline .button-destructive {
   display: grid;
   min-height: 100vh;
   grid-template-columns: 1fr 1fr;
-  background: var(--page, #f3f5fb);
+  background: var(--page, var(--bg));
 }
 
 .auth-brandside {
   position: relative;
   overflow: hidden;
-  color: #fff;
+  color: var(--white);
   padding: 48px 56px;
   display: flex;
   flex-direction: column;
@@ -1501,7 +1548,7 @@ body.is-offline .button-destructive {
   font-weight: 700;
   letter-spacing: -0.03em;
   max-width: 520px;
-  color: #fff;
+  color: var(--white);
 }
 
 .auth-pitch > p {
@@ -1524,10 +1571,10 @@ body.is-offline .button-destructive {
 }
 
 .auth-glimpse-inner {
-  background: #fff;
+  background: var(--white);
   border-radius: 12px;
   overflow: hidden;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
 }
 
 .auth-glimpse-head {
@@ -1535,13 +1582,13 @@ body.is-offline .button-destructive {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border, #e7e9f2);
+  border-bottom: 1px solid var(--border, var(--line));
 }
 
 .auth-glimpse-head .t-h3 {
   font-size: 15px;
   font-weight: 600;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .auth-count {
@@ -1552,8 +1599,8 @@ body.is-offline .button-destructive {
   height: 20px;
   padding: 0 7px;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: #25262b;
+  background: var(--fill);
+  color: var(--ink2);
   font-size: 12px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -1566,7 +1613,7 @@ body.is-offline .button-destructive {
   gap: 10px;
   height: 48px;
   padding: 0 16px;
-  border-bottom: 1px solid var(--border, #e7e9f2);
+  border-bottom: 1px solid var(--border, var(--line));
   font-size: 13px;
 }
 
@@ -1579,7 +1626,7 @@ body.is-offline .button-destructive {
   align-items: center;
   gap: 8px;
   font-weight: 600;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .auth-glimpse .av {
@@ -1594,8 +1641,8 @@ body.is-offline .button-destructive {
 }
 
 .auth-glimpse .av.c3 {
-  background: #fdecef;
-  color: #a3243f;
+  background: var(--coral-tint);
+  color: var(--coral-ink);
 }
 .auth-glimpse .av.c6 {
   background: #eaf5e4;
@@ -1618,18 +1665,18 @@ body.is-offline .button-destructive {
 }
 
 .auth-glimpse .chip.crit {
-  background: #fef2f2;
-  color: #b91c1c;
+  background: var(--crit-tint);
+  color: var(--crit);
   border-color: #fbd5d5;
 }
 .auth-glimpse .chip.attn {
-  background: #fffbeb;
-  color: #b45309;
+  background: var(--warn-tint);
+  color: var(--warn);
   border-color: #fbe3b0;
 }
 .auth-glimpse .chip.info {
-  background: #eff6ff;
-  color: #1d4ed8;
+  background: var(--info-tint);
+  color: var(--info);
   border-color: #cfe0fd;
 }
 
@@ -1662,8 +1709,8 @@ body.is-offline .button-destructive {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: #fff;
-  border: 1px solid var(--border, #e7e9f2);
+  background: var(--white);
+  border: 1px solid var(--border, var(--line));
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
   display: flex;
   align-items: center;
@@ -1675,7 +1722,7 @@ body.is-offline .button-destructive {
   font-size: 28px;
   line-height: 36px;
   font-weight: 700;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
   letter-spacing: -0.02em;
   margin: 20px 0 0;
 }
@@ -1683,7 +1730,7 @@ body.is-offline .button-destructive {
 .auth-lead {
   font-size: 15px;
   line-height: 22px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   margin: 6px 0 0;
 }
 
@@ -1706,7 +1753,7 @@ body.is-offline .button-destructive {
   font-size: 13px;
   line-height: 16px;
   font-weight: 600;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
 }
 
 .field-label-row {
@@ -1722,14 +1769,14 @@ body.is-offline .button-destructive {
   gap: 8px;
   height: 44px;
   padding: 0 12px;
-  border: 1px solid var(--border-strong, #d9dce8);
+  border: 1px solid var(--border-strong, var(--line2));
   border-radius: 10px;
-  background: #fff;
+  background: var(--white);
   box-shadow: inset 0 1px 1px rgb(26 18 72 / 3%);
 }
 
 .input-shell:focus-within {
-  border-color: var(--indigo, #4527c6);
+  border-color: var(--indigo, var(--coach-ink));
   box-shadow: 0 0 0 3px rgb(69 39 198 / 16%);
 }
 
@@ -1753,7 +1800,7 @@ body.is-offline .button-destructive {
   height: 30px;
   border: 0;
   background: none;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   cursor: pointer;
   border-radius: 8px;
   margin-right: -6px;
@@ -1761,7 +1808,7 @@ body.is-offline .button-destructive {
 
 .field-hint {
   font-size: 12px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .auth-or {
@@ -1770,7 +1817,7 @@ body.is-offline .button-destructive {
   gap: 12px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
@@ -1780,7 +1827,7 @@ body.is-offline .button-destructive {
   content: "";
   flex: 1;
   height: 1px;
-  background: var(--border, #e7e9f2);
+  background: var(--border, var(--line));
 }
 
 .auth-note {
@@ -1789,11 +1836,11 @@ body.is-offline .button-destructive {
   gap: 10px;
   padding: 12px 14px;
   border-radius: 12px;
-  background: #fff;
-  border: 1px solid var(--border, #e7e9f2);
+  background: var(--white);
+  border: 1px solid var(--border, var(--line));
   font-size: 13px;
   line-height: 18px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .auth-help {
@@ -1801,7 +1848,7 @@ body.is-offline .button-destructive {
   margin: 0;
   text-align: center;
   font-size: 13px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 /* 44px touch target for the help link (product rule), without moving the line. */
@@ -1847,8 +1894,8 @@ body.is-offline .button-destructive {
   height: 22px;
   padding: 0 8px;
   border-radius: 999px;
-  background: #f3f4f6;
-  color: #374151;
+  background: var(--fill);
+  color: var(--ink2);
   font-size: 11px;
   font-weight: 600;
   border: 1px solid #e3e5ea;
@@ -1866,14 +1913,14 @@ body.is-offline .button-destructive {
   font-size: 18px;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  border: 1px solid var(--border-strong, #d9dce8);
+  border: 1px solid var(--border-strong, var(--line2));
   border-radius: 10px;
-  background: #fff;
+  background: var(--white);
 }
 
 .otp-box:focus {
   outline: none;
-  border-color: var(--indigo, #4527c6);
+  border-color: var(--indigo, var(--coach-ink));
   box-shadow: 0 0 0 3px rgb(69 39 198 / 16%);
 }
 
@@ -1882,13 +1929,13 @@ body.is-offline .button-destructive {
   font-weight: 500;
 }
 .pwd-strength-weak {
-  color: #b91c1c;
+  color: var(--crit);
 }
 .pwd-strength-fair {
-  color: #b45309;
+  color: var(--warn);
 }
 .pwd-strength-strong {
-  color: #047857;
+  color: var(--done);
 }
 
 .auth-store-links {
@@ -1948,7 +1995,7 @@ a.button-primary.btn-lg {
 .link,
 a.link,
 button.link {
-  color: var(--indigo, #4527c6);
+  color: var(--indigo, var(--coach-ink));
   font: inherit;
   font-weight: 600;
   background: none;
@@ -2091,8 +2138,8 @@ button.link:hover {
 }
 
 .button-danger {
-  background: #b91c1c;
-  color: #fff;
+  background: var(--crit);
+  color: var(--white);
   border: none;
   border-radius: 8px;
   font-weight: 600;
