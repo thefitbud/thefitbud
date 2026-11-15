@@ -1,0 +1,136 @@
+{
+  "result": "mean screenshot luminance: light 0.871 (12), dark 0.428 (13)",
+  "light": 0.871,
+  "dark": 0.428,
+  "count": {
+    "light": 12,
+    "dark": 13
+  },
+  "shots": [
+    {
+      "file": "TM-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "TM-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.947
+    },
+    {
+      "file": "TM-04b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.702
+    },
+    {
+      "file": "TM-04b-light-ios.png",
+      "theme": "light",
+      "luma": 0.702
+    },
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.941
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "TR-07a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.924
+    },
+    {
+      "file": "TR-07a-light-ios.png",
+      "theme": "light",
+      "luma": 0.924
+    },
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.894
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    },
+    {
+      "file": "primitives-1-type-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-1-type-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    },
+    {
+      "file": "primitives-2-buttons-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.151
+    },
+    {
+      "file": "primitives-2-buttons-light-ios.png",
+      "theme": "light",
+      "luma": 0.89
+    },
+    {
+      "file": "primitives-3-chips-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.15
+    },
+    {
+      "file": "primitives-3-chips-light-ios.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "primitives-4-cards-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    },
+    {
+      "file": "primitives-4-cards-light-ios.png",
+      "theme": "light",
+      "luma": 0.947
+    },
+    {
+      "file": "primitives-5-inputs-toast-tabbar-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.104
+    },
+    {
+      "file": "primitives-5-inputs-toast-tabbar-light-ios.png",
+      "theme": "light",
+      "luma": 0.895
+    },
+    {
+      "file": "primitives-6-sheet-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "primitives-6-sheet-light-ios.png",
+      "theme": "light",
+      "luma": 0.701
+    },
+    {
+      "file": "primitives-before-flip-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-before-flip-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    },
+    {
+      "file": "primitives-live-flip-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    }
+  ]
+}
