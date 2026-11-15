@@ -267,7 +267,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           ? preferredRole
           : autoRole;
       // The cache owner comes only from the server's `/me`, never from cached
-      // data (Z11-8). Set before any trainer screen can mount and read.
+      // data (Z11-8). Set before any trainer screen can mount and read. A
+      // different user than the current owner removes the previous trainer's
+      // entries and drops any write from a fetch started before (Z12-33).
       setTrainerCacheOwner(meResponse.userId);
       setMe(meResponse);
       setSelectedRole(role);

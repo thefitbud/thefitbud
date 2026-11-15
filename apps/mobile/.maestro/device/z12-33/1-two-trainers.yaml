@@ -69,6 +69,11 @@ env:
 - tapOn: "‹ Clients"
 # Step 4: pull to refresh on Attention and sign out while it may still be loading (the
 # late-write path; if the refresh is too fast to catch, the rest still holds).
+# Reach the Attention tab through More: on Android a client row's status chip is its
+# own "Attention" text node, so a bare tap on "Attention" from Clients can open that
+# client instead of the tab (run 43642084004). The More screen has no other
+# "Attention" text; iOS merges each row into one element, so it never collided there.
+- tapOn: "More"
 - tapOn: "Attention"
 - swipe:
     start: "50%, 30%"
