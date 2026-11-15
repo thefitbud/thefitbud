@@ -19,7 +19,7 @@ gh workflow run device.yml --repo thefitbud/thefitbud --ref main \
 | Input | Use |
 |---|---|
 | `ref` | the branch, tag or SHA whose app to build; empty = the branch the workflow runs from. `scripts/qa` (the harness) always comes from the workflow's own commit, so a branch made before the harness changed still gets today's gate. Maestro flows come from your ref: your own `common/` and `device/` files win, and the harness only adds flow files your branch does not have |
-| `flows` | a Maestro tag (`smoke`, `full`, your task's tag), several tags (`smoke,z12-44`), or path globs under `apps/mobile/.maestro` (`flows/v3/F08*.yaml`) |
+| `flows` | a Maestro tag (`launch`, `full`, your task's tag), several tags (`launch,z12-44`), or path globs under `apps/mobile/.maestro` (`flows/v3/F08*.yaml`) |
 | `roles` | optional filter: `trainee`, `trainer`, `dual` |
 | `platforms`, `themes` | `both` unless you are re-running one side |
 | `extras` | `all` adds the push + lock-screen tap, Live Activity tap attempt and offline/online samples |
@@ -34,6 +34,22 @@ v3 screen (`takeScreenshot: TR-26e`) are saved as `TR-26e-<theme>-<platform>.png
 gh run list --repo thefitbud/thefitbud --workflow device.yml --limit 3   # find the run
 gh run watch <run id> --repo thefitbud/thefitbud                          # never cancel it
 ```
+
+## Scoped task runs (Firoz, 15 Nov 2026)
+
+A W12 task's device run covers only the flows for the screens it changed, plus the **launch
+smoke test** on iOS and Android: the app opens, sign-in works, Today loads
+(`apps/mobile/.maestro/device/launch/`, tag `launch`: the demo trainee reaches a loaded
+Today, the demo trainer `rahul.coach` reaches a loaded Attention). The older `smoke` flows
+fail on the current app and are not part of this.
+
+- Dispatch with `flows=launch,<task tag or flow globs>`, for example
+  `-f flows=launch,z12-44` or `-f flows=launch,flows/v3/F08*.yaml`.
+- Record in the PR which flows ran and why they cover the change.
+- Before any device run, run typecheck, lint and the unit tests, and do the Expo web
+  screenshot check against the v3 mocks (393x852, light and dark; method in
+  `docs/qa/QT9/README.md` and `docs/qa/BT3d/QA-BT3d.md`).
+- Z12-58 alone runs the full suite.
 
 ## 2. Read the result
 

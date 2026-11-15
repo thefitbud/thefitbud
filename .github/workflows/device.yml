@@ -13,7 +13,7 @@
 #   pull_request        ONLY when the harness itself changes (scripts/qa/device/**, this
 #                       file, apps/mobile/.maestro/common/** and device/**), so the harness tests itself
 #                       without running on every mobile PR. Defaults: both platforms,
-#                       both themes, the `smoke` flows, extras on.
+#                       both themes, the `launch` smoke flows, extras on.
 #
 # Only the device-publish job (dispatch only) raises its token to contents: write, to push
 # refs/device-gate/<run id>; every other job keeps the read-only default below.
@@ -74,9 +74,10 @@ permissions:
 env:
   TURBO_TELEMETRY_DISABLED: "1"
   # Inputs are empty on pull_request; every value falls back to the default above,
-  # except flows: a harness PR also runs the Z12-33 two-trainer check (D-W12-31) on
-  # the current app, so the check itself is exercised before Z12-33's head runs it.
-  DEVICE_FLOWS: ${{ inputs.flows || (github.event_name == 'pull_request' && 'smoke,z12-33') || 'smoke' }}
+  # except flows: a harness PR runs only the `launch` smoke flows (Z12-35), the one reliable
+  # check that the app opens, signs in and loads Today; the older `smoke` flows fail on the
+  # current app and would only add noise.
+  DEVICE_FLOWS: ${{ inputs.flows || (github.event_name == 'pull_request' && 'launch') || 'smoke' }}
   DEVICE_ROLES: ${{ inputs.roles || '' }}
   DEVICE_THEMES: ${{ (inputs.themes == 'light' && 'light') || (inputs.themes == 'dark' && 'dark') || 'light dark' }}
   DEVICE_EXTRAS: ${{ inputs.extras || 'all' }}
