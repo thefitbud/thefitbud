@@ -1,5 +1,11 @@
-import type { ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { AccessibilityInfo, Pressable, View } from "react-native";
 import { Check } from "lucide-react-native";
 import { Text } from "./Text";
 import {
@@ -8,6 +14,8 @@ import {
   useTheme,
   withAlpha,
 } from "../providers/ThemeProvider";
+import { useNoticeQueue } from "./notice/NoticeContext";
+import type { NoticeQueue } from "./notice/noticeQueue";
 
 type Props = {
   message: string;
@@ -21,17 +29,66 @@ type Props = {
 
 /**
  * Toast (kit `.toast`): navy fill with white text and a white-tint action in
- * both themes (`--navy` is #33333C in dark). Z12-38 builds the shared queue
- * and host on top of this; the call signature stays.
+ * both themes (`--navy` is #33333C in dark).
+ *
+ * Inside the app's `NoticeHost` (Z12-38) a rendered Snackbar is a request to
+ * the shared queue: it draws where its screen puts it, but only while it is
+ * the queue's current toast, and it leaves on its own (6 s with an action, 4 s
+ * without, or a tap outside an action toast), calling `onDismiss`. Its call
+ * signature is unchanged, so callers need no change. Outside a host (render
+ * tests, the primitive gallery) it draws in place as before.
  */
-export function Snackbar({
+export function Snackbar(props: Props) {
+  const queue = useNoticeQueue();
+  return queue ? <QueuedSnackbar {...props} queue={queue} /> : <SnackbarView {...props} />;
+}
+
+function QueuedSnackbar({ queue, ...props }: Props & { queue: NoticeQueue }) {
+  const latest = useRef(props);
+  latest.current = props;
+  const [id, setId] = useState<string | null>(null);
+  const hasAction = Boolean(props.actionLabel && props.onAction);
+
+  // A new message (or a new action) is a new toast; the old one leaves quietly.
+  useEffect(() => {
+    const next = queue.showToast({
+      message: props.message,
+      actionLabel: hasAction ? props.actionLabel : undefined,
+      onAction: hasAction ? () => latest.current.onAction?.() : undefined,
+      onDismiss: () => latest.current.onDismiss?.(),
+    });
+    setId(next);
+    return () => queue.dismiss(next, "removed");
+  }, [queue, props.message, props.actionLabel, hasAction]);
+
+  const snapshot = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
+  const visible = id != null && snapshot.toast?.id === id;
+
+  useEffect(() => {
+    if (visible) AccessibilityInfo.announceForAccessibility?.(props.message);
+    // Announce once each time this toast comes up.
+  }, [visible]);
+
+  if (!visible || id == null) return null;
+  return (
+    <SnackbarView
+      {...props}
+      onAction={hasAction ? () => queue.act(id) : undefined}
+      onDismiss={props.onDismiss ? () => queue.dismiss(id, "close") : undefined}
+      onTouchInside={() => queue.markToastTouch()}
+    />
+  );
+}
+
+function SnackbarView({
   message,
   actionLabel,
   onAction,
   onDismiss,
   leadingCheck = false,
   leading,
-}: Props) {
+  onTouchInside,
+}: Props & { onTouchInside?: () => void }) {
   const theme = useTheme();
   const styles = useStyles();
   const leadingNode = leadingCheck ? (
@@ -41,7 +98,13 @@ export function Snackbar({
   );
 
   return (
-    <View style={styles.wrap} accessibilityRole="text">
+    <View
+      style={styles.wrap}
+      accessibilityRole="text"
+      accessibilityLiveRegion="polite"
+      testID="notice-toast"
+      onTouchStart={onTouchInside}
+    >
       {leadingNode ? <View style={styles.leading}>{leadingNode}</View> : null}
       <Text style={styles.message}>{message}</Text>
       {actionLabel && onAction ? (

@@ -40,6 +40,7 @@ export type NoticeDismissReason =
 
 export type NoticeLeading =
   | { kind: "initials"; name: string; tone: "coach" | "client" }
+  | { kind: "meal" }
   | { kind: "app" };
 
 export type BannerInput = {
@@ -248,6 +249,35 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     banners.waiting = banners.waiting.filter((item) => !suppressed(item));
   }
 
+  /*
+   * Tap outside a toast with an action (TR-07b's Undo, View): the toast marks
+   * its own touches (`markToastTouch`, bubbling reaches it first), the host's
+   * root reports every touch start and end. Only a tap that began while that
+   * same toast was up counts, so the tap that created the toast never closes it.
+   */
+  let toastTouched = false;
+  let pendingTouch: { toastId: string | null; inside: boolean } | null = null;
+
+  function markToastTouch(): void {
+    toastTouched = true;
+  }
+
+  function touchStart(): void {
+    pendingTouch = { toastId: toasts.current?.id ?? null, inside: toastTouched };
+    toastTouched = false;
+  }
+
+  /** `moved`: the finger travelled (a scroll or a swipe), so it was not a tap. */
+  function touchEnd(moved: boolean): void {
+    const touch = pendingTouch;
+    pendingTouch = null;
+    if (!touch?.toastId || touch.inside || moved) return;
+    const current = toasts.current;
+    if (!current || current.id !== touch.toastId) return;
+    if (toastDuration(current) !== TOAST_ACTION_MS) return;
+    dismiss(current.id, "outside");
+  }
+
   /** Sign-out or a user switch: drop everything, forget what was shown. */
   function reset(): void {
     clearTimer(banners as Lane<NoticeItem>);
@@ -255,6 +285,8 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     banners = emptyLane();
     toasts = emptyLane();
     seenKeys.clear();
+    pendingTouch = null;
+    toastTouched = false;
     emit();
   }
 
@@ -267,6 +299,9 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     hold,
     resume,
     setScreen,
+    markToastTouch,
+    touchStart,
+    touchEnd,
     reset,
     getScreen: () => screen,
     getSnapshot: () => snapshot,

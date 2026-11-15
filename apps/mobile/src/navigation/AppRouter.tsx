@@ -2,6 +2,8 @@ import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { colors } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { ForegroundPushNotices } from "../components/notice/ForegroundPushNotices";
+import { NoticeHost } from "../components/notice/NoticeHost";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { SpecimensScreen } from "../dev/SpecimensScreen";
@@ -67,21 +69,24 @@ export function AppRouter() {
   }
 
   const screen = routeScreen(view.route);
-  if (!pendingRoleSwitch) return screen;
-  // Frame 61 (Z11-14): over the trainee screen, a coach link asks first.
+  // Z12-38: one notice host for both roles; in-app banners and toasts queue here.
   return (
-    <>
+    <NoticeHost>
+      <ForegroundPushNotices />
       {screen}
-      <SwitchRoleSheet
-        visible
-        targetRole={pendingRoleSwitch.targetRole}
-        subject={coachLinkSubject(pendingRoleSwitch.linkKind)}
-        onCancel={cancelRoleSwitch}
-        onSwitch={() => {
-          void confirmRoleSwitch();
-        }}
-      />
-    </>
+      {pendingRoleSwitch ? (
+        // Frame 61 (Z11-14): over the trainee screen, a coach link asks first.
+        <SwitchRoleSheet
+          visible
+          targetRole={pendingRoleSwitch.targetRole}
+          subject={coachLinkSubject(pendingRoleSwitch.linkKind)}
+          onCancel={cancelRoleSwitch}
+          onSwitch={() => {
+            void confirmRoleSwitch();
+          }}
+        />
+      ) : null}
+    </NoticeHost>
   );
 }
 

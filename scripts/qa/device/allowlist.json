@@ -1,7 +1,1 @@
-[
-  {
-    "pattern": "has a shadow set but cannot calculate shadow efficiently",
-    "platform": "ios",
-    "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
-  }
-]
+[]
