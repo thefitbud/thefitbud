@@ -30,6 +30,13 @@ tags:
     commands:
       - assertVisible: "Large title 30"
       - takeScreenshot: primitives-live-flip
+# Light run: the app was just cold-launched. Wait until its JS is up (sign-in on screen)
+# before sending the link: a link that arrives while the bundle is still loading is
+# dropped by React Native, and the gallery never opens (iOS runs 43673200079 and
+# 43678708890: sign-in still on screen after 60 s, every later open worked).
+- extendedWaitUntil:
+    visible: "Large title 30|Sign in with a code instead"
+    timeout: 60000
 - runFlow:
     when:
       notVisible: "Large title 30"
