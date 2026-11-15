@@ -20,11 +20,14 @@ env:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+# Generous waits: on a cold iOS simulator against the local API the first Attention load
+# has taken over 30 s with the skeleton still up (run 43688985985). A load that never
+# finishes still fails here.
 - extendedWaitUntil:
     visible: "${ATTENTION_LOADED}"
-    timeout: 30000
+    timeout: 60000
 - extendedWaitUntil:
     notVisible: "Loading"
-    timeout: 30000
+    timeout: 90000
 - takeScreenshot: launch-trainer-attention
 - runFlow: ../../common/assert-no-crash.yaml
