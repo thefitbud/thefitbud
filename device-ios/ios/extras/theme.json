@@ -1,0 +1,101 @@
+{
+  "result": "mean screenshot luminance: light 0.859 (9), dark 0.859 (9)",
+  "light": 0.859,
+  "dark": 0.859,
+  "count": {
+    "light": 9,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TR-06c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.779
+    },
+    {
+      "file": "TR-06c-light-ios.png",
+      "theme": "light",
+      "luma": 0.779
+    },
+    {
+      "file": "TR-06d-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.792
+    },
+    {
+      "file": "TR-06d-light-ios.png",
+      "theme": "light",
+      "luma": 0.792
+    },
+    {
+      "file": "TR-07f-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.945
+    },
+    {
+      "file": "TR-07f-light-ios.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "TR-07k-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.939
+    },
+    {
+      "file": "TR-07k-light-ios.png",
+      "theme": "light",
+      "luma": 0.939
+    },
+    {
+      "file": "W-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.73
+    },
+    {
+      "file": "W-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.73
+    },
+    {
+      "file": "f29-planned-meal-readonly-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.736
+    },
+    {
+      "file": "f29-planned-meal-readonly-light-ios.png",
+      "theme": "light",
+      "luma": 0.735
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.932
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.932
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workoutNeeds_you-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.932
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workoutNeeds_you-light-ios.png",
+      "theme": "light",
+      "luma": 0.932
+    }
+  ]
+}
