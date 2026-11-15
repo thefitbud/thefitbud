@@ -1,0 +1,33 @@
+appId: com.thefitbud.mobile.staging
+name: Launch smoke, trainer Attention loads
+tags:
+  - device
+  - launch
+  - trainer
+env:
+  # "Needs you <n>" is the Attention chip; it shows "Needs you 0" over the skeleton
+  # too (AttentionTab.tsx), so the wait on it is followed by a wait for "Loading" to go.
+  ATTENTION_LOADED: "Needs you [0-9]+"
+---
+# Launch smoke test, trainer side (Z12-35): sign in as the demo trainer and Attention loads.
+# Env from the harness: QA_TRAINER_EMAIL, QA_PASSWORD.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+# Generous waits: on a cold iOS simulator against the local API the first Attention load
+# has taken over 30 s with the skeleton still up (run 43688985985). A load that never
+# finishes still fails here.
+- extendedWaitUntil:
+    visible: "${ATTENTION_LOADED}"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
+- takeScreenshot: launch-trainer-attention
+- runFlow: ../../common/assert-no-crash.yaml

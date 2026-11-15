@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { app } from "../index.js";
 import { createMemoryR2Bucket } from "../lib/memory-r2.js";
 import type { Env } from "../types.js";
@@ -44,7 +44,7 @@ const TEST_MODES: Array<[string, Partial<Env>, string]> = [
   ["ZEPTOMAIL_TOKEN blank", { ZEPTOMAIL_TOKEN: "  " }, "ZEPTOMAIL_TOKEN=unset"],
 ];
 
-let errorLog: ReturnType<typeof vi.spyOn>;
+let errorLog: MockInstance<typeof console.error>;
 
 beforeEach(() => {
   resetRuntimeGuardLogForTests();
