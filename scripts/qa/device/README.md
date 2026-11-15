@@ -26,7 +26,7 @@ gh workflow run device.yml --repo thefitbud/thefitbud --ref <branch> \
 | `ref` | a branch, tag or SHA | empty (the dispatched branch) | the app to build. `scripts/qa` comes from the workflow's commit; Maestro flows from `ref`, with harness flows added only where `ref` has none |
 | `platforms` | `both`, `ios`, `android` | `both` | which jobs run |
 | `themes` | `both`, `light`, `dark` | `both` | system themes the flows run in, one after the other |
-| `flows` | a Maestro tag, or comma-separated path globs under `apps/mobile/.maestro` | `smoke` | `launch`, `full`, `device`, `trainee` …, or e.g. `flows/v3/F08*.yaml,flows/trainee/today.yaml` (`*` stays in a folder, `**` crosses folders) |
+| `flows` | comma-separated Maestro tags and/or path globs under `apps/mobile/.maestro` (union; an item matching nothing fails) | `launch` | `launch`, `full`, `device`, `trainee` …, or e.g. `flows/v3/F08*.yaml,flows/trainee/today.yaml` (`*` stays in a folder, `**` crosses folders) |
 | `roles` | comma-separated `trainee`, `trainer`, `dual`, `auth` | empty | keeps only the selected flows tagged with one of these |
 | `extras` | `all`, `none` | `all` | after the flows: push + lock-screen tap, Live Activity tap attempt, offline → online |
 | `android_api` | an API level | `36` | the emulator image, `system-images;android-<n>;google_apis;x86_64` |

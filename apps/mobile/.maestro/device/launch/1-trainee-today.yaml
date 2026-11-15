@@ -28,5 +28,8 @@ tags:
     visible: "Today's workout.*"
     timeout: 60000
 - assertVisible: "Today"
+# The heading also shows when the day's data failed to load (TodayTab's catch shows a
+# "Couldn't refresh" banner), so assert that banner is absent.
+- assertNotVisible: ".*Couldn't refresh.*"
 - takeScreenshot: launch-trainee-today
 - runFlow: ../../common/assert-no-crash.yaml

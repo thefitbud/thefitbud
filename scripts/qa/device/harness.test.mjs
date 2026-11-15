@@ -540,7 +540,7 @@ test("device.yml: dispatch plus harness-only pull_request paths, never cancels, 
   );
   assert.doesNotMatch(on, /push:|schedule:|pull_request_target:/);
   for (const input of ["ref", "platforms", "themes", "flows", "roles"]) assert.match(yml, new RegExp(`^ {6}${input}:$`, "m"));
-  assert.match(yml, /DEVICE_FLOWS: \$\{\{ inputs\.flows \|\| \(github\.event_name == 'pull_request' && 'launch'\) \|\| 'smoke' \}\}/);
+  assert.match(yml, /DEVICE_FLOWS: \$\{\{ inputs\.flows \|\| 'launch' \}\}/, "every run without explicit flows runs the launch smoke");
   assert.equal((yml.match(/ref: \$\{\{ inputs\.ref \|\| '' \}\}/g) ?? []).length, 2, "both device jobs build the requested ref");
   assert.equal((yml.match(/git checkout "\$HARNESS_SHA" -- scripts\/qa$/gm) ?? []).length, 2, "and overlay the harness scripts from the workflow's commit");
   assert.equal((yml.match(/if \[ ! -e "\$f" \]; then/g) ?? []).length, 2, "but add harness flows only where the app ref has none");
