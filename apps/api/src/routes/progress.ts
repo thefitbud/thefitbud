@@ -47,6 +47,12 @@ import {
   isInEndedPeriod,
   isWithinCoachLogWindow,
 } from "../domain/log-time-bounds.js";
+import {
+  FUTURE_DAY_ERROR,
+  FUTURE_DAY_LOG_ERROR_DOC,
+  FUTURE_DAY_OPENAPI_NOTE,
+  isFutureInstantDay,
+} from "../domain/future-day.js";
 import { appendChangeLog } from "../domain/sync";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
@@ -392,8 +398,9 @@ progressRoutes.post(
   operation({
     tag: "Progress",
     summary: "Progress operation for POST /progress/relationships/:relationshipId/measurements.",
-    description: "Progress operation for POST /progress/relationships/:relationshipId/measurements.",
+    description: `Progress operation for POST /progress/relationships/:relationshipId/measurements. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainer", "trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     idempotency: true,
     body: createMeasurementRequestSchema,
     response: measurementSchema,
@@ -631,6 +638,12 @@ progressRoutes.post(
         throw error;
       }
     } else {
+      // D-W12-7: a trainee measurement dated after their today is refused.
+      // (The trainer path above already refuses any future date, R2.)
+      const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+      if (isFutureInstantDay({ instant: row.observedAt, now, timeZone })) {
+        return fail(c, 422, FUTURE_DAY_ERROR.code, FUTURE_DAY_ERROR.message);
+      }
       await db.insert(measurements).values(row);
     }
 
@@ -911,8 +924,9 @@ progressRoutes.post(
   operation({
     tag: "Progress",
     summary: "Progress operation for POST /progress/relationships/:relationshipId/entries.",
-    description: "Progress operation for POST /progress/relationships/:relationshipId/entries.",
+    description: `Progress operation for POST /progress/relationships/:relationshipId/entries. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainer", "trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     idempotency: true,
     body: createProgressEntryRequestSchema,
     response: progressEntrySchema,
@@ -1029,6 +1043,11 @@ progressRoutes.post(
       createdAt: now,
       updatedAt: now,
     };
+    // D-W12-7: nothing is logged on a day after the trainee's today.
+    const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    if (isFutureInstantDay({ instant: row.observedAt, now, timeZone })) {
+      return fail(c, 422, FUTURE_DAY_ERROR.code, FUTURE_DAY_ERROR.message);
+    }
     await db.insert(progressEntries).values(row);
 
     const responseBody = {
