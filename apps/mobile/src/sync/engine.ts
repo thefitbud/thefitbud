@@ -456,7 +456,10 @@ export type SyncEngine = {
 export type SyncEngineOptions = {
   /** A request with no answer after this long counts as unreachable. */
   requestTimeoutMs?: number;
-  /** Called with every push failure (for dev logs and Sentry); never throws. */
+  /**
+   * Called with a push failure that is not just "no network" (for dev logs
+   * and Sentry); never throws.
+   */
   onError?: (scope: string, error: unknown) => void;
 };
 
@@ -541,6 +544,13 @@ export function createSyncEngine(
 ): SyncEngine {
   const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   const report = (scope: string, error: unknown) => {
+    // Having no network is a normal state, not an error to report: the row
+    // carries the reason. Everything else is reported.
+    const failure =
+      error instanceof SyntaxError ? null : classifyPushError(error);
+    if (failure?.kind === "waiting" && failure.reason === "UNREACHABLE") {
+      return;
+    }
     try {
       options.onError?.(scope, error);
     } catch {

@@ -308,6 +308,7 @@ export function sheetItems(
       kind === "workout"
         ? (names.workout(workoutId) ??
           (text(body.assignmentId) ? names.workout(text(body.assignmentId)!) : null) ??
+          text(body.workoutName) ??
           "Workout")
         : kind === "meal"
           ? (names.meal(text(body.assignmentId) ?? row.recordId) ?? mealName(body))
@@ -366,6 +367,8 @@ export function sheetTitle(items: readonly Pick<SheetItem, "state">[]): string {
 export const SHEET_WAITING_BODY =
   "They're saved on this phone and send on their own when you're online.";
 export const SHEET_EMPTY_BODY = "Everything you logged has been sent.";
+export const SHEET_FAILED_BODY =
+  "These are still on this phone. Nothing else is waiting.";
 
 /** "Last sent 4:41 pm"; null when nothing has been sent from this phone yet. */
 export function lastSentLabel(

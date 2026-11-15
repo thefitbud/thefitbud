@@ -555,6 +555,27 @@ describe("refused rows", () => {
   });
 });
 
+describe("error reporting", () => {
+  it("having no network is not reported; a server error is", async () => {
+    const store = createMemorySyncStore();
+    const server = fakeServer();
+    const reported: string[] = [];
+    const engine = engineFor(store, server.push, {
+      onError: (scope) => reported.push(scope),
+    });
+    await logWeight(engine, 1);
+
+    server.set("offline");
+    await engine.sendNow();
+    await expect(engine.pushPending()).rejects.toThrow();
+    expect(reported).toEqual([]);
+
+    server.set("500");
+    await engine.sendNow();
+    expect(reported).toEqual(["sync.sendNow"]);
+  });
+});
+
 describe("classifyPushError", () => {
   const api = (status: number) =>
     new ApiClientError({ code: "X", message: "m", requestId: "r", status });

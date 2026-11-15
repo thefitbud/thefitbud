@@ -15,4 +15,5 @@ Every QA report lives here, so cloud agents can read it. The old `/workspace/qa/
 | [AB2/QA-AB2.md](AB2/QA-AB2.md) | AB2 Android crash on invalid `accessibilityRole` | PASS (automated) | 2 Nov 2026 |
 | [QA-BT5.md](QA-BT5.md) | BT5 beta dress-rehearsal checklist (runs in W13) | Checklist (not yet run) | 4 Nov 2026 |
 | [QA-Z6-2c.md](QA-Z6-2c.md) | Z6-2c check-in screens send and show only real answers; web Configure pins the default global form | PARTIAL by design (answers match; layout gaps are out of scope) | 7 Nov 2026 |
+| [Z12-41/README.md](Z12-41/README.md) | Z12-41 offline sync: root cause of finding 2, checks, Expo-web grades | PARTIAL (device run pending; TR-19a and TR-19b graded CLOSE on Expo web) | 15 Nov 2026 |
 | (add rows as reports land) | | | |
