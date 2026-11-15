@@ -239,8 +239,10 @@ vitest test, in every workspace, that calls `console.error` (D-W12-28).
 
 **Allow-list:** `allowlist.json`, `[{ "pattern": "<regex>", "platform":
 "ios|android|both", "reason": "<why>" }]`. An entry without a written reason (20+
-characters) fails the scan. It ships empty: nothing is allowed without a reason in the
-PR that adds it.
+characters) fails the scan. It shipped empty: nothing is allowed without a reason in the
+PR that adds it, and every entry is temporary: its reason names the task that removes it
+(the harness test checks this). Entries and their removal are batch decisions (W12:
+D-W12-33, the iOS shadow ADVICE in the trainee workout flow, removed by Z12-38).
 
 ## Artifacts
 
@@ -256,6 +258,20 @@ shots/lockscreen-*-<theme>-<platform>.png     lock-screen before/after; offline-
 <platform>/extras/*.json                      push, lock-screen and offline evidence
 logs/<platform>-device.log, *.ips, api.log    device log, crash reports, local API log
 lockscreen/                                   raw idb / uiautomator dumps
+```
+
+A dispatched run also publishes its screenshots and verdict files (summaries, `scan.json`,
+JUnit, extras; no logs or raw dumps) as one commit on `refs/device-gate/<run id>` (the
+`device-publish` job; a re-run publishes `refs/device-gate/<run id>-<attempt>`, so no ref
+is ever overwritten). It is not a branch and starts no workflow. Agents never delete these
+refs; Firoz can prune old ones with `git push origin --delete refs/device-gate/<id>`. Cloud agent sessions
+cannot download Actions artifacts (the blob host is not on their allowlist), so they use
+this ref instead of `gh run download`:
+
+```bash
+git fetch origin refs/device-gate/<run id>:refs/device-gate/<run id>
+mkdir -p /tmp/device-run && git archive refs/device-gate/<run id> | tar -x -C /tmp/device-run
+scripts/qa/device/copy-shots.sh /tmp/device-run docs/qa/Z12-44
 ```
 
 Copy the screen shots into the repository with `copy-shots.sh`:

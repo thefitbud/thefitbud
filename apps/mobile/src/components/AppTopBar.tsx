@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Bell } from "lucide-react-native";
 import { Text } from "./Text";
-import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { SyncIndicator } from "./SyncIndicator";
 
 type Props = {
@@ -14,6 +14,7 @@ type Props = {
 
 /** Renders "Today · Sun 18 Oct" with bold lead + mid-grey date (mockup 04). */
 function TitleLine({ title }: { title: string }) {
+  const styles = useStyles();
   const sep = title.indexOf(" · ");
   if (sep > 0) {
     const lead = title.slice(0, sep);
@@ -39,6 +40,8 @@ export function AppTopBar({
   onOpenNotifications,
   onOpenSync,
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.wrap}>
       <View style={styles.titles}>
@@ -56,7 +59,7 @@ export function AppTopBar({
           >
             <Bell
               size={22}
-              color={colors.deepNavy}
+              color={theme.colors.ink}
               strokeWidth={2}
               accessibilityElementsHidden
               importantForAccessibility="no"
@@ -69,62 +72,63 @@ export function AppTopBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   wrap: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.md,
+    gap: t.spacing.md,
     justifyContent: "space-between",
-    paddingBottom: spacing.sm,
+    paddingBottom: t.spacing.sm,
   },
   titles: {
     flex: 1,
     gap: 2,
   },
   title: {
-    color: colors.deepNavy,
-    fontSize: 30,
-    fontWeight: "700",
-    letterSpacing: -0.4,
+    ...t.text.largeTitle.style,
+    color: t.colors.ink,
   },
   titleLine: {
     fontSize: 17,
     lineHeight: 22,
   },
   titleLead: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
   },
   titleRest: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 17,
     fontWeight: "500",
   },
   subtitle: {
-    color: colors.midGrey,
-    fontSize: typeScale.body,
+    color: t.colors.ink2,
+    fontSize: 16,
     lineHeight: 22,
   },
   actions: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: t.spacing.sm,
   },
   bell: {
     alignItems: "center",
     justifyContent: "center",
-    minHeight: 44,
-    minWidth: 44,
+    minHeight: t.touchTarget,
+    minWidth: t.touchTarget,
     position: "relative",
   },
+  // Kit `.circbtn .dot`: coral-strong with a 2 pt card ring (coral = new/due, never an error).
   unreadDot: {
-    backgroundColor: colors.warning,
-    borderRadius: 5,
-    height: 10,
+    backgroundColor: t.colors.coralStrong,
+    borderColor: t.colors.card,
+    borderRadius: 6,
+    borderWidth: 2,
+    height: 12,
     position: "absolute",
-    right: 8,
-    top: 8,
-    width: 10,
+    right: 7,
+    top: 7,
+    width: 12,
   },
-});
+}));

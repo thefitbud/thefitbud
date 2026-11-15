@@ -29,7 +29,7 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { addDays, localDateInTimezone, startOfWeekMonday, weekDatesFrom } from "../lib/dates";
 import { isMealLoggedForCount } from "../trainee/nutrition";
 import { reportError } from "../lib/reportError";
-import { readTrainerCache, writeTrainerCache } from "./cache";
+import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
 import { ClientLogWorkoutScreen } from "./clientlog/ClientLogWorkoutScreen";
 import { ClientLogMealScreen } from "./clientlog/meal/ClientLogMealScreen";
 import { ClientLogMeasurementScreen } from "./clientlog/measurement/ClientLogMeasurementScreen";
@@ -127,6 +127,9 @@ export function ClientStatusScreen({
 
   const load = useCallback(async () => {
     setError(null);
+    // Captured before the fetch: if the trainer changes while it is in
+    // flight, the late write is dropped (Z12-33).
+    const cacheEpoch = trainerCacheEpoch();
     try {
       const [workspace, workoutPage, mealPage, notePage] = await Promise.all([
         api.getClientWorkspace(relationshipId),
@@ -169,7 +172,7 @@ export function ClientStatusScreen({
         savedAt: new Date().toISOString(),
       };
       setData(snapshot);
-      writeTrainerCache(`trainer:client:${relationshipId}`, snapshot);
+      writeTrainerCache(`trainer:client:${relationshipId}`, snapshot, cacheEpoch);
       setOfflineAt(null);
     } catch (err) {
       const cached = readTrainerCache<Snapshot>(`trainer:client:${relationshipId}`);

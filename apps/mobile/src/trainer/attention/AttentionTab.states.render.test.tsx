@@ -34,15 +34,6 @@ vi.mock("../../auth/AuthProvider", async () => {
   );
   return { ...actual, useAuth: () => auth };
 });
-// The real cache keeps a module-level fallback map that outlives a test, so
-// the same read/write contract is backed by a map the tests clear.
-const cacheStore = vi.hoisted(() => new Map<string, unknown>());
-vi.mock("../cache", () => ({
-  readTrainerCache: (key: string) => cacheStore.get(key) ?? null,
-  writeTrainerCache: (key: string, value: unknown) => {
-    cacheStore.set(key, JSON.parse(JSON.stringify(value)));
-  },
-}));
 vi.mock("react-native-gesture-handler", () => ({
   // Swipe is not under test; render the row's children inline.
   Swipeable: ({ children }: { children: unknown }) => children,
@@ -52,6 +43,13 @@ vi.mock("../../realtime/useRealtimeHints", () => ({
 }));
 
 const { AttentionTab } = await import("../AttentionTab");
+// The real cache, scoped to a signed-in trainer the way AuthProvider sets it
+// from `/me`; each test starts from a cleared cache (Z12-33).
+const { clearTrainerCache, readTrainerCache, setTrainerCacheOwner } =
+  await import("../cache");
+
+const TRAINER_A = "6f1c2a9e-3b4d-4c5e-8f70-1a2b3c4d5e6f";
+const TRAINER_B = "0b9e8d7c-6a5f-4e3d-9c2b-1a0f9e8d7c6b";
 
 const RELATIONSHIP_ID = "6a68b615-c47c-4bfc-a7f8-550becf7878a";
 const group = {
@@ -102,7 +100,9 @@ function mount() {
 }
 
 beforeEach(() => {
-  cacheStore.clear();
+  clearTrainerCache();
+  setTrainerCacheOwner(null);
+  setTrainerCacheOwner(TRAINER_A);
   reportError.mockClear();
   Object.values(api).forEach((fn) => fn.mockReset());
 });
@@ -169,5 +169,30 @@ describe("AttentionTab load states", () => {
     await waitFor(() =>
       expect(screen.queryByText("Couldn't load Attention")).toBeNull(),
     );
+  });
+  it("a load started for trainer A that resolves after B signs in writes nothing under B (Z12-33)", async () => {
+    loadOk();
+    let resolveGroups: (value: AttentionGroupsResponse) => void = () => undefined;
+    api.getAttentionGroups.mockReturnValue(
+      new Promise<AttentionGroupsResponse>((resolve) => {
+        resolveGroups = resolve;
+      }),
+    );
+    mount();
+    await waitFor(() => expect(api.getAttentionGroups).toHaveBeenCalled());
+
+    // A signs out and B signs in while A's fetch is still in flight, in the
+    // order AuthProvider runs them (sign-out clear, then B's `/me`).
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+    setTrainerCacheOwner(TRAINER_B);
+
+    resolveGroups(attention);
+    // The rows on screen prove the load reached its cache write.
+    expect(await screen.findByText("Rohan Mehta")).toBeTruthy();
+    expect(readTrainerCache("trainer:attention")).toBeNull();
+    for (let index = 0; index < localStorage.length; index += 1) {
+      expect(localStorage.key(index)?.startsWith("trainer:")).toBe(false);
+    }
   });
 });

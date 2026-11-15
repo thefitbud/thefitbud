@@ -1,6 +1,6 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Text } from "./Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { createThemedStyles } from "../providers/ThemeProvider";
 import { clockRange } from "../trainee/settings/clock";
 
 function parseHm(value: string): number {
@@ -19,6 +19,7 @@ export function QuietHoursPreviewBar({
   quietStart: string;
   quietEnd: string;
 }) {
+  const styles = useStyles();
   const startMin = parseHm(quietStart);
   const endMin = parseHm(quietEnd);
   const segments = Array.from({ length: 24 }, (_, hour) => {
@@ -56,9 +57,9 @@ export function QuietHoursPreviewBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   wrap: {
-    gap: spacing.xs,
+    gap: t.spacing.xs,
   },
   bar: {
     borderRadius: 8,
@@ -70,22 +71,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   quiet: {
-    backgroundColor: colors.indigo,
-    opacity: 0.35,
+    backgroundColor: t.colors.ink3,
   },
   active: {
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.fill2,
   },
   labels: {
     flexDirection: "row",
     justifyContent: "space-between",
   },
   tick: {
-    color: colors.midGrey,
-    fontSize: 10,
+    color: t.colors.ink3,
+    fontSize: 10.5,
   },
   legend: {
-    color: colors.midGrey,
-    fontSize: 12,
+    ...t.text.caption.style,
+    color: t.colors.ink3,
   },
-});
+}));

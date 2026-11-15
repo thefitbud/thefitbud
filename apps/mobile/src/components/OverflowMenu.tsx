@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Text } from "./Text";
-import { colors, radii, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { createThemedStyles } from "../providers/ThemeProvider";
 import { BottomSheet } from "./BottomSheet";
 
 export type OverflowMenuItem = {
@@ -20,6 +20,7 @@ type Props = {
 /** Mobile ⋯ overflow as a bottom sheet. */
 export function OverflowMenu({ items, label = "More actions" }: Props) {
   const [open, setOpen] = useState(false);
+  const styles = useStyles();
 
   return (
     <>
@@ -65,33 +66,33 @@ export function OverflowMenu({ items, label = "More actions" }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   trigger: {
-    minWidth: touchTargetMin,
-    minHeight: touchTargetMin,
+    minWidth: t.touchTarget,
+    minHeight: t.touchTarget,
     alignItems: "center",
     justifyContent: "center",
   },
   triggerLabel: {
     fontSize: 22,
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontWeight: "600",
   },
   list: {
-    gap: spacing.xs,
+    gap: t.spacing.xs,
   },
   item: {
-    minHeight: touchTargetMin,
+    minHeight: t.touchTarget,
     justifyContent: "center",
-    paddingVertical: spacing.sm,
-    borderRadius: radii.control,
+    paddingVertical: t.spacing.sm,
+    borderRadius: t.radii.input,
   },
   itemLabel: {
-    color: colors.deepNavy,
-    fontSize: 16,
+    ...t.text.body.style,
+    color: t.colors.ink,
     fontWeight: "500",
   },
   destructive: {
-    color: colors.error,
+    color: t.colors.crit,
   },
-});
+}));

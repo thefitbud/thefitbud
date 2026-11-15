@@ -1,0 +1,22 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-36 hold the gallery open for the theme flip
+tags:
+  - device
+  - z12-36
+  # Tagged device-offline only to get one Maestro invocation per flow, in path order
+  # (scripts/qa/device/README.md, "Flows that need the device offline"). The gallery
+  # makes no network call, so being offline changes nothing on screen. What matters is
+  # that this flow runs last, leaving the app open on the gallery when theme.sh flips
+  # the system theme before the next run; 1-primitives-gallery.yaml then captures the
+  # flip live.
+  - device-offline
+---
+- launchApp:
+    stopApp: false
+- runFlow:
+    when:
+      notVisible: "Large title 30"
+    commands:
+      - runFlow: open-gallery.yaml
+- takeScreenshot: primitives-before-flip
+- runFlow: ../../common/assert-no-crash.yaml
