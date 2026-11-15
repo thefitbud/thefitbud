@@ -60,6 +60,7 @@ import { invalidateRelationshipDayData } from "./dataCache";
 import { subscribeMealNotificationResponses } from "../notifications/nativeActions";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { ForegroundBanner } from "./notifications/ForegroundBanner";
+import { useNoticeScreen } from "../components/notice/NoticeContext";
 import { reportError } from "../lib/reportError";
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
@@ -235,6 +236,18 @@ export function TraineeShell({
   } | null>(null);
   const captureWorkoutRef = useRef<WorkoutExecution | null>(null);
   captureWorkoutRef.current = captureWorkout;
+
+  // Z12-38: the in-app banner queue skips a banner for the screen already open
+  // (a meal, a workout, a check-in). Tabs never suppress one (TR-06h is over Today).
+  useNoticeScreen(
+    activeCheckin
+      ? `checkin:${activeCheckin.id}`
+      : overlay?.screen === "workout_overview"
+        ? `workout:${overlay.assignmentId}`
+        : overlay?.screen === "something_different" || overlay?.screen === "food_search"
+          ? `meal:${overlay.assignmentId}`
+          : `tab:${tab}`,
+  );
 
   // Sets logged from the lock-screen Live Activity (LA2): drained into the
   // sync outbox when the app becomes active and when the workout tab opens.
