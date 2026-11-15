@@ -1,0 +1,151 @@
+{
+  "result": "mean screenshot luminance: light 0.829 (12), dark 0.38 (16)",
+  "light": 0.829,
+  "dark": 0.38,
+  "count": {
+    "light": 12,
+    "dark": 16
+  },
+  "shots": [
+    {
+      "file": "TM-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "TM-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.947
+    },
+    {
+      "file": "TM-04b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.702
+    },
+    {
+      "file": "TM-04b-light-ios.png",
+      "theme": "light",
+      "luma": 0.702
+    },
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.937
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.937
+    },
+    {
+      "file": "TR-07a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.923
+    },
+    {
+      "file": "TR-07a-light-ios.png",
+      "theme": "light",
+      "luma": 0.923
+    },
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.893
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    },
+    {
+      "file": "primitives-1-type-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-2-buttons-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.15
+    },
+    {
+      "file": "primitives-3-chips-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.15
+    },
+    {
+      "file": "primitives-4-cards-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.11
+    },
+    {
+      "file": "primitives-5-inputs-toast-tabbar-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.104
+    },
+    {
+      "file": "primitives-6-sheet-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "primitives-before-flip-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-before-flip-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    },
+    {
+      "file": "primitives-live-flip-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-005-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "step-006-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "step-010-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "step-046-tapOnElement-Open-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-046-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    },
+    {
+      "file": "step-053-tapOnElement-Open-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-053-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    },
+    {
+      "file": "step-064-tapOnElement-Open-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-064-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    }
+  ]
+}
