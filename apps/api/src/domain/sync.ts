@@ -12,6 +12,7 @@ import {
 import type {
   SyncChangeRecord,
   SyncEntityType,
+  SyncMutationRequest,
   SyncMutationResult,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
@@ -27,6 +28,7 @@ import {
   plans,
   planVersions,
   setExecutions,
+  syncMutations,
   workoutAssignments,
   workoutExecutions,
 } from "../db/schema";
@@ -761,4 +763,286 @@ export async function pullChangesForTrainee(
 
 export function mutationResultFromStored(body: string): SyncMutationResult {
   return JSON.parse(body) as SyncMutationResult;
+}
+
+// ---------------------------------------------------------------------------
+// Push: dedupe, verdicts and offline workout addressing (Z12-41)
+// ---------------------------------------------------------------------------
+
+function isApplied(result: SyncMutationResult): boolean {
+  return result.status === "applied" || result.status === "already_applied";
+}
+
+/**
+ * A dispatch that could not be processed this time (the server failed, was
+ * busy, or timed out). Nothing was decided about the mutation, so no verdict
+ * is stored and the client keeps the row waiting.
+ */
+export function isTransientDispatchStatus(httpStatus: number): boolean {
+  return httpStatus >= 500 || httpStatus === 429 || httpStatus === 408;
+}
+
+type DispatchErrorBody =
+  | {
+      code?: string;
+      message?: string;
+      details?: Record<string, unknown>;
+    }
+  | null
+  | undefined;
+
+/** The per-mutation result for a dispatch that did not succeed. */
+export function failedSyncResult(
+  mutation: Pick<SyncMutationRequest, "mutationId" | "recordId" | "entityType">,
+  httpStatus: number,
+  error: DispatchErrorBody,
+): SyncMutationResult {
+  return {
+    mutationId: mutation.mutationId,
+    status: httpStatus === 409 ? "conflicted" : "rejected",
+    recordId: mutation.recordId,
+    serverVersion: null,
+    entityType: mutation.entityType,
+    error: {
+      code: error?.code ?? "SYNC_MUTATION_FAILED",
+      message: error?.message ?? "Mutation failed.",
+      ...(error?.details ? { details: error.details } : {}),
+    },
+    ...(isTransientDispatchStatus(httpStatus) ? { retryable: true } : {}),
+  };
+}
+
+export type StoredSyncVerdict =
+  /** Never seen, or seen and refused: process it (again). */
+  | { kind: "process" }
+  /** Already applied: answer `already_applied`, with no second side effect. */
+  | { kind: "applied"; result: SyncMutationResult }
+  /** The idempotency key belongs to a different mutation id. */
+  | { kind: "key_reuse"; result: SyncMutationResult };
+
+/**
+ * What the server already knows about a delivered mutation.
+ *
+ * Only an APPLIED result is final. A stored refusal is a record of what
+ * happened, not a verdict to replay: the delivery is processed again, because
+ * nothing was written the first time and the reason may be gone (the day has
+ * arrived, coaching resumed, the execution now exists). Replaying refusals is
+ * what made a refused log impossible to send from the phone (finding 2).
+ */
+export async function findStoredSyncVerdict(
+  db: Db,
+  input: { actorUserId: string; mutation: SyncMutationRequest },
+): Promise<StoredSyncVerdict> {
+  const { actorUserId, mutation } = input;
+  const byMutation = await db
+    .select()
+    .from(syncMutations)
+    .where(
+      and(
+        eq(syncMutations.actorUserId, actorUserId),
+        eq(syncMutations.mutationId, mutation.mutationId),
+      ),
+    )
+    .limit(1);
+  if (byMutation[0]) {
+    const prior = mutationResultFromStored(byMutation[0].resultBody);
+    return isApplied(prior)
+      ? { kind: "applied", result: { ...prior, status: "already_applied" } }
+      : { kind: "process" };
+  }
+
+  const byKey = await db
+    .select()
+    .from(syncMutations)
+    .where(
+      and(
+        eq(syncMutations.actorUserId, actorUserId),
+        eq(syncMutations.idempotencyKey, mutation.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (byKey[0] && byKey[0].mutationId !== mutation.mutationId) {
+    const prior = mutationResultFromStored(byKey[0].resultBody);
+    return {
+      kind: "key_reuse",
+      result: {
+        mutationId: mutation.mutationId,
+        status: "rejected",
+        recordId: prior.recordId,
+        serverVersion: prior.serverVersion,
+        entityType: prior.entityType,
+        error: {
+          code: "IDEMPOTENCY_KEY_REUSE",
+          message:
+            "Idempotency key was already used by a different mutation id.",
+        },
+      },
+    };
+  }
+  return { kind: "process" };
+}
+
+/**
+ * Records a mutation's result and returns what the client should be told.
+ *
+ * - A transient failure (`retryable`) is not stored.
+ * - An applied result already on record wins over anything: a duplicate or a
+ *   racing delivery is answered `already_applied`, never with a second row and
+ *   never with the loser's conflict.
+ * - A refusal on record is replaced by the new result.
+ * Never throws on the unique indexes: a racing writer's row is read back.
+ */
+export async function recordSyncResult(
+  db: Db,
+  input: {
+    actorUserId: string;
+    mutation: SyncMutationRequest;
+    result: SyncMutationResult;
+  },
+): Promise<SyncMutationResult> {
+  const { actorUserId, mutation, result } = input;
+  if (result.retryable) return result;
+
+  const where = and(
+    eq(syncMutations.actorUserId, actorUserId),
+    eq(syncMutations.mutationId, mutation.mutationId),
+  );
+  const readPrior = async () => {
+    const rows = await db.select().from(syncMutations).where(where).limit(1);
+    return rows[0] ?? null;
+  };
+  const appliedAnswer = (stored: { resultBody: string }) => {
+    const prior = mutationResultFromStored(stored.resultBody);
+    return isApplied(prior)
+      ? { ...prior, status: "already_applied" as const }
+      : null;
+  };
+  const replace = () =>
+    db
+      .update(syncMutations)
+      .set({
+        recordId: result.recordId,
+        resultStatus: result.status,
+        serverVersion: result.serverVersion,
+        resultBody: JSON.stringify(result),
+      })
+      .where(where);
+
+  const existing = await readPrior();
+  if (existing) {
+    const applied = appliedAnswer(existing);
+    if (applied) return applied;
+    await replace();
+    return result;
+  }
+
+  try {
+    await db.insert(syncMutations).values({
+      id: createId(),
+      mutationId: mutation.mutationId,
+      actorUserId,
+      idempotencyKey: mutation.idempotencyKey,
+      operation: mutation.operation,
+      entityType: mutation.entityType,
+      recordId: result.recordId,
+      resultStatus: result.status,
+      serverVersion: result.serverVersion,
+      resultBody: JSON.stringify(result),
+      createdAt: nowIso(),
+    });
+    return result;
+  } catch {
+    // Another delivery of this mutation wrote first.
+    const raced = await readPrior();
+    if (!raced) return result;
+    const applied = appliedAnswer(raced);
+    if (applied) return applied;
+    if (isApplied(result)) await replace();
+    return result;
+  }
+}
+
+const EXECUTION_ADDRESSED_OPERATIONS: ReadonlySet<string> = new Set([
+  "workout.pause",
+  "workout.resume",
+  "workout.complete_set",
+  "workout.complete",
+]);
+
+/**
+ * Offline workouts (finding 2). A workout opened with no network has no
+ * server execution yet, so the phone builds one with its own ids and logs
+ * sets against those ids; the server then answers EXECUTION_NOT_FOUND and the
+ * sets are lost. A mutation may therefore also carry the ids the plan gave
+ * the phone, which both sides know: `assignmentId` and, for a set,
+ * `setTargetId`. When the execution id is not one of this trainee's, the
+ * execution and set are looked up by those instead.
+ *
+ * Only this trainee's own execution is ever resolved, and the route the
+ * mutation is dispatched to still checks ownership itself.
+ */
+export async function resolveWorkoutMutationPayload(
+  db: Db,
+  input: {
+    actorUserId: string;
+    operation: string;
+    payload: Record<string, unknown>;
+  },
+): Promise<Record<string, unknown>> {
+  const { actorUserId, operation, payload } = input;
+  if (!EXECUTION_ADDRESSED_OPERATIONS.has(operation)) return payload;
+  const assignmentId = payload.assignmentId;
+  if (typeof assignmentId !== "string") return payload;
+
+  const executionId = payload.executionId;
+  if (typeof executionId === "string") {
+    const known = await db
+      .select({ id: workoutExecutions.id })
+      .from(workoutExecutions)
+      .where(
+        and(
+          eq(workoutExecutions.id, executionId),
+          eq(workoutExecutions.traineeUserId, actorUserId),
+        ),
+      )
+      .limit(1);
+    if (known[0]) return payload;
+  }
+
+  const executions = await db
+    .select({ id: workoutExecutions.id })
+    .from(workoutExecutions)
+    .where(
+      and(
+        eq(workoutExecutions.assignmentId, assignmentId),
+        eq(workoutExecutions.traineeUserId, actorUserId),
+      ),
+    )
+    .limit(1);
+  const execution = executions[0];
+  if (!execution) return payload;
+
+  const resolved: Record<string, unknown> = {
+    ...payload,
+    executionId: execution.id,
+  };
+  if (operation !== "workout.complete_set") return resolved;
+
+  const setTargetId = payload.setTargetId;
+  if (typeof setTargetId !== "string") return resolved;
+  const sets = await db
+    .select({ id: setExecutions.id })
+    .from(setExecutions)
+    .innerJoin(
+      exerciseExecutions,
+      eq(exerciseExecutions.id, setExecutions.exerciseExecutionId),
+    )
+    .where(
+      and(
+        eq(exerciseExecutions.workoutExecutionId, execution.id),
+        eq(setExecutions.setTargetId, setTargetId),
+      ),
+    )
+    .limit(1);
+  return sets[0] ? { ...resolved, setExecutionId: sets[0].id } : resolved;
 }
