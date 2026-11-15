@@ -210,21 +210,21 @@ vi.mock("../auth/AuthProvider", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("../auth/AuthProvider");
   return { ...actual, useAuth: () => auth };
 });
+// One engine for the whole file, as the real provider gives: the tabs' loads
+// depend on its identity, so a new object per render would reload for ever.
+const syncEngine = {
+  pullAndApply: async () => undefined,
+  store: {
+    upsertLocal: async () => undefined,
+    listLocal: async () => [],
+    listOutbox: async () => [],
+    getMeta: async () => ({ cursor: null, lastSyncedAt: null }),
+  },
+  enqueue: async () => undefined,
+};
 vi.mock("../sync/SyncProvider", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("../sync/SyncProvider");
-  return {
-    ...actual,
-    useSyncEngine: () => ({
-      pullAndApply: async () => undefined,
-      store: {
-        upsertLocal: async () => undefined,
-        listLocal: async () => [],
-        listOutbox: async () => [],
-        getMeta: async () => ({ cursor: null, lastSyncedAt: null }),
-      },
-      enqueue: async () => undefined,
-    }),
-  };
+  return { ...actual, useSyncEngine: () => syncEngine };
 });
 vi.mock("../providers/ConfigProvider", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("../providers/ConfigProvider");
@@ -327,9 +327,7 @@ describe("Diet on a future day (TR-07k)", () => {
     await waitFor(() => expect(screen.getByLabelText("Breakfast, planned")).toBeTruthy());
     expectNoLogActions();
 
-    // The tab can redraw its list after mounting, so the row is looked up
-    // again at click time rather than held from an earlier render.
-    await waitFor(() => fireEvent.click(screen.getByLabelText("Breakfast, planned")));
+    fireEvent.click(screen.getByLabelText("Breakfast, planned"));
     await waitFor(() => expect(screen.getByText("Moong dal chilla")).toBeTruthy());
     expectNoLogActions();
     fireEvent.click(screen.getByLabelText("Close"));
