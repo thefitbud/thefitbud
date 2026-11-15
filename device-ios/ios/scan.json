@@ -1,0 +1,41 @@
+{
+  "platform": "ios",
+  "files": [
+    "ios-device.log"
+  ],
+  "sentinel": true,
+  "status": "pass",
+  "counts": {},
+  "findings": [],
+  "truncated": 0,
+  "allowed": [
+    {
+      "kind": "rn-warn",
+      "file": "ios-device.log",
+      "line": 108420,
+      "text": "2026-11-15 12:17:13.282 Df FitBudStaging[45622:1f903] [fitbud-gate] native.warn (ADVICE) View #673 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+      "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+    },
+    {
+      "kind": "rn-warn",
+      "file": "ios-device.log",
+      "line": 112592,
+      "text": "2026-11-15 12:17:18.982 Df FitBudStaging[45622:1f903] [fitbud-gate] native.warn (ADVICE) View #829 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+      "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+    },
+    {
+      "kind": "rn-warn",
+      "file": "ios-device.log",
+      "line": 331672,
+      "text": "2026-11-15 12:28:38.415 Df FitBudStaging[75288:32705] [fitbud-gate] native.warn (ADVICE) View #673 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+      "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+    },
+    {
+      "kind": "rn-warn",
+      "file": "ios-device.log",
+      "line": 333031,
+      "text": "2026-11-15 12:28:40.232 Df FitBudStaging[75288:32705] [fitbud-gate] native.warn (ADVICE) View #839 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+      "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - B290AE44-3363-44B9-8B64-482CB91DF23B" tests="1" failures="0" time="88.314" timestamp="2026-11-15T12:16:39">
+    <testcase id="Z12-36 trainee active workout mid-session (W-03)" name="Z12-36 trainee active workout mid-session (W-03)" classname="Z12-36 trainee active workout mid-session (W-03)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/3-trainee-workout.yaml" time="88.24" timestamp="2026-11-15T12:16:39" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
