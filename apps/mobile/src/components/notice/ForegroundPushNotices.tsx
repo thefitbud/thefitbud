@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { useAuth } from "../../auth/AuthProvider";
+import { isCaptureModeEnabled } from "../../dev/captureBridge";
 import { useNoticeQueue } from "./NoticeContext";
 import {
   bindForegroundPushes,
@@ -39,11 +40,24 @@ export function ForegroundPushNotices({
   }, [queue, userId, selectedRole]);
 
   useEffect(() => {
-    if (!queue || Platform.OS === "web") return undefined;
+    if (!queue) return undefined;
     const handle = createForegroundPushHandler(queue, () => contextRef.current);
-    return bindForegroundPushes(load, (data) => {
-      void handle(data);
-    });
+    // Screen-capture builds only (Expo web QA, EXPO_PUBLIC_SCREEN_CAPTURE=1): a
+    // received push handed to the same handler, since web has no push delivery.
+    const g = globalThis as typeof globalThis & {
+      __fitbudReceivePush?: (data: unknown) => Promise<void>;
+    };
+    if (isCaptureModeEnabled()) g.__fitbudReceivePush = handle;
+    const stop =
+      Platform.OS === "web"
+        ? () => undefined
+        : bindForegroundPushes(load, (data) => {
+            void handle(data);
+          });
+    return () => {
+      stop();
+      if (g.__fitbudReceivePush === handle) delete g.__fitbudReceivePush;
+    };
     // `load` is a module loader; binding once per queue is enough.
   }, [queue]);
 

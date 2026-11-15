@@ -1,0 +1,75 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap
+tags:
+  - device
+  - trainee
+  - z12-38
+env:
+  BANNER: "Rahul has a note for you.*"
+  NOTE: "Try 42.5 kg on the RDLs today if set 2 feels easy."
+---
+# Aarav Shah (on track, local demo seed; his coach is Rahul Verma). The coach shares a
+# note through the local API first (share-note.js), so Today has an unread coach note:
+# the trainee foreground banner queues it on the shared notice queue (Z12-38).
+#
+# What this proves on the device: the banner shows over Today below the status bar,
+# leaves by itself (about 4 s), a swipe up removes it at once, and a tap removes it
+# and lands on Today. A push received in the foreground goes through the same queue
+# (unit-tested through the receive handler, foregroundPush.test.ts); the gate cannot
+# send a push in the middle of a flow, so that path is on the Z12-58 checklist.
+#
+# Each theme's run shares its own note; the tap at the end marks it read.
+- runScript:
+    file: share-note.js
+    env:
+      API: http://127.0.0.1:8787
+      TRAINER_EMAIL: ${QA_TRAINER_EMAIL}
+      TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
+      PASSWORD: ${QA_PASSWORD}
+      NOTE: ${NOTE}
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+
+# 1. It shows (a due-meal banner may come first: one at a time), then leaves by itself.
+- extendedWaitUntil:
+    visible: "${BANNER}"
+    timeout: 20000
+- takeScreenshot: TR-06h
+- extendedWaitUntil:
+    notVisible: "${BANNER}"
+    timeout: 8000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# 2. Swipe up: a fresh launch is a new session, so the still-unread note shows again.
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "${BANNER}"
+    timeout: 30000
+- swipe:
+    from: "${BANNER}"
+    direction: UP
+    duration: 300
+- extendedWaitUntil:
+    notVisible: "${BANNER}"
+    timeout: 2500
+
+# 3. Tap: the banner leaves and Today is the screen (a coach note opens Today).
+- stopApp
+- launchApp
+- extendedWaitUntil:
+    visible: "${BANNER}"
+    timeout: 30000
+- tapOn: "${BANNER}"
+- extendedWaitUntil:
+    notVisible: "${BANNER}"
+    timeout: 2500
+- assertVisible: "Today's workout.*"
+- runFlow: ../../common/assert-no-crash.yaml

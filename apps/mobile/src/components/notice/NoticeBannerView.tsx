@@ -18,22 +18,15 @@ function Leading({ leading }: { leading: NoticeLeading }) {
   if (leading.kind === "meal" || leading.kind === "app") {
     const Icon = leading.kind === "meal" ? Utensils : Bell;
     return (
-      <View
-        style={[styles.avatar, styles.avatarClient]}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
+      <View style={[styles.avatar, styles.avatarClient]}>
         <Icon color={theme.colors.brandInk} size={20} strokeWidth={2} />
       </View>
     );
   }
   const coach = leading.tone === "coach";
   return (
-    <View
-      style={[styles.avatar, coach ? styles.avatarCoach : styles.avatarClient]}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-    >
+    // The banner's button label carries the words; the avatar adds none.
+    <View style={[styles.avatar, coach ? styles.avatarCoach : styles.avatarClient]}>
       <Text style={[styles.initials, coach ? styles.initialsCoach : styles.initialsClient]}>
         {noticeInitials(leading.name)}
       </Text>
