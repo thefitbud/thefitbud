@@ -25,7 +25,8 @@
 //   { "pattern": "<regex>", "platform": "ios"|"android"|"both", "reason": "<why>" }.
 // A match moves the finding to `allowed` (still reported, not failing). An entry
 // without a written reason (at least 20 characters) is refused and fails the scan.
-// It ships empty: nothing is allowed without a reason in the PR (prompt §2 Z12-35).
+// It shipped empty: nothing is allowed without a reason in the PR (prompt §2 Z12-35);
+// every entry is temporary and names the task that removes it (harness.test.mjs).
 //
 // Exit 0 when nothing failed, 1 on findings, 2 on bad input. Node built-ins only.
 import fs from "node:fs";
