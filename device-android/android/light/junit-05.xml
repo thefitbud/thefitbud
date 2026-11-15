@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="17.971" timestamp="2026-11-15T00:55:13">
+    <testcase id="Z12-36 hold the gallery open for the theme flip" name="Z12-36 hold the gallery open for the theme flip" classname="Z12-36 hold the gallery open for the theme flip" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/9-gallery-hold.yaml" time="17.947" timestamp="2026-11-15T00:55:14" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, z12-36, device-offline"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
