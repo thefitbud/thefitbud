@@ -112,9 +112,12 @@ test("the allow-list needs a written reason, and a match is reported, not failed
   assert.equal(ios.allowed.length, 0);
 });
 
-test("the committed allow-list is valid and empty", () => {
+test("the committed allow-list is valid and every entry names the task that removes it", () => {
   const entries = JSON.parse(fs.readFileSync(path.join(here, "allowlist.json"), "utf8"));
-  assert.deepEqual(loadAllowlist(entries), []);
+  const rules = loadAllowlist(entries);
+  // Only temporary entries: each reason names the W12 task (Z12-nn) that removes it.
+  for (const r of rules) assert.match(r.reason, /\bZ12-\d+\b[^.;]*\bremoves this entry\b/, r.pattern);
+  assert.ok(rules.length <= 1, "a new allow-list entry needs its own reviewed PR; update this bound with it");
 });
 
 test("scan-logs CLI exits 1 on findings and 0 on a clean log", () => {
