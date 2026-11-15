@@ -1,0 +1,31 @@
+{
+  "result": "mean screenshot luminance: light 0.927 (2), dark 0.927 (2)",
+  "light": 0.927,
+  "dark": 0.927,
+  "count": {
+    "light": 2,
+    "dark": 2
+  },
+  "shots": [
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.922
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.922
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.931
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    }
+  ]
+}

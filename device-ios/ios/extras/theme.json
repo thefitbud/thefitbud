@@ -1,0 +1,31 @@
+{
+  "result": "mean screenshot luminance: light 0.938 (2), dark 0.947 (2)",
+  "light": 0.938,
+  "dark": 0.947,
+  "count": {
+    "light": 2,
+    "dark": 2
+  },
+  "shots": [
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.941
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.952
+    },
+    {
+      "file": "step-017-assertCondition-Loading-light-ios.png",
+      "theme": "light",
+      "luma": 0.934
+    }
+  ]
+}

@@ -1,0 +1,91 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 2 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 2,
+      "passed": 1,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "message": "Assertion is false: \"Loading\" is not visible"
+        }
+      ],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 102 s",
+      "mode": "cache-hit",
+      "seconds": 102,
+      "cacheKey": "device-native-ios-0f316f84cef6377d7035b85820725b5364347b39"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.938 (2), dark 0.947 (2)",
+      "light": 0.938,
+      "dark": 0.947,
+      "count": {
+        "light": 2,
+        "dark": 2
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.941
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.941
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.952
+        },
+        {
+          "file": "step-017-assertCondition-Loading-light-ios.png",
+          "theme": "light",
+          "luma": 0.934
+        }
+      ]
+    }
+  ]
+}

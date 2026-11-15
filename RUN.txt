@@ -1,0 +1,3 @@
+Device gate run 43688985985, attempt 1
+App ref: claude/Z12-35-launch-smoke
+Run: https://github.com/thefitbud/thefitbud/actions/runs/43688985985
