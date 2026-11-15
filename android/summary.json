@@ -1,0 +1,185 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 3 of 4 flows failed",
+    "dark: 3 of 4 flows failed"
+  ],
+  "flows": [
+    "flows/auth/sign-in-code.yaml",
+    "flows/auth/sign-in-password.yaml",
+    "flows/trainee/today.yaml",
+    "flows/trainer/clients.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 4,
+      "passed": 1,
+      "failed": 3,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Sign in with a code",
+          "message": "Assertion is false: \"Today's workout|Needs you|Choose mode\" is visible"
+        },
+        {
+          "flow": "Trainee Today",
+          "message": "Assertion is false: \"Rest day\\. Recovery is part of the plan\\.|[0-9]+ exercises?.*\" is visible"
+        },
+        {
+          "flow": "Trainer Clients",
+          "message": "Assertion is false: \".*QA Rohan.*\" is visible"
+        }
+      ],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 4,
+      "passed": 1,
+      "failed": 3,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Sign in with a code",
+          "message": "Assertion is false: \"Today's workout|Needs you|Choose mode\" is visible"
+        },
+        {
+          "flow": "Trainee Today",
+          "message": "Assertion is false: \"Rest day\\. Recovery is part of the plan\\.|[0-9]+ exercises?.*\" is visible"
+        },
+        {
+          "flow": "Trainer Clients",
+          "message": "Assertion is false: \".*QA Rohan.*\" is visible"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 44 s",
+      "mode": "cache-hit",
+      "seconds": 44,
+      "cacheKey": "device-native-android-68e8ae0a04ba5381092badb67e74882cc9abc4d6"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.874 (9), dark 0.874 (9)",
+      "light": 0.874,
+      "dark": 0.874,
+      "count": {
+        "light": 9,
+        "dark": 9
+      },
+      "shots": [
+        {
+          "file": "auth-sign-in-code__code-requested-dark-android.png",
+          "theme": "dark",
+          "luma": 0.896
+        },
+        {
+          "file": "auth-sign-in-code__code-requested-light-android.png",
+          "theme": "light",
+          "luma": 0.895
+        },
+        {
+          "file": "auth-sign-in-code__start-dark-android.png",
+          "theme": "dark",
+          "luma": 0.742
+        },
+        {
+          "file": "auth-sign-in-code__start-light-android.png",
+          "theme": "light",
+          "luma": 0.739
+        },
+        {
+          "file": "auth-sign-in-password__signed-in-dark-android.png",
+          "theme": "dark",
+          "luma": 0.934
+        },
+        {
+          "file": "auth-sign-in-password__signed-in-light-android.png",
+          "theme": "light",
+          "luma": 0.934
+        },
+        {
+          "file": "auth-sign-in-password__start-dark-android.png",
+          "theme": "dark",
+          "luma": 0.742
+        },
+        {
+          "file": "auth-sign-in-password__start-light-android.png",
+          "theme": "light",
+          "luma": 0.739
+        },
+        {
+          "file": "step-017-assertCondition-_QA_SLIPPING_NAME-dark-android.png",
+          "theme": "dark",
+          "luma": 0.931
+        },
+        {
+          "file": "step-017-assertCondition-_QA_SLIPPING_NAME-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-033-assertCondition-Rest_day_._Recovery_is_p-dark-android.png",
+          "theme": "dark",
+          "luma": 0.926
+        },
+        {
+          "file": "step-033-assertCondition-Rest_day_._Recovery_is_p-light-android.png",
+          "theme": "light",
+          "luma": 0.926
+        },
+        {
+          "file": "step-051-assertCondition-Today_s_workoutNeeds_you-dark-android.png",
+          "theme": "dark",
+          "luma": 0.887
+        },
+        {
+          "file": "step-051-assertCondition-Today_s_workoutNeeds_you-light-android.png",
+          "theme": "light",
+          "luma": 0.887
+        },
+        {
+          "file": "step-056-assertCondition-Today_s_workoutNeeds_you-dark-android.png",
+          "theme": "dark",
+          "luma": 0.887
+        },
+        {
+          "file": "step-056-assertCondition-Today_s_workoutNeeds_you-light-android.png",
+          "theme": "light",
+          "luma": 0.887
+        },
+        {
+          "file": "trainee-today__loaded-dark-android.png",
+          "theme": "dark",
+          "luma": 0.926
+        },
+        {
+          "file": "trainee-today__loaded-light-android.png",
+          "theme": "light",
+          "luma": 0.926
+        }
+      ]
+    }
+  ]
+}

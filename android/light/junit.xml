@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="4" failures="3" time="251.911" timestamp="2026-11-15T00:17:20">
+    <testcase id="Sign in with a code" name="Sign in with a code" classname="Sign in with a code" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/auth/sign-in-code.yaml" time="108.834" timestamp="2026-11-15T00:17:20" status="ERROR">
+      <properties>
+        <property name="tags" value="auth, trainee, smoke, full"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout|Needs you|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="Sign in with a password" name="Sign in with a password" classname="Sign in with a password" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/auth/sign-in-password.yaml" time="42.187" timestamp="2026-11-15T00:19:09" status="SUCCESS">
+      <properties>
+        <property name="tags" value="auth, trainer, smoke, full"/>
+      </properties>
+    </testcase>
+    <testcase id="Trainee Today" name="Trainee Today" classname="Trainee Today" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/trainee/today.yaml" time="42.747" timestamp="2026-11-15T00:19:52" status="ERROR">
+      <properties>
+        <property name="tags" value="trainee, smoke, full"/>
+      </properties>
+      <failure>Assertion is false: "Rest day\. Recovery is part of the plan\.|[0-9]+ exercises?.*" is visible</failure>
+    </testcase>
+    <testcase id="Trainer Clients" name="Trainer Clients" classname="Trainer Clients" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/trainer/clients.yaml" time="58.106" timestamp="2026-11-15T00:20:34" status="ERROR">
+      <properties>
+        <property name="tags" value="trainer, smoke, full"/>
+      </properties>
+      <failure>Assertion is false: ".*QA Rohan.*" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
