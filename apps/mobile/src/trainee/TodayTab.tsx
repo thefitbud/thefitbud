@@ -22,18 +22,21 @@ import {
   semanticColors,
   spacing,
 } from "@fitbud/ui-mobile";
-import { Check, Clock, CloudUpload, Moon } from "lucide-react-native";
+import { Check, Clock, CloudUpload, List, Moon } from "lucide-react-native";
 import { surface } from "@fitbud/tokens";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
 import { formatInstant } from "@fitbud/core";
+import { addDays, startOfWeekMonday } from "../lib/dates";
+import { FutureDayBanner } from "./FutureDayBanner";
+import { PlannedMealSheet } from "./PlannedMealSheet";
 import {
-  addDays,
-  localDateInTimezone,
-  startOfWeekMonday,
-} from "../lib/dates";
+  isFutureDay,
+  todayFutureBannerText,
+  useLocalToday,
+} from "./futureDay";
 import { reportError } from "../lib/reportError";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
@@ -293,9 +296,13 @@ export function TodayTab({
   const sync = useSyncEngine();
   const s1 = stage1Api(api);
   const timeZone = me?.timezone ?? "UTC";
-  const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
+  // Kept current across local midnight and app foregrounding, so a future
+  // day unlocks when it becomes today (D-W12-7, Z12-39).
+  const today = useLocalToday(timeZone);
   const isToday = selectedDate === today;
-  const isFuture = selectedDate > today;
+  const isFuture = isFutureDay(selectedDate, today);
+  /** A planned meal opened read-only on a future day (TR-07j without actions). */
+  const [plannedMeal, setPlannedMeal] = useState<MealAssignment | null>(null);
 
   const [workout, setWorkout] = useState<WorkoutAssignment | null>(null);
   const [loadedMeals, setMeals] = useState<MealAssignment[]>([]);
@@ -712,6 +719,56 @@ export function TodayTab({
           />
         ) : null}
 
+        {/*
+          D-W12-7 (Z12-39): a future day shows the plan and nothing to log.
+          The hero (Start workout, Eaten as planned) is today-only already;
+          this adds the notice and a preview of the day's workout.
+        */}
+        {isFuture && planState.status === "loaded" && !loading ? (
+          <FutureDayBanner
+            kind="brand"
+            text={todayFutureBannerText(coachName, selectedDate)}
+          />
+        ) : null}
+
+        {isFuture && planState.status === "loaded" && !loading && workout ? (
+          <View
+            style={styles.hero}
+            accessibilityLabel={`${workout.workoutDayName}, planned for ${formatCivilDate(selectedDate)}`}
+            testID="future-day-workout"
+          >
+            <Text style={styles.heroEyebrow}>
+              {/* "Mon 16 · 6:30 pm": the day without its month, as in TR-06d. */}
+              {`${formatCivilDate(selectedDate).split(" ").slice(0, 2).join(" ")} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
+            </Text>
+            <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
+            <Text style={styles.heroItems}>
+              {exerciseCountLabel(workout.workoutDay.exercises.length)}
+              {workoutMins != null ? ` · about ${workoutMins} min` : ""}
+              {workoutSets > 0
+                ? ` · ${workoutSets} ${workoutSets === 1 ? "set" : "sets"}`
+                : ""}
+            </Text>
+            <View style={styles.heroBtns}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Preview exercises"
+                onPress={() =>
+                  onOpenOverlay({
+                    screen: "workout_overview",
+                    assignmentId: workout.id,
+                    viewOnly: true,
+                  })
+                }
+                style={[styles.heroPrimary, styles.heroPreview]}
+              >
+                <List size={20} color={colors.deepNavy} strokeWidth={2} />
+                <Text style={styles.heroPrimaryLabel}>Preview exercises</Text>
+              </Pressable>
+            </View>
+          </View>
+        ) : null}
+
         {loading ? <TodaySkeleton /> : null}
 
         {/*
@@ -1003,6 +1060,37 @@ export function TodayTab({
                   ]
                     .filter(Boolean)
                     .join(" · ");
+                  if (isFuture) {
+                    // D-W12-7: a planned meal on a future day opens the
+                    // read-only planned meal; the row has no log action.
+                    return (
+                      <Pressable
+                        key={meal.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${cleanFoodLabel(meal.mealName)}, planned`}
+                        accessibilityHint="Shows the planned meal"
+                        onPress={() => setPlannedMeal(meal)}
+                        style={({ pressed }) => [
+                          styles.mealRow,
+                          index > 0 && styles.mealRowRule,
+                          pressed && styles.mealRowPressed,
+                        ]}
+                      >
+                        <Text style={styles.mealTime}>
+                          {formatClockTime(meal.windowStartsAt, timeZone)}
+                        </Text>
+                        <View style={styles.mealMain}>
+                          <Text style={styles.mealName}>
+                            {cleanFoodLabel(meal.mealName)}
+                          </Text>
+                          <Text style={styles.mealMeta} numberOfLines={1}>
+                            {sub}
+                          </Text>
+                        </View>
+                        <StatusChip label="Planned" tone="neutral" />
+                      </Pressable>
+                    );
+                  }
                   return (
                     <View
                       key={meal.id}
@@ -1136,6 +1224,14 @@ export function TodayTab({
         ) : null}
       </View>
     </Screen>
+    {plannedMeal && isFuture ? (
+      <PlannedMealSheet
+        meal={plannedMeal}
+        coachName={coachName}
+        timeZone={timeZone}
+        onClose={() => setPlannedMeal(null)}
+      />
+    ) : null}
     </>
   );
 }
@@ -1205,6 +1301,13 @@ const styles = StyleSheet.create({
     color: colors.deepNavy,
     fontSize: 16,
     fontWeight: "700",
+  },
+  heroPreview: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  mealRowPressed: {
+    opacity: 0.6,
   },
   heroSecondary: {
     alignItems: "center",

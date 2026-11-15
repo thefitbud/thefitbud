@@ -35,7 +35,10 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
-import { localDateInTimezone, startOfWeekMonday, weekDatesFrom, weekdayShort, dayOfMonth } from "../lib/dates";
+import { startOfWeekMonday, weekDatesFrom, weekdayShort, dayOfMonth } from "../lib/dates";
+import { FutureDayBanner } from "./FutureDayBanner";
+import { PlannedMealSheet } from "./PlannedMealSheet";
+import { dietFutureBannerText, isFutureDay, useLocalToday } from "./futureDay";
 import { plannedSummaryLine } from "../lib/plannedMealItems";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
@@ -218,7 +221,12 @@ export function DietTab({
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
   const timeZone = me?.timezone ?? "UTC";
-  const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
+  // Kept current across local midnight and app foregrounding (Z12-39).
+  const today = useLocalToday(timeZone);
+  /** D-W12-7: a future day shows the plan with no way to log it. */
+  const isFuture = isFutureDay(selectedDate, today);
+  /** A planned meal opened read-only on a future day (TR-07j without actions). */
+  const [plannedMeal, setPlannedMeal] = useState<MealAssignment | null>(null);
   const weekStart = useMemo(
     () => startOfWeekMonday(selectedDate),
     [selectedDate],
@@ -374,6 +382,8 @@ export function DietTab({
 
   const focusMealId = useMemo(() => {
     if (photoPromptId) return photoPromptId;
+    // A future day has no "due now" meal: every meal is a planned row.
+    if (isFuture) return null;
     const hero = nextUp({
       meals: assignments,
       workout: null,
@@ -381,7 +391,7 @@ export function DietTab({
     });
     if (hero?.kind === "meal") return hero.meal.id;
     return null;
-  }, [assignments, photoPromptId]);
+  }, [assignments, photoPromptId, isFuture]);
 
   function applyOptimistic(id: string, status: MealAssignment["status"]) {
     optimisticStatus.current.set(id, status);
@@ -442,7 +452,47 @@ export function DietTab({
     }
   }
 
+  /**
+   * D-W12-7 (TR-07k): on a future day a meal is a planned row. Tapping it
+   * opens the read-only planned meal; there is no log action anywhere on it.
+   */
+  function renderPlannedRow(meal: MealAssignment, index: number) {
+    const planKcal = nutrientsFromMealPrescription(meal).kcal;
+    const timeLabel = formatClockTime(meal.windowStartsAt, timeZone);
+    const name = cleanFoodLabel(meal.mealName);
+    return (
+      <Pressable
+        key={meal.id}
+        accessibilityRole="button"
+        accessibilityLabel={`${name}, planned`}
+        accessibilityHint="Shows the planned meal"
+        onPress={() => setPlannedMeal(meal)}
+        style={[styles.lrow, index === 0 && styles.lrowFirst]}
+      >
+        <View style={[styles.tile, styles.tileNeu]}>
+          {mealTileIcon(meal, "later")}
+        </View>
+        <View style={styles.lrowText}>
+          <Text style={styles.mealTitle}>
+            {name}
+            <Text style={styles.mealTime}> {timeLabel}</Text>
+          </Text>
+          <Text style={styles.mealSub} numberOfLines={1}>
+            {plannedSummaryLine(meal)}
+          </Text>
+        </View>
+        {planKcal > 0 ? (
+          <View style={styles.lrowRight}>
+            <Text style={styles.laterKcal}>{formatNumber(planKcal)}</Text>
+            <Text style={styles.laterLabel}>planned</Text>
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  }
+
   function renderCompactRow(meal: MealAssignment, index: number) {
+    if (isFuture) return renderPlannedRow(meal, index);
     const lockCopy = lockStateKnown ? mealLockCopy(meal, coachName) : null;
     const kcalRow = kcalRowById.get(meal.id);
     const kcal = kcalRow?.kcal ?? null;
@@ -783,6 +833,14 @@ export function DietTab({
       {weekState.status === "unavailable" ? (
         <ErrorBanner message={WEEK_UNAVAILABLE_MESSAGE} />
       ) : null}
+      {isFuture ? (
+        <View style={styles.futureBanner}>
+          <FutureDayBanner
+            kind="neutral"
+            text={dietFutureBannerText(coachName, selectedDate)}
+          />
+        </View>
+      ) : null}
       {showOffline ? (
         <View style={styles.offlineBanner} accessibilityRole="alert">
           <WifiOff size={20} color={semanticColors.attention.text} strokeWidth={1.75} />
@@ -836,7 +894,9 @@ export function DietTab({
       </View>
 
       <View style={styles.sh}>
-        <Text style={styles.shTitle}>Today&apos;s meals</Text>
+        <Text style={styles.shTitle}>
+          {isFuture ? "Meals" : "Today's meals"}
+        </Text>
         <Pressable
           accessibilityRole="button"
           onPress={() => onOpenOverlay({ screen: "meal_plan" })}
@@ -878,6 +938,14 @@ export function DietTab({
             );
           }}
           onDismiss={() => setSkippedUndo(null)}
+        />
+      ) : null}
+      {plannedMeal && isFuture ? (
+        <PlannedMealSheet
+          meal={plannedMeal}
+          coachName={coachName}
+          timeZone={timeZone}
+          onClose={() => setPlannedMeal(null)}
         />
       ) : null}
     </Screen>
@@ -1394,6 +1462,9 @@ const styles = StyleSheet.create({
     color: colors.deepNavy,
     fontSize: 15,
     fontWeight: "600",
+  },
+  futureBanner: {
+    marginBottom: spacing.md,
   },
   offlineBanner: {
     alignItems: "center",

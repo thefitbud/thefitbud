@@ -25,6 +25,32 @@ export function opensOnLabel(localDate: string): string {
   return `Opens on ${formatCivilDate(localDate)}`;
 }
 
+const WEEKDAYS_LONG = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+] as const;
+
+/** "Monday" for a civil date (YYYY-MM-DD). */
+export function weekdayLong(localDate: string): string {
+  const [y, m, d] = localDate.split("-").map(Number);
+  return WEEKDAYS_LONG[new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay()]!;
+}
+
+/** Today's banner (TR-06d): "This is Rahul’s plan for Monday. Logging opens on the day." */
+export function todayFutureBannerText(coachName: string, localDate: string): string {
+  return `This is ${coachName}’s plan for ${weekdayLong(localDate)}. ${LOGGING_OPENS_ON_THE_DAY}`;
+}
+
+/** Diet's banner (TR-07k): "Opens on Mon 16 Nov. You can see Rahul’s plan now and log it on the day." */
+export function dietFutureBannerText(coachName: string, localDate: string): string {
+  return `${opensOnLabel(localDate)}. You can see ${coachName}’s plan now and log it on the day.`;
+}
+
 /** Milliseconds from now until the next civil midnight in `timeZone`. */
 export function msUntilNextLocalMidnight(
   timeZone: string,
