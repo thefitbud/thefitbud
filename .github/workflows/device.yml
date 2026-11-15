@@ -503,3 +503,62 @@ jobs:
           name: device-ios
           path: qa-results/device
           retention-days: 14
+
+  # Agents cannot download Actions artifacts from this repository's cloud sessions (the
+  # artifact blob host is not on their network allowlist, and its name changes between
+  # runs). So a dispatched run also publishes its screenshots and verdicts as one commit
+  # on refs/device-gate/<run id> — a ref outside refs/heads, so it is not a branch and
+  # starts no workflow. Fetch it with:
+  #   git fetch origin refs/device-gate/<run id>:refs/device-gate/<run id>
+  #   mkdir -p /tmp/device-run && git archive refs/device-gate/<run id> | tar -x -C /tmp/device-run
+  #   scripts/qa/device/copy-shots.sh /tmp/device-run docs/qa/<task>
+  # Logs, crash reports and raw dumps stay in the artifacts only. Dispatch only: a
+  # pull_request run (possibly from a fork) never gets a write token.
+  device-publish:
+    name: device-publish
+    needs: [device-android, device-ios]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Download the device results
+        uses: actions/download-artifact@v5
+        with:
+          pattern: device-*
+          path: device-run
+        continue-on-error: true
+
+      - name: Publish shots and verdicts to refs/device-gate/${{ github.run_id }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          APP_REF: ${{ inputs.ref || github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p publish
+          if [ -d device-run ]; then
+            # Keep screenshots and the small verdict files; drop logs and raw dumps.
+            (cd device-run && find . -type f \( -name '*.png' -o -name 'summary.md' -o -name 'summary.json' \
+              -o -name 'scan.json' -o -name 'junit.xml' -o -path '*/extras/*.json' \) \
+              -not -path '*/logs/*' -not -path '*/lockscreen/*' -print0 \
+              | xargs -0 -r cp --parents -t ../publish)
+          fi
+          {
+            echo "Device gate run $RUN_ID"
+            echo "App ref: $APP_REF"
+            echo "Run: https://github.com/$REPO/actions/runs/$RUN_ID"
+          } > publish/RUN.txt
+          cd publish
+          git init -q
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Device gate run $RUN_ID ($APP_REF)"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -c http.extraheader="AUTHORIZATION: basic $auth" \
+            push -q "https://github.com/$REPO.git" "HEAD:refs/device-gate/$RUN_ID"
+          echo "Published $(git ls-files | wc -l) file(s) to refs/device-gate/$RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"

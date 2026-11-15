@@ -47,10 +47,15 @@ gh run watch <run id> --repo thefitbud/thefitbud                          # neve
 - **Artifacts** `device-ios` / `device-android` (14 days): `shots/`, `<platform>/summary.md`,
   JUnit and Maestro logs per theme, `logs/` (device log, crash reports, API log),
   `lockscreen/` dumps, the native fingerprint manifest.
-- Copy your screens into the repository:
+- **`refs/device-gate/<run id>`** (dispatched runs only): the screenshots and verdict files
+  as one commit, for cloud agent sessions, which cannot download artifacts (the artifact
+  blob host is not on their network allowlist).
+- Copy your screens into the repository (a cloud session uses the ref; with `gh` and
+  artifact access, `gh run download <run id> --repo thefitbud/thefitbud --pattern 'device-*' --dir /tmp/device-run` works too):
 
 ```bash
-gh run download <run id> --repo thefitbud/thefitbud --pattern 'device-*' --dir /tmp/device-run
+git fetch origin refs/device-gate/<run id>:refs/device-gate/<run id>
+mkdir -p /tmp/device-run && git archive refs/device-gate/<run id> | tar -x -C /tmp/device-run
 scripts/qa/device/copy-shots.sh /tmp/device-run docs/qa/<task ID>
 node scripts/qa/device/parity-gen.mjs        # adds only missing rows, to their section's table; never rewrites a row
 ```
