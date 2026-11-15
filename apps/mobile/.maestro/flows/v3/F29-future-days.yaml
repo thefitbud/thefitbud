@@ -29,16 +29,41 @@ tags:
     clearKeychain: true
     permissions:
       all: allow
+# Sign-in steps as in common/sign-in-password.yaml, with one difference: the
+# landing wait also accepts Today on a rest day. There the plan header's label
+# is "Today's workout: rest day", which iOS exposes instead of the text, so the
+# common subflow's exact "Today's workout" never matches (device run
+# 43714036097, Sun 15 Nov). common/ is the harness's file and is not changed here.
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 30000
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${QA_ONTRACK_EMAIL}
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Your coach's plan for today is waiting\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+# The Android emulator once dropped the typed email (run 43714036097, light):
+# the form answered "Enter your mobile number or email and password." Type the
+# email again once if so.
 - runFlow:
-    file: ../../common/sign-in-password.yaml
-    env:
-      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+    when:
+      visible: "Enter your mobile number or email and password\\."
+    commands:
+      - tapOn: "you@example.com or 9876543210"
+      - inputText: ${QA_ONTRACK_EMAIL}
+      - tapOn: "Your coach's plan for today is waiting\\."
+      - tapOn:
+          text: "Sign in"
+          below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
 - extendedWaitUntil:
     notVisible: ".*Loading your day.*"
     timeout: 30000
-- extendedWaitUntil:
-    visible: "Today's workout"
-    timeout: 60000
 - evalScript: ${output.tomorrow = (function () { var d = new Date(Date.now() + (5.5 * 3600 + 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
 - evalScript: ${output.yesterday = (function () { var d = new Date(Date.now() + (5.5 * 3600 - 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
 
