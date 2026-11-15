@@ -655,6 +655,8 @@ export function TodayTab({
           onSelectDate={onSelectDate}
           weekState={weekState}
           day={dayTotals}
+          // The future-day banner below says what the "Preview" line did (TR-06d has no such line).
+          showPreviewBanner={false}
         />
 
         {offline ? (

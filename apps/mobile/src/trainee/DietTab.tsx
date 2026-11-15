@@ -868,7 +868,9 @@ export function DietTab({
               ? mealsLoggedSummary(assignments)
               : plannedNote
                 ? `${mealsLoggedSummary(assignments)} · ${plannedNote}`
-                : `${mealsLoggedSummary(assignments)} today`}
+                : isFuture
+                  ? mealsLoggedSummary(assignments)
+                  : `${mealsLoggedSummary(assignments)} today`}
           </Text>
           <View style={styles.mac3}>
             <MacroBar

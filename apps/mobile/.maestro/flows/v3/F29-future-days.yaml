@@ -1,15 +1,17 @@
 appId: com.thefitbud.mobile.staging
 name: F29 Future days are view only (Z12-39)
 tags:
+  - device
   - trainee
-  - full
   - z12-39
 ---
 # F29 (D-W12-7, Z12-39): a day after the trainee's today shows the plan with
 # no way to log it; a past day stays loggable as a late log.
 #
-# Account: the on-track trainee (Asia/Kolkata in the demo seed and the QA seed).
-# Env from the runner: QA_ONTRACK_EMAIL, QA_PASSWORD.
+# Account: the on-track trainee, aarav.ontrack on the local demo seed
+# (Asia/Kolkata). Env from the device harness: QA_ONTRACK_EMAIL, QA_PASSWORD.
+# Tagged `device` (docs/qa/W12/maestro-map.md rules): it runs in device.yml,
+# not in qa.yml's staging suite.
 #
 # Screens and screenshots (named by v3 screen ID, see
 # scripts/qa/device/collect-shots.mjs):
