@@ -119,6 +119,29 @@ describe("durable sync store", () => {
     expect(cached[0]?.payloadJson).toContain("Fat loss");
   });
 
+  it("small storage keeps only the newest plan, however many versions were cached", async () => {
+    const storage = createMemoryKeyValue();
+    const first = open(storage, "small");
+    for (const [id, at] of [
+      ["plan-1", "2026-11-01T07:00:00.000Z"],
+      ["plan-3", "2026-11-15T07:00:00.000Z"],
+      ["plan-2", "2026-11-08T07:00:00.000Z"],
+    ] as const) {
+      await first.upsertLocal({
+        entityType: "effective_plan",
+        recordId: id,
+        serverVersion: 1,
+        payloadJson: "{}",
+        tombstone: false,
+        updatedAt: at,
+      });
+    }
+
+    const cached = await open(storage, "small").listLocal("effective_plan");
+
+    expect(cached.map((row) => row.recordId)).toEqual(["plan-3"]);
+  });
+
   it("small storage does not keep a pull cursor without the records it covers", async () => {
     const storage = createMemoryKeyValue();
     const first = open(storage, "small");

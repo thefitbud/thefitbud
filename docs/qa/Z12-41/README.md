@@ -189,7 +189,7 @@ Other states captured: `TR-19a-unreachable-light-web.png`, `TR-19a-sending-light
 5. **Cold start offline is handled in `AuthProvider.tsx`**, not `AppRouter.tsx`: with a snapshot the route resolves to the shell; with none, the error screen with Retry is unchanged. The trainer cache owner is not set from the snapshot (Z11-8).
 6. **Reachability is "can the API be reached"**, asked of the API (`/health`), behind `sync/reachability.ts`. `setReachabilityFactory` is the one place Z12-57 switches to NetInfo.
 7. **`enqueueAndPush` returns only its own action's verdict.** Before, a refused row from another action in the same request made an unrelated log show an error.
-8. **Having no network is not reported as an error** (it would be one report every 30 s while offline); the row carries the reason.
+8. **Having no network is not reported as an error** (it would be one report every 30 s while offline); the row carries the reason. And while the API is known to be unreachable, a new log is saved without starting a request that would hang, so the screen is not kept waiting; the triggers and "Try sending now" still try.
 9. **Copy with no frame**: "Can't reach FitBud. Check your connection.", "FitBud didn't respond. We'll keep trying.", "Couldn't send yet (SYNC-AUTH / SYNC-PARSE). We'll keep trying.", "N items couldn't be sent", "These are still on this phone. Nothing else is waiting.", "Everything you logged has been sent.", "Kept on phone", "What changed", "Try again", "Remove", and the unreadable-outbox line (SYNC-STORE). Diagnostics and Email support are gone from this screen (not in the mock; Help is on More).
 10. **Web keeps the old cold-start behaviour** (see "Not covered on web").
 
@@ -201,4 +201,8 @@ Other states captured: `TR-19a-unreachable-light-web.png`, `TR-19a-sending-light
 - **Diet offers "Eaten as planned" on a meal whose window has not opened** (seen as Aarav at 1:33 pm for the 5:00 pm snack); the server refuses it (Z12-42 / Z12-39).
 - **Today's own sync button** (`TodayHeader.tsx`, Z12-46) still computes its label itself; `useSyncView` and `pillFromStatus` give it the same answer as the pill.
 - **Z12-57 list:** replace the keychain-chunk storage with a database module; NetInfo behind `setReachabilityFactory`.
-- **Z12-58 / Firoz's checklist:** real airplane mode and real mobile-data-off-with-Wi-Fi on a phone; an app kill with unsent logs on a real device (keychain persistence); the OS reachability signal on iOS.
+- **Z12-58 / Firoz's real-phone checklist:**
+  - real airplane mode, and mobile data off with Wi-Fi on: log a meal, a set and a weight, see "Saved on phone", and watch them send on their own;
+  - kill the app with unsent logs, reopen it with no network: it opens on cached data and the logs are still listed (keychain persistence);
+  - **TR-19b: coach republishes while a log waits.** Log a meal offline, have the coach change that meal and publish, go online: the dialog opens with the coach's name, "Keep my log" keeps the line as "Kept on phone". Not reachable in a device flow, so it has Expo-web captures and render tests only;
+  - the OS reachability signal on iOS (after Z12-57 adds NetInfo).

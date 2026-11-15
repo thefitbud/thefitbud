@@ -38,8 +38,8 @@ const ALL_ENTITY_TYPES: readonly SyncEntityType[] = [
 ];
 
 /**
- * Small storage (the native keychain) keeps the outbox and the plan a cold
- * start opens on. The pull cursor is not kept there: the records it covers
+ * Small storage (the native keychain) keeps the outbox and the newest plan,
+ * which is what a cold start opens on. The pull cursor is not kept there: the records it covers
  * are not, so after a restart the pull starts again from the beginning.
  */
 const SMALL_ENTITY_TYPES: readonly SyncEntityType[] = ["effective_plan"];
@@ -203,7 +203,14 @@ export function createDurableSyncStore(
     }
     const type = persistedTypes.find((candidate) => localKey(candidate) === key);
     if (!type) return;
-    const text = JSON.stringify(await inner.listLocal(type));
+    let rows = await inner.listLocal(type);
+    if (capacity === "small" && rows.length > 1) {
+      // The keychain keeps what a cold start opens on: the newest record.
+      rows = [...rows]
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+        .slice(0, 1);
+    }
+    const text = JSON.stringify(rows);
     if (capacity === "small" && text.length > SMALL_SEGMENT_MAX_CHARS) {
       // Too large for the keychain: this launch keeps it in memory only.
       await storage.remove(key);

@@ -27,6 +27,10 @@ export function SyncProvider({ children }: { children: ReactNode }) {
   const { api, me } = useAuth();
   const userId = me?.userId ?? null;
 
+  const reachability = useMemo(
+    () => createReachability({ probe: () => api.health() }),
+    [api],
+  );
   const engine = useMemo(
     () =>
       createSyncEngine(
@@ -35,15 +39,15 @@ export function SyncProvider({ children }: { children: ReactNode }) {
           pushSync: (body) => api.pushSync(body),
           pullSync: (query) => api.pullSync(query),
         },
-        { onError: reportError },
+        {
+          onError: reportError,
+          // Unknown counts as reachable: only a failed probe holds a send back.
+          isReachable: () => reachability.isReachable() !== false,
+        },
       ),
-    [api, userId],
+    [api, reachability, userId],
   );
 
-  const reachability = useMemo(
-    () => createReachability({ probe: () => api.health() }),
-    [api],
-  );
   useEffect(() => () => reachability.dispose(), [reachability]);
 
   useEffect(() => {

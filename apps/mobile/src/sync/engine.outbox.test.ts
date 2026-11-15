@@ -555,6 +555,27 @@ describe("refused rows", () => {
   });
 });
 
+describe("known to be unreachable", () => {
+  it("a log made then is saved without starting a request; Try sending now still tries", async () => {
+    const store = createMemorySyncStore();
+    const server = fakeServer();
+    let reachable = false;
+    const engine = engineFor(store, server.push, { isReachable: () => reachable });
+    await logWeight(engine, 1);
+
+    expect(await engine.pushPending()).toEqual([]);
+    expect(server.requests).toHaveLength(0);
+    expect(await engine.getStatus()).toMatchObject({ waiting: 1, sending: 0, failed: 0 });
+
+    // The triggers and the button are not held back by the hint.
+    expect((await engine.sendNow()).sent).toBe(1);
+
+    reachable = true;
+    await logWeight(engine, 2);
+    expect((await engine.pushPending())[0]?.status).toBe("applied");
+  });
+});
+
 describe("error reporting", () => {
   it("having no network is not reported; a server error is", async () => {
     const store = createMemorySyncStore();

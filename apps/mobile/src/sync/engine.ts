@@ -457,6 +457,13 @@ export type SyncEngineOptions = {
   /** A request with no answer after this long counts as unreachable. */
   requestTimeoutMs?: number;
   /**
+   * False while the API is known to be unreachable. A log made then is saved
+   * and left for the triggers: `pushPending` does not start a request that
+   * is expected to hang, so the screen that made the log is not kept waiting.
+   * `sendNow` (the triggers, "Try sending now") always tries.
+   */
+  isReachable?: () => boolean;
+  /**
    * Called with a push failure that is not just "no network" (for dev logs
    * and Sentry); never throws.
    */
@@ -783,7 +790,10 @@ export function createSyncEngine(
   function pushPending(): Promise<SyncMutationResult[]> {
     return serial(async () => {
       try {
-        const { results } = await drain();
+        const { results } =
+          options.isReachable && !options.isReachable()
+            ? { results: [] as SyncMutationResult[] }
+            : await drain();
         // A caller's row may have gone out in the push before its own. So
         // the answer also carries the verdict of every refused row still in
         // the outbox: a caller always finds the row it asked about.
