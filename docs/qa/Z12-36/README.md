@@ -2,7 +2,7 @@
 
 Branch `claude/Z12-36-tokens-theme`, off `main` at `6e088ce7`. Spec: `docs/specs/Z12-36.md`; decisions D-W12-12, D-W12-13, D-W12-14, D-W12-20, D-W12-29 in `docs/specs/batches/W12.md`.
 
-**Status:** built, unit/render tests and checks green. The **device gate is not run yet**: the Z12-35 harness is not on `main`. The orchestrator runs the steps in "Device check" below once it lands.
+**Status:** built; lint, typecheck, unit/render tests, `ci`, `e2e` and `banned-strings` green. **Device gate:** every flow passed on Android and on iOS in both themes (Android run 43669586698 fully green; iOS run 43661044035 every flow passed), but the iOS job still fails on four React Native "ADVICE" warnings raised by views on the trainee workout path, not by this task's primitives (see "Device-gate blocker" below). Reported to the orchestrator; PR stays in draft until that is settled.
 
 ## Gap list, re-checked against `main` (`6e088ce7`)
 
@@ -119,22 +119,63 @@ Measured from the generated tokens by `pnpm --filter @fitbud/tokens contrast:v3`
 
 All 50 pairs pass in both themes.
 
-## Device check (orchestrator, on the Z12-35 harness, on this PR's head)
+## Device check (Z12-35 harness, `device.yml`, flows `apps/mobile/.maestro/device/z12-36/`)
 
-Prerequisite, iOS: `apps/mobile/app.json` still has `"userInterfaceStyle": "light"`, which pins `Appearance` to light on iOS. Until Z12-57 sets it to `"automatic"` (native config, D-W12-13), **iOS cannot show dark**: run the iOS dark steps on a build that has that change (Z12-57's head, or a harness build that overrides it), and record iOS dark as "blocked on Z12-57" if neither exists. Android follows the system already.
+Dispatch: `device.yml` on `main`, inputs `ref=claude/Z12-36-tokens-theme`, `flows=z12-36` (both roles, both themes, both platforms). The flows run one Maestro invocation each, in path order (`9-gallery-hold.yaml` is tagged `device-offline` for that; the gallery makes no network call).
 
-1. **Builds.** iOS simulator and Android emulator dev builds of this head through the harness. Start Metro with `EXPO_PUBLIC_PRIMITIVE_GALLERY=1` for steps 2–4 (dev builds only: the app opens on the primitive gallery instead of sign-in), and without it for steps 5–6.
-2. **Live flip, gallery.** With the gallery open, flip the system theme without restarting the app:
-   - iOS: `xcrun simctl ui booted appearance dark`, then `… light`.
-   - Android: `adb shell cmd uimode night yes`, then `… no`.
-   Expect within a second (the gallery is opted in): page `#F4F5F8` ↔ `#0F0F13`, cards `#FFFFFF` ↔ `#1A1A20`, primary button navy-on-white ↔ off-white-on-dark, and the status bar content dark ↔ light. No restart, no red box, no warning in the device log.
-3. **Screenshots, both themes, both platforms:** scroll the gallery and capture every section (type, buttons, chips/pills/status/badge, card and list, inputs and banners, toast and tab bar) to `docs/qa/Z12-36/primitives-<section>-<light|dark>-<ios|android>.png`. Check by eye: no text unreadable on any primitive; disabled button and chip read as disabled (`--ink4`); badge numeral navy on coral in both themes.
-4. **Inter weights render.** On the gallery's type block: Large title 30 (700), Title 20 (700), Headline 17 (600), Body 16 (400), Body 16 semibold (600), Caption 12 (500) show four visibly distinct Inter weights, and the device log has no "fontFamily "Inter_…" is not a system font and has not been loaded" warning. The Hindi run "आज का प्लान" renders (Devanagari fallback), not boxes.
-5. **App screens, light (regression).** Sign in as trainee and as trainer (`docs/LOCAL_TESTING.md` personas) and open Today (TR-06a), Workout (W-03), Diet (TR-07a), Needs you (TM-01a) and a nudge sheet (TM-04b). Expect them to render as before in light, with v3 primitives (navy primary buttons, Inter, coral notification dot) and nothing clipped or unreadable. Screens themselves are not migrated in this task.
-6. **App screens, system dark.** Same screens with the system in dark: they must stay **light** (no screen is opted in yet), with dark status-bar content, and nothing unreadable. Each screen goes dark only when its own W12 task sets `<Screen v3>`; record those rows in `docs/qa/W12/parity.md` as GAP "not opted in yet (Z12-36)".
-7. **Android navigation bar.** Note its colour in both themes. It is not themed yet (no JS API without `expo-navigation-bar`, a native module): expected to keep the native theme's colour. Z12-57 item below.
+| Flow | Role | What it captures |
+|---|---|---|
+| `1-primitives-gallery.yaml` | none | The primitive gallery section by section (`primitives-1-type` … `primitives-6-sheet`) and, in the second theme, `primitives-live-flip`: the gallery after `theme.sh` flipped the system theme **with the app open** (the app is not stopped or cleared; a relaunch would land on sign-in) |
+| `2-trainee-today-diet.yaml` | trainee (Aarav) | `TR-06a`, `TR-07a` |
+| `3-trainee-workout.yaml` | trainee (Rohan) | `W-03`: this week's Saturday "Lower body B" from the week strip (light starts it, dark continues it), one set logged, rest skipped |
+| `4-trainer-needs-you-nudge.yaml` | trainer (Rahul) | `TM-01a`, then Clients → Rohan → Review → "Nudge on WhatsApp" → `TM-04b` (opened and closed; nothing is sent) |
+| `9-gallery-hold.yaml` | none | Leaves the gallery open for the flip (`primitives-before-flip`) |
+| `open-gallery.yaml`, `sign-in-password.yaml` | subflows | Open `fitbud://qa/primitives` (accepting iOS's "Open in …?" prompt); a task-local sign-in (see below) |
 
-Mock anchors for primitives only (colour, type, radius): TR-06a, W-03, TR-07a, TM-01a, TM-04b in `docs/design/v3/png/` and `png-dark/`. Grade CLOSE/GAP per platform, never a pixel match.
+**How the Release gate reaches the gallery (decision 18).** The gate builds a Release app against the runner's local API (`EXPO_PUBLIC_API_BASE_URL` = `http://127.0.0.1:8787` / `http://10.0.2.2:8787`). `App.tsx` loads the gallery only in that build (or a dev build with `EXPO_PUBLIC_PRIMITIVE_GALLERY=1`), from literal comparisons on the inlined env values, and `fitbud://qa/primitives` opens it (`fitbud://qa/app` returns). Checked with `expo export:embed`: a production-env bundle has no gallery module ("Large title 30" absent); a local-API bundle has it. No native file touched.
+
+**Evidence** (screenshots in this folder, `<screen ID>-<theme>-<platform>.png` and `primitives-*-<theme>-<platform>.png`). Sources: Android from run 43669586698 (head `448a2f5a`, all flows passed, device log clean); iOS screen IDs, dark gallery, live flip and `primitives-before-flip-light-ios` from run 43673200079 (head `c7bc6a33`), iOS light gallery sections from run 43661044035 (head `79e9fdea`, where every iOS flow passed). The app code is the same in all three heads apart from the gallery's Android status-bar padding (`31b2da4b`).
+- Live flip: `primitives-live-flip-dark-{ios,android}.png` is the gallery in dark taken without a relaunch after the flip from light (`primitives-before-flip-light-*`). Mean screenshot luminance per theme (harness evidence): Android light 0.85 / dark 0.43 (run 43669586698); iOS light 0.83 / dark 0.38 (run 43673200079).
+- Inter weights: the gallery's type block shows 400/500/600/700 and the Devanagari fallback ("आज का प्लान") on both platforms; no font warning in the device logs.
+- Un-opted screens stay light under system dark (decision 3): `TR-06a-dark-*`, `TM-01a-dark-*` etc. render light with dark status-bar content.
+
+### `screen ID → control → result`
+
+| Screen | Control | Result |
+|---|---|---|
+| Gallery | system theme flip light → dark with the app open | gallery changes live (Android ✓, iOS ✓) |
+| Gallery | scroll through every section | every primitive renders in both themes, no unreadable text by eye |
+| Gallery | "Open sheet" → sheet → "Close sheet" | sheet over the scrim opens and closes |
+| TR-06a | sign in (password) → Today | loads, light in both themes |
+| TR-07a | Diet tab | loads with "Something different" |
+| W-03 | Workout tab → "Sat Lower B" → Start/Continue workout → "Log set" → "Skip rest" | active workout mid-session |
+| TM-01a | sign in → Needs you | loads (skeleton gone) |
+| TM-04b | Clients → Rohan Mehta → Review → Nudge on WhatsApp → Close | nudge sheet opens with the message preview, closes; nothing sent |
+
+### Deliberate departures from the mocks
+- The five anchors are captured on **unmigrated** screens: their layout and colours are still v2 (their own W12 tasks migrate them); only the primitives and Inter are v3 here. All ten parity rows are GAP for that reason.
+- Dark mocks: the screens render light under system dark until opted in (decision 3).
+- TM-04b today is the exception review's WhatsApp nudge sheet; the v3 mock is the push nudge sheet (Z12-50).
+- Tab bar (light): opaque `--card` instead of 90 % `--glass` (decision 19).
+
+### For Firoz's real-phone checklist (Z12-58)
+- Flip the system theme on a real iPhone **after Z12-57** sets `userInterfaceStyle: "automatic"` (the gate patches the generated Info.plist; the shipped app is pinned light until then).
+- Android navigation bar colour in both themes (not themed until Z12-57 adds `expo-navigation-bar`).
+- Inter on a real device at the user's text-size setting (Dynamic Type / font scale), and the Devanagari fallback on a Hindi-locale phone.
+
+### Device-gate runs and the blocker
+
+| Run | Head | Android | iOS |
+|---|---|---|---|
+| 43643116147 | `1649a204` | W-03 (rest day), TM-04b ("Nudge…" opens WhatsApp) failed | "Open in …?" alert blocked every flow |
+| 43657287248 | `d5a4700b` | W-03 dark failed | sign-in wait (rest-day label), gallery tab-bar shadow advice |
+| 43659668747 | `613828e1`→`79e9fdea` | **pass** | Needs-you load > 30 s, email typed with dropped characters; 4 rn-warn |
+| 43661044035 | `79e9fdea` | **pass** | **every flow passed, both themes**; 4 rn-warn |
+| 43665745548 | `84a38bc9` | **pass** | sign-in > 30 s on a cold simulator; 4 rn-warn |
+| 43669586698 | `448a2f5a` | **pass** | iOS alert not seen by the conditional wait; 2 rn-warn |
+| 43673200079 | `c7bc6a33` | first flow: app never started (`capture-empty`, "Unknown error", harness/emulator) | first cold gallery open > 60 s; everything else passed; 4 rn-warn |
+
+**Blocker (iOS `rn-warn`, not this task's code).** Every iOS run logs 2–4 `[fitbud-gate] native.warn (ADVICE) View #… of type RCTView has a shadow set but cannot calculate shadow efficiently`, always during `3-trainee-workout.yaml` (Rohan: Today → Workout → active workout), in both themes (the screens are light in both, not opted in). The gallery flows, which render every rebuilt primitive, log none since the tab-bar fix (`79e9fdea`). The only shadow over a translucent fill left in the app is the in-app banner, `apps/mobile/src/trainee/notifications/Surfaces.tsx:753` (`backgroundColor: "rgba(250,249,253,0.97)"` with `shadowOpacity: 0.24`), shown over Rohan's tabs for his due meal and coach notes; that is the likely source (the harness publishes no device log to confirm the view). That file belongs to Z12-38 (D-W12-29), so it is not changed here. Options for the orchestrator: Z12-38 makes the banner fill opaque (or drops the shadow) before this merges, or the harness allow-lists this ADVICE line with a reason.
 
 ## Native items for Z12-57 (none done here, D-W12-13)
 
@@ -150,7 +191,8 @@ Mock anchors for primitives only (colour, type, radius): TR-06a, W-03, TR-07a, T
 - `pnpm test` (turbo, 17 tasks): pass. `@fitbud/mobile` 1293 tests, `@fitbud/api` 1598, `@fitbud/trainer-web` 678, `@fitbud/core` 244, `@fitbud/tokens` 116, others green.
 - `@fitbud/tokens`: 116 tests (v3 diff 7 incl. radii, contrast 108 incl. 100 v3 pair checks, brand 1).
 - `@fitbud/mobile`: new `ThemeProvider.render.test.tsx` (10, listed in the opt-in section), `PrimitiveGallery.render.test.tsx` (8), `eslint-rules/no-hard-coded-colour.test.mjs` (27, including named colours, the failing fixture through the real eslint config, and a check that every file in `src/components` gets the rule).
-- Not run: the device gate (harness not on `main`), trainer-web Playwright e2e (CPU shared; trainer web is untouched: `tokens.css` unchanged).
+- Device gate: see "Device-gate runs and the blocker" above.
+- Not run locally: trainer-web Playwright e2e (CPU shared); `e2e` and `banned-strings` are green in CI on the PR head.
 
 ## Decisions taken (decide and note)
 
@@ -171,3 +213,8 @@ Mock anchors for primitives only (colour, type, radius): TR-06a, W-03, TR-07a, T
 15. **Model:** opus, as the spec's `model` field says.
 16. **Depends on Z12-35:** the spec waits for Z12-35 (D-W12-21a); the orchestrator started this lane in parallel. Nothing here touches the vitest configs or CI files Z12-35 owns; after Z12-35 merges, merge `main` and re-run `pnpm test` (its console-error setup may flag the render tests' pre-existing icon-mock warnings, which are not from this change).
 17. **Files outside `files_owned` left as they are:** `packages/ui-mobile/src/FitText.tsx` still says "Satoshi" in comments and a helper name (`satoshiFamilyForWeight`); it already maps to the Inter faces through `typography.ts`. Its holder is Z12-42 (D-W12-29). `apps/mobile/src/dev/SpecimensScreen.tsx` still shows the sample line "Satoshi 600 · actions" (dev-only, web `__specimens` path); `src/dev/**` is not this task's, so it is left for its owner or a hygiene task.
+
+18. **How the Release device gate reaches the primitives (orchestrator asked to pick one).** Option taken: the gallery behind a build-time QA condition, not real screens, because no real screen is opted in to dark yet, so only the gallery can show the primitives in dark. The condition is "the bundle is made against the runner's local API" (`EXPO_PUBLIC_API_BASE_URL` is `http://127.0.0.1:8787` or `http://10.0.2.2:8787`), which the harness already sets and no store or EAS profile can have; `fitbud://qa/primitives` then opens the gallery. Literal comparisons let Metro drop the gallery from every other bundle (checked with `expo export:embed`); `src/providers/qaGallery.test.ts` pins the gate. No native file touched.
+19. **Tab bar (light) is opaque `--card`, not 90 % `--glass`.** React Native core has no backdrop blur, and iOS logs "View … has a shadow set but cannot calculate shadow efficiently" for a shadow over a translucent fill, which the gate counts as a warning (run 43657287248). Dark keeps `--glass` (no shadow there).
+20. **Task-local sign-in subflow.** `device/z12-36/sign-in-password.yaml` copies `common/sign-in-password.yaml` with a looser final wait (`Today's workout.*`: on iOS a rest-day Today exposes only "Today's workout: rest day"), a 60 s wait and a retype when the simulator drops characters from the email. Reported for the shared subflow's owner; `common/` is not this task's.
+21. **W-03 is reached through this week's Saturday workout** ("Sat Lower B", which the seed keeps startable): the runner's day can be a rest day, and the light run uses up a "Log it". Light starts it, dark continues it.
