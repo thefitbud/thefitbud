@@ -1,0 +1,81 @@
+{
+  "result": "mean screenshot luminance: light 0.643 (8), dark 0.277 (6)",
+  "light": 0.643,
+  "dark": 0.277,
+  "count": {
+    "light": 8,
+    "dark": 6
+  },
+  "shots": [
+    {
+      "file": "primitives-before-flip-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.709
+    },
+    {
+      "file": "step-005-assertCondition-Large_title_30-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.093
+    },
+    {
+      "file": "step-005-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-005-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.709
+    },
+    {
+      "file": "step-006-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.578
+    },
+    {
+      "file": "step-007-assertCondition-Sign_in_with_a_code_inst-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-007-assertCondition-Sign_in_with_a_code_inst-light-ios.png",
+      "theme": "light",
+      "luma": 0.577
+    },
+    {
+      "file": "step-008-assertCondition-Sign_in_with_a_code_inst-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-008-assertCondition-Sign_in_with_a_code_inst-light-ios.png",
+      "theme": "light",
+      "luma": 0.577
+    },
+    {
+      "file": "step-009-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.709
+    },
+    {
+      "file": "step-009-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "step-010-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.578
+    }
+  ]
+}

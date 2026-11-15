@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="72.975" timestamp="2026-11-15T05:01:23">
+    <testcase id="Z12-36 trainer Needs you (TM-01a) and the nudge sheet (TM-04b)" name="Z12-36 trainer Needs you (TM-01a) and the nudge sheet (TM-04b)" classname="Z12-36 trainer Needs you (TM-01a) and the nudge sheet (TM-04b)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/4-trainer-needs-you-nudge.yaml" time="72.947" timestamp="2026-11-15T05:01:23" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-36"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
