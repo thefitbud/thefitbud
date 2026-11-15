@@ -5,7 +5,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "@fitbud/api-client";
 import { workoutAssignmentSchema, workoutExecutionSchema } from "@fitbud/contracts";
-import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
+import { act, fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
 import {
   assignmentsOn,
   isNetworkError,
@@ -199,6 +199,21 @@ vi.mock("../../lib/dates", async (orig) => ({
 
 const { ClientLogWorkoutScreen } = await import("./ClientLogWorkoutScreen");
 
+/**
+ * Press a button once React has applied the commit that rendered it.
+ *
+ * react-native-web's Pressable hands its `disabled` and `onPress` to the press
+ * responder in a passive effect, which React flushes lazily. A click fired the
+ * moment `findBy*` resolves can therefore reach the responder while it still
+ * holds the previous render's config (the "Saving…" one, disabled) and is
+ * dropped; the test then waits for a call that never comes. Flushing effects
+ * first makes the click land on the config the user would see.
+ */
+async function press(button: HTMLElement) {
+  await act(async () => {});
+  fireEvent.click(button);
+}
+
 function renderForm(over: { ended?: boolean; initialDate?: string; initialAssignmentId?: string; onSaved?: (m: string) => void } = {}) {
   render(
     <ClientLogWorkoutScreen
@@ -222,7 +237,7 @@ describe("ClientLogWorkoutScreen", () => {
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
     expect(screen.getByText(/Planned for Mon 2 Nov · 2 exercises/)).toBeTruthy();
-    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
+    await press(await screen.findByRole("button", { name: "Save workout" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
     const [assignmentId, body, key] = api.logClientWorkout.mock.calls[0]!;
     expect(assignmentId).toBe(ids(10));
@@ -250,10 +265,10 @@ describe("ClientLogWorkoutScreen", () => {
     const onSaved = vi.fn();
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
-    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
+    await press(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. We couldn’t reach FitBud, so nothing was saved\. Your entries are still here/);
-    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 5000 });
+    await press(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 3000 });
     expect(api.logClientWorkout.mock.calls[1]![2]).toBe(api.logClientWorkout.mock.calls[0]![2]);
   });
 
@@ -265,13 +280,9 @@ describe("ClientLogWorkoutScreen", () => {
     );
     renderForm({ initialDate: "2026-11-02" });
     await screen.findByText("Upper body A");
-    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
+    await press(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. A trainer log must be dated within the last 7 days\./);
   });
-
-  function retryButton() {
-    return screen.queryByRole("button", { name: "Try again" }) ?? screen.getByRole("button", { name: "Save workout" });
-  }
 
   it("reuses the key after a 5xx, since the server may have applied the log", async () => {
     api.listWorkoutAssignments.mockResolvedValue({ items: [assignment({ date: "2026-11-02" })], nextCursor: null });
@@ -282,10 +293,10 @@ describe("ClientLogWorkoutScreen", () => {
     const onSaved = vi.fn();
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
-    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
+    await press(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. Something went wrong on our side\./);
-    fireEvent.click(retryButton());
-    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 5000 });
+    await press(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled(), { timeout: 3000 });
     expect(api.logClientWorkout.mock.calls[1]![2]).toBe(api.logClientWorkout.mock.calls[0]![2]);
   });
 
@@ -300,10 +311,10 @@ describe("ClientLogWorkoutScreen", () => {
     const onSaved = vi.fn();
     renderForm({ initialDate: "2026-11-02", onSaved });
     await screen.findByText("Upper body A");
-    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
+    await press(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/Not saved\. A trainer log must be dated within the last 7 days\./);
-    fireEvent.click(retryButton());
-    await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(2), { timeout: 5000 });
+    await press(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(api.logClientWorkout).toHaveBeenCalledTimes(2), { timeout: 3000 });
     expect(api.logClientWorkout.mock.calls[1]![2]).not.toBe(api.logClientWorkout.mock.calls[0]![2]);
   });
 
@@ -323,7 +334,7 @@ describe("ClientLogWorkoutScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Plus 2.5" }));
     fireEvent.click(screen.getByRole("button", { name: "Next: reps" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    await press(await screen.findByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Edited by you"));
     expect(api.editClientWorkout).toHaveBeenCalledWith(ids(50), {
       recordVersion: 3,
@@ -368,12 +379,12 @@ describe("ClientLogWorkoutScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: /Set 2 reps/ }));
     fireEvent.click(screen.getByRole("button", { name: "Minus 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Save changes" }));
+    await press(await screen.findByRole("button", { name: "Save changes" }));
     await screen.findByText(/Not saved\. This entry changed\. Reload it\./);
     expect((screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement).disabled).toBe(true);
     expect(api.editClientWorkout).toHaveBeenCalledTimes(1);
     const before = api.getWorkoutExecution.mock.calls.length;
-    fireEvent.click(await screen.findByRole("button", { name: "Reload entry" }));
+    await press(await screen.findByRole("button", { name: "Reload entry" }));
     await waitFor(() => expect(api.getWorkoutExecution.mock.calls.length).toBe(before + 1));
   });
 
@@ -383,7 +394,7 @@ describe("ClientLogWorkoutScreen", () => {
     api.logClientWorkout.mockRejectedValueOnce(new TypeError("undefined is not a function"));
     renderForm({ initialDate: "2026-11-02" });
     await screen.findByText("Upper body A");
-    fireEvent.click(await screen.findByRole("button", { name: "Save workout" }));
+    await press(await screen.findByRole("button", { name: "Save workout" }));
     await screen.findByText(/LOG-SAVE/);
     expect(screen.queryByText(/couldn’t reach FitBud/)).toBeNull();
   });

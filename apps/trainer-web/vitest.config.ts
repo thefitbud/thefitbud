@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { defineConfig, mergeConfig } from "vitest/config";
+import { configDefaults, defineConfig, mergeConfig } from "vitest/config";
 import viteConfig from "./vite.config";
 
 // The app's Vite config (plugins, server) plus the shared console-error gate: every
@@ -9,6 +9,8 @@ export default mergeConfig(
   viteConfig,
   defineConfig({
     test: {
+      // vitest 4 no longer excludes build output: never run the compiled copies of tests in dist/.
+      exclude: [...configDefaults.exclude, "**/dist/**"],
       setupFiles: [fileURLToPath(new URL("../../packages/config/vitest/fail-on-console.js", import.meta.url))],
     },
   }),
