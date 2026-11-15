@@ -1,96 +1,31 @@
 appId: com.thefitbud.mobile.staging
-name: Z12-36 primitives gallery, light and dark, and the live theme flip
+name: Z12-36 live theme flip on the primitives gallery
 tags:
   - device
   - z12-36
 ---
-# Z12-36 device check (docs/qa/Z12-36/README.md "Device check").
+# Z12-36 device check (docs/qa/Z12-36/README.md "Device check"): flip the system theme
+# with the app open and the app changes live.
 #
-# The gate builds a Release app against the runner's local API; such a build carries
-# the primitive gallery behind `fitbud://qa/primitives` (apps/mobile/src/providers/
-# qaGallery.ts). A store or EAS build never contains it.
+# The flows run one Maestro invocation each, in path order (9-gallery-hold.yaml is tagged
+# device-offline for that). The light run ends with 9-gallery-hold.yaml leaving the app
+# open on the gallery; theme.sh then flips the system to dark with the app still open.
+# This flow starts WITHOUT stopping or clearing the app and, in the dark run, asserts the
+# gallery is still on screen before capturing primitives-live-flip: a relaunch would
+# land on sign-in and fail the flow. It assumes the default theme order (light, then
+# dark); re-run both themes together. In the light run it does nothing.
 #
-# Live flip (spec: "flip the system theme with the app open"): the flows run one Maestro
-# invocation each, in path order, because 9-gallery-hold.yaml is tagged device-offline.
-# The last flow of the light run leaves the app open on the gallery; theme.sh then flips
-# the system to dark with the app still open; this flow starts WITHOUT stopping or
-# clearing the app, so in the dark run its first screenshot, primitives-live-flip, is the
-# gallery after the flip with no relaunch (a relaunch would land on sign-in). In the light
-# run (first theme) the app is not open yet, so the link opens the gallery instead.
+# The gallery sections themselves are captured by 8-primitives-gallery.yaml, after the
+# trainee and trainer flows have already opened the gallery once (a first link on a
+# freshly launched iOS app can be lost; open-gallery.yaml also retries it).
 - launchApp:
     stopApp: false
     permissions:
       all: allow
-# Dark run: the gallery must still be on screen after the flip, with no relaunch (a
-# relaunch would land on sign-in), so the flow fails instead of skipping the shot.
-# This assumes the default theme order (light, then dark); re-run both themes together.
 - runFlow:
     when:
       true: ${DEVICE_THEME == 'dark'}
     commands:
       - assertVisible: "Large title 30"
       - takeScreenshot: primitives-live-flip
-# Light run: the app was just cold-launched. Wait until its JS is up (sign-in on screen)
-# before sending the link: a link that arrives while the bundle is still loading is
-# dropped by React Native, and the gallery never opens (iOS runs 43673200079 and
-# 43678708890: sign-in still on screen after 60 s, every later open worked).
-- extendedWaitUntil:
-    visible: "Large title 30|Sign in with a code instead"
-    timeout: 60000
-- runFlow:
-    when:
-      notVisible: "Large title 30"
-    commands:
-      - runFlow: open-gallery.yaml
-- takeScreenshot: primitives-1-type
-- runFlow: ../../common/assert-no-crash.yaml
-
-# Each section is scrolled until one of its own elements is centred, so every capture
-# shows a different part of the page (run 43673200079: without centring, sections
-# already on screen did not scroll and two captures were identical).
-# Buttons (kit .btn variants, disabled, small).
-- scrollUntilVisible:
-    element: "Quiet danger"
-    centerElement: true
-    timeout: 20000
-- takeScreenshot: primitives-2-buttons
-- runFlow: ../../common/assert-no-crash.yaml
-
-# Chips, pills, status chips, badge.
-- scrollUntilVisible:
-    element: "3 × 10 @ 40 kg"
-    centerElement: true
-    timeout: 20000
-- takeScreenshot: primitives-3-chips
-- runFlow: ../../common/assert-no-crash.yaml
-
-# Card, due card, grouped list rows.
-- scrollUntilVisible:
-    element: "Due card"
-    centerElement: true
-    timeout: 20000
-- takeScreenshot: primitives-4-cards
-- runFlow: ../../common/assert-no-crash.yaml
-
-# Field, segmented control, error banner, toast, tab bar.
-- scrollUntilVisible:
-    element: "Meal logged"
-    centerElement: true
-    timeout: 20000
-- scrollUntilVisible:
-    element: "Open sheet"
-    timeout: 20000
-- takeScreenshot: primitives-5-inputs-toast-tabbar
-- runFlow: ../../common/assert-no-crash.yaml
-
-# Sheet over the scrim.
-- tapOn: "Open sheet"
-- extendedWaitUntil:
-    visible: "Sheet title"
-    timeout: 10000
-- takeScreenshot: primitives-6-sheet
-- runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Close sheet"
-- extendedWaitUntil:
-    notVisible: "Sheet title"
-    timeout: 10000
+      - runFlow: ../../common/assert-no-crash.yaml
