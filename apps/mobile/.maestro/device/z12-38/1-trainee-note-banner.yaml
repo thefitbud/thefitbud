@@ -26,6 +26,13 @@ env:
     clearKeychain: true
     permissions:
       all: allow
+# iOS: an earlier flow's deep link (z12-36's gallery link) can leave the system
+# "Open in …?" alert over the app (run 43741069030). Dismiss it if it is there.
+- runFlow:
+    when:
+      visible: "Open in .*FitBud Staging.*"
+    commands:
+      - tapOn: "Cancel"
 - runFlow:
     file: ../../common/sign-in-password.yaml
     env:
@@ -45,7 +52,12 @@ env:
       TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
       PASSWORD: ${QA_PASSWORD}
       NOTE: ${NOTE}
-- tapOn: "Today"
+# Do not wait for the screen to settle after the tap: on a cold Android emulator the
+# settle wait plus slow hierarchy dumps can outlast a 4 s banner (runs 43715594740 and
+# 43741069030, Android light). Start looking for the banner straight away.
+- tapOn:
+    text: "Today"
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
     timeout: 15000
@@ -65,7 +77,9 @@ env:
       TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
       PASSWORD: ${QA_PASSWORD}
       NOTE: "Keep the last set slow on the way down."
-- tapOn: "Today"
+- tapOn:
+    text: "Today"
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
     timeout: 15000
@@ -87,7 +101,9 @@ env:
       TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
       PASSWORD: ${QA_PASSWORD}
       NOTE: "Water first thing tomorrow."
-- tapOn: "Today"
+- tapOn:
+    text: "Today"
+    waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
     timeout: 15000
