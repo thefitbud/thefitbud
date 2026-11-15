@@ -1,0 +1,276 @@
+{
+  "platform": "ios",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/z12-36/1-primitives-gallery.yaml",
+    "device/z12-36/2-trainee-today-diet.yaml",
+    "device/z12-36/3-trainee-workout.yaml",
+    "device/z12-36/4-trainer-needs-you-nudge.yaml",
+    "device/z12-36/8-primitives-gallery.yaml",
+    "device/z12-36/9-gallery-hold.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": [
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 83330,
+        "text": "2026-11-15 13:00:52.838 Df FitBudStaging[47521:2004c] [fitbud-gate] native.warn (ADVICE) View #673 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      },
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 88776,
+        "text": "2026-11-15 13:01:02.754 Df FitBudStaging[47521:2004c] [fitbud-gate] native.warn (ADVICE) View #839 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      },
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 313257,
+        "text": "2026-11-15 13:15:14.938 Df FitBudStaging[82910:36828] [fitbud-gate] native.warn (ADVICE) View #673 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      },
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 318847,
+        "text": "2026-11-15 13:15:22.880 Df FitBudStaging[82910:36828] [fitbud-gate] native.warn (ADVICE) View #1257 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      }
+    ]
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 120 s",
+      "mode": "cache-hit",
+      "seconds": 120,
+      "cacheKey": "device-native-ios-e336efe8733ec5eb567f0d2ebf8857a5c9c9994f"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.868 (14), dark 0.38 (16)",
+      "light": 0.868,
+      "dark": 0.38,
+      "count": {
+        "light": 14,
+        "dark": 16
+      },
+      "shots": [
+        {
+          "file": "TM-01a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.947
+        },
+        {
+          "file": "TM-01a-light-ios.png",
+          "theme": "light",
+          "luma": 0.947
+        },
+        {
+          "file": "TM-04b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.702
+        },
+        {
+          "file": "TM-04b-light-ios.png",
+          "theme": "light",
+          "luma": 0.702
+        },
+        {
+          "file": "TR-06a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.937
+        },
+        {
+          "file": "TR-06a-light-ios.png",
+          "theme": "light",
+          "luma": 0.937
+        },
+        {
+          "file": "TR-07a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.923
+        },
+        {
+          "file": "TR-07a-light-ios.png",
+          "theme": "light",
+          "luma": 0.923
+        },
+        {
+          "file": "W-03-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.894
+        },
+        {
+          "file": "W-03-light-ios.png",
+          "theme": "light",
+          "luma": 0.901
+        },
+        {
+          "file": "primitives-1-type-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "primitives-1-type-light-ios.png",
+          "theme": "light",
+          "luma": 0.853
+        },
+        {
+          "file": "primitives-2-buttons-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.151
+        },
+        {
+          "file": "primitives-2-buttons-light-ios.png",
+          "theme": "light",
+          "luma": 0.891
+        },
+        {
+          "file": "primitives-3-chips-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.15
+        },
+        {
+          "file": "primitives-3-chips-light-ios.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "primitives-4-cards-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.11
+        },
+        {
+          "file": "primitives-4-cards-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "primitives-5-inputs-toast-tabbar-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.106
+        },
+        {
+          "file": "primitives-5-inputs-toast-tabbar-light-ios.png",
+          "theme": "light",
+          "luma": 0.896
+        },
+        {
+          "file": "primitives-6-sheet-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "primitives-6-sheet-light-ios.png",
+          "theme": "light",
+          "luma": 0.701
+        },
+        {
+          "file": "primitives-before-flip-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "primitives-before-flip-light-ios.png",
+          "theme": "light",
+          "luma": 0.853
+        },
+        {
+          "file": "primitives-live-flip-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-046-tapOnElement-Open-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-046-tapOnElement-Open-light-ios.png",
+          "theme": "light",
+          "luma": 0.853
+        },
+        {
+          "file": "step-053-tapOnElement-Open-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-064-tapOnElement-Open-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-064-tapOnElement-Open-light-ios.png",
+          "theme": "light",
+          "luma": 0.853
+        }
+      ]
+    }
+  ]
+}

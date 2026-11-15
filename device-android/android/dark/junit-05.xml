@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="84.32" timestamp="2026-11-15T07:25:11">
+    <testcase id="Z12-36 primitives gallery, section by section" name="Z12-36 primitives gallery, section by section" classname="Z12-36 primitives gallery, section by section" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/8-primitives-gallery.yaml" time="84.273" timestamp="2026-11-15T07:25:11" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, z12-36"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

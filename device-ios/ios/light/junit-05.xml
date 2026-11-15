@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - CC2C4128-E056-4E71-8B48-561071B2A3E9" tests="1" failures="0" time="115.598" timestamp="2026-11-15T13:06:13">
+    <testcase id="Z12-36 primitives gallery, section by section" name="Z12-36 primitives gallery, section by section" classname="Z12-36 primitives gallery, section by section" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/8-primitives-gallery.yaml" time="115.516" timestamp="2026-11-15T13:06:13" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, z12-36"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

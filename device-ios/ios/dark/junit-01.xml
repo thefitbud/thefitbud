@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - CC2C4128-E056-4E71-8B48-561071B2A3E9" tests="1" failures="0" time="22.675" timestamp="2026-11-15T13:09:51">
+    <testcase id="Z12-36 live theme flip on the primitives gallery" name="Z12-36 live theme flip on the primitives gallery" classname="Z12-36 live theme flip on the primitives gallery" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/1-primitives-gallery.yaml" time="22.642" timestamp="2026-11-15T13:09:51" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, z12-36"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
