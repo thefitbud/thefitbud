@@ -552,7 +552,7 @@ jobs:
             # Keep screenshots and the small verdict files; drop logs and raw dumps.
             (cd device-run && find . -type f \( -name '*.png' -o -name 'summary.md' -o -name 'summary.json' \
               -o -name 'scan.json' -o -name 'junit*.xml' -o -path '*/extras/*.json' \) \
-              -not -path '*/logs/*' -not -path '*/lockscreen/*' -print0 \
+              -not -path '*/logs/*' -not -path '*/lockscreen/*' -not -path '*/maestro/*' -print0 \
               | xargs -0 -r cp --parents -t ../publish)
           fi
           {
