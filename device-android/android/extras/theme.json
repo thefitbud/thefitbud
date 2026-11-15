@@ -1,0 +1,91 @@
+{
+  "result": "mean screenshot luminance: light 0.825 (8), dark 0.824 (8)",
+  "light": 0.825,
+  "dark": 0.824,
+  "count": {
+    "light": 8,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "TR-06c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.761
+    },
+    {
+      "file": "TR-06c-light-android.png",
+      "theme": "light",
+      "luma": 0.761
+    },
+    {
+      "file": "TR-06d-dark-android.png",
+      "theme": "dark",
+      "luma": 0.774
+    },
+    {
+      "file": "TR-06d-light-android.png",
+      "theme": "light",
+      "luma": 0.774
+    },
+    {
+      "file": "TR-07f-dark-android.png",
+      "theme": "dark",
+      "luma": 0.923
+    },
+    {
+      "file": "TR-07f-light-android.png",
+      "theme": "light",
+      "luma": 0.923
+    },
+    {
+      "file": "TR-07k-dark-android.png",
+      "theme": "dark",
+      "luma": 0.921
+    },
+    {
+      "file": "TR-07k-light-android.png",
+      "theme": "light",
+      "luma": 0.921
+    },
+    {
+      "file": "W-01e-dark-android.png",
+      "theme": "dark",
+      "luma": 0.724
+    },
+    {
+      "file": "W-01e-light-android.png",
+      "theme": "light",
+      "luma": 0.724
+    },
+    {
+      "file": "f29-planned-meal-readonly-dark-android.png",
+      "theme": "dark",
+      "luma": 0.647
+    },
+    {
+      "file": "f29-planned-meal-readonly-light-android.png",
+      "theme": "light",
+      "luma": 0.651
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.917
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.917
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    }
+  ]
+}
