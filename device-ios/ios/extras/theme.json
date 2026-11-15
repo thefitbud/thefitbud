@@ -1,0 +1,76 @@
+{
+  "result": "mean screenshot luminance: light 0.8 (9), dark 0.349 (4)",
+  "light": 0.8,
+  "dark": 0.349,
+  "count": {
+    "light": 9,
+    "dark": 4
+  },
+  "shots": [
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.927
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-005-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-005-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.577
+    },
+    {
+      "file": "step-007-assertCondition-Sign_in_with_a_code_inst-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-008-assertCondition-Sign_in_with_a_code_inst-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.349
+    },
+    {
+      "file": "step-008-assertCondition-Sign_in_with_a_code_inst-light-ios.png",
+      "theme": "light",
+      "luma": 0.577
+    },
+    {
+      "file": "step-043-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.732
+    },
+    {
+      "file": "step-046-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "step-047-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "step-051-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.732
+    }
+  ]
+}

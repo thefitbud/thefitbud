@@ -1,0 +1,157 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 4 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-36/3-trainee-workout.yaml",
+    "device/z12-38/1-trainee-note-banner.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 4,
+      "passed": 3,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap",
+          "message": "Assertion is false: \"Rahul has a note for you.*\" is not visible"
+        }
+      ],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 77 s",
+      "mode": "cache-hit",
+      "seconds": 77,
+      "cacheKey": "device-native-android-93acb09e0e4eb1e14311eceb3fde37dcb80d0d88"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.897 (6), dark 0.76 (5)",
+      "light": 0.897,
+      "dark": 0.76,
+      "count": {
+        "light": 6,
+        "dark": 5
+      },
+      "shots": [
+        {
+          "file": "TR-06h-dark-android.png",
+          "theme": "dark",
+          "luma": 0.911
+        },
+        {
+          "file": "TR-06h-light-android.png",
+          "theme": "light",
+          "luma": 0.911
+        },
+        {
+          "file": "W-03-dark-android.png",
+          "theme": "dark",
+          "luma": 0.877
+        },
+        {
+          "file": "W-03-light-android.png",
+          "theme": "light",
+          "luma": 0.883
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.91
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.912
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.929
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.929
+        },
+        {
+          "file": "step-042-assertCondition-_BANNER-light-android.png",
+          "theme": "light",
+          "luma": 0.912
+        },
+        {
+          "file": "step-047-tapOnElement-Open-dark-android.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-047-tapOnElement-Open-light-android.png",
+          "theme": "light",
+          "luma": 0.835
+        }
+      ]
+    }
+  ]
+}
