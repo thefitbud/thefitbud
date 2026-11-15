@@ -67,7 +67,4 @@ env:
     notVisible: "Message preview.*"
     timeout: 10000
 
-- openLink: fitbud://qa/primitives
-- extendedWaitUntil:
-    visible: "Large title 30"
-    timeout: 30000
+- runFlow: open-gallery.yaml

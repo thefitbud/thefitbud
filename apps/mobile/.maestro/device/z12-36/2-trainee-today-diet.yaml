@@ -35,7 +35,4 @@ tags:
 - runFlow: ../../common/assert-no-crash.yaml
 
 # Leave the app on the gallery, so the next flow may go offline with nothing loading.
-- openLink: fitbud://qa/primitives
-- extendedWaitUntil:
-    visible: "Large title 30"
-    timeout: 30000
+- runFlow: open-gallery.yaml

@@ -1,0 +1,21 @@
+# Subflow (Z12-36): open the QA primitive gallery with fitbud://qa/primitives and wait
+# for it. On iOS the simulator first asks "Open in “FitBud Staging”?" (run 43643116147:
+# the dialog stayed up and blocked every later flow), so "Open" is tapped when it shows.
+# No `tags:`, so the device gate never selects this file as a flow; `appId` is required
+# by Maestro for any file reached by `runFlow:` (see common/assert-no-crash.yaml).
+appId: com.thefitbud.mobile.staging
+---
+- openLink: fitbud://qa/primitives
+- extendedWaitUntil:
+    visible: "Large title 30|Open in .*"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Open in .*"
+    commands:
+      - tapOn:
+          text: "Open"
+          below: "Open in .*"
+- extendedWaitUntil:
+    visible: "Large title 30"
+    timeout: 30000

@@ -60,7 +60,4 @@ tags:
 - takeScreenshot: W-03
 - runFlow: ../../common/assert-no-crash.yaml
 
-- openLink: fitbud://qa/primitives
-- extendedWaitUntil:
-    visible: "Large title 30"
-    timeout: 30000
+- runFlow: open-gallery.yaml
