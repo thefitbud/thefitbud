@@ -116,7 +116,7 @@ test("the committed allow-list is valid and every entry names the task that remo
   const entries = JSON.parse(fs.readFileSync(path.join(here, "allowlist.json"), "utf8"));
   const rules = loadAllowlist(entries);
   // Only temporary entries: each reason names the W12 task (Z12-nn) that removes it.
-  for (const r of rules) assert.match(r.reason, /Z12-\d+ .*removes this entry/, r.pattern);
+  for (const r of rules) assert.match(r.reason, /\bZ12-\d+\b[^.;]*\bremoves this entry\b/, r.pattern);
   assert.ok(rules.length <= 1, "a new allow-list entry needs its own reviewed PR; update this bound with it");
 });
 
