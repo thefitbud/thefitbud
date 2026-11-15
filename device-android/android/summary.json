@@ -1,0 +1,145 @@
+{
+  "platform": "android",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-36/3-trainee-workout.yaml",
+    "device/z12-38/1-trainee-note-banner.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 68 s",
+      "mode": "cache-hit",
+      "seconds": 68,
+      "cacheKey": "device-native-android-37ed91d0f73a642132da03bf19342b1026ce2943"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.895 (5), dark 0.762 (5)",
+      "light": 0.895,
+      "dark": 0.762,
+      "count": {
+        "light": 5,
+        "dark": 5
+      },
+      "shots": [
+        {
+          "file": "TR-06h-dark-android.png",
+          "theme": "dark",
+          "luma": 0.915
+        },
+        {
+          "file": "TR-06h-light-android.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "W-03-dark-android.png",
+          "theme": "dark",
+          "luma": 0.877
+        },
+        {
+          "file": "W-03-light-android.png",
+          "theme": "light",
+          "luma": 0.883
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.915
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.917
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.929
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.929
+        },
+        {
+          "file": "step-047-tapOnElement-Open-dark-android.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-047-tapOnElement-Open-light-android.png",
+          "theme": "light",
+          "luma": 0.835
+        }
+      ]
+    }
+  ]
+}
