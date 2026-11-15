@@ -1,0 +1,35 @@
+appId: com.thefitbud.mobile.staging
+name: Launch smoke, trainee Today loads
+tags:
+  - device
+  - launch
+  - trainee
+---
+# Launch smoke test (Z12-35, Firoz 15 Nov 2026): the app opens, sign-in works, Today loads.
+# Run on every scoped task run: dispatch flows=launch,<task tag>.
+# Env from the harness: QA_ONTRACK_EMAIL, QA_PASSWORD (the public local demo password).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+# Sign-in sheet, then the signed-in home (the common flow waits for both).
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+# Loaded, not a skeleton or an error: the skeleton's "Loading your day" text is gone and
+# the plan-gated Today heading is there. It reads "Today's workout" on a training day and
+# "Today's workout: rest day" on a rest day (iOS), hence the regex.
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- assertVisible: "Today"
+# The heading also shows when the day's data failed to load (TodayTab's catch shows a
+# "Couldn't refresh" banner), so assert that banner is absent.
+- assertNotVisible: ".*Couldn't refresh.*"
+- takeScreenshot: launch-trainee-today
+- runFlow: ../../common/assert-no-crash.yaml

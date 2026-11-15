@@ -2,15 +2,16 @@
 // Resolves the workflow's `flows` and `roles` inputs into the Maestro flow files to run
 // (Z12-35). Prints one absolute path per line, in path order.
 //
-//   node scripts/qa/device/select-flows.mjs --flows <tag | glob[,glob...]> [--roles trainee,trainer,dual]
+//   node scripts/qa/device/select-flows.mjs --flows <tag-or-glob[,tag-or-glob...]> [--roles trainee,trainer,dual]
 //
-//   flows  a Maestro tag, or several comma-separated (letters, digits, - and _; e.g.
-//          smoke, full, device, trainee, or smoke,z12-33 for the union):
-//          every flow under apps/mobile/.maestro/flows/ or device/ whose `tags:` include
-//          it (device/ holds task-specific gate flows the nightly suite never collects).
-//          Anything else is one or more comma-separated path globs relative to
-//          apps/mobile/.maestro (`*` stays inside a directory, `**` crosses them), e.g.
-//          flows/trainee/today.yaml or flows/v3/F0*.yaml.
+//   flows  a comma-separated list; each item is a Maestro tag or a path glob, mixed freely
+//          (e.g. launch,flows/v3/F29*.yaml): the union, in path order, each flow once.
+//          A tag (letters, digits, - and _ only, e.g. smoke, full, device, z12-33) selects every
+//          flow under apps/mobile/.maestro/flows/ or device/ whose `tags:` include it (device/
+//          holds task-specific gate flows the nightly suite never collects). Any other item is
+//          a path glob relative to apps/mobile/.maestro (`*` stays inside a directory, `**`
+//          crosses them), e.g. flows/trainee/today.yaml or flows/v3/F0*.yaml. A tag or glob
+//          that matches no flow is an error (exit 2); nothing is silently dropped.
 //   roles  optional; keeps only the flows tagged with at least one of these roles.
 //
 // Only flow files are ever selected: common/ subflows (no tags, called by flows) and
@@ -68,20 +69,25 @@ export function selectFlows({ flows, roles = "", root = MAESTRO_DIR }) {
     .map((f) => ({ file: f, rel: path.relative(root, f).split(path.sep).join("/") }))
     .filter((f) => !f.rel.startsWith("common/"))
     .map((f) => ({ ...f, tags: flowTags(fs.readFileSync(f.file, "utf8")) }));
-  let picked;
-  if (/^[A-Za-z0-9_-]+(\s*,\s*[A-Za-z0-9_-]+)*$/.test(spec)) {
-    // One tag or a comma-separated list of tags: the union, in path order.
-    const tags = spec.split(",").map((t) => t.trim());
-    const candidates = all.filter((f) => f.rel.startsWith("flows/") || f.rel.startsWith("device/"));
-    // A typo in one tag of a list must not silently drop that part of the gate.
-    for (const t of tags) {
-      if (!candidates.some((f) => f.tags.includes(t))) throw new Error(`tag "${t}" matches no flow`);
+  // Each comma-separated item is a tag (letters, digits, - and _ only) or a path glob (anything
+  // else, e.g. it holds a / or a *). A list may mix both; the result is the union, in path
+  // order, each flow once. An item that matches no flow is an error, never silently dropped.
+  const items = spec.split(",").map((i) => i.trim()).filter(Boolean);
+  const candidates = all.filter((f) => f.rel.startsWith("flows/") || f.rel.startsWith("device/"));
+  const chosen = new Set();
+  for (const item of items) {
+    let hits;
+    if (/^[A-Za-z0-9_-]+$/.test(item)) {
+      hits = candidates.filter((f) => f.tags.includes(item));
+      if (hits.length === 0) throw new Error(`tag "${item}" matches no flow`);
+    } else {
+      const re = globToRegExp(item);
+      hits = all.filter((f) => re.test(f.rel));
+      if (hits.length === 0) throw new Error(`glob "${item}" matches no flow`);
     }
-    picked = candidates.filter((f) => f.tags.some((t) => tags.includes(t)));
-  } else {
-    const globs = spec.split(",").map((g) => g.trim()).filter(Boolean).map(globToRegExp);
-    picked = all.filter((f) => globs.some((g) => g.test(f.rel)));
+    for (const h of hits) chosen.add(h.file);
   }
+  let picked = all.filter((f) => chosen.has(f.file));
   if (roleList.length) picked = picked.filter((f) => f.tags.some((t) => roleList.includes(t)));
   return picked.map((f) => f.file);
 }

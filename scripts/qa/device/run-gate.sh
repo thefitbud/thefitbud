@@ -7,8 +7,8 @@
 #   scripts/qa/device/run-gate.sh android   # a booted emulator on adb
 #
 # Environment (all optional):
-#   DEVICE_FLOWS    Maestro tag, or comma-separated path globs under apps/mobile/.maestro
-#                   (select-flows.mjs). Default: smoke
+#   DEVICE_FLOWS    comma-separated Maestro tags and/or path globs under apps/mobile/.maestro
+#                   (select-flows.mjs: union, in path order). Default: launch
 #   DEVICE_ROLES    keep only flows tagged with one of these roles (trainee,trainer,dual)
 #   DEVICE_THEMES   "light dark" (default), "light" or "dark"
 #   DEVICE_EXTRAS   all (default): after the flows, the push, lock-screen and offline
@@ -42,7 +42,7 @@ set -uo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 PLATFORM="$(device_platform "${1:-}")"
-FLOWS="${DEVICE_FLOWS:-smoke}"
+FLOWS="${DEVICE_FLOWS:-launch}"
 ROLES="${DEVICE_ROLES:-}"
 THEMES="${DEVICE_THEMES:-light dark}"
 EXTRAS="${DEVICE_EXTRAS:-all}"
