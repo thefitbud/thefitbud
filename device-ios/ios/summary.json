@@ -1,0 +1,167 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "dark: 1 of 5 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F10-offline-sync.yaml",
+    "flows/v3/F10b-offline-sync-offline.yaml",
+    "flows/v3/F10c-offline-sync-reconnect.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 5,
+      "passed": 4,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": [
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 100855,
+        "text": "2026-11-15 19:56:33.093 Df FitBudStaging[22542:4a317] [fitbud-gate] native.warn (ADVICE) View #673 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      },
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 103711,
+        "text": "2026-11-15 19:56:39.728 Df FitBudStaging[22542:4a317] [fitbud-gate] native.warn (ADVICE) View #1249 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      },
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 302582,
+        "text": "2026-11-15 20:11:59.327 Df FitBudStaging[57743:6057c] [fitbud-gate] native.warn (ADVICE) View #673 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      },
+      {
+        "kind": "rn-warn",
+        "file": "ios-device.log",
+        "line": 308163,
+        "text": "2026-11-15 20:12:15.159 Df FitBudStaging[57743:6057c] [fitbud-gate] native.warn (ADVICE) View #829 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component.",
+        "reason": "Temporary, D-W12-33 (W12 orchestrator, 15 Nov 2026). iOS ADVICE from pre-W12 code outside Z12-36, seen only in the trainee workout flow (likely the in-app banner in apps/mobile/src/trainee/notifications/Surfaces.tsx, a near-opaque fill under a shadow). Surfaces.tsx is Z12-38's (shell lane): Z12-38 fixes the shadow and removes this entry in its PR."
+      }
+    ]
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "full in 2029 s",
+      "mode": "full",
+      "seconds": 2029,
+      "cacheKey": "device-native-ios-93514e33ce85b82a27fc66dd3cb6c87665b7a258"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.939 (3), dark 0.609 (4)",
+      "light": 0.939,
+      "dark": 0.609,
+      "count": {
+        "light": 3,
+        "dark": 4
+      },
+      "shots": [
+        {
+          "file": "TR-19a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.088
+        },
+        {
+          "file": "TR-19a-light-ios.png",
+          "theme": "light",
+          "luma": 0.937
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.932
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-005-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.708
+        },
+        {
+          "file": "step-015-assertCondition-Today_s_workout.Needs_yo-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.708
+        }
+      ]
+    }
+  ]
+}
