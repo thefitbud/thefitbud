@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 579CE18B-04CC-4DBE-BB3D-422DE003FA76" tests="1" failures="1" time="155.82" timestamp="2026-11-15T07:50:15">
+    <testcase id="Z12-36 trainee Today (TR-06a) and Diet (TR-07a)" name="Z12-36 trainee Today (TR-06a) and Diet (TR-07a)" classname="Z12-36 trainee Today (TR-06a) and Diet (TR-07a)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/2-trainee-today-diet.yaml" time="155.739" timestamp="2026-11-15T07:50:15" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
