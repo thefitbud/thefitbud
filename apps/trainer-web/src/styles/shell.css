@@ -5,7 +5,7 @@
   min-height: 100dvh;
   display: grid;
   grid-template-columns: 240px 1fr;
-  background: var(--page-bg, #f3f5fb);
+  background: var(--page-bg, var(--bg));
 }
 
 .shell-side {
@@ -16,8 +16,8 @@
   min-height: 100dvh;
   height: 100vh;
   height: 100dvh;
-  background: var(--deep-navy, #1a1248);
-  color: #fff;
+  background: var(--deep-navy, var(--ink));
+  color: var(--white);
   display: flex;
   flex-direction: column;
   padding: 20px 14px 16px;
@@ -40,7 +40,7 @@
   font-size: 19px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--white);
 }
 
 .shell-nav {
@@ -74,18 +74,18 @@
 
 .shell-nav-link:hover {
   background: rgb(255 255 255 / 8%);
-  color: #fff;
+  color: var(--white);
 }
 
 .shell-nav-link.is-active,
 .shell-nav-link[aria-current="page"] {
   background: rgb(69 39 198 / 42%);
-  color: #fff;
+  color: var(--white);
 }
 
 .shell-nav-link.is-active svg,
 .shell-nav-link[aria-current="page"] svg {
-  color: #fff;
+  color: var(--white);
 }
 
 .shell-nav-badge {
@@ -94,8 +94,8 @@
   height: 20px;
   padding: 0 7px;
   border-radius: 999px;
-  background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
+  background: var(--pale-lavender, var(--coach-tint));
+  color: var(--indigo, var(--coach-ink));
   border: 1px solid #d4ccff;
   font-size: 12px;
   font-weight: 700;
@@ -124,7 +124,7 @@
   padding: 8px 10px;
   border-radius: 12px;
   text-decoration: none;
-  color: #fff;
+  color: var(--white);
 }
 
 .shell-me:hover {
@@ -135,8 +135,8 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: #edeaff;
-  color: #3b23a8;
+  background: var(--coach-tint);
+  color: var(--coach-ink);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -168,7 +168,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: var(--page-bg, #f3f5fb);
+  background: var(--page-bg, var(--bg));
 }
 
 .shell-topbar {
@@ -177,7 +177,7 @@
   gap: 16px;
   padding: 14px 32px;
   background: transparent;
-  border-bottom: 1px solid #e7e9f2;
+  border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 15;
@@ -186,7 +186,7 @@
 .shell-crumb {
   font-size: 14px;
   font-weight: 500;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   min-width: 4rem;
 }
 
@@ -200,9 +200,9 @@
   min-width: 320px;
   width: min(420px, 42vw);
   border-radius: 10px;
-  border: 1px solid #d9dce8;
-  background: #fff;
-  color: var(--ink-500, #5b616b);
+  border: 1px solid var(--line2);
+  background: var(--white);
+  color: var(--ink-500, var(--ink3));
   font-size: 14px;
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
   cursor: pointer;
@@ -219,11 +219,11 @@
   height: 20px;
   padding: 0 6px;
   border-radius: 5px;
-  border: 1px solid #d9dce8;
-  background: #fff;
+  border: 1px solid var(--line2);
+  background: var(--white);
   font-size: 11px;
   font-weight: 600;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .shell-bell-wrap {
@@ -234,12 +234,12 @@
   width: 36px;
   height: 36px;
   border-radius: 10px;
-  border: 1px solid #d9dce8;
-  background: #fff;
+  border: 1px solid var(--line2);
+  background: var(--white);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   cursor: pointer;
   position: relative;
   box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
@@ -252,7 +252,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #b91c1c;
+  background: var(--crit);
 }
 
 .shell-bell-popover {
@@ -262,8 +262,8 @@
   width: 360px;
   max-height: 420px;
   overflow: auto;
-  background: #fff;
-  border: 1px solid #e7e9f2;
+  background: var(--white);
+  border: 1px solid var(--line);
   border-radius: 12px;
   box-shadow: 0 8px 24px rgb(26 18 72 / 10%);
   padding: 8px;
@@ -288,7 +288,7 @@
 }
 
 .shell-bell-popover button:hover {
-  background: #f7f8fc;
+  background: var(--bg);
 }
 
 .app-shell > .page-main,
@@ -316,9 +316,9 @@
 .shell-palette,
 .shell-help-sheet {
   width: min(520px, calc(100vw - 32px));
-  background: #fff;
+  background: var(--white);
   border-radius: 16px;
-  border: 1px solid #e7e9f2;
+  border: 1px solid var(--line);
   box-shadow: 0 8px 24px rgb(26 18 72 / 10%);
   overflow: hidden;
 }
@@ -333,7 +333,7 @@
 .shell-help-sheet ul {
   margin: 0;
   padding-left: 1.1rem;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
 }
 
 .shell-palette-input {
@@ -341,7 +341,7 @@
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border-bottom: 1px solid #e7e9f2;
+  border-bottom: 1px solid var(--line);
 }
 
 .shell-palette-input input {
@@ -376,7 +376,7 @@
 }
 
 .shell-palette-list button:hover {
-  background: #f7f8fc;
+  background: var(--bg);
 }
 
 /* Hide legacy white sidebar styles when new shell is active */
@@ -452,8 +452,8 @@
 
   .shell-topbar {
     padding: 12px 16px;
-    background: #fff;
-    border-bottom: 1px solid #e7e9f2;
+    background: var(--white);
+    border-bottom: 1px solid var(--line);
   }
 
   .shell-search {
@@ -478,8 +478,8 @@
     right: 0;
     bottom: 0;
     height: 64px;
-    background: #fff;
-    border-top: 1px solid #e7e9f2;
+    background: var(--white);
+    border-top: 1px solid var(--line);
     z-index: 30;
     justify-content: space-around;
     align-items: center;
@@ -490,7 +490,7 @@
     flex-direction: column;
     gap: 2px;
     height: auto;
-    color: var(--ink-500, #5b616b);
+    color: var(--ink-500, var(--ink3));
     font-size: 11px;
     font-weight: 500;
     padding: 6px 4px;
@@ -503,7 +503,7 @@
 
   .shell-bottom-nav .shell-nav-link.is-active,
   .shell-bottom-nav .shell-nav-link[aria-current="page"] {
-    color: var(--indigo, #4527c6);
+    color: var(--indigo, var(--coach-ink));
     background: transparent;
   }
 

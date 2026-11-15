@@ -26,6 +26,9 @@
 # Runners: ubuntu-latest (KVM) for Android, macos-15 for iOS — both standard GitHub-hosted
 # runners, free for this public repository. No larger runner label may be added.
 name: Device gate
+# Names each run after the app it tests, so a task can find its own dispatch among
+# runs that all show head_branch main (the workflow's ref).
+run-name: "Device gate · ${{ inputs.ref || github.head_ref || github.ref_name }} · ${{ inputs.flows || 'launch' }}"
 
 on:
   workflow_dispatch:
