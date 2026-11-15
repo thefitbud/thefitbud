@@ -43,8 +43,8 @@ Template row (W12-PROMPT §3):
 | TR-04 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-04-waiting-for-coach.png` | — |
 | TR-05 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-05-reminder-setup.png` | — |
 | TR-05 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-05-reminder-setup.png` | — |
-| TR-06a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06a-today-default.png` | — |
-| TR-06a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06a-today-default.png` | — |
+| TR-06a | light | yes · state: Aarav signs in (device/z12-36/2) | GAP | GAP | docs/qa/Z12-36/TR-06a-light-ios.png, …-android.png | `docs/design/v3/png/trainee/TR-06a-today-default.png` | Z12-36 anchor for primitives only: screen not migrated yet (v2 layout and colours, e.g. indigo day pill, rest-day card; Today v3 is its own W12 task); Inter, v3 type and primitives are in |
+| TR-06a | dark | yes · state: Aarav signs in (device/z12-36/2) | GAP | GAP | docs/qa/Z12-36/TR-06a-dark-ios.png, …-android.png | `docs/design/v3/png-dark/trainee/TR-06a-today-default.png` | renders light under system dark by design: not opted in to dark until its own W12 task sets `<Screen v3>` (Z12-36 decision 3); status bar follows (dark content) |
 | TR-06a2 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06a2-today-scrolled.png` | — |
 | TR-06a2 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06a2-today-scrolled.png` | — |
 | TR-06b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06b-today-rest-day.png` | — |
@@ -61,8 +61,8 @@ Template row (W12-PROMPT §3):
 | TR-06g | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06g-today-refresh-error.png` | — |
 | TR-06h | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06h-today-inapp-banner.png` | — |
 | TR-06h | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06h-today-inapp-banner.png` | — |
-| TR-07a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07a-diet-day.png` | — |
-| TR-07a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07a-diet-day.png` | — |
+| TR-07a | light | yes · state: Aarav → Diet (device/z12-36/2) | GAP | GAP | docs/qa/Z12-36/TR-07a-light-ios.png, …-android.png | `docs/design/v3/png/trainee/TR-07a-diet-day.png` | Z12-36 anchor for primitives only: Diet not migrated yet (v2 layout and colours); Inter and primitives are in |
+| TR-07a | dark | yes · state: Aarav → Diet (device/z12-36/2) | GAP | GAP | docs/qa/Z12-36/TR-07a-dark-ios.png, …-android.png | `docs/design/v3/png-dark/trainee/TR-07a-diet-day.png` | renders light under system dark by design: not opted in to dark until its own W12 task sets `<Screen v3>` (Z12-36 decision 3); status bar follows (dark content) |
 | TR-07b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07b-eaten-as-planned-undo.png` | — |
 | TR-07b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07b-eaten-as-planned-undo.png` | — |
 | TR-07c | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07c-diet-no-meals-planned.png` | — |
@@ -187,8 +187,8 @@ Template row (W12-PROMPT §3):
 | W-01e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01e-workout-tab-future-day.png` | — |
 | W-02 | light | — | — | — | — | `docs/design/v3/png/trainee/W-02-active-start.png` | — |
 | W-02 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-02-active-start.png` | — |
-| W-03 | light | — | — | — | — | `docs/design/v3/png/trainee/W-03-active-mid.png` | — |
-| W-03 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-03-active-mid.png` | — |
+| W-03 | light | yes · state: Rohan → Workout → Sat Lower B → set 1 logged (device/z12-36/3) | GAP | GAP | docs/qa/Z12-36/W-03-light-ios.png, …-android.png | `docs/design/v3/png/trainee/W-03-active-mid.png` | Z12-36 anchor for primitives only: active workout not migrated yet (v2 indigo log bar and set rows); Inter is in |
+| W-03 | dark | yes · state: Rohan → Workout → Sat Lower B → set 1 logged (device/z12-36/3) | GAP | GAP | docs/qa/Z12-36/W-03-dark-ios.png, …-android.png | `docs/design/v3/png-dark/trainee/W-03-active-mid.png` | renders light under system dark by design: not opted in to dark until its own W12 task sets `<Screen v3>` (Z12-36 decision 3); status bar follows (dark content) |
 | W-03b | light | — | — | — | — | `docs/design/v3/png/trainee/W-03b-active-end-of-list.png` | — |
 | W-03b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-03b-active-end-of-list.png` | — |
 | W-04 | light | — | — | — | — | `docs/design/v3/png/trainee/W-04-active-keypad.png` | — |
@@ -240,8 +240,8 @@ Template row (W12-PROMPT §3):
 
 | Screen | Theme | Flows | Reachable | iOS | Android | App screenshots | Mock | Remaining differences |
 |---|---|---|---|---|---|---|---|
-| TM-01a | light | — | — | — | — | `docs/design/v3/png/trainer/TM-01a-needs-you.png` | — |
-| TM-01a | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-01a-needs-you.png` | — |
+| TM-01a | light | yes · state: Rahul signs in (device/z12-36/4) | GAP | GAP | docs/qa/Z12-36/TM-01a-light-ios.png, …-android.png | `docs/design/v3/png/trainer/TM-01a-needs-you.png` | Z12-36 anchor for primitives only: Needs you not migrated yet (v2 layout, chips and colours); Inter and StatusChip v3 are in |
+| TM-01a | dark | yes · state: Rahul signs in (device/z12-36/4) | GAP | GAP | docs/qa/Z12-36/TM-01a-dark-ios.png, …-android.png | `docs/design/v3/png-dark/trainer/TM-01a-needs-you.png` | renders light under system dark by design: not opted in to dark until its own W12 task sets `<Screen v3>` (Z12-36 decision 3); status bar follows (dark content) |
 | TM-01a2 | light | — | — | — | — | `docs/design/v3/png/trainer/TM-01a2-needs-you-scrolled.png` | — |
 | TM-01a2 | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-01a2-needs-you-scrolled.png` | — |
 | TM-01b | light | — | — | — | — | `docs/design/v3/png/trainer/TM-01b-needs-you-swipe.png` | — |
@@ -292,8 +292,8 @@ Template row (W12-PROMPT §3):
 | TM-03j | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-03j-nudge-pick-item.png` | — |
 | TM-04a | light | — | — | — | — | `docs/design/v3/png/trainer/TM-04a-exception-review.png` | — |
 | TM-04a | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-04a-exception-review.png` | — |
-| TM-04b | light | — | — | — | — | `docs/design/v3/png/trainer/TM-04b-nudge-sheet.png` | — |
-| TM-04b | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-04b-nudge-sheet.png` | — |
+| TM-04b | light | yes · state: Clients → Rohan → Review → Nudge on WhatsApp (device/z12-36/4) | GAP | GAP | docs/qa/Z12-36/TM-04b-light-ios.png, …-android.png | `docs/design/v3/png/trainer/TM-04b-nudge-sheet.png` | Z12-36 anchor for primitives only: today this is the exception review's WhatsApp nudge sheet (v3 mock is the push nudge sheet, Z12-50); sheet primitive v3 |
+| TM-04b | dark | yes · state: Clients → Rohan → Review → Nudge on WhatsApp (device/z12-36/4) | GAP | GAP | docs/qa/Z12-36/TM-04b-dark-ios.png, …-android.png | `docs/design/v3/png-dark/trainer/TM-04b-nudge-sheet.png` | renders light under system dark by design: not opted in to dark until its own W12 task sets `<Screen v3>` (Z12-36 decision 3); status bar follows (dark content) |
 | TM-04c | light | — | — | — | — | `docs/design/v3/png/trainer/TM-04c-nudge-quiet-hours.png` | — |
 | TM-04c | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-04c-nudge-quiet-hours.png` | — |
 | TM-04d | light | — | — | — | — | `docs/design/v3/png/trainer/TM-04d-resolve-sheet.png` | — |

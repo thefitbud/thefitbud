@@ -1,9 +1,9 @@
 import { useRef, type ReactNode } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { Check } from "lucide-react-native";
 import { Text } from "./Text";
 import { Swipeable } from "react-native-gesture-handler";
-import { colors, semanticColors, spacing } from "@fitbud/ui-mobile";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type Props = {
   children: ReactNode;
@@ -20,6 +20,8 @@ export function SwipeActionRow({
   onMarkReviewed,
   markLabel = "Mark reviewed",
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const swipeRef = useRef<Swipeable>(null);
   const committed = useRef(false);
 
@@ -37,7 +39,7 @@ export function SwipeActionRow({
       style={styles.rightAction}
       onPress={commitMarkReviewed}
     >
-      <Check color={colors.white} size={22} strokeWidth={2.4} />
+      <Check color={theme.colors.onBrand} size={22} strokeWidth={2.4} />
       <Text style={styles.rightActionText}>{markLabel}</Text>
     </Pressable>
   );
@@ -67,19 +69,20 @@ export function SwipeActionRow({
 
 const ACTION_WIDTH = 132;
 
-const styles = StyleSheet.create({
+/** Done action: --done fill with an on-brand tick and label (green means done). */
+const useStyles = createThemedStyles((t) => ({
   rightAction: {
     alignItems: "center",
-    backgroundColor: semanticColors.positive.text,
+    backgroundColor: t.colors.done,
     gap: 4,
     justifyContent: "center",
     width: ACTION_WIDTH,
   },
   rightActionText: {
-    color: colors.white,
+    color: t.colors.onBrand,
     fontSize: 13,
     fontWeight: "700",
-    paddingHorizontal: spacing.sm,
+    paddingHorizontal: t.spacing.sm,
     textAlign: "center",
   },
-});
+}));

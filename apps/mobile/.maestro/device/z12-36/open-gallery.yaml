@@ -1,0 +1,31 @@
+# Subflow (Z12-36): open the QA primitive gallery with fitbud://qa/primitives and wait
+# for it. Robust to the two iOS behaviours seen on the gate:
+# - the simulator may ask "Open in “FitBud Staging”?" first (a SpringBoard alert that
+#   clearState does not dismiss): "Open" is tapped optionally, matched exactly so the
+#   gallery's "Open sheet" never matches (runs 43643116147, 43669586698);
+# - the first link sent to a freshly launched app can be lost (runs 43673200079,
+#   43678708890, 43685546138: sign-in still on screen after 60 s, every later open
+#   worked): after ~15 s without the gallery the link is sent once more.
+# No `tags:`, so the device gate never selects this file as a flow; `appId` is required
+# by Maestro for any file reached by `runFlow:` (see common/assert-no-crash.yaml).
+appId: com.thefitbud.mobile.staging
+---
+- openLink: fitbud://qa/primitives
+- tapOn:
+    text: "Open"
+    optional: true
+- extendedWaitUntil:
+    visible: "Large title 30"
+    timeout: 15000
+    optional: true
+- runFlow:
+    when:
+      notVisible: "Large title 30"
+    commands:
+      - openLink: fitbud://qa/primitives
+      - tapOn:
+          text: "Open"
+          optional: true
+- extendedWaitUntil:
+    visible: "Large title 30"
+    timeout: 60000
