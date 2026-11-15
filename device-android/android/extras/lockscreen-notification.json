@@ -1,0 +1,7 @@
+{
+  "platform": "android",
+  "target": "notification",
+  "match": "FitBud",
+  "outcome": "tapped-no-app",
+  "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+}

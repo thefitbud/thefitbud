@@ -1,0 +1,101 @@
+{
+  "result": "mean screenshot luminance: light 0.876 (9), dark 0.876 (9)",
+  "light": 0.876,
+  "dark": 0.876,
+  "count": {
+    "light": 9,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TR-06c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.942
+    },
+    {
+      "file": "TR-06c-light-ios.png",
+      "theme": "light",
+      "luma": 0.942
+    },
+    {
+      "file": "TR-06d-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.792
+    },
+    {
+      "file": "TR-06d-light-ios.png",
+      "theme": "light",
+      "luma": 0.792
+    },
+    {
+      "file": "TR-07f-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.944
+    },
+    {
+      "file": "TR-07f-light-ios.png",
+      "theme": "light",
+      "luma": 0.944
+    },
+    {
+      "file": "TR-07k-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.941
+    },
+    {
+      "file": "TR-07k-light-ios.png",
+      "theme": "light",
+      "luma": 0.939
+    },
+    {
+      "file": "W-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.729
+    },
+    {
+      "file": "W-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.729
+    },
+    {
+      "file": "f29-planned-meal-readonly-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.735
+    },
+    {
+      "file": "f29-planned-meal-readonly-light-ios.png",
+      "theme": "light",
+      "luma": 0.736
+    },
+    {
+      "file": "f29-today-future-meals-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.93
+    },
+    {
+      "file": "f29-today-future-meals-light-ios.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.927
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.927
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    }
+  ]
+}
