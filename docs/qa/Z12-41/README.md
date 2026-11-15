@@ -6,7 +6,7 @@ Spec: `docs/specs/Z12-41.md`. This file holds the root cause of finding 2 with i
 
 ### What I could and could not reproduce
 
-I had no device logs from the 13 Nov session, so I could not replay that exact session. I reproduced the symptom (the sync screen says "Couldn't send" while every `POST /sync/push` answers 200) against the local API and the local D1, and then read the code for every other path that gives the same symptom. There are four causes. The first is reproduced end to end below; the other three are each reproduced by a test that fails on `main`.
+I had no device logs from the 13 Nov session, so I could not replay that exact session and cannot say which of the paths below it took. I reproduced the symptom (the sync screen says "Couldn't send" while every `POST /sync/push` answers 200) against the local API and the local D1, and then read the code for every other path that gives the same symptom. There are four causes. The first is reproduced end to end below, before and after the fix; each of the other three now has a test.
 
 ### Cause 1 (reproduced on the local API and D1): a workout opened with no network
 
@@ -42,7 +42,39 @@ select count(*) from set_executions se
 
 So: the workout started on the server, the set was refused with HTTP 200, the refusal was stored, and Retry replayed the stored refusal. The set was never written. The phone showed "Couldn't send" and nothing the trainee could do would send it.
 
-This fits the 13 Nov report: with mobile data off, the phone still reached the local API over Wi-Fi some of the time, so `/sync/push` answered 200 while the rows it carried were refused.
+This gives exactly the reported symptom: `/sync/push` answers 200 while the rows it carries are refused.
+
+After the fix, on the same local D1 (the app now sends the plan's own ids, `assignmentId` and `setTargetId`, and the server finds the real execution and set by them):
+
+```
+push #1 (reconnect) HTTP 200 [{"status":"applied"},{"status":"applied"}]
+push #2 (duplicate delivery) HTTP 200 [{"status":"already_applied"},{"status":"already_applied"}]
+old refused set, same mutation id, retried HTTP 200 [{"status":"applied"}]
+```
+
+The third line is the set from the reproduction above (`89c44194-…`), sent again with its own mutation id: the stored refusal is no longer replayed.
+
+| mutation_id | operation | result_status |
+|---|---|---|
+| 89c44194-… (refused before the fix) | workout.complete_set | applied |
+| 51709f88-… | workout.start | applied |
+| a1f04d7b-… | workout.complete_set | applied |
+
+```sql
+select we.assignment_id, se.status, se.actual_reps, count(*) from set_executions se
+  join exercise_executions ee on ee.id = se.exercise_execution_id
+  join workout_executions we on we.id = ee.workout_execution_id
+ where we.assignment_id in ('7cda0c19-…','74cdd34c-…') group by 1, 2, 3;
+```
+
+| assignment | set status | reps | rows |
+|---|---|---|---|
+| 74cdd34c-… (the stuck one) | modified | 10 | 1 |
+| 74cdd34c-… | pending | | 16 |
+| 7cda0c19-… | modified | 10 | 1 |
+| 7cda0c19-… | pending | | 16 |
+
+One logged set per workout ("modified" because 10 reps differ from the prescription), one execution per assignment, after the queue was delivered twice.
 
 ### Cause 2: a refusal was final for ever
 

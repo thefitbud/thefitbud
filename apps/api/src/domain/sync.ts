@@ -975,8 +975,8 @@ const EXECUTION_ADDRESSED_OPERATIONS: ReadonlySet<string> = new Set([
  * sets against those ids; the server then answers EXECUTION_NOT_FOUND and the
  * sets are lost. A mutation may therefore also carry the ids the plan gave
  * the phone, which both sides know: `assignmentId` and, for a set,
- * `setTargetId`. When the execution id is not one of this trainee's, the
- * execution and set are looked up by those instead.
+ * `setTargetId`. When the execution id or the set id is not one of this
+ * trainee's, the execution and set are looked up by those instead.
  *
  * Only this trainee's own execution is ever resolved, and the route the
  * mutation is dispatched to still checks ownership itself.
@@ -994,55 +994,56 @@ export async function resolveWorkoutMutationPayload(
   const assignmentId = payload.assignmentId;
   if (typeof assignmentId !== "string") return payload;
 
-  const executionId = payload.executionId;
-  if (typeof executionId === "string") {
-    const known = await db
+  // The trainee's own execution: by the id sent when the server knows it,
+  // otherwise by the assignment.
+  const ownExecution = (condition: SQL) =>
+    db
       .select({ id: workoutExecutions.id })
       .from(workoutExecutions)
-      .where(
-        and(
-          eq(workoutExecutions.id, executionId),
-          eq(workoutExecutions.traineeUserId, actorUserId),
-        ),
-      )
+      .where(and(condition, eq(workoutExecutions.traineeUserId, actorUserId)))
       .limit(1);
-    if (known[0]) return payload;
-  }
-
-  const executions = await db
-    .select({ id: workoutExecutions.id })
-    .from(workoutExecutions)
-    .where(
-      and(
-        eq(workoutExecutions.assignmentId, assignmentId),
-        eq(workoutExecutions.traineeUserId, actorUserId),
-      ),
-    )
-    .limit(1);
-  const execution = executions[0];
+  const executionId = payload.executionId;
+  const known =
+    typeof executionId === "string"
+      ? (await ownExecution(eq(workoutExecutions.id, executionId)))[0]
+      : undefined;
+  const execution =
+    known ??
+    (await ownExecution(eq(workoutExecutions.assignmentId, assignmentId)))[0];
   if (!execution) return payload;
 
-  const resolved: Record<string, unknown> = {
-    ...payload,
-    executionId: execution.id,
-  };
+  const resolved: Record<string, unknown> =
+    execution.id === executionId
+      ? payload
+      : { ...payload, executionId: execution.id };
   if (operation !== "workout.complete_set") return resolved;
 
+  // A workout that was started online and continued with no network has the
+  // server's execution id but set ids the phone made up. A set id that is
+  // really one of this execution's is left alone.
   const setTargetId = payload.setTargetId;
   if (typeof setTargetId !== "string") return resolved;
-  const sets = await db
-    .select({ id: setExecutions.id })
-    .from(setExecutions)
-    .innerJoin(
-      exerciseExecutions,
-      eq(exerciseExecutions.id, setExecutions.exerciseExecutionId),
-    )
-    .where(
-      and(
-        eq(exerciseExecutions.workoutExecutionId, execution.id),
-        eq(setExecutions.setTargetId, setTargetId),
-      ),
-    )
-    .limit(1);
-  return sets[0] ? { ...resolved, setExecutionId: sets[0].id } : resolved;
+  const setsOfExecution = (condition: SQL) =>
+    db
+      .select({ id: setExecutions.id })
+      .from(setExecutions)
+      .innerJoin(
+        exerciseExecutions,
+        eq(exerciseExecutions.id, setExecutions.exerciseExecutionId),
+      )
+      .where(
+        and(eq(exerciseExecutions.workoutExecutionId, execution.id), condition),
+      )
+      .limit(1);
+  const setExecutionId = payload.setExecutionId;
+  if (
+    typeof setExecutionId === "string" &&
+    (await setsOfExecution(eq(setExecutions.id, setExecutionId)))[0]
+  ) {
+    return resolved;
+  }
+  const byTarget = (
+    await setsOfExecution(eq(setExecutions.setTargetId, setTargetId))
+  )[0];
+  return byTarget ? { ...resolved, setExecutionId: byTarget.id } : resolved;
 }

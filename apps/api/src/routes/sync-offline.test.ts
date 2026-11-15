@@ -528,8 +528,8 @@ describe("sync push: nothing duplicated, nothing lost (Z12-41)", () => {
     expect(forOwner.setExecutionId).not.toBe(payload.setExecutionId);
   });
 
-  it("a known execution id is used as it is, whatever plan ids come with it", async () => {
-    const { trainee, assignmentId } = await reachCoaching("known", true);
+  it("started online, continued offline: the server's execution id with the phone's set ids still lands", async () => {
+    const { trainee, assignmentId } = await reachCoaching("continued", true);
     await push(trainee, [mutation(1, "workout.start", assignmentId, { assignmentId })]);
     const [execution] = await db
       .select()
@@ -546,9 +546,36 @@ describe("sync push: nothing duplicated, nothing lost (Z12-41)", () => {
       }),
     ]);
 
-    // The set id is wrong for a real execution: that is the client's error
-    // to see, not something to paper over.
-    expect(result).toMatchObject({ status: "rejected", error: { code: "SET_NOT_FOUND" } });
+    expect(result?.status).toBe("applied");
+    expect((await completedSets(assignmentId)).map((row) => row.setTargetId)).toEqual([
+      SET_TARGET_1,
+    ]);
+  });
+
+  it("real ids are used as they are: the plan ids never redirect a set the server knows", async () => {
+    const { trainee, assignmentId } = await reachCoaching("known", true);
+    await push(trainee, [mutation(1, "workout.start", assignmentId, { assignmentId })]);
+    const sets = await db
+      .select({ id: schema.setExecutions.id, setTargetId: schema.setExecutions.setTargetId })
+      .from(schema.setExecutions);
+    const second = sets.find((row) => row.setTargetId === SET_TARGET_2)!;
+    const [execution] = await db.select().from(schema.workoutExecutions);
+
+    // The set id says set 2; a (wrong) target id says set 1. The id wins.
+    const [result] = await push(trainee, [
+      mutation(2, "workout.complete_set", execution!.id, {
+        executionId: execution!.id,
+        setExecutionId: second.id,
+        assignmentId,
+        setTargetId: SET_TARGET_1,
+        body: { actualReps: 5 },
+      }),
+    ]);
+
+    expect(result?.status).toBe("applied");
+    expect((await completedSets(assignmentId)).map((row) => row.setTargetId)).toEqual([
+      SET_TARGET_2,
+    ]);
   });
 
   it("a transient failure is retryable and leaves no verdict behind", async () => {
