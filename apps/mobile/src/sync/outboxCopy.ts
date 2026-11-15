@@ -143,3 +143,295 @@ export function createKeptRowsBinding(store: KeptRowsStore): {
     snapshot: () => store.copy(),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Sync status sheet (TR-19a) and conflict (TR-19b), Z12-41
+// ---------------------------------------------------------------------------
+
+/** The outbox row fields the sheet reads. */
+export type SheetRow = {
+  mutationId: string;
+  operation: string;
+  recordId: string;
+  payloadJson: string;
+  clientOccurredAt: string;
+  status: string;
+  lastError: string | null;
+  lastErrorCode: string | null;
+  lastErrorReason: string | null;
+  keptAt: string | null;
+};
+
+/** Names the outbox does not carry, read from records already on the phone. */
+export type SheetNames = {
+  /** Meal name by meal assignment id. */
+  meal: (assignmentId: string) => string | null;
+  /** Workout name by execution id or assignment id. */
+  workout: (id: string) => string | null;
+};
+
+export const NO_SHEET_NAMES: SheetNames = {
+  meal: () => null,
+  workout: () => null,
+};
+
+export type SheetItemState = "waiting" | "sending" | "failed";
+
+/** One line of the sheet: one meal, one workout (all its sets), one weight. */
+export type SheetItem = {
+  key: string;
+  kind: "meal" | "workout" | "progress" | "checkin";
+  title: string;
+  /** "Diet · eaten as planned · 5:04 pm" */
+  detail: string;
+  state: SheetItemState;
+  /** Why it was refused, for a failed item. */
+  reason: string | null;
+  /** The coach changed the plan meanwhile (TR-19b). */
+  conflict: boolean;
+  /** The trainee already chose "Keep my log" for this conflict. */
+  kept: boolean;
+  mutationIds: string[];
+};
+
+function rowState(status: string): SheetItemState | null {
+  if (status === "pending") return "waiting";
+  if (status === "in_flight") return "sending";
+  if (status === "rejected" || status === "conflicted") return "failed";
+  return null;
+}
+
+/** The coach changed the plan while the log waited on the phone. */
+export function isPlanChangeConflict(row: {
+  status: string;
+  lastErrorReason: string | null;
+}): boolean {
+  return row.status === "conflicted" && row.lastErrorReason === "superseded";
+}
+
+/**
+ * Why the server refused a row. The API's own message is static, curated text
+ * (AGENTS.md), so it is shown as it is when no better line is known.
+ */
+export function failureReason(
+  row: Pick<SheetRow, "status" | "lastError" | "lastErrorCode" | "lastErrorReason">,
+  coachFirstName: string,
+): string {
+  if (isPlanChangeConflict(row)) {
+    return `${coachFirstName} changed this while you were offline.`;
+  }
+  if (row.lastErrorReason === "exception_resolved") {
+    return `${coachFirstName} closed this before your log was sent.`;
+  }
+  if (row.lastErrorCode === "RELATIONSHIP_ENDED") {
+    return "Coaching has ended.";
+  }
+  return row.lastError?.trim() || "Couldn't send.";
+}
+
+const MEASUREMENT_LABELS: Record<string, string> = {
+  body_weight_kg: "Weight",
+  waist_cm: "Waist",
+  chest_cm: "Chest",
+  hips_cm: "Hips",
+};
+
+function measurementTitle(body: Record<string, unknown>): string {
+  const inner = (body.body ?? {}) as Record<string, unknown>;
+  const label =
+    typeof inner.type === "string" ? MEASUREMENT_LABELS[inner.type] : undefined;
+  const value = typeof inner.value === "number" ? inner.value : null;
+  const unit = text(inner.unit);
+  if (!label || value === null) return "Measurement";
+  return unit ? `${label} ${value} ${unit}` : `${label} ${value}`;
+}
+
+const MEAL_ACTIONS: Record<string, string> = {
+  "meal.confirm": "eaten as planned",
+  "meal.skip": "skipped",
+  "meal.deviate": "something different",
+};
+
+const SET_OPERATION = "workout.complete_set";
+
+/** Worst state first: a refusal outranks sending, sending outranks waiting. */
+function worst(a: SheetItemState, b: SheetItemState): SheetItemState {
+  const rank: Record<SheetItemState, number> = { waiting: 0, sending: 1, failed: 2 };
+  return rank[b] > rank[a] ? b : a;
+}
+
+/**
+ * The outbox as the sheet shows it (TR-19a). A workout is one line however
+ * many of its sets are queued; everything else is one line per log. Sent rows
+ * are not in the outbox, so they are not here.
+ */
+export function sheetItems(
+  rows: readonly SheetRow[],
+  options: {
+    names?: SheetNames;
+    coachFirstName?: string;
+    timeZone?: string;
+  } = {},
+): SheetItem[] {
+  const names = options.names ?? NO_SHEET_NAMES;
+  const coach = options.coachFirstName ?? "Your coach";
+  const items = new Map<string, SheetItem & { sets: number; latest: string }>();
+
+  for (const row of rows) {
+    const state = rowState(row.status);
+    if (!state) continue;
+    const body = payload(row);
+    const isWorkout = row.operation.startsWith("workout.");
+    const workoutId =
+      text(body.executionId) ?? text(body.assignmentId) ?? row.recordId;
+    const key = isWorkout ? `workout:${workoutId}` : row.mutationId;
+    const reason = state === "failed" ? failureReason(row, coach) : null;
+    const existing = items.get(key);
+    if (existing) {
+      existing.state = worst(existing.state, state);
+      existing.reason = existing.reason ?? reason;
+      existing.mutationIds.push(row.mutationId);
+      if (row.operation === SET_OPERATION) existing.sets += 1;
+      if (row.clientOccurredAt > existing.latest) {
+        existing.latest = row.clientOccurredAt;
+      }
+      continue;
+    }
+    const kind: SheetItem["kind"] = isWorkout
+      ? "workout"
+      : row.operation.startsWith("meal.")
+        ? "meal"
+        : row.operation.startsWith("checkin.")
+          ? "checkin"
+          : "progress";
+    const title =
+      kind === "workout"
+        ? (names.workout(workoutId) ??
+          (text(body.assignmentId) ? names.workout(text(body.assignmentId)!) : null) ??
+          "Workout")
+        : kind === "meal"
+          ? (names.meal(text(body.assignmentId) ?? row.recordId) ?? mealName(body))
+          : kind === "checkin"
+            ? "Check-in"
+            : measurementTitle(body);
+    items.set(key, {
+      key,
+      kind,
+      title,
+      detail: row.operation,
+      state,
+      reason,
+      conflict: isPlanChangeConflict(row),
+      kept: row.keptAt !== null,
+      mutationIds: [row.mutationId],
+      sets: row.operation === SET_OPERATION ? 1 : 0,
+      latest: row.clientOccurredAt,
+    });
+  }
+
+  return [...items.values()].map(({ sets, latest, detail, ...item }) => {
+    const when = formatClockTime(latest, options.timeZone);
+    const area =
+      item.kind === "meal"
+        ? ["Diet", MEAL_ACTIONS[detail]]
+        : item.kind === "workout"
+          ? ["Workout"]
+          : item.kind === "checkin"
+            ? ["Check-in"]
+            : ["Progress"];
+    return {
+      ...item,
+      title:
+        item.kind === "workout" && sets > 0
+          ? `${item.title} · ${sets} ${sets === 1 ? "set" : "sets"}`
+          : item.title,
+      detail: [...area, when].filter(Boolean).join(" · "),
+    };
+  });
+}
+
+/** "3 items waiting to send" (TR-19a). Counts lines, not outbox rows. */
+export function sheetTitle(items: readonly Pick<SheetItem, "state">[]): string {
+  const open = items.filter((item) => item.state !== "failed").length;
+  const failed = items.length - open;
+  if (open > 0) {
+    return `${open} ${open === 1 ? "item" : "items"} waiting to send`;
+  }
+  if (failed > 0) {
+    return `${failed} ${failed === 1 ? "item" : "items"} couldn't be sent`;
+  }
+  return "All saved";
+}
+
+export const SHEET_WAITING_BODY =
+  "They're saved on this phone and send on their own when you're online.";
+export const SHEET_EMPTY_BODY = "Everything you logged has been sent.";
+
+/** "Last sent 4:41 pm"; null when nothing has been sent from this phone yet. */
+export function lastSentLabel(
+  iso: string | null,
+  timeZone?: string,
+): string | null {
+  if (!iso) return null;
+  const time = formatClockTime(iso, timeZone);
+  return time ? `Last sent ${time}` : null;
+}
+
+/**
+ * What "Try sending now" did, read from the outbox after the attempt. Null
+ * when there is nothing to add to what the list already shows.
+ */
+export function sendOutcomeLine(outcome: {
+  sent: number;
+  status: { waiting: number; failed: number; waitingReason: string | null };
+}): string | null {
+  const { sent, status } = outcome;
+  if (status.waiting === 0) {
+    if (sent > 0) return status.failed > 0 ? "Sent what could be sent." : "Sent.";
+    return null;
+  }
+  switch (status.waitingReason) {
+    case "UNREACHABLE":
+      return "Can't reach FitBud. Check your connection.";
+    case "SERVER":
+      return "FitBud didn't respond. We'll keep trying.";
+    case "AUTH":
+      return "Couldn't send yet (SYNC-AUTH). We'll keep trying.";
+    case "CLIENT":
+      return "Couldn't send yet (SYNC-PARSE). We'll keep trying.";
+    default:
+      return "Not sent yet. We'll keep trying.";
+  }
+}
+
+/** The pill in the top bar. Derived only from the outbox counts. */
+export function pillFromStatus(status: {
+  waiting: number;
+  sending: number;
+  failed: number;
+}): { kind: IndicatorKind; label: string } | null {
+  if (status.failed > 0) return { kind: "problem", label: "Couldn't send" };
+  if (status.sending > 0) return { kind: "syncing", label: "Sending…" };
+  if (status.waiting > 0) return { kind: "waiting", label: "Saved on phone" };
+  return null;
+}
+
+/** TR-19b copy. `subject` is the lower-cased meal name, or null. */
+export function conflictSheetCopy(input: {
+  coachFirstName: string;
+  kind: SheetItem["kind"];
+  subject: string | null;
+}): { title: string; body: string; keep: string; see: string } {
+  const { coachFirstName: coach, kind } = input;
+  const noun = kind === "workout" ? "workout" : kind === "meal" ? "meal" : "plan";
+  const what = input.subject ? `your ${input.subject}` : `this ${noun}`;
+  return {
+    title: `${coach} changed this ${noun}`,
+    // Departure from the mock ("Your log is kept and he'll see both"): the
+    // server does not record a log against a replaced plan item, so the
+    // coach does not see it. The log is kept on this phone only.
+    body: `While you were offline, ${coach} updated ${what}. Your log is kept on this phone.`,
+    keep: "Keep my log",
+    see: `See ${coach}'s change`,
+  };
+}
