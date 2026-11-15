@@ -336,6 +336,30 @@ test("the real smoke selection is the four smoke flows", () => {
   assert.deepEqual(files, ["flows/auth/sign-in-code.yaml", "flows/auth/sign-in-password.yaml", "flows/trainee/today.yaml", "flows/trainer/clients.yaml"]);
 });
 
+test("the real launch selection is the two launch smoke flows, and the sign-in wait takes a rest-day Today", () => {
+  const files = selectFlows({ flows: "launch" }).map((f) => path.relative(path.join(repo, "apps/mobile/.maestro"), f));
+  assert.deepEqual(files, ["device/launch/1-trainee-today.yaml", "device/launch/2-trainer-attention.yaml"]);
+  const signIn = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/sign-in-password.yaml"), "utf8");
+  assert.match(signIn, /visible: "Today's workout\.\*\|/);
+});
+
+test("flows lists may mix tags and globs; an item with no match is an error", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "sel-mix-"));
+  const write = (f, tags) => {
+    fs.mkdirSync(path.dirname(path.join(root, f)), { recursive: true });
+    fs.writeFileSync(path.join(root, f), `appId: x\ntags:\n${tags.map((t) => `  - ${t}`).join("\n")}\n---\n`);
+  };
+  write("device/launch/a.yaml", ["launch"]);
+  write("flows/v3/F29a.yaml", ["full"]);
+  write("flows/v3/F30a.yaml", ["full"]);
+  const rel = (fl) => fl.map((f) => path.relative(root, f));
+  assert.deepEqual(rel(selectFlows({ flows: "launch,flows/v3/F29*.yaml", root })), ["device/launch/a.yaml", "flows/v3/F29a.yaml"]);
+  // duplicates collapse, order is path order
+  assert.deepEqual(rel(selectFlows({ flows: "flows/v3/F29a.yaml,launch,flows/v3/F2*.yaml", root })), ["device/launch/a.yaml", "flows/v3/F29a.yaml"]);
+  assert.throws(() => selectFlows({ flows: "launch,nosuchtag", root }), /tag "nosuchtag" matches no flow/);
+  assert.throws(() => selectFlows({ flows: "launch,flows/v9/*.yaml", root }), /glob "flows\/v9\/\*\.yaml" matches no flow/);
+});
+
 // ---------- patch-native ----------
 
 const APP_DELEGATE = `#import "AppDelegate.h"
@@ -516,7 +540,7 @@ test("device.yml: dispatch plus harness-only pull_request paths, never cancels, 
   );
   assert.doesNotMatch(on, /push:|schedule:|pull_request_target:/);
   for (const input of ["ref", "platforms", "themes", "flows", "roles"]) assert.match(yml, new RegExp(`^ {6}${input}:$`, "m"));
-  assert.match(yml, /DEVICE_FLOWS: \$\{\{ inputs\.flows \|\| \(github\.event_name == 'pull_request' && 'smoke,z12-33'\) \|\| 'smoke' \}\}/);
+  assert.match(yml, /DEVICE_FLOWS: \$\{\{ inputs\.flows \|\| 'launch' \}\}/, "every run without explicit flows runs the launch smoke");
   assert.equal((yml.match(/ref: \$\{\{ inputs\.ref \|\| '' \}\}/g) ?? []).length, 2, "both device jobs build the requested ref");
   assert.equal((yml.match(/git checkout "\$HARNESS_SHA" -- scripts\/qa$/gm) ?? []).length, 2, "and overlay the harness scripts from the workflow's commit");
   assert.equal((yml.match(/if \[ ! -e "\$f" \]; then/g) ?? []).length, 2, "but add harness flows only where the app ref has none");
