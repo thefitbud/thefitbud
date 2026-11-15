@@ -1,0 +1,38 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-36 trainee Today (TR-06a) and Diet (TR-07a)
+tags:
+  - device
+  - trainee
+  - z12-36
+---
+# Mock anchors for the primitives (colour, type, radius) on real screens. The screens
+# themselves migrate in their own W12 tasks and are not opted in to dark yet
+# (docs/qa/Z12-36/README.md, decision 3), so in the dark run they must still render
+# light and readable. On-track trainee (Aarav Shah, local demo seed).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- takeScreenshot: TR-06a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "Something different"
+    timeout: 30000
+- takeScreenshot: TR-07a
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Leave the app on the gallery, so the next flow may go offline with nothing loading.
+- runFlow: open-gallery.yaml

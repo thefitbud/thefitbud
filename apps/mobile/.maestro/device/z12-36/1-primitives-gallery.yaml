@@ -1,0 +1,31 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-36 live theme flip on the primitives gallery
+tags:
+  - device
+  - z12-36
+---
+# Z12-36 device check (docs/qa/Z12-36/README.md "Device check"): flip the system theme
+# with the app open and the app changes live.
+#
+# The flows run one Maestro invocation each, in path order (9-gallery-hold.yaml is tagged
+# device-offline for that). The light run ends with 9-gallery-hold.yaml leaving the app
+# open on the gallery; theme.sh then flips the system to dark with the app still open.
+# This flow starts WITHOUT stopping or clearing the app and, in the dark run, asserts the
+# gallery is still on screen before capturing primitives-live-flip: a relaunch would
+# land on sign-in and fail the flow. It assumes the default theme order (light, then
+# dark); re-run both themes together. In the light run it does nothing.
+#
+# The gallery sections themselves are captured by 8-primitives-gallery.yaml, after the
+# trainee and trainer flows have already opened the gallery once (a first link on a
+# freshly launched iOS app can be lost; open-gallery.yaml also retries it).
+- launchApp:
+    stopApp: false
+    permissions:
+      all: allow
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
+    commands:
+      - assertVisible: "Large title 30"
+      - takeScreenshot: primitives-live-flip
+      - runFlow: ../../common/assert-no-crash.yaml

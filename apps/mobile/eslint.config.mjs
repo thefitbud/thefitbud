@@ -1,5 +1,6 @@
 import config from "@fitbud/config/eslint/base";
 
+import fitbudTheme from "./eslint-rules/no-hard-coded-colour.mjs";
 import fitbudAccessibility from "./eslint-rules/no-invalid-accessibility-role.mjs";
 import fitbudDependencies from "./eslint-rules/no-undeclared-dependency.mjs";
 
@@ -28,5 +29,13 @@ export default [
     ignores: ["**/*.test.{ts,tsx,mjs}", "src/test/**", "eslint-rules/**", "eslint.config.mjs"],
     plugins: { "fitbud-deps": fitbudDependencies },
     rules: { "fitbud-deps/no-undeclared-dependency": "error" },
+  },
+  {
+    // Z12-36: shared primitives take every colour from the theme so they
+    // follow the system light/dark setting (D-W12-12). Tests may use literals.
+    files: ["src/components/**/*.{ts,tsx}", "src/providers/**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}"],
+    plugins: { "fitbud-theme": fitbudTheme },
+    rules: { "fitbud-theme/no-hard-coded-colour": "error" },
   },
 ];
