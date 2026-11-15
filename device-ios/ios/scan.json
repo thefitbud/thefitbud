@@ -1,0 +1,27 @@
+{
+  "platform": "ios",
+  "files": [
+    "ios-device.log"
+  ],
+  "sentinel": true,
+  "status": "fail",
+  "counts": {
+    "rn-warn": 2
+  },
+  "findings": [
+    {
+      "kind": "rn-warn",
+      "file": "ios-device.log",
+      "line": 164473,
+      "text": "2026-11-15 08:58:59.382 Df FitBudStaging[88494:39d26] [fitbud-gate] native.warn (ADVICE) View #673 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component."
+    },
+    {
+      "kind": "rn-warn",
+      "file": "ios-device.log",
+      "line": 169571,
+      "text": "2026-11-15 08:59:11.499 Df FitBudStaging[88494:39d26] [fitbud-gate] native.warn (ADVICE) View #829 of type RCTView has a shadow set but cannot calculate shadow efficiently. Consider setting a solid background color to fix this, or apply the shadow to a more specific component."
+    }
+  ],
+  "truncated": 0,
+  "allowed": []
+}

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - AF3E146C-4C42-41EE-B042-89728CCF5189" tests="1" failures="0" time="23.971" timestamp="2026-11-15T09:03:29">
+    <testcase id="Z12-36 hold the gallery open for the theme flip" name="Z12-36 hold the gallery open for the theme flip" classname="Z12-36 hold the gallery open for the theme flip" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/9-gallery-hold.yaml" time="23.917" timestamp="2026-11-15T09:03:29" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, z12-36, device-offline"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

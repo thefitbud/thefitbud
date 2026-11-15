@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - AF3E146C-4C42-41EE-B042-89728CCF5189" tests="1" failures="1" time="55.887" timestamp="2026-11-15T08:45:57">
+    <testcase id="Z12-36 trainee active workout mid-session (W-03)" name="Z12-36 trainee active workout mid-session (W-03)" classname="Z12-36 trainee active workout mid-session (W-03)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/3-trainee-workout.yaml" time="55.724" timestamp="2026-11-15T08:45:57" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+      <failure>Assertion is false: "Sign in with a code instead" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

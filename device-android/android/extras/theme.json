@@ -1,0 +1,136 @@
+{
+  "result": "mean screenshot luminance: light 0.846 (12), dark 0.426 (13)",
+  "light": 0.846,
+  "dark": 0.426,
+  "count": {
+    "light": 12,
+    "dark": 13
+  },
+  "shots": [
+    {
+      "file": "TM-01a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "TM-01a-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "TM-04b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.688
+    },
+    {
+      "file": "TM-04b-light-android.png",
+      "theme": "light",
+      "luma": 0.688
+    },
+    {
+      "file": "TR-06a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.921
+    },
+    {
+      "file": "TR-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.921
+    },
+    {
+      "file": "TR-07a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.904
+    },
+    {
+      "file": "TR-07a-light-android.png",
+      "theme": "light",
+      "luma": 0.904
+    },
+    {
+      "file": "W-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.877
+    },
+    {
+      "file": "W-03-light-android.png",
+      "theme": "light",
+      "luma": 0.883
+    },
+    {
+      "file": "primitives-1-type-dark-android.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-1-type-light-android.png",
+      "theme": "light",
+      "luma": 0.834
+    },
+    {
+      "file": "primitives-2-buttons-dark-android.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-2-buttons-light-android.png",
+      "theme": "light",
+      "luma": 0.834
+    },
+    {
+      "file": "primitives-3-chips-dark-android.png",
+      "theme": "dark",
+      "luma": 0.173
+    },
+    {
+      "file": "primitives-3-chips-light-android.png",
+      "theme": "light",
+      "luma": 0.834
+    },
+    {
+      "file": "primitives-4-cards-dark-android.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "primitives-4-cards-light-android.png",
+      "theme": "light",
+      "luma": 0.908
+    },
+    {
+      "file": "primitives-5-inputs-toast-tabbar-dark-android.png",
+      "theme": "dark",
+      "luma": 0.114
+    },
+    {
+      "file": "primitives-5-inputs-toast-tabbar-light-android.png",
+      "theme": "light",
+      "luma": 0.884
+    },
+    {
+      "file": "primitives-6-sheet-dark-android.png",
+      "theme": "dark",
+      "luma": 0.114
+    },
+    {
+      "file": "primitives-6-sheet-light-android.png",
+      "theme": "light",
+      "luma": 0.699
+    },
+    {
+      "file": "primitives-before-flip-dark-android.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-before-flip-light-android.png",
+      "theme": "light",
+      "luma": 0.835
+    },
+    {
+      "file": "primitives-live-flip-dark-android.png",
+      "theme": "dark",
+      "luma": 0.174
+    }
+  ]
+}

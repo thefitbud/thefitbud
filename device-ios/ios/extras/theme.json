@@ -1,0 +1,106 @@
+{
+  "result": "mean screenshot luminance: light 0.671 (7), dark 0.449 (12)",
+  "light": 0.671,
+  "dark": 0.449,
+  "count": {
+    "light": 7,
+    "dark": 12
+  },
+  "shots": [
+    {
+      "file": "TM-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "TM-04b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.702
+    },
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.937
+    },
+    {
+      "file": "TR-07a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.923
+    },
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.9
+    },
+    {
+      "file": "primitives-1-type-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "primitives-2-buttons-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.151
+    },
+    {
+      "file": "primitives-3-chips-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.149
+    },
+    {
+      "file": "primitives-4-cards-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.111
+    },
+    {
+      "file": "primitives-5-inputs-toast-tabbar-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.106
+    },
+    {
+      "file": "primitives-6-sheet-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "primitives-before-flip-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.709
+    },
+    {
+      "file": "step-005-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.709
+    },
+    {
+      "file": "step-006-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "step-007-assertCondition-Sign_in_with_a_code_inst-light-ios.png",
+      "theme": "light",
+      "luma": 0.577
+    },
+    {
+      "file": "step-008-assertCondition-Sign_in_with_a_code_inst-light-ios.png",
+      "theme": "light",
+      "luma": 0.577
+    },
+    {
+      "file": "step-009-assertCondition-Large_title_30Open_in-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "step-011-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.709
+    }
+  ]
+}
