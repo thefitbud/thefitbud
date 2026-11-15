@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="34.179" timestamp="2026-11-15T12:38:54">
+    <testcase id="F10 offline sync, part 3 (online again; everything sends without a tap)" name="F10 offline sync, part 3 (online again; everything sends without a tap)" classname="F10 offline sync, part 3 (online again; everything sends without a tap)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F10c-offline-sync-reconnect.yaml" time="34.138" timestamp="2026-11-15T12:38:54" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-41"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,56 @@
+{
+  "result": "mean screenshot luminance: light 0.936 (4), dark 0.76 (5)",
+  "light": 0.936,
+  "dark": 0.76,
+  "count": {
+    "light": 4,
+    "dark": 5
+  },
+  "shots": [
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.926
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.926
+    },
+    {
+      "file": "step-010-assertCondition-Last_sent-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.074
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workoutNeeds_you-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.926
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workoutNeeds_you-light-ios.png",
+      "theme": "light",
+      "luma": 0.926
+    },
+    {
+      "file": "step-020-assertCondition-Log_weight-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.926
+    },
+    {
+      "file": "step-025-tapOnElement-Log_Waist-light-ios.png",
+      "theme": "light",
+      "luma": 0.943
+    }
+  ]
+}
