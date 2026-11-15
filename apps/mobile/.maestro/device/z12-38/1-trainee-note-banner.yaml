@@ -8,25 +8,19 @@ env:
   BANNER: "Rahul has a note for you.*"
   NOTE: "Try 42.5 kg on the RDLs today if set 2 feels easy."
 ---
-# Aarav Shah (on track, local demo seed; his coach is Rahul Verma). The coach shares a
-# note through the local API first (share-note.js), so Today has an unread coach note:
-# the trainee foreground banner queues it on the shared notice queue (Z12-38).
+# Aarav Shah (on track, local demo seed; his coach is Rahul Verma). While Aarav is on
+# Progress, the coach shares a note through the local API (share-note.js); going back
+# to Today reads it, and the trainee foreground banner queues it on the shared notice
+# queue (Z12-38). A new note is a new banner (each is shown once per session).
+#
+# Why not at a cold launch: on the Android emulator, launchApp's settle wait plus slow
+# hierarchy dumps can outlast a 4 s banner (run 43715594740, Android light).
 #
 # What this proves on the device: the banner shows over Today below the status bar,
 # leaves by itself (about 4 s), a swipe up removes it at once, and a tap removes it
 # and lands on Today. A push received in the foreground goes through the same queue
 # (unit-tested through the receive handler, foregroundPush.test.ts); the gate cannot
 # send a push in the middle of a flow, so that path is on the Z12-58 checklist.
-#
-# Each theme's run shares its own note; the tap at the end marks it read.
-- runScript:
-    file: share-note.js
-    env:
-      API: http://127.0.0.1:8787
-      TRAINER_EMAIL: ${QA_TRAINER_EMAIL}
-      TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
-      PASSWORD: ${QA_PASSWORD}
-      NOTE: ${NOTE}
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -36,23 +30,45 @@ env:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+# Banners from an earlier run's unread notes may show and leave meanwhile.
+- extendedWaitUntil:
+    notVisible: "${BANNER}"
+    timeout: 15000
 
 # 1. It shows (a due-meal banner may come first: one at a time), then leaves by itself.
+- tapOn: "Progress"
+- runScript:
+    file: share-note.js
+    env:
+      API: http://127.0.0.1:8787
+      TRAINER_EMAIL: ${QA_TRAINER_EMAIL}
+      TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
+      PASSWORD: ${QA_PASSWORD}
+      NOTE: ${NOTE}
+- tapOn: "Today"
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 20000
+    timeout: 15000
 - takeScreenshot: TR-06h
 - extendedWaitUntil:
     notVisible: "${BANNER}"
     timeout: 8000
 - runFlow: ../../common/assert-no-crash.yaml
 
-# 2. Swipe up: a fresh launch is a new session, so the still-unread note shows again.
-- stopApp
-- launchApp
+# 2. Swipe up removes it at once (well before its 4 s).
+- tapOn: "Progress"
+- runScript:
+    file: share-note.js
+    env:
+      API: http://127.0.0.1:8787
+      TRAINER_EMAIL: ${QA_TRAINER_EMAIL}
+      TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
+      PASSWORD: ${QA_PASSWORD}
+      NOTE: "Keep the last set slow on the way down."
+- tapOn: "Today"
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 30000
+    timeout: 15000
 - swipe:
     from: "${BANNER}"
     direction: UP
@@ -61,12 +77,20 @@ env:
     notVisible: "${BANNER}"
     timeout: 2500
 
-# 3. Tap: the banner leaves and Today is the screen (a coach note opens Today).
-- stopApp
-- launchApp
+# 3. A tap removes it and lands on Today (a coach note opens Today); it marks it read.
+- tapOn: "Progress"
+- runScript:
+    file: share-note.js
+    env:
+      API: http://127.0.0.1:8787
+      TRAINER_EMAIL: ${QA_TRAINER_EMAIL}
+      TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
+      PASSWORD: ${QA_PASSWORD}
+      NOTE: "Water first thing tomorrow."
+- tapOn: "Today"
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 30000
+    timeout: 15000
 - tapOn: "${BANNER}"
 - extendedWaitUntil:
     notVisible: "${BANNER}"
