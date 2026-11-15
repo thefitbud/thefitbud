@@ -1,5 +1,11 @@
 import { useState } from "react";
-import { SafeAreaView, ScrollView, View } from "react-native";
+import {
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  View,
+} from "react-native";
 import {
   Bell,
   CalendarDays,
@@ -57,7 +63,15 @@ function GalleryBody({ sheetOpen }: { sheetOpen: boolean }) {
   const styles = useStyles();
   const [sheet, setSheet] = useState(sheetOpen);
   return (
-    <SafeAreaView style={styles.page}>
+    // SafeAreaView pads only on iOS; under the translucent Android status bar, pad by its height.
+    <SafeAreaView
+      style={[
+        styles.page,
+        Platform.OS === "android"
+          ? { paddingTop: StatusBar.currentHeight ?? 24 }
+          : null,
+      ]}
+    >
       <ScrollView
         style={styles.page}
         contentContainerStyle={styles.content}
