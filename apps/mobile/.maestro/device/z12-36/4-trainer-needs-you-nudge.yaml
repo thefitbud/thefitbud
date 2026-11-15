@@ -24,7 +24,7 @@ env:
     permissions:
       all: allow
 - runFlow:
-    file: ../../common/sign-in-password.yaml
+    file: sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
 - extendedWaitUntil:

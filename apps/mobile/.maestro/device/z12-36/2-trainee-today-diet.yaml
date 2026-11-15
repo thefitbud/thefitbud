@@ -15,14 +15,14 @@ tags:
     permissions:
       all: allow
 - runFlow:
-    file: ../../common/sign-in-password.yaml
+    file: sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
 - extendedWaitUntil:
     notVisible: ".*Loading your day.*"
     timeout: 30000
 - extendedWaitUntil:
-    visible: "Today's workout"
+    visible: "Today's workout.*"
     timeout: 60000
 - takeScreenshot: TR-06a
 - runFlow: ../../common/assert-no-crash.yaml

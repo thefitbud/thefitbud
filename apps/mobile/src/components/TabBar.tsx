@@ -80,7 +80,12 @@ export function TabBar<K extends string>({
 
 const useStyles = createThemedStyles((t) => ({
   bar: {
-    backgroundColor: t.colors.glass,
+    // Light: opaque card under the level-3 shadow. The kit's 90% --glass relies on a
+    // backdrop blur React Native core does not have, and iOS cannot draw a shadow
+    // efficiently over a translucent fill (RCTView "cannot calculate shadow
+    // efficiently" advice, which fails the device gate). Dark has no shadow, so it
+    // keeps --glass.
+    backgroundColor: t.scheme === "dark" ? t.colors.glass : t.colors.card,
     borderRadius: t.radii.tabCapsule,
     borderWidth: t.scheme === "dark" ? 1 : 0.5,
     borderColor: t.scheme === "dark" ? t.colors.edge : t.colors.line,
