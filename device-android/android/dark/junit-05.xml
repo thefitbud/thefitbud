@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="51.445" timestamp="2026-11-15T06:41:04">
+    <testcase id="Z12-33 Rahul signs back in (step 8, online part)" name="Z12-33 Rahul signs back in (step 8, online part)" classname="Z12-33 Rahul signs back in (step 8, online part)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-33/3-rahul-again.yaml" time="51.422" timestamp="2026-11-15T06:41:04" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-33"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 29D2717C-AE29-47DD-A1A7-5383617F0B48" tests="1" failures="0" time="49.398" timestamp="2026-11-15T12:23:55">
+    <testcase id="Z12-33 Rahul offline (step 8, offline part)" name="Z12-33 Rahul offline (step 8, offline part)" classname="Z12-33 Rahul offline (step 8, offline part)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-33/4-offline-rahul.yaml" time="49.258" timestamp="2026-11-15T12:23:55" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-33, device-offline"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

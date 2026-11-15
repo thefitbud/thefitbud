@@ -1,0 +1,208 @@
+{
+  "platform": "ios",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-33/1-two-trainers.yaml",
+    "device/z12-33/2-offline-priya.yaml",
+    "device/z12-33/3-rahul-again.yaml",
+    "device/z12-33/4-offline-rahul.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 93 s",
+      "mode": "cache-hit",
+      "seconds": 93,
+      "cacheKey": "device-native-ios-0f316f84cef6377d7035b85820725b5364347b39"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.95 (14), dark 0.949 (14)",
+      "light": 0.95,
+      "dark": 0.949,
+      "count": {
+        "light": 14,
+        "dark": 14
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.941
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.941
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.952
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "priya-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.954
+        },
+        {
+          "file": "priya-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.954
+        },
+        {
+          "file": "priya-client-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.908
+        },
+        {
+          "file": "priya-client-light-ios.png",
+          "theme": "light",
+          "luma": 0.939
+        },
+        {
+          "file": "priya-clients-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.952
+        },
+        {
+          "file": "priya-clients-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "priya-offline-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.955
+        },
+        {
+          "file": "priya-offline-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.954
+        },
+        {
+          "file": "priya-offline-clients-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.95
+        },
+        {
+          "file": "priya-offline-clients-light-ios.png",
+          "theme": "light",
+          "luma": 0.95
+        },
+        {
+          "file": "rahul-again-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.952
+        },
+        {
+          "file": "rahul-again-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "rahul-again-clients-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.962
+        },
+        {
+          "file": "rahul-again-clients-light-ios.png",
+          "theme": "light",
+          "luma": 0.962
+        },
+        {
+          "file": "rahul-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.952
+        },
+        {
+          "file": "rahul-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "rahul-client-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.939
+        },
+        {
+          "file": "rahul-client-light-ios.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "rahul-clients-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.962
+        },
+        {
+          "file": "rahul-clients-light-ios.png",
+          "theme": "light",
+          "luma": 0.962
+        },
+        {
+          "file": "rahul-offline-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.961
+        },
+        {
+          "file": "rahul-offline-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.961
+        },
+        {
+          "file": "rahul-offline-clients-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.95
+        },
+        {
+          "file": "rahul-offline-clients-light-ios.png",
+          "theme": "light",
+          "luma": 0.95
+        }
+      ]
+    }
+  ]
+}

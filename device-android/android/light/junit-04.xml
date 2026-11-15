@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="42.974" timestamp="2026-11-15T06:34:02">
+    <testcase id="Z12-33 Priya offline (step 7)" name="Z12-33 Priya offline (step 7)" classname="Z12-33 Priya offline (step 7)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-33/2-offline-priya.yaml" time="42.955" timestamp="2026-11-15T06:34:02" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-33, device-offline"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,208 @@
+{
+  "platform": "android",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-33/1-two-trainers.yaml",
+    "device/z12-33/2-offline-priya.yaml",
+    "device/z12-33/3-rahul-again.yaml",
+    "device/z12-33/4-offline-rahul.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 51 s",
+      "mode": "cache-hit",
+      "seconds": 51,
+      "cacheKey": "device-native-android-68e8ae0a04ba5381092badb67e74882cc9abc4d6"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.926 (14), dark 0.926 (14)",
+      "light": 0.926,
+      "dark": 0.926,
+      "count": {
+        "light": 14,
+        "dark": 14
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.922
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.922
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.931
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "priya-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.933
+        },
+        {
+          "file": "priya-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "priya-client-dark-android.png",
+          "theme": "dark",
+          "luma": 0.893
+        },
+        {
+          "file": "priya-client-light-android.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "priya-clients-dark-android.png",
+          "theme": "dark",
+          "luma": 0.932
+        },
+        {
+          "file": "priya-clients-light-android.png",
+          "theme": "light",
+          "luma": 0.932
+        },
+        {
+          "file": "priya-offline-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.933
+        },
+        {
+          "file": "priya-offline-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "priya-offline-clients-dark-android.png",
+          "theme": "dark",
+          "luma": 0.929
+        },
+        {
+          "file": "priya-offline-clients-light-android.png",
+          "theme": "light",
+          "luma": 0.929
+        },
+        {
+          "file": "rahul-again-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-again-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-again-clients-dark-android.png",
+          "theme": "dark",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-again-clients-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-client-dark-android.png",
+          "theme": "dark",
+          "luma": 0.893
+        },
+        {
+          "file": "rahul-client-light-android.png",
+          "theme": "light",
+          "luma": 0.891
+        },
+        {
+          "file": "rahul-clients-dark-android.png",
+          "theme": "dark",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-clients-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "rahul-offline-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.941
+        },
+        {
+          "file": "rahul-offline-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.941
+        },
+        {
+          "file": "rahul-offline-clients-dark-android.png",
+          "theme": "dark",
+          "luma": 0.93
+        },
+        {
+          "file": "rahul-offline-clients-light-android.png",
+          "theme": "light",
+          "luma": 0.93
+        }
+      ]
+    }
+  ]
+}

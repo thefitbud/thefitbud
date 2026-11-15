@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 29D2717C-AE29-47DD-A1A7-5383617F0B48" tests="1" failures="0" time="160.375" timestamp="2026-11-15T12:29:29">
+    <testcase id="Z12-33 two trainers on one phone (steps 1-6)" name="Z12-33 two trainers on one phone (steps 1-6)" classname="Z12-33 two trainers on one phone (steps 1-6)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-33/1-two-trainers.yaml" time="160.262" timestamp="2026-11-15T12:29:30" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-33"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
