@@ -14,7 +14,7 @@
   gap: 4px;
   min-height: 44px;
   padding: 0 8px 0 0;
-  color: var(--indigo, #4527c6);
+  color: var(--indigo, var(--coach-ink));
   font-size: 15px;
   font-weight: 500;
   text-decoration: none;
@@ -29,7 +29,7 @@
 .hv-btn:focus-visible,
 .hv-chip:focus-visible,
 .hv-row:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--indigo, var(--coach-ink));
   outline-offset: 2px;
 }
 
@@ -50,12 +50,12 @@
   align-items: center;
   gap: 10px;
   margin: 0;
-  font-family: var(--font-family, Satoshi, "Noto Sans", system-ui, sans-serif);
+  font-family: var(--font-family, Inter, "Noto Sans Devanagari", system-ui, sans-serif);
   font-size: 28px;
   font-weight: 500;
   line-height: 34px;
   letter-spacing: -0.02em;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .hv-count {
@@ -66,8 +66,8 @@
   height: 24px;
   padding: 0 7px;
   border-radius: 12px;
-  background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
+  background: var(--pale-lavender, var(--coach-tint));
+  color: var(--indigo, var(--coach-ink));
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
@@ -77,12 +77,12 @@
 .hv-sub {
   margin: 6px 0 0;
   font-size: 14px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .hv-sort {
   font-size: 13px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .hv-num {
@@ -101,10 +101,10 @@
   gap: 6px;
   min-height: 44px;
   padding: 0 18px;
-  border: 1px solid var(--border-default, #e7e9f2);
+  border: 1px solid var(--border-default, var(--line));
   border-radius: 22px;
-  background: #fff;
-  color: var(--deep-navy, #1a1248);
+  background: var(--white);
+  color: var(--deep-navy, var(--ink));
   font-size: 15px;
   font-weight: 500;
   cursor: pointer;
@@ -115,14 +115,14 @@
 }
 
 .hv-chip[aria-pressed="true"] {
-  background: var(--pale-lavender, #edeaff);
+  background: var(--pale-lavender, var(--coach-tint));
   border-color: #d6cfff;
-  color: var(--indigo, #4527c6);
+  color: var(--indigo, var(--coach-ink));
 }
 
 .hv-card {
-  background: #fff;
-  border: 1px solid var(--border-default, #e7e9f2);
+  background: var(--white);
+  border: 1px solid var(--border-default, var(--line));
   border-radius: 16px;
   overflow: hidden;
 }
@@ -130,17 +130,17 @@
 .hv-sec {
   margin: 0;
   padding: 8px 16px;
-  background: var(--surface-page-web, #f3f5fb);
-  border-bottom: 1px solid var(--border-default, #e7e9f2);
+  background: var(--surface-page-web, var(--bg));
+  border-bottom: 1px solid var(--border-default, var(--line));
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .hv-card section + section .hv-sec {
-  border-top: 1px solid var(--border-default, #e7e9f2);
+  border-top: 1px solid var(--border-default, var(--line));
 }
 
 .hv-list {
@@ -150,7 +150,7 @@
 }
 
 .hv-list li + li .hv-row {
-  border-top: 1px solid var(--border-default, #e7e9f2);
+  border-top: 1px solid var(--border-default, var(--line));
 }
 
 .hv-row {
@@ -160,7 +160,7 @@
   gap: 16px;
   min-height: 56px;
   padding: 8px 16px;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
   text-decoration: none;
   outline-offset: -2px;
 }
@@ -184,7 +184,7 @@ a.hv-row:focus-visible {
 .hv-who b {
   font-size: 15px;
   font-weight: 500;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -200,17 +200,17 @@ a.hv-row:focus-visible {
   border-radius: 50%;
   font-size: 12px;
   font-weight: 600;
-  background: #e9e5ff;
-  color: #3b23a8;
+  background: var(--coach-tint);
+  color: var(--coach-ink);
 }
 
 .hv-av.c2 { background: #e0f2f1; color: #0f5f5a; }
-.hv-av.c3 { background: #fdecef; color: #a3243f; }
-.hv-av.c4 { background: #fff1db; color: #8a4b06; }
+.hv-av.c3 { background: var(--coral-tint); color: var(--coral-ink); }
+.hv-av.c4 { background: var(--warn-tint); color: #8a4b06; }
 .hv-av.c5 { background: #e3eefd; color: #1e4b9e; }
 .hv-av.c6 { background: #eaf5e4; color: #2f6b1e; }
 .hv-av.c7 { background: #f1e8fa; color: #6b2a93; }
-.hv-av.c8 { background: #eceef2; color: #374151; }
+.hv-av.c8 { background: var(--fill); color: var(--ink2); }
 
 .hv-issue {
   display: flex;
@@ -230,8 +230,8 @@ a.hv-row:focus-visible {
   margin-left: 8px;
   padding: 2px 7px;
   border-radius: 10px;
-  background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
+  background: var(--pale-lavender, var(--coach-tint));
+  color: var(--indigo, var(--coach-ink));
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -244,13 +244,13 @@ a.hv-row:focus-visible {
 .hv-age {
   justify-self: end;
   font-size: 14px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .hv-chev {
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .hv-row-skel {
@@ -293,15 +293,15 @@ a.hv-row:focus-visible {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: var(--semantic-positive-fill, #ecfdf5);
-  color: var(--semantic-positive-text, #047857);
+  background: var(--semantic-positive-fill, var(--done-tint));
+  color: var(--semantic-positive-text, var(--done));
 }
 
 .hv-empty h2 {
   margin: 4px 0 0;
   font-size: 20px;
   font-weight: 500;
-  color: var(--deep-navy, #1a1248);
+  color: var(--deep-navy, var(--ink));
 }
 
 .hv-empty p {
@@ -309,7 +309,7 @@ a.hv-row:focus-visible {
   max-width: 420px;
   font-size: 14px;
   line-height: 20px;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 .hv-btn {
@@ -319,10 +319,10 @@ a.hv-row:focus-visible {
   min-height: 44px;
   margin-top: 4px;
   padding: 0 20px;
-  border: 1px solid var(--border-default, #e7e9f2);
+  border: 1px solid var(--border-default, var(--line));
   border-radius: 12px;
-  background: #fff;
-  color: var(--deep-navy, #1a1248);
+  background: var(--white);
+  color: var(--deep-navy, var(--ink));
   font-size: 15px;
   font-weight: 500;
   text-decoration: none;
@@ -409,7 +409,7 @@ button.hv-row:focus-visible {
 }
 
 .hv-list li + li button.hv-row {
-  border-top: 1px solid var(--border-default, #e7e9f2);
+  border-top: 1px solid var(--border-default, var(--line));
 }
 
 .hv-row-rn {
@@ -426,7 +426,7 @@ button.hv-row:focus-visible {
 .hv-when {
   min-width: 0;
   font-size: 15px;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -443,10 +443,10 @@ button.hv-row:focus-visible {
   justify-content: center;
   min-height: 44px;
   padding: 0 16px;
-  border: 1px solid var(--border-default, #e7e9f2);
+  border: 1px solid var(--border-default, var(--line));
   border-radius: 12px;
-  background: #fff;
-  color: var(--deep-navy, #1a1248);
+  background: var(--white);
+  color: var(--deep-navy, var(--ink));
   font-size: 15px;
   font-weight: 500;
   white-space: nowrap;
@@ -470,10 +470,10 @@ a.hv-row-rn:hover .hv-open {
   justify-content: center;
   min-width: 72px;
   padding: 3px 12px;
-  border: 1px solid var(--border-default, #e7e9f2);
+  border: 1px solid var(--border-default, var(--line));
   border-radius: 14px;
-  background: var(--surface-page-web, #f3f5fb);
-  color: var(--ink-700, #25262b);
+  background: var(--surface-page-web, var(--bg));
+  color: var(--ink-700, var(--ink2));
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
@@ -481,8 +481,8 @@ a.hv-row-rn:hover .hv-open {
 
 .hv-topic.is-pain {
   border-color: #f8c9d1;
-  background: #fdecef;
-  color: #a3243f;
+  background: var(--coral-tint);
+  color: var(--coral-ink);
 }
 
 .hv-nowrap {
@@ -495,16 +495,16 @@ a.hv-row-rn:hover .hv-open {
   gap: 10px;
   margin: 0;
   padding: 12px 16px;
-  border: 1px solid var(--border-default, #e7e9f2);
+  border: 1px solid var(--border-default, var(--line));
   border-radius: 12px;
   background: #f0f1f5;
   font-size: 14px;
-  color: var(--ink-700, #25262b);
+  color: var(--ink-700, var(--ink2));
 }
 
 .hv-note svg {
   flex: none;
-  color: var(--ink-500, #5b616b);
+  color: var(--ink-500, var(--ink3));
 }
 
 @media (max-width: 1100px) {
@@ -550,7 +550,7 @@ a.hv-row-rn:hover .hv-open {
     justify-self: start;
     padding-left: 44px;
     font-size: 13px;
-    color: var(--ink-500, #5b616b);
+    color: var(--ink-500, var(--ink3));
   }
   .hv-when { grid-area: when; }
   .hv-open { display: none; }
