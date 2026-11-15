@@ -5,11 +5,13 @@ tags:
   - trainee
   - z12-36
 ---
-# Rohan Mehta (slipping, local demo seed). The runner's local day can be a rest day
-# (run 43643116147 ran on Sun 15 Nov IST), so the flow takes today's workout when there
-# is one ("Start workout" / "Continue workout") and otherwise a missed one from this week
-# ("Log it", "Missed · you can still log it"). It logs one set, skips the rest and
-# captures the active workout mid-session. Same opt-in note as 2-trainee-today-diet.
+# Rohan Mehta (slipping, local demo seed). The seed keeps this week's Saturday
+# "Lower body B" startable (apps/api/src/seed/demo/history.ts), so the flow opens it
+# from the Workout tab's week strip ("Sat Lower B") whatever the runner's day is: the
+# light run starts it, the dark run continues the same session. (Run 43645505100: the
+# day's own hero was a rest day, and the light run used up the only "Log it".) It logs
+# one set, skips the rest and captures the active workout mid-session. Same opt-in
+# note as 2-trainee-today-diet.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -33,19 +35,14 @@ tags:
       - tapOn:
           text: "Workout"
           index: 1
-- scrollUntilVisible:
-    element: "Start workout|Continue workout|Log it"
+- extendedWaitUntil:
+    visible: "Sat Lower B"
     timeout: 30000
-- runFlow:
-    when:
-      visible: "Start workout|Continue workout"
-    commands:
-      - tapOn: "Start workout|Continue workout"
-- runFlow:
-    when:
-      notVisible: "Start workout|Continue workout"
-    commands:
-      - tapOn: "Log it"
+- tapOn: "Sat Lower B"
+- extendedWaitUntil:
+    visible: "Start workout|Continue workout"
+    timeout: 30000
+- tapOn: "Start workout|Continue workout"
 - extendedWaitUntil:
     visible: "Log set [0-9]+ ·.*"
     timeout: 30000
