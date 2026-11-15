@@ -48,7 +48,7 @@ function testEnv(): Env {
 
 type Headers = Record<string, string>;
 
-async function signIn(email: string): Promise<Headers> {
+async function signIn(email: string, role: "trainee" | "trainer" = "trainee"): Promise<Headers> {
   const login = await app.request(
     "/auth/login",
     {
@@ -60,7 +60,7 @@ async function signIn(email: string): Promise<Headers> {
   );
   expect(login.status, email).toBe(200);
   const { data } = (await login.json()) as { data: { token: string } };
-  return { Authorization: `Bearer ${data.token}`, "x-fitbud-role": "trainee" };
+  return { Authorization: `Bearer ${data.token}`, "x-fitbud-role": role };
 }
 
 let keySeq = 0;
@@ -276,6 +276,17 @@ describe("Z12-39 future days are view only (demo seed)", () => {
       observedAt: lateToday,
     });
     expect(entry.status).toBe(200);
+  });
+
+  it("the progress-entry guard is the trainee's: the coach's own post is not refused with FUTURE_DAY", async () => {
+    const { relationship } = await trainee(AARAV);
+    const coach = await signIn("rahul.coach@demo.fitbud.test", "trainer");
+    const response = await post(`/progress/relationships/${relationship.id}/entries`, coach, {
+      entryType: "milestone",
+      title: "Deload week",
+      observedAt: "2026-11-11T19:00:00.000Z",
+    });
+    expect(response.status).toBe(200);
   });
 
   it("synced offline logs for a future day come back rejected with FUTURE_DAY", async () => {

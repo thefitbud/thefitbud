@@ -865,7 +865,9 @@ export function DietTab({
           </Text>
           <Text style={styles.daysumSub}>
             {assignments.length === 0
-              ? mealsLoggedSummary(assignments)
+              ? isFuture
+                ? "No meals planned"
+                : mealsLoggedSummary(assignments)
               : plannedNote
                 ? `${mealsLoggedSummary(assignments)} · ${plannedNote}`
                 : isFuture
@@ -911,7 +913,10 @@ export function DietTab({
         <Text style={styles.muted}>Loading meals…</Text>
       ) : assignments.length === 0 ? (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>No meals planned today.</Text>
+          <Text style={styles.emptyTitle}>
+            {/* A future day is not "today" (copy as in the trainer phone preview). */}
+            {isFuture ? "No meals planned" : "No meals planned today."}
+          </Text>
         </View>
       ) : (
         <>

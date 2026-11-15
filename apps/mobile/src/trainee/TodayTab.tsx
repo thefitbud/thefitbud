@@ -1040,7 +1040,9 @@ export function TodayTab({
               </Text>
             ) : null}
             {meals.length === 0 && !loading ? (
-              <Text style={styles.body}>No meals planned today.</Text>
+              <Text style={styles.body}>
+                {isFuture ? "No meals planned" : "No meals planned today."}
+              </Text>
             ) : (
               <View style={styles.mealsList}>
                 {meals.map((meal, index) => {

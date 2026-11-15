@@ -334,6 +334,13 @@ describe("Diet on a future day (TR-07k)", () => {
     await waitFor(() => expect(screen.queryByText("Moong dal chilla")).toBeNull());
   });
 
+  it("a future day with no meals does not claim to be today", async () => {
+    renderDiet(addDays(TODAY, 2));
+    // The summary line and the empty card both say it.
+    await waitFor(() => expect(screen.getAllByText("No meals planned").length).toBe(2));
+    expect(screen.queryByText("No meals planned today.")).toBeNull();
+  });
+
   it("today's meal can still be logged", async () => {
     renderDiet(TODAY);
     await waitFor(() => expect(screen.getByLabelText("Eaten as planned")).toBeTruthy());

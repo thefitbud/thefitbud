@@ -76,6 +76,8 @@ tags:
 - scrollUntilVisible:
     element: ".*, planned"
     timeout: 60000
+# TR-06d's meal rows (Planned, no log action), below the fold of the first shot.
+- takeScreenshot: f29-today-future-meals
 - tapOn: ".*, planned"
 - extendedWaitUntil:
     visible: "Planned for .*"

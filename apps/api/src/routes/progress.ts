@@ -1043,10 +1043,13 @@ progressRoutes.post(
       createdAt: now,
       updatedAt: now,
     };
-    // D-W12-7: nothing is logged on a day after the trainee's today.
-    const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
-    if (isFutureInstantDay({ instant: row.observedAt, now, timeZone })) {
-      return fail(c, 422, FUTURE_DAY_ERROR.code, FUTURE_DAY_ERROR.message);
+    // D-W12-7: a trainee logs nothing on a day after their today. Scoped to
+    // the trainee, as on measurements: trainer posts keep their own rules.
+    if (actor.selectedRole === "trainee") {
+      const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+      if (isFutureInstantDay({ instant: row.observedAt, now, timeZone })) {
+        return fail(c, 422, FUTURE_DAY_ERROR.code, FUTURE_DAY_ERROR.message);
+      }
     }
     await db.insert(progressEntries).values(row);
 
