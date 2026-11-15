@@ -126,14 +126,26 @@ export async function bannerForPush(
   };
 }
 
-/** Handle one received push: build its banner and queue it. */
-export async function showForegroundPush(
+/**
+ * The receive handler: builds each push's banner (the reads run at once) and
+ * queues them in arrival order, so two pushes in a row show in the order they
+ * came even when the first needs one more read (a coach note's text).
+ */
+export function createForegroundPushHandler(
   queue: NoticeQueue,
-  data: unknown,
-  context: ForegroundPushContext,
-): Promise<string | null> {
-  const banner = await bannerForPush(data, context);
-  return banner ? queue.showBanner(banner) : null;
+  context: () => ForegroundPushContext,
+): (data: unknown) => Promise<void> {
+  let chain: Promise<void> = Promise.resolve();
+  return (data) => {
+    const built = bannerForPush(data, context());
+    chain = chain
+      .then(async () => {
+        const banner = await built;
+        if (banner) queue.showBanner(banner);
+      })
+      .catch((err: unknown) => reportError("foregroundPush.show", err));
+    return chain;
+  };
 }
 
 type ReceivedNotification = {

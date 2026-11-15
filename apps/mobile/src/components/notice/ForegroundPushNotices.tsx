@@ -4,7 +4,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { useNoticeQueue } from "./NoticeContext";
 import {
   bindForegroundPushes,
-  showForegroundPush,
+  createForegroundPushHandler,
   type ForegroundPushContext,
   type ReceivedNotificationsModule,
 } from "./foregroundPush";
@@ -40,8 +40,9 @@ export function ForegroundPushNotices({
 
   useEffect(() => {
     if (!queue || Platform.OS === "web") return undefined;
+    const handle = createForegroundPushHandler(queue, () => contextRef.current);
     return bindForegroundPushes(load, (data) => {
-      void showForegroundPush(queue, data, contextRef.current);
+      void handle(data);
     });
     // `load` is a module loader; binding once per queue is enough.
   }, [queue]);
