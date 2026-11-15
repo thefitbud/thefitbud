@@ -260,7 +260,9 @@ lockscreen/                                   raw idb / uiautomator dumps
 
 A dispatched run also publishes its screenshots and verdict files (summaries, `scan.json`,
 JUnit, extras; no logs or raw dumps) as one commit on `refs/device-gate/<run id>` (the
-`device-publish` job). It is not a branch and starts no workflow. Cloud agent sessions
+`device-publish` job; a re-run publishes `refs/device-gate/<run id>-<attempt>`, so no ref
+is ever overwritten). It is not a branch and starts no workflow. Agents never delete these
+refs; Firoz can prune old ones with `git push origin --delete refs/device-gate/<id>`. Cloud agent sessions
 cannot download Actions artifacts (the blob host is not on their allowlist), so they use
 this ref instead of `gh run download`:
 

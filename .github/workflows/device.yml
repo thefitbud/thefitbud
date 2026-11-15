@@ -15,6 +15,8 @@
 #                       without running on every mobile PR. Defaults: both platforms,
 #                       both themes, the `smoke` flows, extras on.
 #
+# Only the device-publish job (dispatch only) raises its token to contents: write, to push
+# refs/device-gate/<run id>; every other job keeps the read-only default below.
 # Not a required check, and it must never become one (W12 prompt §1: repo settings need
 # Firoz's OK). No secret is read, no staging URL is used, and nothing runs a remote D1
 # command: the API is `wrangler dev --local` on the runner, seeded by `pnpm db:reset`.
@@ -507,8 +509,10 @@ jobs:
   # Agents cannot download Actions artifacts from this repository's cloud sessions (the
   # artifact blob host is not on their network allowlist, and its name changes between
   # runs). So a dispatched run also publishes its screenshots and verdicts as one commit
-  # on refs/device-gate/<run id> — a ref outside refs/heads, so it is not a branch and
-  # starts no workflow. Fetch it with:
+  # on refs/device-gate/<run id> (a re-run: <run id>-<attempt>) — a ref outside refs/heads,
+  # so it is not a branch and starts no workflow. Refs are never overwritten or deleted by
+  # agents; Firoz can prune old ones (git push origin --delete refs/device-gate/<id>).
+  # Fetch it with:
   #   git fetch origin refs/device-gate/<run id>:refs/device-gate/<run id>
   #   mkdir -p /tmp/device-run && git archive refs/device-gate/<run id> | tar -x -C /tmp/device-run
   #   scripts/qa/device/copy-shots.sh /tmp/device-run docs/qa/<task>
@@ -530,24 +534,29 @@ jobs:
           path: device-run
         continue-on-error: true
 
-      - name: Publish shots and verdicts to refs/device-gate/${{ github.run_id }}
+      - name: Publish shots and verdicts to refs/device-gate
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
           REPO: ${{ github.repository }}
           APP_REF: ${{ inputs.ref || github.ref_name }}
         run: |
           set -euo pipefail
+          # One ref per attempt, never overwritten: attempt 1 is <run id>, a re-run is
+          # <run id>-<attempt>.
+          REF_NAME="$RUN_ID"
+          [ "$RUN_ATTEMPT" = "1" ] || REF_NAME="$RUN_ID-$RUN_ATTEMPT"
           mkdir -p publish
           if [ -d device-run ]; then
             # Keep screenshots and the small verdict files; drop logs and raw dumps.
             (cd device-run && find . -type f \( -name '*.png' -o -name 'summary.md' -o -name 'summary.json' \
-              -o -name 'scan.json' -o -name 'junit.xml' -o -path '*/extras/*.json' \) \
+              -o -name 'scan.json' -o -name 'junit*.xml' -o -path '*/extras/*.json' \) \
               -not -path '*/logs/*' -not -path '*/lockscreen/*' -print0 \
               | xargs -0 -r cp --parents -t ../publish)
           fi
           {
-            echo "Device gate run $RUN_ID"
+            echo "Device gate run $RUN_ID, attempt $RUN_ATTEMPT"
             echo "App ref: $APP_REF"
             echo "Run: https://github.com/$REPO/actions/runs/$RUN_ID"
           } > publish/RUN.txt
@@ -556,9 +565,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Device gate run $RUN_ID ($APP_REF)"
+          git commit -q -m "Device gate run $RUN_ID attempt $RUN_ATTEMPT ($APP_REF)"
           auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           echo "::add-mask::$auth"
           git -c http.extraheader="AUTHORIZATION: basic $auth" \
-            push -q "https://github.com/$REPO.git" "HEAD:refs/device-gate/$RUN_ID"
-          echo "Published $(git ls-files | wc -l) file(s) to refs/device-gate/$RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+            push -q "https://github.com/$REPO.git" "HEAD:refs/device-gate/$REF_NAME"
+          echo "Published $(git ls-files | wc -l) file(s) to refs/device-gate/$REF_NAME" | tee -a "$GITHUB_STEP_SUMMARY"
