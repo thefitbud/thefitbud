@@ -62,23 +62,34 @@ test.describe("TW-G iPad shell smoke", () => {
   });
 
   test("sign-in, shell nav, clients list, overflow menu", async ({ page }) => {
-    // Icon rail at 768–1279 hides nav labels — navigate by href / role.
-    const clientsNav = page.locator('a.shell-nav-link[href="/clients"]');
-    if (await clientsNav.count()) {
-      await clientsNav.first().click();
-    } else {
+    const width = page.viewportSize()?.width ?? 1024;
+    // Z12-4: hamburger drawer only at 768–900; ≥901 keeps the icon rail.
+    const hamburgerShell = width >= 768 && width <= 900;
+
+    if (hamburgerShell) {
       await page.goto("/clients");
+    } else {
+      const clientsNav = page.locator('a.shell-nav-link[href="/clients"]');
+      if (await clientsNav.count()) {
+        await clientsNav.first().click();
+      } else {
+        await page.goto("/clients");
+      }
     }
     await expect(page).toHaveURL(/\/clients/);
     await expect(page.getByRole("heading", { name: /^Clients$/i })).toBeVisible({
       timeout: 20_000,
     });
 
-    // Z12-4: tablet portrait uses hamburger + drawer (not always-visible icon rail).
-    const menuBtn = page.getByTestId("shell-menu-btn");
-    await expect(menuBtn).toBeVisible();
-    await menuBtn.click();
-    await expect(page.locator(".shell-side")).toBeVisible();
+    if (hamburgerShell) {
+      const menuBtn = page.getByTestId("shell-menu-btn");
+      await expect(menuBtn).toBeVisible();
+      await menuBtn.click();
+      await expect(page.locator(".shell-side")).toBeVisible();
+    } else {
+      await expect(page.locator(".shell-side")).toBeVisible();
+      await expect(page.getByTestId("shell-menu-btn")).toBeHidden();
+    }
 
     const overflow = page.getByRole("button", { name: /More actions|Open menu/i }).first();
     if (await overflow.isVisible()) {
