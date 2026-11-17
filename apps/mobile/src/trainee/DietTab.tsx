@@ -765,7 +765,7 @@ function DietTabBody({
         <View style={styles.row}>
           <Pressable
             disabled={!opensDetail}
-            accessibilityRole={opensDetail ? "button" : undefined}
+            accessibilityRole="button"
             accessibilityLabel={opensDetail ? `${name}, planned` : undefined}
             accessibilityHint={
               opensDetail ? "Shows the planned meal" : undefined
