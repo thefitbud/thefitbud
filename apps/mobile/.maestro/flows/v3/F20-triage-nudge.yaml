@@ -19,7 +19,7 @@ tags:
 #   TM-04m  the sent toast over the client screen
 #   TM-04n  the same item again: "You nudged {First} about this at {time}…", Send off
 #   TM-04o  Ishita Banerjee (FitBud pushes off): the amber push-off line; Send still works
-#           and says it went to her inbox
+#           (the sheet closes; its toast says it went to her inbox)
 #
 # What this does not do: it does not receive the push (the harness's push extras and
 # Z12-58's phone checklist do) and it does not open WhatsApp.
@@ -54,17 +54,24 @@ tags:
       - takeScreenshot: TM-04c
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Send nudge"
+# The sheet closes when the send succeeds and the toast stays about 4 s: a slow hierarchy
+# dump can miss it (run 44127718482), so the toast is captured when it is there and the
+# proof that the first send worked is the TM-04n state below.
 - extendedWaitUntil:
-    visible: "Nudge sent.*"
+    notVisible: "PREVIEW · TAP TO EDIT"
     timeout: 20000
-- takeScreenshot: TM-04m
+- runFlow:
+    when:
+      visible: "Nudge sent.*"
+    commands:
+      - takeScreenshot: TM-04m
 - runFlow: ../../common/assert-no-crash.yaml
 
 # ---- The same item again: the TM-04n state (no second push) -----------------------------
 - extendedWaitUntil:
     notVisible: "Nudge sent.*"
     timeout: 15000
-- tapOn: "Nudge…"
+- runFlow: ../../device/z12-50/to-nudge.yaml
 - runFlow: ../../device/z12-50/open-sheet.yaml
 - tapOn: "Send nudge"
 - extendedWaitUntil:
@@ -90,6 +97,6 @@ tags:
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Send nudge"
 - extendedWaitUntil:
-    visible: "Nudge sent to .* inbox.*"
+    notVisible: "PREVIEW · TAP TO EDIT"
     timeout: 20000
 - runFlow: ../../common/assert-no-crash.yaml

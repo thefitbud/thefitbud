@@ -19,7 +19,11 @@ appId: com.thefitbud.mobile.staging
     element: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
     timeout: 30000
 - tapOn: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
-- extendedWaitUntil:
-    visible: "Nudge…"
-    timeout: 30000
-- tapOn: "Nudge…"
+# A row tap can land on the row's own Review button (the exception screen, run
+# 44127718482 iOS light): "Open client status" gets to the client either way.
+- runFlow:
+    when:
+      visible: "Review the signal.*"
+    commands:
+      - tapOn: "Open client status"
+- runFlow: to-nudge.yaml
