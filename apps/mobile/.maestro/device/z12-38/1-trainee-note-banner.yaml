@@ -54,13 +54,14 @@ env:
       NOTE: ${NOTE}
 # Do not wait for the screen to settle after the tap: on a cold Android emulator the
 # settle wait plus slow hierarchy dumps can outlast a 4 s banner (runs 43715594740 and
-# 43741069030, Android light). Start looking for the banner straight away.
+# 43741069030, Android light). Start looking for the banner straight away, and allow
+# for a slow first read on a cold local API (run 43744259140, iOS light).
 - tapOn:
     text: "Today"
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 15000
+    timeout: 30000
 - takeScreenshot: TR-06h
 - extendedWaitUntil:
     notVisible: "${BANNER}"
@@ -82,7 +83,7 @@ env:
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 15000
+    timeout: 30000
 - swipe:
     from: "${BANNER}"
     direction: UP
@@ -106,7 +107,7 @@ env:
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 15000
+    timeout: 30000
 - tapOn: "${BANNER}"
 - extendedWaitUntil:
     notVisible: "${BANNER}"
