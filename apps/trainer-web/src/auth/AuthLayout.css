@@ -1,0 +1,65 @@
+/**
+ * Z12-1 colocated auth polish (D-W12b-2). Global styles.css / styles/* stay frozen.
+ * Ink primary on auth surfaces (v3: brand/ink; coral never a button).
+ * Hero glimpse chips match frame 01 / html mock icons + spacing.
+ * iPad portrait (≤1023px, brandside hidden) spacing for frame 197.
+ */
+
+/* v3 primary on auth: --brand / --ink navy, no glow shadow. */
+.auth-formside .button-primary {
+  background: var(--brand, var(--ink));
+  color: var(--on-brand, var(--white));
+  box-shadow: none;
+}
+
+.auth-formside .button-primary:hover,
+.auth-formside .button-primary:focus-visible {
+  filter: brightness(1.04);
+  outline: 2px solid var(--brand, var(--ink));
+  outline-offset: 2px;
+}
+
+/* Frame 01: status chips carry lucide icons (octagon / triangle / info). */
+.auth-glimpse .chip {
+  gap: 5px;
+  padding: 0 9px 0 7px;
+}
+
+.auth-glimpse .chip svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+/* Slightly tighter who column so icon chips still fit the 540px glimpse. */
+.auth-glimpse-row {
+  grid-template-columns: 148px 1fr auto;
+  gap: 8px 10px;
+}
+
+/* iPad portrait / narrow: form-only column (brandside already display:none). */
+@media (max-width: 1023px) {
+  .auth-formside {
+    padding-top: 3rem;
+    padding-inline: clamp(1.25rem, 5vw, 2.5rem);
+  }
+
+  .auth-fcard {
+    width: min(400px, 100%);
+  }
+
+  /* Frame 197: a touch more air under the lead before fields. */
+  .auth-form {
+    margin-top: 32px;
+    gap: 20px;
+  }
+
+  .auth-note {
+    margin-top: 24px;
+  }
+
+  /* Keep the form block optically centred above help + DS5 legal. */
+  .auth-form-stack > div:first-child {
+    padding-block: 1.5rem 0.75rem;
+  }
+}

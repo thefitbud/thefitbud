@@ -1,0 +1,33 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Clients › Add client
+Search clients
+⌘K
+Add client
+Invite ready for Kriti
+
+Send it from your WhatsApp. You can edit the message before you press Send.
+
+Hi Kriti, I've set up your coaching on FitBud. Join here: http://localhost:8787/i/f1a18d6e73e55290ef4d4a9ba6d2beaec2f72e5b83da5b161b31699b5c16915a
+
+Signed as you, Rahul Verma
+
+Send on WhatsApp
+Copy invite link
+Email invite
+QR code
+
+This link works once and expires in 14 days. Your client will set a password when they join.
+
+Invite another client

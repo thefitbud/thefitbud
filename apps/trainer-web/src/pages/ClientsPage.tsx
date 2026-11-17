@@ -1,12 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Plus, SearchX, UserPlus } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ClientDirectoryItem, OnboardingStatus } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
 import { ClientRow } from "../components/ClientRow";
 import { FilterBar } from "../components/FilterBar";
-import { ErrorState, LoadingBlock } from "../components/StatePanels";
+import {
+  ErrorState,
+  LoadingBlock,
+  errorKindFromFailure,
+  type ErrorKind,
+} from "../components/StatePanels";
 import { Button } from "../components/Button";
 import { apiClient } from "../lib/api";
 import {
@@ -28,14 +33,26 @@ import {
   type RenewalFilter,
 } from "../lib/clients";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import "./ClientsPage.css";
 
 const DIRECTORY_PAGE_LIMIT = 30;
 const SEARCH_DEBOUNCE_MS = 250;
 const ENDED_NOTE =
   "Ended clients are read-only. Their history and progress stay visible.";
 
-function errorMessage(err: unknown, fallback: string): string {
-  return err instanceof ApiClientError ? err.message : fallback;
+type ClientsLoadError = {
+  kind: ErrorKind;
+  requestId?: string | null;
+};
+
+function clearFiltersKeepingSegment(
+  f: ClientDirectoryFilters,
+): ClientDirectoryFilters {
+  return {
+    ...emptyClientDirectoryFilters(),
+    segment: f.segment,
+    status: f.segment === "ended" ? ["ended"] : [],
+  };
 }
 
 export function ClientsPage() {
@@ -52,7 +69,8 @@ export function ClientsPage() {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ClientsLoadError | null>(null);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [goalOptions, setGoalOptions] = useState<string[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -82,6 +100,7 @@ export function ClientsPage() {
     setLoading(true);
     setLoadingMore(false);
     setError(null);
+    setLoadMoreError(null);
     setItems([]);
     setNextCursor(null);
     void apiClient
@@ -97,7 +116,15 @@ export function ClientsPage() {
       })
       .catch((err: unknown) => {
         if (generation.current !== id) return;
-        setError(errorMessage(err, "Could not load clients."));
+        const apiErr = err instanceof ApiClientError ? err : null;
+        setError({
+          kind: errorKindFromFailure({
+            status: apiErr?.status,
+            code: apiErr?.code,
+            message: apiErr?.message,
+          }),
+          requestId: apiErr?.requestId ?? null,
+        });
       })
       .finally(() => {
         if (generation.current === id) setLoading(false);
@@ -145,7 +172,7 @@ export function ClientsPage() {
     const id = generation.current;
     if (!cursor || loading || loadingMore) return;
     setLoadingMore(true);
-    setError(null);
+    setLoadMoreError(null);
     void apiClient
       .listClients(
         clientDirectoryListQuery(clientDirectoryFiltersFromKey(requestKey), {
@@ -160,7 +187,11 @@ export function ClientsPage() {
       })
       .catch((err: unknown) => {
         if (generation.current !== id) return;
-        setError(errorMessage(err, "Could not load more clients."));
+        setLoadMoreError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not load more clients.",
+        );
       })
       .finally(() => {
         if (generation.current === id) setLoadingMore(false);
@@ -217,6 +248,18 @@ export function ClientsPage() {
   const endedCount = statusFacets ? (statusFacets.ended ?? 0) : null;
   const activeCount = statusFacets ? (statusFacets.active ?? 0) : null;
 
+  const listSettled = !loading && !error;
+  const listEmpty = listSettled && items.length === 0;
+  // True empty: no current clients and no ended clients either (frame 138 hides
+  // the filter bar and segment). A Current-only zero with ended clients still
+  // keeps the toolbar so the trainer can switch segments.
+  const isTrueEmpty =
+    listEmpty &&
+    !filtersActive &&
+    !isEnded &&
+    (endedCount === null || endedCount === 0);
+  const isFilteredEmpty = listEmpty && !isTrueEmpty;
+
   function selectSegment(segment: "current" | "ended") {
     updateFilters((f) =>
       segment === "ended"
@@ -262,17 +305,23 @@ export function ClientsPage() {
     </div>
   );
 
+  const headerSubtitle = isTrueEmpty ? (
+    <p className="clients-count muted" aria-live="polite">
+      No clients yet
+    </p>
+  ) : currentCount !== null && activeCount !== null ? (
+    <p className="clients-count muted" aria-live="polite">
+      {currentCount} {currentCount === 1 ? "client" : "clients"} ·{" "}
+      {activeCount} active
+    </p>
+  ) : null;
+
   return (
     <section className="page clients-page" data-testid="screen-TW-06">
       <header className="page-header clients-header">
         <div>
           <h1>Clients</h1>
-          {currentCount !== null && activeCount !== null ? (
-            <p className="clients-count muted" aria-live="polite">
-              {currentCount} {currentCount === 1 ? "client" : "clients"} ·{" "}
-              {activeCount} active
-            </p>
-          ) : null}
+          {headerSubtitle}
         </div>
         <Link to="/clients/add" className="button-primary clients-add">
           <Plus size={16} strokeWidth={2} aria-hidden="true" />
@@ -280,131 +329,139 @@ export function ClientsPage() {
         </Link>
       </header>
 
-      <FilterBar
-        search={filters.q}
-        onSearchChange={(q) =>
-          updateFilters((f) => ({ ...f, q }), { replace: true })
-        }
-        showClear={filtersActive}
-        onClear={() =>
-          updateFilters((f) => ({
-            ...emptyClientDirectoryFilters(),
-            segment: f.segment,
-            status: f.segment === "ended" ? ["ended"] : [],
-          }))
-        }
-        trailing={segmentSwitch}
-        status={{
-          label: "Status",
-          selected: filters.status.filter((s) => s !== "ended"),
-          options: CLIENT_STATUS_FILTERS.map((value) => ({
-            value,
-            label: labelFor("onboarding_status", value),
-            count: facets?.status?.[value],
-          })),
-          onToggle: (value) =>
-            updateFilters((f) => ({
-              ...f,
-              status: toggleClientDirectoryValue(
-                CLIENT_STATUS_FILTERS,
-                f.status.filter((s) => s !== "ended"),
-                value as OnboardingStatus,
-              ),
+      {!isTrueEmpty ? (
+        <FilterBar
+          search={filters.q}
+          onSearchChange={(q) =>
+            updateFilters((f) => ({ ...f, q }), { replace: true })
+          }
+          showClear={filtersActive}
+          onClear={() => updateFilters(clearFiltersKeepingSegment)}
+          trailing={segmentSwitch}
+          status={{
+            label: "Status",
+            selected: filters.status.filter((s) => s !== "ended"),
+            options: CLIENT_STATUS_FILTERS.map((value) => ({
+              value,
+              label: labelFor("onboarding_status", value),
+              count: facets?.status?.[value],
             })),
-          onClear: () =>
-            updateFilters((f) => ({
-              ...f,
-              status: f.segment === "ended" ? ["ended"] : [],
+            onToggle: (value) =>
+              updateFilters((f) => ({
+                ...f,
+                status: toggleClientDirectoryValue(
+                  CLIENT_STATUS_FILTERS,
+                  f.status.filter((s) => s !== "ended"),
+                  value as OnboardingStatus,
+                ),
+              })),
+            onClear: () =>
+              updateFilters((f) => ({
+                ...f,
+                status: f.segment === "ended" ? ["ended"] : [],
+              })),
+          }}
+          adherence={{
+            label: "Adherence",
+            selected: filters.adherenceState,
+            options: CLIENT_ADHERENCE_FILTERS.map((value) => ({
+              value,
+              label: labelFor("adherence_state", value),
+              count: facets?.adherence?.[value],
             })),
-        }}
-        adherence={{
-          label: "Adherence",
-          selected: filters.adherenceState,
-          options: CLIENT_ADHERENCE_FILTERS.map((value) => ({
-            value,
-            label: labelFor("adherence_state", value),
-            count: facets?.adherence?.[value],
-          })),
-          onToggle: (value) =>
-            updateFilters((f) => ({
-              ...f,
-              adherenceState: toggleClientDirectoryValue(
-                CLIENT_ADHERENCE_FILTERS,
-                f.adherenceState,
-                value as (typeof CLIENT_ADHERENCE_FILTERS)[number],
-              ),
+            onToggle: (value) =>
+              updateFilters((f) => ({
+                ...f,
+                adherenceState: toggleClientDirectoryValue(
+                  CLIENT_ADHERENCE_FILTERS,
+                  f.adherenceState,
+                  value as (typeof CLIENT_ADHERENCE_FILTERS)[number],
+                ),
+              })),
+            onClear: () => updateFilters((f) => ({ ...f, adherenceState: [] })),
+          }}
+          goal={{
+            label: "Goal",
+            selected: filters.goal,
+            options: goalChoices.map((value) => ({ value, label: value })),
+            onToggle: (value) =>
+              updateFilters((f) => ({
+                ...f,
+                goal: toggleClientDirectoryValue(goalChoices, f.goal, value),
+              })),
+            onClear: () => updateFilters((f) => ({ ...f, goal: [] })),
+          }}
+          renewal={{
+            label: "Renewal",
+            selected: filters.renewal,
+            options: CLIENT_RENEWAL_FILTERS.map((value) => ({
+              value,
+              label: renewalFilterLabel(value),
+              count: facets?.renewal?.[value],
             })),
-          onClear: () => updateFilters((f) => ({ ...f, adherenceState: [] })),
-        }}
-        goal={{
-          label: "Goal",
-          selected: filters.goal,
-          options: goalChoices.map((value) => ({ value, label: value })),
-          onToggle: (value) =>
-            updateFilters((f) => ({
-              ...f,
-              goal: toggleClientDirectoryValue(goalChoices, f.goal, value),
-            })),
-          onClear: () => updateFilters((f) => ({ ...f, goal: [] })),
-        }}
-        renewal={{
-          label: "Renewal",
-          selected: filters.renewal,
-          options: CLIENT_RENEWAL_FILTERS.map((value) => ({
-            value,
-            label: renewalFilterLabel(value),
-            count: facets?.renewal?.[value],
-          })),
-          onToggle: (value) =>
-            updateFilters((f) => ({
-              ...f,
-              renewal: toggleClientDirectoryValue(
-                CLIENT_RENEWAL_FILTERS,
-                f.renewal,
-                value as RenewalFilter,
-              ),
-            })),
-          onClear: () => updateFilters((f) => ({ ...f, renewal: [] })),
-        }}
-      />
+            onToggle: (value) =>
+              updateFilters((f) => ({
+                ...f,
+                renewal: toggleClientDirectoryValue(
+                  CLIENT_RENEWAL_FILTERS,
+                  f.renewal,
+                  value as RenewalFilter,
+                ),
+              })),
+            onClear: () => updateFilters((f) => ({ ...f, renewal: [] })),
+          }}
+        />
+      ) : null}
 
       {loading && items.length === 0 ? <LoadingBlock /> : null}
 
       {error && items.length === 0 ? (
-        <ErrorState
-          title="Could not load clients"
-          message={error}
-          onRetry={() => setReloadNonce((n) => n + 1)}
-        />
+        <div className="state-card-mount clients-state-mount">
+          <ErrorState
+            title="Couldn't load your clients"
+            kind={error.kind}
+            requestId={error.requestId}
+            screenId="TW-06"
+            onRetry={() => setReloadNonce((n) => n + 1)}
+          />
+        </div>
       ) : null}
 
-      {!loading && !error && items.length === 0 ? (
-        <div className="empty-state" data-testid="clients-empty">
-          {filtersActive || isEnded ? (
-            <>
-              <h2>No clients match these filters</h2>
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  updateFilters((f) => ({
-                    ...emptyClientDirectoryFilters(),
-                    segment: f.segment,
-                    status: f.segment === "ended" ? ["ended"] : [],
-                  }))
-                }
-              >
-                Clear filters
-              </Button>
-            </>
-          ) : (
-            <>
-              <h2>No clients yet</h2>
-              <p>Invite your first client to start coaching.</p>
-              <Link to="/clients/add" className="button-primary">
-                Add client
-              </Link>
-            </>
-          )}
+      {isFilteredEmpty ? (
+        <div
+          className="clients-state-panel"
+          data-testid="clients-empty"
+          role="status"
+        >
+          <span className="clients-state-icon" aria-hidden="true">
+            <SearchX size={28} strokeWidth={1.75} />
+          </span>
+          <h2>No clients match these filters</h2>
+          <p>Try fewer filters, or clear them to see everyone.</p>
+          <Button
+            variant="secondary"
+            onClick={() => updateFilters(clearFiltersKeepingSegment)}
+          >
+            Clear filters
+          </Button>
+        </div>
+      ) : null}
+
+      {isTrueEmpty ? (
+        <div
+          className="clients-state-panel"
+          data-testid="clients-empty"
+          role="status"
+        >
+          <span className="clients-state-icon" aria-hidden="true">
+            <UserPlus size={28} strokeWidth={1.75} />
+          </span>
+          <h2>No clients yet</h2>
+          <p>Invite your first client to start coaching.</p>
+          <Link to="/clients/add" className="button-primary">
+            <Plus size={16} strokeWidth={2} aria-hidden="true" />
+            Add client
+          </Link>
         </div>
       ) : null}
 
@@ -494,9 +551,9 @@ export function ClientsPage() {
         </div>
       ) : null}
 
-      {error && items.length > 0 ? (
+      {loadMoreError ? (
         <p className="form-error" role="alert">
-          {error}
+          {loadMoreError}
         </p>
       ) : null}
     </section>

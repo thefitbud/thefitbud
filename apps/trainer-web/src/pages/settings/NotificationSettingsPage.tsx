@@ -11,15 +11,57 @@ import {
 } from "../../components/StatePanels";
 import {
   defaultTrainerCategories,
-  TRAINER_NOTIFICATION_META,
+  type TrainerNotificationKey,
   type TrainerNotificationPrefs,
 } from "../../lib/trainer-notification-prefs";
+import "./settings.css";
+
+/** Frame 177 rows mapped onto existing trainerCategories keys. */
+const FRAME_ROWS: Array<{
+  key: TrainerNotificationKey;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: "criticalDigest",
+    label: "Clients who need you",
+    description: "One summary at 9:00 am and when something turns critical.",
+  },
+  {
+    key: "checkinSubmitted",
+    label: "Check-ins submitted",
+    description: "As they arrive.",
+  },
+  {
+    key: "intakeSubmitted",
+    label: "Intake submitted",
+    description: "As they arrive.",
+  },
+  {
+    key: "renewalsDue",
+    label: "Renewals due",
+    description: "3 days before and on the day.",
+  },
+  {
+    key: "morningSummary",
+    label: "Weekly summary email",
+    description: "Mondays, 8:00 am.",
+  },
+];
+
+const DEFAULT_QUIET_START = "22:00";
+const DEFAULT_QUIET_END = "07:00";
+
+function quietHoursLabel(start: string, end: string): string {
+  return `${formatHhMmTime(start)} — ${formatHhMmTime(end)}`;
+}
 
 export function NotificationSettingsPage() {
   const online = useOnlineStatus();
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [quietStart, setQuietStart] = useState("22:00");
-  const [quietEnd, setQuietEnd] = useState("07:00");
+  const [quietStart, setQuietStart] = useState(DEFAULT_QUIET_START);
+  const [quietEnd, setQuietEnd] = useState(DEFAULT_QUIET_END);
+  const [quietOn, setQuietOn] = useState(true);
   const [categories, setCategories] = useState<TrainerNotificationPrefs>(
     defaultTrainerCategories(),
   );
@@ -33,7 +75,6 @@ export function NotificationSettingsPage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
     "idle",
   );
-  const persistTimer = useRef<number | null>(null);
   const skipPersist = useRef(true);
   const saveGen = useRef(0);
   const loadGen = useRef(0);
@@ -59,8 +100,13 @@ export function NotificationSettingsPage() {
       if (typeof result.pushEnabled === "boolean") {
         setPushEnabled(result.pushEnabled);
       }
-      if (result.quietHoursStart) setQuietStart(result.quietHoursStart);
-      if (result.quietHoursEnd) setQuietEnd(result.quietHoursEnd);
+      // Product default is quiet hours on (22:00–07:00). Null on the server
+      // means "use the default", not "off" — matches frame 177 and prior TW-29.
+      const start = result.quietHoursStart ?? DEFAULT_QUIET_START;
+      const end = result.quietHoursEnd ?? DEFAULT_QUIET_END;
+      setQuietStart(start);
+      setQuietEnd(end);
+      setQuietOn(true);
       if (result.trainerCategories) {
         setCategories(result.trainerCategories);
       }
@@ -96,6 +142,7 @@ export function NotificationSettingsPage() {
     async (
       next: {
         pushEnabled: boolean;
+        quietOn: boolean;
         quietStart: string;
         quietEnd: string;
         categories: TrainerNotificationPrefs;
@@ -109,8 +156,8 @@ export function NotificationSettingsPage() {
       try {
         await apiClient.updateNotificationPreferences({
           pushEnabled: next.pushEnabled,
-          quietHoursStart: next.quietStart,
-          quietHoursEnd: next.quietEnd,
+          quietHoursStart: next.quietOn ? next.quietStart : null,
+          quietHoursEnd: next.quietOn ? next.quietEnd : null,
           trainerCategories: next.categories,
         });
         if (gen === saveGen.current) setSaveStatus("saved");
@@ -128,28 +175,35 @@ export function NotificationSettingsPage() {
     [online],
   );
 
-  useEffect(() => {
-    if (skipPersist.current) return;
-    if (persistTimer.current) window.clearTimeout(persistTimer.current);
-    persistTimer.current = window.setTimeout(() => {
-      void persist({ pushEnabled, quietStart, quietEnd, categories });
-    }, 300);
-    return () => {
-      if (persistTimer.current) window.clearTimeout(persistTimer.current);
-    };
-  }, [pushEnabled, quietStart, quietEnd, categories, persist]);
-
-  function toggleCategory(key: keyof TrainerNotificationPrefs) {
+  function toggleCategory(key: TrainerNotificationKey) {
     setCategories((current) => {
       const next = { ...current, [key]: !current[key] };
-      // Force persist now — do not race skipPersist from the initial load.
       skipPersist.current = false;
       void persist(
         {
           pushEnabled,
+          quietOn,
           quietStart,
           quietEnd,
           categories: next,
+        },
+        { force: true },
+      );
+      return next;
+    });
+  }
+
+  function toggleQuietHours() {
+    setQuietOn((current) => {
+      const next = !current;
+      skipPersist.current = false;
+      void persist(
+        {
+          pushEnabled,
+          quietOn: next,
+          quietStart,
+          quietEnd,
+          categories,
         },
         { force: true },
       );
@@ -173,12 +227,15 @@ export function NotificationSettingsPage() {
     );
   }
 
+  const quietDesc = quietOn
+    ? `${quietHoursLabel(quietStart, quietEnd)} • nothing during these hours.`
+    : "Off — alerts can arrive any time.";
+
   return (
     <div className="settings-panel stack-lg" data-testid="screen-TW-29">
       <h2>Notifications</h2>
-      <p className="muted">
-        Choose which coaching events notify you. Critical and meal-time alerts
-        merge into at most one push every 15 minutes.
+      <p className="muted settings-notif-lede">
+        Push to your phone and this browser.
       </p>
 
       {!online ? (
@@ -187,96 +244,42 @@ export function NotificationSettingsPage() {
         </p>
       ) : null}
 
-      <section aria-labelledby="notification-channels-heading">
-        <h3 id="notification-channels-heading">Channels</h3>
-        <ul className="notification-category-list">
-          <li>
-            <label className="switch-row">
-              <input type="checkbox" checked disabled readOnly />
-              <span>
-                <strong>Web bell</strong>
-                <span className="muted block">
-                  Always on in trainer web while you&apos;re signed in.
-                </span>
-              </span>
-            </label>
-          </li>
-          <li>
-            <label className="switch-row">
-              <input
-                type="checkbox"
-                checked={pushEnabled}
-                disabled={!online}
-                onChange={(e) => setPushEnabled(e.target.checked)}
-              />
-              <span>
-                <strong>Mobile push</strong>
-                <span className="muted block">
-                  When the FitBud trainer app is installed on your phone.
-                </span>
-              </span>
-            </label>
-          </li>
-        </ul>
-        <p className="muted" role="note">
-          Turn on notifications in the FitBud app on your phone if push is off.
-        </p>
-      </section>
-
-      <section aria-labelledby="notification-categories-heading">
-        <h3 id="notification-categories-heading">Categories</h3>
-        <ul className="notification-category-list">
-          {TRAINER_NOTIFICATION_META.map((item) => (
-            <li key={item.key}>
-              <label className="switch-row">
-                <input
-                  type="checkbox"
-                  checked={categories[item.key]}
-                  disabled={!online}
-                  onChange={() => toggleCategory(item.key)}
-                />
-                <span>
-                  <strong>{item.label}</strong>
-                  <span className="muted block">{item.description}</span>
-                </span>
-              </label>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <fieldset className="field">
-        <legend>Quiet hours</legend>
-        <p className="muted">
-          Trainer push is held during quiet hours (your timezone). Default{" "}
-          {formatHhMmTime("22:00")} – {formatHhMmTime("07:00")}.
-        </p>
-        <p className="quiet-hours-display" aria-live="polite">
-          {formatHhMmTime(quietStart)} – {formatHhMmTime(quietEnd)}
-        </p>
-        <div className="quiet-hours-row">
-          <label>
-            <span>From</span>
+      <ul className="settings-notif-list">
+        {FRAME_ROWS.map((item) => (
+          <li key={item.key} className="settings-notif-row">
+            <span className="settings-notif-copy">
+              <strong id={`notif-label-${item.key}`}>{item.label}</strong>
+              <span className="muted">{item.description}</span>
+            </span>
             <input
-              type="time"
-              value={quietStart}
+              type="checkbox"
+              role="switch"
+              className="settings-switch"
+              checked={categories[item.key]}
               disabled={!online}
-              onChange={(e) => setQuietStart(e.target.value)}
+              aria-labelledby={`notif-label-${item.key}`}
+              onChange={() => toggleCategory(item.key)}
             />
-            <span className="muted">{formatHhMmTime(quietStart)}</span>
-          </label>
-          <label>
-            <span>To</span>
-            <input
-              type="time"
-              value={quietEnd}
-              disabled={!online}
-              onChange={(e) => setQuietEnd(e.target.value)}
-            />
-            <span className="muted">{formatHhMmTime(quietEnd)}</span>
-          </label>
-        </div>
-      </fieldset>
+          </li>
+        ))}
+        <li className="settings-notif-row">
+          <span className="settings-notif-copy">
+            <strong id="notif-label-quiet">Quiet hours</strong>
+            <span className="muted" data-testid="quiet-hours-display">
+              {quietDesc}
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            className="settings-switch"
+            checked={quietOn}
+            disabled={!online}
+            aria-labelledby="notif-label-quiet"
+            onChange={() => toggleQuietHours()}
+          />
+        </li>
+      </ul>
 
       {saveStatus === "saved" && !saveError ? (
         <p className="muted" role="status" data-testid="notification-prefs-saved">

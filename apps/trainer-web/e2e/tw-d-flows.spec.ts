@@ -91,23 +91,38 @@ test.describe("TW-D plan and builders", () => {
     await expect(page.getByTestId("screen-TW-13")).toBeVisible();
     await expect(page.getByTestId("autosave-status")).toContainText(/Draft v\d+/);
     await expect(page.getByTestId("library-drawer")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Preview as client/ })).toBeVisible();
+    // Z12-11: topbar is Preview + Publish & schedule (not “Preview as client” / “Publish…”).
+    await expect(page.getByRole("button", { name: /^Preview$/ })).toBeVisible();
 
     await page.getByRole("tab", { name: "Nutrition" }).click();
     await expect(page.getByTestId("screen-TW-14")).toBeVisible();
     await expect(page.getByTestId("day-total-bar")).toBeVisible();
     await expectNoBannedStrings(page);
 
-    await page.getByRole("button", { name: /^Publish…$/ }).click();
+    // Z12-10: Nutrition tab + unchanged workouts → frame 156 diet-scope modal (TW-15).
+    await page.getByRole("button", { name: /^Publish & schedule$/ }).click();
+    const dietModal = page.getByTestId("screen-TW-15");
+    await expect(dietModal).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Apply this change/ })).toBeVisible();
+    await expect(dietModal).toContainText(/From today/);
+    await expect(dietModal).toContainText("Today only");
+    await expect(page.getByRole("button", { name: "Apply change" })).toBeVisible();
+    await expectNoBannedStrings(page);
+    await page.getByRole("button", { name: "Cancel" }).click();
+    await expect(dietModal).toBeHidden();
+
+    // Workout tab → full Publish & schedule modal (TW-16) with civil start options.
+    await page.getByRole("tab", { name: "Workout" }).click();
+    await expect(page.getByTestId("screen-TW-13")).toBeVisible();
+    await page.getByRole("button", { name: /^Publish & schedule$/ }).click();
     const modal = page.getByTestId("screen-TW-16");
     await expect(modal).toBeVisible();
-    await expect(modal.getByRole("heading", { name: /When does this plan start\?/ })).toBeVisible();
-    await expect(modal).toContainText("Validity is separate from the first schedule window.");
-    await expect(modal).toContainText(/Dates use .* time/);
-    await expect(modal.getByRole("radio", { name: /Ongoing/ })).toBeChecked();
-    await expect(modal.getByRole("radio", { name: /Next 7 days/ })).toBeChecked();
-    await expect(modal.getByRole("button", { name: "Publish & schedule" })).toBeVisible();
-    await expect(modal.getByRole("switch")).toBeChecked();
+    await expect(modal.getByRole("heading", { name: /Publish & schedule/ })).toBeVisible();
+    await expect(modal.getByRole("radio", { name: /^Start (Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/ })).toBeVisible();
+    await expect(modal.getByRole("radio", { name: /Start today/ })).toBeVisible();
+    await expect(modal.getByRole("radio", { name: /Pick a date/ })).toBeVisible();
+    await expect(modal.getByTestId("assign-ends")).toContainText(/After 8 weeks/);
+    await expect(modal.getByRole("button", { name: /^Publish$/ })).toBeVisible();
     const box = await modal.boundingBox();
     expect(box?.width).toBeLessThanOrEqual(641);
     expect(box?.width).toBeGreaterThan(500);
@@ -115,8 +130,6 @@ test.describe("TW-D plan and builders", () => {
     await expect(modal.getByTestId("assign-replace")).toContainText(
       /Anything already logged stays as it is\./,
     );
-    await expect(modal.getByTestId("screen-TW-15")).toContainText("From today onward");
-    await expect(modal.getByTestId("screen-TW-15")).toContainText("Today only");
     await expectNoBannedStrings(page);
 
     await modal.getByRole("button", { name: "Cancel" }).click();
@@ -149,15 +162,19 @@ test.describe("TW-D plan and builders", () => {
       .getByRole("button", { name: /^Adjust plan$/ })
       .click();
     await expect(page.getByTestId("screen-TW-13")).toBeVisible();
-    await page.getByRole("button", { name: /^Publish…$/ }).click();
+    await page.getByRole("button", { name: /^Publish & schedule$/ }).click();
     const modal = page.getByTestId("screen-TW-16");
-    await expect(modal).toContainText(/Dates use Deepak's time · Dubai · 1 h 30 m behind you/);
-    await expect(modal.getByRole("button", { name: "Publish & schedule" })).toBeEnabled({
+    await expect(modal).toBeVisible({ timeout: 15_000 });
+    // Z12-10 assign modal: civil start options; schedule uses trainee timezone on the server.
+    await expect(
+      modal.getByRole("radio", { name: /^Start (Mon|Tue|Wed|Thu|Fri|Sat|Sun)\b/ }),
+    ).toBeVisible();
+    await expect(modal.getByRole("button", { name: /^Publish$/ })).toBeEnabled({
       timeout: 15_000,
     });
-    await modal.getByRole("button", { name: "Publish & schedule" }).click();
+    await modal.getByRole("button", { name: /^Publish$/ }).click();
     await expect(page).toHaveURL(new RegExp(`/clients/${DEEPAK}/plan$`), { timeout: 20_000 });
-    await expect(page.getByTestId("plan-effective-line")).toContainText(/ongoing/);
+    await expect(page.getByTestId("plan-effective-line")).toBeVisible();
     await expect(page.getByTestId("draft-banner")).toBeHidden();
   });
 
@@ -170,6 +187,6 @@ test.describe("TW-D plan and builders", () => {
       .getByRole("button", { name: /^Adjust plan$/ })
       .click();
     await expect(page.getByTestId("builder-small-screen")).toContainText("Open on a larger screen");
-    await expect(page.getByRole("button", { name: /^Publish…$/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^Publish & schedule$/ })).toBeDisabled();
   });
 });
