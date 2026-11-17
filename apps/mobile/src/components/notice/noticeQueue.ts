@@ -27,6 +27,25 @@ export const BANNER_MS = 4000;
 export const TOAST_MS = 4000;
 export const TOAST_ACTION_MS = 6000;
 
+/**
+ * The longest single JS timer the queue arms. An item leaves at a wall-clock
+ * deadline (`now() >= deadline`), re-checked on short ticks, never on one long
+ * `setTimeout(4000)`.
+ *
+ * Why: TR-06h outlived its 4 s on the iOS simulator (runs 43744259140,
+ * 44063388981, 44069358004), never on Android. On iOS, React Native's timer
+ * module (`RCTTiming.mm`, old architecture, RN 0.76) runs a timer due more than
+ * `kMinimumSleepInterval` (1 s) away on a separate path: it pauses its display
+ * link and parks the timer on one shared `NSTimer` (`_sleepTimer`) in
+ * `NSDefaultRunLoopMode`, created on whichever thread's run loop scheduled it
+ * (the main thread's when a resign-active notification, e.g. a system alert,
+ * lands while timers are pending); later long timers only move that timer's
+ * fire date. A 4 s dismissal therefore depends on a default-mode run loop that
+ * the app does not control. Timers of 1 s or less stay on the display link, and
+ * a deadline makes a late or early tick harmless: it only re-checks the clock.
+ */
+export const NOTICE_TICK_MS = 250;
+
 /** Why an item left. Only the person's own dismissals and the timer call `onDismiss`. */
 export type NoticeDismissReason =
   | "timeout"
@@ -79,14 +98,15 @@ type Lane<T extends NoticeItem> = {
   current: T | null;
   waiting: T[];
   timer: ReturnType<typeof setTimeout> | null;
-  /** When the running timer was started and for how long (for hold/resume). */
-  startedAt: number;
+  /** Wall-clock time (ms) at which the visible item leaves. */
+  deadline: number;
+  /** Time left when a finger paused the item (hold/resume). */
   remaining: number;
   held: boolean;
 };
 
 function emptyLane<T extends NoticeItem>(): Lane<T> {
-  return { current: null, waiting: [], timer: null, startedAt: 0, remaining: 0, held: false };
+  return { current: null, waiting: [], timer: null, deadline: 0, remaining: 0, held: false };
 }
 
 export function toastDuration(item: Pick<ToastInput, "actionLabel" | "onAction">): number {
@@ -123,17 +143,26 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     lane.timer = null;
   }
 
+  /** Check the deadline now and again every tick until it passes (see NOTICE_TICK_MS). */
+  function tick(lane: Lane<NoticeItem>, item: NoticeItem) {
+    lane.timer = null;
+    if (lane.current?.id !== item.id || lane.held) return;
+    const left = lane.deadline - now();
+    if (left <= 0) {
+      dismiss(item.id, "timeout");
+      return;
+    }
+    lane.timer = setTimeout(() => tick(lane, item), Math.min(NOTICE_TICK_MS, left));
+  }
+
   function startTimer(lane: Lane<NoticeItem>, ms: number) {
     clearTimer(lane);
     const item = lane.current;
     if (!item) return;
-    lane.startedAt = now();
+    lane.deadline = now() + ms;
     lane.remaining = ms;
     lane.held = false;
-    lane.timer = setTimeout(() => {
-      lane.timer = null;
-      if (lane.current?.id === item.id) dismiss(item.id, "timeout");
-    }, ms);
+    lane.timer = setTimeout(() => tick(lane, item), Math.min(NOTICE_TICK_MS, ms));
   }
 
   function suppressed(item: NoticeItem): boolean {
@@ -227,9 +256,8 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
   function hold(id: string): void {
     const found = find(id);
     if (!found?.current || found.lane.held) return;
-    const elapsed = now() - found.lane.startedAt;
     clearTimer(found.lane);
-    found.lane.remaining = Math.max(0, found.lane.remaining - elapsed);
+    found.lane.remaining = Math.max(0, found.lane.deadline - now());
     found.lane.held = true;
   }
 

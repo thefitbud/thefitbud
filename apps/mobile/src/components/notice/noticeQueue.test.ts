@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BANNER_MS,
+  NOTICE_TICK_MS,
   TOAST_ACTION_MS,
   TOAST_MS,
   createNoticeQueue,
@@ -112,6 +113,44 @@ describe("notice queue (Z12-38)", () => {
     const queue = createNoticeQueue();
     queue.setScreen("tab:today");
     expect(queue.showBanner(note)).not.toBeNull();
+  });
+
+  it("never arms a JS timer longer than 1 s (iOS parks longer ones on a run-loop NSTimer), yet leaves at 4 s", () => {
+    // RCTTiming.mm (RN 0.76) moves any timer due more than kMinimumSleepInterval
+    // (1 s) away off its display link onto a shared default-mode NSTimer; that is
+    // the path TR-06h's 4 s dismissal outlived on the iOS simulator.
+    const armed = vi.spyOn(globalThis, "setTimeout");
+    const queue = createNoticeQueue();
+    queue.showBanner(note);
+    queue.showToast({ message: "Lunch skipped", actionLabel: "Undo", onAction: vi.fn() });
+    vi.advanceTimersByTime(BANNER_MS - 1);
+    expect(queue.getSnapshot().banner).not.toBeNull();
+    vi.advanceTimersByTime(1);
+    expect(queue.getSnapshot().banner).toBeNull();
+    vi.advanceTimersByTime(TOAST_ACTION_MS);
+    expect(queue.getSnapshot().toast).toBeNull();
+    const delays = armed.mock.calls.map((call) => Number(call[1] ?? 0));
+    expect(delays.length).toBeGreaterThan(0);
+    expect(Math.max(...delays)).toBeLessThanOrEqual(1000);
+    armed.mockRestore();
+  });
+
+  it("leaves at its wall-clock deadline: a tick that fires early waits, one that fires late leaves at once", () => {
+    let clock = 1_000_000;
+    const queue = createNoticeQueue({ now: () => clock });
+    const onDismiss = vi.fn();
+    queue.showBanner({ ...note, onDismiss });
+
+    // The JS timers run, but the clock has not reached the deadline: still up.
+    vi.advanceTimersByTime(BANNER_MS * 3);
+    expect(queue.getSnapshot().banner).not.toBeNull();
+    expect(onDismiss).not.toHaveBeenCalled();
+
+    // Timers held back past the deadline: the first tick that runs removes it.
+    clock += BANNER_MS + 5000;
+    vi.advanceTimersByTime(NOTICE_TICK_MS);
+    expect(queue.getSnapshot().banner).toBeNull();
+    expect(onDismiss).toHaveBeenCalledWith("timeout");
   });
 
   it("a key shows once per session, until reset", () => {

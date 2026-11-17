@@ -39,6 +39,10 @@ export function bannerAnnouncement(item: Pick<BannerItem, "title" | "body">): st
   return [item.title, item.body].filter(Boolean).join(". ");
 }
 
+/** The banner's slide out, and the latest it leaves if the animation never reports back. */
+const EXIT_MS = 160;
+export const EXIT_FALLBACK_MS = EXIT_MS + 240;
+
 /** Below this travel (pt) a touch is a tap, not a scroll. */
 const TAP_SLOP = 10;
 const NATIVE_DRIVER = Platform.OS !== "web";
@@ -71,15 +75,28 @@ function BannerLayer({ queue, banner }: { queue: NoticeQueue; banner: BannerItem
   shownId.current = shown?.id ?? null;
 
   // The queue moved on: slide the old banner out (unless motion is reduced), then swap.
+  // The swap never waits on the animation's end callback alone: if a native
+  // animation never reports back, the banner would stay up with the queue
+  // already past it, so a short fallback timer swaps anyway.
   useEffect(() => {
-    if (banner?.id === shown?.id) return;
+    if (banner?.id === shown?.id) return undefined;
     if (!shown || reducedMotion) {
       setShown(banner);
-      return;
+      return undefined;
     }
-    Animated.timing(enter, { toValue: 0, duration: 160, useNativeDriver: NATIVE_DRIVER }).start(
-      () => setShown(latest.current),
-    );
+    let swapped = false;
+    const swap = () => {
+      if (swapped) return;
+      swapped = true;
+      setShown(latest.current);
+    };
+    Animated.timing(enter, {
+      toValue: 0,
+      duration: EXIT_MS,
+      useNativeDriver: NATIVE_DRIVER,
+    }).start(swap);
+    const fallback = setTimeout(swap, EXIT_FALLBACK_MS);
+    return () => clearTimeout(fallback);
   }, [banner, shown, reducedMotion, enter]);
 
   // A new banner: slide in (or appear) and announce it.

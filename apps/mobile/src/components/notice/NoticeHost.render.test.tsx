@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { AccessibilityInfo, Pressable, Text as RNText } from "react-native";
+import { AccessibilityInfo, Animated, Pressable, Text as RNText } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Snackbar } from "../Snackbar";
-import { NoticeHost, swipeDismisses } from "./NoticeHost";
+import { EXIT_FALLBACK_MS, NoticeHost, swipeDismisses } from "./NoticeHost";
 import { BANNER_MS, TOAST_ACTION_MS, createNoticeQueue, type NoticeQueue } from "./noticeQueue";
 
 const NOTE = {
@@ -62,6 +62,28 @@ describe("NoticeHost (Z12-38)", () => {
       vi.advanceTimersByTime(BANNER_MS);
     });
     expect(queue.getSnapshot().banner).toBeNull();
+  });
+
+  it("the banner leaves the screen even if its slide-out never reports back", async () => {
+    // An animation whose end callback never comes must not keep a banner the
+    // queue has already moved past.
+    vi.spyOn(Animated, "timing").mockImplementation(
+      () => ({ start: () => undefined, stop: () => undefined, reset: () => undefined }) as never,
+    );
+    renderHost();
+    await settle();
+    act(() => {
+      queue.showBanner(NOTE);
+    });
+    expect(screen.getByText("Rahul has a note for you")).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(BANNER_MS);
+    });
+    expect(queue.getSnapshot().banner).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(EXIT_FALLBACK_MS);
+    });
+    expect(screen.queryByText("Rahul has a note for you")).toBeNull();
   });
 
   it("a tap opens the target", async () => {
