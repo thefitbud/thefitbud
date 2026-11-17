@@ -14,14 +14,18 @@ import {
   sortedMealsByTime,
 } from "../plan-composition";
 import { BuilderLayout, useBuilderMode } from "./BuilderLayout";
-import { DaysPane } from "./DaysPane";
+import { CompareVersionsModal, ConflictBanner } from "./ConflictBanner";
+import { DayTabs } from "./DayTabs";
+import { ExerciseProperties } from "./ExerciseProperties";
 import { LibraryDrawer } from "./LibraryDrawer";
-import { MealDaysPane, MealsPane, type MealDay } from "./MealsPane";
+import { MealProperties } from "./MealProperties";
+import { type MealDay, MealsPane } from "./MealsPane";
 import { PhonePreview } from "./PhonePreview";
 import { SessionEditor } from "./SessionEditor";
 import { publishIssues, type PublishIssues } from "./validation";
 import { useBuilderDraft, type SaveState } from "./useBuilderDraft";
 import { WEEK_ORDER, weekdayShort } from "./weekdays";
+import "./builder.css";
 
 export type BuilderTab = "workout" | "nutrition";
 
@@ -29,6 +33,13 @@ export type BuilderExpectations = {
   sessionsPerWeek: number;
   mealsPerDay: number;
   photoRequirement: "none" | "selected_meals" | "all_meals" | null;
+};
+
+export type ConflictHandlers = {
+  /** Refresh optimistic concurrency before overwriting with local edits. */
+  prepareKeepMine: () => Promise<void>;
+  /** Load the other device's content for Compare / Take theirs. */
+  loadRemote: () => Promise<{ title: string; content: PlanContent }>;
 };
 
 function statusText(state: SaveState): string {
@@ -44,7 +55,7 @@ function statusText(state: SaveState): string {
     case "conflict":
       return "Not saved";
     case "saved":
-      return state.at ? `Saved ${formatClockTime(state.at)}` : "Saved";
+      return state.at ? `saved ${formatClockTime(state.at)}` : "Saved";
   }
 }
 
@@ -58,25 +69,49 @@ function isTypingTarget(target: EventTarget | null): boolean {
   );
 }
 
-function ReadOnlySummary({ content }: { content: PlanContent }) {
-  const sessions = [...content.workoutDays].sort(
+function summarizeContent(content: PlanContent): string[] {
+  const lines: string[] = [];
+  for (const day of [...content.workoutDays].sort(
     (a, b) =>
       WEEK_ORDER.indexOf((a.weekday ?? 9) as (typeof WEEK_ORDER)[number]) -
       WEEK_ORDER.indexOf((b.weekday ?? 9) as (typeof WEEK_ORDER)[number]),
-  );
+  )) {
+    const dayName = day.weekday != null ? weekdayShort(day.weekday) : "Day";
+    lines.push(
+      `${dayName} · ${day.name}: ${day.exercises.length} ${
+        day.exercises.length === 1 ? "exercise" : "exercises"
+      }`,
+    );
+  }
+  for (const meal of sortedMealsByTime(content.mealPrescriptions)) {
+    const time = meal.localTime ? formatHhMmTime(meal.localTime) : "no time";
+    lines.push(`${meal.name} (${time}): ${(meal.items ?? []).length} foods`);
+  }
+  return lines.length > 0 ? lines : ["Empty plan"];
+}
+
+function ReadOnlySummary({ content }: { content: PlanContent }) {
   return (
     <div className="builder-readonly">
-      {sessions.length > 0 ? (
+      {content.workoutDays.length > 0 ? (
         <section>
           <h3>Sessions</h3>
           <ul>
-            {sessions.map((day) => (
-              <li key={day.id}>
-                <strong>{day.weekday != null ? weekdayShort(day.weekday) : "Unscheduled"}</strong>{" "}
-                {day.name} · {day.exercises.length}{" "}
-                {day.exercises.length === 1 ? "exercise" : "exercises"}
-              </li>
-            ))}
+            {[...content.workoutDays]
+              .sort(
+                (a, b) =>
+                  WEEK_ORDER.indexOf((a.weekday ?? 9) as (typeof WEEK_ORDER)[number]) -
+                  WEEK_ORDER.indexOf((b.weekday ?? 9) as (typeof WEEK_ORDER)[number]),
+              )
+              .map((day) => (
+                <li key={day.id}>
+                  <strong>
+                    {day.weekday != null ? weekdayShort(day.weekday) : "Unscheduled"}
+                  </strong>{" "}
+                  {day.name} · {day.exercises.length}{" "}
+                  {day.exercises.length === 1 ? "exercise" : "exercises"}
+                </li>
+              ))}
           </ul>
         </section>
       ) : null}
@@ -114,9 +149,10 @@ export function PlanBuilder({
   expectations = null,
   loadPreview,
   onPublish,
-  publishLabel = "Publish…",
+  publishLabel = "Publish & schedule",
   banner,
   screenId,
+  conflictHandlers,
 }: {
   backTo: string;
   backLabel: string;
@@ -136,27 +172,37 @@ export function PlanBuilder({
   publishLabel?: string;
   banner?: ReactNode;
   screenId: string;
+  conflictHandlers?: ConflictHandlers;
 }) {
   const mode = useBuilderMode();
   const [title, setTitle] = useState(initialTitle);
-  const { content, setContent, undo, canUndo, saveState, flush } = useBuilderDraft({
-    initialContent,
-    title,
-    save,
-    enabled: !readOnly && online,
-  });
+  const { content, setContent, undo, canUndo, saveState, flush, keepMine, takeTheirs } =
+    useBuilderDraft({
+      initialContent,
+      title,
+      save,
+      enabled: !readOnly && online,
+    });
   const contentRef = useRef(content);
   contentRef.current = content;
   const titleRef = useRef(title);
   titleRef.current = title;
 
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [selectedMealId, setSelectedMealId] = useState<string | null>(null);
-  const [mealDay, setMealDay] = useState<MealDay>("all");
+  const [mealDay] = useState<MealDay>("all");
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [preview, setPreview] = useState<PlanContent | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [libraryError, setLibraryError] = useState<string | null>(null);
+  const [comparing, setComparing] = useState(false);
+  const [remoteSummary, setRemoteSummary] = useState<string[]>([]);
+  const [remotePayload, setRemotePayload] = useState<{
+    title: string;
+    content: PlanContent;
+  } | null>(null);
+  const [keepMineBusy, setKeepMineBusy] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   const days = useMemo(
@@ -169,10 +215,25 @@ export function PlanBuilder({
     [content.workoutDays],
   );
   const activeDay = days.find((day) => day.id === selectedDayId) ?? days[0] ?? null;
+  const activeExercise =
+    activeDay == null
+      ? null
+      : sortedByOrder(activeDay.exercises).find((ex) => ex.id === selectedExerciseId) ??
+        sortedByOrder(activeDay.exercises)[0] ??
+        null;
   const meals = sortedMealsByTime(content.mealPrescriptions);
   const activeMeal = meals.find((meal) => meal.id === selectedMealId) ?? meals[0] ?? null;
   const editable = !readOnly && mode !== "small";
   const overlay = mode === "narrow";
+  const conflict = saveState.kind === "conflict";
+
+  useEffect(() => {
+    if (!activeDay) return;
+    const ids = new Set(activeDay.exercises.map((ex) => ex.id));
+    if (selectedExerciseId && ids.has(selectedExerciseId)) return;
+    const first = sortedByOrder(activeDay.exercises)[0];
+    setSelectedExerciseId(first?.id ?? null);
+  }, [activeDay, selectedExerciseId]);
 
   const openLibrary = useCallback(() => {
     setLibraryOpen(true);
@@ -213,6 +274,7 @@ export function PlanBuilder({
         next = addSetTarget(next, day.id, added.id);
       }
       setContent(() => next);
+      if (added) setSelectedExerciseId(added.id);
     } catch (err) {
       setLibraryError(err instanceof Error ? err.message : "Couldn't add that exercise.");
     }
@@ -251,14 +313,60 @@ export function PlanBuilder({
     onPublish({ title: titleRef.current, content: contentRef.current, issues });
   }
 
-  const retrySave = () => void flush();
-  const conflict = saveState.kind === "conflict";
+  async function onKeepMine() {
+    if (!conflictHandlers) {
+      window.location.reload();
+      return;
+    }
+    setKeepMineBusy(true);
+    try {
+      await keepMine(conflictHandlers.prepareKeepMine);
+      setComparing(false);
+      setRemotePayload(null);
+    } finally {
+      setKeepMineBusy(false);
+    }
+  }
+
+  async function onCompare() {
+    if (!conflictHandlers) return;
+    if (comparing) {
+      setComparing(false);
+      return;
+    }
+    try {
+      const remote = await conflictHandlers.loadRemote();
+      setRemotePayload(remote);
+      setRemoteSummary(summarizeContent(remote.content));
+      setComparing(true);
+    } catch {
+      setRemoteSummary(["Couldn't load the other version."]);
+      setComparing(true);
+    }
+  }
+
+  function onTakeTheirs() {
+    if (!remotePayload) {
+      window.location.reload();
+      return;
+    }
+    takeTheirs(remotePayload.content, remotePayload.title);
+    setTitle(remotePayload.title);
+    setComparing(false);
+    setRemotePayload(null);
+  }
+
+  const subtitleBits = [
+    tab === "workout" ? "Workout plan" : "Nutrition plan",
+    statusLabel,
+    statusText(saveState),
+  ];
 
   const topbar = (
     <>
       <div className="builder-topbar-main">
-        <Link className="builder-back" to={backTo}>
-          ← {backLabel}
+        <Link className="builder-back" to={backTo} aria-label={backLabel}>
+          ←
         </Link>
         <div className="builder-titleline">
           <h1 className="sr-only">
@@ -274,17 +382,19 @@ export function PlanBuilder({
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
+          {clientName ? <span className="builder-title-client">· {clientName}</span> : null}
+          <span className="builder-draft-pill">Draft</span>
           <p
             className={`builder-status is-${saveState.kind}`}
             role="status"
             aria-live="polite"
             data-testid="autosave-status"
           >
-            {statusLabel} · {statusText(saveState)}
+            {subtitleBits.join(" · ")}
             {saveState.kind === "error" ? (
               <>
                 {" "}
-                <button type="button" className="button-link" onClick={retrySave}>
+                <button type="button" className="button-link" onClick={() => void flush()}>
                   Retry
                 </button>
               </>
@@ -319,11 +429,12 @@ export function PlanBuilder({
           className="button-ghost"
           disabled={!canUndo || !editable}
           onClick={undo}
+          aria-label="Undo"
         >
           Undo
         </button>
         <button type="button" className="button-secondary" onClick={() => void openPreview()}>
-          Preview as client
+          Preview
         </button>
         {onPublish ? (
           <button
@@ -347,17 +458,18 @@ export function PlanBuilder({
         </p>
       ) : null}
       {conflict ? (
-        <p className="builder-banner is-attention" role="alert">
-          This draft was changed in another tab.{" "}
-          <button type="button" className="button-link" onClick={() => window.location.reload()}>
-            Reload the latest
-          </button>
-        </p>
+        <ConflictBanner
+          at={saveState.kind === "conflict" ? saveState.at : null}
+          comparing={comparing}
+          onCompare={() => void onCompare()}
+          onKeepMine={() => void onKeepMine()}
+          keepMineBusy={keepMineBusy}
+        />
       ) : null}
       {saveState.kind === "error" ? (
         <p className="builder-banner is-attention" role="alert">
           Couldn&apos;t save your latest change.{" "}
-          <button type="button" className="button-link" onClick={retrySave}>
+          <button type="button" className="button-link" onClick={() => void flush()}>
             Retry
           </button>
         </p>
@@ -372,79 +484,109 @@ export function PlanBuilder({
     </>
   );
 
+  const library = editable ? (
+    <>
+      <LibraryDrawer
+        kind={tab}
+        day={activeDay}
+        meal={activeMeal}
+        onAddExercise={addExercise}
+        onAddFood={addFood}
+        searchRef={searchRef}
+        overlay={overlay}
+        open={libraryOpen || !overlay}
+        onClose={() => setLibraryOpen(false)}
+      />
+      {libraryError ? (
+        <p className="form-error library-error" role="alert">
+          {libraryError}
+        </p>
+      ) : null}
+    </>
+  ) : (
+    <aside className="builder-props">
+      <h2 className="builder-pane-title">{tab === "workout" ? "Exercises" : "Foods"}</h2>
+      <p className="muted">Library is available when you can edit.</p>
+    </aside>
+  );
+
+  const center =
+    tab === "workout" ? (
+      <div className="builder-center-stack">
+        <DayTabs
+          content={content}
+          selectedId={activeDay?.id ?? null}
+          onSelect={setSelectedDayId}
+          onChange={setContent}
+          readOnly={!editable}
+        />
+        <SessionEditor
+          day={activeDay}
+          selectedExerciseId={activeExercise?.id ?? null}
+          onSelectExercise={setSelectedExerciseId}
+          onChange={setContent}
+          readOnly={!editable}
+          onOpenLibrary={openLibrary}
+          showLibraryToggle={overlay}
+        />
+      </div>
+    ) : (
+      <MealsPane
+        content={content}
+        selectedDay={mealDay}
+        selectedMealId={activeMeal?.id ?? null}
+        onSelectMeal={setSelectedMealId}
+        onChange={setContent}
+        readOnly={!editable}
+        photoRequirement={expectations?.photoRequirement ?? null}
+        onOpenLibrary={openLibrary}
+        showLibraryToggle={overlay}
+      />
+    );
+
+  const properties =
+    tab === "workout" ? (
+      activeDay ? (
+        <ExerciseProperties
+          day={activeDay}
+          exercise={activeExercise}
+          onChange={setContent}
+          readOnly={!editable}
+        />
+      ) : (
+        <aside className="builder-props">
+          <h2 className="builder-pane-title">Properties</h2>
+          <p className="muted">Select a day to edit exercises.</p>
+        </aside>
+      )
+    ) : (
+      <MealProperties meal={activeMeal} onChange={setContent} readOnly={!editable} />
+    );
+
+  // Wide: library left / workspace / properties. Narrow: properties left, library overlay.
+  const leftPane = overlay ? properties : library;
+  const rightPane = overlay ? library : properties;
+
   return (
-    <section className="page plan-builder-page" data-testid={screenId}>
+    <section className="page plan-builder-page builder-v3" data-testid={screenId}>
       <BuilderLayout
         mode={mode}
         topbar={topbar}
         banner={bannerNode}
-        left={
-          tab === "workout" ? (
-            <DaysPane
-              content={content}
-              selectedId={activeDay?.id ?? null}
-              onSelect={setSelectedDayId}
-              onChange={setContent}
-              readOnly={!editable}
-            />
-          ) : (
-            <MealDaysPane
-              content={content}
-              selectedDay={mealDay}
-              onSelectDay={setMealDay}
-              selectedMealId={activeMeal?.id ?? null}
-              onChange={setContent}
-              readOnly={!editable}
-            />
-          )
-        }
-        center={
-          tab === "workout" ? (
-            <SessionEditor
-              day={activeDay}
-              onChange={setContent}
-              readOnly={!editable}
-              onOpenLibrary={openLibrary}
-              showLibraryToggle={overlay}
-            />
-          ) : (
-            <MealsPane
-              content={content}
-              selectedDay={mealDay}
-              selectedMealId={activeMeal?.id ?? null}
-              onSelectMeal={setSelectedMealId}
-              onChange={setContent}
-              readOnly={!editable}
-              photoRequirement={expectations?.photoRequirement ?? null}
-              onOpenLibrary={openLibrary}
-              showLibraryToggle={overlay}
-            />
-          )
-        }
-        right={
-          editable ? (
-            <>
-              <LibraryDrawer
-                kind={tab}
-                day={activeDay}
-                meal={activeMeal}
-                onAddExercise={addExercise}
-                onAddFood={addFood}
-                searchRef={searchRef}
-                overlay={overlay}
-                open={libraryOpen}
-                onClose={() => setLibraryOpen(false)}
-              />
-              {libraryError ? (
-                <p className="form-error library-error" role="alert">
-                  {libraryError}
-                </p>
-              ) : null}
-            </>
-          ) : null
-        }
+        left={leftPane}
+        center={center}
+        right={rightPane}
         smallScreen={<ReadOnlySummary content={content} />}
       />
+      {comparing ? (
+        <CompareVersionsModal
+          localSummary={summarizeContent(content)}
+          remoteSummary={remoteSummary}
+          onKeepMine={() => void onKeepMine()}
+          onTakeTheirs={onTakeTheirs}
+          onClose={() => setComparing(false)}
+        />
+      ) : null}
       {preview ? (
         <PhonePreview content={preview} clientName={clientName} onClose={() => setPreview(null)} />
       ) : null}

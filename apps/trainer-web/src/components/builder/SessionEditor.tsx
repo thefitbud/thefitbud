@@ -1,29 +1,28 @@
 import type { PlanContent, WorkoutDay } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { formatNumber } from "@fitbud/core";
+import { OverflowMenu } from "../OverflowMenu";
 import {
-  addSetTarget,
   duplicateExercise,
-  duplicateSetTarget,
   moveExercise,
-  moveSessionToWeekday,
   removeExercise,
-  removeSetTarget,
   sortedByOrder,
-  updateExercise,
-  updateSetTarget,
   updateWorkoutDay,
 } from "../plan-composition";
-import { SetTable } from "./SetTable";
-import { WEEK_ORDER, WEEKDAY_INITIAL, weekdayShort } from "./weekdays";
+import { exerciseSummaryLine } from "./formatters";
+import { weekdayShort } from "./weekdays";
 
 export function SessionEditor({
   day,
+  selectedExerciseId,
+  onSelectExercise,
   onChange,
   readOnly = false,
   onOpenLibrary,
   showLibraryToggle = false,
 }: {
   day: WorkoutDay | null;
+  selectedExerciseId: string | null;
+  onSelectExercise: (exerciseId: string) => void;
   onChange: (update: (current: PlanContent) => PlanContent) => void;
   readOnly?: boolean;
   onOpenLibrary?: () => void;
@@ -33,61 +32,40 @@ export function SessionEditor({
     return (
       <div className="session-empty" data-testid="session-empty">
         <h2>No session selected</h2>
-        <p className="muted">
-          Pick a day on the left, or add a session to start building this week.
-        </p>
+        <p className="muted">Pick a day above, or tap a Rest tab to add a session.</p>
       </div>
     );
   }
+
   const exercises = sortedByOrder(day.exercises);
+  const setCount = exercises.reduce((sum, exercise) => sum + exercise.setTargets.length, 0);
+  const dayLabel =
+    day.weekday != null ? `${weekdayShort(day.weekday)} · ${day.name}` : day.name;
+  const meta = [
+    `${formatNumber(exercises.length)} ${exercises.length === 1 ? "exercise" : "exercises"}`,
+    `${formatNumber(setCount)} ${setCount === 1 ? "set" : "sets"}`,
+  ].join(" · ");
+
   return (
-    <div className="session-editor">
-      <header className="session-head">
-        <label className="field session-title">
-          <span>Session title</span>
-          <input
-            value={day.name}
-            maxLength={120}
-            disabled={readOnly}
-            onChange={(event) =>
-              onChange((current) => updateWorkoutDay(current, day.id, { name: event.target.value }))
-            }
-          />
-        </label>
-        <div className="weekday-chips" role="group" aria-label="Weekday">
-          {WEEK_ORDER.map((weekday) => (
-            <button
-              key={weekday}
-              type="button"
-              className={day.weekday === weekday ? "weekday-chip is-on" : "weekday-chip"}
-              aria-pressed={day.weekday === weekday}
-              aria-label={weekdayShort(weekday)}
+    <div className="session-editor session-board" data-testid="session-board">
+      <header className="session-board-head">
+        <div>
+          <label className="field session-title">
+            <span className="sr-only">Session title</span>
+            <input
+              value={day.name}
+              maxLength={120}
               disabled={readOnly}
-              onClick={() =>
-                onChange((current) => moveSessionToWeekday(current, day.id, weekday))
+              aria-label="Session title"
+              onChange={(event) =>
+                onChange((current) =>
+                  updateWorkoutDay(current, day.id, { name: event.target.value }),
+                )
               }
-            >
-              {WEEKDAY_INITIAL[weekday]}
-            </button>
-          ))}
+            />
+          </label>
+          <p className="session-board-meta">{dayLabel} · {meta}</p>
         </div>
-        <label className="field session-note">
-          <span>Instructions for the session</span>
-          <textarea
-            rows={2}
-            maxLength={2000}
-            placeholder="Warm-up, tempo, anything the client should know before starting"
-            value={day.instructions ?? ""}
-            disabled={readOnly}
-            onChange={(event) =>
-              onChange((current) =>
-                updateWorkoutDay(current, day.id, {
-                  instructions: event.target.value || null,
-                }),
-              )
-            }
-          />
-        </label>
       </header>
 
       {exercises.length === 0 ? (
@@ -98,107 +76,95 @@ export function SessionEditor({
                 Add exercises from the library →
               </button>
             ) : (
-              "Add exercises from the library →"
+              "Drag an exercise here or add one from the library."
             )}
           </p>
         </div>
       ) : (
-        <ol className="exercise-list">
-          {exercises.map((exercise, index) => (
-            <li key={exercise.id} className="exercise-block">
-              <div className="exercise-head">
-                <label className="field exercise-name">
-                  <span className="sr-only">Exercise name</span>
-                  <input
-                    value={exercise.name}
-                    maxLength={120}
-                    placeholder="Exercise name"
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      onChange((current) =>
-                        updateExercise(current, day.id, exercise.id, { name: event.target.value }),
-                      )
-                    }
-                  />
-                </label>
-                {exercise.primaryMuscles.map((muscle) => (
-                  <span key={muscle} className="muscle-chip">
-                    {labelFor("body_part", muscle)}
+        <ol className="exercise-card-list">
+          {exercises.map((exercise, index) => {
+            const selected = exercise.id === selectedExerciseId;
+            return (
+              <li key={exercise.id}>
+                <button
+                  type="button"
+                  className={selected ? "exercise-card is-selected" : "exercise-card"}
+                  aria-current={selected ? "true" : undefined}
+                  onClick={() => onSelectExercise(exercise.id)}
+                >
+                  <span className="exercise-card-handle" aria-hidden="true">
+                    ⋮⋮
                   </span>
-                ))}
+                  <span className="exercise-card-body">
+                    <span className="exercise-card-title">
+                      {index + 1}. {exercise.name || "Untitled exercise"}
+                    </span>
+                    <span className="exercise-card-summary">
+                      {exerciseSummaryLine(exercise) || "Add sets in properties"}
+                    </span>
+                  </span>
+                </button>
                 {readOnly ? null : (
-                  <span className="exercise-actions">
-                    <button
-                      type="button"
-                      className="button-ghost button-sm"
-                      disabled={index === 0}
-                      aria-label={`Move ${exercise.name || "exercise"} up`}
-                      onClick={() =>
-                        onChange((current) => moveExercise(current, day.id, exercise.id, -1))
-                      }
-                    >
-                      Up
-                    </button>
-                    <button
-                      type="button"
-                      className="button-ghost button-sm"
-                      disabled={index === exercises.length - 1}
-                      aria-label={`Move ${exercise.name || "exercise"} down`}
-                      onClick={() =>
-                        onChange((current) => moveExercise(current, day.id, exercise.id, 1))
-                      }
-                    >
-                      Down
-                    </button>
-                    <button
-                      type="button"
-                      className="button-ghost button-sm"
-                      onClick={() =>
-                        onChange((current) => duplicateExercise(current, day.id, exercise.id))
-                      }
-                    >
-                      Duplicate
-                    </button>
-                    <button
-                      type="button"
-                      className="button-ghost button-sm"
-                      onClick={() =>
-                        onChange((current) => removeExercise(current, day.id, exercise.id))
-                      }
-                    >
-                      Delete
-                    </button>
+                  <span className="exercise-card-menu">
+                    <OverflowMenu
+                      label={`Actions for ${exercise.name || "exercise"}`}
+                      items={[
+                        {
+                          id: "up",
+                          label: "Move up",
+                          disabled: index === 0,
+                          onSelect: () =>
+                            onChange((current) =>
+                              moveExercise(current, day.id, exercise.id, -1),
+                            ),
+                        },
+                        {
+                          id: "down",
+                          label: "Move down",
+                          disabled: index === exercises.length - 1,
+                          onSelect: () =>
+                            onChange((current) =>
+                              moveExercise(current, day.id, exercise.id, 1),
+                            ),
+                        },
+                        {
+                          id: "duplicate",
+                          label: "Duplicate",
+                          onSelect: () =>
+                            onChange((current) =>
+                              duplicateExercise(current, day.id, exercise.id),
+                            ),
+                        },
+                        {
+                          id: "delete",
+                          label: "Delete",
+                          destructive: true,
+                          onSelect: () =>
+                            onChange((current) =>
+                              removeExercise(current, day.id, exercise.id),
+                            ),
+                        },
+                      ]}
+                    />
                   </span>
                 )}
-              </div>
-              {exercise.sourceExerciseLibraryItemId ? (
-                <p className="exercise-source">From library · snapshot</p>
-              ) : null}
-              <SetTable
-                sets={exercise.setTargets}
-                exerciseName={exercise.name}
-                readOnly={readOnly}
-                onUpdate={(setId, patch) =>
-                  onChange((current) =>
-                    updateSetTarget(current, day.id, exercise.id, setId, patch),
-                  )
-                }
-                onAdd={() =>
-                  onChange((current) => addSetTarget(current, day.id, exercise.id))
-                }
-                onDuplicate={(setId) =>
-                  onChange((current) =>
-                    duplicateSetTarget(current, day.id, exercise.id, setId),
-                  )
-                }
-                onRemove={(setId) =>
-                  onChange((current) => removeSetTarget(current, day.id, exercise.id, setId))
-                }
-              />
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ol>
       )}
+
+      <div className="exercise-dropzone" data-testid="exercise-dropzone">
+        {showLibraryToggle && onOpenLibrary ? (
+          <button type="button" className="button-link" onClick={onOpenLibrary}>
+            Drag an exercise here or add one
+          </button>
+        ) : (
+          <p>
+            Drag an exercise here or <strong>add one</strong>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
