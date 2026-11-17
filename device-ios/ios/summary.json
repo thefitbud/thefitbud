@@ -1,0 +1,282 @@
+{
+  "platform": "ios",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-36/3-trainee-workout.yaml",
+    "device/z12-40/1-day-moves.yaml",
+    "device/z12-44/1-workout-tab.yaml",
+    "device/z12-44/2-finish-workout.yaml",
+    "device/z12-44/3-no-plan.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 181 s",
+      "mode": "cache-hit",
+      "seconds": 181,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.923 (19), dark 0.517 (17)",
+      "light": 0.923,
+      "dark": 0.517,
+      "count": {
+        "light": 19,
+        "dark": 17
+      },
+      "shots": [
+        {
+          "file": "TR-06a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "TR-06a-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "TR-07a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "TR-07a-light-ios.png",
+          "theme": "light",
+          "luma": 0.949
+        },
+        {
+          "file": "TR-10a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.16
+        },
+        {
+          "file": "TR-10a-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "TR-10b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.157
+        },
+        {
+          "file": "TR-10b-light-ios.png",
+          "theme": "light",
+          "luma": 0.955
+        },
+        {
+          "file": "TR-10c-light-ios.png",
+          "theme": "light",
+          "luma": 0.951
+        },
+        {
+          "file": "W-01b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.205
+        },
+        {
+          "file": "W-01b-light-ios.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "W-01e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.162
+        },
+        {
+          "file": "W-01e-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "W-03-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.89
+        },
+        {
+          "file": "W-03-light-ios.png",
+          "theme": "light",
+          "luma": 0.9
+        },
+        {
+          "file": "W-17a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.121
+        },
+        {
+          "file": "W-17a-light-ios.png",
+          "theme": "light",
+          "luma": 0.9
+        },
+        {
+          "file": "W-17b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "W-17b-light-ios.png",
+          "theme": "light",
+          "luma": 0.901
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.949
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.949
+        },
+        {
+          "file": "step-067-assertCondition-Large_title_30-light-ios.png",
+          "theme": "light",
+          "luma": 0.9
+        },
+        {
+          "file": "step-070-tapOnElement-Open-light-ios.png",
+          "theme": "light",
+          "luma": 0.853
+        },
+        {
+          "file": "step-071-tapOnElement-Open-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "z12-40-diet-tomorrow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.943
+        },
+        {
+          "file": "z12-40-diet-tomorrow-light-ios.png",
+          "theme": "light",
+          "luma": 0.943
+        },
+        {
+          "file": "z12-40-today-plus-7-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.944
+        },
+        {
+          "file": "z12-40-today-plus-7-light-ios.png",
+          "theme": "light",
+          "luma": 0.944
+        },
+        {
+          "file": "z12-40-today-yesterday-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.785
+        },
+        {
+          "file": "z12-40-today-yesterday-light-ios.png",
+          "theme": "light",
+          "luma": 0.785
+        },
+        {
+          "file": "z12-40-workout-day-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.16
+        },
+        {
+          "file": "z12-40-workout-day-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "z12-44-finished-day-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.172
+        },
+        {
+          "file": "z12-44-finished-day-light-ios.png",
+          "theme": "light",
+          "luma": 0.945
+        }
+      ]
+    }
+  ]
+}
