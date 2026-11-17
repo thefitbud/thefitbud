@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - EF94D0B9-8F22-4E29-9B9E-EBAC491054D9" tests="3" failures="0" time="391.848" timestamp="2026-11-17T22:38:23">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="123.577" timestamp="2026-11-17T22:38:23" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="73.007" timestamp="2026-11-17T22:40:27" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F13 Notifications inbox and its taps (Z12-47)" name="F13 Notifications inbox and its taps (Z12-47)" classname="F13 Notifications inbox and its taps (Z12-47)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F13-notifications-deep-links.yaml" time="195.153" timestamp="2026-11-17T22:41:40" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-47"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

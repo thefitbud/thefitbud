@@ -1,0 +1,56 @@
+{
+  "result": "mean screenshot luminance: light 0.931 (4), dark 0.382 (5)",
+  "light": 0.931,
+  "dark": 0.382,
+  "count": {
+    "light": 4,
+    "dark": 5
+  },
+  "shots": [
+    {
+      "file": "TR-15a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.073
+    },
+    {
+      "file": "TR-15a-light-android.png",
+      "theme": "light",
+      "luma": 0.934
+    },
+    {
+      "file": "TR-15b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.068
+    },
+    {
+      "file": "TR-15b-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.769
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "z12-47-read-all-dark-android.png",
+      "theme": "dark",
+      "luma": 0.073
+    },
+    {
+      "file": "z12-47-read-all-light-android.png",
+      "theme": "light",
+      "luma": 0.935
+    }
+  ]
+}
