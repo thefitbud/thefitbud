@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - D954513B-892A-402F-B56A-9627C177783A" tests="4" failures="2" time="297.407" timestamp="2026-11-17T23:27:18">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="57.057" timestamp="2026-11-17T23:27:18" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="50.874" timestamp="2026-11-17T23:28:15" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F07 Diet day (Z12-42)" name="F07 Diet day (Z12-42)" classname="F07 Diet day (Z12-42)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F07-diet-day.yaml" time="99.298" timestamp="2026-11-17T23:29:06" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+      <failure>Assertion is false: "kcal eaten" is visible</failure>
+    </testcase>
+    <testcase id="F09 Diet edit and late log (Z12-42)" name="F09 Diet edit and late log (Z12-42)" classname="F09 Diet edit and late log (Z12-42)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F09-diet-edit-delete-late.yaml" time="89.969" timestamp="2026-11-17T23:30:45" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+      <failure>Assertion is false: "kcal eaten" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
