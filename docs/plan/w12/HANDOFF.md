@@ -4,7 +4,7 @@ The first W12 orchestrator session hands over to a fresh one here. The session e
 
 ## 1. State at handover
 
-**Merged W12 tasks (11.5 of 32: Z12-29 to Z12-60; Z12-50 counts as half until part 2 merges):**
+**Merged W12 tasks (12.5 of 32: Z12-29 to Z12-60; Z12-50 counts as half until part 2 merges):**
 
 | Task | PR |
 |---|---|
@@ -15,6 +15,7 @@ The first W12 orchestrator session hands over to a fresh one here. The session e
 | Z12-35 | #438, with harness follow-ups #444, #447, #452 |
 | Z12-36 | #440, plus #445 (the temporary D-W12-33 allow-list entry) |
 | Z12-37 | #451 |
+| Z12-39 | #448 |
 | Z12-41 | #449 |
 | Z12-54 | #437 |
 | Z12-55 | #441 |
@@ -24,8 +25,7 @@ The first W12 orchestrator session hands over to a fresh one here. The session e
 The plan revision is #446.
 
 **Open at handover:**
-- **Z12-39 (#448):** ready. The device run on the final app head is green: 43743416490, app head 50136722, every flow passing on iOS and Android in light and dark. A delta review of its fix round was running. If it hasn't merged, merge it once a fresh review passes. Main must be merged in first if main moved (see §3).
-- **Z12-38 (#450):** draft.
+- **Z12-38 (#450):** draft. Its implementer from the old session was still running at handover (device run 44063388981 in progress), and will push to #450 and mark it ready with its report in the PR body. **Don't start a second Z12-38 agent unless #450 has had no new commit for 2 hours.** When it's marked ready, run the fresh review and merge as usual.
   - Device run 4 (43744259140 at e2f523d) was pending.
   - Agreed: after one green run on both platforms, a single docs-only commit (screenshots, parity rows, README) may follow without a new run.
   - Z12-38 must remove the D-W12-33 allow-list entry. Run 43715594740 already showed iOS `allowed: 0` with the workout flow included.
@@ -33,7 +33,7 @@ The plan revision is #446.
 - **#453 and #454:** Firoz's own ops hotfixes. Not W12; don't touch them.
 
 **Next tasks, in the revised order (W12.md, D-W12-35):**
-- When #448 merges: Z12-40.
+- **Start now:** Z12-40 (Z12-39 merged at 4ae1639c).
 - When #450 merges: Z12-47 and Z12-50 part 2.
 - After that, follow the priority list in W12.md.
 - Z12-57 starts after every other mobile task has merged.
@@ -122,7 +122,8 @@ These are in addition to D-W12-1 to D-W12-35 in W12.md.
     - `PlannedMealSheet` is handed to Z12-42.
     - The empty future day says "No meals planned".
 16. **Orchestrator mistake:** the first Z12-39 device run was accepted as evidence before confirming its commit. A fresh review caught it, and it was re-run on the head. The lesson is the commit check in §3.
-17. **Models:** listed in §1. Firoz moved Z12-60 to Opus at high effort on 17 Nov.
+17. **Models:** listed in §1. Firoz moved Z12-60 to Opus at high effort on 17 Nov. This handoff PR's review ran on Sonnet (a recorded model switch).
+18. **Device evidence across up-to-date main merges** (§3, "Device gate"). This is an exception to the "`git log -1` equals the PR's app head" check. It was first used for Z12-39, which merged after main brought in Z12-41.
 
 ## 5. Follow-ups to list in the report
 
@@ -176,4 +177,4 @@ Don't message anyone else about it.
 
 ## 7. Timeline as of handover
 
-About 17–18 tasks remain (Z12-39 and Z12-38 are nearly done), plus Z12-58, 59 and 60. With the 38-hour weekly pause, the earlier estimate moves to about Fri 20 Nov, and later if another weekly limit hits. The binding constraint is the usage budget, not the order of the work.
+About 17 tasks remain (Z12-38 is nearly done), plus Z12-58, 59 and 60. With the 38-hour weekly pause, the earlier estimate moves to about Fri 20 Nov, and later if another weekly limit hits. The binding constraint is the usage budget, not the order of the work.
