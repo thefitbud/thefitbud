@@ -4,13 +4,14 @@
  */
 import { describe, expect, it, vi } from "vitest";
 import { useState } from "react";
-import { fireEvent, render, screen } from "../test/render";
-import { localDateInTimezone } from "../lib/dates";
+import { act, fireEvent, render, screen } from "../test/render";
+import { addDays, localDateInTimezone } from "../lib/dates";
 import {
   dayEyebrow,
   dayKindOf,
   longDayLabel,
-  shouldClaimSwipe,
+  SWIPE_ACTIVE_X,
+  SWIPE_FAIL_Y,
   swipeDirection,
   useDayState,
 } from "./useDayState";
@@ -56,13 +57,21 @@ describe("swipe", () => {
   it("a short or mostly vertical drag is not a day change", () => {
     expect(swipeDirection(-30, 0)).toBe(0);
     expect(swipeDirection(-80, 60)).toBe(0);
-    expect(shouldClaimSwipe(10, 0)).toBe(false);
-    expect(shouldClaimSwipe(30, 40)).toBe(false);
-    expect(shouldClaimSwipe(30, 5)).toBe(true);
   });
 });
 
-function Probe({ onSelect }: { onSelect: (date: string) => void }) {
+type PanEnd = (
+  event: { translationX: number; translationY: number },
+  success: boolean,
+) => void;
+
+function Probe({
+  onSelect,
+  onGesture,
+}: {
+  onSelect: (date: string) => void;
+  onGesture?: (gesture: ReturnType<typeof useDayState>["swipeGesture"]) => void;
+}) {
   const today = localDateInTimezone(TIME_ZONE);
   const [date, setDate] = useState(today);
   const state = useDayState({
@@ -73,6 +82,7 @@ function Probe({ onSelect }: { onSelect: (date: string) => void }) {
     },
     timeZone: TIME_ZONE,
   });
+  onGesture?.(state.swipeGesture);
   return (
     <>
       <span data-testid="kind">{state.kind}</span>
@@ -100,5 +110,48 @@ describe("useDayState", () => {
     expect(screen.getByTestId("kind").textContent).toBe("today");
     expect(onSelect).toHaveBeenLastCalledWith(today);
     expect(onSelect).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe("the day swipe gesture", () => {
+  function setup() {
+    const onSelect = vi.fn();
+    let gesture: ReturnType<typeof useDayState>["swipeGesture"] | null = null;
+    render(<Probe onSelect={onSelect} onGesture={(g) => (gesture = g)} />);
+    const end = (translationX: number, translationY: number, success = true) =>
+      act(() => {
+        (gesture!.handlers as unknown as { onEnd: PanEnd }).onEnd(
+          { translationX, translationY },
+          success,
+        );
+      });
+    return { onSelect, gesture: () => gesture!, end };
+  }
+
+  it("is a horizontal pan that leaves a vertical drag to the scroll view", () => {
+    const { gesture } = setup();
+    const config = (gesture() as unknown as { config: Record<string, unknown> })
+      .config;
+    expect(config.activeOffsetX).toEqual([-SWIPE_ACTIVE_X, SWIPE_ACTIVE_X]);
+    expect(config.failOffsetY).toEqual([-SWIPE_FAIL_Y, SWIPE_FAIL_Y]);
+    expect(config.runOnJS).toBe(true);
+  });
+
+  it("a finished left swipe is the next day, a right swipe the previous one", () => {
+    const { onSelect, end } = setup();
+    const today = localDateInTimezone(TIME_ZONE);
+    end(-90, 6);
+    expect(onSelect).toHaveBeenLastCalledWith(addDays(today, 1));
+    end(90, -6);
+    expect(onSelect).toHaveBeenLastCalledWith(today);
+    expect(onSelect).toHaveBeenCalledTimes(2);
+  });
+
+  it("a cancelled, short or vertical pan does not change day", () => {
+    const { onSelect, end } = setup();
+    end(-90, 6, false);
+    end(-30, 0);
+    end(-90, 70);
+    expect(onSelect).not.toHaveBeenCalled();
   });
 });

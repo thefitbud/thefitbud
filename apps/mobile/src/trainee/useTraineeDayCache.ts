@@ -2,8 +2,11 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import type { WeekReadModel } from "@fitbud/contracts";
 import { addDays, startOfWeekMonday } from "../lib/dates";
 import {
+  cacheGeneration,
+  claimDayCacheOwner,
   dayViewKey,
   getCacheEntry,
+  inflightReads,
   setCached,
   subscribe,
   subscribeAll,
@@ -31,27 +34,35 @@ export const PREFETCH_RADIUS = 3;
 /** An entry younger than this is shown without refetching on a revisit. */
 export const DAY_VIEW_MAX_AGE_MS = 30_000;
 
-const inflight = new Map<string, Promise<unknown>>();
-
 /**
  * Fetches one day into the cache, sharing a request already in flight for the
  * same key (a prefetch and a tap on that day make one call, not two).
+ *
+ * A request is shared only within one write generation (`cacheGeneration`):
+ * one that started before a log may carry pre-log data, so a read after the
+ * log never joins it, and its result is not stored as fresh. A `force` read
+ * (pull to refresh, refresh after a log) never joins at all.
  */
 export function fetchDayInto<T>(
   key: string,
   fetchDay: () => Promise<T>,
+  options: { force?: boolean } = {},
 ): Promise<T> {
-  const running = inflight.get(key) as Promise<T> | undefined;
-  if (running) return running;
-  const promise = fetchDay()
+  const generation = cacheGeneration(key);
+  const running = inflightReads.get(key);
+  if (running && !options.force && running.generation === generation) {
+    return running.promise as Promise<T>;
+  }
+  const promise: Promise<T> = fetchDay()
     .then((value) => {
-      setCached(key, value);
+      setCached(key, value, { generation });
       return value;
     })
     .finally(() => {
-      inflight.delete(key);
+      // A newer request for the key may have replaced this one.
+      if (inflightReads.get(key)?.promise === promise) inflightReads.delete(key);
     });
-  inflight.set(key, promise);
+  inflightReads.set(key, { promise, generation });
   return promise;
 }
 
@@ -88,7 +99,7 @@ export async function sharedRead<T>(
   ) {
     return entry.value;
   }
-  return fetchDayInto(key, fetch);
+  return fetchDayInto(key, fetch, { force: options.force });
 }
 
 export function needsRevalidate(
@@ -132,6 +143,9 @@ export function useTraineeDayCache<T>(input: {
     prefetchStepDays = 1,
     maxAgeMs = DAY_VIEW_MAX_AGE_MS,
   } = input;
+  // Another relationship on screen (another account) drops the previous
+  // one's days before anything is read.
+  if (enabled) claimDayCacheOwner(relationshipId);
   const key = dayViewKey(screen, relationshipId, date);
   // The latest loader without making it an effect dependency: hosts build it
   // inline, and a new function each render must not refetch the day.
@@ -159,7 +173,9 @@ export function useTraineeDayCache<T>(input: {
       if (!force && !needsRevalidate(current, Date.now(), maxAgeMs)) return;
       setPendingKey(key);
       try {
-        await fetchDayInto(key, () => fetchRef.current(date, { force }));
+        await fetchDayInto(key, () => fetchRef.current(date, { force }), {
+          force,
+        });
         setFailure((prev) => (prev?.key === key ? null : prev));
       } catch (error) {
         setFailure({ key, error });

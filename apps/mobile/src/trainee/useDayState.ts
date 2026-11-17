@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef } from "react";
-import { PanResponder, type GestureResponderHandlers } from "react-native";
+import { Gesture, type PanGesture } from "react-native-gesture-handler";
 import { formatCivilDate } from "@fitbud/core";
 import { addDays } from "../lib/dates";
 import { useLocalToday } from "./futureDay";
@@ -60,7 +60,13 @@ export function dayEyebrow(
 
 /** Horizontal travel (pt) that counts as a swipe, and the slope it must keep. */
 export const SWIPE_DISTANCE = 56;
-const SWIPE_CLAIM = 18;
+/**
+ * The pan becomes a day swipe after this much horizontal travel, and fails
+ * (leaving the touch to the vertical scroll) after `SWIPE_FAIL_Y` of vertical
+ * travel first.
+ */
+export const SWIPE_ACTIVE_X = 20;
+export const SWIPE_FAIL_Y = 12;
 
 /**
  * Which way a finished horizontal gesture moves the day: a swipe to the left
@@ -73,10 +79,6 @@ export function swipeDirection(dx: number, dy: number): -1 | 0 | 1 {
   return dx < 0 ? 1 : -1;
 }
 
-export function shouldClaimSwipe(dx: number, dy: number): boolean {
-  return Math.abs(dx) > SWIPE_CLAIM && Math.abs(dx) > Math.abs(dy) * 2;
-}
-
 export type DayState = {
   today: string;
   kind: DayKind;
@@ -87,8 +89,11 @@ export type DayState = {
   goToToday: () => void;
   goPrevDay: () => void;
   goNextDay: () => void;
-  /** Spread on the tab body's wrapping view: a horizontal swipe changes day. */
-  swipeHandlers: GestureResponderHandlers;
+  /**
+   * The day swipe, for a `GestureDetector` around the tab's screen: a
+   * horizontal swipe changes day.
+   */
+  swipeGesture: PanGesture;
 };
 
 export function useDayState(input: {
@@ -120,23 +125,26 @@ export function useDayState(input: {
   }, []);
   const goToToday = useCallback(() => goToDay(today), [goToDay, today]);
 
-  const swipeHandlers = useMemo(
+  // A native pan (react-native-gesture-handler), not a JS PanResponder: on
+  // iOS the scroll view's own pan recognizer cancelled the JS responder
+  // before it could claim the drag (Z12-40 review, device run 44080890973).
+  // Taps never reach `activeOffsetX`, and a drag that goes vertical first
+  // fails at `failOffsetY`, leaving it to the scroll view.
+  const swipeGesture = useMemo(
     () =>
-      PanResponder.create({
-        // Only a clearly horizontal drag is claimed; taps and vertical
-        // scrolls stay with the rows and the scroll view.
-        onMoveShouldSetPanResponder: (_e, g) => shouldClaimSwipe(g.dx, g.dy),
-        onMoveShouldSetPanResponderCapture: (_e, g) =>
-          shouldClaimSwipe(g.dx, g.dy),
-        // Once a drag is clearly horizontal it stays a day swipe: the
-        // vertical scroll view must not take it over halfway (iOS).
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderRelease: (_e, g) => {
-          const direction = swipeDirection(g.dx, g.dy);
+      Gesture.Pan()
+        .activeOffsetX([-SWIPE_ACTIVE_X, SWIPE_ACTIVE_X])
+        .failOffsetY([-SWIPE_FAIL_Y, SWIPE_FAIL_Y])
+        .runOnJS(true)
+        .onEnd((event, success) => {
+          if (!success) return;
+          const direction = swipeDirection(
+            event.translationX,
+            event.translationY,
+          );
           if (direction === 1) goNextDay();
           else if (direction === -1) goPrevDay();
-        },
-      }).panHandlers,
+        }),
     [goNextDay, goPrevDay],
   );
 
@@ -150,6 +158,6 @@ export function useDayState(input: {
     goToToday,
     goPrevDay,
     goNextDay,
-    swipeHandlers,
+    swipeGesture,
   };
 }

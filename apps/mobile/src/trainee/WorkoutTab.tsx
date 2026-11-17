@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import {
   AlertTriangle,
   Bell,
@@ -834,6 +835,10 @@ export function WorkoutTab({
     : [];
 
   return (
+    // A horizontal swipe anywhere on the screen moves a day (Z12-40): a
+    // native pan around the whole screen, so the empty space under a short
+    // day counts too.
+    <GestureDetector gesture={dayState.swipeGesture}>
     <Screen
       chrome="app"
       title="Workout"
@@ -843,8 +848,7 @@ export function WorkoutTab({
         void onRefresh();
       }}
     >
-      {/* A horizontal swipe anywhere on the day moves a day (Z12-40). */}
-      <View style={styles.swipeBody} {...dayState.swipeHandlers}>
+      <View style={styles.swipeBody}>
       {error ? <ErrorBanner message={error} /> : null}
       {offline ? (
         <Text style={styles.offline}>Saved on phone · Not sent yet</Text>
@@ -1256,6 +1260,7 @@ export function WorkoutTab({
       </BottomSheet>
       </View>
     </Screen>
+    </GestureDetector>
   );
 }
 

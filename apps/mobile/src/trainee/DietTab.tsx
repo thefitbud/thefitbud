@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import Svg, { Circle } from "react-native-svg";
 import {
   Bell,
@@ -757,6 +758,10 @@ export function DietTab({
   });
 
   return (
+    // A horizontal swipe anywhere on the screen moves a day (Z12-40): a
+    // native pan around the whole screen, so the empty space under a short
+    // day counts too.
+    <GestureDetector gesture={dayState.swipeGesture}>
     <Screen
       chrome="app"
       title="Diet"
@@ -764,8 +769,7 @@ export function DietTab({
       refreshing={refreshing}
       onRefresh={() => void onRefresh()}
     >
-      {/* A horizontal swipe anywhere on the day moves a day (Z12-40). */}
-      <View style={styles.swipeBody} {...dayState.swipeHandlers}>
+      <View style={styles.swipeBody}>
       <View style={styles.ttlrow}>
         <View style={styles.titles}>
           <Text style={styles.eyebrow} testID="day-eyebrow">
@@ -953,6 +957,7 @@ export function DietTab({
       ) : null}
       </View>
     </Screen>
+    </GestureDetector>
   );
 }
 

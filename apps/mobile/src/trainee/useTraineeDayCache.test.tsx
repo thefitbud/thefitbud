@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, screen, waitFor, act } from "../test/render";
 import {
   DAY_VIEW_LIMIT,
+  claimDayCacheOwner,
   clearDayViews,
   dayViewKey,
   getCacheEntry,
@@ -252,5 +253,181 @@ describe("useTraineeDayCache", () => {
     await waitFor(() =>
       expect(screen.getByTestId("state").textContent).toBe("error"),
     );
+  });
+});
+
+describe("reads across a write (review fix)", () => {
+  /** Fetches that each wait until the test releases them, in call order. */
+  function heldFetches<T>() {
+    const calls: Array<() => void> = [];
+    const fetch = (value: T) => () =>
+      new Promise<T>((resolve) => {
+        calls.push(() => resolve(value));
+      });
+    return { calls, fetch };
+  }
+
+  it("a read started before a write is not joined after it", async () => {
+    const key = dayViewKey("today", REL, "2026-11-12");
+    setCached(key, { date: "2026-11-12", meals: 1 });
+    const held = heldFetches<Day>();
+    const before = fetchDayInto(key, held.fetch({ date: "2026-11-12", meals: 1 }));
+    invalidateRelationshipDayData(REL);
+    const after = fetchDayInto(key, held.fetch({ date: "2026-11-12", meals: 2 }));
+    expect(held.calls).toHaveLength(2);
+    held.calls[1]!();
+    await expect(after).resolves.toEqual({ date: "2026-11-12", meals: 2 });
+    held.calls[0]!();
+    await before;
+    // The pre-write answer landing last does not overwrite the fresh one.
+    expect(getCacheEntry<Day>(key)).toMatchObject({
+      value: { meals: 2 },
+      stale: false,
+    });
+  });
+
+  it("a pre-write answer is never stored as fresh", async () => {
+    const key = dayViewKey("today", REL, "2026-11-12");
+    setCached(key, { date: "2026-11-12", meals: 1 });
+    const held = heldFetches<Day>();
+    const before = fetchDayInto(key, held.fetch({ date: "2026-11-12", meals: 1 }));
+    invalidateRelationshipDayData(REL);
+    held.calls[0]!();
+    await before;
+    expect(getCacheEntry<Day>(key)?.stale).toBe(true);
+  });
+
+  it("a write on another relationship does not retire this one's reads", async () => {
+    const key = dayViewKey("today", REL, "2026-11-12");
+    const held = heldFetches<Day>();
+    const first = fetchDayInto(key, held.fetch({ date: "2026-11-12", meals: 1 }));
+    invalidateRelationshipDayData(OTHER_REL);
+    const second = fetchDayInto(key, held.fetch({ date: "2026-11-12", meals: 1 }));
+    expect(held.calls).toHaveLength(1);
+    held.calls[0]!();
+    await Promise.all([first, second]);
+    expect(getCacheEntry<Day>(key)?.stale).toBe(false);
+  });
+
+  it("a forced read never joins one in flight", async () => {
+    const key = `meals:${REL}:2026-11-12:2026-11-12`;
+    const held = heldFetches<number>();
+    const a = sharedRead(key, held.fetch(1));
+    const b = sharedRead(key, held.fetch(2), { force: true });
+    expect(held.calls).toHaveLength(2);
+    held.calls[0]!();
+    held.calls[1]!();
+    await expect(Promise.all([a, b])).resolves.toEqual([1, 2]);
+  });
+
+  it("clearing drops the reads in flight with the data", async () => {
+    const key = dayViewKey("today", REL, "2026-11-12");
+    const held = heldFetches<Day>();
+    const before = fetchDayInto(key, held.fetch({ date: "2026-11-12", meals: 1 }));
+    clearDayViews();
+    const after = fetchDayInto(key, held.fetch({ date: "2026-11-12", meals: 1 }));
+    expect(held.calls).toHaveLength(2);
+    held.calls[0]!();
+    await before;
+    expect(getCached(key)).toBeUndefined();
+    held.calls[1]!();
+    await after;
+    expect(getCached(key)).toBeDefined();
+  });
+
+  it("a meal logged during a slow revalidation shows as logged", async () => {
+    // The server's answer at the moment each request is made.
+    let serverMeals = 1;
+    const pending: Array<() => void> = [];
+    let hold = false;
+    const fetchDay = (date: string) =>
+      new Promise<Day>((resolve) => {
+        const answer = { date, meals: serverMeals };
+        if (hold && date === "2026-11-12") pending.push(() => resolve(answer));
+        else resolve(answer);
+      });
+    render(<DayProbe date="2026-11-12" fetchDay={fetchDay} />);
+    await waitFor(() =>
+      expect(screen.getByTestId("state").textContent).toBe("2026-11-12:1"),
+    );
+    hold = true;
+    // Something else wrote: a slow revalidation starts, answering "1".
+    act(() => {
+      invalidateRelationshipDayData(REL);
+    });
+    await waitFor(() => expect(pending).toHaveLength(1));
+    // The trainee logs a meal while it is still running.
+    serverMeals = 2;
+    act(() => {
+      invalidateRelationshipDayData(REL);
+    });
+    await waitFor(() => expect(pending).toHaveLength(2));
+    // The slow pre-log answer arrives first, then the post-log one.
+    act(() => pending[0]!());
+    act(() => pending[1]!());
+    await waitFor(() =>
+      expect(screen.getByTestId("state").textContent).toBe("2026-11-12:2"),
+    );
+    expect(
+      getCacheEntry<Day>(dayViewKey("probe", REL, "2026-11-12")),
+    ).toMatchObject({ value: { meals: 2 }, stale: false });
+  });
+});
+
+describe("account change (review fix)", () => {
+  it("another relationship on screen drops the previous one's days first", () => {
+    const mine = dayViewKey("today", REL, "2026-11-12");
+    claimDayCacheOwner(REL);
+    setCached(mine, { date: "2026-11-12", meals: 3 });
+    claimDayCacheOwner(REL);
+    expect(getCached(mine)).toBeDefined();
+    claimDayCacheOwner(OTHER_REL);
+    expect(getCached(mine)).toBeUndefined();
+  });
+});
+
+describe("prefetch window (review fix)", () => {
+  it("moving to an adjacent day fetches only the newly needed day", async () => {
+    const asked: string[] = [];
+    const fetchDay = async (date: string) => {
+      asked.push(date);
+      return { date, meals: 1 };
+    };
+    const view = render(<DayProbe date="2026-11-12" fetchDay={fetchDay} />);
+    await waitFor(() => expect(asked).toHaveLength(7));
+    asked.length = 0;
+    view.rerender(<DayProbe date="2026-11-13" fetchDay={fetchDay} />);
+    expect(screen.getByTestId("state").textContent).toBe("2026-11-13:1");
+    await waitFor(() => expect(asked).toEqual(["2026-11-16"]));
+    // Nothing else follows: the cached days are skipped.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    expect(asked).toEqual(["2026-11-16"]);
+  });
+
+  it("a day change stops the previous day's prefetch loop", async () => {
+    const asked: string[] = [];
+    const held = new Map<string, () => void>();
+    const fetchDay = (date: string) =>
+      new Promise<Day>((resolve) => {
+        asked.push(date);
+        held.set(date, () => resolve({ date, meals: 1 }));
+      });
+    const view = render(<DayProbe date="2026-11-12" fetchDay={fetchDay} />);
+    await waitFor(() => expect(held.has("2026-11-12")).toBe(true));
+    act(() => held.get("2026-11-12")!());
+    // The loop is now waiting on its first prefetch, the next day.
+    await waitFor(() => expect(held.has("2026-11-13")).toBe(true));
+    view.rerender(<DayProbe date="2026-11-20" fetchDay={fetchDay} />);
+    await waitFor(() => expect(held.has("2026-11-20")).toBe(true));
+    act(() => held.get("2026-11-13")!());
+    act(() => held.get("2026-11-20")!());
+    await waitFor(() => expect(held.has("2026-11-21")).toBe(true));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+    // The 12th's loop never went on to the 11th.
+    expect(asked).not.toContain("2026-11-11");
   });
 });

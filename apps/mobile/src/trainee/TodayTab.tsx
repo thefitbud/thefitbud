@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import { Text } from "../components/Text";
 import type {
   Checkin,
@@ -646,6 +647,10 @@ export function TodayTab({
       {isToday ? (
         <ReviewedBanner coachName={coachName} onOpenCheckin={onOpenCheckin} />
       ) : null}
+    {/* A horizontal swipe anywhere on the screen moves a day (Z12-40): a
+        native pan around the whole screen, so the empty space under a short
+        day counts too. */}
+    <GestureDetector gesture={dayState.swipeGesture}>
     <Screen
       chrome="app"
       title="Today"
@@ -655,8 +660,7 @@ export function TodayTab({
         void onRefresh();
       }}
     >
-      {/* A horizontal swipe anywhere on the day moves a day (Z12-40). */}
-      <View style={styles.stack} {...dayState.swipeHandlers}>
+      <View style={styles.stack}>
         <TodayHeader
           eyebrow={dayEyebrow(selectedDate, dayState.kind)}
           unreadNotifications={unreadNotifications}
@@ -1247,6 +1251,7 @@ export function TodayTab({
         ) : null}
       </View>
     </Screen>
+    </GestureDetector>
     {plannedMeal && isFuture ? (
       <PlannedMealSheet
         meal={plannedMeal}
