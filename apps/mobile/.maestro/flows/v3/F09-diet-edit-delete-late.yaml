@@ -30,7 +30,7 @@ tags:
     timeout: 60000
 - tapOn: "Diet"
 - extendedWaitUntil:
-    visible: "kcal eaten"
+    visible: ".*kcal eaten.*"
     timeout: 30000
 # The meal's window is clock-relative, so the sheet is opened only when the
 # screen offers it.
@@ -45,7 +45,7 @@ tags:
       - runFlow: ../../common/assert-no-crash.yaml
       - tapOn: "Back"
       - extendedWaitUntil:
-          visible: "kcal eaten"
+          visible: ".*kcal eaten.*"
           timeout: 10000
 - assertNotVisible: ".*Waiting to send.*"
 
@@ -58,7 +58,7 @@ tags:
       - tapOn: "Previous week"
 - tapOn: "${output.yesterday}, .*"
 - extendedWaitUntil:
-    visible: "kcal eaten"
+    visible: ".*kcal eaten.*"
     timeout: 30000
 # A closed row reads "Closed · can't be changed now" and carries no Change button.
 - runFlow:

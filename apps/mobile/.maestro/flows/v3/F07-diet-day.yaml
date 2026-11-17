@@ -36,7 +36,7 @@ tags:
     timeout: 60000
 - tapOn: "Diet"
 - extendedWaitUntil:
-    visible: "kcal eaten"
+    visible: ".*kcal eaten.*"
     timeout: 30000
 # One rounding: the ring's number, then "kcal left" or "kcal over" and the goal.
 - assertVisible: ".*kcal (left|over)"
@@ -69,7 +69,7 @@ tags:
       - tapOn: "Previous week"
 - tapOn: "${output.yesterday}, .*"
 - extendedWaitUntil:
-    visible: "kcal eaten"
+    visible: ".*kcal eaten.*"
     timeout: 30000
 - assertVisible: "Meals"
 - takeScreenshot: TR-07f-diet-locked-and-missed
