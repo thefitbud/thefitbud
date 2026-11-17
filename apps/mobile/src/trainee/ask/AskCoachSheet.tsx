@@ -12,6 +12,8 @@ import {
   whatsappHref,
 } from "@fitbud/core";
 import { spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { ApiClientError } from "@fitbud/api-client";
+import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -177,17 +179,21 @@ function AskCoachSheetBody({
       });
       try {
         await Linking.openURL(url);
-      } catch {
-        setError("Couldn't open WhatsApp. The ask was still recorded.");
+      } catch (openErr) {
+        reportError("AskCoachSheet.openWhatsApp", openErr);
+        setError("Couldn't open WhatsApp (ASK-WA). Your question was still noted.");
         setLoading(false);
         return;
       }
       onDone();
     } catch (err) {
+      // AGENTS.md no misleading catch: only the API's own curated message is
+      // shown as-is; anything else gets a short code and is reported.
+      reportError("AskCoachSheet.createAsk", err);
       setError(
-        err instanceof Error
+        err instanceof ApiClientError
           ? err.message
-          : "You're offline. Try again when you're back online.",
+          : "Couldn't send your question (ASK-NET). Check your connection and try again.",
       );
     } finally {
       setLoading(false);
@@ -213,11 +219,11 @@ function AskCoachSheetBody({
           <View style={styles.grab} />
           <View style={styles.sheetHead}>
             <View style={styles.sheetTitles}>
-              <Text style={styles.sheetTitle}>
-                Ask {coachShort} about {itemLabel} · {dateLabel}
+              <Text style={styles.sheetTitle} accessibilityRole="header">
+                Ask {coachShort}
               </Text>
               <Text style={styles.sheetSub}>
-                Pick a topic. WhatsApp opens with a draft you can edit.
+                About: {itemLabel} · {dateLabel}
               </Text>
             </View>
             <M2CloseButton onPress={onCancel} />
@@ -293,7 +299,7 @@ function AskCoachSheetBody({
                 <>
                   <WhatsAppGlyph size={22} />
                   <Text style={styles.waBtnLabel}>
-                    {isPain && !painAck ? "Continue" : "Open WhatsApp"}
+                    {isPain && !painAck ? "Continue" : "Open in WhatsApp"}
                   </Text>
                 </>
               )}

@@ -1,69 +1,29 @@
-import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
-import type { CoachingRelationship } from "@fitbud/contracts";
-import { formatCivilDate, whatsappHref } from "@fitbud/core";
-import { spacing } from "@fitbud/ui-mobile";
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Platform, Pressable, RefreshControl, SafeAreaView, ScrollView, View } from "react-native";
 import {
   Bell,
   ChevronRight,
-  Scale,
-  Check,
+  CircleUserRound,
+  ClipboardCheck,
+  Footprints,
+  Hourglass,
+  MessageCircle,
 } from "lucide-react-native";
-import { Text } from "../components/Text";
+import type { CoachingRelationship } from "@fitbud/contracts";
+import { formatCivilDate, formatLocalDate, whatsappHref, zonedDateTimeFormat } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
-import { ErrorBanner } from "../components/ErrorBanner";
+import { BottomSheet } from "../components/BottomSheet";
 import { Button } from "../components/Button";
-import {
-  BrandRow,
-  Card2,
-  M2Avatar,
-  M2Screen,
-} from "../components/m2";
-import { WhatsAppGlyph } from "../components/m2/WhatsAppGlyph";
-
-type TimelineStep = {
-  label: string;
-  detail?: string;
-  state: "done" | "current" | "later";
-};
-
-function timelineFor(
-  relationship: CoachingRelationship,
-  intakeSubmittedAt: string | null,
-): TimelineStep[] {
-  const status = relationship.onboardingStatus;
-  const joined = formatCivilDate(relationship.startedAt.slice(0, 10));
-  const intakeDone =
-    status === "onboarding_submitted" ||
-    status === "coaching_ready" ||
-    status === "active";
-  const reviewDone = status === "coaching_ready" || status === "active";
-  const planReady = status === "active";
-  const intakeDetail = intakeDone
-    ? formatCivilDate(
-        (intakeSubmittedAt ?? relationship.startedAt).slice(0, 10),
-      )
-    : undefined;
-
-  return [
-    { label: "Joined", detail: joined, state: "done" },
-    {
-      label: "Intake sent",
-      detail: intakeDetail,
-      state: intakeDone ? "done" : "later",
-    },
-    {
-      label: `${coachFirstName(relationship)} reviews your answers`,
-      detail: reviewDone ? "Usually the next step" : "Usually the next step",
-      state: reviewDone ? "done" : intakeDone ? "current" : "later",
-    },
-    {
-      label: "Your plan is ready",
-      state: planReady ? "done" : "later",
-    },
-  ];
-}
+import { ErrorBanner } from "../components/ErrorBanner";
+import { Text } from "../components/Text";
+import { isStepsEnabled } from "../lib/config";
+import { localDateInTimezone } from "../lib/dates";
+import { reportError } from "../lib/reportError";
+import { useConfig } from "../providers/ConfigProvider";
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { ReminderSettingsScreen } from "../trainee/settings/ReminderSettingsScreen";
+import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
+import { StepsSetupScreen } from "../trainee/steps/StepsSetupScreen";
 
 function coachFirstName(relationship: CoachingRelationship): string {
   const raw = relationship.trainerDisplayName?.trim();
@@ -71,24 +31,52 @@ function coachFirstName(relationship: CoachingRelationship): string {
   return raw.split(/\s+/)[0] ?? raw;
 }
 
-function WaitingReviewScreenBody({
-  relationship,
-}: {
-  relationship: CoachingRelationship;
-}) {
+/** "Fri 13 Nov, 8:12 pm" in the trainee's zone; null for a bad timestamp. */
+export function sentAtLabel(iso: string | null, zone: string): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const day = formatCivilDate(formatLocalDate(date, zone));
+  try {
+    const time = zonedDateTimeFormat("en-IN", {
+      timeZone: zone,
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+      .format(date)
+      .replace(/\s?(AM|PM)$/i, (m) => ` ${m.trim().toLowerCase()}`);
+    return `${day}, ${time}`;
+  } catch (err) {
+    reportError("WaitingReview.sentAt", err);
+    return day;
+  }
+}
+
+type Detail = "reminders" | "quiet_hours" | "steps" | null;
+
+/**
+ * TR-04: intake sent, the coach builds the plan. Reminders and Steps can be
+ * set up while waiting; sign-out sits behind the account button (the old
+ * visible Sign out, pull-to-refresh hint and WhatsApp-green button are gone,
+ * Z12-19). The app checks for the plan every 20 seconds and on pull.
+ */
+function WaitingReviewScreenBody({ relationship }: { relationship: CoachingRelationship }) {
   const theme = useTheme();
   const styles = useStyles();
-  const { refreshSession, signOut, api } = useAuth();
+  const { refreshSession, signOut, api, me } = useAuth();
+  const { config } = useConfig();
+  const zone = me?.timezone || "Asia/Kolkata";
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const [detail, setDetail] = useState<Detail>(null);
   const coach = coachFirstName(relationship);
-  const coachFull = relationship.trainerDisplayName?.trim() ?? coach;
   const phoneE164 = relationship.trainerWhatsappE164 ?? null;
   const hasNumber = Boolean(phoneE164 && phoneE164.replace(/\D/g, "").length >= 10);
   const [intakeSubmittedAt, setIntakeSubmittedAt] = useState<string | null>(null);
-  const steps = timelineFor(relationship, intakeSubmittedAt);
   const [greetingName, setGreetingName] = useState("there");
+
   useEffect(() => {
     void api
       .getTraineeProfile()
@@ -96,19 +84,16 @@ function WaitingReviewScreenBody({
         const first = profile.displayName?.trim().split(/\s+/)[0];
         if (first) setGreetingName(first);
       })
-      .catch(() => {
-        // keep default
-      });
+      .catch((err: unknown) => reportError("WaitingReview.profile", err));
   }, [api]);
+
   useEffect(() => {
     void api
       .getOnboardingResponse(relationship.id)
       .then((res) => {
         if (res.submittedAt) setIntakeSubmittedAt(res.submittedAt);
       })
-      .catch(() => {
-        // keep joined date fallback
-      });
+      .catch((err: unknown) => reportError("WaitingReview.intake", err));
   }, [api, relationship.id]);
 
   const refresh = useCallback(async () => {
@@ -116,10 +101,9 @@ function WaitingReviewScreenBody({
     setError(null);
     try {
       await refreshSession();
-      setOffline(false);
-    } catch {
-      setError("Couldn't refresh. Pull to try again.");
-      setOffline(true);
+    } catch (err) {
+      reportError("WaitingReview.refresh", err);
+      setError("Couldn't check for your plan (WAIT-REFRESH). Pull to try again.");
     } finally {
       setRefreshing(false);
     }
@@ -127,295 +111,249 @@ function WaitingReviewScreenBody({
 
   useEffect(() => {
     const timer = setInterval(() => {
-      void refreshSession().catch(() => {
-        setOffline(true);
-      });
+      void refreshSession().catch((err: unknown) => reportError("WaitingReview.poll", err));
     }, 20_000);
     return () => clearInterval(timer);
   }, [refreshSession]);
 
-  return (
-    <M2Screen>
-      <BrandRow />
-      <View style={styles.hero}>
-        <Text style={styles.h1} accessibilityRole="header">
-          Hi {greetingName}
-        </Text>
-        <Text style={styles.lead}>
-          Your coach has your answers. Here&apos;s where things are.
-        </Text>
-      </View>
-
-      {error ? <ErrorBanner message={error} /> : null}
-      {offline ? (
-        <Text style={styles.offline}>You&apos;re offline · we&apos;ll keep checking</Text>
-      ) : null}
-
-      <Card2 style={styles.statusCard}>
-        <View style={styles.coachRow}>
-          <M2Avatar name={coachFull} />
-          <View style={styles.coachText}>
-            <Text style={styles.coachTitle}>{coach} is preparing your plan</Text>
-            <Text style={styles.coachSub}>
-              You&apos;ll get a notification when it&apos;s ready
-            </Text>
-          </View>
-        </View>
-        <View style={styles.timeline}>
-          {steps.map((step, index) => (
-            <View key={step.label}>
-              <View style={styles.chkRow}>
-                <View
-                  style={[
-                    styles.chkIcon,
-                    step.state === "done" && styles.chkIconDone,
-                    step.state === "current" && styles.chkIconCurrent,
-                    step.state === "later" && styles.chkIconLater,
-                  ]}
-                >
-                  {step.state === "done" ? (
-                    <Check size={15} color={theme.colors.card} strokeWidth={3} />
-                  ) : null}
-                </View>
-                <View>
-                  <Text
-                    style={[
-                      styles.chkLabel,
-                      step.state === "later" && styles.chkLabelLater,
-                    ]}
-                  >
-                    {step.label}
-                  </Text>
-                  {step.detail ? (
-                    <Text style={styles.chkDetail}>{step.detail}</Text>
-                  ) : null}
-                </View>
-              </View>
-              {index < steps.length - 1 ? <View style={styles.chkLine} /> : null}
-            </View>
-          ))}
-        </View>
-      </Card2>
-
-      <Text style={styles.section}>Meanwhile</Text>
-      <Card2 style={styles.listCard}>
-        <Pressable accessibilityRole="button" style={styles.lrow}>
-          <View style={styles.tile}>
-            <Bell size={19} color={theme.colors.brand} strokeWidth={1.75} />
-          </View>
-          <View style={styles.lrowText}>
-            <Text style={styles.lrowTitle}>Set up reminders</Text>
-            <Text style={styles.lrowSub}>
-              Two minutes, so logging is easy later
-            </Text>
-          </View>
-          <ChevronRight size={18} color={theme.colors.ink3} />
-        </Pressable>
-        <View style={styles.rowDivider} />
-        <Pressable accessibilityRole="button" style={styles.lrow}>
-          <View style={styles.tile}>
-            <Scale size={19} color={theme.colors.brand} strokeWidth={1.75} />
-          </View>
-          <View style={styles.lrowText}>
-            <Text style={styles.lrowTitle}>Add your starting weight</Text>
-            <Text style={styles.lrowSub}>Optional</Text>
-          </View>
-          <ChevronRight size={18} color={theme.colors.ink3} />
-        </Pressable>
-      </Card2>
-
-      <Button
-        label={`Message ${coach} on WhatsApp`}
-        variant="whatsapp"
-        icon={<WhatsAppGlyph size={20} />}
-        disabled={!hasNumber}
-        onPress={() => {
-          if (!hasNumber) return;
-          const text = `Hi ${coach}, I've filled my FitBud intake and I'm ready when you are.`;
-          void Linking.openURL(whatsappHref({ phoneE164, draftText: text }));
-        }}
+  if (detail === "reminders") {
+    return (
+      <ReminderSettingsScreen
+        onBack={() => setDetail(null)}
+        onOpenQuietHours={() => setDetail("quiet_hours")}
+        coachName={relationship.trainerDisplayName ?? coach}
       />
-      <Text style={styles.waNote}>
-        Opens WhatsApp with a message ready. You press Send.
-      </Text>
+    );
+  }
+  if (detail === "quiet_hours") {
+    return <QuietHoursScreen onBack={() => setDetail("reminders")} />;
+  }
+  if (detail === "steps") {
+    return <StepsSetupScreen coachName={coach} onBack={() => setDetail(null)} />;
+  }
 
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => void refresh()}
-        style={styles.refreshHit}
+  const sent = sentAtLabel(intakeSubmittedAt, zone);
+  const stepsOn = isStepsEnabled(config);
+
+  return (
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={theme.colors.ink3}
+            onRefresh={() => {
+              void refresh();
+            }}
+          />
+        }
+        testID="waiting-review"
       >
-        <Text style={styles.refreshLabel}>
-          {refreshing ? "Checking…" : "Pull to refresh for updates"}
-        </Text>
-      </Pressable>
+        <View style={styles.head}>
+          <View style={styles.flex}>
+            <Text tone="ink2" style={styles.date}>
+              {formatCivilDate(localDateInTimezone(zone))}
+            </Text>
+            <Text variant="largeTitle" accessibilityRole="header">
+              Hi {greetingName}
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Account"
+            onPress={() => setAccountOpen(true)}
+            style={styles.round}
+          >
+            <CircleUserRound color={theme.colors.ink} size={26} strokeWidth={1.9} />
+          </Pressable>
+        </View>
 
-      <Button label="Sign out" variant="tertiary" onPress={signOut} />
-    </M2Screen>
+        {error ? <ErrorBanner message={error} /> : null}
+
+        <View style={[styles.card, styles.hero]}>
+          <View style={styles.tileLg}>
+            <Hourglass color={theme.colors.brandInk} size={30} strokeWidth={1.9} />
+          </View>
+          <Text variant="title" style={styles.heroTitle} accessibilityRole="header">
+            {coach} is building your plan
+          </Text>
+          <Text tone="ink2" style={styles.heroBody}>
+            You&apos;ll get a notification when your first workout and meals are ready.
+          </Text>
+        </View>
+
+        <Text style={styles.section} accessibilityRole="header">
+          WHILE YOU WAIT
+        </Text>
+        <View style={styles.card}>
+          <View style={styles.row}>
+            <View style={[styles.tile, styles.tileDone]}>
+              <ClipboardCheck color={theme.colors.done} size={20} strokeWidth={1.9} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.rowTitle}>Intake form</Text>
+              <Text tone="ink2" style={styles.rowSub}>
+                {sent ? `Sent ${sent}` : "Sent to " + coach}
+              </Text>
+            </View>
+            <View style={styles.chip}>
+              <Text tone="done" style={styles.chipText}>
+                Sent
+              </Text>
+            </View>
+          </View>
+          <View style={styles.sep} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reminders"
+            onPress={() => setDetail("reminders")}
+            style={styles.row}
+          >
+            <View style={styles.tile}>
+              <Bell color={theme.colors.ink2} size={20} strokeWidth={1.9} />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.rowTitle}>Reminders</Text>
+              <Text tone="ink2" style={styles.rowSub}>
+                Meals, workouts and check-ins
+              </Text>
+            </View>
+            <ChevronRight color={theme.colors.ink4} size={20} strokeWidth={2} />
+          </Pressable>
+          {stepsOn ? (
+            <>
+              <View style={styles.sep} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Steps"
+                onPress={() => setDetail("steps")}
+                style={styles.row}
+              >
+                <View style={styles.tile}>
+                  <Footprints color={theme.colors.ink2} size={20} strokeWidth={1.9} />
+                </View>
+                <View style={styles.flex}>
+                  <Text style={styles.rowTitle}>Steps</Text>
+                  <Text tone="ink2" style={styles.rowSub}>
+                    {Platform.OS === "android" ? "Connect Health Connect" : "Connect Apple Health"}
+                  </Text>
+                </View>
+                <ChevronRight color={theme.colors.ink4} size={20} strokeWidth={2} />
+              </Pressable>
+            </>
+          ) : null}
+        </View>
+
+        {hasNumber ? (
+          <Button
+            label={`Message ${coach} on WhatsApp`}
+            variant="outline"
+            icon={<MessageCircle color={theme.colors.ink} size={22} strokeWidth={2} />}
+            accessibilityHint="Opens WhatsApp with a message ready. You press Send."
+            onPress={() => {
+              const text = `Hi ${coach}, I've filled my FitBud intake and I'm ready when you are.`;
+              void Linking.openURL(whatsappHref({ phoneE164, draftText: text })).catch(
+                (err: unknown) => reportError("WaitingReview.whatsapp", err),
+              );
+            }}
+          />
+        ) : null}
+      </ScrollView>
+
+      <BottomSheet
+        visible={accountOpen}
+        title={me?.email ?? "Account"}
+        subtitle="Your plan will be here as soon as it's ready."
+        onDismiss={() => setAccountOpen(false)}
+      >
+        <Button
+          label="Sign out"
+          variant="dangerQuiet"
+          onPress={() => {
+            setAccountOpen(false);
+            signOut();
+          }}
+        />
+      </BottomSheet>
+    </SafeAreaView>
   );
 }
 
 const useStyles = createThemedStyles((t) => ({
-  hero: {
-    marginTop: spacing.md,
-  },
-  h1: {
-    color: t.colors.ink,
-    fontSize: 30,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-    lineHeight: 36,
-  },
-  lead: {
-    color: t.colors.ink3,
-    fontSize: 15,
-    lineHeight: 21,
-    marginTop: 4,
-  },
-  offline: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    fontWeight: "600",
-    marginBottom: spacing.md,
-  },
-  statusCard: {
-    marginTop: spacing.lg,
-  },
-  coachRow: {
+  safe: { flex: 1, backgroundColor: t.colors.bg },
+  content: { gap: 16, paddingBottom: 40, paddingHorizontal: 20, paddingTop: 8 },
+  head: { alignItems: "flex-end", flexDirection: "row", gap: 12 },
+  flex: { flex: 1, minWidth: 0 },
+  date: { fontSize: 16, marginBottom: 2 },
+  round: {
     alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  coachText: {
-    flex: 1,
-  },
-  coachTitle: {
-    color: t.colors.ink,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  coachSub: {
-    color: t.colors.ink3,
-    fontSize: 14,
-    marginTop: 2,
-  },
-  timeline: {
-    marginTop: 14,
-  },
-  chkRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.md,
-    minHeight: 48,
-  },
-  chkIcon: {
-    alignItems: "center",
-    borderRadius: 14,
-    height: 28,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.edge,
+    borderRadius: 24,
+    borderWidth: t.scheme === "dark" ? 1 : 0.5,
+    height: 48,
     justifyContent: "center",
-    width: 28,
+    width: 48,
   },
-  chkIconDone: {
-    backgroundColor: t.colors.ink,
+  card: {
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.edge,
+    borderRadius: 24,
+    borderWidth: t.scheme === "dark" ? 1 : 0.5,
+    overflow: "hidden",
   },
-  chkIconCurrent: {
-    borderColor: t.colors.brand,
-    borderWidth: 2,
-  },
-  chkIconLater: {
-    borderColor: t.colors.line2,
-    borderStyle: "dashed",
-    borderWidth: 2,
-  },
-  chkLabel: {
-    color: t.colors.ink,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  chkLabelLater: {
-    color: t.colors.ink3,
-    fontWeight: "500",
-  },
-  chkDetail: {
-    color: t.colors.ink3,
-    fontSize: 13,
-  },
-  chkLine: {
-    backgroundColor: t.colors.line,
-    height: 10,
-    marginLeft: 13,
-    width: 2,
-  },
-  section: {
-    color: t.colors.ink,
-    fontSize: 17,
-    fontWeight: "700",
-    marginBottom: spacing.sm,
-    marginTop: spacing.lg,
-    paddingHorizontal: 4,
-  },
-  listCard: {
-    padding: 0,
-  },
-  lrow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.md,
-    minHeight: 56,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 10,
-  },
-  rowDivider: {
-    backgroundColor: t.colors.line,
-    height: StyleSheet.hairlineWidth,
-    marginLeft: spacing.lg + 36 + spacing.md,
-  },
-  tile: {
+  hero: { alignItems: "center", padding: 24 },
+  tileLg: {
     alignItems: "center",
     backgroundColor: t.colors.brandTint,
-    borderRadius: 11,
+    borderRadius: 24,
+    height: 76,
+    justifyContent: "center",
+    marginBottom: 16,
+    width: 76,
+  },
+  heroTitle: { fontSize: 22, marginBottom: 6, textAlign: "center" },
+  heroBody: { fontSize: 16, lineHeight: 22, textAlign: "center" },
+  section: {
+    color: t.colors.ink3,
+    fontSize: 13,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    marginBottom: -6,
+    marginLeft: 8,
+    marginTop: 4,
+  },
+  row: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    minHeight: 68,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  sep: { backgroundColor: t.colors.line, height: 1, marginLeft: 66 },
+  tile: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: 10,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
-  lrowText: {
-    flex: 1,
+  tileDone: { backgroundColor: t.colors.doneTint },
+  rowTitle: { color: t.colors.ink, fontSize: 17 },
+  rowSub: { fontSize: 15, lineHeight: 20 },
+  chip: {
+    backgroundColor: t.colors.doneTint,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  lrowTitle: {
-    color: t.colors.ink,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  lrowSub: {
-    color: t.colors.ink3,
-    fontSize: 14,
-  },
-  waNoteRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 6,
-    justifyContent: "center",
-    marginTop: spacing.md,
-  },
-  waNote: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    lineHeight: 17,
-    textAlign: "center",
-  },
-  refreshHit: {
-    alignItems: "center",
-    marginTop: spacing.lg,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  refreshLabel: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    fontWeight: "600",
-  },
+  chipText: { fontSize: 14, fontWeight: "700" },
 }));
 
-/** WaitingReviewScreen in the system theme (Z12-49): its own styles read the scope. */
+/** WaitingReviewScreen in the system theme (Z12-49). */
 export function WaitingReviewScreen(props: Parameters<typeof WaitingReviewScreenBody>[0]) {
   return (
     <ThemeScope scheme="system">
