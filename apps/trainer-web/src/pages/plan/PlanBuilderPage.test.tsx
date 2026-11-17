@@ -26,6 +26,8 @@ const api = vi.hoisted(() => ({
   getClientWorkspace: vi.fn(),
   updatePlanDraft: vi.fn(),
   previewPlanVersion: vi.fn(),
+  listExerciseLibrary: vi.fn(async () => ({ items: [], nextCursor: null })),
+  listFoodLibrary: vi.fn(async () => ({ items: [], nextCursor: null })),
 }));
 
 vi.mock("../../lib/api", () => ({ apiClient: api }));
@@ -33,10 +35,6 @@ vi.mock("../../hooks/useOnline", () => ({ useOnline: () => true }));
 vi.mock("../../hooks/useMediaQuery", () => ({ useMediaQuery: () => false }));
 vi.mock("../../auth/AuthProvider", () => ({
   useAuth: () => ({ me: { timezone: "Asia/Kolkata" } }),
-}));
-vi.mock("../../pages/templates/LibrarySearch", () => ({
-  ExerciseSearchPane: () => <div>Exercise search</div>,
-  FoodSearchPane: () => <div>Food search</div>,
 }));
 
 import { PlanBuilderPage } from "./PlanBuilderPage";
