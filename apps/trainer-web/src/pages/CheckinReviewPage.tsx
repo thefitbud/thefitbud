@@ -17,6 +17,7 @@ import {
   formatInstant,
   labelFor,
 } from "@fitbud/core";
+import { AlertTriangle, CheckCircle2 } from "lucide-react";
 import { apiClient } from "../lib/api";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { LinkedMedia } from "../components/LinkedMedia";
@@ -24,6 +25,7 @@ import { Button } from "../components/Button";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { StatusChip } from "../components/StatusChip";
 import { TimezoneBadge } from "../components/workspace/TimezoneBadge";
+import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import {
   EmptyState,
   ErrorState,
@@ -33,6 +35,7 @@ import { useOutletContext } from "react-router-dom";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import { useAuth } from "../auth/AuthProvider";
 import { useOnline } from "../hooks/useOnline";
+import "./CheckinReviewPage.css";
 
 const OUTCOMES: Array<{ value: CheckinReviewOutcome; label: string }> = [
   { value: "acknowledged", label: "Acknowledged" },
@@ -77,6 +80,11 @@ function optionLabel(
   return id;
 }
 
+function looksLikePain(label: string, text: string): boolean {
+  const hay = `${label} ${text}`.toLowerCase();
+  return /hurt|pain|ache|stiff|sore|injur/.test(hay);
+}
+
 export function CheckinReviewPage() {
   const navigate = useNavigate();
   const online = useOnline();
@@ -116,6 +124,7 @@ export function CheckinReviewPage() {
     routeRelationshipId || context?.checkin.coachingRelationshipId || "";
   const clientName =
     workspace?.header.traineeDisplayName ?? "Client";
+  const firstName = clientName.trim().split(/\s+/)[0] || "Client";
   const clientTz =
     workspace?.header.traineeTimezone ??
     me?.timezone ??
@@ -210,39 +219,79 @@ export function CheckinReviewPage() {
     };
   }, [fromInbox, checkinId]);
 
-  const adherenceLines = useMemo(() => {
+  const contextRows = useMemo(() => {
     if (!context) return [];
     const w = context.recentWorkoutAdherence;
     const m = context.recentMealCompliance;
-    const lines: string[] = [];
+    const rows: Array<{ label: string; text: string }> = [];
     const workoutTotal =
       w.completed + w.missed + w.modified + w.skipped + w.pending;
-    if (w.completed > 0 && workoutTotal > 0) {
-      lines.push(`${w.completed} of ${workoutTotal} workouts`);
+    if (workoutTotal > 0) {
+      const missedBits: string[] = [];
+      if (w.missed > 0) missedBits.push(`missed ${w.missed}`);
+      if (w.modified > 0) missedBits.push(`${w.modified} modified`);
+      if (w.skipped > 0) missedBits.push(`${w.skipped} skipped`);
+      rows.push({
+        label: "Workouts",
+        text:
+          missedBits.length > 0
+            ? `${w.completed} of ${workoutTotal} · ${missedBits.join(", ")}`
+            : `${w.completed} of ${workoutTotal}`,
+      });
     }
-    if (w.modified > 0) lines.push(`${w.modified} workouts modified`);
-    if (w.skipped > 0) lines.push(`${w.skipped} workouts skipped`);
-    if (w.missed > 0) lines.push(`${w.missed} workouts missed`);
-    if (m.modified > 0) lines.push(`${m.modified} meals changed`);
-    if (m.skipped > 0) lines.push(`${m.skipped} meals skipped`);
-    if (m.confirmed > 0) lines.push(`${m.confirmed} meals logged`);
-    if (m.overdue > 0) lines.push(`${m.overdue} meals overdue`);
-    return lines;
-  }, [context]);
+    const mealTotal =
+      m.confirmed + m.modified + m.skipped + m.overdue + m.pending;
+    const mealsLogged = m.confirmed + m.modified + m.skipped;
+    if (mealTotal > 0) {
+      rows.push({
+        label: "Meals logged",
+        text: `${mealsLogged} of ${mealTotal}`,
+      });
+    }
+    const weight = context.measurements.find(
+      (row) =>
+        row.type === "body_weight_kg" ||
+        row.type === "weight" ||
+        /weight/i.test(row.type),
+    );
+    if (weight) {
+      const sameType = context.measurements
+        .filter((row) => row.type === weight.type)
+        .sort((a, b) => b.observedAt.localeCompare(a.observedAt));
+      const latest = sameType[0]!;
+      const previous = sameType[1];
+      if (previous) {
+        const delta =
+          Number.parseFloat(String(latest.value)) -
+          Number.parseFloat(String(previous.value));
+        if (Number.isFinite(delta) && delta !== 0) {
+          const sign = delta > 0 ? "+" : "−";
+          rows.push({
+            label: "Weight trend",
+            text: `${sign}${Math.abs(delta).toFixed(1).replace(/\.0$/, "")} ${latest.unit ?? "kg"} / week`,
+          });
+        }
+      }
+    }
+    const renewal = workspace?.header.renewalState;
+    if (renewal === "expired" || renewal === "due") {
+      rows.push({
+        label: "Renewal",
+        text: labelFor("renewal_state", renewal),
+      });
+    }
+    return rows;
+  }, [context, workspace?.header.renewalState]);
 
-  const measurementLines = useMemo(() => {
-    if (!context) return [];
+  const measurementByType = useMemo(() => {
+    if (!context) return new Map<string, string>();
     const byType = new Map<string, typeof context.measurements>();
     for (const row of context.measurements) {
       const list = byType.get(row.type) ?? [];
       list.push(row);
       byType.set(row.type, list);
     }
-    const lines: Array<{
-      key: string;
-      label: string;
-      text: string;
-    }> = [];
+    const map = new Map<string, string>();
     for (const [type, rows] of byType) {
       const sorted = [...rows].sort((a, b) =>
         b.observedAt.localeCompare(a.observedAt),
@@ -259,13 +308,10 @@ export function CheckinReviewPage() {
           text += ` · ${sign}${Math.abs(delta).toFixed(1).replace(/\.0$/, "")} since ${formatCivilDate(previous.observedAt.slice(0, 10))}`;
         }
       }
-      lines.push({
-        key: type,
-        label: labelFor("measurement_type", type),
-        text,
-      });
+      map.set(type, text);
+      map.set(labelFor("measurement_type", type).toLowerCase(), text);
     }
-    return lines;
+    return map;
   }, [context]);
 
   async function saveReview() {
@@ -338,19 +384,31 @@ export function CheckinReviewPage() {
     }
   }
 
+  function openWhatsApp() {
+    if (!clientWa) return;
+    const text = encodeURIComponent(
+      `Reviewed your check-in — open it in FitBud: /checkin/${checkinId}`,
+    );
+    window.open(
+      `https://wa.me/${clientWa.replace(/\D/g, "")}?text=${text}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+  }
+
   const submittedLabel = context?.checkin.submittedAt
-    ? `Weekly check-in · submitted ${formatInstant(context.checkin.submittedAt, clientTz)}`
+    ? `Submitted ${formatInstant(context.checkin.submittedAt, clientTz)}`
     : context
-      ? `Weekly check-in · due ${formatCivilDate(context.checkin.localDate)}`
+      ? `Due ${formatCivilDate(context.checkin.localDate)}`
       : "Weekly check-in";
 
   const alreadyReviewed = Boolean(context?.checkin.review) && !editing;
   const photos = context?.photos ?? [];
-  // The pinned form's answered questions in form order (Z6-2b shared helper).
+  // Pinned form answers in form order, then any measurements not already shown.
   const answerRows = useMemo(() => {
     if (!context) return [];
     const fields = context.pinnedForm.fields;
-    return checkinAnswerEntries(fields, context.checkin.answers).map(
+    const fromAnswers = checkinAnswerEntries(fields, context.checkin.answers).map(
       (entry) => ({
         fieldId: entry.fieldId,
         label: entry.label,
@@ -360,7 +418,49 @@ export function CheckinReviewPage() {
         ),
       }),
     );
-  }, [context]);
+    const answeredLabels = new Set(
+      fromAnswers.map((row) => row.label.toLowerCase()),
+    );
+    const extras: Array<{ fieldId: string; label: string; text: string }> = [];
+    const byType = new Map<string, typeof context.measurements>();
+    for (const row of context.measurements) {
+      const list = byType.get(row.type) ?? [];
+      list.push(row);
+      byType.set(row.type, list);
+    }
+    for (const [type, rows] of byType) {
+      const label = labelFor("measurement_type", type);
+      if (answeredLabels.has(label.toLowerCase())) continue;
+      if (answeredLabels.has("weight") && /weight/i.test(label)) continue;
+      const sorted = [...rows].sort((a, b) =>
+        b.observedAt.localeCompare(a.observedAt),
+      );
+      const text = measurementByType.get(type) ?? measurementByType.get(label.toLowerCase());
+      if (!text) {
+        const latest = sorted[0]!;
+        extras.push({
+          fieldId: `measurement:${type}`,
+          label,
+          text: `${latest.value}${latest.unit ? ` ${latest.unit}` : ""}`,
+        });
+      } else {
+        extras.push({
+          fieldId: `measurement:${type}`,
+          label,
+          text,
+        });
+      }
+      answeredLabels.add(label.toLowerCase());
+    }
+    return [...extras, ...fromAnswers].map((row) => ({
+      ...row,
+      flag: looksLikePain(row.label, row.text),
+    }));
+  }, [context, measurementByType]);
+
+  const checkinDateLabel = context
+    ? formatCivilDate(context.checkin.localDate)
+    : "";
 
   return (
     <div
@@ -370,7 +470,11 @@ export function CheckinReviewPage() {
       <header className="workspace-toolbar">
         <div>
           <h1 className="workspace-card-title">Check-in review</h1>
-          <p className="lede">{submittedLabel}</p>
+          <p className="lede">
+            {context
+              ? `Weekly check-in · ${submittedLabel}`
+              : "Weekly check-in"}
+          </p>
         </div>
         <div className="workspace-header-actions">
           {fromInbox && nextReview ? (
@@ -417,15 +521,18 @@ export function CheckinReviewPage() {
 
       {context ? (
         <>
-          <div className="checkin-review-columns">
+          <div className="checkin-review-grid">
             <div className="checkin-review-main">
-              <section className="workspace-card" aria-labelledby="answers-h">
-                <h2 id="answers-h" className="workspace-card-title">
-                  Answers
-                </h2>
-                <p className="muted">
-                  Form v{context.pinnedForm.version} (pinned)
-                </p>
+              <section
+                className="workspace-card"
+                aria-labelledby="answers-h"
+              >
+                <div className="checkin-answers-head">
+                  <h2 id="answers-h">
+                    Check-in · {checkinDateLabel}
+                  </h2>
+                  <p>{submittedLabel}</p>
+                </div>
                 {context.checkin.status === "due" ||
                 context.checkin.status === "overdue" ||
                 context.checkin.status === "scheduled" ? (
@@ -433,13 +540,21 @@ export function CheckinReviewPage() {
                     Due by {formatCivilDate(context.checkin.localDate)}, 11:59 pm
                   </p>
                 ) : null}
-                {context.checkin.answers ? (
+                {context.checkin.answers || answerRows.length > 0 ? (
                   answerRows.length > 0 ? (
-                    <dl className="detail-list">
+                    <dl className="checkin-answer-list detail-list">
                       {answerRows.map((row) => (
                         <div key={row.fieldId}>
                           <dt>{row.label}</dt>
-                          <dd>{row.text}</dd>
+                          <dd>
+                            <span>{row.text}</span>
+                            {row.flag ? (
+                              <span className="checkin-answer-flag">
+                                <AlertTriangle size={12} strokeWidth={2} aria-hidden="true" />
+                                Review
+                              </span>
+                            ) : null}
+                          </dd>
                         </div>
                       ))}
                     </dl>
@@ -449,33 +564,16 @@ export function CheckinReviewPage() {
                 ) : (
                   <p className="workspace-empty">
                     {context.checkin.recordStatus === "draft"
-                      ? `${clientName.split(" ")[0]} has started but not submitted.`
+                      ? `${firstName} has started but not submitted.`
                       : "No answers submitted yet."}
                   </p>
                 )}
               </section>
 
               <section
-                className="workspace-card"
-                aria-labelledby="measurements-h"
+                className="workspace-card checkin-photos"
+                aria-labelledby="photos-h"
               >
-                <h2 id="measurements-h" className="workspace-card-title">
-                  Measurements
-                </h2>
-                {measurementLines.length === 0 ? (
-                  <p className="muted">No measurements in this review.</p>
-                ) : (
-                  <ul className="workspace-list">
-                    {measurementLines.map((line) => (
-                      <li key={line.key}>
-                        <strong>{line.label}</strong> · {line.text}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              <section className="workspace-card" aria-labelledby="photos-h">
                 <div className="workspace-card-head">
                   <h2 id="photos-h" className="workspace-card-title">
                     Photos
@@ -519,37 +617,187 @@ export function CheckinReviewPage() {
             </div>
 
             <aside className="checkin-review-side">
-              <section className="workspace-card" aria-labelledby="since-h">
-                <h2 id="since-h" className="workspace-card-title">
-                  Since last check-in
-                </h2>
-                {adherenceLines.length === 0 ? (
-                  <p className="muted">No activity counted in this period.</p>
+              {/* Your review first so Save / Reviewed stay in the first
+                  viewport (163/164); Context follows below. At ≤1024 the
+                  grid stacks answers then this review card (198). */}
+              <section
+                className="workspace-card checkin-review-card"
+                aria-labelledby="review-h"
+                data-testid="review-action-bar"
+              >
+                {alreadyReviewed ? (
+                  <>
+                    <div className="checkin-review-card-body">
+                      <h2 id="review-h">Your review</h2>
+                      <p className="checkin-reviewed-meta">
+                        Reviewed by you ·{" "}
+                        {formatInstant(
+                          context.checkin.review!.createdAt,
+                          trainerTz,
+                        )}
+                      </p>
+                      {context.checkin.review!.notes ? (
+                        <p className="checkin-reviewed-body">
+                          {context.checkin.review!.notes}
+                        </p>
+                      ) : (
+                        <p className="muted">No note saved.</p>
+                      )}
+                    </div>
+                    <div className="checkin-reviewed-pill-row">
+                      <span className="checkin-reviewed-pill">
+                        <CheckCircle2 size={14} strokeWidth={2} aria-hidden="true" />
+                        Reviewed
+                      </span>
+                      <Button
+                        variant="secondary"
+                        onClick={() => setEditing(true)}
+                      >
+                        Edit review
+                      </Button>
+                    </div>
+                    <p className="muted" style={{ marginTop: "0.75rem" }}>
+                      {labelFor(
+                        "checkin_review_outcome",
+                        context.checkin.review!.outcome,
+                      )}
+                    </p>
+                  </>
                 ) : (
-                  <ul>
-                    {adherenceLines.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
+                  <>
+                    <div className="checkin-review-card-body">
+                      <h2 id="review-h">Your review</h2>
+                      <div
+                        className="segment"
+                        role="group"
+                        aria-label="Outcome"
+                      >
+                        {OUTCOMES.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            className={
+                              outcome === opt.value
+                                ? "segment-btn is-on"
+                                : "segment-btn"
+                            }
+                            aria-pressed={outcome === opt.value}
+                            onClick={() => setOutcome(opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="checkin-review-note field">
+                        <label>
+                          <span>Note to {firstName}</span>
+                          <textarea
+                            rows={3}
+                            value={noteBody}
+                            onChange={(e) => setNoteBody(e.target.value)}
+                            maxLength={2000}
+                            placeholder="Optional note"
+                          />
+                        </label>
+                        {visibleToClient ? (
+                          <p className="checkin-review-helper">
+                            {firstName} sees this in the app with a push
+                            notification.
+                          </p>
+                        ) : (
+                          <p className="checkin-review-helper">
+                            Private unless you mark it visible to {firstName}.
+                          </p>
+                        )}
+                      </div>
+                      <label className="checkin-review-visible">
+                        <input
+                          type="checkbox"
+                          checked={visibleToClient}
+                          onChange={(e) => setVisibleToClient(e.target.checked)}
+                        />
+                        Visible to client
+                      </label>
+                    </div>
+                    <div className="checkin-review-actions">
+                      <Button
+                        variant="primary"
+                        disabled={acting || !online}
+                        onClick={() => void saveReview()}
+                      >
+                        {acting ? "Saving…" : "Save review"}
+                      </Button>
+                      <Button
+                        variant="whatsapp"
+                        disabled={!clientWa}
+                        onClick={openWhatsApp}
+                      >
+                        <WhatsAppGlyph />
+                        Message on WhatsApp
+                      </Button>
+                    </div>
+                    <p className="checkin-review-footer-note">
+                      Saving closes this check-in in Needs attention.
+                    </p>
+                    <div className="checkin-review-more">
+                      <Button
+                        variant="secondary"
+                        disabled={acting || !online}
+                        onClick={() => void scheduleNext()}
+                      >
+                        Schedule next
+                      </Button>
+                      <TimezoneBadge
+                        traineeName={clientName}
+                        traineeTimezone={clientTz}
+                        trainerTimezone={trainerTz}
+                      />
+                      <OverflowMenu
+                        label="More review actions"
+                        items={[
+                          {
+                            id: "adjust-plan",
+                            label: "Adjust plan",
+                            onSelect: () => {
+                              if (relationshipId) {
+                                navigate(`/clients/${relationshipId}/plan`);
+                              }
+                            },
+                          },
+                        ]}
+                      />
+                    </div>
+                  </>
                 )}
               </section>
 
-              <section className="workspace-card" aria-labelledby="open-h">
-                <h2 id="open-h" className="workspace-card-title">
-                  Open items
-                </h2>
-                {context.activeExceptions.length === 0 ? (
-                  <p className="muted">No open exceptions.</p>
+              <section
+                className="workspace-card checkin-side-card"
+                aria-labelledby="context-h"
+              >
+                <h2 id="context-h">Context · last 7 days</h2>
+                {contextRows.length === 0 ? (
+                  <p className="muted">No activity counted in this period.</p>
                 ) : (
-                  <ul className="activity-list">
-                    {context.activeExceptions.map((item) => (
-                      <li key={item.id} className="activity-row">
+                  <dl className="checkin-context-list">
+                    {contextRows.map((row) => (
+                      <div key={row.label}>
+                        <dt>{row.label}</dt>
+                        <dd>{row.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {context.activeExceptions.length > 0 ? (
+                  <ul className="checkin-open-list" aria-label="Open items">
+                    {context.activeExceptions.slice(0, 3).map((item) => (
+                      <li key={item.id}>
                         <div className="workspace-row-copy">
                           <p className="workspace-row-title">{item.summary}</p>
                           <StatusChip kind="severity" value={item.severity} />
                         </div>
                         <Link
-                          className="button-tinted"
+                          className="button-ghost"
                           to={`/clients/${relationshipId}?exception=${item.id}`}
                         >
                           Review
@@ -557,132 +805,14 @@ export function CheckinReviewPage() {
                       </li>
                     ))}
                   </ul>
-                )}
+                ) : null}
+                {context.activeExceptions.length > 3 ? (
+                  <p className="muted" style={{ margin: "0.5rem 0 0" }}>
+                    +{context.activeExceptions.length - 3} more open
+                  </p>
+                ) : null}
               </section>
-
-              {context.currentConfiguration ? (
-                <p className="muted">
-                  Cadence:{" "}
-                  {labelFor(
-                    "checkin_cadence",
-                    context.currentConfiguration.checkinCadence,
-                  )}
-                </p>
-              ) : null}
             </aside>
-          </div>
-
-          <div className="checkin-review-bar" data-testid="review-action-bar">
-            {alreadyReviewed ? (
-              <>
-                <p>
-                  Reviewed ·{" "}
-                  {labelFor(
-                    "checkin_review_outcome",
-                    context.checkin.review!.outcome,
-                  )}{" "}
-                  · {formatCivilDate(context.checkin.review!.createdAt.slice(0, 10))}
-                </p>
-                <div className="review-bar-actions">
-                  <Button variant="secondary" onClick={() => setEditing(true)}>
-                    Edit review
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div
-                  className="segment"
-                  role="group"
-                  aria-label="Outcome"
-                >
-                  {OUTCOMES.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      className={
-                        outcome === opt.value
-                          ? "segment-btn is-on"
-                          : "segment-btn"
-                      }
-                      aria-pressed={outcome === opt.value}
-                      onClick={() => setOutcome(opt.value)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <label className="field review-note-field">
-                  <span>Note</span>
-                  <textarea
-                    rows={2}
-                    value={noteBody}
-                    onChange={(e) => setNoteBody(e.target.value)}
-                    maxLength={2000}
-                    placeholder="Optional note"
-                  />
-                </label>
-                <label className="review-visible-toggle">
-                  <input
-                    type="checkbox"
-                    checked={visibleToClient}
-                    onChange={(e) => setVisibleToClient(e.target.checked)}
-                  />
-                  Visible to client
-                </label>
-                <div className="review-bar-actions">
-                  <Button
-                    variant="primary"
-                    disabled={acting || !online}
-                    onClick={() => void saveReview()}
-                  >
-                    {acting ? "Saving…" : "Save review"}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    disabled={acting || !online}
-                    onClick={() => void scheduleNext()}
-                  >
-                    Schedule next
-                  </Button>
-                  <TimezoneBadge
-                    traineeName={clientName}
-                    traineeTimezone={clientTz}
-                    trainerTimezone={trainerTz}
-                  />
-                  <OverflowMenu
-                    label="More review actions"
-                    items={[
-                      {
-                        id: "whatsapp",
-                        label: "WhatsApp client",
-                        disabled: !clientWa,
-                        onSelect: () => {
-                          if (!clientWa) return;
-                          const text = encodeURIComponent(
-                            `Reviewed your check-in — open it in FitBud: /checkin/${checkinId}`,
-                          );
-                          window.open(
-                            `https://wa.me/${clientWa.replace(/\D/g, "")}?text=${text}`,
-                            "_blank",
-                            "noopener,noreferrer",
-                          );
-                        },
-                      },
-                      {
-                        id: "adjust-plan",
-                        label: "Adjust plan",
-                        onSelect: () => {
-                          if (relationshipId) {
-                            navigate(`/clients/${relationshipId}/plan`);
-                          }
-                        },
-                      },
-                    ]}
-                  />
-                </div>
-              </>
-            )}
           </div>
         </>
       ) : null}

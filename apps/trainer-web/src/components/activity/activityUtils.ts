@@ -84,6 +84,7 @@ export function chipValueForActivity(item: WorkspaceActivityItem): string {
   return item.state;
 }
 
+/** Shared meal chip overrides (Overview + filters). */
 export function mealChipLabel(state: string): string | undefined {
   if (state === "confirmed") return "Logged";
   if (state === "modified") return "Changed";
@@ -91,9 +92,88 @@ export function mealChipLabel(state: string): string | undefined {
   return undefined;
 }
 
+/** Frame 158 activity feed chips: As planned / Changed / Not logged / Not logged yet. */
+export function activityMealChipLabel(state: string): string | undefined {
+  if (state === "confirmed") return "As planned";
+  if (state === "modified") return "Changed";
+  if (state === "logged_later") return "Logged late";
+  if (state === "pending") return "Not logged yet";
+  if (state === "overdue") return "Not logged";
+  return undefined;
+}
+
 export function workoutChipLabel(state: string): string | undefined {
   if (state === "assigned") return "Pending";
   return undefined;
+}
+
+export type ActivityChipTone =
+  | "positive"
+  | "info"
+  | "attention"
+  | "neutral"
+  | "critical";
+
+export function activityChipTone(
+  item: WorkspaceActivityItem,
+): ActivityChipTone {
+  if (item.type === "meal") {
+    if (item.state === "confirmed" || item.state === "logged_later") {
+      return "positive";
+    }
+    if (item.state === "modified") return "info";
+    if (item.state === "overdue" || item.state === "pending") return "attention";
+    if (item.state === "skipped") return "neutral";
+    return "neutral";
+  }
+  if (item.type === "workout") {
+    if (item.state === "completed") return "positive";
+    if (item.state === "missed") return "attention";
+    if (item.state === "modified") return "info";
+    return "neutral";
+  }
+  if (item.state === "reviewed") return "positive";
+  if (item.state === "submitted") return "info";
+  if (item.state === "overdue" || item.state === "due") return "attention";
+  return "neutral";
+}
+
+export function feedCardTitle(
+  type: ActivityTypeFilter,
+  rangeMode: DateRangeMode,
+): string {
+  const kind =
+    type === "meal" ? "Meals" : type === "workout" ? "Workouts" : "Check-ins";
+  const range =
+    rangeMode === "this_week"
+      ? "this week"
+      : rangeMode === "last_week"
+        ? "last week"
+        : "custom range";
+  return `${kind} · ${range}`;
+}
+
+/** Average planned daily kcal from loaded meal assignments, when derivable. */
+export function plannedDailyKcalMeta(
+  assignments: Map<string, MealAssignment>,
+): string | null {
+  if (assignments.size === 0) return null;
+  const byDay = new Map<string, number>();
+  for (const assignment of assignments.values()) {
+    const kcal = planEnergyKcal(assignment.prescription.items);
+    if (kcal <= 0) continue;
+    byDay.set(
+      assignment.localDate,
+      (byDay.get(assignment.localDate) ?? 0) + kcal,
+    );
+  }
+  if (byDay.size === 0) return null;
+  const totals = [...byDay.values()];
+  const avg = Math.round(
+    totals.reduce((sum, value) => sum + value, 0) / totals.length,
+  );
+  if (avg <= 0) return null;
+  return `Planned ${avg.toLocaleString("en-IN")} kcal a day`;
 }
 
 export function canNudgeItem(item: WorkspaceActivityItem): boolean {

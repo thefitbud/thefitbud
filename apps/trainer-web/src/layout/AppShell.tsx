@@ -17,6 +17,7 @@ import {
 import {
   Bell,
   ClipboardCheck,
+  Dumbbell,
   HelpCircle,
   Home,
   LayoutGrid,
@@ -25,7 +26,12 @@ import {
   Search,
   Users,
 } from "lucide-react";
-import { formatPersonName, trainerNotificationCopy } from "@fitbud/core";
+import {
+  formatPersonName,
+  labelFor,
+  trainerNotificationCopy,
+} from "@fitbud/core";
+import type { ClientDirectoryItem } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
 import { useConfig } from "../lib/config";
 import { apiClient } from "../lib/api";
@@ -37,11 +43,114 @@ import {
 } from "../lib/shell-title";
 import "./AppShell.css";
 
-type PaletteHit = {
-  relationshipId: string;
+type PaletteClientHit = {
+  kind: "client";
+  id: string;
   name: string;
-  goalShort: string | null;
+  meta: string;
+  href: string;
 };
+
+type PaletteTemplateHit = {
+  kind: "template";
+  id: string;
+  name: string;
+  meta: string;
+  href: string;
+  icon: "exercise" | "plan" | "users";
+};
+
+type PalettePageHit = {
+  kind: "page";
+  id: string;
+  name: string;
+  meta: string;
+  href: string;
+};
+
+type PaletteHit = PaletteClientHit | PaletteTemplateHit | PalettePageHit;
+
+const PALETTE_PAGES: Array<Omit<PalettePageHit, "kind">> = [
+  { id: "page-home", name: "Home", meta: "Dashboard", href: "/" },
+  { id: "page-clients", name: "Clients", meta: "Roster", href: "/clients" },
+  {
+    id: "page-clients-ended",
+    name: "Clients · Ended",
+    meta: "Roster",
+    href: "/clients?segment=ended",
+  },
+  {
+    id: "page-checkins",
+    name: "Check-ins",
+    meta: "Inbox",
+    href: "/checkins",
+  },
+  {
+    id: "page-templates",
+    name: "Templates",
+    meta: "Hub",
+    href: "/templates",
+  },
+  {
+    id: "page-exercises",
+    name: "Exercises",
+    meta: "Libraries",
+    href: "/templates/libraries/exercises",
+  },
+  {
+    id: "page-foods",
+    name: "Foods",
+    meta: "Libraries",
+    href: "/templates/libraries/foods",
+  },
+  {
+    id: "page-add-client",
+    name: "Add client",
+    meta: "Clients",
+    href: "/clients/add",
+  },
+  {
+    id: "page-settings",
+    name: "Settings",
+    meta: "More",
+    href: "/settings",
+  },
+];
+
+/** Word-prefix match so "ro" hits Rohan / Roller / Roster, not Crossover. */
+function matchesQuery(haystack: string, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  const h = haystack.toLowerCase();
+  if (h.startsWith(q)) return true;
+  return h.split(/[^a-z0-9]+/).some((word) => word.startsWith(q));
+}
+
+function clientPaletteMeta(row: ClientDirectoryItem): string {
+  const parts: string[] = [];
+  if (row.adherenceState === "needs_attention") {
+    parts.push(labelFor("adherence_state", row.adherenceState));
+  } else {
+    parts.push(labelFor("onboarding_status", row.status));
+  }
+  if (row.goalShort?.trim()) parts.push(row.goalShort.trim());
+  if (row.effectivePlan?.title?.trim()) {
+    parts.push(row.effectivePlan.title.trim());
+  }
+  return parts.join(" · ");
+}
+
+function ownershipLabel(ownership: "global" | "trainer"): string {
+  return ownership === "global" ? "FitBud base" : "Mine";
+}
+
+function avatarTone(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i += 1) {
+    hash = (hash + name.charCodeAt(i) * (i + 1)) % 8;
+  }
+  return `shell-palette-av-c${(hash % 8) + 1}`;
+}
 
 const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = [
   { match: (p) => p === "/", title: "Home" },
@@ -102,8 +211,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [checkinBadge, setCheckinBadge] = useState<number | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const [paletteHits, setPaletteHits] = useState<PaletteHit[]>([]);
+  const [paletteClients, setPaletteClients] = useState<PaletteClientHit[]>([]);
+  const [paletteTemplates, setPaletteTemplates] = useState<PaletteTemplateHit[]>(
+    [],
+  );
+  const [palettePages, setPalettePages] = useState<PalettePageHit[]>([]);
   const [paletteLoading, setPaletteLoading] = useState(false);
+  const [paletteIndex, setPaletteIndex] = useState(0);
   const [bellOpen, setBellOpen] = useState(false);
   const [bellItems, setBellItems] = useState<
     Array<{ id: string; title: string; href: string }>
@@ -162,32 +276,94 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!paletteOpen) return;
     const q = paletteQuery.trim();
     if (q.length < 1) {
-      setPaletteHits([]);
+      setPaletteClients([]);
+      setPaletteTemplates([]);
+      setPalettePages([]);
+      setPaletteIndex(0);
+      setPaletteLoading(false);
       return;
     }
     let cancelled = false;
-    const started = performance.now();
     setPaletteLoading(true);
-    void apiClient
-      .listClients({ q, limit: 12 })
-      .then((res) => {
+    setPaletteIndex(0);
+
+    const pages = PALETTE_PAGES.filter(
+      (page) =>
+        matchesQuery(page.name, q) || matchesQuery(page.meta, q),
+    ).map((page) => ({ ...page, kind: "page" as const }));
+    setPalettePages(pages);
+
+    void Promise.all([
+      apiClient.listClients({ q, limit: 12 }).catch(() => ({ items: [] })),
+      apiClient
+        .listPlanTemplates({ q, limit: 12, scope: "all" })
+        .catch(() => ({ items: [] })),
+      apiClient
+        .listExerciseLibrary({ q, limit: 24 })
+        .catch(() => ({ items: [] })),
+    ])
+      .then(([clients, plans, exercises]) => {
         if (cancelled) return;
-        const hits = res.items
-          .filter((row) => Boolean(row.relationshipId))
+        const clientHits: PaletteClientHit[] = clients.items
+          .filter(
+            (row) =>
+              Boolean(row.relationshipId) &&
+              (matchesQuery(row.traineeDisplayName, q) ||
+                matchesQuery(row.goalShort ?? "", q) ||
+                matchesQuery(row.effectivePlan?.title ?? "", q)),
+          )
+          .slice(0, 6)
           .map((row) => ({
-            relationshipId: row.relationshipId as string,
-            name: row.traineeDisplayName,
-            goalShort: row.goalShort ?? null,
+            kind: "client",
+            id: row.relationshipId as string,
+            name: formatPersonName(row.traineeDisplayName),
+            meta: clientPaletteMeta(row),
+            href: `/clients/${row.relationshipId}`,
           }));
-        setPaletteHits(hits);
-        void started;
-      })
-      .catch(() => {
-        if (!cancelled) setPaletteHits([]);
+        const planHits: PaletteTemplateHit[] = plans.items
+          .filter((row) => matchesQuery(row.title, q))
+          .slice(0, 4)
+          .map((row) => {
+            const hub =
+              row.templateType === "nutrition"
+                ? "diets"
+                : row.templateType === "combined"
+                  ? "full-plans"
+                  : "workouts";
+            return {
+              kind: "template" as const,
+              id: `plan-${row.id}`,
+              name: row.title,
+              meta: `${labelFor("plan_template_type", row.templateType)} · ${ownershipLabel(row.ownership)}`,
+              href: `/templates/${hub}/${row.id}`,
+              icon: "plan" as const,
+            };
+          });
+        const qLower = q.toLowerCase();
+        const exerciseHits: PaletteTemplateHit[] = exercises.items
+          .filter((row) => matchesQuery(row.name, q))
+          .sort((a, b) => {
+            const aStarts = a.name.toLowerCase().startsWith(qLower) ? 0 : 1;
+            const bStarts = b.name.toLowerCase().startsWith(qLower) ? 0 : 1;
+            if (aStarts !== bStarts) return aStarts - bStarts;
+            return a.name.localeCompare(b.name);
+          })
+          .slice(0, 2)
+          .map((row) => ({
+            kind: "template" as const,
+            id: `ex-${row.id}`,
+            name: row.name,
+            meta: `Exercise · ${ownershipLabel(row.ownership)}`,
+            href: "/templates/libraries/exercises",
+            icon: "exercise" as const,
+          }));
+        setPaletteClients(clientHits);
+        setPaletteTemplates([...exerciseHits, ...planHits].slice(0, 5));
       })
       .finally(() => {
         if (!cancelled) setPaletteLoading(false);
       });
+
     return () => {
       cancelled = true;
     };
@@ -296,20 +472,51 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate]);
 
+  const paletteFlat: PaletteHit[] = [
+    ...paletteClients,
+    ...paletteTemplates,
+    ...palettePages,
+  ];
+  const activeHit = paletteFlat[paletteIndex] ?? null;
+
   function openPalette(event?: FormEvent) {
     event?.preventDefault();
     setPaletteOpen(true);
     setPaletteQuery("");
+    setPaletteIndex(0);
+  }
+
+  function closePalette() {
+    setPaletteOpen(false);
+    setPaletteQuery("");
+    setPaletteIndex(0);
+  }
+
+  function openPaletteHit(hit: PaletteHit) {
+    navigate(hit.href);
+    closePalette();
   }
 
   function onPaletteKey(ev: ReactKeyboardEvent<HTMLInputElement>) {
     if (ev.key === "Escape") {
-      setPaletteOpen(false);
+      closePalette();
       return;
     }
-    if (ev.key === "Enter" && paletteHits[0]) {
-      navigate(`/clients/${paletteHits[0].relationshipId}`);
-      setPaletteOpen(false);
+    if (ev.key === "ArrowDown") {
+      ev.preventDefault();
+      if (paletteFlat.length === 0) return;
+      setPaletteIndex((i) => (i + 1) % paletteFlat.length);
+      return;
+    }
+    if (ev.key === "ArrowUp") {
+      ev.preventDefault();
+      if (paletteFlat.length === 0) return;
+      setPaletteIndex((i) => (i - 1 + paletteFlat.length) % paletteFlat.length);
+      return;
+    }
+    if (ev.key === "Enter" && activeHit) {
+      ev.preventDefault();
+      openPaletteHit(activeHit);
     }
   }
 
@@ -499,13 +706,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div
           className="shell-palette-backdrop"
           role="presentation"
-          onClick={() => setPaletteOpen(false)}
+          onClick={closePalette}
         >
           <div
             className="shell-palette"
             role="dialog"
             aria-modal="true"
-            aria-label="Search clients"
+            aria-label="Search"
+            data-testid="shell-search-palette"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="shell-palette-input">
@@ -515,38 +723,163 @@ export function AppShell({ children }: { children: ReactNode }) {
                 value={paletteQuery}
                 onChange={(e) => setPaletteQuery(e.target.value)}
                 onKeyDown={onPaletteKey}
-                placeholder="Search clients by name or goal"
+                placeholder="Search clients, templates, pages"
                 aria-controls={paletteListId}
                 aria-autocomplete="list"
+                aria-activedescendant={
+                  activeHit ? `palette-opt-${activeHit.id}` : undefined
+                }
               />
+              <kbd className="shell-palette-esc">esc</kbd>
             </div>
-            <ul id={paletteListId} className="shell-palette-list" role="listbox">
+            <div id={paletteListId} className="shell-palette-results" role="listbox">
               {paletteLoading ? (
-                <li className="muted">Searching…</li>
+                <p className="shell-palette-empty muted">Searching…</p>
               ) : null}
               {!paletteLoading &&
               paletteQuery.trim() &&
-              paletteHits.length === 0 ? (
-                <li className="muted">No clients match</li>
+              paletteFlat.length === 0 ? (
+                <p className="shell-palette-empty muted">No matches</p>
               ) : null}
-              {paletteHits.map((hit) => (
-                <li key={hit.relationshipId}>
-                  <button
-                    type="button"
-                    role="option"
-                    onClick={() => {
-                      navigate(`/clients/${hit.relationshipId}`);
-                      setPaletteOpen(false);
-                    }}
-                  >
-                    <b>{hit.name}</b>
-                    {hit.goalShort ? (
-                      <span className="muted">{hit.goalShort}</span>
-                    ) : null}
-                  </button>
-                </li>
-              ))}
-            </ul>
+              {!paletteLoading && paletteClients.length > 0 ? (
+                <section className="shell-palette-group" aria-label="Clients">
+                  <h2 className="shell-palette-group-label">Clients</h2>
+                  <ul className="shell-palette-list">
+                    {paletteClients.map((hit) => {
+                      const flatIndex = paletteFlat.findIndex(
+                        (row) => row.id === hit.id,
+                      );
+                      const selected = flatIndex === paletteIndex;
+                      return (
+                        <li key={hit.id}>
+                          <button
+                            type="button"
+                            id={`palette-opt-${hit.id}`}
+                            role="option"
+                            aria-selected={selected}
+                            className={
+                              selected
+                                ? "shell-palette-row is-active"
+                                : "shell-palette-row"
+                            }
+                            onMouseEnter={() => setPaletteIndex(flatIndex)}
+                            onClick={() => openPaletteHit(hit)}
+                          >
+                            <span
+                              className={`shell-palette-av ${avatarTone(hit.name)}`}
+                              aria-hidden
+                            >
+                              {initials(hit.name)}
+                            </span>
+                            <span className="shell-palette-row-text">
+                              <b>{hit.name}</b>
+                              {hit.meta ? (
+                                <span className="muted">{hit.meta}</span>
+                              ) : null}
+                            </span>
+                            {selected ? (
+                              <span className="shell-palette-enter">
+                                Enter to open
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+              {!paletteLoading && paletteTemplates.length > 0 ? (
+                <section className="shell-palette-group" aria-label="Templates">
+                  <h2 className="shell-palette-group-label">Templates</h2>
+                  <ul className="shell-palette-list">
+                    {paletteTemplates.map((hit) => {
+                      const flatIndex = paletteFlat.findIndex(
+                        (row) => row.id === hit.id,
+                      );
+                      const selected = flatIndex === paletteIndex;
+                      return (
+                        <li key={hit.id}>
+                          <button
+                            type="button"
+                            id={`palette-opt-${hit.id}`}
+                            role="option"
+                            aria-selected={selected}
+                            className={
+                              selected
+                                ? "shell-palette-row is-active"
+                                : "shell-palette-row"
+                            }
+                            onMouseEnter={() => setPaletteIndex(flatIndex)}
+                            onClick={() => openPaletteHit(hit)}
+                          >
+                            <span className="shell-palette-icon" aria-hidden>
+                              {hit.icon === "exercise" ? (
+                                <Dumbbell size={18} strokeWidth={1.75} />
+                              ) : (
+                                <LayoutGrid size={18} strokeWidth={1.75} />
+                              )}
+                            </span>
+                            <span className="shell-palette-row-text">
+                              <b>{hit.name}</b>
+                              <span className="muted">{hit.meta}</span>
+                            </span>
+                            {selected ? (
+                              <span className="shell-palette-enter">
+                                Enter to open
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+              {!paletteLoading && palettePages.length > 0 ? (
+                <section className="shell-palette-group" aria-label="Pages">
+                  <h2 className="shell-palette-group-label">Pages</h2>
+                  <ul className="shell-palette-list">
+                    {palettePages.map((hit) => {
+                      const flatIndex = paletteFlat.findIndex(
+                        (row) => row.id === hit.id,
+                      );
+                      const selected = flatIndex === paletteIndex;
+                      return (
+                        <li key={hit.id}>
+                          <button
+                            type="button"
+                            id={`palette-opt-${hit.id}`}
+                            role="option"
+                            aria-selected={selected}
+                            className={
+                              selected
+                                ? "shell-palette-row is-active"
+                                : "shell-palette-row"
+                            }
+                            onMouseEnter={() => setPaletteIndex(flatIndex)}
+                            onClick={() => openPaletteHit(hit)}
+                          >
+                            <span className="shell-palette-icon" aria-hidden>
+                              <Users size={18} strokeWidth={1.75} />
+                            </span>
+                            <span className="shell-palette-row-text">
+                              <b>{hit.name}</b>
+                              <span className="muted">{hit.meta}</span>
+                            </span>
+                            {selected ? (
+                              <span className="shell-palette-enter">
+                                Enter to open
+                              </span>
+                            ) : null}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </section>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
