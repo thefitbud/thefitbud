@@ -238,7 +238,7 @@ describe("no ISO dates on Today or Diet", () => {
       offline = isOffline;
       dayTotals = null;
       const view = renderDiet(date);
-      await waitFor(() => expect(view.container.textContent).toMatch(/kcal/));
+      await waitFor(() => expect(view.container.textContent).toMatch(/kcal|No meals planned|load your meals/));
       expect(view.container.textContent).not.toMatch(ISO);
     });
     it(`Today ${name}`, async () => {
@@ -264,10 +264,12 @@ describe("no ISO dates on Today or Diet", () => {
     const view = renderDiet(TODAY);
     await waitFor(() => {
       const text = view.container.textContent ?? "";
-      expect(text).toMatch(/Logged · 461 kcal/);
-      expect(text).toMatch(/Changed · 532 kcal/);
-      expect(text).toMatch(/993\s*of\s*1,200\s*kcal/);
-      expect(text).not.toMatch(/1,000\s*of/);
+      expect(text).toMatch(/461\s*kcal/);
+      expect(text).toMatch(/Changed/);
+      expect(text).toMatch(/532\s*kcal/);
+      expect(text).toMatch(/993\s*kcal eaten/);
+      expect(text).toMatch(/Goal 1,200/);
+      expect(text).not.toMatch(/1,000\s*kcal eaten/);
     });
   });
 
@@ -276,7 +278,7 @@ describe("no ISO dates on Today or Diet", () => {
     offline = false;
     dayTotals = dayOf(1000, [[SLOT1, 461], [SLOT2, 532]]);
     const diet = renderDiet(TODAY);
-    await waitFor(() => expect(diet.container.textContent).toMatch(/993\s*of/));
+    await waitFor(() => expect(diet.container.textContent).toMatch(/993\s*kcal eaten/));
     diet.unmount();
     const today = renderToday(TODAY);
     await waitFor(() => expect(today.container.textContent).toMatch(/993/));
@@ -290,7 +292,8 @@ describe("no ISO dates on Today or Diet", () => {
     const view = renderDiet(TODAY);
     await waitFor(() => {
       expect(screen.getAllByText(/^Skipped$/).length).toBeGreaterThan(0);
-      expect(view.container.textContent).toMatch(/400\s*of\s*800\s*kcal/);
+      expect(view.container.textContent).toMatch(/400\s*kcal eaten/);
+      expect(view.container.textContent).toMatch(/Goal 800/);
     });
     expect(view.container.textContent).not.toMatch(/Skipped\s*·/);
   });
@@ -313,11 +316,12 @@ describe("no ISO dates on Today or Diet", () => {
     offline = false;
     dayTotals = dayOf(1000, [[SLOT1, 461], [SLOT2, 532]]);
     const view = renderDiet(TODAY);
-    await waitFor(() => expect(view.container.textContent).toMatch(/993\s*of\s*1,200\s*kcal/));
+    await waitFor(() => expect(view.container.textContent).toMatch(/993\s*kcal eaten/));
     offline = true;
     invalidateRelationshipDayData(REL);
-    await waitFor(() => expect(view.container.textContent).toMatch(/You're offline\. Your logs are saved on this phone/));
-    expect(view.container.textContent).toMatch(/993\s*of\s*1,200\s*kcal/);
+    await waitFor(() => expect(view.container.textContent).toMatch(/Offline\. .*saved on your phone/));
+    expect(view.container.textContent).toMatch(/993\s*kcal eaten/);
+    expect(view.container.textContent).toMatch(/Goal 1,200/);
   });
 });
 

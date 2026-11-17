@@ -271,3 +271,40 @@ describe("selected day only (Z11b-1)", () => {
     expect(kcal?.assigned).toBe(2000);
   });
 });
+
+describe("one rounding on the day sum (Z12-42)", () => {
+  function eaten(id: string, slot: string, kcal: number): MealAssignment {
+    const base = meal({ id, status: "confirmed" });
+    return {
+      ...base,
+      prescription: {
+        ...base.prescription,
+        id: slot,
+        items: [
+          {
+            ...(base.prescription.items[0] as object),
+            calculated: {
+              energyKcalScaled: Math.round(kcal * NUTRIENT_SCALE),
+              proteinScaled: 0,
+              carbsScaled: 0,
+              fatScaled: 0,
+              partial: false,
+            },
+          },
+        ],
+      },
+    } as unknown as MealAssignment;
+  }
+
+  it("two meals of 872.6 kcal eaten as planned read 1,745 of 1,745, not 1,746 of 1,745", () => {
+    const meals = [
+      eaten("e1", "00000000-0000-4000-8000-0000000000b1", 872.6),
+      eaten("e2", "00000000-0000-4000-8000-0000000000b2", 872.6),
+    ];
+    const out = dayKcalSummary(meals, null);
+    // Each row rounds on its own for display; the day does not add the rounded rows.
+    expect(out.rows.map((r) => r.kcal)).toEqual([873, 873]);
+    expect(out.plannedTotal).toBe(1745);
+    expect(out.loggedTotal).toBe(1745);
+  });
+});

@@ -157,7 +157,7 @@ describe("DietTab counts the selected day only (Z11b-1)", () => {
         onOpenOverlay={() => undefined}
       />,
     );
-    await waitFor(() => expect(screen.getByText("2 of 4 meals logged today")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("2 of 4 logged")).toBeTruthy());
     expect(screen.queryByText(/of 84 meals/)).toBeNull();
   });
 
@@ -171,7 +171,7 @@ describe("DietTab counts the selected day only (Z11b-1)", () => {
         onOpenOverlay={() => undefined}
       />,
     );
-    await waitFor(() => expect(screen.getByText("2 of 4 meals logged today")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("2 of 4 logged")).toBeTruthy());
     network = "offline";
     view.rerender(
       <DietTab

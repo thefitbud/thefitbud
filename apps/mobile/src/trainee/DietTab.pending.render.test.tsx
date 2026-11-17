@@ -114,7 +114,7 @@ const relationship = coachingRelationshipSchema.parse({
   trainerDisplayName: "Rahul Verma",
 });
 
-describe("DietTab meal logged offline (frame 86)", () => {
+describe("DietTab meal logged offline (TR-07d)", () => {
   it("shows Waiting to send, the header chip and the planned-until-sent note", async () => {
     await enqueueAndPush(syncEngine, {
       recordId: LUNCH_ID,
@@ -130,12 +130,10 @@ describe("DietTab meal logged offline (frame 86)", () => {
       />,
     );
     await waitFor(() => expect(screen.getByText("Waiting to send 1")).toBeTruthy());
-    // Row pill (the header chip text is "Waiting to send 1").
-    expect(screen.getByText("Waiting to send")).toBeTruthy();
-    expect(screen.getByText("Logged")).toBeTruthy();
-    expect(
-      screen.getByText("2 of 3 meals logged · Lunch is counted as planned until it's sent"),
-    ).toBeTruthy();
+    // The row says it is not sent yet (TR-07d); the other logged meal is not.
+    expect(screen.getAllByText(/Eaten as planned · not sent yet/).length).toBe(1);
+    expect(screen.getByLabelText("Not sent yet")).toBeTruthy();
+    expect(screen.getByText("2 of 3 logged")).toBeTruthy();
   });
 });
 

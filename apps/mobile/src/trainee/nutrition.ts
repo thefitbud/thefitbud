@@ -116,20 +116,38 @@ export function dayNutritionFromMeals(
     unknown: assignedTotals.unknown,
   };
 
+  // Plan-derived meals are summed in scaled units and rounded once for the
+  // day (Z12-42); a changed meal brings its own logged figures.
   let loggedKcal = 0;
   let loggedProtein = 0;
   let loggedCarbs = 0;
   let loggedFat = 0;
   let unknown = false;
+  const planLoggedItems: Array<
+    (typeof assignedItems)[number]
+  > = [];
   for (const meal of meals) {
     if (!isMealLoggedForCount(meal.status)) continue;
-    const macros = loggedMacrosForMeal(meal);
-    loggedKcal += macros.kcal;
-    loggedProtein += macros.protein;
-    loggedCarbs += macros.carbs;
-    loggedFat += macros.fat;
-    if (macros.unknown) unknown = true;
+    if (meal.status === "skipped") continue;
+    if (meal.status === "modified") {
+      const macros = loggedMacrosForMeal(meal);
+      loggedKcal += macros.kcal;
+      loggedProtein += macros.protein;
+      loggedCarbs += macros.carbs;
+      loggedFat += macros.fat;
+      if (macros.unknown) unknown = true;
+      continue;
+    }
+    for (const item of meal.prescription.items) {
+      planLoggedItems.push("calculated" in item && item.calculated ? item.calculated : null);
+    }
   }
+  const planLogged = dayMacrosFromScaledItems(planLoggedItems);
+  loggedKcal += planLogged.kcal;
+  loggedProtein += planLogged.proteinG;
+  loggedCarbs += planLogged.carbsG;
+  loggedFat += planLogged.fatG;
+  if (planLogged.unknown) unknown = true;
 
   const logged: MacroTotals = {
     kcal: loggedKcal,
@@ -236,12 +254,49 @@ export type DayKcalSummary = {
   plannedTotal: number;
 };
 
+/** A meal's planned kcal in scaled units, unrounded (summed over its items). */
+function plannedKcalScaled(meal: MealAssignment): number {
+  let total = 0;
+  for (const item of meal.prescription.items) {
+    if ("calculated" in item && item.calculated) {
+      total += item.calculated.energyKcalScaled ?? 0;
+    }
+  }
+  return total;
+}
+
+/** A meal's logged kcal in scaled units, unrounded (same sources as `loggedMacrosForMeal`). */
+function loggedKcalScaled(
+  meal: MealAssignment,
+  serverScaled: number | undefined,
+): number {
+  if (meal.status === "skipped") return 0;
+  if (meal.status === "modified") {
+    const logged = meal.compliance?.loggedTotals?.energyKcal;
+    if (logged != null) return logged * NUTRIENT_SCALE;
+    const items = meal.compliance?.loggedItems ?? [];
+    if (items.length > 0) {
+      return items.reduce(
+        (sum, item) => sum + (item.energyKcal ?? 0) * NUTRIENT_SCALE,
+        0,
+      );
+    }
+    return plannedKcalScaled(meal);
+  }
+  if (serverScaled != null && serverScaled > 0) return serverScaled;
+  return plannedKcalScaled(meal);
+}
+
 /**
  * Single kcal source for the Diet day summary and the meal rows (D-W11-6).
  * A logged meal contributes its logged kcal (actual foods for "something
  * different", the server per-meal total or the plan otherwise, 0 when skipped);
  * a meal not logged yet shows its planned kcal and adds nothing to the logged
- * total. The summary number is therefore always the sum of the logged rows.
+ * total.
+ *
+ * Rounding happens once on each day sum (Z12-42): the rows show each meal
+ * rounded, but the logged total and the planned total are each the scaled sum
+ * rounded one time, so a day eaten as planned never reads "1,746 of 1,745".
  */
 export function dayKcalSummary(
   allAssignments: readonly MealAssignment[],
@@ -255,24 +310,17 @@ export function dayKcalSummary(
     (dayTotals?.perMeal ?? []).map((row) => [row.slotKey, row.kcalScaled]),
   );
   const rows: DayKcalRow[] = [];
-  let loggedTotal = 0;
-  // Rounded once over all items, the same figure the rings call `assigned`.
+  let loggedScaled = 0;
   const plannedTotal = dayNutritionFromMeals([...assignments]).assigned.kcal;
   for (const meal of assignments) {
     if (isMealLoggedForCount(meal.status)) {
-      let kcal: number;
-      const serverScaled = perMeal.get(meal.prescription.id);
-      if (meal.status === "skipped") {
-        kcal = 0;
-      } else if (meal.status === "modified") {
-        kcal = loggedMacrosForMeal(meal).kcal;
-      } else if (serverScaled != null && serverScaled > 0) {
-        kcal = Math.round(unscaleNutrient(serverScaled));
-      } else {
-        kcal = loggedMacrosForMeal(meal).kcal;
-      }
-      rows.push({ id: meal.id, kcal, kind: "logged" });
-      loggedTotal += kcal;
+      const scaled = loggedKcalScaled(meal, perMeal.get(meal.prescription.id));
+      rows.push({
+        id: meal.id,
+        kcal: Math.round(scaled / NUTRIENT_SCALE),
+        kind: "logged",
+      });
+      loggedScaled += scaled;
     } else {
       rows.push({
         id: meal.id,
@@ -281,5 +329,9 @@ export function dayKcalSummary(
       });
     }
   }
-  return { rows, loggedTotal, plannedTotal };
+  return {
+    rows,
+    loggedTotal: Math.round(loggedScaled / NUTRIENT_SCALE),
+    plannedTotal,
+  };
 }
