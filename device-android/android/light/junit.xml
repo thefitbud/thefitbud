@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="1" time="193.389" timestamp="2026-11-17T16:56:36">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="4.339" timestamp="2026-11-17T16:56:36" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+      <failure>Unknown error</failure>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="68.584" timestamp="2026-11-17T16:56:41" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F13 Notifications inbox and its taps (Z12-47)" name="F13 Notifications inbox and its taps (Z12-47)" classname="F13 Notifications inbox and its taps (Z12-47)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F13-notifications-deep-links.yaml" time="120.363" timestamp="2026-11-17T16:57:49" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-47"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
