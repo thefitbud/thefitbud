@@ -31,7 +31,14 @@ Scoped run (D-W12-34) **44144088662**, flows `launch,z12-44,device/z12-36/3-trai
 | iOS simulator | 7/7 | 7/7 | pass, 0 findings, 0 allowed |
 | Android emulator | 7/7 | 7/7 | pass, 0 findings, 0 allowed |
 
-Shots: `docs/qa/Z12-44/<screen ID>-<theme>-<platform>.png` (copied with `copy-shots.sh` from `refs/device-gate/44144088662`). Every screen of this task in both themes on both platforms, except TR-10c dark: in the dark pass the light run had already opened Monday's missed workout, so no banner was left (Expo web shows it in dark).
+Shots: `docs/qa/Z12-44/<screen ID>-<theme>-<platform>.png` (copied with `copy-shots.sh` from `refs/device-gate/44144088662`), except TR-10c dark: in the dark pass the light run had already opened Monday's missed workout, so no banner was left (Expo web shows it in dark).
+
+**Review correction (Z12-44 review).** Run 44144088662 has no W-01a and no iOS W-01c:
+
+- Every `W-01a-*` shot came from `device/z12-40/1-day-moves.yaml`, which took `W-01a-workout-tab-not-started` unconditionally on Aarav's Workout tab: a done day on Android, a Wednesday rest day on iOS. The `when: visible: "Start workout"` branches in z12-44/1 and /2 never fired: `collect-shots` would have logged "W-01a … was taken twice" (it did for W-01c, W-17a and W-17b, not W-01a). The app never showed Start on a done day.
+- The iOS job ran after IST midnight on a Wednesday, a rest day for every demo plan, so z12-44/1's done-day block was skipped; the kept iOS `W-01c` was Rohan's finished Tuesday (a past day).
+
+Those six shots are removed and the parity rows are GAP or Android-only until the re-run. The flows now assert today's strip state from the device clock (IST) before they branch (`device/z12-44/ist-days.yaml`), z12-40's shot is renamed `z12-40-workout-day`, z12-36/3 opens last Saturday, and z12-44/2 captures Rohan's W-01a in both themes. The re-run needs a Tuesday or Thursday (IST), dispatched between 01:30 and about 17:00 UTC: the seed's day is the IST date when it seeds (`apps/api/src/seed/demo/build.ts:20-27`, `:244`) and it logs today's workout only once the 07:00 IST slot opens (`history.ts:379`, `:393`); Rohan has a current-week miss and an unlogged last Saturday only on those days (`history.ts:534-541`).
 
 The first run (44131228416, app `5d40b638`) failed on flow problems, not app defects: the no-plan flow used the shared sign-in, which waits for "Today's workout" (a trainee with no plan never gets it), and dark iOS stalled on the startup spinner after a cold relaunch. Both flows were fixed (sign-in inline for the no-plan flow; wait for the tab bar after a relaunch) and the run above is the one allowed re-run. It also covers Z12-47, merged into the branch in between.
 
