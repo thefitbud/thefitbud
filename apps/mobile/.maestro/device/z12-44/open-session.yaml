@@ -1,0 +1,48 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow (no tags: never run on its own). Opens an active workout for Rohan Mehta
+# (slipping, local demo seed) from the v3 Workout tab (Z12-44), whatever day the
+# runner is on. Start on the Workout tab, its week loaded. In order:
+#   1. today's card: "Start workout" or "Continue workout";
+#   2. the missed banner's "Log it" (TR-10c, this week's newest missed workout);
+#   3. an earlier day, a swipe at a time (Z12-40): a session left open there
+#      ("Continue workout", e.g. the other theme's run) or a missed workout ("Log
+#      workout", a late log). The seed leaves his last two days unlogged.
+# Ends on the active workout ("Log set N · …").
+- runFlow:
+    when:
+      visible: "Start workout|Continue workout"
+    commands:
+      - tapOn: "Start workout|Continue workout"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+- runFlow:
+    when:
+      notVisible: "Log set [0-9]+ ·.*"
+      visible: "Log it"
+    commands:
+      - tapOn: "Log it"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+- runFlow:
+    when:
+      notVisible: "Log set [0-9]+ ·.*"
+    commands:
+      - repeat:
+          times: 7
+          while:
+            notVisible: "Continue workout|Log workout"
+          commands:
+            - swipe:
+                start: "15%, 70%"
+                end: "85%, 70%"
+                duration: 350
+            - extendedWaitUntil:
+                notVisible: "Loading workouts…"
+                timeout: 20000
+      - tapOn: "Continue workout|Log workout"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000

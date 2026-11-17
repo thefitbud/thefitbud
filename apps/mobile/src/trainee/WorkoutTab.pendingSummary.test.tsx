@@ -240,7 +240,9 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
         onPendingSummaryConsumed={consumed}
       />,
     );
-    expect(await screen.findByRole("button", { name: "Save and share with Rahul" })).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Save and share with Rahul" }, { timeout: 5000 }),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
   });

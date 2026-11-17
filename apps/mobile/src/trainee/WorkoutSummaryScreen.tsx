@@ -437,13 +437,9 @@ const useStyles = createThemedStyles((t) => ({
   offline: {
     marginTop: t.spacing.lg,
   },
+  // The Screen's footer bar already draws the edge and the background.
   abar: {
-    backgroundColor: t.colors.bg,
-    borderTopColor: t.colors.line,
-    borderTopWidth: 1,
-    paddingBottom: t.spacing.xl,
-    paddingHorizontal: t.spacing.lg,
-    paddingTop: t.spacing.md,
+    paddingTop: t.spacing.xs,
   },
   footerBtn: {
     minHeight: 56,

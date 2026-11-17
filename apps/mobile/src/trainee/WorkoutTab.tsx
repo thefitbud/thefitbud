@@ -901,7 +901,13 @@ export function WorkoutTab({
           trainerWhatsappE164={relationship.trainerWhatsappE164 ?? null}
           focusAssignment={focusAssignment}
           hero={hero}
-          heroExecution={heroExecution}
+          // Seeded and coach-built executions can come without exercise
+          // rows; the plan fills them in, as on the summary (TR-12).
+          heroExecution={
+            heroExecution
+              ? enrichExecutionFromAssignmentDay(heroExecution, focusAssignment)
+              : null
+          }
           timeZone={timeZone}
           isToday={dayState.isToday}
           weekCompleted={week.completed}
@@ -1505,14 +1511,20 @@ function HeroCard({
         </View>
         {title}
         <View style={styles.tiles}>
-          <StatTile label="Duration" value={minutes != null ? `${minutes} min` : "—"} />
+          <StatTile
+            label="Duration"
+            value={minutes != null ? String(minutes) : "—"}
+            unit={minutes != null ? " min" : ""}
+          />
           <StatTile
             label="Volume"
-            value={volume != null ? `${formatNumber(volume)} kg` : "—"}
+            value={volume != null ? formatNumber(volume) : "—"}
+            unit={volume != null ? " kg" : ""}
           />
           <StatTile
             label="Sets"
-            value={counts ? `${counts.done} / ${counts.total}` : "—"}
+            value={counts ? String(counts.done) : "—"}
+            unit={counts ? ` / ${counts.total}` : ""}
           />
         </View>
         {doneAt ? (
@@ -1591,15 +1603,39 @@ function HeroCard({
   );
 }
 
-function StatTile({ label, value }: { label: string; value: string }) {
+/** A figure on the done card (W-01c): the number large, its unit small. */
+function StatTile({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+}) {
   const styles = useStyles();
   return (
-    <View style={styles.tile} accessible accessibilityLabel={`${label} ${value}`}>
+    <View
+      style={styles.tile}
+      accessible
+      accessibilityLabel={`${label} ${value}${unit}`}
+    >
       <Text variant="subhead" tone="ink2">
         {label}
       </Text>
-      <Text variant="numberMd" style={styles.tileValue}>
+      <Text
+        variant="numberMd"
+        style={styles.tileValue}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+      >
         {value}
+        {unit ? (
+          <Text variant="subhead" tone="ink2">
+            {unit}
+          </Text>
+        ) : null}
       </Text>
     </View>
   );
@@ -1776,6 +1812,7 @@ const useStyles = createThemedStyles((t) => ({
     backgroundColor: t.colors.fill,
     borderRadius: 14,
     flex: 1,
+    minWidth: 0,
     paddingHorizontal: t.spacing.md,
     paddingVertical: 10,
   },

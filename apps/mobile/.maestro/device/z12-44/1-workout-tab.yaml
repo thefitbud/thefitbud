@@ -1,0 +1,138 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)
+tags:
+  - device
+  - trainee
+  - z12-44
+---
+# Z12-44: the v3 Workout tab. Aarav Shah (on track, local demo seed): his workouts
+# through today are logged, so a training day today is done (W-01c) and offers only
+# View summary, on Workout and on Today (ISSUE-MAP #4). The summary (W-17a) moves to
+# the shared step (W-17b), whose week ticks equal its "N of M done" (ISSUE-MAP #10).
+# After a kill and relaunch the day still offers View summary only. Then a planned
+# day ahead (W-01e, "Opens on …", no Start) and a rest day (TR-10a).
+#
+# Days are never written here: the flow moves by swiping (Z12-40) and reads the
+# cards it lands on.
+#
+# Screens (v3 IDs): W-01a or W-01c (whichever today is), W-17a, W-17b, W-01e, TR-10a.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+
+# ---- Today's card on Workout ---------------------------------------------------
+- runFlow: open-workout-tab.yaml
+- runFlow:
+    when:
+      visible: "View summary"
+    commands:
+      # W-01c: done, View summary only (ISSUE-MAP #4).
+      - assertNotVisible: "Start workout"
+      - assertNotVisible: "Continue workout"
+      - takeScreenshot: W-01c-workout-tab-done
+- runFlow:
+    when:
+      visible: "Start workout"
+    commands:
+      - takeScreenshot: W-01a-workout-tab-not-started
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Summary: W-17a, then W-17b -------------------------------------------------
+- runFlow:
+    when:
+      visible: "View summary"
+    commands:
+      - tapOn: "View summary"
+      - extendedWaitUntil:
+          visible: "Workout done"
+          timeout: 30000
+      - takeScreenshot: W-17a-summary
+      - tapOn: "Save and share with .*"
+      - extendedWaitUntil:
+          visible: "This week"
+          timeout: 10000
+      - assertVisible: "[0-9]+ of [0-9]+ done"
+      - takeScreenshot: W-17b-summary-shared
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Done"
+      - extendedWaitUntil:
+          visible: "View summary"
+          timeout: 30000
+      # Today agrees: its done card has View summary and no Start.
+      - tapOn: "Today"
+      - extendedWaitUntil:
+          notVisible: ".*Loading your day.*"
+          timeout: 30000
+      - scrollUntilVisible:
+          element: "View summary"
+          timeout: 20000
+      - assertNotVisible: "Start workout"
+      - assertNotVisible: "Continue workout"
+      # Kill and relaunch: still done, still View summary only.
+      - launchApp:
+          clearState: false
+      - extendedWaitUntil:
+          notVisible: ".*Loading your day.*"
+          timeout: 60000
+      - runFlow: open-workout-tab.yaml
+      - extendedWaitUntil:
+          visible: "View summary"
+          timeout: 30000
+      - assertNotVisible: "Start workout"
+      - assertNotVisible: "Continue workout"
+      - runFlow: ../../common/assert-no-crash.yaml
+
+# ---- A planned day ahead: W-01e -------------------------------------------------
+# Swipe a day at a time (Z12-40) until a planned workout shows "Opens on …".
+- repeat:
+    times: 7
+    while:
+      notVisible: "Opens on .*"
+    commands:
+      - swipe:
+          start: "85%, 70%"
+          end: "15%, 70%"
+          duration: 350
+      - extendedWaitUntil:
+          notVisible: "Loading workouts…"
+          timeout: 20000
+- runFlow:
+    when:
+      visible: "Opens on .*"
+    commands:
+      - assertNotVisible: "Start workout"
+      - assertNotVisible: "Log workout"
+      - takeScreenshot: W-01e-workout-tab-future-day
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- A rest day: TR-10a ---------------------------------------------------------
+- repeat:
+    times: 14
+    while:
+      notVisible: "Rest day"
+    commands:
+      - swipe:
+          start: "15%, 70%"
+          end: "85%, 70%"
+          duration: 350
+      - extendedWaitUntil:
+          notVisible: "Loading workouts…"
+          timeout: 20000
+- runFlow:
+    when:
+      visible: "Rest day"
+    commands:
+      - takeScreenshot: TR-10a-workout-rest-day
+- runFlow: ../../common/assert-no-crash.yaml
