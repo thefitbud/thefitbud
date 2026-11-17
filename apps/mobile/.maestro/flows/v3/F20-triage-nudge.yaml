@@ -54,6 +54,10 @@ tags:
       - takeScreenshot: TM-04c
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Send nudge"
+- extendedWaitUntil:
+    visible: "Nudge sent.*"
+    timeout: 8000
+    optional: true
 # The sheet closes when the send succeeds and the toast stays about 4 s: a slow hierarchy
 # dump can miss it (run 44127718482), so the toast is captured when it is there and the
 # proof that the first send worked is the TM-04n state below.
