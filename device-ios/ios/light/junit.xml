@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 2AA4F5DB-F3B6-4131-9582-B1558ED1D1A7" tests="4" failures="0" time="407.907" timestamp="2026-11-17T16:45:13">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="103.176" timestamp="2026-11-17T16:45:13" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="92.427" timestamp="2026-11-17T16:46:56" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-36 trainee active workout mid-session (W-03)" name="Z12-36 trainee active workout mid-session (W-03)" classname="Z12-36 trainee active workout mid-session (W-03)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/3-trainee-workout.yaml" time="113.735" timestamp="2026-11-17T16:48:29" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" name="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" classname="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-38/1-trainee-note-banner.yaml" time="98.382" timestamp="2026-11-17T16:50:22" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-38"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
