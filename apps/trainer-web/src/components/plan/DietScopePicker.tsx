@@ -1,4 +1,7 @@
+import { useEffect, useRef } from "react";
+import { X } from "lucide-react";
 import type { DietAdjustmentScope } from "@fitbud/core";
+import { formatCivilDate } from "@fitbud/core";
 
 export type TodayMealsPreview =
   | { status: "loading" }
@@ -51,20 +54,42 @@ function PreviewLine({ preview }: { preview: TodayMealsPreview }) {
   );
 }
 
-/** TW-15: diet change scope, shown when a nutrition-only adjustment is published. */
+/**
+ * Frame 156 / TW-15: diet change scope when a nutrition-only adjustment is published.
+ * Values stay on the API's today_onward | today_only (frame's "Only Thursdays" is not in
+ * DietAdjustmentScope — noted as a follow-up).
+ */
 export function DietScopePicker({
   value,
   onChange,
   preview,
+  today,
+  changeSummary,
+  asModal = false,
+  acting = false,
+  onCancel,
+  onApply,
 }: {
   value: DietAdjustmentScope;
   onChange: (next: DietAdjustmentScope) => void;
   preview: TodayMealsPreview;
+  /** Trainee-local civil today, for civil-date copy. */
+  today?: string;
+  /** Optional context line under the title (e.g. meal time change). */
+  changeSummary?: string;
+  /** When true, render as the frame-156 modal shell with Cancel / Apply. */
+  asModal?: boolean;
+  acting?: boolean;
+  onCancel?: () => void;
+  onApply?: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const todayLabel = today ? formatCivilDate(today) : null;
+
   const options: Array<{ value: DietAdjustmentScope; title: string; body: string }> = [
     {
       value: "today_onward",
-      title: "From today onward",
+      title: todayLabel ? `From today, ${todayLabel}` : "From today onward",
       body: "Updates the plan from today. Today's and future meals that aren't logged yet will change.",
     },
     {
@@ -73,9 +98,23 @@ export function DietScopePicker({
       body: "Changes only today's meals that aren't logged yet. The plan stays the same from tomorrow.",
     },
   ];
-  return (
-    <fieldset className="diet-scope" data-testid="screen-TW-15">
-      <legend>When should the diet change apply?</legend>
+
+  useEffect(() => {
+    if (asModal) dialogRef.current?.focus();
+  }, [asModal]);
+
+  useEffect(() => {
+    if (!asModal || !onCancel) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape" && !acting) onCancel?.();
+    }
+    globalThis.addEventListener("keydown", onKey);
+    return () => globalThis.removeEventListener("keydown", onKey);
+  }, [asModal, acting, onCancel]);
+
+  const body = (
+    <fieldset className="diet-scope" data-testid="screen-TW-15" disabled={acting}>
+      {!asModal ? <legend>When should the diet change apply?</legend> : null}
       <div className="radio-cards" role="radiogroup" aria-label="Diet change scope">
         {options.map((option) => (
           <label
@@ -98,5 +137,50 @@ export function DietScopePicker({
       <PreviewLine preview={preview} />
       <p className="muted">Workouts aren&apos;t affected. Logged meals are protected.</p>
     </fieldset>
+  );
+
+  if (!asModal) return body;
+
+  return (
+    <div className="modal-scrim" role="presentation">
+      <div
+        className="modal-card assign-modal diet-scope-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="diet-scope-title"
+        tabIndex={-1}
+        ref={dialogRef}
+      >
+        <header className="assign-head assign-head-row">
+          <div>
+            <h2 id="diet-scope-title">Apply this change to…</h2>
+            {changeSummary ? <p className="muted assign-sub">{changeSummary}</p> : null}
+          </div>
+          <button
+            type="button"
+            className="assign-close"
+            aria-label="Close"
+            disabled={acting}
+            onClick={onCancel}
+          >
+            <X size={18} strokeWidth={2} aria-hidden />
+          </button>
+        </header>
+        <div className="assign-body">{body}</div>
+        <footer className="assign-actions">
+          <button type="button" className="button-secondary" disabled={acting} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="button-primary"
+            disabled={acting}
+            onClick={() => onApply?.()}
+          >
+            {acting ? "Applying…" : "Apply change"}
+          </button>
+        </footer>
+      </div>
+    </div>
   );
 }
