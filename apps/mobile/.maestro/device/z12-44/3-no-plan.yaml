@@ -1,0 +1,43 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-44 Workout tab, no plan yet (TR-10b)
+tags:
+  - device
+  - trainee
+  - z12-44
+---
+# Z12-44 owns TR-10b (D-W12-27). Harpreet (`harpreet.ready`, local demo seed): an
+# active relationship with no plan of any kind (docs/LOCAL_TESTING.md, Z12-34). The
+# Workout tab says no workouts are planned yet, never a load error, with no strip.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+# The steps of common/sign-in-password.yaml, which ends by waiting for "Today's
+# workout", a heading a trainee with no plan never gets (CU22): this one waits for
+# the trainee tab bar instead (device run 44131228416).
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- tapOn: "you@example.com or 9876543210"
+- inputText: harpreet.ready@demo.fitbud.test
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Your coach's plan for today is waiting\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "Diet"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- runFlow: open-workout-tab.yaml
+- extendedWaitUntil:
+    visible: "No workouts planned yet"
+    timeout: 30000
+- assertNotVisible: "Couldn't load your plan"
+- assertNotVisible: "Start workout"
+- takeScreenshot: TR-10b-workout-no-plan
+- runFlow: ../../common/assert-no-crash.yaml

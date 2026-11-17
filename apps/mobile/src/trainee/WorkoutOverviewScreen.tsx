@@ -265,7 +265,10 @@ export function WorkoutOverviewScreen({
               <View style={styles.note}>
                 <MessageSquare color={colors.indigo} size={18} />
                 <Text style={styles.noteBody}>
-                  <Text style={styles.noteBold}>{coachName}:</Text>{" "}
+                  {/* First name only, as on every v3 screen ("Rahul:"), whatever the caller passes (Z12-23 → Z12-44). */}
+                  <Text style={styles.noteBold}>
+                    {coachName.trim().split(/\s+/)[0] || "Your coach"}:
+                  </Text>{" "}
                   {assignment.workoutDay.instructions.trim()}
                 </Text>
               </View>
