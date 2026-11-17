@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="7" failures="0" time="670.535" timestamp="2026-11-17T21:26:37">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="65.441" timestamp="2026-11-17T21:26:37" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="38.042" timestamp="2026-11-17T21:27:42" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-36 trainee active workout mid-session (W-03)" name="Z12-36 trainee active workout mid-session (W-03)" classname="Z12-36 trainee active workout mid-session (W-03)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/3-trainee-workout.yaml" time="102.039" timestamp="2026-11-17T21:28:20" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-40 Moving between days (swipe, cached days, header)" name="Z12-40 Moving between days (swipe, cached days, header)" classname="Z12-40 Moving between days (swipe, cached days, header)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-40/1-day-moves.yaml" time="129.994" timestamp="2026-11-17T21:30:02" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-40"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" name="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" classname="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/1-workout-tab.yaml" time="79.447" timestamp="2026-11-17T21:32:12" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" name="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" classname="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/2-finish-workout.yaml" time="208.233" timestamp="2026-11-17T21:33:32" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-44 Workout tab, no plan yet (TR-10b)" name="Z12-44 Workout tab, no plan yet (TR-10b)" classname="Z12-44 Workout tab, no plan yet (TR-10b)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/3-no-plan.yaml" time="47.242" timestamp="2026-11-17T21:37:00" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
