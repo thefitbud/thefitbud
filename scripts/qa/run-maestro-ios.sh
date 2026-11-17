@@ -74,7 +74,12 @@ missing=""
 # run-maestro.sh: Maestro walks the workspace in path order, and
 # trainee/workout-log.yaml must run before trainer/attention.yaml resolves
 # exceptions, which can close workout logging for the same client.
-EXPECTED_ORDER="auth trainee trainer"
+# `v3` holds the device-harness flows (scripts/qa/device, selected by tag or glob). None
+# of them carries `smoke` or `full`, so this runner's --include-tags filter never runs
+# them (F10b needs the device taken offline, which only the harness does); they sort
+# last, after trainer, so they cannot reorder the suite above. mobile-build.test.mjs
+# keeps both halves of that true.
+EXPECTED_ORDER="auth trainee trainer v3"
 ACTUAL_ORDER="$(find "$WORKSPACE/flows" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | tr '\n' ' ')"
 ACTUAL_ORDER="${ACTUAL_ORDER% }"
 if [ "$ACTUAL_ORDER" != "$EXPECTED_ORDER" ]; then

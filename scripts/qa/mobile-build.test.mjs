@@ -483,3 +483,25 @@ test("the Today scrolls below the workout card allow 120 s on iOS", () => {
   assert.ok(today.indexOf('element: "Nutrition"') < today.indexOf('element: "Meals"'));
   assert.match(today, /- assertNotVisible: "No meals planned today\\\\\."/);
 });
+
+// Z12-35 follow-up: flows/v3 (F10, F29) joined the workspace after the order guard was
+// written. Both legacy runners must name it, last, and must not run its flows: they are
+// selected by the device harness, and the runners only pass --include-tags smoke|full.
+test("the legacy Maestro runners expect flows/v3 last, and no v3 flow carries smoke or full", () => {
+  const flows = path.join(repo, "apps/mobile/.maestro/flows");
+  const dirs = fs.readdirSync(flows, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  assert.equal(dirs.at(-1), "v3");
+  for (const script of ["run-maestro.sh", "run-maestro-ios.sh"]) {
+    const m = fs.readFileSync(path.join(here, script), "utf8").match(/^EXPECTED_ORDER="([^"]*)"/m);
+    assert.ok(m, `${script} has an EXPECTED_ORDER`);
+    assert.equal(m[1], dirs.join(" "), `${script} guard matches the workspace`);
+  }
+  const v3 = fs.readdirSync(path.join(flows, "v3")).filter((f) => f.endsWith(".yaml"));
+  assert.ok(v3.length > 0);
+  for (const f of v3) {
+    const head = fs.readFileSync(path.join(flows, "v3", f), "utf8").split(/^---$/m)[0];
+    const tags = [...head.matchAll(/^\s+-\s+(\S+)\s*$/gm)].map((t) => t[1]);
+    assert.ok(tags.includes("device"), `${f} is a device-harness flow`);
+    assert.ok(!tags.includes("smoke") && !tags.includes("full"), `${f} would run in the legacy runners`);
+  }
+});
