@@ -1,4 +1,10 @@
-import { useMemo, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { Link, useParams } from "react-router-dom";
 import type {
   ExerciseDifficulty,
@@ -8,9 +14,8 @@ import type {
   NutritionBasis,
 } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { calculateServingNutrients, formatNumber, labelFor } from "@fitbud/core";
 import { Button } from "../../components/Button";
-import { OverflowMenu } from "../../components/OverflowMenu";
 import {
   EmptyState,
   ErrorState,
@@ -18,11 +23,14 @@ import {
 } from "../../components/StatePanels";
 import { useOnline } from "../../hooks/useOnline";
 import { apiClient } from "../../lib/api";
-import { LibraryThumb } from "./LibraryThumb";
+import { LibrarySearch } from "./LibrarySearch";
 import { errorText } from "./shared";
 import { useCursorPage, useDebounced } from "./useCursorPage";
+import "./LibrariesPanel.css";
 
 const PAGE_SIZE = 25;
+
+type SourceFilter = "all" | "global" | "mine";
 
 const MUSCLE_OPTIONS = [
   "chest",
@@ -69,15 +77,181 @@ const FOOD_CLASSIFICATIONS: FoodClassification[] = [
   "branded_product",
 ];
 
+const SOURCE_OPTIONS: Array<{ value: SourceFilter; label: string }> = [
+  { value: "all", label: "All sources" },
+  { value: "global", label: "FitBud base" },
+  { value: "mine", label: "Mine" },
+];
+
 function scaledDisplay(value: number | null): string {
   if (value == null) return "—";
-  const whole = value / NUTRIENT_SCALE;
-  return Number.isInteger(whole) ? String(whole) : whole.toFixed(1);
+  // Frames use whole kcal / grams; round rather than show seed decimals.
+  return formatNumber(Math.round(value / NUTRIENT_SCALE));
 }
 
-function joinLabels(values: string[], namespace: "body_part" | "equipment"): string {
-  if (values.length === 0) return "—";
-  return values.map((value) => labelFor(namespace, value)).join(", ");
+/** First serving with a conversion — same pick as BuilderLibraryList.foodLibraryMetaLine. */
+function defaultFoodServing(item: FoodLibraryItem) {
+  return item.servings.find((candidate) => candidate.conversionScaled != null) ?? null;
+}
+
+/** Per-serving nutrients from per-100g (or basis) canonical values. */
+function foodServingNutrients(item: FoodLibraryItem) {
+  const serving = defaultFoodServing(item);
+  if (!serving || serving.conversionScaled == null) return null;
+  return {
+    serving,
+    calculated: calculateServingNutrients(
+      {
+        energyKcalScaled: item.energyKcalScaled,
+        proteinScaled: item.proteinScaled,
+        carbsScaled: item.carbsScaled,
+        fatScaled: item.fatScaled,
+      },
+      serving.conversionScaled,
+      NUTRIENT_SCALE,
+    ),
+  };
+}
+
+function sourceLabel(ownership: "global" | "trainer"): string {
+  return ownership === "global" ? "FitBud base" : "Mine";
+}
+
+function foodCategory(item: FoodLibraryItem): string {
+  if (item.classification) {
+    return labelFor("food_classification", item.classification);
+  }
+  return "Uncategorised";
+}
+
+/** List meta: `portion · kcal` for the default serving (not raw per-100g). */
+export function foodServingKcal(item: FoodLibraryItem): string {
+  const nutrients = foodServingNutrients(item);
+  if (!nutrients) {
+    const fallback = item.servings[0]?.label?.trim() || "—";
+    return `${fallback} · —`;
+  }
+  const servingLabel = nutrients.serving.label.trim() || "—";
+  const kcal = scaledDisplay(nutrients.calculated.energyKcalScaled);
+  if (kcal === "—") return `${servingLabel} · —`;
+  return `${servingLabel} · ${kcal} kcal`;
+}
+
+function FoodDrawerMacroRows({ item }: { item: FoodLibraryItem }) {
+  const nutrients = foodServingNutrients(item);
+  const servingLabel =
+    nutrients?.serving.label ?? item.servings[0]?.label ?? "—";
+  const energy = scaledDisplay(nutrients?.calculated.energyKcalScaled ?? null);
+  const protein = scaledDisplay(nutrients?.calculated.proteinScaled ?? null);
+  const carbs = scaledDisplay(nutrients?.calculated.carbsScaled ?? null);
+  const fat = scaledDisplay(nutrients?.calculated.fatScaled ?? null);
+  return (
+    <>
+      <div>
+        <dt>Serving</dt>
+        <dd>{servingLabel}</dd>
+      </div>
+      <div>
+        <dt>Calories</dt>
+        <dd>{energy === "—" ? "—" : `${energy} kcal`}</dd>
+      </div>
+      <div>
+        <dt>Protein</dt>
+        <dd>{protein === "—" ? "—" : `${protein} g`}</dd>
+      </div>
+      <div>
+        <dt>Carbs</dt>
+        <dd>{carbs === "—" ? "—" : `${carbs} g`}</dd>
+      </div>
+      <div>
+        <dt>Fat</dt>
+        <dd>{fat === "—" ? "—" : `${fat} g`}</dd>
+      </div>
+    </>
+  );
+}
+
+function exerciseMuscle(item: ExerciseLibraryItem): string {
+  if (item.primaryMuscles.length === 0) return "—";
+  return item.primaryMuscles
+    .map((value) => labelFor("body_part", value))
+    .join(", ");
+}
+
+function exerciseEquipment(item: ExerciseLibraryItem): string {
+  if (item.equipment.length === 0) return "—";
+  return item.equipment
+    .map((value) => labelFor("equipment", value))
+    .join(", ");
+}
+
+function matchesSource(
+  ownership: "global" | "trainer",
+  source: SourceFilter,
+): boolean {
+  if (source === "all") return true;
+  if (source === "global") return ownership === "global";
+  return ownership === "trainer";
+}
+
+function SourceFilterControl({
+  value,
+  onChange,
+}: {
+  value: SourceFilter;
+  onChange: (value: SourceFilter) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const label =
+    SOURCE_OPTIONS.find((option) => option.value === value)?.label ?? "Source";
+
+  useEffect(() => {
+    if (!open) return;
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  return (
+    <div className="libraries-source">
+      <button
+        type="button"
+        className={
+          value === "all"
+            ? "libraries-source-trigger"
+            : "libraries-source-trigger has-selection"
+        }
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        Source{value === "all" ? "" : `: ${label}`}
+        <span aria-hidden>▾</span>
+      </button>
+      {open ? (
+        <ul className="libraries-source-menu" role="listbox" aria-label="Source">
+          {SOURCE_OPTIONS.map((option) => (
+            <li key={option.value} role="presentation">
+              <button
+                type="button"
+                role="option"
+                aria-selected={value === option.value}
+                className={value === option.value ? "is-on" : undefined}
+                onClick={() => {
+                  onChange(option.value);
+                  setOpen(false);
+                }}
+              >
+                {option.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
 }
 
 export function LibrariesPanel() {
@@ -86,65 +260,95 @@ export function LibrariesPanel() {
     segment === "foods" ? "foods" : ("exercises" as "exercises" | "foods");
   const [tab, setTab] = useState<"exercises" | "foods">(initial);
 
+  useEffect(() => {
+    setTab(segment === "foods" ? "foods" : "exercises");
+  }, [segment]);
+
   return (
-    <div className="templates-tab-panel" data-testid="screen-TW-26">
-      <header className="templates-tab-header">
-        <h2 className="templates-tab-title">Libraries</h2>
-        <p className="lede">
-          Exercises and foods used in plan builders. Global items are read-only.
-        </p>
-      </header>
-      <div
-        className="segment-control library-segment"
-        role="group"
-        aria-label="Library type"
-      >
-        <Link
-          to="/templates/libraries/exercises"
-          className={
-            tab === "exercises" ? "segment-tab is-selected" : "segment-tab"
-          }
-          onClick={() => setTab("exercises")}
-        >
-          Exercises
-        </Link>
-        <Link
-          to="/templates/libraries/foods"
-          className={tab === "foods" ? "segment-tab is-selected" : "segment-tab"}
-          onClick={() => setTab("foods")}
-        >
-          Foods
-        </Link>
-      </div>
-      {tab === "exercises" ? <ExerciseLibrary /> : <FoodLibrary />}
+    <div className="templates-tab-panel libraries-v3" data-testid="screen-TW-26">
+      {tab === "exercises" ? (
+        <ExerciseLibrary onTab={setTab} />
+      ) : (
+        <FoodLibrary onTab={setTab} />
+      )}
     </div>
   );
 }
 
-function ExerciseLibrary() {
+function LibrariesChrome({
+  tab,
+  onTab,
+  addLabel,
+  onAdd,
+  children,
+}: {
+  tab: "exercises" | "foods";
+  onTab: (tab: "exercises" | "foods") => void;
+  addLabel: string;
+  onAdd: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <>
+      <header className="libraries-header">
+        <div>
+          <h2>Libraries</h2>
+          <p className="lede">Foods and exercises you use in plans</p>
+        </div>
+        <Button variant="primary" onClick={onAdd}>
+          <span aria-hidden>+ </span>
+          {addLabel}
+        </Button>
+      </header>
+      <div
+        className="libraries-segment"
+        role="group"
+        aria-label="Library type"
+      >
+        <Link
+          to="/templates/libraries/foods"
+          className={tab === "foods" ? "is-on" : undefined}
+          onClick={() => onTab("foods")}
+        >
+          Foods
+        </Link>
+        <Link
+          to="/templates/libraries/exercises"
+          className={tab === "exercises" ? "is-on" : undefined}
+          onClick={() => onTab("exercises")}
+        >
+          Exercises
+        </Link>
+      </div>
+      {children}
+    </>
+  );
+}
+
+function ExerciseLibrary({
+  onTab,
+}: {
+  onTab: (tab: "exercises" | "foods") => void;
+}) {
   const online = useOnline();
   const [q, setQ] = useState("");
-  const [muscleGroup, setMuscleGroup] = useState("");
+  const [source, setSource] = useState<SourceFilter>("all");
   const [equipment, setEquipment] = useState("");
-  const [difficulty, setDifficulty] = useState<ExerciseDifficulty | "">("");
   const nameQuery = useDebounced(q);
   const page = useCursorPage(
     JSON.stringify({
       q: nameQuery.trim(),
-      muscleGroup,
       equipment,
-      difficulty,
     }),
     (cursor) =>
       apiClient.listExerciseLibrary({
         cursor,
         limit: PAGE_SIZE,
         q: nameQuery.trim() || undefined,
-        muscleGroup: muscleGroup || undefined,
         equipment: equipment || undefined,
-        difficulty: difficulty || undefined,
       }),
   );
+  const [detail, setDetail] = useState<ExerciseLibraryItem | null>(null);
   const [form, setForm] = useState<{
     id: string | null;
     name: string;
@@ -160,7 +364,14 @@ function ExerciseLibrary() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const emptySearch = Boolean(nameQuery.trim()) && page.items.length === 0;
+  const items = useMemo(
+    () => page.items.filter((item) => matchesSource(item.ownership, source)),
+    [page.items, source],
+  );
+  const emptySearch =
+    Boolean(nameQuery.trim() || equipment || source !== "all") &&
+    items.length === 0 &&
+    !page.loading;
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -205,6 +416,7 @@ function ExerciseLibrary() {
         difficulty: item.difficulty,
       });
       setMessage("Duplicated to mine.");
+      setDetail(null);
       page.reload();
     } catch (err) {
       setError(errorText(err, "Could not duplicate."));
@@ -220,6 +432,7 @@ function ExerciseLibrary() {
     try {
       await apiClient.deleteExerciseLibraryItem(archiveTarget.id);
       setArchiveTarget(null);
+      setDetail(null);
       setMessage("Archived.");
       page.reload();
     } catch (err) {
@@ -229,231 +442,302 @@ function ExerciseLibrary() {
     }
   }
 
+  function openNew() {
+    setForm({
+      id: null,
+      name: "",
+      instructions: "",
+      primaryMuscles: [],
+      secondaryMuscles: [],
+      equipment: [],
+      difficulty: "",
+    });
+  }
+
   return (
     <div className="library-panel">
-      {!online ? (
-        <ErrorState
-          kind="network"
-          screenId="TW-26"
-          title="You're offline"
-          message="Reconnect to browse the library."
-        />
-      ) : null}
-      <div className="library-toolbar">
-        <label className="field">
-          <span className="sr-only">Search exercises</span>
-          <input
-            type="search"
-            placeholder="Search exercises"
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
+      <LibrariesChrome
+        tab="exercises"
+        onTab={onTab}
+        addLabel="Add exercise"
+        onAdd={openNew}
+      >
+        {!online ? (
+          <ErrorState
+            kind="network"
+            screenId="TW-26"
+            title="You're offline"
+            message="Reconnect to browse the library."
           />
-        </label>
-        <label className="field">
-          <span className="sr-only">Muscle</span>
-          <select
-            value={muscleGroup}
-            onChange={(event) => setMuscleGroup(event.target.value)}
-          >
-            <option value="">All muscles</option>
-            {MUSCLE_OPTIONS.map((value) => (
-              <option key={value} value={value}>
-                {labelFor("body_part", value)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="sr-only">Equipment</span>
-          <select
-            value={equipment}
-            onChange={(event) => setEquipment(event.target.value)}
-          >
-            <option value="">All equipment</option>
-            {EQUIPMENT_OPTIONS.map((value) => (
-              <option key={value} value={value}>
-                {labelFor("equipment", value)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="field">
-          <span className="sr-only">Difficulty</span>
-          <select
-            value={difficulty}
-            onChange={(event) =>
-              setDifficulty(event.target.value as ExerciseDifficulty | "")
-            }
-          >
-            <option value="">All levels</option>
-            {DIFFICULTIES.map((value) => (
-              <option key={value} value={value}>
-                {labelFor("exercise_difficulty", value)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button
-          variant="primary"
-          onClick={() =>
-            setForm({
-              id: null,
-              name: "",
-              instructions: "",
-              primaryMuscles: [],
-              secondaryMuscles: [],
-              equipment: [],
-              difficulty: "",
-            })
-          }
+        ) : null}
+        <div className="libraries-toolbar">
+          <LibrarySearch
+            value={q}
+            onChange={setQ}
+            label="Search exercises"
+            placeholder="Search"
+          />
+          <SourceFilterControl value={source} onChange={setSource} />
+        </div>
+        <div
+          className="libraries-pill-filters"
+          role="group"
+          aria-label="Equipment"
         >
-          New exercise
-        </Button>
-      </div>
-
-      {error || page.error ? (
-        <ErrorState
-          message={error ?? page.error ?? "Could not load exercises."}
-          onRetry={page.reload}
-          screenId="TW-26"
-        />
-      ) : null}
-      {message ? (
-        <p className="form-success" role="status">
-          {message}
-        </p>
-      ) : null}
-
-      {page.loading && page.items.length === 0 ? (
-        <LoadingBlock label="Loading exercises…" />
-      ) : null}
-
-      {!page.loading && emptySearch ? (
-        <EmptyState
-          title={`No exercises match '${nameQuery.trim()}'. Create it?`}
-          action={
-            <Button
-              variant="primary"
+          <button
+            type="button"
+            className={equipment === "" ? "libraries-pill is-on" : "libraries-pill"}
+            onClick={() => setEquipment("")}
+          >
+            All equipment
+          </button>
+          {EQUIPMENT_OPTIONS.slice(0, 6).map((value) => (
+            <button
+              key={value}
+              type="button"
+              className={
+                equipment === value ? "libraries-pill is-on" : "libraries-pill"
+              }
               onClick={() =>
-                setForm({
-                  id: null,
-                  name: nameQuery.trim(),
-                  instructions: "",
-                  primaryMuscles: [],
-                  secondaryMuscles: [],
-                  equipment: [],
-                  difficulty: "",
-                })
+                setEquipment((current) => (current === value ? "" : value))
               }
             >
-              Create exercise
-            </Button>
-          }
-        />
-      ) : null}
+              {labelFor("equipment", value)}
+            </button>
+          ))}
+        </div>
 
-      {page.items.length > 0 ? (
-        <div className="library-table-wrap" tabIndex={0}>
-          <table className="library-table">
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Primary muscles</th>
-                <th scope="col">Secondary</th>
-                <th scope="col">Equipment</th>
-                <th scope="col">Difficulty</th>
-                <th scope="col">Media</th>
-                <th scope="col">Owner</th>
-                <th scope="col">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {page.items.map((item) => (
-                <tr key={item.id}>
-                  <td data-label="Name">
-                    <div className="library-name-cell">
-                      <LibraryThumb name={item.name} kind="exercise" />
-                      <span>{item.name}</span>
-                    </div>
-                  </td>
-                  <td data-label="Primary muscles">
-                    {joinLabels(item.primaryMuscles, "body_part")}
-                  </td>
-                  <td data-label="Secondary">
-                    {joinLabels(item.secondaryMuscles, "body_part")}
-                  </td>
-                  <td data-label="Equipment">
-                    {joinLabels(item.equipment, "equipment")}
-                  </td>
-                  <td data-label="Difficulty">
-                    {item.difficulty
-                      ? labelFor("exercise_difficulty", item.difficulty)
-                      : "—"}
-                  </td>
-                  <td data-label="Media">—</td>
-                  <td data-label="Owner">
-                    {item.ownership === "global" ? "FitBud" : "Mine"}
-                  </td>
-                  <td data-label="Actions">
-                    <OverflowMenu
-                      label={`Actions for ${item.name}`}
-                      items={
-                        item.ownership === "global"
-                          ? [
-                              {
-                                id: "dup",
-                                label: "Duplicate to mine",
-                                onSelect: () => void duplicate(item),
-                              },
-                            ]
-                          : [
-                              {
-                                id: "edit",
-                                label: "Edit",
-                                onSelect: () =>
-                                  setForm({
-                                    id: item.id,
-                                    name: item.name,
-                                    instructions: item.instructions ?? "",
-                                    primaryMuscles: [...item.primaryMuscles],
-                                    secondaryMuscles: [
-                                      ...item.secondaryMuscles,
-                                    ],
-                                    equipment: [...item.equipment],
-                                    difficulty: item.difficulty ?? "",
-                                  }),
-                              },
-                              {
-                                id: "archive",
-                                label: "Archive",
-                                destructive: true,
-                                onSelect: () => setArchiveTarget(item),
-                              },
-                            ]
-                      }
-                    />
-                  </td>
+        {error || page.error ? (
+          <ErrorState
+            message={error ?? page.error ?? "Could not load exercises."}
+            onRetry={page.reload}
+            screenId="TW-26"
+          />
+        ) : null}
+        {message ? (
+          <p className="form-success" role="status">
+            {message}
+          </p>
+        ) : null}
+
+        {page.loading && page.items.length === 0 ? (
+          <LoadingBlock label="Loading exercises…" />
+        ) : null}
+
+        {!page.loading && emptySearch ? (
+          <EmptyState
+            title={
+              nameQuery.trim()
+                ? `No exercises match '${nameQuery.trim()}'. Create it?`
+                : "No exercises match these filters."
+            }
+            action={
+              nameQuery.trim() ? (
+                <Button
+                  variant="primary"
+                  onClick={() =>
+                    setForm({
+                      id: null,
+                      name: nameQuery.trim(),
+                      instructions: "",
+                      primaryMuscles: [],
+                      secondaryMuscles: [],
+                      equipment: [],
+                      difficulty: "",
+                    })
+                  }
+                >
+                  Create exercise
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : null}
+
+        {items.length > 0 ? (
+          <div className="libraries-table-wrap" tabIndex={0}>
+            <table className="libraries-table">
+              <thead>
+                <tr>
+                  <th scope="col">Exercise</th>
+                  <th scope="col">Equipment</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">
+                    <span className="sr-only">Open</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr
+                    key={item.id}
+                    className={detail?.id === item.id ? "is-selected" : undefined}
+                    tabIndex={0}
+                    onClick={() => setDetail(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setDetail(item);
+                      }
+                    }}
+                  >
+                    <td data-label="Exercise">
+                      <span className="libraries-name">{item.name}</span>
+                      <span className="libraries-sub">
+                        {exerciseMuscle(item)}
+                      </span>
+                    </td>
+                    <td data-label="Equipment">{exerciseEquipment(item)}</td>
+                    <td data-label="Source">
+                      <span
+                        className={
+                          item.ownership === "trainer"
+                            ? "libraries-source-chip is-mine"
+                            : "libraries-source-chip"
+                        }
+                      >
+                        {sourceLabel(item.ownership)}
+                      </span>
+                    </td>
+                    <td aria-hidden="true">
+                      <span className="libraries-row-chevron">›</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {page.nextCursor ? (
+          <Button
+            variant="secondary"
+            disabled={page.loadingMore}
+            onClick={page.loadMore}
+          >
+            {page.loadingMore ? "Loading…" : "Load more"}
+          </Button>
+        ) : null}
+
+        <section className="libraries-logged-card" aria-label="Logged by clients">
+          <div className="libraries-logged-head">
+            <h3>Logged by clients, not in library</h3>
+            <p>Free-text entries from client logs</p>
+          </div>
+          <p className="libraries-logged-empty">
+            Client free-text exercises stay on their workout logs. There is no
+            library feed for them yet — open a client workspace to review
+            unusual entries.
+          </p>
+        </section>
+      </LibrariesChrome>
+
+      {detail ? (
+        <div
+          className="libraries-drawer-scrim"
+          role="presentation"
+          onClick={() => setDetail(null)}
+        >
+          <aside
+            className="libraries-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={detail.name}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="libraries-drawer-head">
+              <div>
+                <h2>{detail.name}</h2>
+                <div className="libraries-drawer-meta">
+                  <span
+                    className={
+                      detail.ownership === "trainer"
+                        ? "libraries-source-chip is-mine"
+                        : "libraries-source-chip"
+                    }
+                  >
+                    {sourceLabel(detail.ownership)}
+                  </span>
+                </div>
+              </div>
+              <Button variant="tertiary" onClick={() => setDetail(null)}>
+                Close
+              </Button>
+            </div>
+            <dl className="libraries-drawer-dl">
+              <div>
+                <dt>Primary muscles</dt>
+                <dd>{exerciseMuscle(detail)}</dd>
+              </div>
+              <div>
+                <dt>Equipment</dt>
+                <dd>{exerciseEquipment(detail)}</dd>
+              </div>
+              <div>
+                <dt>Difficulty</dt>
+                <dd>
+                  {detail.difficulty
+                    ? labelFor("exercise_difficulty", detail.difficulty)
+                    : "—"}
+                </dd>
+              </div>
+            </dl>
+            {detail.ownership === "global" ? (
+              <div className="libraries-drawer-note" role="note">
+                FitBud base exercises can&apos;t be edited. Make your own copy
+                to change it.
+              </div>
+            ) : null}
+            <div className="libraries-drawer-actions">
+              {detail.ownership === "global" ? (
+                <Button
+                  variant="primary"
+                  disabled={acting}
+                  onClick={() => void duplicate(detail)}
+                >
+                  Make my copy
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setForm({
+                        id: detail.id,
+                        name: detail.name,
+                        instructions: detail.instructions ?? "",
+                        primaryMuscles: [...detail.primaryMuscles],
+                        secondaryMuscles: [...detail.secondaryMuscles],
+                        equipment: [...detail.equipment],
+                        difficulty: detail.difficulty ?? "",
+                      });
+                      setDetail(null);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setArchiveTarget(detail)}
+                  >
+                    Archive
+                  </Button>
+                </>
+              )}
+              <Button variant="secondary" onClick={() => setDetail(null)}>
+                Close
+              </Button>
+            </div>
+          </aside>
         </div>
       ) : null}
 
-      {page.nextCursor ? (
-        <Button
-          variant="secondary"
-          disabled={page.loadingMore}
-          onClick={page.loadMore}
-        >
-          {page.loadingMore ? "Loading…" : "Load more"}
-        </Button>
-      ) : null}
-
       {form ? (
-        <div className="modal-scrim" role="presentation" onClick={() => setForm(null)}>
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onClick={() => setForm(null)}
+        >
           <div
             className="modal-card library-drawer"
             role="dialog"
@@ -461,128 +745,124 @@ function ExerciseLibrary() {
             aria-label={form.id ? "Edit exercise" : "Create exercise"}
             onClick={(event) => event.stopPropagation()}
           >
-          <form onSubmit={(event) => void save(event)}>
-            <h2>{form.id ? "Edit exercise" : "New exercise"}</h2>
-            <label className="field">
-              <span>Name</span>
-              <input
-                value={form.name}
-                required
-                maxLength={120}
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Primary muscles</span>
-              <select
-                multiple
-                value={form.primaryMuscles}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    primaryMuscles: [...event.target.selectedOptions].map(
-                      (option) => option.value,
-                    ),
-                  })
-                }
-              >
-                {MUSCLE_OPTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {labelFor("body_part", value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Secondary muscles</span>
-              <select
-                multiple
-                value={form.secondaryMuscles}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    secondaryMuscles: [...event.target.selectedOptions].map(
-                      (option) => option.value,
-                    ),
-                  })
-                }
-              >
-                {MUSCLE_OPTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {labelFor("body_part", value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Equipment</span>
-              <select
-                multiple
-                value={form.equipment}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    equipment: [...event.target.selectedOptions].map(
-                      (option) => option.value,
-                    ),
-                  })
-                }
-              >
-                {EQUIPMENT_OPTIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {labelFor("equipment", value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Difficulty</span>
-              <select
-                value={form.difficulty}
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    difficulty: event.target.value as ExerciseDifficulty | "",
-                  })
-                }
-              >
-                <option value="">None</option>
-                {DIFFICULTIES.map((value) => (
-                  <option key={value} value={value}>
-                    {labelFor("exercise_difficulty", value)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Instructions</span>
-              <textarea
-                rows={4}
-                value={form.instructions}
-                onChange={(event) =>
-                  setForm({ ...form, instructions: event.target.value })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Media link</span>
-              <input type="url" placeholder="https://" />
-            </label>
-            <div className="button-row">
-              <Button variant="primary" disabled={acting} type="submit">
-                {acting ? "Saving…" : "Save"}
-              </Button>
-              <Button
-                variant="tertiary"
-                type="button"
-                onClick={() => setForm(null)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
+            <form onSubmit={(event) => void save(event)}>
+              <h2>{form.id ? "Edit exercise" : "New exercise"}</h2>
+              <label className="field">
+                <span>Name</span>
+                <input
+                  value={form.name}
+                  required
+                  maxLength={120}
+                  onChange={(event) =>
+                    setForm({ ...form, name: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Primary muscles</span>
+                <select
+                  multiple
+                  value={form.primaryMuscles}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      primaryMuscles: [...event.target.selectedOptions].map(
+                        (option) => option.value,
+                      ),
+                    })
+                  }
+                >
+                  {MUSCLE_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {labelFor("body_part", value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Secondary muscles</span>
+                <select
+                  multiple
+                  value={form.secondaryMuscles}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      secondaryMuscles: [...event.target.selectedOptions].map(
+                        (option) => option.value,
+                      ),
+                    })
+                  }
+                >
+                  {MUSCLE_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {labelFor("body_part", value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Equipment</span>
+                <select
+                  multiple
+                  value={form.equipment}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      equipment: [...event.target.selectedOptions].map(
+                        (option) => option.value,
+                      ),
+                    })
+                  }
+                >
+                  {EQUIPMENT_OPTIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {labelFor("equipment", value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Difficulty</span>
+                <select
+                  value={form.difficulty}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      difficulty: event.target.value as ExerciseDifficulty | "",
+                    })
+                  }
+                >
+                  <option value="">None</option>
+                  {DIFFICULTIES.map((value) => (
+                    <option key={value} value={value}>
+                      {labelFor("exercise_difficulty", value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Instructions</span>
+                <textarea
+                  rows={4}
+                  value={form.instructions}
+                  onChange={(event) =>
+                    setForm({ ...form, instructions: event.target.value })
+                  }
+                />
+              </label>
+              <div className="button-row">
+                <Button variant="primary" disabled={acting} type="submit">
+                  {acting ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  variant="tertiary"
+                  type="button"
+                  onClick={() => setForm(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}
@@ -625,9 +905,14 @@ function ExerciseLibrary() {
   );
 }
 
-function FoodLibrary() {
+function FoodLibrary({
+  onTab,
+}: {
+  onTab: (tab: "exercises" | "foods") => void;
+}) {
   const online = useOnline();
   const [q, setQ] = useState("");
+  const [source, setSource] = useState<SourceFilter>("all");
   const nameQuery = useDebounced(q);
   const page = useCursorPage(`foods-${nameQuery}`, (cursor) =>
     apiClient.listFoodLibrary({
@@ -636,6 +921,7 @@ function FoodLibrary() {
       q: nameQuery.trim() || undefined,
     }),
   );
+  const [detail, setDetail] = useState<FoodLibraryItem | null>(null);
   const [form, setForm] = useState<{
     id: string | null;
     name: string;
@@ -656,7 +942,14 @@ function FoodLibrary() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  const emptySearch = Boolean(nameQuery.trim()) && page.items.length === 0;
+  const items = useMemo(
+    () => page.items.filter((item) => matchesSource(item.ownership, source)),
+    [page.items, source],
+  );
+  const emptySearch =
+    Boolean(nameQuery.trim() || source !== "all") &&
+    items.length === 0 &&
+    !page.loading;
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -743,6 +1036,7 @@ function FoodLibrary() {
         notes: item.notes,
       });
       setMessage("Duplicated to mine.");
+      setDetail(null);
       page.reload();
     } catch (err) {
       setError(errorText(err, "Could not duplicate."));
@@ -757,6 +1051,7 @@ function FoodLibrary() {
     try {
       await apiClient.deleteFoodLibraryItem(archiveTarget.id);
       setArchiveTarget(null);
+      setDetail(null);
       setMessage("Archived.");
       page.reload();
     } catch (err) {
@@ -766,215 +1061,252 @@ function FoodLibrary() {
     }
   }
 
-  const customLoggedHint = useMemo(
-    () =>
-      "Client-logged foods stay on that client's meals — they are not listed in your library. Open the client workspace to review them.",
-    [],
-  );
+  function openNew() {
+    setForm({
+      id: null,
+      name: "",
+      classification: "generic_food",
+      basis: "per_100_g",
+      energyKcal: "",
+      proteinGrams: "",
+      carbsGrams: "",
+      fatGrams: "",
+      servings: [
+        { label: "100 g", unit: "g", conversion: "100" },
+        { label: "1 katori", unit: "g", conversion: "150" },
+      ],
+      aliases: "",
+      description: "",
+    });
+  }
 
   return (
     <div className="library-panel">
-      {!online ? (
-        <ErrorState
-          kind="network"
-          screenId="TW-26"
-          title="You're offline"
-          message="Reconnect to browse the library."
-        />
-      ) : null}
-      <div className="library-toolbar">
-        <label className="field">
-          <span className="sr-only">Search foods</span>
-          <input
-            type="search"
-            placeholder="Search foods"
-            value={q}
-            onChange={(event) => setQ(event.target.value)}
+      <LibrariesChrome
+        tab="foods"
+        onTab={onTab}
+        addLabel="Add food"
+        onAdd={openNew}
+      >
+        {!online ? (
+          <ErrorState
+            kind="network"
+            screenId="TW-26"
+            title="You're offline"
+            message="Reconnect to browse the library."
           />
-        </label>
-        <Button
-          variant="primary"
-          onClick={() =>
-            setForm({
-              id: null,
-              name: "",
-              classification: "generic_food",
-              basis: "per_100_g",
-              energyKcal: "",
-              proteinGrams: "",
-              carbsGrams: "",
-              fatGrams: "",
-              servings: [
-                { label: "100 g", unit: "g", conversion: "100" },
-                { label: "1 katori", unit: "g", conversion: "150" },
-              ],
-              aliases: "",
-              description: "",
-            })
-          }
-        >
-          New food
-        </Button>
-      </div>
-      <p className="muted">{customLoggedHint}</p>
+        ) : null}
+        <div className="libraries-toolbar">
+          <LibrarySearch
+            value={q}
+            onChange={setQ}
+            label="Search foods"
+            placeholder="Search"
+          />
+          <SourceFilterControl value={source} onChange={setSource} />
+        </div>
 
-      {error || page.error ? (
-        <ErrorState
-          message={error ?? page.error ?? "Could not load foods."}
-          onRetry={page.reload}
-          screenId="TW-26"
-        />
-      ) : null}
-      {message ? (
-        <p className="form-success" role="status">
-          {message}
-        </p>
-      ) : null}
+        {error || page.error ? (
+          <ErrorState
+            message={error ?? page.error ?? "Could not load foods."}
+            onRetry={page.reload}
+            screenId="TW-26"
+          />
+        ) : null}
+        {message ? (
+          <p className="form-success" role="status">
+            {message}
+          </p>
+        ) : null}
 
-      {page.loading && page.items.length === 0 ? (
-        <LoadingBlock label="Loading foods…" />
-      ) : null}
+        {page.loading && page.items.length === 0 ? (
+          <LoadingBlock label="Loading foods…" />
+        ) : null}
 
-      {!page.loading && emptySearch ? (
-        <EmptyState title={`No foods match '${nameQuery.trim()}'.`} />
-      ) : null}
+        {!page.loading && emptySearch ? (
+          <EmptyState title={`No foods match '${nameQuery.trim() || "filters"}'.`} />
+        ) : null}
 
-      {page.items.length > 0 ? (
-        <div className="library-table-wrap" tabIndex={0}>
-          <table className="library-table">
-            <thead>
-              <tr>
-                <th scope="col">Name</th>
-                <th scope="col">Classification</th>
-                <th scope="col">Basis</th>
-                <th scope="col">kcal</th>
-                <th scope="col">P</th>
-                <th scope="col">C</th>
-                <th scope="col">F</th>
-                <th scope="col">Servings</th>
-                <th scope="col">Owner</th>
-                <th scope="col">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {page.items.map((item) => (
-                <tr key={item.id}>
-                  <td data-label="Name">
-                    <div className="library-name-cell">
-                      <LibraryThumb name={item.name} kind="food" />
-                      <span>{item.name}</span>
-                    </div>
-                  </td>
-                  <td data-label="Classification">
-                    {item.classification
-                      ? labelFor("food_classification", item.classification)
-                      : "—"}
-                  </td>
-                  <td data-label="Basis">
-                    {item.basis ? labelFor("nutrition_basis", item.basis) : "—"}
-                  </td>
-                  <td data-label="kcal">
-                    {scaledDisplay(item.energyKcalScaled)}
-                  </td>
-                  <td data-label="Protein">
-                    {scaledDisplay(item.proteinScaled)}
-                  </td>
-                  <td data-label="Carbs">
-                    {scaledDisplay(item.carbsScaled)}
-                  </td>
-                  <td data-label="Fat">{scaledDisplay(item.fatScaled)}</td>
-                  <td data-label="Servings">{item.servings.length}</td>
-                  <td data-label="Owner">
-                    {item.ownership === "global" ? "FitBud" : "Mine"}
-                  </td>
-                  <td data-label="Actions">
-                    <OverflowMenu
-                      label={`Actions for ${item.name}`}
-                      items={
-                        item.ownership === "global"
-                          ? [
-                              {
-                                id: "dup",
-                                label: "Duplicate to mine",
-                                onSelect: () => void duplicate(item),
-                              },
-                            ]
-                          : [
-                              {
-                                id: "edit",
-                                label: "Edit",
-                                onSelect: () =>
-                                  setForm({
-                                    id: item.id,
-                                    name: item.name,
-                                    classification: item.classification ?? "",
-                                    basis: item.basis ?? "",
-                                    energyKcal: scaledDisplay(
-                                      item.energyKcalScaled,
-                                    ).replace("—", ""),
-                                    proteinGrams: scaledDisplay(
-                                      item.proteinScaled,
-                                    ).replace("—", ""),
-                                    carbsGrams: scaledDisplay(
-                                      item.carbsScaled,
-                                    ).replace("—", ""),
-                                    fatGrams: scaledDisplay(
-                                      item.fatScaled,
-                                    ).replace("—", ""),
-                                    servings:
-                                      item.servings.length > 0
-                                        ? item.servings.map((s) => ({
-                                            label: s.label,
-                                            unit: s.unit,
-                                            conversion: String(
-                                              (s.conversionScaled ??
-                                                NUTRIENT_SCALE) /
-                                                NUTRIENT_SCALE,
-                                            ),
-                                          }))
-                                        : [
-                                            {
-                                              label: "1 katori",
-                                              unit: "g",
-                                              conversion: "150",
-                                            },
-                                          ],
-                                    aliases: (item.notes ?? "")
-                                      .replace(/^Aliases:\s*/i, ""),
-                                    description: item.description ?? "",
-                                  }),
-                              },
-                              {
-                                id: "archive",
-                                label: "Archive",
-                                destructive: true,
-                                onSelect: () => setArchiveTarget(item),
-                              },
-                            ]
-                      }
-                    />
-                  </td>
+        {items.length > 0 ? (
+          <div className="libraries-table-wrap" tabIndex={0}>
+            <table className="libraries-table">
+              <thead>
+                <tr>
+                  <th scope="col">Food</th>
+                  <th scope="col">Serving · kcal</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr
+                    key={item.id}
+                    className={detail?.id === item.id ? "is-selected" : undefined}
+                    tabIndex={0}
+                    onClick={() => setDetail(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setDetail(item);
+                      }
+                    }}
+                  >
+                    <td data-label="Food">
+                      <span className="libraries-name">{item.name}</span>
+                      <span className="libraries-sub">{foodCategory(item)}</span>
+                    </td>
+                    <td data-label="Serving · kcal">
+                      <span className="libraries-serving">
+                        {foodServingKcal(item)}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {page.nextCursor ? (
+          <Button
+            variant="secondary"
+            disabled={page.loadingMore}
+            onClick={page.loadMore}
+          >
+            {page.loadingMore ? "Loading…" : "Load more"}
+          </Button>
+        ) : null}
+      </LibrariesChrome>
+
+      {detail ? (
+        <div
+          className="libraries-drawer-scrim"
+          role="presentation"
+          onClick={() => setDetail(null)}
+        >
+          <aside
+            className="libraries-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label={detail.name}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="libraries-drawer-head">
+              <div>
+                <h2>{detail.name}</h2>
+                <div className="libraries-drawer-meta">
+                  <span
+                    className={
+                      detail.ownership === "trainer"
+                        ? "libraries-source-chip is-mine"
+                        : "libraries-source-chip"
+                    }
+                  >
+                    {sourceLabel(detail.ownership)}
+                  </span>
+                </div>
+              </div>
+              <Button variant="tertiary" onClick={() => setDetail(null)}>
+                Close
+              </Button>
+            </div>
+            <dl className="libraries-drawer-dl">
+              <FoodDrawerMacroRows item={detail} />
+              <div>
+                <dt>Used in</dt>
+                <dd>—</dd>
+              </div>
+            </dl>
+            {detail.ownership === "global" ? (
+              <div className="libraries-drawer-note" role="note">
+                FitBud base foods can&apos;t be edited. Make your own copy to
+                change it.
+              </div>
+            ) : null}
+            <div className="libraries-drawer-actions">
+              {detail.ownership === "global" ? (
+                <Button
+                  variant="primary"
+                  disabled={acting}
+                  onClick={() => void duplicate(detail)}
+                >
+                  Make my copy
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    variant="primary"
+                    onClick={() => {
+                      setForm({
+                        id: detail.id,
+                        name: detail.name,
+                        classification: detail.classification ?? "",
+                        basis: detail.basis ?? "",
+                        energyKcal: scaledDisplay(detail.energyKcalScaled).replace(
+                          "—",
+                          "",
+                        ),
+                        proteinGrams: scaledDisplay(detail.proteinScaled).replace(
+                          "—",
+                          "",
+                        ),
+                        carbsGrams: scaledDisplay(detail.carbsScaled).replace(
+                          "—",
+                          "",
+                        ),
+                        fatGrams: scaledDisplay(detail.fatScaled).replace(
+                          "—",
+                          "",
+                        ),
+                        servings:
+                          detail.servings.length > 0
+                            ? detail.servings.map((s) => ({
+                                label: s.label,
+                                unit: s.unit,
+                                conversion: String(
+                                  (s.conversionScaled ?? NUTRIENT_SCALE) /
+                                    NUTRIENT_SCALE,
+                                ),
+                              }))
+                            : [
+                                {
+                                  label: "1 katori",
+                                  unit: "g",
+                                  conversion: "150",
+                                },
+                              ],
+                        aliases: (detail.notes ?? "").replace(
+                          /^Aliases:\s*/i,
+                          "",
+                        ),
+                        description: detail.description ?? "",
+                      });
+                      setDetail(null);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setArchiveTarget(detail)}
+                  >
+                    Archive
+                  </Button>
+                </>
+              )}
+              <Button variant="secondary" onClick={() => setDetail(null)}>
+                Close
+              </Button>
+            </div>
+          </aside>
         </div>
       ) : null}
 
-      {page.nextCursor ? (
-        <Button
-          variant="secondary"
-          disabled={page.loadingMore}
-          onClick={page.loadMore}
-        >
-          {page.loadingMore ? "Loading…" : "Load more"}
-        </Button>
-      ) : null}
-
       {form ? (
-        <div className="modal-scrim" role="presentation" onClick={() => setForm(null)}>
+        <div
+          className="modal-scrim"
+          role="presentation"
+          onClick={() => setForm(null)}
+        >
           <div
             className="modal-card library-drawer"
             role="dialog"
@@ -982,157 +1314,160 @@ function FoodLibrary() {
             aria-label={form.id ? "Edit food" : "Create food"}
             onClick={(event) => event.stopPropagation()}
           >
-          <form onSubmit={(event) => void save(event)}>
-            <h2>{form.id ? "Edit food" : "New food"}</h2>
-            <label className="field">
-              <span>Name</span>
-              <input
-                value={form.name}
-                required
-                onChange={(event) =>
-                  setForm({ ...form, name: event.target.value })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Classification</span>
-              <select
-                value={form.classification}
-                required
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    classification: event.target
-                      .value as FoodClassification,
-                  })
-                }
-              >
-                {FOOD_CLASSIFICATIONS.map((value) => (
-                  <option key={value} value={value}>
-                    {labelFor("food_classification", value)}
+            <form onSubmit={(event) => void save(event)}>
+              <h2>{form.id ? "Edit food" : "New food"}</h2>
+              <label className="field">
+                <span>Name</span>
+                <input
+                  value={form.name}
+                  required
+                  onChange={(event) =>
+                    setForm({ ...form, name: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Classification</span>
+                <select
+                  value={form.classification}
+                  required
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      classification: event.target.value as FoodClassification,
+                    })
+                  }
+                >
+                  {FOOD_CLASSIFICATIONS.map((value) => (
+                    <option key={value} value={value}>
+                      {labelFor("food_classification", value)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Basis</span>
+                <select
+                  value={form.basis}
+                  required
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      basis: event.target.value as NutritionBasis,
+                    })
+                  }
+                >
+                  <option value="per_100_g">
+                    {labelFor("nutrition_basis", "per_100_g")}
                   </option>
+                  <option value="per_100_ml">
+                    {labelFor("nutrition_basis", "per_100_ml")}
+                  </option>
+                </select>
+              </label>
+              <div className="libraries-macro-grid">
+                {(
+                  [
+                    ["energyKcal", "kcal"],
+                    ["proteinGrams", "Protein"],
+                    ["carbsGrams", "Carbs"],
+                    ["fatGrams", "Fat"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="field">
+                    <span>{label}</span>
+                    <input
+                      inputMode="decimal"
+                      value={form[key]}
+                      placeholder="—"
+                      onChange={(event) =>
+                        setForm({ ...form, [key]: event.target.value })
+                      }
+                    />
+                  </label>
                 ))}
-              </select>
-            </label>
-            <label className="field">
-              <span>Basis</span>
-              <select
-                value={form.basis}
-                required
-                onChange={(event) =>
-                  setForm({
-                    ...form,
-                    basis: event.target.value as NutritionBasis,
-                  })
-                }
-              >
-                <option value="per_100_g">per 100 g</option>
-                <option value="per_100_ml">per 100 ml</option>
-              </select>
-            </label>
-            <div className="library-macro-grid">
-              {(
-                [
-                  ["energyKcal", "kcal"],
-                  ["proteinGrams", "Protein"],
-                  ["carbsGrams", "Carbs"],
-                  ["fatGrams", "Fat"],
-                ] as const
-              ).map(([key, label]) => (
-                <label key={key} className="field">
-                  <span>{label}</span>
-                  <input
-                    inputMode="decimal"
-                    value={form[key]}
-                    placeholder="—"
-                    onChange={(event) =>
-                      setForm({ ...form, [key]: event.target.value })
-                    }
-                  />
-                </label>
-              ))}
-            </div>
-            <fieldset className="templates-options">
-              <legend>Servings</legend>
-              {form.servings.map((serving, index) => (
-                <div key={index} className="templates-option-row">
-                  <input
-                    placeholder="1 katori"
-                    value={serving.label}
-                    onChange={(event) => {
-                      const servings = [...form.servings];
-                      servings[index] = {
-                        ...serving,
-                        label: event.target.value,
-                      };
-                      setForm({ ...form, servings });
-                    }}
-                  />
-                  <input
-                    placeholder="g"
-                    value={serving.unit}
-                    onChange={(event) => {
-                      const servings = [...form.servings];
-                      servings[index] = {
-                        ...serving,
-                        unit: event.target.value,
-                      };
-                      setForm({ ...form, servings });
-                    }}
-                  />
-                  <input
-                    placeholder="150"
-                    value={serving.conversion}
-                    onChange={(event) => {
-                      const servings = [...form.servings];
-                      servings[index] = {
-                        ...serving,
-                        conversion: event.target.value,
-                      };
-                      setForm({ ...form, servings });
-                    }}
-                  />
-                </div>
-              ))}
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={() =>
-                  setForm({
-                    ...form,
-                    servings: [
-                      ...form.servings,
-                      { label: "", unit: "g", conversion: "" },
-                    ],
-                  })
-                }
-              >
-                Add serving
-              </Button>
-            </fieldset>
-            <label className="field">
-              <span>Aliases</span>
-              <input
-                value={form.aliases}
-                placeholder="dal, daal, dhal, paruppu"
-                onChange={(event) =>
-                  setForm({ ...form, aliases: event.target.value })
-                }
-              />
-            </label>
-            <div className="button-row">
-              <Button variant="primary" disabled={acting} type="submit">
-                {acting ? "Saving…" : "Save"}
-              </Button>
-              <Button
-                variant="tertiary"
-                type="button"
-                onClick={() => setForm(null)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </form>
+              </div>
+              <fieldset className="templates-options">
+                <legend>Servings</legend>
+                {form.servings.map((serving, index) => (
+                  <div key={index} className="templates-option-row">
+                    <input
+                      placeholder="1 katori"
+                      value={serving.label}
+                      onChange={(event) => {
+                        const servings = [...form.servings];
+                        servings[index] = {
+                          ...serving,
+                          label: event.target.value,
+                        };
+                        setForm({ ...form, servings });
+                      }}
+                    />
+                    <input
+                      placeholder="g"
+                      value={serving.unit}
+                      onChange={(event) => {
+                        const servings = [...form.servings];
+                        servings[index] = {
+                          ...serving,
+                          unit: event.target.value,
+                        };
+                        setForm({ ...form, servings });
+                      }}
+                    />
+                    <input
+                      placeholder="150"
+                      value={serving.conversion}
+                      onChange={(event) => {
+                        const servings = [...form.servings];
+                        servings[index] = {
+                          ...serving,
+                          conversion: event.target.value,
+                        };
+                        setForm({ ...form, servings });
+                      }}
+                    />
+                  </div>
+                ))}
+                <Button
+                  variant="secondary"
+                  type="button"
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      servings: [
+                        ...form.servings,
+                        { label: "", unit: "g", conversion: "" },
+                      ],
+                    })
+                  }
+                >
+                  Add serving
+                </Button>
+              </fieldset>
+              <label className="field">
+                <span>Aliases</span>
+                <input
+                  value={form.aliases}
+                  placeholder="dal, daal, dhal, paruppu"
+                  onChange={(event) =>
+                    setForm({ ...form, aliases: event.target.value })
+                  }
+                />
+              </label>
+              <div className="button-row">
+                <Button variant="primary" disabled={acting} type="submit">
+                  {acting ? "Saving…" : "Save"}
+                </Button>
+                <Button
+                  variant="tertiary"
+                  type="button"
+                  onClick={() => setForm(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </form>
           </div>
         </div>
       ) : null}

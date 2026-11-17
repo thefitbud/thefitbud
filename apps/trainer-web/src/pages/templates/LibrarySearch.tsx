@@ -12,6 +12,47 @@ import { PLAN_COMPOSITION_LIMITS } from "../../components/plan-composition";
 import { useCursorPage, useDebounced } from "./useCursorPage";
 import { LibraryThumb } from "./LibraryThumb";
 
+/** Round search field for Libraries hub (frames 172 / 173). Styles in LibrariesPanel.css. */
+export function LibrarySearch({
+  value,
+  onChange,
+  placeholder = "Search",
+  label = "Search",
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  label?: string;
+}) {
+  return (
+    <label className="libraries-search">
+      <span className="sr-only">{label}</span>
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 16 16"
+        fill="none"
+        aria-hidden="true"
+      >
+        <circle cx="7" cy="7" r="4.5" stroke="currentColor" strokeWidth="1.5" />
+        <path
+          d="M10.5 10.5 13.5 13.5"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+      </svg>
+      <input
+        type="search"
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
 const DIFFICULTIES: ExerciseDifficulty[] = [
   "beginner",
   "intermediate",
