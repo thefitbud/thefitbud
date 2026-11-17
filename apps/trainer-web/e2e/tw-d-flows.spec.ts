@@ -91,7 +91,8 @@ test.describe("TW-D plan and builders", () => {
     await expect(page.getByTestId("screen-TW-13")).toBeVisible();
     await expect(page.getByTestId("autosave-status")).toContainText(/Draft v\d+/);
     await expect(page.getByTestId("library-drawer")).toBeVisible();
-    await expect(page.getByRole("button", { name: /Preview as client/ })).toBeVisible();
+    // Z12-11: topbar is Preview + Publish & schedule (not “Preview as client” / “Publish…”).
+    await expect(page.getByRole("button", { name: /^Preview$/ })).toBeVisible();
 
     await page.getByRole("tab", { name: "Nutrition" }).click();
     await expect(page.getByTestId("screen-TW-14")).toBeVisible();
@@ -99,7 +100,7 @@ test.describe("TW-D plan and builders", () => {
     await expectNoBannedStrings(page);
 
     // Z12-10: Nutrition tab + unchanged workouts → frame 156 diet-scope modal (TW-15).
-    await page.getByRole("button", { name: /^Publish…$/ }).click();
+    await page.getByRole("button", { name: /^Publish & schedule$/ }).click();
     const dietModal = page.getByTestId("screen-TW-15");
     await expect(dietModal).toBeVisible();
     await expect(page.getByRole("heading", { name: /Apply this change/ })).toBeVisible();
@@ -113,7 +114,7 @@ test.describe("TW-D plan and builders", () => {
     // Workout tab → full Publish & schedule modal (TW-16) with civil start options.
     await page.getByRole("tab", { name: "Workout" }).click();
     await expect(page.getByTestId("screen-TW-13")).toBeVisible();
-    await page.getByRole("button", { name: /^Publish…$/ }).click();
+    await page.getByRole("button", { name: /^Publish & schedule$/ }).click();
     const modal = page.getByTestId("screen-TW-16");
     await expect(modal).toBeVisible();
     await expect(modal.getByRole("heading", { name: /Publish & schedule/ })).toBeVisible();
@@ -161,7 +162,7 @@ test.describe("TW-D plan and builders", () => {
       .getByRole("button", { name: /^Adjust plan$/ })
       .click();
     await expect(page.getByTestId("screen-TW-13")).toBeVisible();
-    await page.getByRole("button", { name: /^Publish…$/ }).click();
+    await page.getByRole("button", { name: /^Publish & schedule$/ }).click();
     const modal = page.getByTestId("screen-TW-16");
     await expect(modal).toBeVisible({ timeout: 15_000 });
     // Z12-10 assign modal: civil start options; schedule uses trainee timezone on the server.
@@ -186,6 +187,6 @@ test.describe("TW-D plan and builders", () => {
       .getByRole("button", { name: /^Adjust plan$/ })
       .click();
     await expect(page.getByTestId("builder-small-screen")).toContainText("Open on a larger screen");
-    await expect(page.getByRole("button", { name: /^Publish…$/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /^Publish & schedule$/ })).toBeDisabled();
   });
 });
