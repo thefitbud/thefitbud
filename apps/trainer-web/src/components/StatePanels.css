@@ -1,0 +1,139 @@
+/* Z12-17 system-state cards (frames 184/185/187). Colocated — do not edit styles.css. */
+
+.state-panel.state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  max-width: 28rem;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2.5rem 2rem 2rem;
+  border: 1px solid var(--border, var(--line));
+  border-radius: var(--radius, 16px);
+  background: var(--surface, var(--card));
+  box-shadow: var(--shadow);
+  color: var(--ink-900, var(--ink));
+}
+
+.state-panel.state-card.is-error {
+  /* Frame cards use a quiet border, not a red edge. */
+  border-color: var(--border, var(--line));
+}
+
+.state-card-icon {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+  margin-bottom: 0.25rem;
+  flex-shrink: 0;
+}
+
+.state-card-icon.is-error {
+  background: var(--semantic-critical-fill, var(--crit-tint));
+  color: var(--semantic-critical-text, var(--crit));
+}
+
+.state-card-icon.is-neutral {
+  background: var(--semantic-neutral-fill, var(--fill));
+  color: var(--ink-700, var(--ink2));
+}
+
+.state-card-icon.is-lock {
+  background: var(--semantic-neutral-fill, var(--fill));
+  color: var(--ink-900, var(--ink));
+}
+
+.state-panel.state-card h2,
+.state-panel.state-card h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink-900, var(--ink));
+}
+
+.state-panel.state-card > p {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink-500, var(--ink3));
+}
+
+.state-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+.state-card-actions .button-primary,
+.state-card-actions .button-secondary,
+.state-card-actions a.button-primary,
+.state-card-actions a.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  text-decoration: none;
+}
+
+.state-card-details {
+  margin-top: 0.5rem;
+  width: 100%;
+  text-align: left;
+}
+
+.state-card-details summary {
+  cursor: pointer;
+  color: var(--ink-500, var(--ink3));
+  font-size: 0.875rem;
+  font-weight: 600;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 44px;
+}
+
+.state-card-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.state-card-details summary::after {
+  content: "▾";
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.state-card-details[open] summary::after {
+  content: "▴";
+}
+
+.state-card-details .muted {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-500, var(--ink3));
+}
+
+/* Full-bleed centre for workspace / page mounts of the card. */
+.state-card-mount {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: min(70vh, 36rem);
+  padding: 2rem 1.25rem;
+  box-sizing: border-box;
+}
+
+.state-card-mount.page {
+  gap: 0;
+}
