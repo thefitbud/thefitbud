@@ -26,15 +26,22 @@ export function ForegroundPushNotices({
   const coachName =
     route.name === "trainee_shell" ? route.relationship.trainerDisplayName?.trim() || null : null;
 
+  const userId = me?.userId ?? null;
   const contextRef = useRef<ForegroundPushContext>({
     api,
     role: selectedRole,
+    userId,
     coachName,
     openPayload: handleNotificationOpen,
   });
-  contextRef.current = { api, role: selectedRole, coachName, openPayload: handleNotificationOpen };
+  contextRef.current = {
+    api,
+    role: selectedRole,
+    userId,
+    coachName,
+    openPayload: handleNotificationOpen,
+  };
 
-  const userId = me?.userId ?? null;
   useEffect(() => {
     queue?.reset();
   }, [queue, userId, selectedRole]);

@@ -64,7 +64,11 @@ function fakeApi(items: Notification[]) {
     })),
     markNotificationRead,
   };
-  return { api: api as unknown as FitBudApiClient, markNotificationRead };
+  return {
+    api: api as unknown as FitBudApiClient,
+    markNotificationRead,
+    listMeCoachNotes: api.listMeCoachNotes,
+  };
 }
 
 /** A fake expo-notifications whose listener the test fires, as the OS would. */
@@ -100,17 +104,82 @@ describe("foreground push → notice queue (Z12-38, TR-06h, TM-13b)", () => {
 
   function setup(items: Notification[], role: ForegroundPushContext["role"], coachName: string | null) {
     const queue = createNoticeQueue();
-    const { api, markNotificationRead } = fakeApi(items);
+    const { api, markNotificationRead, listMeCoachNotes } = fakeApi(items);
     const openPayload = vi.fn();
-    const context: ForegroundPushContext = { api, role, coachName, openPayload };
+    const context: ForegroundPushContext = {
+      api,
+      role,
+      userId: "00000000-0000-4000-8000-000000000011",
+      coachName,
+      openPayload,
+    };
     const native = fakeNotifications();
     const handle = createForegroundPushHandler(queue, () => context);
     const stop = bindForegroundPushes(
       async () => native.module,
       (data) => void handle(data),
     );
-    return { queue, native, stop, openPayload, markNotificationRead };
+    /** Hold the coach-note read until `release()`, as a slow network would. */
+    function holdNoteRead(): () => void {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const original = listMeCoachNotes.getMockImplementation()!;
+      listMeCoachNotes.mockImplementation(async () => {
+        await gate;
+        return original();
+      });
+      return release;
+    }
+    return { queue, native, stop, openPayload, markNotificationRead, context, holdNoteRead };
   }
+
+  it("a push still being read when the user signs out shows nothing afterwards", async () => {
+    const note = record("trainer_note_shared", { type: "coaching_relationship", id: NOTE_ID });
+    const { queue, native, context, holdNoteRead } = setup([note], "trainee", "Rahul Verma");
+    // The coach-note read is still out when the user signs out.
+    const release = holdNoteRead();
+    await flush();
+    native.deliver(note.routing);
+    await flush();
+    // Sign-out: the router resets the queue; the signed-out context has no user.
+    queue.reset();
+    context.role = null;
+    context.userId = null;
+    release();
+    await flush();
+    expect(queue.getSnapshot().banner).toBeNull();
+  });
+
+  it("a reset while a push is read drops it even if the next session has the same role", async () => {
+    const note = record("trainer_note_shared", { type: "coaching_relationship", id: NOTE_ID });
+    const { queue, native, context, holdNoteRead } = setup([note], "trainee", "Rahul Verma");
+    const release = holdNoteRead();
+    await flush();
+    native.deliver(note.routing);
+    await flush();
+    queue.reset();
+    // Same role and user again (signed back in) before the read came back.
+    release();
+    await flush();
+    expect(queue.getSnapshot().banner).toBeNull();
+    expect(context.userId).not.toBeNull();
+  });
+
+  it("a push read across a switch to another user of the same role is dropped", async () => {
+    const note = record("trainer_note_shared", { type: "coaching_relationship", id: NOTE_ID });
+    const { queue, native, context, holdNoteRead } = setup([note], "trainee", "Rahul Verma");
+    const release = holdNoteRead();
+    await flush();
+    native.deliver(note.routing);
+    await flush();
+    // The router has rendered the next user but its reset effect has not run yet.
+    context.userId = "00000000-0000-4000-8000-000000000012";
+    release();
+    await flush();
+    expect(queue.getSnapshot().banner).toBeNull();
+  });
 
   it("a coach note with the app open: banner with the note, gone in about 4 s", async () => {
     const note = record("trainer_note_shared", { type: "coaching_relationship", id: NOTE_ID });

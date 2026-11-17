@@ -117,6 +117,33 @@ describe("NoticeHost (Z12-38)", () => {
     expect(screen.queryByText("Rahul has a note for you")).toBeNull();
   });
 
+  it("a swipe up takes the banner off the queue on release, even if the fling never reports back", async () => {
+    // A native animation whose end callback never comes must not leave the
+    // banner held (its timer paused) with everything queued behind it.
+    vi.spyOn(Animated, "timing").mockImplementation(
+      () => ({ start: () => undefined, stop: () => undefined, reset: () => undefined }) as never,
+    );
+    const onDismiss = vi.fn();
+    renderHost();
+    await settle();
+    act(() => {
+      queue.showBanner({ ...NOTE, onDismiss });
+      queue.showBanner({ ...NOTE, key: "note:second", title: "Second note" });
+    });
+    const banner = screen.getByTestId("notice-banner");
+    touch(banner, "touchStart", 100, 120, 0);
+    touch(banner, "touchMove", 100, 100, 16);
+    touch(banner, "touchMove", 100, 60, 32);
+    touch(banner, "touchEnd", 100, 60, 48);
+    expect(onDismiss).toHaveBeenCalledWith("swipe");
+    expect(queue.getSnapshot().banner?.title).toBe("Second note");
+    act(() => {
+      vi.advanceTimersByTime(EXIT_FALLBACK_MS);
+    });
+    expect(screen.queryByText("Rahul has a note for you")).toBeNull();
+    expect(screen.getByText("Second note")).toBeTruthy();
+  });
+
   it("a small drag does not dismiss", () => {
     expect(swipeDismisses(-10, -0.1)).toBe(false);
     expect(swipeDismisses(30, 1)).toBe(false);
@@ -185,6 +212,82 @@ describe("NoticeHost (Z12-38)", () => {
       touch(outside, "touchStart", 50, 300, 100);
       touch(outside, "touchEnd", 50, 300, 140);
       expect(screen.queryByText("Evening snack logged as planned")).toBeNull();
+    });
+
+    it("a toast is announced once, with no live region as well", async () => {
+      renderHost(<UndoScreen onUndo={vi.fn()} />);
+      await settle();
+      fireEvent.click(screen.getByRole("button", { name: "Eaten as planned" }));
+      expect(announce.mock.calls.filter(([text]: unknown[]) => text === "Evening snack logged as planned")).toHaveLength(1);
+      expect(screen.getByTestId("notice-toast").getAttribute("aria-live")).toBeNull();
+    });
+
+    /** AttentionTab's shape: same words for each answer, inline Undo, no onDismiss. */
+    function AnswerScreen({ onUndo }: { onUndo: (client: string) => void }) {
+      const [client, setClient] = useState<string | null>(null);
+      return (
+        <>
+          <Pressable accessibilityRole="button" onPress={() => setClient("A")}>
+            <RNText>Answer A</RNText>
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={() => setClient("B")}>
+            <RNText>Answer B</RNText>
+          </Pressable>
+          {client ? (
+            <Snackbar leadingCheck message="Marked answered" actionLabel="Undo" onAction={() => onUndo(client)} />
+          ) : null}
+        </>
+      );
+    }
+
+    it("the same toast asked for again keeps the new Undo reachable", async () => {
+      const onUndo = vi.fn();
+      renderHost(<AnswerScreen onUndo={onUndo} />);
+      await settle();
+      fireEvent.click(screen.getByRole("button", { name: "Answer A" }));
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Answer B" }));
+      // Past A's 6 s: B's request started the time over.
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(screen.getByText("Marked answered")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      expect(onUndo).toHaveBeenCalledWith("B");
+      expect(screen.queryByText("Marked answered")).toBeNull();
+    });
+
+    it("re-renders can't keep a toast up past twice its time", async () => {
+      function Rerendering() {
+        const [n, setN] = useState(0);
+        return (
+          <>
+            <Pressable accessibilityRole="button" onPress={() => setN(n + 1)}>
+              <RNText>Tick {n}</RNText>
+            </Pressable>
+            <Snackbar message="Marked answered" actionLabel="Undo" onAction={() => undefined} />
+          </>
+        );
+      }
+      renderHost(<Rerendering />);
+      await settle();
+      for (let i = 0; i < 4; i += 1) {
+        act(() => {
+          vi.advanceTimersByTime(2900);
+        });
+        fireEvent.click(screen.getByRole("button", { name: `Tick ${i}` }));
+      }
+      // 11.6 s in, still up; gone by 12 s from when it came up.
+      expect(screen.getByText("Marked answered")).toBeTruthy();
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(screen.queryByText("Marked answered")).toBeNull();
+      // Once gone, a re-render does not bring it back.
+      fireEvent.click(screen.getByRole("button", { name: "Tick 4" }));
+      expect(screen.queryByText("Marked answered")).toBeNull();
     });
 
     it("two toasts show one at a time", async () => {

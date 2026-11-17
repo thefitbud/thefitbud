@@ -103,10 +103,12 @@ type Lane<T extends NoticeItem> = {
   /** Time left when a finger paused the item (hold/resume). */
   remaining: number;
   held: boolean;
+  /** The latest a `refresh` may push the deadline (twice the item's time from when it came up). */
+  cap: number;
 };
 
 function emptyLane<T extends NoticeItem>(): Lane<T> {
-  return { current: null, waiting: [], timer: null, deadline: 0, remaining: 0, held: false };
+  return { current: null, waiting: [], timer: null, deadline: 0, remaining: 0, held: false, cap: 0 };
 }
 
 export function toastDuration(item: Pick<ToastInput, "actionLabel" | "onAction">): number {
@@ -119,6 +121,8 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
   let banners = emptyLane<BannerItem>();
   let toasts = emptyLane<ToastItem>();
   let screen: string | null = null;
+  /** Bumped by `reset()`: work started before a sign-out can tell it is stale. */
+  let epoch = 0;
   const seenKeys = new Set<string>();
   const listeners = new Set<() => void>();
   let snapshot: NoticeSnapshot = { banner: null, toast: null };
@@ -178,6 +182,7 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
       if (suppressed(next)) continue;
       lane.current = next;
       startTimer(lane, durationOf(next));
+      lane.cap = lane.deadline + durationOf(next);
       return;
     }
   }
@@ -189,6 +194,7 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     } else {
       lane.current = item;
       startTimer(lane, durationOf(item));
+      lane.cap = lane.deadline + durationOf(item);
     }
     emit();
     return item.id;
@@ -268,6 +274,25 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     startTimer(found.lane, Math.max(1000, found.lane.remaining));
   }
 
+  /**
+   * A toast's screen asked for it again while it is still up (the same words,
+   * a new request: e.g. "Marked answered" for a second client inside the first
+   * one's Undo window). Its time starts over, but never past twice its time
+   * from when it first came up, so re-renders can't keep it up for ever.
+   * Silent: nothing re-announces. A toast that already left is not brought back.
+   */
+  function refresh(id: string): void {
+    const found = find(id);
+    if (!found?.current || found.item.kind !== "toast") return;
+    const lane = found.lane;
+    const ms = Math.min(durationOf(found.item), Math.max(0, lane.cap - now()));
+    if (lane.held) {
+      lane.remaining = Math.max(lane.remaining, ms);
+      return;
+    }
+    startTimer(lane, ms);
+  }
+
   /** The screen now open (`null` when unknown). A banner for it leaves. */
   function setScreen(next: string | null): void {
     screen = next;
@@ -313,6 +338,7 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     banners = emptyLane();
     toasts = emptyLane();
     seenKeys.clear();
+    epoch += 1;
     pendingTouch = null;
     toastTouched = false;
     emit();
@@ -326,12 +352,15 @@ export function createNoticeQueue(options: { now?: () => number } = {}) {
     act,
     hold,
     resume,
+    refresh,
     setScreen,
     markToastTouch,
     touchStart,
     touchEnd,
     reset,
     getScreen: () => screen,
+    /** Changes on every `reset()` (sign-out, user or role switch). */
+    getEpoch: () => epoch,
     getSnapshot: () => snapshot,
     subscribe(listener: () => void): () => void {
       listeners.add(listener);

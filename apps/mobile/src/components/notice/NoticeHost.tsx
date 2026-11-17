@@ -127,15 +127,18 @@ function BannerLayer({ queue, banner }: { queue: NoticeQueue; banner: BannerItem
           const id = shownId.current;
           if (!id) return;
           if (swipeDismisses(g.dy, g.vy)) {
-            if (reducedRef.current) {
-              queue.dismiss(id, "swipe");
-              return;
+            // Off the queue on release, never from the animation's end callback:
+            // if a native animation never reports back the banner would stay
+            // held with everything queued behind it. The fling is only looks;
+            // the queue's swap (and its fallback timer) takes the banner away.
+            queue.dismiss(id, "swipe");
+            if (!reducedRef.current) {
+              Animated.timing(drag, {
+                toValue: -240,
+                duration: 160,
+                useNativeDriver: NATIVE_DRIVER,
+              }).start();
             }
-            Animated.timing(drag, {
-              toValue: -240,
-              duration: 160,
-              useNativeDriver: NATIVE_DRIVER,
-            }).start(() => queue.dismiss(id, "swipe"));
             return;
           }
           if (reducedRef.current) drag.setValue(0);

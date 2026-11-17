@@ -37,6 +37,8 @@ export type ForegroundPushContext = {
   api: FitBudApiClient;
   /** Signed-in role; a push for the other role is not shown. */
   role: Role | null;
+  /** Signed-in user; a banner built for one user is never shown to the next. */
+  userId: string | null;
   /** Trainee only: the coach's display name, for the copy and the avatar. */
   coachName: string | null;
   /** Routes like a system notification tap (AuthProvider.handleNotificationOpen). */
@@ -137,11 +139,27 @@ export function createForegroundPushHandler(
 ): (data: unknown) => Promise<void> {
   let chain: Promise<void> = Promise.resolve();
   return (data) => {
-    const built = bannerForPush(data, context());
+    // The reads below take time. If the user signs out (or switches user or
+    // role) meanwhile, `reset()` has bumped the queue's epoch and the banner,
+    // with its `onOpen`, belongs to the old session: drop it.
+    const epoch = queue.getEpoch();
+    const received = context();
+    const { role, userId } = received;
+    const built = bannerForPush(data, received);
     chain = chain
       .then(async () => {
         const banner = await built;
-        if (banner) queue.showBanner(banner);
+        if (!banner) return;
+        const current = context();
+        if (
+          queue.getEpoch() !== epoch ||
+          current.role !== role ||
+          current.userId !== userId ||
+          current.userId == null
+        ) {
+          return;
+        }
+        queue.showBanner(banner);
       })
       .catch((err: unknown) => reportError("foregroundPush.show", err));
     return chain;

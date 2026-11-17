@@ -61,13 +61,22 @@ function QueuedSnackbar({ queue, ...props }: Props & { queue: NoticeQueue }) {
     return () => queue.dismiss(next, "removed");
   }, [queue, props.message, props.actionLabel, hasAction]);
 
+  // The same words with a new action is the screen asking again (e.g. "Marked
+  // answered" for a second client while the first one's toast is still up):
+  // the toast's time starts over, capped by the queue, so the new Undo stays
+  // reachable. Callers pass inline handlers, so a plain re-render looks the
+  // same; the cap keeps that from holding the toast up, and it only touches
+  // the timer (no re-queue, no re-announcement, no render).
+  const onAction = hasAction ? props.onAction : undefined;
+  const lastAction = useRef(onAction);
+  useEffect(() => {
+    if (lastAction.current === onAction) return;
+    lastAction.current = onAction;
+    if (id != null && onAction) queue.refresh(id);
+  }, [queue, id, onAction]);
+
   const snapshot = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
   const visible = id != null && snapshot.toast?.id === id;
-
-  useEffect(() => {
-    if (visible) AccessibilityInfo.announceForAccessibility?.(props.message);
-    // Announce once each time this toast comes up.
-  }, [visible]);
 
   if (!visible || id == null) return null;
   return (
@@ -91,6 +100,11 @@ function SnackbarView({
 }: Props & { onTouchInside?: () => void }) {
   const theme = useTheme();
   const styles = useStyles();
+  // One announcement per showing, on both platforms (a queued toast mounts this
+  // view only while it is up). No live region as well: Android would read it twice.
+  useEffect(() => {
+    AccessibilityInfo.announceForAccessibility?.(message);
+  }, [message]);
   const leadingNode = leadingCheck ? (
     <Check color={theme.colors.toastOk} size={18} strokeWidth={2.4} />
   ) : (
@@ -101,7 +115,6 @@ function SnackbarView({
     <View
       style={styles.wrap}
       accessibilityRole="text"
-      accessibilityLiveRegion="polite"
       testID="notice-toast"
       onTouchStart={onTouchInside}
     >
