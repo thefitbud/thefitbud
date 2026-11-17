@@ -5,7 +5,7 @@ import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";
 import { Text } from "../../components/Text";
-import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { AuthPage, CodeBoxes, InlineError, TextLink } from "./authParts";
 
 type Props = {
@@ -34,7 +34,7 @@ function countdown(seconds: number): string {
  * TR-01b (ask for a code), TR-01c (enter it) and TR-01g (it expired). The v3
  * mock drops the WhatsApp channel chips (v3 DECISIONS #18): codes go by email.
  */
-export function CodeSignInScreen({
+function CodeSignInScreenBody({
   identifier,
   loading,
   error,
@@ -158,3 +158,12 @@ const useStyles = createThemedStyles((t) => ({
   },
   resendText: { fontSize: 16 },
 }));
+
+/** CodeSignInScreen in the system theme (Z12-49): its own styles read the scope. */
+export function CodeSignInScreen(props: Parameters<typeof CodeSignInScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <CodeSignInScreenBody {...props} />
+    </ThemeScope>
+  );
+}

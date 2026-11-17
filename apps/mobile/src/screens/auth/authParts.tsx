@@ -315,6 +315,8 @@ const useFieldStyles = createThemedStyles((t) => ({
     flex: 1,
     fontSize: 16,
     paddingVertical: t.spacing.md,
+    // The box draws the focus edge; no second browser outline on web.
+    outlineWidth: 0,
   },
   eye: { alignItems: "center", height: 48, justifyContent: "center", width: 48 },
 }));

@@ -26,7 +26,7 @@ function firstName(fullName: string | null | undefined): string | null {
  * More (a role already in use) it has Back, which keeps that role; on first
  * run it has none (Z12-49).
  */
-export function RoleSelectScreen() {
+function RoleSelectScreenBody() {
   const {
     me,
     relationships,
@@ -358,3 +358,12 @@ const absoluteFill = {
   bottom: 0,
   left: 0,
 };
+
+/** RoleSelectScreen in the system theme (Z12-49): its own styles read the scope. */
+export function RoleSelectScreen() {
+  return (
+    <ThemeScope scheme="system">
+      <RoleSelectScreenBody />
+    </ThemeScope>
+  );
+}
