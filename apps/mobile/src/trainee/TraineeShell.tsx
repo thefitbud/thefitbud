@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { ApiClientError } from "@fitbud/api-client";
 import {
   CalendarDays,
   CircleUserRound,
@@ -62,6 +63,33 @@ import type { NotificationDeepLink } from "../notifications/routing";
 import { ForegroundBanner } from "./notifications/ForegroundBanner";
 import { useNoticeScreen } from "../components/notice/NoticeContext";
 import { reportError } from "../lib/reportError";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
+
+
+/**
+ * What the "unavailable" screen says when opening a notification's target
+ * failed (AGENTS.md client error handling). "Isn't available anymore" is only
+ * true when the server answered not-found; any other failure (offline, a 5xx,
+ * a client/server disagreement) is reported and shown as a short code, and an
+ * `ApiClientError`'s own curated message is the only server text shown.
+ */
+export function deepLinkFailureReason(
+  where: string,
+  err: unknown,
+  noun: "meal" | "check-in",
+): string {
+  reportError(where, err);
+  const prefix = noun === "meal" ? "MEAL" : "CHECKIN";
+  if (err instanceof ApiClientError) {
+    if (err.status === 404) return `This ${noun} isn't available anymore.`;
+    return `${err.message} (${prefix}-${err.status})`;
+  }
+  return `Couldn't open this ${noun}. Check your connection and try again. (${prefix}-NET)`;
+}
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
 
@@ -305,10 +333,10 @@ export function TraineeShell({
               screen: "something_different",
               assignmentId: match.id,
             });
-          } catch {
+          } catch (err) {
             setOverlay({
               screen: "deep_link",
-              reason: "This meal isn't available anymore.",
+              reason: deepLinkFailureReason("TraineeShell.openMeal", err, "meal"),
             });
           }
         })();
@@ -328,10 +356,14 @@ export function TraineeShell({
                 screen: "deep_link",
                 reason: "This check-in isn't available anymore.",
               });
-          } catch {
+          } catch (err) {
             setOverlay({
               screen: "deep_link",
-              reason: "This check-in isn't available anymore.",
+              reason: deepLinkFailureReason(
+                "TraineeShell.openCheckin",
+                err,
+                "check-in",
+              ),
             });
           }
         })();
@@ -1066,59 +1098,83 @@ export function TraineeShell({
         </View>
       ) : null}
 
-      {!hideTabBar ? (
-        <View accessibilityRole="tablist" style={styles.tabBar}>
-          {TABS.map((item) => {
-            const selected = item.id === tab;
-            const Icon = item.Icon;
-            const tint = selected ? colors.indigo : colors.midGrey;
-            return (
-              <Pressable
-                key={item.id}
-                accessibilityRole="tab"
-                accessibilityLabel={item.label}
-                accessibilityState={{ selected }}
-                onPress={() => setTab(item.id)}
-                style={styles.tab}
-              >
-                <Icon
-                  size={22}
-                  color={tint}
-                  strokeWidth={selected ? 2.25 : 1.75}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no"
-                />
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    selected ? styles.tabLabelSelected : null,
-                  ]}
-                >
-                  {item.label}
-                </Text>
-                {selected ? <View style={styles.tabIndicator} /> : null}
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+      {!hideTabBar ? <TraineeTabBar active={tab} onSelect={setTab} /> : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  content: {
-    flex: 1,
-  },
+/**
+ * The bottom tab bar. Opted in to the system theme on its own (Z12-46,
+ * D-W12-12): it used to stay light under system dark because the shell is
+ * not a `<Screen v3>`. It does not drive the status bar.
+ */
+function TraineeTabBar({
+  active,
+  onSelect,
+}: {
+  active: TraineeTab;
+  onSelect: (tab: TraineeTab) => void;
+}) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <TabBarRow active={active} onSelect={onSelect} />
+    </ThemeScope>
+  );
+}
+
+function TabBarRow({
+  active,
+  onSelect,
+}: {
+  active: TraineeTab;
+  onSelect: (tab: TraineeTab) => void;
+}) {
+  const theme = useTheme();
+  const barStyles = useTabBarStyles();
+  return (
+    <View accessibilityRole="tablist" style={barStyles.tabBar}>
+      {TABS.map((item) => {
+        const selected = item.id === active;
+        const Icon = item.Icon;
+        const tint = selected ? theme.colors.brand : theme.colors.ink3;
+        return (
+          <Pressable
+            key={item.id}
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected }}
+            onPress={() => onSelect(item.id)}
+            style={barStyles.tab}
+          >
+            <Icon
+              size={22}
+              color={tint}
+              strokeWidth={selected ? 2.25 : 1.75}
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+            />
+            <Text
+              style={[
+                barStyles.tabLabel,
+                selected ? barStyles.tabLabelSelected : null,
+              ]}
+            >
+              {item.label}
+            </Text>
+            {selected ? <View style={barStyles.tabIndicator} /> : null}
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+const useTabBarStyles = createThemedStyles((t) => ({
   tabBar: {
     flexDirection: "row",
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.lightGrey,
-    backgroundColor: colors.white,
+    borderTopColor: t.colors.line,
+    backgroundColor: t.colors.card,
     paddingBottom: spacing.sm,
     paddingTop: spacing.sm,
   },
@@ -1130,19 +1186,29 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   tabLabel: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
     fontWeight: "500",
   },
   tabLabelSelected: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontWeight: "600",
   },
   tabIndicator: {
     width: 18,
     height: 3,
     borderRadius: 999,
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
+  },
+}));
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  content: {
+    flex: 1,
   },
   tabbedOverlay: {
     backgroundColor: colors.white,
