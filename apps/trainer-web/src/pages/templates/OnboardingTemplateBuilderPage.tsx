@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import type { OnboardingFormTemplateDetail } from "@fitbud/contracts";
 import { Button } from "../../components/Button";
+import { OverflowMenu } from "../../components/OverflowMenu";
 import {
   EmptyState,
   ErrorState,
@@ -26,6 +27,7 @@ import {
   type FieldDraft,
 } from "./onboardingBuilder";
 import { errorText } from "./shared";
+import "./OnboardingTemplateBuilderPage.css";
 
 function sortedVersions(detail: OnboardingFormTemplateDetail) {
   return [...detail.versions].sort((a, b) => a.version - b.version);
@@ -43,6 +45,13 @@ function duplicateLabels(drafts: FieldDraft[]): string[] {
     .map(([label]) => label);
 }
 
+function questionSubtitle(draft: FieldDraft): string {
+  const parts = [fieldTypeLabel(draft.type)];
+  if (draft.required) parts.push("required");
+  if (draft.highlight) parts.push("flagged for review");
+  return parts.join(" · ");
+}
+
 export function OnboardingTemplateBuilderPage() {
   const { templateId = "" } = useParams();
   const navigate = useNavigate();
@@ -51,11 +60,13 @@ export function OnboardingTemplateBuilderPage() {
     null,
   );
   const [drafts, setDrafts] = useState<FieldDraft[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [showFork, setShowFork] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
 
   const load = useCallback(() => {
     if (!templateId) return;
@@ -68,7 +79,9 @@ export function OnboardingTemplateBuilderPage() {
         const latest =
           sortedVersions(loaded).find((v) => v.id === loaded.latestVersionId) ??
           sortedVersions(loaded).at(-1);
-        setDrafts(draftsFromFields(latest?.fields ?? []));
+        const nextDrafts = draftsFromFields(latest?.fields ?? []);
+        setDrafts(nextDrafts);
+        setSelectedId(nextDrafts[0]?.id ?? null);
       })
       .catch((err: unknown) =>
         setLoadError(errorText(err, "Could not load this onboarding form.")),
@@ -80,6 +93,10 @@ export function OnboardingTemplateBuilderPage() {
   const nextVersion = (detail?.latestVersionNumber ?? 0) + 1;
   const readOnly = detail?.ownership === "global";
   const dupLabels = useMemo(() => duplicateLabels(drafts), [drafts]);
+  const selected = useMemo(
+    () => drafts.find((draft) => draft.id === selectedId) ?? null,
+    [drafts, selectedId],
+  );
   const builtPreview = useMemo(() => {
     const built = buildFields(
       drafts.map((d) =>
@@ -88,6 +105,12 @@ export function OnboardingTemplateBuilderPage() {
     );
     return built.ok ? built.fields : [];
   }, [drafts]);
+
+  function updateDraft(id: string, patch: Partial<FieldDraft>) {
+    setDrafts((current) =>
+      current.map((row) => (row.id === id ? { ...row, ...patch } : row)),
+    );
+  }
 
   function move(index: number, delta: number) {
     setDrafts((current) => {
@@ -99,6 +122,12 @@ export function OnboardingTemplateBuilderPage() {
       next[target] = tmp;
       return next;
     });
+  }
+
+  function addQuestion() {
+    const field = blankField();
+    setDrafts((current) => [...current, field]);
+    setSelectedId(field.id);
   }
 
   async function saveVersion() {
@@ -128,9 +157,15 @@ export function OnboardingTemplateBuilderPage() {
       const next =
         sortedVersions(saved).find((v) => v.id === saved.latestVersionId) ??
         sortedVersions(saved).at(-1);
-      setDrafts(draftsFromFields(next?.fields ?? []));
+      const nextDrafts = draftsFromFields(next?.fields ?? []);
+      setDrafts(nextDrafts);
+      setSelectedId((current) =>
+        nextDrafts.some((d) => d.id === current)
+          ? current
+          : (nextDrafts[0]?.id ?? null),
+      );
       setMessage(
-        `Saved as v${saved.latestVersionNumber}. Clients already invited keep their version.`,
+        `Published as v${saved.latestVersionNumber}. Clients who already answered keep their version.`,
       );
     } catch (err) {
       setSaveError(errorText(err, "Could not save this version."));
@@ -141,7 +176,7 @@ export function OnboardingTemplateBuilderPage() {
 
   if (loadError) {
     return (
-      <section className="page" data-testid="screen-TW-24">
+      <section className="page intake-builder" data-testid="screen-TW-24">
         <ErrorState message={loadError} onRetry={load} screenId="TW-24" />
         <Link to="/templates/onboarding">Back to onboarding</Link>
       </section>
@@ -150,7 +185,7 @@ export function OnboardingTemplateBuilderPage() {
 
   if (!detail) {
     return (
-      <section className="page" data-testid="screen-TW-24">
+      <section className="page intake-builder" data-testid="screen-TW-24">
         <LoadingBlock label="Loading form…" />
       </section>
     );
@@ -158,7 +193,7 @@ export function OnboardingTemplateBuilderPage() {
 
   if (!online) {
     return (
-      <section className="page" data-testid="screen-TW-24">
+      <section className="page intake-builder" data-testid="screen-TW-24">
         <ErrorState
           kind="network"
           screenId="TW-24"
@@ -169,20 +204,32 @@ export function OnboardingTemplateBuilderPage() {
     );
   }
 
+  const questionCount = drafts.length;
+  const statusBadge = readOnly
+    ? `v${detail.latestVersionNumber}`
+    : `Draft · v${nextVersion}`;
+
   return (
-    <section className="page form-builder-page" data-testid="screen-TW-24">
-      <header className="form-builder-header">
+    <section className="page intake-builder" data-testid="screen-TW-24">
+      <header className="intake-builder-header">
         <div>
-          <Link to="/templates/onboarding">← Onboarding forms</Link>
-          <h1>{detail.name}</h1>
-          <p className="muted">
-            {readOnly ? "FitBud base · read-only" : "Mine"} ·{" "}
-            {readOnly
-              ? `v${detail.latestVersionNumber}`
-              : `Draft · will save as v${nextVersion}`}
+          <Link className="intake-builder-crumb" to="/templates/onboarding">
+            Templates › Onboarding forms
+          </Link>
+          <div className="intake-builder-title-row">
+            <h1>{detail.name}</h1>
+            <span className="intake-builder-badge">{statusBadge}</span>
+          </div>
+          <p className="intake-builder-meta">
+            Onboarding form · {questionCount}{" "}
+            {questionCount === 1 ? "question" : "questions"}
+            {readOnly ? " · FitBud base · read-only" : " · Mine"}
           </p>
         </div>
-        <div className="button-row">
+        <div className="intake-builder-actions">
+          <Button variant="secondary" onClick={() => setShowPreview(true)}>
+            Preview
+          </Button>
           {readOnly ? (
             <Button variant="primary" onClick={() => setShowFork(true)}>
               Fork to edit
@@ -193,7 +240,7 @@ export function OnboardingTemplateBuilderPage() {
               disabled={acting}
               onClick={() => void saveVersion()}
             >
-              {acting ? "Saving…" : "Save version"}
+              {acting ? "Publishing…" : `Publish v${nextVersion}`}
             </Button>
           )}
         </div>
@@ -215,304 +262,326 @@ export function OnboardingTemplateBuilderPage() {
         </p>
       ) : null}
 
-      <div className="form-builder-panes">
-        <div className="form-builder-editor" tabIndex={0}>
+      <div className="intake-builder-layout">
+        <div className="intake-builder-editor" tabIndex={0}>
           {drafts.length === 0 ? (
             <EmptyState title="No questions yet.">
               <Button
                 variant="secondary"
                 disabled={readOnly}
-                onClick={() => setDrafts([blankField()])}
+                onClick={addQuestion}
               >
                 Add question
               </Button>
             </EmptyState>
           ) : (
-            <ul className="form-question-list">
-              {drafts.map((draft, index) => (
-                <li key={draft.id} className="form-question-card">
-                  <div className="form-question-toolbar">
-                    <span className="drag-handle" aria-hidden>
+            <ul className="intake-builder-list" aria-label="Questions">
+              {drafts.map((draft, index) => {
+                const selectedRow = draft.id === selectedId;
+                return (
+                  <li
+                    key={draft.id}
+                    className={
+                      selectedRow ? "intake-q-row is-selected" : "intake-q-row"
+                    }
+                  >
+                    <span className="intake-q-handle" aria-hidden>
                       ⋮⋮
                     </span>
-                    <Button
-                      variant="tertiary"
-                      disabled={readOnly || index === 0}
-                      onClick={() => move(index, -1)}
+                    <button
+                      type="button"
+                      className="intake-q-select"
+                      aria-pressed={selectedRow}
+                      onClick={() => setSelectedId(draft.id)}
                     >
-                      Up
-                    </Button>
-                    <Button
-                      variant="tertiary"
-                      disabled={readOnly || index === drafts.length - 1}
-                      onClick={() => move(index, 1)}
-                    >
-                      Down
-                    </Button>
-                    <Button
-                      variant="tertiary"
-                      disabled={readOnly}
-                      onClick={() =>
-                        setDrafts((current) => {
-                          const next = [...current];
-                          next.splice(index + 1, 0, duplicateFieldDraft(draft));
-                          return next;
-                        })
-                      }
-                    >
-                      Duplicate
-                    </Button>
-                    <Button
-                      variant="tertiary"
-                      disabled={readOnly}
-                      onClick={() =>
-                        setDrafts((current) =>
-                          current.filter((row) => row.id !== draft.id),
-                        )
-                      }
-                    >
-                      Delete
-                    </Button>
-                  </div>
-                  <label className="field">
-                    <span>Label</span>
-                    <input
-                      value={draft.label}
-                      disabled={readOnly}
-                      aria-invalid={
-                        !draft.label.trim() ||
-                        dupLabels.includes(draft.label.trim().toLowerCase())
-                      }
-                      onChange={(event) =>
-                        setDrafts((current) =>
-                          current.map((row) =>
-                            row.id === draft.id
-                              ? { ...row, label: event.target.value }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                    {!draft.label.trim() ? (
-                      <span className="field-error">Enter a label.</span>
-                    ) : null}
-                    {draft.label.trim() &&
-                    dupLabels.includes(draft.label.trim().toLowerCase()) ? (
-                      <span className="field-error">
-                        Another question uses this label.
+                      <span className="intake-q-label">
+                        {draft.label.trim() || "Untitled question"}
                       </span>
+                      <span className="intake-q-sub">
+                        {questionSubtitle(draft)}
+                      </span>
+                    </button>
+                    {!readOnly ? (
+                      <div className="intake-q-menu">
+                        <OverflowMenu
+                          label={`Actions for ${draft.label.trim() || "question"}`}
+                          items={[
+                            {
+                              id: "up",
+                              label: "Move up",
+                              disabled: index === 0,
+                              onSelect: () => move(index, -1),
+                            },
+                            {
+                              id: "down",
+                              label: "Move down",
+                              disabled: index === drafts.length - 1,
+                              onSelect: () => move(index, 1),
+                            },
+                            {
+                              id: "dup",
+                              label: "Duplicate",
+                              onSelect: () => {
+                                const copy = duplicateFieldDraft(draft);
+                                setDrafts((current) => {
+                                  const next = [...current];
+                                  next.splice(index + 1, 0, copy);
+                                  return next;
+                                });
+                                setSelectedId(copy.id);
+                              },
+                            },
+                            {
+                              id: "delete",
+                              label: "Delete",
+                              destructive: true,
+                              dividerBefore: true,
+                              onSelect: () => {
+                                setDrafts((current) => {
+                                  const next = current.filter(
+                                    (row) => row.id !== draft.id,
+                                  );
+                                  setSelectedId((currentId) =>
+                                    currentId === draft.id
+                                      ? (next[Math.max(0, index - 1)]?.id ??
+                                        null)
+                                      : currentId,
+                                  );
+                                  return next;
+                                });
+                              },
+                            },
+                          ]}
+                        />
+                      </div>
                     ) : null}
-                  </label>
-                  <label className="field">
-                    <span>Help text</span>
-                    <input
-                      value={draft.helpText}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        setDrafts((current) =>
-                          current.map((row) =>
-                            row.id === draft.id
-                              ? { ...row, helpText: event.target.value }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                  </label>
-                  <label className="field">
-                    <span>Type</span>
-                    <select
-                      value={draft.type}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        setDrafts((current) =>
-                          current.map((row) =>
-                            row.id === draft.id
-                              ? withFieldType(
-                                  row,
-                                  event.target.value as FieldDraft["type"],
-                                )
-                              : row,
-                          ),
-                        )
-                      }
-                    >
-                      {BUILDER_FIELD_TYPES.map((type) => (
-                        <option key={type} value={type}>
-                          {fieldTypeLabel(type)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={draft.required}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        setDrafts((current) =>
-                          current.map((row) =>
-                            row.id === draft.id
-                              ? { ...row, required: event.target.checked }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                    <span>Required</span>
-                  </label>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={draft.highlight}
-                      disabled={readOnly}
-                      onChange={(event) =>
-                        setDrafts((current) =>
-                          current.map((row) =>
-                            row.id === draft.id
-                              ? { ...row, highlight: event.target.checked }
-                              : row,
-                          ),
-                        )
-                      }
-                    />
-                    <span>Highlight for coach</span>
-                  </label>
-                  {isTextType(draft.type) ? (
-                    <label className="field">
-                      <span>Max length</span>
-                      <input
-                        value={draft.maxLength}
-                        disabled={readOnly}
-                        onChange={(event) =>
-                          setDrafts((current) =>
-                            current.map((row) =>
-                              row.id === draft.id
-                                ? { ...row, maxLength: event.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                  ) : null}
-                  {draft.type === "number" ? (
-                    <label className="field">
-                      <span>Unit</span>
-                      <input
-                        value={draft.unit}
-                        disabled={readOnly}
-                        placeholder="kg"
-                        onChange={(event) =>
-                          setDrafts((current) =>
-                            current.map((row) =>
-                              row.id === draft.id
-                                ? { ...row, unit: event.target.value }
-                                : row,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                  ) : null}
-                  {isChoiceType(draft.type) ? (
-                    <fieldset className="templates-options">
-                      <legend>Choices</legend>
-                      {draft.options.map((option, optionIndex) => (
-                        <div key={option.id} className="templates-option-row">
-                          <input
-                            value={option.label}
-                            disabled={readOnly}
-                            placeholder={`Option ${optionIndex + 1}`}
-                            onChange={(event) =>
-                              setDrafts((current) =>
-                                current.map((row) =>
-                                  row.id === draft.id
-                                    ? {
-                                        ...row,
-                                        options: row.options.map((opt) =>
-                                          opt.id === option.id
-                                            ? {
-                                                ...opt,
-                                                label: event.target.value,
-                                              }
-                                            : opt,
-                                        ),
-                                      }
-                                    : row,
-                                ),
-                              )
-                            }
-                          />
-                          <Button
-                            variant="tertiary"
-                            disabled={readOnly || draft.options.length <= 2}
-                            onClick={() =>
-                              setDrafts((current) =>
-                                current.map((row) =>
-                                  row.id === draft.id
-                                    ? {
-                                        ...row,
-                                        options: row.options.filter(
-                                          (opt) => opt.id !== option.id,
-                                        ),
-                                      }
-                                    : row,
-                                ),
-                              )
-                            }
-                          >
-                            Remove
-                          </Button>
-                        </div>
-                      ))}
-                      <Button
-                        variant="secondary"
-                        disabled={readOnly}
-                        onClick={() =>
-                          setDrafts((current) =>
-                            current.map((row) =>
-                              row.id === draft.id
-                                ? {
-                                    ...row,
-                                    options: [
-                                      ...row.options,
-                                      {
-                                        id: crypto.randomUUID(),
-                                        label: "",
-                                      },
-                                    ],
-                                  }
-                                : row,
-                            ),
-                          )
-                        }
-                      >
-                        Add option
-                      </Button>
-                      {draft.options.filter((o) => o.label.trim()).length <
-                      2 ? (
-                        <p className="form-error">
-                          A choice question needs at least 2 options.
-                        </p>
-                      ) : null}
-                    </fieldset>
-                  ) : null}
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
-          {!readOnly ? (
+          {!readOnly && drafts.length > 0 ? (
             <Button
+              className="intake-builder-add"
               variant="secondary"
-              onClick={() => setDrafts((current) => [...current, blankField()])}
+              onClick={addQuestion}
             >
-              Add question
+              <span aria-hidden>+ </span>Add question
             </Button>
           ) : null}
         </div>
-        <FormPhonePreview fields={builtPreview} title={detail.name} />
+
+        <aside className="intake-question-panel" aria-label="Question">
+          <h2>Question</h2>
+          {!selected ? (
+            <p className="intake-question-empty">
+              Select a question to edit its wording and type.
+            </p>
+          ) : (
+            <>
+              <label className="field">
+                <span>Question</span>
+                <input
+                  value={selected.label}
+                  disabled={readOnly}
+                  aria-invalid={
+                    !selected.label.trim() ||
+                    dupLabels.includes(selected.label.trim().toLowerCase())
+                  }
+                  onChange={(event) =>
+                    updateDraft(selected.id, { label: event.target.value })
+                  }
+                />
+                {!selected.label.trim() ? (
+                  <span className="field-error">Enter a label.</span>
+                ) : null}
+                {selected.label.trim() &&
+                dupLabels.includes(selected.label.trim().toLowerCase()) ? (
+                  <span className="field-error">
+                    Another question uses this label.
+                  </span>
+                ) : null}
+              </label>
+              <label className="field">
+                <span>Help text</span>
+                <input
+                  value={selected.helpText}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    updateDraft(selected.id, { helpText: event.target.value })
+                  }
+                />
+              </label>
+              <label className="field">
+                <span>Answer type</span>
+                <select
+                  value={selected.type}
+                  disabled={readOnly}
+                  onChange={(event) =>
+                    updateDraft(
+                      selected.id,
+                      withFieldType(
+                        selected,
+                        event.target.value as FieldDraft["type"],
+                      ),
+                    )
+                  }
+                >
+                  {BUILDER_FIELD_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {fieldTypeLabel(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="intake-switch-row">
+                <span>Required</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={selected.required}
+                  disabled={readOnly}
+                  aria-checked={selected.required}
+                  onChange={(event) =>
+                    updateDraft(selected.id, {
+                      required: event.target.checked,
+                    })
+                  }
+                />
+              </label>
+              <label className="intake-switch-row">
+                <span>Flag for review</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={selected.highlight}
+                  disabled={readOnly}
+                  aria-checked={selected.highlight}
+                  onChange={(event) =>
+                    updateDraft(selected.id, {
+                      highlight: event.target.checked,
+                    })
+                  }
+                />
+              </label>
+              {isTextType(selected.type) ? (
+                <label className="field">
+                  <span>Max length</span>
+                  <input
+                    value={selected.maxLength}
+                    disabled={readOnly}
+                    onChange={(event) =>
+                      updateDraft(selected.id, {
+                        maxLength: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+              ) : null}
+              {selected.type === "number" ? (
+                <label className="field">
+                  <span>Unit</span>
+                  <input
+                    value={selected.unit}
+                    disabled={readOnly}
+                    placeholder="kg"
+                    onChange={(event) =>
+                      updateDraft(selected.id, { unit: event.target.value })
+                    }
+                  />
+                </label>
+              ) : null}
+              {isChoiceType(selected.type) ? (
+                <fieldset className="templates-options">
+                  <legend>Choices</legend>
+                  {selected.options.map((option, optionIndex) => (
+                    <div key={option.id} className="templates-option-row">
+                      <input
+                        value={option.label}
+                        disabled={readOnly}
+                        placeholder={`Option ${optionIndex + 1}`}
+                        onChange={(event) =>
+                          updateDraft(selected.id, {
+                            options: selected.options.map((opt) =>
+                              opt.id === option.id
+                                ? { ...opt, label: event.target.value }
+                                : opt,
+                            ),
+                          })
+                        }
+                      />
+                      <Button
+                        variant="tertiary"
+                        disabled={readOnly || selected.options.length <= 2}
+                        onClick={() =>
+                          updateDraft(selected.id, {
+                            options: selected.options.filter(
+                              (opt) => opt.id !== option.id,
+                            ),
+                          })
+                        }
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="secondary"
+                    disabled={readOnly}
+                    onClick={() =>
+                      updateDraft(selected.id, {
+                        options: [
+                          ...selected.options,
+                          { id: crypto.randomUUID(), label: "" },
+                        ],
+                      })
+                    }
+                  >
+                    Add option
+                  </Button>
+                  {selected.options.filter((o) => o.label.trim()).length < 2 ? (
+                    <p className="form-error">
+                      A choice question needs at least 2 options.
+                    </p>
+                  ) : null}
+                </fieldset>
+              ) : null}
+              <p className="intake-question-note">
+                {readOnly
+                  ? "FitBud base forms are read-only. Fork to edit your own copy."
+                  : `Clients who already answered v${detail.latestVersionNumber} keep their answers. v${nextVersion} applies to new submissions.`}
+              </p>
+            </>
+          )}
+        </aside>
       </div>
+
+      {showPreview ? (
+        <div
+          className="intake-preview-scrim"
+          role="presentation"
+          onClick={() => setShowPreview(false)}
+        >
+          <div
+            className="intake-preview-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Form preview"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="intake-preview-card-head">
+              <h2>Preview</h2>
+              <Button
+                variant="tertiary"
+                onClick={() => setShowPreview(false)}
+              >
+                Close
+              </Button>
+            </div>
+            <FormPhonePreview fields={builtPreview} title={detail.name} />
+          </div>
+        </div>
+      ) : null}
 
       {showFork ? (
         <ForkTemplateModal
