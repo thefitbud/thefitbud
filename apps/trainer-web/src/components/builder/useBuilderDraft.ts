@@ -9,7 +9,7 @@ export type SaveState =
   | { kind: "dirty" }
   | { kind: "invalid"; message: string }
   | { kind: "error"; message: string }
-  | { kind: "conflict" };
+  | { kind: "conflict"; at: Date };
 
 const UNDO_LIMIT = 20;
 const AUTOSAVE_MS = 1200;
@@ -23,7 +23,7 @@ export function isConflictError(err: unknown): boolean {
 
 /**
  * Local draft state with a 20-step undo stack and debounced autosave.
- * `save` must throw on failure; a 409 becomes the "changed in another tab" state.
+ * `save` must throw on failure; a 409 becomes the conflict banner state.
  */
 export function useBuilderDraft({
   initialContent,
@@ -81,7 +81,7 @@ export function useBuilderDraft({
       } catch (err) {
         if (isConflictError(err)) {
           conflicted.current = true;
-          setSaveState({ kind: "conflict" });
+          setSaveState({ kind: "conflict", at: new Date() });
         } else {
           setSaveState({
             kind: "error",
@@ -137,5 +137,39 @@ export function useBuilderDraft({
     return persist();
   }, [persist]);
 
-  return { content, setContent, undo, canUndo: undoDepth > 0, saveState, flush };
+  /**
+   * Keep local edits after a conflict. `prepare` refreshes optimistic concurrency
+   * (e.g. re-read recordVersion) so the next PUT overwrites the other device.
+   */
+  const keepMine = useCallback(
+    async (prepare?: () => Promise<void>) => {
+      if (timer.current) window.clearTimeout(timer.current);
+      if (prepare) await prepare();
+      conflicted.current = false;
+      return persist();
+    },
+    [persist],
+  );
+
+  const takeTheirs = useCallback((remote: PlanContent, remoteTitle?: string) => {
+    conflicted.current = false;
+    setContentState(remote);
+    undoStack.current = [];
+    setUndoDepth(0);
+    const nextTitle = remoteTitle ?? latest.current.title;
+    latest.current = { title: nextTitle, content: remote };
+    savedJson.current = JSON.stringify({ title: nextTitle, content: remote });
+    setSaveState({ kind: "saved", at: new Date() });
+  }, []);
+
+  return {
+    content,
+    setContent,
+    undo,
+    canUndo: undoDepth > 0,
+    saveState,
+    flush,
+    keepMine,
+    takeTheirs,
+  };
 }
