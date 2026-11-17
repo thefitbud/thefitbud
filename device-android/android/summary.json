@@ -1,0 +1,162 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 3 flows failed",
+    "dark: 1 of 3 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F20 Trainer nudges a client as a FitBud push (Z12-50)",
+          "message": "Assertion is false: \"Nudge sent.*\" is visible"
+        }
+      ],
+      "error": null
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F20 Trainer nudges a client as a FitBud push (Z12-50)",
+          "message": "Assertion is false: \"Nudge sent.*\" is visible"
+        }
+      ],
+      "error": null
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 54 s",
+      "mode": "cache-hit",
+      "seconds": 54,
+      "cacheKey": "device-native-android-93acb09e0e4eb1e14311eceb3fde37dcb80d0d88"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.782 (6), dark 0.639 (5)",
+      "light": 0.782,
+      "dark": 0.639,
+      "count": {
+        "light": 6,
+        "dark": 5
+      },
+      "shots": [
+        {
+          "file": "TM-03j-light-android.png",
+          "theme": "light",
+          "luma": 0.7
+        },
+        {
+          "file": "TM-04b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.302
+        },
+        {
+          "file": "TM-04b-light-android.png",
+          "theme": "light",
+          "luma": 0.701
+        },
+        {
+          "file": "TM-04c-dark-android.png",
+          "theme": "dark",
+          "luma": 0.302
+        },
+        {
+          "file": "TM-04c-light-android.png",
+          "theme": "light",
+          "luma": 0.701
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.769
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.769
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        },
+        {
+          "file": "step-051-assertCondition-Nudge_sent-dark-android.png",
+          "theme": "dark",
+          "luma": 0.894
+        },
+        {
+          "file": "step-053-assertCondition-Nudge_sent-light-android.png",
+          "theme": "light",
+          "luma": 0.895
+        }
+      ]
+    }
+  ]
+}
