@@ -7,6 +7,14 @@ type Listener = () => void;
 type CacheEntry<T> = {
   value: T;
   updatedAt: number;
+  /**
+   * Set when a write elsewhere (a log, a sync) made the value out of date. A
+   * stale entry is still shown (stale-while-revalidate, Z12-40) and is
+   * refetched the next time a screen reads its day.
+   */
+  stale?: boolean;
+  /** Last read or write, for the day-view eviction below. */
+  touchedAt: number;
 };
 
 const store = new Map<string, CacheEntry<unknown>>();
@@ -14,19 +22,69 @@ const listeners = new Map<string, Set<Listener>>();
 const globalListeners = new Set<Listener>();
 
 export function cacheKey(
-  kind: "meals" | "day" | "week" | "exceptions" | "workouts",
+  kind: "meals" | "day" | "week" | "exceptions" | "workouts" | "dayview",
   ...parts: string[]
 ): string {
   return [kind, ...parts].join(":");
 }
 
+/**
+ * Per-day screen data (Z12-40): one entry per screen, relationship and civil
+ * date, `dayview:<screen>:<relationshipId>:<YYYY-MM-DD>`. A trainee moving
+ * between days reads these first, so a day already seen (or prefetched)
+ * paints at once and refreshes underneath.
+ */
+export function dayViewKey(
+  screen: string,
+  relationshipId: string,
+  localDate: string,
+): string {
+  return cacheKey("dayview", screen, relationshipId, localDate);
+}
+
+/**
+ * Day views kept in memory at most. Seven days either side of where the
+ * trainee is, for two screens, with room to spare; the least recently used
+ * go first.
+ */
+export const DAY_VIEW_LIMIT = 42;
+
 export function getCached<T>(key: string): T | undefined {
-  return store.get(key)?.value as T | undefined;
+  const entry = store.get(key);
+  if (entry) entry.touchedAt = Date.now();
+  return entry?.value as T | undefined;
+}
+
+/** The entry with its freshness, for stale-while-revalidate readers. */
+export function getCacheEntry<T>(
+  key: string,
+): { value: T; updatedAt: number; stale: boolean } | undefined {
+  const entry = store.get(key);
+  if (!entry) return undefined;
+  entry.touchedAt = Date.now();
+  return {
+    value: entry.value as T,
+    updatedAt: entry.updatedAt,
+    stale: entry.stale === true,
+  };
 }
 
 export function setCached<T>(key: string, value: T): void {
-  store.set(key, { value, updatedAt: Date.now() });
+  const now = Date.now();
+  store.set(key, { value, updatedAt: now, touchedAt: now });
+  if (key.startsWith("dayview:")) evictDayViews();
   notify(key);
+}
+
+function evictDayViews() {
+  const views = [...store.entries()].filter(([key]) =>
+    key.startsWith("dayview:"),
+  );
+  if (views.length <= DAY_VIEW_LIMIT) return;
+  views.sort((a, b) => a[1].touchedAt - b[1].touchedAt);
+  for (const [key] of views.slice(0, views.length - DAY_VIEW_LIMIT)) {
+    store.delete(key);
+  }
 }
 
 export function invalidate(...keys: string[]): void {
@@ -42,7 +100,13 @@ export function invalidateRelationshipDayData(relationshipId: string): void {
   const prefixMeals = `meals:${relationshipId}:`;
   const prefixWorkouts = `workouts:${relationshipId}:`;
   const prefixDay = "day:";
-  for (const key of [...store.keys()]) {
+  for (const [key, entry] of [...store.entries()]) {
+    // Day views are marked stale, not dropped: the day keeps showing what it
+    // had (no skeleton after a log) while the screen refetches it (Z12-40).
+    if (key.startsWith("dayview:") && key.includes(`:${relationshipId}:`)) {
+      entry.stale = true;
+      continue;
+    }
     if (
       key.startsWith(prefixMeals) ||
       key.startsWith(prefixWorkouts) ||
@@ -54,6 +118,21 @@ export function invalidateRelationshipDayData(relationshipId: string): void {
     }
   }
   for (const listener of globalListeners) listener();
+}
+
+/**
+ * Drops every per-day screen view (`dayview:` keys) and the day reads they
+ * share (meals, workouts, day, week). Used when what is cached can no longer
+ * be trusted as a starting point at all, for example a new session; an
+ * ordinary write marks views stale instead (`invalidateRelationshipDayData`).
+ */
+export function clearDayViews(): void {
+  const prefixes = ["dayview:", "meals:", "workouts:", "day:", "week:"];
+  for (const key of [...store.keys()]) {
+    if (!prefixes.some((prefix) => key.startsWith(prefix))) continue;
+    store.delete(key);
+    notify(key);
+  }
 }
 
 export function subscribe(key: string, listener: Listener): () => void {

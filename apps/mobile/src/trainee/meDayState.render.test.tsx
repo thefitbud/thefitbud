@@ -16,6 +16,7 @@
  * the native strip (`DateNavigator`) rendered directly.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -407,4 +408,9 @@ describe("DietTab passes the day through", () => {
     });
     view.unmount();
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

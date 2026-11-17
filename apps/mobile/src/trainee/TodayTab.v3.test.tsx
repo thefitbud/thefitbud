@@ -4,6 +4,8 @@
  * text, roles and labels, not layout (the Expo web captures do that).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
+import { longDayLabel } from "./useDayState";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -12,7 +14,6 @@ import {
   type MealAssignment,
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor, fireEvent, act } from "../test/render";
-import { formatCivilDate } from "@fitbud/core";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
@@ -518,19 +519,23 @@ function queuedRow(n: number, status = "pending") {
 describe("Today v3 past day, loading and offline", () => {
   const PAST = dayBefore(TODAY, 2);
 
-  it("past day: banner with the date and Back to today, no workout card", async () => {
+  it("past day: TR-06c banner (late logging still open), no workout card", async () => {
     workouts = [
       { ...workoutAssignment, localDate: PAST, windowStartsAt: `${PAST}T13:00:00.000Z`, windowEndsAt: `${PAST}T15:00:00.000Z` },
     ];
     meals = [{ ...meal(1, "Breakfast", "overdue"), localDate: PAST }];
     renderToday(PAST);
     const banner = await screen.findByLabelText(/^Past day\./);
-    expect(banner.textContent).toMatch(/you can still log it/);
+    await waitFor(() =>
+      expect(banner.textContent).toBe(
+        "Past days are read-only. You can still log a missed meal until Rahul reviews the day.",
+      ),
+    );
     expect(banner.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(screen.queryByText("Start workout")).toBeNull();
     expect(screen.queryByText("Today's workout")).toBeNull();
-    screen.getByRole("button", { name: "Back to today" }).click();
-    expect(onSelectDate).toHaveBeenCalledWith(TODAY);
+    // The way back is the coral-ringed today in the strip (TR-06c).
+    expect(screen.queryByRole("button", { name: "Back to today" })).toBeNull();
   });
 
   it("today has no past banner", async () => {
@@ -826,7 +831,8 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     renderToday(TODAY, { unreadNotifications: 2 });
     await screen.findByText("Meals");
     expect(screen.getByRole("heading", { name: "Today" })).toBeTruthy();
-    expect(screen.getAllByText(formatCivilDate(TODAY)).length).toBeGreaterThan(0);
+    // TR-06a: today's eyebrow is the long date alone.
+    expect(screen.getByTestId("day-eyebrow").textContent).toBe(longDayLabel(TODAY));
     fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
     expect(openOverlay).toHaveBeenCalledWith({ screen: "notifications" });
   });
@@ -862,20 +868,17 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     ).toBeTruthy();
   });
 
-  it("past day: the title is the date and exactly one past-day notice shows", async () => {
+  it("past day: the title stays Today, the eyebrow says past day, one notice shows", async () => {
     const past = dayBefore(TODAY, 2);
     const view = renderToday(past);
     await screen.findByLabelText(/^Past day\./);
-    expect(
-      screen.getByRole("heading", {
-        name: formatCivilDate(past).replace(" ", ", "),
-      }),
-    ).toBeTruthy();
+    // TR-06c: "Thursday, 12 Nov · past day" over the "Today" title.
+    expect(screen.getByRole("heading", { name: "Today" })).toBeTruthy();
+    expect(screen.getByTestId("day-eyebrow").textContent).toBe(
+      `${longDayLabel(past)} · past day`,
+    );
     expect(screen.getAllByLabelText(/^Past day\./)).toHaveLength(1);
     expect(view.container.textContent).not.toMatch(/read-only except late logging/);
-    // The banner carries the way back; the strip's own Today pill is off.
-    expect(screen.queryByRole("button", { name: "Go to today" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Back to today" })).toHaveLength(1);
   });
 
   it("done card: executed of planned, and View summary hands the execution id on", async () => {
@@ -922,4 +925,9 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     renderToday(TODAY, { onViewSummary: () => undefined });
     expect(await screen.findByText("2 exercises · 52 min")).toBeTruthy();
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

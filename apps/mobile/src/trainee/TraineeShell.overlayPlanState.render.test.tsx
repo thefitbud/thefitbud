@@ -12,6 +12,7 @@
  * labels, not layout.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -222,4 +223,9 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     expect(screen.queryByText("Loading meal plan…")).toBeNull();
     expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });
