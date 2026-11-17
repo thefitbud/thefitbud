@@ -69,6 +69,16 @@ export function RequireAuth() {
     return <Navigate to="/welcome" replace />;
   }
 
+  // First-run exits AppShell (Z12-2 / frames 125–128): focused chrome only.
+  if (onWelcome) {
+    return (
+      <>
+        <OfflineBanner />
+        <Outlet />
+      </>
+    );
+  }
+
   return (
     <AppShell>
       <OfflineBanner />

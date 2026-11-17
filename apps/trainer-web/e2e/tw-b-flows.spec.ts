@@ -287,19 +287,24 @@ test.describe("TW-B first-run welcome", () => {
     await page.getByTestId("screen-TW-02").waitFor({ state: "visible" });
     await page.getByLabel(/display name/i).fill("Nova Coach");
     await page.getByPlaceholder(/98765/i).fill("9876500999");
-    await page.getByLabel(/timezone/i).fill("Asia/Kolkata");
+    await page.getByLabel(/timezone/i).selectOption("Asia/Kolkata");
     await page.getByRole("button", { name: /^continue$/i }).click();
-    await expect(page.getByText(/your starting templates/i)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(
+      page.getByRole("heading", { name: /your starting templates/i }),
+    ).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: /^continue$/i }).click();
-    await expect(page.getByText(/invite your first client/i)).toBeVisible();
+    // Stepper title + page h1 both say this; assert the heading only (Z12-2).
+    await expect(
+      page.getByRole("heading", { name: /invite your first client/i }),
+    ).toBeVisible();
     await expect(page.getByTestId("welcome-invite-form")).toBeVisible();
     // Invalid WhatsApp on step 1 already saved; prove field error path on re-edit via draft is optional —
     // Skip for now and assert finish copy.
     await page.getByRole("button", { name: /skip for now/i }).click();
-    await expect(page.getByTestId("welcome-done")).toContainText(
-      "You're set. FitBud will show you who needs attention here.",
+    const done = page.getByTestId("welcome-done");
+    await expect(done.getByRole("heading", { name: /you're set/i })).toBeVisible();
+    await expect(done).toContainText(
+      "FitBud will show you who needs attention here.",
     );
     await page.getByRole("link", { name: /go to home/i }).click();
     await page.waitForURL(/\/$/, { timeout: 30_000 });
