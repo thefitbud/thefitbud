@@ -42,8 +42,10 @@ vi.mock("./androidChannels", () => ({
 }));
 
 const ensureCategories = vi.fn(async () => undefined);
+const cancelMealSnoozeReminders = vi.fn(async () => undefined);
 vi.mock("./nativeActions", () => ({
   ensureMealNotificationActions: ensureCategories,
+  cancelMealSnoozeReminders,
 }));
 
 import {
@@ -58,6 +60,7 @@ import {
   watchPushTokenChanges,
 } from "./register";
 import { localInstallationId } from "./routing";
+import { isMealSnoozed, snoozeMeal } from "./actions";
 
 type RegisterCall = {
   provider: string;
@@ -436,6 +439,24 @@ describe("signOutPushRegistration", () => {
       "registered",
     );
     expect(api.registerDeviceToken).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Z12-47 review: a snoozed meal reminder must not outlive the session, or the
+   * next person signed in on this phone sees the first trainee's meal title
+   * and can open their assignment.
+   */
+  it("cancels the scheduled meal reminders and clears the snooze record", async () => {
+    const mealId = "44444444-4444-4444-8444-444444444444";
+    cancelMealSnoozeReminders.mockClear();
+    expect(snoozeMeal(mealId).ok).toBe(true);
+    expect(isMealSnoozed(mealId)).toBe(true);
+
+    signOutPushRegistration({ installationId: null, client: null });
+    await flush();
+
+    expect(cancelMealSnoozeReminders).toHaveBeenCalledTimes(1);
+    expect(isMealSnoozed(mealId)).toBe(false);
   });
 
   it("stops the token watch so a rotation cannot re-register the signed-out user", async () => {

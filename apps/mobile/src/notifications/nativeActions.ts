@@ -60,6 +60,11 @@ export async function ensureMealNotificationActions(): Promise<void> {
             typeof data.domainEntityId === "string"
           ? data.domainEntityId
           : null;
+    // TraineeShell subscribes only while a trainee session is mounted. With no
+    // subscriber (signed out, or a trainer session) a meal button press is
+    // dropped: it must not schedule a reminder carrying an earlier trainee's
+    // meal title, or open their assignment.
+    if (listeners.size === 0) return;
     if (actionId === "meal_snooze_30") {
       if (mealAssignmentId) {
         const result = snoozeMeal(mealAssignmentId, new Date(), quietWindow("Asia/Kolkata"));
@@ -93,6 +98,31 @@ export async function ensureMealNotificationActions(): Promise<void> {
     }
   });
   nativeReady = true;
+}
+
+/**
+ * Sign-out: cancels every scheduled meal snooze reminder and takes delivered
+ * ones out of Notification Centre, so the next person on this phone never sees
+ * the signed-out trainee's meal title or opens their assignment. Only the local
+ * reminder carries `mealAssignmentId`; server pushes are left alone.
+ */
+export async function cancelMealSnoozeReminders(): Promise<void> {
+  if (Platform.OS === "web") return;
+  const Notifications = await import("expo-notifications");
+  const isSnoozeReminder = (data: Record<string, unknown> | null | undefined) =>
+    typeof data?.mealAssignmentId === "string";
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const request of scheduled) {
+    if (isSnoozeReminder(request.content.data)) {
+      await Notifications.cancelScheduledNotificationAsync(request.identifier);
+    }
+  }
+  const presented = await Notifications.getPresentedNotificationsAsync();
+  for (const notification of presented) {
+    if (isSnoozeReminder(notification.request.content.data)) {
+      await Notifications.dismissNotificationAsync(notification.request.identifier);
+    }
+  }
 }
 
 /** Schedules the one follow-up push. Web cannot, so the caller keeps the in-app snooze. */

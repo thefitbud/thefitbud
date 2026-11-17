@@ -37,6 +37,7 @@ import {
   type Theme,
 } from "../providers/ThemeProvider";
 import { addDays, localDateInTimezone } from "../lib/dates";
+import { isZodError, reportError } from "../lib/reportError";
 import { stage1Api } from "../lib/stage1Api";
 import {
   coachGivenName,
@@ -171,6 +172,22 @@ function tileForType(type: NotificationType): Tile {
   }
 }
 
+export const INBOX_LOAD_ERROR = "Couldn't load notifications (NOTIF-LOAD). Try again.";
+export const INBOX_READ_ERROR = "Couldn't mark them as read (NOTIF-READ). Try again.";
+export const INBOX_PARSE_ERROR =
+  "Couldn't read the notifications (NOTIF-PARSE). Try again.";
+
+/**
+ * AGENTS.md "Client error handling": only an ApiClientError's own message is
+ * shown as-is; anything else gets a short code and blames no cause it did not
+ * check. The caller has already sent the error through `reportError`.
+ */
+export function inboxErrorCopy(err: unknown, action: "load" | "read"): string {
+  if (err instanceof ApiClientError && err.message) return err.message;
+  if (isZodError(err)) return INBOX_PARSE_ERROR;
+  return action === "load" ? INBOX_LOAD_ERROR : INBOX_READ_ERROR;
+}
+
 export function NotificationsScreen({ onBack, coachName, onNavigate }: Props) {
   const { api, me, refreshSession } = useAuth();
   const s1 = stage1Api(api);
@@ -199,16 +216,16 @@ export function NotificationsScreen({ onBack, coachName, onNavigate }: Props) {
         setCached(CACHE_KEY, filtered);
         setOffline(false);
       } catch (err) {
-        setOffline(true);
+        reportError("notifications.load", err);
+        // A ZodError is a client/server disagreement, not a lost connection.
+        const parse = isZodError(err);
+        setOffline(!parse);
         const cached = getCached<Notification[]>(CACHE_KEY);
         if (cached && cached.length > 0) {
           setItems(cached.filter((item) => withinRetention(item.createdAt)));
+          if (parse) setError(inboxErrorCopy(err, "load"));
         } else {
-          setError(
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load notifications.",
-          );
+          setError(inboxErrorCopy(err, "load"));
         }
       } finally {
         setLoading(false);
@@ -271,18 +288,25 @@ export function NotificationsScreen({ onBack, coachName, onNavigate }: Props) {
 
   async function markAllRead() {
     const done = new Set<string>();
+    let failure: unknown = null;
     for (const item of retained) {
       if (item.readAt != null) continue;
       try {
         await s1.markNotificationRead(item.id);
         done.add(item.id);
-      } catch {
-        // Offline or refused: the rest stay unread and keep their dot.
+      } catch (err) {
+        // The rest stay unread and keep their dot.
+        failure = err;
         break;
       }
     }
     markReadLocally(done);
     await load({ soft: true });
+    if (failure) {
+      // After the reload, which clears the banner.
+      reportError("notifications.readAll", failure);
+      setError(inboxErrorCopy(failure, "read"));
+    }
   }
 
   function renderRow(

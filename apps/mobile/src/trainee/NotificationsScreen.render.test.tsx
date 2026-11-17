@@ -50,9 +50,22 @@ vi.mock("../auth/AuthProvider", async () => {
   return { ...actual, useAuth: () => auth };
 });
 
-const { NotificationsScreen, groupInbox, inboxTimeLabel } = await import(
-  "./NotificationsScreen"
-);
+const reportErrorMock = vi.fn();
+vi.mock("../lib/reportError", async () => {
+  const actual = await vi.importActual<Record<string, unknown>>(
+    "../lib/reportError",
+  );
+  return { ...actual, reportError: reportErrorMock };
+});
+
+const {
+  NotificationsScreen,
+  groupInbox,
+  inboxTimeLabel,
+  INBOX_LOAD_ERROR,
+  INBOX_PARSE_ERROR,
+  INBOX_READ_ERROR,
+} = await import("./NotificationsScreen");
 const { setCached } = await import("./dataCache");
 
 let seq = 0;
@@ -216,6 +229,70 @@ describe("NotificationsScreen (TR-15a, TR-15b)", () => {
     await waitFor(() =>
       expect(screen.queryByRole("button", { name: "Read all" })).toBeNull(),
     );
+  });
+
+  it("Read all that fails reports it and shows a short error code", async () => {
+    const now = Date.now();
+    inbox = [
+      row("plan_published", new Date(now - 60_000).toISOString()),
+      row("checkin_reviewed", new Date(now - 120_000).toISOString()),
+    ];
+    const failure = new TypeError("Network request failed");
+    markRead.mockRejectedValueOnce(failure);
+    reportErrorMock.mockClear();
+    render(
+      <NotificationsScreen
+        coachName="Rahul Verma"
+        onBack={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Read all" }));
+
+    expect(await screen.findByText(INBOX_READ_ERROR)).toBeTruthy();
+    expect(reportErrorMock).toHaveBeenCalledWith("notifications.readAll", failure);
+    // The first refusal stops the loop; both rows keep their unread dot.
+    expect(markRead).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Read all" })).toBeTruthy();
+  });
+
+  it("a load that fails to parse is reported and does not read as offline", async () => {
+    inbox = [row("plan_published", new Date().toISOString())];
+    // Something already on screen, so the saved list stays visible.
+    setCached("notifications:inbox", inbox);
+    const zod = Object.assign(new Error("bad shape"), {
+      name: "ZodError",
+      issues: [{ path: ["items", 0, "type"], message: "Invalid" }],
+    });
+    api.listNotifications.mockRejectedValueOnce(zod);
+    reportErrorMock.mockClear();
+    render(
+      <NotificationsScreen
+        coachName="Rahul Verma"
+        onBack={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    );
+
+    expect(await screen.findByText(INBOX_PARSE_ERROR)).toBeTruthy();
+    expect(reportErrorMock).toHaveBeenCalledWith("notifications.load", zod);
+    expect(screen.queryByText("Showing saved notifications")).toBeNull();
+    expect(screen.getByText("Rahul changed your plan")).toBeTruthy();
+  });
+
+  it("a load that fails with no saved list shows a short code, not the cause", async () => {
+    api.listNotifications.mockRejectedValueOnce(new Error("boom"));
+    reportErrorMock.mockClear();
+    render(
+      <NotificationsScreen
+        coachName="Rahul Verma"
+        onBack={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    );
+    expect(await screen.findByText(INBOX_LOAD_ERROR)).toBeTruthy();
+    expect(screen.queryByText("boom")).toBeNull();
+    expect(reportErrorMock).toHaveBeenCalledTimes(1);
   });
 
   it("a tap marks the row read and opens its target", async () => {

@@ -454,16 +454,21 @@ export function TraineeShell({
     return subscribeMealNotificationResponses((event) => {
       if (event.kind !== "open") return;
       if (event.mealAssignmentId) {
-        setTab("diet");
-        setOverlay({
-          screen: "something_different",
-          assignmentId: event.mealAssignmentId,
+        // Same path as a body tap: the id is checked against this
+        // relationship's meals before anything opens.
+        handleNotificationNavigate({
+          tab: "diet",
+          domainEntityType: "meal_assignment",
+          domainEntityId: event.mealAssignmentId,
+          route: { type: "meal", assignmentId: event.mealAssignmentId },
+          path: `/go/meal/${event.mealAssignmentId}`,
+          refetchRequired: true,
         });
         return;
       }
       setTab("diet");
     });
-  }, []);
+  }, [handleNotificationNavigate]);
 
   useEffect(() => {
     setSelectedDate(today);

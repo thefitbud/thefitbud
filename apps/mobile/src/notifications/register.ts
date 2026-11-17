@@ -3,6 +3,7 @@ import type { DeviceTokenPlatform, DeviceTokenProvider } from "@fitbud/contracts
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { reportError } from "../lib/reportError";
+import { clearMealSnoozes } from "./actions";
 import { localInstallationId } from "./routing";
 
 /**
@@ -342,10 +343,21 @@ export async function unregisterDeviceTokenForPush(
   }
 }
 
+/** Best-effort: a failure is reported and never blocks sign-out. */
+async function cancelLocalMealReminders(): Promise<void> {
+  if (defaultPlatform() === "web") return;
+  try {
+    const { cancelMealSnoozeReminders } = await import("./nativeActions");
+    await cancelMealSnoozeReminders();
+  } catch (err) {
+    reportError("push-signout-reminders", err);
+  }
+}
+
 /**
  * Sign-out teardown, the one path the provider takes. The module singletons
- * (the registered token and registration) are cleared
- * unconditionally, so no state of the signed-out user can reach the next
+ * (the registered token and registration), the meal snooze record and the
+ * scheduled meal snooze reminders are cleared unconditionally, so no state of the signed-out user can reach the next
  * session in the same app run; the revoke is best-effort on top of that and
  * only runs when there is something to revoke and a client to revoke with.
  */
@@ -356,6 +368,8 @@ export function signOutPushRegistration(input: {
 }): void {
   const installationId = input.installationId ?? registration?.installationId;
   resetPushRegistration();
+  clearMealSnoozes();
+  void cancelLocalMealReminders();
   if (!installationId || !input.client) return;
   void unregisterDeviceTokenForPush(input.client, installationId);
 }
