@@ -20,6 +20,7 @@ import { isStepsEnabled } from "../lib/config";
 import { localDateInTimezone } from "../lib/dates";
 import { reportError } from "../lib/reportError";
 import { useConfig } from "../providers/ConfigProvider";
+import { androidTopInset } from "./auth/authParts";
 import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { ReminderSettingsScreen } from "../trainee/settings/ReminderSettingsScreen";
 import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
@@ -281,7 +282,7 @@ function WaitingReviewScreenBody({ relationship }: { relationship: CoachingRelat
 }
 
 const useStyles = createThemedStyles((t) => ({
-  safe: { flex: 1, backgroundColor: t.colors.bg },
+  safe: { flex: 1, backgroundColor: t.colors.bg, paddingTop: androidTopInset },
   content: { gap: 16, paddingBottom: 40, paddingHorizontal: 20, paddingTop: 8 },
   head: { alignItems: "flex-end", flexDirection: "row", gap: 12 },
   flex: { flex: 1, minWidth: 0 },

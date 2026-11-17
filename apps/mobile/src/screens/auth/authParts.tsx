@@ -5,6 +5,7 @@ import {
   Pressable,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   TextInput,
   View,
   type TextInputProps,
@@ -18,6 +19,13 @@ import {
   createThemedStyles,
   useTheme,
 } from "../../providers/ThemeProvider";
+
+/**
+ * Top inset for Android, which draws the app edge to edge (under the status
+ * bar); iOS gets its inset from SafeAreaView. Same rule as the notice host.
+ */
+export const androidTopInset =
+  Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) : 0;
 
 /**
  * Shared v3 pieces for the sign-in, onboarding and system screens (TR-01*,
@@ -135,7 +143,7 @@ function AuthPageBody({
 }
 
 const usePageStyles = createThemedStyles((t) => ({
-  safe: { flex: 1, backgroundColor: t.colors.bg },
+  safe: { flex: 1, backgroundColor: t.colors.bg, paddingTop: androidTopInset },
   flex: { flex: 1 },
   content: {
     flexGrow: 1,
@@ -571,7 +579,7 @@ function CenteredStateBody({
 }
 
 const useStateStyles = createThemedStyles((t) => ({
-  safe: { flex: 1, backgroundColor: t.colors.bgPlain },
+  safe: { flex: 1, backgroundColor: t.colors.bgPlain, paddingTop: androidTopInset },
   canvas: { backgroundColor: t.colors.bg },
   flex: { flex: 1 },
   nav: {

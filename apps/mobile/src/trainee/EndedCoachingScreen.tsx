@@ -29,6 +29,7 @@ import {
   createThemedStyles,
   useTheme,
 } from "../providers/ThemeProvider";
+import { androidTopInset } from "../screens/auth/authParts";
 import { initials } from "./MoreScreen";
 
 type Props = {
@@ -380,7 +381,7 @@ function RestartSheet({
 }
 
 const useStyles = createThemedStyles((t) => ({
-  safe: { flex: 1, backgroundColor: t.colors.bg },
+  safe: { flex: 1, backgroundColor: t.colors.bg, paddingTop: androidTopInset },
   scroll: { flex: 1, backgroundColor: t.colors.bg },
   content: { gap: 16, paddingBottom: 32, paddingHorizontal: 20, paddingTop: 8 },
   head: { gap: 2, marginBottom: 4 },

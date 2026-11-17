@@ -11,6 +11,7 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react-native";
 import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { androidTopInset } from "../../screens/auth/authParts";
 import {
   ThemeScope,
   createThemedStyles,
@@ -772,6 +773,7 @@ const useStyles = createThemedStyles((t) => ({
   page: {
     backgroundColor: t.colors.bg,
     flex: 1,
+    paddingTop: androidTopInset,
   },
   pagePlain: { backgroundColor: t.colors.bgPlain },
   navAction: { justifyContent: "center", minHeight: 44, minWidth: 72, paddingHorizontal: 8 },

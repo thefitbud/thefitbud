@@ -5,6 +5,7 @@ import {
   Platform,
   Pressable,
   RefreshControl,
+  SafeAreaView,
   ScrollView,
   View,
 } from "react-native";
@@ -21,7 +22,12 @@ import {
   User,
 } from "lucide-react-native";
 import type { CoachingRelationship } from "@fitbud/contracts";
-import { formatCivilDate, formatLocalDate, formatPersonName, whatsappHref } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatLocalDate,
+  formatPersonName,
+  whatsappHref,
+} from "@fitbud/core";
 import { Button } from "../components/Button";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Text } from "../components/Text";
@@ -38,6 +44,7 @@ import {
   useTheme,
 } from "../providers/ThemeProvider";
 import { SwitchRoleSheet } from "../screens/RoleSelectScreen";
+import { androidTopInset } from "../screens/auth/authParts";
 import { useSyncEngine } from "../sync/SyncProvider";
 import type { OutboxEntry } from "../sync/engine";
 import { M2Group, M2Row, M2Section, m2Gutter } from "./settings/m2";
@@ -54,7 +61,10 @@ export function initials(name: string): string {
   return `${first}${last}`.toUpperCase() || "•";
 }
 
-function civilFromIso(iso: string | null | undefined, timeZone: string): string {
+function civilFromIso(
+  iso: string | null | undefined,
+  timeZone: string,
+): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -62,7 +72,9 @@ function civilFromIso(iso: string | null | undefined, timeZone: string): string 
 }
 
 /** Rows the sign-out sheet counts as unsent (TR-20f). */
-export function unsentRows(rows: readonly Pick<OutboxEntry, "status">[]): number {
+export function unsentRows(
+  rows: readonly Pick<OutboxEntry, "status">[],
+): number {
   return rows.filter(
     (row) =>
       row.status === "pending" ||
@@ -127,7 +139,10 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
     } catch (err) {
       // The name falls back to the email; nothing else on this screen needs the call.
       reportError("TraineeMore.load", err);
-      setDisplayName((current) => current ?? formatPersonName(me?.email?.split("@")[0] ?? "You"));
+      setDisplayName(
+        (current) =>
+          current ?? formatPersonName(me?.email?.split("@")[0] ?? "You"),
+      );
     } finally {
       setRefreshing(false);
     }
@@ -182,7 +197,9 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
     }
   }
 
-  const dual = me ? mobilePermittedRoles(me.permittedRoles).includes("trainer") : false;
+  const dual = me
+    ? mobilePermittedRoles(me.permittedRoles).includes("trainer")
+    : false;
   const endedCoaching = relationship.status === "ended";
   const coachSince = civilFromIso(relationship.startedAt, timeZone);
   const coachHint = endedCoaching
@@ -193,196 +210,243 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
   const profileLine = dual
     ? `Client of ${coachFirst} · also a coach`
     : (me?.email ?? "Profile");
-  const hasWhatsApp = Boolean(relationship.trainerWhatsappE164) && !endedCoaching;
+  const hasWhatsApp =
+    Boolean(relationship.trainerWhatsappE164) && !endedCoaching;
 
   return (
-    <ScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.content}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          tintColor={theme.colors.ink3}
-          onRefresh={() => {
-            setRefreshing(true);
-            void load();
-          }}
-        />
-      }
-      testID="trainee-more"
-    >
-      <Text variant="largeTitle" style={styles.h1} accessibilityRole="header">
-        More
-      </Text>
-      {error ? <ErrorBanner message={error} /> : null}
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Profile. ${displayName ?? ""}. ${profileLine}`}
-        onPress={() => onOpenOverlay({ screen: "profile" })}
-        style={styles.card}
+    <SafeAreaView style={styles.safe}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            tintColor={theme.colors.ink3}
+            onRefresh={() => {
+              setRefreshing(true);
+              void load();
+            }}
+          />
+        }
+        testID="trainee-more"
       >
-        <View style={[styles.avatar, dual ? styles.avatarDual : null]}>
-          <Text style={[styles.avatarText, dual ? styles.avatarTextDual : null]}>
-            {displayName ? initials(displayName) : ""}
-          </Text>
-        </View>
-        <View style={styles.flex}>
-          <Text style={styles.name} numberOfLines={1}>
-            {displayName ?? " "}
-          </Text>
-          <Text tone="ink2" style={styles.sub} numberOfLines={1}>
-            {profileLine}
-          </Text>
-        </View>
-        <ChevronRight color={theme.colors.ink4} size={20} strokeWidth={2} />
-      </Pressable>
+        <Text variant="largeTitle" style={styles.h1} accessibilityRole="header">
+          More
+        </Text>
+        {error ? <ErrorBanner message={error} /> : null}
 
-      {dual ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Switch to coach view"
-          onPress={() => setSwitchOpen(true)}
-          style={[styles.card, styles.switchCard]}
-          testID="more-switch-to-coach"
+          accessibilityLabel={`Profile. ${displayName ?? ""}. ${profileLine}`}
+          onPress={() => onOpenOverlay({ screen: "profile" })}
+          style={styles.card}
         >
-          <View style={[styles.tile, styles.tileInfo]}>
-            <ArrowLeftRight color={theme.colors.info} size={20} strokeWidth={2} />
+          <View style={[styles.avatar, dual ? styles.avatarDual : null]}>
+            <Text
+              style={[styles.avatarText, dual ? styles.avatarTextDual : null]}
+            >
+              {displayName ? initials(displayName) : ""}
+            </Text>
           </View>
           <View style={styles.flex}>
-            <Text style={styles.rowTitle}>Switch to coach view</Text>
-            <Text tone="ink2" style={styles.sub}>
-              Manage your clients
+            <Text style={styles.name} numberOfLines={1}>
+              {displayName ?? " "}
+            </Text>
+            <Text tone="ink2" style={styles.sub} numberOfLines={1}>
+              {profileLine}
             </Text>
           </View>
           <ChevronRight color={theme.colors.ink4} size={20} strokeWidth={2} />
         </Pressable>
-      ) : (
-        <View style={styles.card}>
-          <View style={styles.coachAvatar}>
-            <Text style={styles.coachAvatarText}>{initials(coachName)}</Text>
-          </View>
-          <View style={styles.flex}>
-            <Text style={styles.coachName} numberOfLines={1}>
-              {endedCoaching ? coachName : `Coached by ${coachName}`}
-            </Text>
-            <Text tone="ink2" style={styles.sub} numberOfLines={1}>
-              {coachHint}
-            </Text>
-          </View>
-          {hasWhatsApp ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Message ${coachFirst} on WhatsApp`}
-              accessibilityHint="Opens WhatsApp with a draft. You press Send."
-              onPress={() => {
-                void askCoach();
-              }}
-              style={styles.chat}
-            >
-              <MessageCircle color={theme.colors.ink} size={24} strokeWidth={1.9} />
-            </Pressable>
-          ) : null}
-        </View>
-      )}
 
-      <M2Section label="Settings" />
-      <M2Group>
-        <M2Row
-          icon={<Bell color={theme.colors.ink2} size={20} strokeWidth={1.9} />}
-          label="Reminders"
-          hint="Workout, meals, check-in"
-          onPress={() => onOpenOverlay({ screen: "reminder_settings" })}
-        />
-        {stepsOn ? (
+        {dual ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Switch to coach view"
+            onPress={() => setSwitchOpen(true)}
+            style={[styles.card, styles.switchCard]}
+            testID="more-switch-to-coach"
+          >
+            <View style={[styles.tile, styles.tileInfo]}>
+              <ArrowLeftRight
+                color={theme.colors.info}
+                size={20}
+                strokeWidth={2}
+              />
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.rowTitle}>Switch to coach view</Text>
+              <Text tone="ink2" style={styles.sub}>
+                Manage your clients
+              </Text>
+            </View>
+            <ChevronRight color={theme.colors.ink4} size={20} strokeWidth={2} />
+          </Pressable>
+        ) : (
+          <View style={styles.card}>
+            <View style={styles.coachAvatar}>
+              <Text style={styles.coachAvatarText}>{initials(coachName)}</Text>
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.coachName} numberOfLines={1}>
+                {endedCoaching ? coachName : `Coached by ${coachName}`}
+              </Text>
+              <Text tone="ink2" style={styles.sub} numberOfLines={1}>
+                {coachHint}
+              </Text>
+            </View>
+            {hasWhatsApp ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Message ${coachFirst} on WhatsApp`}
+                accessibilityHint="Opens WhatsApp with a draft. You press Send."
+                onPress={() => {
+                  void askCoach();
+                }}
+                style={styles.chat}
+              >
+                <MessageCircle
+                  color={theme.colors.ink}
+                  size={24}
+                  strokeWidth={1.9}
+                />
+              </Pressable>
+            ) : null}
+          </View>
+        )}
+
+        <M2Section label="Settings" />
+        <M2Group>
           <M2Row
-            tile="done"
-            icon={<Footprints color={theme.colors.done} size={20} strokeWidth={1.9} />}
-            label="Steps"
-            hint={Platform.OS === "android" ? "Health Connect" : "Apple Health"}
-            onPress={() => onOpenOverlay({ screen: "steps_settings" })}
+            icon={
+              <Bell color={theme.colors.ink2} size={20} strokeWidth={1.9} />
+            }
+            label="Reminders"
+            hint="Workout, meals, check-in"
+            onPress={() => onOpenOverlay({ screen: "reminder_settings" })}
+          />
+          {stepsOn ? (
+            <M2Row
+              tile="done"
+              icon={
+                <Footprints
+                  color={theme.colors.done}
+                  size={20}
+                  strokeWidth={1.9}
+                />
+              }
+              label="Steps"
+              hint={
+                Platform.OS === "android" ? "Health Connect" : "Apple Health"
+              }
+              onPress={() => onOpenOverlay({ screen: "steps_settings" })}
+            />
+          ) : null}
+        </M2Group>
+        <M2Group>
+          <M2Row
+            icon={
+              <User color={theme.colors.ink2} size={20} strokeWidth={1.9} />
+            }
+            label="Account"
+            hint="Sign-in, password, time zone"
+            onPress={() => onOpenOverlay({ screen: "account" })}
+          />
+          <M2Row
+            icon={
+              <CircleHelp
+                color={theme.colors.ink2}
+                size={20}
+                strokeWidth={1.9}
+              />
+            }
+            label="Help"
+            hint="Email the FitBud team"
+            onPress={() => onOpenOverlay({ screen: "help" })}
+          />
+        </M2Group>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Sign out"
+          onPress={() => {
+            void beginSignOut();
+          }}
+          style={[styles.card, styles.signOut]}
+        >
+          <Text tone="crit" style={styles.signOutText}>
+            Sign out
+          </Text>
+        </Pressable>
+
+        <View style={styles.footer}>
+          <Text tone="ink3" style={styles.footerText}>
+            {versionLabel()} ·{" "}
+          </Text>
+          <FooterLink
+            label="Terms"
+            a11y="Terms of use, opens in your browser"
+            path="/terms"
+          />
+          <Text tone="ink3" style={styles.footerText}>
+            {" · "}
+          </Text>
+          <FooterLink
+            label="Privacy"
+            a11y="Privacy policy, opens in your browser"
+            path="/privacy"
+          />
+          <Text tone="ink3" style={styles.footerText}>
+            {" · "}
+          </Text>
+          <FooterLink
+            label="Credits"
+            a11y="Credits and licences, opens in your browser"
+            path="/credits"
+          />
+        </View>
+
+        <SignOutSheet
+          count={signOutCount}
+          sending={sending}
+          onSendFirst={() => {
+            void sendFirst();
+          }}
+          onSignOut={() => {
+            setSignOutCount(null);
+            signOut();
+          }}
+          onCancel={() => setSignOutCount(null)}
+        />
+
+        {dual ? (
+          <SwitchRoleSheet
+            visible={switchOpen}
+            targetRole="trainer"
+            busy={switching}
+            onCancel={() => setSwitchOpen(false)}
+            onSwitch={() => {
+              setSwitching(true);
+              void selectRole("trainer").finally(() => {
+                setSwitching(false);
+                setSwitchOpen(false);
+              });
+            }}
           />
         ) : null}
-      </M2Group>
-      <M2Group>
-        <M2Row
-          icon={<User color={theme.colors.ink2} size={20} strokeWidth={1.9} />}
-          label="Account"
-          hint="Sign-in, password, time zone"
-          onPress={() => onOpenOverlay({ screen: "account" })}
-        />
-        <M2Row
-          icon={<CircleHelp color={theme.colors.ink2} size={20} strokeWidth={1.9} />}
-          label="Help"
-          hint="Email the FitBud team"
-          onPress={() => onOpenOverlay({ screen: "help" })}
-        />
-      </M2Group>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Sign out"
-        onPress={() => {
-          void beginSignOut();
-        }}
-        style={[styles.card, styles.signOut]}
-      >
-        <Text tone="crit" style={styles.signOutText}>
-          Sign out
-        </Text>
-      </Pressable>
-
-      <View style={styles.footer}>
-        <Text tone="ink3" style={styles.footerText}>
-          {versionLabel()} ·{" "}
-        </Text>
-        <FooterLink label="Terms" a11y="Terms of use, opens in your browser" path="/terms" />
-        <Text tone="ink3" style={styles.footerText}>
-          {" · "}
-        </Text>
-        <FooterLink label="Privacy" a11y="Privacy policy, opens in your browser" path="/privacy" />
-        <Text tone="ink3" style={styles.footerText}>
-          {" · "}
-        </Text>
-        <FooterLink
-          label="Credits"
-          a11y="Credits and licences, opens in your browser"
-          path="/credits"
-        />
-      </View>
-
-      <SignOutSheet
-        count={signOutCount}
-        sending={sending}
-        onSendFirst={() => {
-          void sendFirst();
-        }}
-        onSignOut={() => {
-          setSignOutCount(null);
-          signOut();
-        }}
-        onCancel={() => setSignOutCount(null)}
-      />
-
-      {dual ? (
-        <SwitchRoleSheet
-          visible={switchOpen}
-          targetRole="trainer"
-          busy={switching}
-          onCancel={() => setSwitchOpen(false)}
-          onSwitch={() => {
-            setSwitching(true);
-            void selectRole("trainer").finally(() => {
-              setSwitching(false);
-              setSwitchOpen(false);
-            });
-          }}
-        />
-      ) : null}
-    </ScrollView>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-function FooterLink({ label, a11y, path }: { label: string; a11y: string; path: Parameters<typeof legalUrl>[0] }) {
+function FooterLink({
+  label,
+  a11y,
+  path,
+}: {
+  label: string;
+  a11y: string;
+  path: Parameters<typeof legalUrl>[0];
+}) {
   const styles = useStyles();
   return (
     <Pressable
@@ -419,16 +483,25 @@ function SignOutSheet({
   const theme = useTheme();
   const styles = useStyles();
   if (count == null) return null;
-  const title = count === 1 ? "1 item isn't sent yet" : `${count} items aren't sent yet`;
+  const title =
+    count === 1 ? "1 item isn't sent yet" : `${count} items aren't sent yet`;
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onCancel}>
       <ThemeScope scheme="system" drivesSystemBars={false}>
         <View style={styles.scrim}>
-          <View style={styles.dialog} accessibilityViewIsModal testID="sign-out-unsent">
+          <View
+            style={styles.dialog}
+            accessibilityViewIsModal
+            testID="sign-out-unsent"
+          >
             <View style={styles.warnTile}>
               <CloudOff color={theme.colors.warn} size={26} strokeWidth={1.9} />
             </View>
-            <Text variant="title" style={styles.dialogTitle} accessibilityRole="header">
+            <Text
+              variant="title"
+              style={styles.dialogTitle}
+              accessibilityRole="header"
+            >
               {title}
             </Text>
             <Text variant="body" tone="ink2" style={styles.dialogBody}>
@@ -440,10 +513,20 @@ function SignOutSheet({
               <Button
                 label="Send first"
                 loading={sending}
-                icon={<RefreshCw color={theme.colors.onBrand} size={20} strokeWidth={2.25} />}
+                icon={
+                  <RefreshCw
+                    color={theme.colors.onBrand}
+                    size={20}
+                    strokeWidth={2.25}
+                  />
+                }
                 onPress={onSendFirst}
               />
-              <Button label="Sign out anyway" variant="dangerQuiet" onPress={onSignOut} />
+              <Button
+                label="Sign out anyway"
+                variant="dangerQuiet"
+                onPress={onSignOut}
+              />
               <Button label="Cancel" variant="secondary" onPress={onCancel} />
             </View>
           </View>
@@ -454,8 +537,14 @@ function SignOutSheet({
 }
 
 const useStyles = createThemedStyles((t) => ({
+  safe: { flex: 1, backgroundColor: t.colors.bg, paddingTop: androidTopInset },
   scroll: { flex: 1, backgroundColor: t.colors.bg },
-  content: { gap: 12, paddingBottom: 40, paddingHorizontal: m2Gutter, paddingTop: 8 },
+  content: {
+    gap: 12,
+    paddingBottom: 40,
+    paddingHorizontal: m2Gutter,
+    paddingTop: 8,
+  },
   h1: { marginBottom: 8, marginLeft: 4 },
   flex: { flex: 1, minWidth: 0 },
   card: {
@@ -482,7 +571,12 @@ const useStyles = createThemedStyles((t) => ({
   avatarDual: { backgroundColor: t.colors.infoTint },
   avatarText: { color: t.colors.ink, fontSize: 19, fontWeight: "700" },
   avatarTextDual: { color: t.colors.info },
-  name: { color: t.colors.ink, fontSize: 21, fontWeight: "700", lineHeight: 26 },
+  name: {
+    color: t.colors.ink,
+    fontSize: 21,
+    fontWeight: "700",
+    lineHeight: 26,
+  },
   sub: { fontSize: 16, lineHeight: 21 },
   rowTitle: { color: t.colors.ink, fontSize: 18, lineHeight: 23 },
   coachAvatar: {
@@ -494,7 +588,12 @@ const useStyles = createThemedStyles((t) => ({
     width: 48,
   },
   coachAvatarText: { color: t.colors.onCoach, fontSize: 17, fontWeight: "700" },
-  coachName: { color: t.colors.ink, fontSize: 18, fontWeight: "700", lineHeight: 23 },
+  coachName: {
+    color: t.colors.ink,
+    fontSize: 18,
+    fontWeight: "700",
+    lineHeight: 23,
+  },
   chat: {
     alignItems: "center",
     backgroundColor: t.colors.fill,
