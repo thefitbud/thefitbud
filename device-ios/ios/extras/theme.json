@@ -1,0 +1,76 @@
+{
+  "result": "mean screenshot luminance: light 0.904 (9), dark 0.787 (4)",
+  "light": 0.904,
+  "dark": 0.787,
+  "count": {
+    "light": 9,
+    "dark": 4
+  },
+  "shots": [
+    {
+      "file": "TR-06c-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "TR-06d-light-ios.png",
+      "theme": "light",
+      "luma": 0.936
+    },
+    {
+      "file": "TR-07f-light-ios.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "TR-07k-light-ios.png",
+      "theme": "light",
+      "luma": 0.939
+    },
+    {
+      "file": "W-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.949
+    },
+    {
+      "file": "f29-planned-meal-readonly-light-ios.png",
+      "theme": "light",
+      "luma": 0.749
+    },
+    {
+      "file": "f29-today-future-meals-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.786
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.786
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.708
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workout.Needs_yo-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.708
+    }
+  ]
+}
