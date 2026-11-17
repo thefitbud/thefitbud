@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-import { addDays } from "../lib/dates";
+import type { WeekReadModel } from "@fitbud/contracts";
+import { addDays, startOfWeekMonday } from "../lib/dates";
 import {
   dayViewKey,
   getCacheEntry,
@@ -7,6 +8,7 @@ import {
   subscribe,
   subscribeAll,
 } from "./dataCache";
+import { loadWeekModel, type WeekModelState } from "./TraineeDateNavigator";
 
 /**
  * Per-day cache for the trainee's day screens (Z12-40, ISSUE-MAP #6).
@@ -54,10 +56,14 @@ export function fetchDayInto<T>(
 }
 
 /** The civil dates prefetched around `date`, nearest first. */
-export function prefetchDates(date: string, radius = PREFETCH_RADIUS): string[] {
+export function prefetchDates(
+  date: string,
+  radius = PREFETCH_RADIUS,
+  stepDays = 1,
+): string[] {
   const out: string[] = [];
   for (let offset = 1; offset <= radius; offset += 1) {
-    out.push(addDays(date, offset), addDays(date, -offset));
+    out.push(addDays(date, offset * stepDays), addDays(date, -offset * stepDays));
   }
   return out;
 }
@@ -113,6 +119,8 @@ export function useTraineeDayCache<T>(input: {
   fetchDay: (date: string, options: { force: boolean }) => Promise<T>;
   enabled?: boolean;
   prefetchRadius?: number;
+  /** Days between prefetched keys: 1 for days, 7 for weeks. */
+  prefetchStepDays?: number;
   maxAgeMs?: number;
 }): DayCacheResult<T> {
   const {
@@ -121,6 +129,7 @@ export function useTraineeDayCache<T>(input: {
     date,
     enabled = true,
     prefetchRadius = PREFETCH_RADIUS,
+    prefetchStepDays = 1,
     maxAgeMs = DAY_VIEW_MAX_AGE_MS,
   } = input;
   const key = dayViewKey(screen, relationshipId, date);
@@ -166,7 +175,7 @@ export function useTraineeDayCache<T>(input: {
     let cancelled = false;
     void revalidate(false).then(() => {
       if (cancelled) return;
-      for (const near of prefetchDates(date, prefetchRadius)) {
+      for (const near of prefetchDates(date, prefetchRadius, prefetchStepDays)) {
         const nearKey = dayViewKey(screen, relationshipId, near);
         if (getCacheEntry(nearKey)) continue;
         // A failed prefetch shows nothing and is retried when the day is
@@ -181,7 +190,16 @@ export function useTraineeDayCache<T>(input: {
     return () => {
       cancelled = true;
     };
-  }, [date, enabled, nonce, prefetchRadius, relationshipId, revalidate, screen]);
+  }, [
+    date,
+    enabled,
+    nonce,
+    prefetchRadius,
+    prefetchStepDays,
+    relationshipId,
+    revalidate,
+    screen,
+  ]);
 
   const refresh = useCallback(() => revalidate(true), [revalidate]);
 
@@ -194,4 +212,57 @@ export function useTraineeDayCache<T>(input: {
     error: failure?.key === key ? failure.error : null,
     refresh,
   };
+}
+
+/** `GET /me/week` did not give a week; nothing is cached for it. */
+class WeekUnavailable extends Error {
+  constructor() {
+    super("Week unavailable");
+    this.name = "WeekUnavailable";
+  }
+}
+
+/**
+ * The selected day's week (`GET /me/week`) as the strip and "This week" read
+ * it, cached per relationship and week start and shared by Today and Diet
+ * (Z12-40), with the weeks either side prefetched. Loaded on its own, beside
+ * the day, so a failed week shows as soon as it fails (CU23).
+ *
+ * A failure is never cached: it reads `unavailable` (four states, never a
+ * nullable model, D-W3b-25) and the next visit or pull to refresh asks
+ * again.
+ */
+export function useTraineeWeek(input: {
+  relationshipId: string;
+  selectedDate: string;
+  getMeWeek: (weekStart: string) => Promise<WeekReadModel | null>;
+  where: string;
+}): { weekState: WeekModelState; refresh: () => Promise<void> } {
+  const { relationshipId, selectedDate, getMeWeek, where } = input;
+  const getRef = useRef(getMeWeek);
+  getRef.current = getMeWeek;
+  const fetchWeek = useCallback(
+    async (weekStart: string): Promise<WeekModelState> => {
+      const week = await loadWeekModel(
+        (start) => getRef.current(start),
+        weekStart,
+        where,
+      );
+      if (week.status !== "loaded") throw new WeekUnavailable();
+      return week;
+    },
+    [where],
+  );
+  const cache = useTraineeDayCache<WeekModelState>({
+    screen: "week",
+    relationshipId,
+    date: startOfWeekMonday(selectedDate),
+    fetchDay: fetchWeek,
+    prefetchRadius: 1,
+    prefetchStepDays: 7,
+  });
+  const weekState: WeekModelState =
+    cache.data ??
+    (cache.error != null ? { status: "unavailable" } : { status: "loading" });
+  return { weekState, refresh: cache.refresh };
 }

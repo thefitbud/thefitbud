@@ -29,7 +29,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
 import { formatInstant } from "@fitbud/core";
-import { addDays, startOfWeekMonday } from "../lib/dates";
+import { addDays } from "../lib/dates";
 import { FutureDayBanner } from "./FutureDayBanner";
 import { PlannedMealSheet } from "./PlannedMealSheet";
 import { todayFutureBannerText } from "./futureDay";
@@ -41,8 +41,6 @@ import { TodayCheckinCard } from "./CheckinScreen";
 import {
   TraineeDateNavigator,
   WEEK_UNAVAILABLE_MESSAGE,
-  loadWeekModel,
-  type WeekModelState,
 } from "./TraineeDateNavigator";
 import { confirmMealAssignment, MealSyncError } from "./mealActions";
 import {
@@ -56,7 +54,11 @@ import {
 } from "./workoutDuration";
 import { cacheKey, subscribeAll } from "./dataCache";
 import { dayEyebrow, useDayState } from "./useDayState";
-import { sharedRead, useTraineeDayCache } from "./useTraineeDayCache";
+import {
+  sharedRead,
+  useTraineeDayCache,
+  useTraineeWeek,
+} from "./useTraineeDayCache";
 import {
   buildNutritionRings,
   dayKcalSummary,
@@ -266,7 +268,6 @@ type MeDay = Awaited<ReturnType<ReturnType<typeof stage1Api>["getMeDay"]>>;
 export type TodayDayBundle = {
   workout: WorkoutAssignment | null;
   meals: MealAssignment[];
-  week: WeekModelState;
   day: MeDay | null;
   notes: CoachNote[];
   checkin: Checkin | null;
@@ -322,9 +323,8 @@ export function TodayTab({
 
   const fetchDay = useCallback(
     async (date: string, { force }: { force: boolean }): Promise<TodayDayBundle> => {
-      const weekStart = startOfWeekMonday(date);
       const nextDay = addDays(date, 1);
-      const [workouts, mealList, week, day, notes, checkins] = await Promise.all([
+      const [workouts, mealList, day, notes, checkins] = await Promise.all([
         api.listWorkoutAssignments(relationship.id, {
           fromDate: date,
           toDate: nextDay,
@@ -336,18 +336,6 @@ export function TodayTab({
               fromDate: date,
               toDate: date,
             }),
-          { force },
-        ),
-        // Four-state, never a nullable model: see `WeekModelState` (CU23,
-        // D-W3b-25). Shared by the seven days of a week.
-        sharedRead(
-          cacheKey("week", relationship.id, weekStart),
-          () =>
-            loadWeekModel(
-              (start) => s1.getMeWeek(start),
-              weekStart,
-              "TodayTab.getMeWeek",
-            ),
           { force },
         ),
         s1.getMeDay(date).catch(() => null),
@@ -374,7 +362,6 @@ export function TodayTab({
         meals: sortMealsByTime(
           mealsForDay(scheduledAssignments(mealList.items), date),
         ),
-        week,
         day,
         notes: notes.items.slice(0, 2),
         checkin: pickTodayCheckin(checkins.items),
@@ -407,13 +394,22 @@ export function TodayTab({
     actionError ?? (loadFailed ? "Couldn't refresh · pull to try again." : null);
   const offlineHint = loadFailed;
   const [refreshing, setRefreshing] = useState(false);
-  // The whole day load failed with nothing cached: there is no week to show
-  // either. It settles on `unavailable` rather than staying `loading` for
-  // ever: "This week" disappearing with no explanation is the same silent
-  // degradation CU23 removes.
-  const weekState: WeekModelState =
-    bundle?.week ?? (loadFailed ? { status: "unavailable" } : { status: "loading" });
+  // Four-state, never a nullable model: see `WeekModelState` (CU23,
+  // D-W3b-25). Cached per week and shared with Diet (Z12-40); a failed
+  // `GET /me/week` reads `unavailable`, never days derived from the date.
+  const { weekState, refresh: refreshWeek } = useTraineeWeek({
+    relationshipId: relationship.id,
+    selectedDate,
+    getMeWeek: (start) => s1.getMeWeek(start),
+    where: "TodayTab.getMeWeek",
+  });
   const dayTotals = bundle?.day ?? null;
+  // The strip keeps the last `GET /me/day` answer while the next day loads;
+  // `navigatorDaysFor` applies it only to the date it names (Z5-8).
+  const [stripDay, setStripDay] = useState<MeDay | null>(null);
+  useEffect(() => {
+    if (bundle?.day) setStripDay(bundle.day);
+  }, [bundle]);
   // Steps chip (D-W9-3): the server's answer, not native sync.
   const [stepsChip, setStepsChip] = useState<StepsChipState>({
     status: "loading",
@@ -443,9 +439,9 @@ export function TodayTab({
     setActionError(null);
     onRefreshPlan();
     setRefreshNonce((value) => value + 1);
-    await refreshDay();
+    await Promise.all([refreshDay(), refreshWeek()]);
     setRefreshing(false);
-  }, [refreshDay, onRefreshPlan]);
+  }, [refreshDay, refreshWeek, onRefreshPlan]);
 
   useEffect(() => {
     if (!isToday) return;
@@ -678,7 +674,7 @@ export function TodayTab({
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
           weekState={weekState}
-          day={dayTotals}
+          day={dayTotals ?? stripDay}
           // The future-day banner below says what the "Preview" line did (TR-06d has no such line).
           showPreviewBanner={false}
         />

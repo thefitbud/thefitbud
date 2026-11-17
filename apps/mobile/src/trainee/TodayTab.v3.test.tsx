@@ -927,6 +927,87 @@ describe("Today header, past notice and done card (Z10-20)", () => {
   });
 });
 
+describe("Moving between days (Z12-40)", () => {
+  function rerenderToday(
+    view: ReturnType<typeof renderToday>,
+    selectedDate: string,
+  ) {
+    view.rerender(
+      <TodayTab
+        relationship={relationship}
+        planState={effectivePlanStateFor(livePlan)}
+        planCacheError={null}
+        selectedDate={selectedDate}
+        onSelectDate={onSelectDate}
+        onStartWorkout={() => undefined}
+        onOpenDiet={() => undefined}
+        onOpenCheckin={() => undefined}
+        onRefreshPlan={() => undefined}
+        onOpenOverlay={openOverlay}
+      />,
+    );
+  }
+
+  it("a prefetched day (±3) paints in the same render, with no skeleton", async () => {
+    const yesterday = dayBefore(TODAY, 1);
+    meals = [{ ...meal(1, "Breakfast", "confirmed"), localDate: yesterday }];
+    const view = renderToday(TODAY);
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Loading today")).toBeNull();
+    });
+    // Let the ±3 prefetch settle, then hold every later load: a day that
+    // still needed the network would now sit on the skeleton.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    holdDay = new Promise<void>(() => undefined);
+    rerenderToday(view, yesterday);
+    // Synchronously after the move: no skeleton, the past day is on screen.
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByTestId("day-eyebrow").textContent).toBe(
+      `${longDayLabel(yesterday)} · past day`,
+    );
+    expect(screen.getByLabelText(/^Past day\./)).toBeTruthy();
+    // And back to today, also from cache.
+    rerenderToday(view, TODAY);
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+  });
+
+  it("a first visit beyond the prefetch window shows the skeleton until it loads", async () => {
+    const view = renderToday(TODAY);
+    await screen.findByLabelText("Open diet");
+    let release: () => void = () => undefined;
+    holdDay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    rerenderToday(view, dayBefore(TODAY, 6));
+    expect(screen.getByLabelText("Loading today")).toBeTruthy();
+    release();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Loading today")).toBeNull();
+    });
+  });
+
+  it("a cached day refetches underneath without a spinner when a log marks it stale", async () => {
+    renderToday(TODAY);
+    await screen.findByLabelText("Open diet");
+    const { invalidateRelationshipDayData } = await import("./dataCache");
+    let release: () => void = () => undefined;
+    holdDay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    act(() => {
+      invalidateRelationshipDayData(relationship.id);
+    });
+    // The refetch is held: the day keeps showing, with no skeleton.
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+  });
+});
+
 // Each test starts with no cached day views (Z12-40's per-day cache).
 beforeEach(() => {
   clearDayViews();

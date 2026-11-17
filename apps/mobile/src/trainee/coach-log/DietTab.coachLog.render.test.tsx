@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { clearDayViews } from "./dataCache";
+import { clearDayViews } from "../dataCache";
 import {
   coachingRelationshipSchema,
   mealAssignmentSchema,
