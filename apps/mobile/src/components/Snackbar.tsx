@@ -1,5 +1,11 @@
-import type { ReactNode } from "react";
-import { Pressable, View } from "react-native";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import { AccessibilityInfo, Pressable, View } from "react-native";
 import { Check } from "lucide-react-native";
 import { Text } from "./Text";
 import {
@@ -8,6 +14,8 @@ import {
   useTheme,
   withAlpha,
 } from "../providers/ThemeProvider";
+import { useNoticeQueue } from "./notice/NoticeContext";
+import type { NoticeQueue } from "./notice/noticeQueue";
 
 type Props = {
   message: string;
@@ -21,19 +29,82 @@ type Props = {
 
 /**
  * Toast (kit `.toast`): navy fill with white text and a white-tint action in
- * both themes (`--navy` is #33333C in dark). Z12-38 builds the shared queue
- * and host on top of this; the call signature stays.
+ * both themes (`--navy` is #33333C in dark).
+ *
+ * Inside the app's `NoticeHost` (Z12-38) a rendered Snackbar is a request to
+ * the shared queue: it draws where its screen puts it, but only while it is
+ * the queue's current toast, and it leaves on its own (6 s with an action, 4 s
+ * without, or a tap outside an action toast), calling `onDismiss`. Its call
+ * signature is unchanged, so callers need no change. Outside a host (render
+ * tests, the primitive gallery) it draws in place as before.
  */
-export function Snackbar({
+export function Snackbar(props: Props) {
+  const queue = useNoticeQueue();
+  return queue ? <QueuedSnackbar {...props} queue={queue} /> : <SnackbarView {...props} />;
+}
+
+function QueuedSnackbar({ queue, ...props }: Props & { queue: NoticeQueue }) {
+  const latest = useRef(props);
+  latest.current = props;
+  const [id, setId] = useState<string | null>(null);
+  const hasAction = Boolean(props.actionLabel && props.onAction);
+
+  // A new message (or a new action) is a new toast; the old one leaves quietly.
+  useEffect(() => {
+    const next = queue.showToast({
+      message: props.message,
+      actionLabel: hasAction ? props.actionLabel : undefined,
+      onAction: hasAction ? () => latest.current.onAction?.() : undefined,
+      onDismiss: () => latest.current.onDismiss?.(),
+    });
+    setId(next);
+    return () => queue.dismiss(next, "removed");
+  }, [queue, props.message, props.actionLabel, hasAction]);
+
+  // The same words with a new action is the screen asking again (e.g. "Marked
+  // answered" for a second client while the first one's toast is still up):
+  // the toast's time starts over, capped by the queue, so the new Undo stays
+  // reachable. Callers pass inline handlers, so a plain re-render looks the
+  // same; the cap keeps that from holding the toast up, and it only touches
+  // the timer (no re-queue, no re-announcement, no render).
+  const onAction = hasAction ? props.onAction : undefined;
+  const lastAction = useRef(onAction);
+  useEffect(() => {
+    if (lastAction.current === onAction) return;
+    lastAction.current = onAction;
+    if (id != null && onAction) queue.refresh(id);
+  }, [queue, id, onAction]);
+
+  const snapshot = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
+  const visible = id != null && snapshot.toast?.id === id;
+
+  if (!visible || id == null) return null;
+  return (
+    <SnackbarView
+      {...props}
+      onAction={hasAction ? () => queue.act(id) : undefined}
+      onDismiss={props.onDismiss ? () => queue.dismiss(id, "close") : undefined}
+      onTouchInside={() => queue.markToastTouch()}
+    />
+  );
+}
+
+function SnackbarView({
   message,
   actionLabel,
   onAction,
   onDismiss,
   leadingCheck = false,
   leading,
-}: Props) {
+  onTouchInside,
+}: Props & { onTouchInside?: () => void }) {
   const theme = useTheme();
   const styles = useStyles();
+  // One announcement per showing, on both platforms (a queued toast mounts this
+  // view only while it is up). No live region as well: Android would read it twice.
+  useEffect(() => {
+    AccessibilityInfo.announceForAccessibility?.(message);
+  }, [message]);
   const leadingNode = leadingCheck ? (
     <Check color={theme.colors.toastOk} size={18} strokeWidth={2.4} />
   ) : (
@@ -41,7 +112,12 @@ export function Snackbar({
   );
 
   return (
-    <View style={styles.wrap} accessibilityRole="text">
+    <View
+      style={styles.wrap}
+      accessibilityRole="text"
+      testID="notice-toast"
+      onTouchStart={onTouchInside}
+    >
       {leadingNode ? <View style={styles.leading}>{leadingNode}</View> : null}
       <Text style={styles.message}>{message}</Text>
       {actionLabel && onAction ? (

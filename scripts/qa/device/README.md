@@ -259,8 +259,9 @@ vitest test, in every workspace, that calls `console.error` (D-W12-28).
 "ios|android|both", "reason": "<why>" }]`. An entry without a written reason (20+
 characters) fails the scan. It shipped empty: nothing is allowed without a reason in the
 PR that adds it, and every entry is temporary: its reason names the task that removes it
-(the harness test checks this). Entries and their removal are batch decisions (W12:
-D-W12-33, the iOS shadow ADVICE in the trainee workout flow, removed by Z12-38).
+(the harness test checks this). Entries and their removal are batch decisions. It is
+empty again: the one W12 entry (D-W12-33, the iOS shadow ADVICE) was removed by Z12-38,
+which made the in-app banner's fill opaque.
 
 ## Artifacts
 

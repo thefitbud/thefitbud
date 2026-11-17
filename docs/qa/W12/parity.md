@@ -59,8 +59,8 @@ Template row (W12-PROMPT §3):
 | TR-06f | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06f-today-loading.png` | — |
 | TR-06g | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06g-today-refresh-error.png` | — |
 | TR-06g | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06g-today-refresh-error.png` | — |
-| TR-06h | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06h-today-inapp-banner.png` | — |
-| TR-06h | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06h-today-inapp-banner.png` | — |
+| TR-06h | light | yes · state: coach shares a note, back to Today (`device/z12-38/1-trainee-note-banner.yaml`, run 44094063791) | CLOSE | CLOSE | `docs/qa/Z12-38/TR-06h-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-06h-today-inapp-banner.png` | title copy "has a note for you" vs "left a note" (Z12-47 copy); opaque `--card` fill, no blur (D-W12-33); the Today behind it is Z12-46's |
+| TR-06h | dark | yes · same flow, dark run (run 44094063791) | GAP | GAP | `docs/qa/Z12-38/TR-06h-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-06h-today-inapp-banner.png` | Today is not opted in to dark yet (Z12-46); the banner follows the open screen's theme, so it is light; dark tokens are ready (`--card`, `--edge`, no shadow) |
 | TR-07a | light | yes · device/z12-40/1 (Aarav → Diet) | CLOSE | CLOSE | `docs/qa/Z12-40/TR-07a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-07a-diet-day.png` | Z12-40: eyebrow "Tuesday, 17 Nov · Rahul’s plan" over "Diet" and the shared v3 strip match; summary and rows v2 (Diet v3: Z12-42); run 44098030020 (review fixes, app e4d67bf) |
 | TR-07a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/TR-07a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-07a-diet-day.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44098030020 (review fixes, app e4d67bf) |
 | TR-07b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07b-eaten-as-planned-undo.png` | — |
@@ -388,8 +388,8 @@ Template row (W12-PROMPT §3):
 | TM-12b | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-12b-diet-meal-sheet-ate-out.png` | — |
 | TM-13a | light | — | — | — | — | `docs/design/v3/png/trainer/TM-13a-trainer-lockscreen.png` | — |
 | TM-13a | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-13a-trainer-lockscreen.png` | — |
-| TM-13b | light | — | — | — | — | `docs/design/v3/png/trainer/TM-13b-inapp-banner.png` | — |
-| TM-13b | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-13b-inapp-banner.png` | — |
+| TM-13b | light | no · needs a push received while the app is open; the gate cannot send one mid-flow (Expo web: CLOSE) | — | — | `docs/qa/Z12-38/TM-13b-light-web.png` | `docs/design/v3/png/trainer/TM-13b-inapp-banner.png` | copy "Aarav Shah asked on WhatsApp" vs "Aarav asked you" plus the topic line (Z12-47 copy); native check on Z12-58's phone checklist; harness follow-up for a mid-flow push |
+| TM-13b | dark | no · as light (Expo web: GAP, Clients is not opted in to dark yet, Z12-53) | — | — | `docs/qa/Z12-38/TM-13b-dark-web.png` | `docs/design/v3/png-dark/trainer/TM-13b-inapp-banner.png` | the banner follows the open screen's theme; dark once Clients opts in |
 | TM-15a | light | — | — | — | — | `docs/design/v3/png/trainer/TM-15a-coach-logs-meal.png` | — |
 | TM-15a | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-15a-coach-logs-meal.png` | — |
 | TM-15b | light | — | — | — | — | `docs/design/v3/png/trainer/TM-15b-coach-logs-workout.png` | — |
