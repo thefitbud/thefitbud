@@ -19,6 +19,7 @@ import {
   useTheme,
 } from "../../providers/ThemeProvider";
 import { firstNameOf } from "./exceptionSheetContent";
+import { NudgePickContent, type NudgePickItem } from "./NudgePickSheet";
 import { isNetworkFailure } from "./exceptionStateContent";
 import {
   NUDGE_BODY_MAX,
@@ -51,7 +52,9 @@ export type NudgeApi = {
 
 type Props = {
   visible: boolean;
+  /** The item to nudge about. Null with `pickItems`: pick one first (TM-03j), in this same sheet. */
   target: NudgeTarget | null;
+  pickItems?: NudgePickItem[];
   traineeDisplayName: string;
   /** IANA zone of the client, for the quiet-hours check. */
   clientTimeZone: string | null;
@@ -78,7 +81,8 @@ export function NudgeSheet(props: Props) {
 
 function NudgeSheetBody({
   visible,
-  target,
+  target: givenTarget,
+  pickItems,
   traineeDisplayName,
   clientTimeZone,
   trainerDisplayName,
@@ -91,6 +95,12 @@ function NudgeSheetBody({
   const first = firstNameOf(traineeDisplayName) || "your client";
   const coachFirst = firstNameOf(trainerDisplayName);
   const title = `${coachFirst || "Your coach"} nudged you`;
+
+  const [picked, setPicked] = useState<NudgeTarget | null>(null);
+  const target = givenTarget ?? picked;
+  useEffect(() => {
+    if (visible) setPicked(null);
+  }, [visible]);
 
   const [chip, setChip] = useState<NudgeChip | null>("gentle");
   const [body, setBody] = useState("");
@@ -131,7 +141,18 @@ function NudgeSheetBody({
     // The target's identity, not its object, restarts the sheet.
   }, [visible, targetKey]);
 
-  if (!target) return null;
+  if (!target) {
+    if (!pickItems || pickItems.length === 0) return null;
+    return (
+      <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
+        <NudgePickContent
+          traineeDisplayName={traineeDisplayName}
+          items={pickItems}
+          onNext={setPicked}
+        />
+      </BottomSheet>
+    );
+  }
 
   const trimmed = body.trim();
   const tooLong = trimmed.length > NUDGE_BODY_MAX;

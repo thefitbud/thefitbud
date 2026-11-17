@@ -132,4 +132,38 @@ describe("NudgeSheet", () => {
     fireEvent.click(screen.getByText("Send nudge"));
     expect(api.nudgeActivity).not.toHaveBeenCalled();
   });
+
+  it("with several open items it asks which first (TM-03j), in the same sheet, then composes", () => {
+    const meal: NudgeTarget = {
+      ...target,
+      activityType: "meal",
+      activityId: "33333333-3333-4333-8333-333333333333",
+      kindLabel: "Dinner not logged",
+      sourceName: "Dinner",
+      dayLabel: "Fri",
+    };
+    render(
+      <NudgeSheet
+        visible
+        target={null}
+        pickItems={[
+          { id: "a", title: "Missed workout", detail: "Tue 17 Nov · critical", target },
+          { id: "b", title: "Overdue meal", detail: "Fri 13 Nov", target: meal },
+        ]}
+        traineeDisplayName="Rohan Mehta"
+        clientTimeZone="Asia/Kolkata"
+        trainerDisplayName="Rahul Sharma"
+        api={makeApi()}
+        onDismiss={() => {}}
+        onSent={() => {}}
+      />,
+    );
+    expect(screen.getByText("Nudge Rohan about…")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("nudge-pick-b"));
+    fireEvent.click(screen.getByText("Next"));
+    expect(screen.getByText("Nudge Rohan")).toBeTruthy();
+    expect(
+      screen.getByText("Dinner wasn't logged on Fri. Can you add it, even roughly?"),
+    ).toBeTruthy();
+  });
 });

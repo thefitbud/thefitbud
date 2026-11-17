@@ -45,7 +45,7 @@ import {
 import { RemindersCard } from "./clientStatus/RemindersCard";
 import { WeekCard } from "./clientStatus/WeekCard";
 import { openContextualWhatsApp } from "./whatsapp";
-import { NudgePickSheet, type NudgePickItem } from "./sheets/NudgePickSheet";
+import type { NudgePickItem } from "./sheets/NudgePickSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import { exceptionDateLabel } from "./sheets/exceptionSheetContent";
 import { nudgeTargetFromException, type NudgeTarget } from "./sheets/nudgeContent";
@@ -119,8 +119,10 @@ export function ClientStatusScreen({
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [nudgePick, setNudgePick] = useState<NudgePickItem[] | null>(null);
-  const [nudgeTarget, setNudgeTarget] = useState<NudgeTarget | null>(null);
+  // One sheet for both steps (TM-03j picker, then TM-04b): iOS cannot swap modals.
+  const [nudge, setNudge] = useState<
+    { target: NudgeTarget | null; items: NudgePickItem[] } | null
+  >(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -228,9 +230,9 @@ export function ClientStatusScreen({
       if (items.length === 0) {
         setToast("Nothing open to nudge about");
       } else if (items.length === 1) {
-        setNudgeTarget(items[0]!.target);
+        setNudge({ target: items[0]!.target, items });
       } else {
-        setNudgePick(items);
+        setNudge({ target: null, items });
       }
     } catch (err) {
       reportError("client-status.nudge.items", err);
@@ -657,27 +659,17 @@ export function ClientStatusScreen({
           </Pressable>
         </View>
       ) : null}
-      <NudgePickSheet
-        visible={nudgePick != null}
-        traineeDisplayName={name}
-        items={nudgePick ?? []}
-        onDismiss={() => setNudgePick(null)}
-        onNext={(target) => {
-          setNudgePick(null);
-          // iOS cannot present a modal while another is still leaving.
-          setTimeout(() => setNudgeTarget(target), 450);
-        }}
-      />
       <NudgeSheet
-        visible={nudgeTarget != null}
-        target={nudgeTarget}
+        visible={nudge != null}
+        target={nudge?.target ?? null}
+        pickItems={nudge?.items}
         traineeDisplayName={name}
         clientTimeZone={header?.traineeTimezone ?? null}
         trainerDisplayName={me?.trainerProfile?.displayName ?? null}
         api={clientStatusApi(api)}
-        onDismiss={() => setNudgeTarget(null)}
+        onDismiss={() => setNudge(null)}
         onSent={(line) => {
-          setNudgeTarget(null);
+          setNudge(null);
           setToast(line);
         }}
       />

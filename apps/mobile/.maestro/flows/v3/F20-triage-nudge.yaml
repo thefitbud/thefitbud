@@ -100,7 +100,15 @@ tags:
 - takeScreenshot: TM-04o
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Send nudge"
+# The first theme of a job sends it and the sheet closes; the second finds it already
+# sent today (one nudge per item per client day) and the sheet stays on the TM-04n line.
 - extendedWaitUntil:
     notVisible: "PREVIEW · TAP TO EDIT"
-    timeout: 20000
+    timeout: 10000
+    optional: true
+- runFlow:
+    when:
+      visible: "PREVIEW · TAP TO EDIT"
+    commands:
+      - tapOn: "Close"
 - runFlow: ../../common/assert-no-crash.yaml

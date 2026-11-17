@@ -1,14 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { Check } from "lucide-react-native";
-import { BottomSheet } from "../../components/BottomSheet";
 import { Button } from "../../components/Button";
 import { Text } from "../../components/Text";
-import {
-  ThemeScope,
-  createThemedStyles,
-  useTheme,
-} from "../../providers/ThemeProvider";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { firstNameOf } from "./exceptionSheetContent";
 import type { NudgeTarget } from "./nudgeContent";
 
@@ -22,42 +17,24 @@ export type NudgePickItem = {
 };
 
 type Props = {
-  visible: boolean;
   traineeDisplayName: string;
   items: NudgePickItem[];
-  onDismiss: () => void;
   onNext: (target: NudgeTarget) => void;
 };
 
-/** TM-03j: pick the one open item a nudge is about. The push opens it. */
-export function NudgePickSheet(props: Props) {
-  return (
-    <ThemeScope scheme="system" drivesSystemBars={false}>
-      <PickBody {...props} />
-    </ThemeScope>
-  );
-}
-
-function PickBody({
-  visible,
-  traineeDisplayName,
-  items,
-  onDismiss,
-  onNext,
-}: Props) {
+/**
+ * TM-03j: pick the one open item a nudge is about. The push opens it. This is
+ * the first step inside `NudgeSheet`'s own sheet, not a sheet of its own: iOS
+ * cannot present a second modal while the first is still leaving.
+ */
+export function NudgePickContent({ traineeDisplayName, items, onNext }: Props) {
   const theme = useTheme();
   const styles = useStyles();
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string | null>(items[0]?.id ?? null);
   const first = firstNameOf(traineeDisplayName) || "your client";
-
-  useEffect(() => {
-    if (visible) setSelected(items[0]?.id ?? null);
-    // Re-seed only when the sheet opens.
-  }, [visible]);
-
   const chosen = items.find((item) => item.id === selected) ?? null;
   return (
-    <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
+    <>
       <View style={styles.head}>
         <Text variant="title" accessibilityRole="header">
           {`Nudge ${first} about…`}
@@ -96,7 +73,7 @@ function PickBody({
         }}
         testID="nudge-pick-next"
       />
-    </BottomSheet>
+    </>
   );
 }
 
