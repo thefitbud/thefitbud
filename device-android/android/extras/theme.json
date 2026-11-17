@@ -1,0 +1,101 @@
+{
+  "result": "mean screenshot luminance: light 0.796 (9), dark 0.428 (9)",
+  "light": 0.796,
+  "dark": 0.428,
+  "count": {
+    "light": 9,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TM-03j-dark-android.png",
+      "theme": "dark",
+      "luma": 0.299
+    },
+    {
+      "file": "TM-03j-light-android.png",
+      "theme": "light",
+      "luma": 0.663
+    },
+    {
+      "file": "TM-04b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.302
+    },
+    {
+      "file": "TM-04b-light-android.png",
+      "theme": "light",
+      "luma": 0.701
+    },
+    {
+      "file": "TM-04c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.302
+    },
+    {
+      "file": "TM-04c-light-android.png",
+      "theme": "light",
+      "luma": 0.701
+    },
+    {
+      "file": "TM-04n-dark-android.png",
+      "theme": "dark",
+      "luma": 0.264
+    },
+    {
+      "file": "TM-04n-light-android.png",
+      "theme": "light",
+      "luma": 0.739
+    },
+    {
+      "file": "TM-04o-dark-android.png",
+      "theme": "dark",
+      "luma": 0.296
+    },
+    {
+      "file": "TM-04o-light-android.png",
+      "theme": "light",
+      "luma": 0.708
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.93
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "step-055-assertCondition-Nudge_sent-dark-android.png",
+      "theme": "dark",
+      "luma": 0.264
+    },
+    {
+      "file": "step-055-assertCondition-Nudge_sent-light-android.png",
+      "theme": "light",
+      "luma": 0.895
+    },
+    {
+      "file": "step-057-assertCondition-You_nudged_._again_tomor-light-android.png",
+      "theme": "light",
+      "luma": 0.895
+    },
+    {
+      "file": "step-141-assertCondition-PREVIEW___TAP_TO_EDIT-dark-android.png",
+      "theme": "dark",
+      "luma": 0.262
+    }
+  ]
+}
