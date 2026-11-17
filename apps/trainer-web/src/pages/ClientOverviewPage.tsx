@@ -7,6 +7,7 @@ import type {
   MealComplianceItem,
   TrainerNote,
   WeekReadModel,
+  WorkspaceActivityItem,
   WorkoutAdherenceItem,
 } from "@fitbud/contracts";
 import {
@@ -21,9 +22,23 @@ import {
   labelFor,
 } from "@fitbud/core";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
-import { AlertOctagon, AlertTriangle } from "lucide-react";
+import {
+  AlertOctagon,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  CircleDashed,
+  Info,
+  type LucideIcon,
+} from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import { useAuth } from "../auth/AuthProvider";
+import {
+  chipValueForActivity,
+  mealChipLabel,
+  workoutChipLabel,
+} from "../components/activity/activityUtils";
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
 import { ErrorState } from "../components/StatePanels";
@@ -39,8 +54,10 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { stage1Api } from "../lib/stage1-api";
 import { isWorkspaceReadOnly } from "../hooks/useWorkspaceReadOnly";
 import type { WorkspaceOutletContext } from "./workspaceContext";
+import "./ClientOverviewPage.css";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+const DAY_MS = 86_400_000;
 
 function civilParts(date: string) {
   const [y, m, d] = date.slice(0, 10).split("-").map(Number);
@@ -77,6 +94,87 @@ function weekdayLabel(date: string, today: string): string {
 
 function dayNum(date: string): number {
   return civilParts(date).d;
+}
+
+/** Civil date `days` after `date` (YYYY-MM-DD, negative goes back). */
+function addCivilDays(date: string, days: number): string {
+  const { y, m, d } = civilParts(date);
+  const utc = new Date(Date.UTC(y, m - 1, d + days));
+  return utc.toISOString().slice(0, 10);
+}
+
+const WEEK_MS = 7 * DAY_MS;
+
+/** Same current-week index as WorkspaceHeader; past weeks subtract the Monday offset. */
+function coachingWeekNumber(
+  startedAt: string | null | undefined,
+  weekMonday: string,
+  timeZone: string,
+  nowMs = Date.now(),
+): number | null {
+  if (!startedAt) return null;
+  const started = Date.parse(startedAt);
+  if (Number.isNaN(started)) return null;
+  const current = Math.max(1, Math.floor((nowMs - started) / WEEK_MS) + 1);
+  const thisMonday = mondayOfWeek(formatLocalDate(new Date(nowMs), timeZone));
+  const a = civilParts(thisMonday);
+  const b = civilParts(weekMonday);
+  const offsetWeeks = Math.round(
+    (Date.UTC(b.y, b.m - 1, b.d) - Date.UTC(a.y, a.m - 1, a.d)) / WEEK_MS,
+  );
+  return Math.max(1, current + offsetWeeks);
+}
+
+function overviewActivityLabel(item: WorkspaceActivityItem): string {
+  if (item.type === "meal") {
+    return mealChipLabel(item.state) ?? labelFor("meal_assignment_status", item.state);
+  }
+  if (item.type === "workout") {
+    if (item.state === "completed") return "Done";
+    return workoutChipLabel(item.state) ?? labelFor("workout_assignment_status", item.state);
+  }
+  return labelFor("checkin_status", item.state);
+}
+
+type ChipTone = "critical" | "attention" | "positive" | "info" | "neutral";
+
+function overviewActivityTone(item: WorkspaceActivityItem): ChipTone {
+  if (item.type === "meal") {
+    if (item.state === "confirmed" || item.state === "logged_later") return "positive";
+    if (item.state === "overdue" || item.state === "pending") return "attention";
+    return "neutral";
+  }
+  if (item.type === "workout") {
+    if (item.state === "completed") return "positive";
+    if (item.state === "missed") return "attention";
+    return "neutral";
+  }
+  if (item.state === "reviewed") return "positive";
+  if (item.state === "submitted") return "info";
+  if (item.state === "overdue" || item.state === "due") return "attention";
+  return "neutral";
+}
+
+function OverviewActivityChip({ item }: { item: WorkspaceActivityItem }) {
+  const tone = overviewActivityTone(item);
+  const Icon: LucideIcon =
+    tone === "attention"
+      ? AlertTriangle
+      : tone === "positive"
+        ? CheckCircle2
+        : tone === "info"
+          ? Info
+          : CircleDashed;
+  return (
+    <span
+      className={`status-chip status-chip-${tone}`}
+      data-kind={item.type}
+      data-value={chipValueForActivity(item)}
+    >
+      <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+      <span>{overviewActivityLabel(item)}</span>
+    </span>
+  );
 }
 
 type WeekDayView = WeekReadModel["days"][number];
@@ -161,6 +259,9 @@ export function ClientOverviewPage() {
     useOutletContext<WorkspaceOutletContext>();
   const { me } = useAuth();
   const viewerTz = me?.timezone ?? "Asia/Kolkata";
+  const thisWeekMonday = mondayOfWeek(todayCivilUtc());
+  const [weekStart, setWeekStart] = useState(thisWeekMonday);
+  const [selectedDate, setSelectedDate] = useState(todayCivilUtc());
   const [week, setWeek] = useState<WeekReadModel | null>(null);
   const [notes, setNotes] = useState<TrainerNote[]>([]);
   const [weekError, setWeekError] = useState(false);
@@ -243,21 +344,57 @@ export function ClientOverviewPage() {
   const workspaceLoaded = workspace != null;
   const endedWorkspace = isWorkspaceReadOnly(workspace);
 
+  const loadWeek = useCallback(
+    (start: string) => {
+      if (!relationshipId) return;
+      setWeekError(false);
+      void stage1Api
+        .getWorkspaceWeek(relationshipId, start)
+        .then((model) => {
+          setWeek(model);
+          setSelectedDate((prev) => {
+            const inWeek = (date: string) =>
+              model.days.some((day) => day.date === date);
+            const nutritionDay = model.todayNutrition?.date;
+            // Prefer trainee-local today when this payload is the current week.
+            // Browser-local today can disagree across the IST/UTC date line.
+            if (
+              nutritionDay &&
+              inWeek(nutritionDay) &&
+              mondayOfWeek(nutritionDay) === model.start
+            ) {
+              if (!inWeek(prev) || prev === todayCivilUtc()) {
+                return nutritionDay;
+              }
+              return prev;
+            }
+            if (inWeek(prev)) return prev;
+            return model.days[model.days.length - 1]?.date ?? prev;
+          });
+        })
+        .catch(() => {
+          setWeek(null);
+          setWeekError(true);
+        });
+    },
+    [relationshipId],
+  );
+
   useEffect(() => {
     if (!relationshipId || !workspaceLoaded) return;
     loadNotes();
     // Frame 179: an ended client's Overview has no live week, so skip the fetch.
     if (endedWorkspace) return;
-    setWeekError(false);
-    const weekStart = mondayOfWeek(todayCivilUtc());
-    void stage1Api
-      .getWorkspaceWeek(relationshipId, weekStart)
-      .then(setWeek)
-      .catch(() => {
-        setWeek(null);
-        setWeekError(true);
-      });
-  }, [relationshipId, refreshEpoch, loadNotes, workspaceLoaded, endedWorkspace]);
+    loadWeek(weekStart);
+  }, [
+    relationshipId,
+    refreshEpoch,
+    loadNotes,
+    workspaceLoaded,
+    endedWorkspace,
+    weekStart,
+    loadWeek,
+  ]);
 
   if (!workspace) {
     return (
@@ -311,8 +448,71 @@ export function ClientOverviewPage() {
 
   const openEx = overview.openException;
   const nutrition = week?.todayNutrition;
-  const todayDate = nutrition?.date ?? week?.days.find(() => true)?.date;
+  const traineeTz = resolveTraineeTimezone(header).timezone;
+  const todayDate =
+    nutrition?.date ?? formatLocalDate(new Date(), traineeTz);
+  const currentWeekMonday = mondayOfWeek(todayDate);
   const weekEnd = week?.days[week.days.length - 1]?.date;
+  const isCurrentWeek = weekStart === currentWeekMonday;
+  const weekNumber = coachingWeekNumber(
+    header.startedAt,
+    weekStart,
+    traineeTz,
+  );
+  const coachingStartMonday = header.startedAt
+    ? mondayOfWeek(formatLocalDate(new Date(header.startedAt), traineeTz))
+    : null;
+  const canGoPrev =
+    coachingStartMonday == null || weekStart > coachingStartMonday;
+  const canGoNext = !isCurrentWeek;
+  const selectedDay =
+    week?.days.find((day) => day.date === selectedDate) ?? null;
+  const showNutritionRings =
+    nutrition != null && selectedDate === nutrition.date;
+  const selectedMealLabel = selectedDay
+    ? mealCountLabel(selectedDay, selectedDate === todayDate)
+    : null;
+  const nutritionTitle =
+    selectedDate === todayDate
+      ? `Today · ${formatCivilDate(selectedDate)}`
+      : formatCivilDate(selectedDate);
+  const nutritionSub =
+    selectedDate === todayDate
+      ? "Nutrition logged so far"
+      : selectedMealLabel
+        ? `Nutrition logged · ${selectedMealLabel} meals`
+        : "Nutrition logged";
+
+  const goToWeek = (nextMonday: string, preferredDate?: string) => {
+    const clamped =
+      coachingStartMonday && nextMonday < coachingStartMonday
+        ? coachingStartMonday
+        : nextMonday > currentWeekMonday
+          ? currentWeekMonday
+          : nextMonday;
+    setWeekStart(clamped);
+    setWeek(null);
+    if (preferredDate && mondayOfWeek(preferredDate) === clamped) {
+      setSelectedDate(preferredDate);
+    } else if (clamped === currentWeekMonday) {
+      setSelectedDate(todayDate);
+    } else {
+      setSelectedDate(addCivilDays(clamped, 6));
+    }
+  };
+
+  const stepDay = (delta: number) => {
+    const next = addCivilDays(selectedDate, delta);
+    const nextMonday = mondayOfWeek(next);
+    if (nextMonday !== weekStart) {
+      if (coachingStartMonday && nextMonday < coachingStartMonday) return;
+      if (nextMonday > currentWeekMonday) return;
+      goToWeek(nextMonday, next);
+      return;
+    }
+    setSelectedDate(next);
+  };
+
   const configured = workspace.configuration.configuration;
   const sessionsPerWeek =
     configured?.workout.sessionsPerWeek ?? plan.version?.content.workoutDays.length;
@@ -379,32 +579,74 @@ export function ClientOverviewPage() {
 
         <section className="ov-card">
           <div className="ov-card-h">
-            <div>
-              <h2 className="t-h3">This week</h2>
-              {week ? (
-                <div className="t-cap muted" style={{ marginTop: 2 }}>
-                  {formatCivilDate(week.start)}
-                  {weekEnd ? ` – ${formatCivilDate(weekEnd)}` : ""}
+            <div className="ov-week-head">
+              <div className="ov-week-head-main">
+                <div>
+                  <h2 className="t-h3">
+                    {isCurrentWeek
+                      ? "This week"
+                      : weekNumber != null
+                        ? `Week ${weekNumber}`
+                        : "Week"}
+                  </h2>
+                  {week ? (
+                    <div className="t-cap muted" style={{ marginTop: 2 }}>
+                      {formatCivilDate(week.start)}
+                      {weekEnd ? ` – ${formatCivilDate(weekEnd)}` : ""}
+                      {isCurrentWeek && weekNumber != null
+                        ? ` · week ${weekNumber}`
+                        : ""}
+                    </div>
+                  ) : null}
                 </div>
-              ) : null}
-            </div>
-            <div className="ov-legend" aria-label="Legend">
-              <span>
-                <i className="is-workout-done" />
-                Workout done
-              </span>
-              <span>
-                <i className="is-workout-missed" />
-                Missed
-              </span>
-              <span>
-                <i className="is-meal-logged" />
-                Meal logged
-              </span>
-              <span>
-                <i className="is-meal-no" />
-                Not logged
-              </span>
+                <div className="ov-wnav" aria-label="Week">
+                  <button
+                    type="button"
+                    className="ov-wnav-btn"
+                    aria-label="Previous week"
+                    disabled={!canGoPrev}
+                    onClick={() => goToWeek(addCivilDays(weekStart, -7))}
+                  >
+                    <ChevronLeft size={16} strokeWidth={1.75} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="ov-wnav-btn"
+                    aria-label="Next week"
+                    disabled={!canGoNext}
+                    onClick={() => goToWeek(addCivilDays(weekStart, 7))}
+                  >
+                    <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
+                  </button>
+                  {!isCurrentWeek ? (
+                    <button
+                      type="button"
+                      className="ov-wnav-pill"
+                      onClick={() => goToWeek(currentWeekMonday, todayDate)}
+                    >
+                      This week
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+              <div className="ov-legend" aria-label="Legend">
+                <span>
+                  <i className="is-workout-done" />
+                  Workout done
+                </span>
+                <span>
+                  <i className="is-workout-missed" />
+                  Missed
+                </span>
+                <span>
+                  <i className="is-meal-logged" />
+                  Meal logged
+                </span>
+                <span>
+                  <i className="is-meal-no" />
+                  Not logged
+                </span>
+              </div>
             </div>
           </div>
           {week ? (
@@ -412,6 +654,7 @@ export function ClientOverviewPage() {
               <div className="ov-week" role="list" aria-label="Week consistency">
                 {week.days.map((day) => {
                   const isToday = todayDate === day.date;
+                  const isSelected = selectedDate === day.date;
                   const slots = mealSlotsFor(day);
                   const countLabel = mealCountLabel(day, isToday);
                   const label = day.workoutLabel ?? "Rest";
@@ -419,24 +662,34 @@ export function ClientOverviewPage() {
                   return (
                     <div
                       key={day.date}
-                      className={`ov-day${isToday ? " is-today" : ""}`}
+                      className={`ov-day${isToday ? " is-today" : ""}${
+                        isSelected ? " is-selected" : ""
+                      }`}
                       role="listitem"
                     >
-                      <div className="ov-dn">
-                        {weekdayLabel(day.date, todayDate ?? "")}
-                      </div>
-                      <div className="ov-dd">{dayNum(day.date)}</div>
-                      {/* D-W7-10: the API day-state as is; a started past day is partial, unlogged today is To do. */}
-                      <WeekCircle state={day.state} className="ov-wk" />
-                      <div className={`ov-wl${isRestLabel ? " is-muted" : ""}`}>
-                        {label}
-                      </div>
-                      <div className="ov-meals" aria-hidden="true">
-                        {slots.map((slot, index) => (
-                          <i key={index} className={`is-${slot}`} />
-                        ))}
-                      </div>
-                      <div className="ov-ml">{countLabel ?? "\u00a0"}</div>
+                      <button
+                        type="button"
+                        className="ov-day-btn"
+                        aria-pressed={isSelected}
+                        aria-label={formatCivilDate(day.date)}
+                        onClick={() => setSelectedDate(day.date)}
+                      >
+                        <div className="ov-dn">
+                          {weekdayLabel(day.date, todayDate)}
+                        </div>
+                        <div className="ov-dd">{dayNum(day.date)}</div>
+                        {/* D-W7-10: the API day-state as is; a started past day is partial, unlogged today is To do. */}
+                        <WeekCircle state={day.state} className="ov-wk" />
+                        <div className={`ov-wl${isRestLabel ? " is-muted" : ""}`}>
+                          {label}
+                        </div>
+                        <div className="ov-meals" aria-hidden="true">
+                          {slots.map((slot, index) => (
+                            <i key={index} className={`is-${slot}`} />
+                          ))}
+                        </div>
+                        <div className="ov-ml">{countLabel ?? "\u00a0"}</div>
+                      </button>
                     </div>
                   );
                 })}
@@ -454,7 +707,9 @@ export function ClientOverviewPage() {
                     {week.meals.logged}{" "}
                     <small>of {week.meals.assigned}</small>
                   </div>
-                  <div className="ov-stat-l">Meals logged so far</div>
+                  <div className="ov-stat-l">
+                    {isCurrentWeek ? "Meals logged so far" : "Meals logged"}
+                  </div>
                 </div>
                 <div className="ov-stat">
                   <div className="ov-stat-v">
@@ -478,65 +733,83 @@ export function ClientOverviewPage() {
                   </div>
                 </div>
               </div>
-              {nutrition ? (
-                <div className="ov-nut">
-                  <div className="ov-nut-lbl">
-                    Today&apos;s nutrition
-                    <span>Logged so far</span>
-                  </div>
-                  <MiniRing
-                    value={nutrition.logged.kcal}
-                    max={
-                      (nutrition.assigned?.kcal ?? nutrition.logged.kcal) || 1
-                    }
-                    color="var(--brand-indigo, #4527C6)"
-                    label="kcal"
-                    unit=""
-                  />
-                  <MiniRing
-                    value={nutrition.logged.proteinG}
-                    max={
-                      (nutrition.assigned?.proteinG ??
-                        nutrition.logged.proteinG) || 1
-                    }
-                    color="var(--brand-deep-navy, #1A1248)"
-                    label="Protein"
-                    unit="g"
-                  />
-                  <MiniRing
-                    value={nutrition.logged.carbsG}
-                    max={
-                      (nutrition.assigned?.carbsG ??
-                        nutrition.logged.carbsG) || 1
-                    }
-                    color="#7C6CF0"
-                    label="Carbs"
-                    unit="g"
-                  />
-                  <MiniRing
-                    value={nutrition.logged.fatG}
-                    max={
-                      (nutrition.assigned?.fatG ?? nutrition.logged.fatG) || 1
-                    }
-                    color="#0E7490"
-                    label="Fat"
-                    unit="g"
-                  />
+              <div className="ov-nut">
+                <div className="ov-nut-lbl">
+                  {nutritionTitle}
+                  <span>{nutritionSub}</span>
                 </div>
-              ) : null}
-              {nutrition?.assigned ? (
-                <p className="ov-nut-line muted">
-                  {nutrition.logged.hasUnknown ? "≥ " : ""}
-                  {formatKcal(nutrition.logged.kcal)} /{" "}
-                  {formatKcal(nutrition.assigned.kcal)} · P{" "}
-                  {formatNumber(nutrition.logged.proteinG)}/
-                  {formatNumber(nutrition.assigned.proteinG)} g · C{" "}
-                  {formatNumber(nutrition.logged.carbsG)}/
-                  {formatNumber(nutrition.assigned.carbsG)} g · F{" "}
-                  {formatNumber(nutrition.logged.fatG)}/
-                  {formatNumber(nutrition.assigned.fatG)} g
-                </p>
-              ) : null}
+                {showNutritionRings && nutrition ? (
+                  <>
+                    <MiniRing
+                      value={nutrition.logged.kcal}
+                      max={
+                        (nutrition.assigned?.kcal ?? nutrition.logged.kcal) ||
+                        1
+                      }
+                      color="var(--brand-indigo, #4527C6)"
+                      label="kcal"
+                      unit=""
+                    />
+                    <MiniRing
+                      value={nutrition.logged.proteinG}
+                      max={
+                        (nutrition.assigned?.proteinG ??
+                          nutrition.logged.proteinG) || 1
+                      }
+                      color="var(--brand-deep-navy, #1A1248)"
+                      label="Protein"
+                      unit="g"
+                    />
+                    <MiniRing
+                      value={nutrition.logged.carbsG}
+                      max={
+                        (nutrition.assigned?.carbsG ??
+                          nutrition.logged.carbsG) || 1
+                      }
+                      color="#7C6CF0"
+                      label="Carbs"
+                      unit="g"
+                    />
+                    <MiniRing
+                      value={nutrition.logged.fatG}
+                      max={
+                        (nutrition.assigned?.fatG ?? nutrition.logged.fatG) ||
+                        1
+                      }
+                      color="#0E7490"
+                      label="Fat"
+                      unit="g"
+                    />
+                  </>
+                ) : null}
+                <div className="ov-dnav" aria-label="Day">
+                  <button
+                    type="button"
+                    className="ov-dnav-btn"
+                    aria-label={`Previous day, ${formatCivilDate(addCivilDays(selectedDate, -1))}`}
+                    disabled={
+                      coachingStartMonday != null &&
+                      addCivilDays(selectedDate, -1) < coachingStartMonday
+                    }
+                    onClick={() => stepDay(-1)}
+                  >
+                    <ChevronLeft size={14} strokeWidth={1.75} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="ov-dnav-btn"
+                    aria-label={
+                      selectedDate >= todayDate
+                        ? "Next day"
+                        : `Next day, ${formatCivilDate(addCivilDays(selectedDate, 1))}`
+                    }
+                    disabled={selectedDate >= todayDate}
+                    onClick={() => stepDay(1)}
+                  >
+                    <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
+                  </button>
+                </div>
+              </div>
             </>
           ) : weekError ? (
             <p className="form-error" role="alert">
@@ -544,16 +817,7 @@ export function ClientOverviewPage() {
               <button
                 type="button"
                 className="text-link"
-                onClick={() => {
-                  setWeekError(false);
-                  void stage1Api
-                    .getWorkspaceWeek(
-                      relationshipId,
-                      mondayOfWeek(todayCivilUtc()),
-                    )
-                    .then(setWeek)
-                    .catch(() => setWeekError(true));
-                }}
+                onClick={() => loadWeek(weekStart)}
               >
                 Retry
               </button>
@@ -588,22 +852,13 @@ export function ClientOverviewPage() {
                       {labelFor("workspace_activity_type", item.type)}
                     </span>
                   </div>
-                  <StatusChip
-                    kind={
-                      item.type === "workout"
-                        ? "workout"
-                        : item.type === "meal"
-                          ? "meal"
-                          : "checkin"
-                    }
-                    value={item.state}
-                  />
+                  <OverviewActivityChip item={item} />
                   <time
                     className="ov-when"
                     title={formatInstant(item.occurredAt, viewerTz)}
                     dateTime={item.occurredAt}
                   >
-                    {formatRelative(item.occurredAt)}
+                    {formatCivilDate(item.localDate)}
                   </time>
                 </li>
               ))}
@@ -907,13 +1162,6 @@ export function ClientOverviewPage() {
 /* —— Frame 179: ended client's read-only Overview body (Z8-20) —— */
 
 const MINUS = "−";
-
-/** Civil date `days` after `date` (YYYY-MM-DD, negative goes back). */
-function addCivilDays(date: string, days: number): string {
-  const { y, m, d } = civilParts(date);
-  const utc = new Date(Date.UTC(y, m - 1, d + days));
-  return utc.toISOString().slice(0, 10);
-}
 
 /** "68.2 kg → 65.1 kg · −3.1 kg"; one weigh-in shows just that value. */
 function weightLine(
