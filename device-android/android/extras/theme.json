@@ -1,0 +1,91 @@
+{
+  "result": "mean screenshot luminance: light 0.767 (8), dark 0.522 (8)",
+  "light": 0.767,
+  "dark": 0.522,
+  "count": {
+    "light": 8,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "TM-03j-light-android.png",
+      "theme": "light",
+      "luma": 0.7
+    },
+    {
+      "file": "TM-04b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.302
+    },
+    {
+      "file": "TM-04b-light-android.png",
+      "theme": "light",
+      "luma": 0.701
+    },
+    {
+      "file": "TM-04c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.302
+    },
+    {
+      "file": "TM-04c-light-android.png",
+      "theme": "light",
+      "luma": 0.701
+    },
+    {
+      "file": "TM-04n-dark-android.png",
+      "theme": "dark",
+      "luma": 0.264
+    },
+    {
+      "file": "TM-04n-light-android.png",
+      "theme": "light",
+      "luma": 0.739
+    },
+    {
+      "file": "TM-04o-dark-android.png",
+      "theme": "dark",
+      "luma": 0.295
+    },
+    {
+      "file": "TM-04o-light-android.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-016-assertCondition-Today_s_workout-light-android.png",
+      "theme": "light",
+      "luma": 0.767
+    },
+    {
+      "file": "step-054-assertCondition-Nudge_sent-dark-android.png",
+      "theme": "dark",
+      "luma": 0.894
+    },
+    {
+      "file": "step-056-assertCondition-Nudge_sent-light-android.png",
+      "theme": "light",
+      "luma": 0.895
+    },
+    {
+      "file": "step-134-assertCondition-PREVIEW___TAP_TO_EDIT-dark-android.png",
+      "theme": "dark",
+      "luma": 0.262
+    }
+  ]
+}
