@@ -41,7 +41,15 @@ vi.mock("./androidChannels", () => ({
   ensureAndroidNotificationChannels: ensureChannels,
 }));
 
+const ensureCategories = vi.fn(async () => undefined);
+const cancelMealSnoozeReminders = vi.fn(async () => undefined);
+vi.mock("./nativeActions", () => ({
+  ensureMealNotificationActions: ensureCategories,
+  cancelMealSnoozeReminders,
+}));
+
 import {
+  preparePushPresentation,
   requestPushPermission,
   currentPushRegistration,
   installationIdForToken,
@@ -52,6 +60,7 @@ import {
   watchPushTokenChanges,
 } from "./register";
 import { localInstallationId } from "./routing";
+import { isMealSnoozed, snoozeMeal } from "./actions";
 
 type RegisterCall = {
   provider: string;
@@ -432,6 +441,24 @@ describe("signOutPushRegistration", () => {
     expect(api.registerDeviceToken).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * Z12-47 review: a snoozed meal reminder must not outlive the session, or the
+   * next person signed in on this phone sees the first trainee's meal title
+   * and can open their assignment.
+   */
+  it("cancels the scheduled meal reminders and clears the snooze record", async () => {
+    const mealId = "44444444-4444-4444-8444-444444444444";
+    cancelMealSnoozeReminders.mockClear();
+    expect(snoozeMeal(mealId).ok).toBe(true);
+    expect(isMealSnoozed(mealId)).toBe(true);
+
+    signOutPushRegistration({ installationId: null, client: null });
+    await flush();
+
+    expect(cancelMealSnoozeReminders).toHaveBeenCalledTimes(1);
+    expect(isMealSnoozed(mealId)).toBe(false);
+  });
+
   it("stops the token watch so a rotation cannot re-register the signed-out user", async () => {
     const api = fakeApi();
     await registerDeviceTokenForPush(api.client);
@@ -477,7 +504,8 @@ describe("Android 13 notification permission", () => {
       platform: "android",
     });
     expect(outcome.status).toBe("registered");
-    expect(ensureChannels).toHaveBeenCalledTimes(1);
+    // Once for the prompt, once for push presentation (Z12-47); both idempotent.
+    expect(ensureChannels).toHaveBeenCalled();
     expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
   });
 
@@ -510,5 +538,37 @@ describe("Android 13 notification permission", () => {
     });
     expect(await requestPushPermission("android")).toBe("granted");
     expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("push presentation (Z12-47)", () => {
+  beforeEach(() => {
+    resetPushRegistration();
+    ensureChannels.mockClear();
+    ensureCategories.mockClear();
+  });
+
+  it("creates the Android channels and the categories once per session", async () => {
+    await preparePushPresentation("android");
+    await preparePushPresentation("android");
+    expect(ensureChannels).toHaveBeenCalledTimes(1);
+    expect(ensureCategories).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers the iOS categories without touching Android channels", async () => {
+    await preparePushPresentation("ios");
+    expect(ensureChannels).not.toHaveBeenCalled();
+    expect(ensureCategories).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing on web", async () => {
+    await preparePushPresentation("web");
+    expect(ensureCategories).not.toHaveBeenCalled();
+  });
+
+  it("runs on the registration path before the token is sent", async () => {
+    const api = fakeApi();
+    await registerDeviceTokenForPush(api.client, { platform: "ios" });
+    expect(ensureCategories).toHaveBeenCalledTimes(1);
   });
 });

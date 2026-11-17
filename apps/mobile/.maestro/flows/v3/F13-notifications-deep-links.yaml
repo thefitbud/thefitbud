@@ -1,0 +1,122 @@
+appId: com.thefitbud.mobile.staging
+name: F13 Notifications inbox and its taps (Z12-47)
+tags:
+  - device
+  - trainee
+  - z12-47
+env:
+  # A coached trainee with nothing in the last 30 days on the local demo seed
+  # (public demo account; same demo password as the others).
+  EMPTY_INBOX_EMAIL: tanvi.attention@demo.fitbud.test
+---
+# F13 (Z12-47): the trainee inbox matches TR-15a, a row opens its screen and is
+# marked read, Read all clears the unread dots, and the empty inbox is TR-15b.
+#
+# Accounts on the local demo seed: the on-track trainee (Aarav, coach Rahul) for
+# the inbox (his seeded notifications are older than 30 days, so the inbox holds
+# only what this flow sends); Tanvi, who has nothing in the last 30 days, for the
+# empty state. Env from the device harness: QA_ONTRACK_EMAIL, QA_TRAINER_EMAIL,
+# QA_PASSWORD.
+#
+# Lock-screen pushes (TR-15c, TM-13a) cannot be sent from inside a Maestro flow.
+# The gate's extras send one with `simctl push` / UiAutomator after the flows
+# (lockscreen-tap.sh). This flow launches with every permission allowed, so the
+# app holds notification permission when that push arrives (Z12-35 follow-up).
+#
+# Screenshots are named by v3 screen ID (scripts/qa/device/collect-shots.mjs).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+# If permission was not pre-granted, the app asks once after sign-in: allow it.
+- runFlow:
+    when:
+      visible: ".*Would Like to Send You Notifications.*|.*send you notifications.*"
+    commands:
+      - tapOn: "Allow"
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 60000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+
+# A fresh coach note gives the inbox an unread, coach-tinted row today.
+- runScript:
+    file: ../../device/z12-38/share-note.js
+    env:
+      API: http://127.0.0.1:8787
+      TRAINER_EMAIL: ${QA_TRAINER_EMAIL}
+      TRAINEE_EMAIL: ${QA_ONTRACK_EMAIL}
+      PASSWORD: ${QA_PASSWORD}
+      NOTE: "Keep protein near 110 g this week."
+# The in-app banner for that note may show over Today first; let it go.
+- extendedWaitUntil:
+    notVisible: "Rahul left a note"
+    timeout: 15000
+
+# 1. TR-15a: groups, coach row, unread dot, Read all, the 30-day line.
+- tapOn: "Notifications"
+- extendedWaitUntil:
+    visible: "Notifications are kept for 30 days."
+    timeout: 30000
+- assertVisible: "TODAY|Today"
+- assertVisible: "Read all"
+- assertVisible: "Rahul left a note.*"
+- takeScreenshot: TR-15a
+- runFlow: ../../common/assert-no-crash.yaml
+
+# 2. A tap on the coach note marks it read and opens Today.
+- tapOn: "Rahul left a note.*"
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 30000
+- assertNotVisible: "Notifications are kept for 30 days."
+
+# 3. Read all clears every unread row; the button goes away.
+- tapOn: "Notifications"
+- extendedWaitUntil:
+    visible: "Notifications are kept for 30 days."
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Read all"
+    commands:
+      - tapOn: "Read all"
+      - extendedWaitUntil:
+          notVisible: "Read all"
+          timeout: 30000
+- assertNotVisible: ".*Unread"
+- takeScreenshot: z12-47-read-all
+# Back returns to Today.
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 30000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# 4. TR-15b: an inbox with nothing in it.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${EMPTY_INBOX_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 60000
+- tapOn: "Notifications"
+- extendedWaitUntil:
+    visible: "You’re all caught up"
+    timeout: 30000
+- assertNotVisible: "Read all"
+- takeScreenshot: TR-15b
+- runFlow: ../../common/assert-no-crash.yaml

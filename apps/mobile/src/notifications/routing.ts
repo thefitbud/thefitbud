@@ -40,10 +40,23 @@ function exactRouteFromPayload(payload: PushPayload): ResolvedAppRoute {
       return { type: "checkin", checkinId: payload.domainEntityId };
     case "daily_summary":
     case "subscription_renewal_reminder":
-    case "plan_published":
-    case "coach_answered":
-    case "reminders_paused":
     case "relationship_ended":
+      return { type: "tab", tab: "today" };
+    case "plan_published":
+      // F13: "Rahul changed your plan" opens the Workout tab, where the
+      // plan-changed banner says what changed (W-01d).
+      return { type: "tab", tab: "workout" };
+    case "reminders_paused":
+      // Where they can be turned back on ("Turn them back on anytime").
+      return { type: "reminders" };
+    case "coach_answered":
+      // Opens the item the question was about, when the payload names one.
+      if (payload.domainEntityType === "workout_assignment") {
+        return { type: "workout_overview", assignmentId: payload.domainEntityId };
+      }
+      if (payload.domainEntityType === "meal_assignment") {
+        return { type: "meal", assignmentId: payload.domainEntityId };
+      }
       return { type: "tab", tab: "today" };
     case "activity_nudge":
       if (payload.domainEntityType === "workout_assignment") {
