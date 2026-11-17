@@ -1,7 +1,7 @@
-import { StyleSheet, View } from "react-native";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
-import { surface } from "@fitbud/tokens";
+import { View } from "react-native";
+import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { createThemedStyles } from "../../providers/ThemeProvider";
 
 /**
  * Loading state shaped like Today v3 (frame 96): summary card with ring,
@@ -9,10 +9,12 @@ import { Text } from "../../components/Text";
  * blocks: motion is for state change, not for waiting.
  */
 function Block({ style }: { style: object }) {
+  const styles = useStyles();
   return <View style={[styles.block, style]} />;
 }
 
 export function TodaySkeleton() {
+  const styles = useStyles();
   return (
     <View style={styles.stack} accessibilityLabel="Loading today">
       {/* Kept as text for screen readers and the Maestro wait on it. */}
@@ -46,7 +48,7 @@ export function TodaySkeleton() {
       </View>
 
       <View style={styles.mealsHead}>
-        <Text style={styles.mealsLabel}>Meals</Text>
+        <Text variant="headline">Meals</Text>
         <Block style={styles.mealsCount} />
       </View>
       <View style={styles.list}>
@@ -65,23 +67,21 @@ export function TodaySkeleton() {
   );
 }
 
-const BLOCK = "#ECEAF4";
-
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   stack: { gap: spacing.md },
-  block: { backgroundColor: BLOCK, borderRadius: 8 },
+  block: { backgroundColor: t.colors.skel1, borderRadius: 8 },
   srOnly: { height: 1, overflow: "hidden", position: "absolute", width: 1 },
   summary: {
-    backgroundColor: colors.white,
-    borderColor: surface.border,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.md,
   },
   summaryTop: { alignItems: "center", flexDirection: "row", gap: spacing.lg },
   ring: {
-    borderColor: BLOCK,
+    borderColor: t.colors.skel1,
     borderRadius: 54,
     borderWidth: 10,
     height: 108,
@@ -96,32 +96,31 @@ const styles = StyleSheet.create({
   chips: { flexDirection: "row", gap: spacing.sm },
   chip: { borderRadius: 16, flex: 1, height: 48 },
   day: {
-    backgroundColor: "#E6E4F0",
+    backgroundColor: t.colors.skel1,
     borderRadius: 22,
     gap: spacing.md,
     padding: spacing.md,
   },
   dayChip: {
     alignSelf: "flex-start",
-    backgroundColor: "#F4F3FA",
+    backgroundColor: t.colors.skel2,
     borderRadius: 14,
     height: 28,
     width: 110,
   },
-  dayLine: { backgroundColor: "#F4F3FA", borderRadius: 8, height: 20, width: 190 },
-  dayButton: { backgroundColor: "#F4F3FA", borderRadius: 24, height: 48 },
+  dayLine: { backgroundColor: t.colors.skel2, borderRadius: 8, height: 20, width: 190 },
+  dayButton: { backgroundColor: t.colors.skel2, borderRadius: 24, height: 48 },
   mealsHead: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: spacing.sm,
   },
-  mealsLabel: { color: colors.deepNavy, fontSize: 17, fontWeight: "700" },
   mealsCount: { height: 12, width: 80 },
   list: {
-    backgroundColor: colors.white,
-    borderColor: surface.border,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     overflow: "hidden",
   },
@@ -132,10 +131,10 @@ const styles = StyleSheet.create({
     minHeight: 58,
     padding: spacing.md,
   },
-  rowRule: { borderTopColor: colors.lightGrey, borderTopWidth: 1 },
+  rowRule: { borderTopColor: t.colors.line, borderTopWidth: 1 },
   time: { height: 12, width: 50 },
   rowMain: { flex: 1, gap: 6 },
   rowName: { height: 14, width: 100 },
   rowMeta: { height: 10, width: 140 },
   rowChip: { borderRadius: 16, height: 28, width: 76 },
-});
+}));

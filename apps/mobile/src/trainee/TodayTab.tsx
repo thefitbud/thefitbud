@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import { Text } from "../components/Text";
 import type {
   Checkin,
@@ -29,14 +30,10 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { StatusChip } from "../components/StatusChip";
 import { formatInstant } from "@fitbud/core";
-import { addDays, startOfWeekMonday } from "../lib/dates";
+import { addDays } from "../lib/dates";
 import { FutureDayBanner } from "./FutureDayBanner";
 import { PlannedMealSheet } from "./PlannedMealSheet";
-import {
-  isFutureDay,
-  todayFutureBannerText,
-  useLocalToday,
-} from "./futureDay";
+import { todayFutureBannerText } from "./futureDay";
 import { reportError } from "../lib/reportError";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
@@ -45,8 +42,6 @@ import { TodayCheckinCard } from "./CheckinScreen";
 import {
   TraineeDateNavigator,
   WEEK_UNAVAILABLE_MESSAGE,
-  loadWeekModel,
-  type WeekModelState,
 } from "./TraineeDateNavigator";
 import { confirmMealAssignment, MealSyncError } from "./mealActions";
 import {
@@ -58,7 +53,13 @@ import {
   durationMinutesFromExecution,
   estimateDurationMinutesFromDay,
 } from "./workoutDuration";
-import { subscribeAll } from "./dataCache";
+import { cacheKey, subscribeAll } from "./dataCache";
+import { dayEyebrow, useDayState } from "./useDayState";
+import {
+  sharedRead,
+  useTraineeDayCache,
+  useTraineeWeek,
+} from "./useTraineeDayCache";
 import {
   buildNutritionRings,
   dayKcalSummary,
@@ -258,6 +259,21 @@ type CoachNote = Awaited<
   ReturnType<ReturnType<typeof stage1Api>["listMeCoachNotes"]>
 >["items"][number];
 
+type MeDay = Awaited<ReturnType<ReturnType<typeof stage1Api>["getMeDay"]>>;
+
+/**
+ * Everything Today shows for one civil date, cached per relationship and
+ * date (Z12-40): moving to a day already seen or prefetched paints from here
+ * at once and refreshes underneath.
+ */
+export type TodayDayBundle = {
+  workout: WorkoutAssignment | null;
+  meals: MealAssignment[];
+  day: MeDay | null;
+  notes: CoachNote[];
+  checkin: Checkin | null;
+};
+
 export function TodayTab({
   relationship,
   planState,
@@ -298,38 +314,103 @@ export function TodayTab({
   const timeZone = me?.timezone ?? "UTC";
   // Kept current across local midnight and app foregrounding, so a future
   // day unlocks when it becomes today (D-W12-7, Z12-39).
-  const today = useLocalToday(timeZone);
-  const isToday = selectedDate === today;
-  const isFuture = isFutureDay(selectedDate, today);
+  // One day state for Today, Diet and Workout (Z12-40); kept current across
+  // local midnight and app foregrounding, so a future day unlocks when it
+  // becomes today (D-W12-7, Z12-39).
+  const dayState = useDayState({ selectedDate, onSelectDate, timeZone });
+  const { today, isToday, isFuture } = dayState;
   /** A planned meal opened read-only on a future day (TR-07j without actions). */
   const [plannedMeal, setPlannedMeal] = useState<MealAssignment | null>(null);
 
-  const [workout, setWorkout] = useState<WorkoutAssignment | null>(null);
-  const [loadedMeals, setMeals] = useState<MealAssignment[]>([]);
-  // Z11b-1: counts, rings and rows read the selected day's meals only, even
-  // while the last-loaded list still holds another day.
-  const meals = useMemo(
-    () => mealsForDay(loadedMeals, selectedDate),
-    [loadedMeals, selectedDate],
+  const fetchDay = useCallback(
+    async (date: string, { force }: { force: boolean }): Promise<TodayDayBundle> => {
+      const nextDay = addDays(date, 1);
+      const [workouts, mealList, day, notes, checkins] = await Promise.all([
+        api.listWorkoutAssignments(relationship.id, {
+          fromDate: date,
+          toDate: nextDay,
+        }),
+        sharedRead(
+          cacheKey("meals", relationship.id, date, date),
+          () =>
+            api.listMealAssignments(relationship.id, {
+              fromDate: date,
+              toDate: date,
+            }),
+          { force },
+        ),
+        s1.getMeDay(date).catch(() => null),
+        sharedRead(
+          cacheKey("day", "coach-notes", relationship.id),
+          () =>
+            s1.listMeCoachNotes().catch(() => ({ items: [] as CoachNote[] })),
+          { force },
+        ),
+        sharedRead(
+          cacheKey("day", "checkins", relationship.id),
+          () =>
+            api
+              .listCheckins(relationship.id)
+              .catch(() => ({ items: [] as Checkin[] })),
+          { force },
+        ),
+      ]);
+      return {
+        workout:
+          scheduledAssignments(workouts.items).find(
+            (item) => item.localDate === date,
+          ) ?? null,
+        meals: sortMealsByTime(
+          mealsForDay(scheduledAssignments(mealList.items), date),
+        ),
+        day,
+        notes: notes.items.slice(0, 2),
+        checkin: pickTodayCheckin(checkins.items),
+      };
+    },
+    [api, relationship.id, s1],
   );
-  const [checkin, setCheckin] = useState<Checkin | null>(null);
-  const [loading, setLoading] = useState(true);
+  const dayCache = useTraineeDayCache({
+    screen: "today",
+    relationshipId: relationship.id,
+    date: selectedDate,
+    fetchDay,
+  });
+  const bundle = dayCache.data;
+  /** The last load of this day failed; what shows is its cached copy, if any. */
+  const loadFailed = dayCache.error != null;
+  /** The skeleton case only: a first visit to a day with nothing cached. */
+  const loading = dayCache.firstLoad;
+  const workout = bundle?.workout ?? null;
+  // Z11b-1: counts, rings and rows read the selected day's meals only.
+  const meals = useMemo(
+    () => mealsForDay(bundle?.meals ?? [], selectedDate),
+    [bundle, selectedDate],
+  );
+  const checkin = bundle?.checkin ?? null;
   /** False until listMealAssignments returns derived loggingLocked flags. */
-  const [lockStateKnown, setLockStateKnown] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [offlineHint, setOfflineHint] = useState(false);
+  const lockStateKnown = bundle !== undefined && !loadFailed;
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error =
+    actionError ?? (loadFailed ? "Couldn't refresh · pull to try again." : null);
+  const offlineHint = loadFailed;
   const [refreshing, setRefreshing] = useState(false);
   // Four-state, never a nullable model: see `WeekModelState` (CU23,
-  // D-W3b-25). `getMeWeek(...).catch(() => null)` used to make a failed
-  // `GET /me/week` indistinguishable from "not loaded yet", so the "This
-  // week" rollup silently vanished and the date strip filled its day states
-  // in from the date alone.
-  const [weekState, setWeekState] = useState<WeekModelState>({
-    status: "loading",
+  // D-W3b-25). Cached per week and shared with Diet (Z12-40); a failed
+  // `GET /me/week` reads `unavailable`, never days derived from the date.
+  const { weekState, refresh: refreshWeek } = useTraineeWeek({
+    relationshipId: relationship.id,
+    selectedDate,
+    getMeWeek: (start) => s1.getMeWeek(start),
+    where: "TodayTab.getMeWeek",
   });
-  const [dayTotals, setDayTotals] = useState<Awaited<
-    ReturnType<typeof s1.getMeDay>
-  > | null>(null);
+  const dayTotals = bundle?.day ?? null;
+  // The strip keeps the last `GET /me/day` answer while the next day loads;
+  // `navigatorDaysFor` applies it only to the date it names (Z5-8).
+  const [stripDay, setStripDay] = useState<MeDay | null>(null);
+  useEffect(() => {
+    if (bundle?.day) setStripDay(bundle.day);
+  }, [bundle]);
   // Steps chip (D-W9-3): the server's answer, not native sync.
   const [stepsChip, setStepsChip] = useState<StepsChipState>({
     status: "loading",
@@ -339,7 +420,7 @@ export function TodayTab({
   const [nextWorkout, setNextWorkout] = useState<WorkoutAssignment | null>(
     null,
   );
-  const [coachNotes, setCoachNotes] = useState<CoachNote[]>([]);
+  const coachNotes = bundle?.notes ?? [];
   // Trainee listExceptions is 403 — late-log gate uses a positive sentinel.
   const unresolvedExceptions = 1;
   const [mealActingId, setMealActingId] = useState<string | null>(null);
@@ -347,81 +428,21 @@ export function TodayTab({
   const coachName =
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setLockStateKnown(false);
-    setError(null);
-    try {
-      const weekStart = startOfWeekMonday(selectedDate);
-      const nextDay = addDays(selectedDate, 1);
-      const [workouts, mealList, week, day, notes, checkins] =
-        await Promise.all([
-          api.listWorkoutAssignments(relationship.id, {
-            fromDate: selectedDate,
-            toDate: nextDay,
-          }),
-          api.listMealAssignments(relationship.id, {
-            fromDate: selectedDate,
-            toDate: selectedDate,
-          }),
-          loadWeekModel(
-            (start) => s1.getMeWeek(start),
-            weekStart,
-            "TodayTab.getMeWeek",
-          ),
-          s1.getMeDay(selectedDate).catch(() => null),
-          s1.listMeCoachNotes().catch(() => ({ items: [] as CoachNote[] })),
-          api.listCheckins(relationship.id).catch(() => ({ items: [] as Checkin[] })),
-        ]);
-      setWeekState(week);
-      setDayTotals(day);
-      setCoachNotes(notes.items.slice(0, 2));
-      setWorkout(
-        scheduledAssignments(workouts.items).find(
-          (item) => item.localDate === selectedDate,
-        ) ?? null,
-      );
-      setMeals(
-        sortMealsByTime(mealsForDay(scheduledAssignments(mealList.items), selectedDate)),
-      );
-      setCheckin(pickTodayCheckin(checkins.items));
-      setOfflineHint(false);
-      setLockStateKnown(true);
-    } catch {
-      setError("Couldn't refresh · pull to try again.");
-      setOfflineHint(true);
-      setWorkout(null);
-      // Keep the last-loaded meals of this day (as Diet does) so the ring and
-      // rows still agree offline; a different day's meals are dropped.
-      setMeals((prev) => mealsForDay(prev, selectedDate));
-      setLockStateKnown(false);
-      // The whole day load failed, so there is no week to show either. It
-      // settles on `unavailable` rather than staying `loading` for ever:
-      // "This week" disappearing with no explanation is the same silent
-      // degradation CU23 removes.
-      setWeekState({ status: "unavailable" });
-    } finally {
-      setLoading(false);
-    }
-  }, [api, relationship.id, selectedDate, s1]);
-
-  useEffect(() => {
-    void load();
-  }, [load, refreshNonce]);
-
   useEffect(() => {
     return subscribeAll(() => {
       setRefreshNonce((value) => value + 1);
     });
   }, []);
 
+  const refreshDay = dayCache.refresh;
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
+    setActionError(null);
     onRefreshPlan();
     setRefreshNonce((value) => value + 1);
-    await load();
+    await Promise.all([refreshDay(), refreshWeek()]);
     setRefreshing(false);
-  }, [load, onRefreshPlan]);
+  }, [refreshDay, refreshWeek, onRefreshPlan]);
 
   useEffect(() => {
     if (!isToday) return;
@@ -592,7 +613,7 @@ export function TodayTab({
 
   async function handleConfirmMeal(meal: MealAssignment) {
     setMealActingId(meal.id);
-    setError(null);
+    setActionError(null);
     try {
       await confirmMealAssignment(
         api,
@@ -601,9 +622,9 @@ export function TodayTab({
         meal,
         coachName,
       );
-      await load();
+      await refreshDay();
     } catch (err) {
-      setError(
+      setActionError(
         err instanceof MealSyncError
           ? err.message
           : "Couldn't save that meal. Try again when you're online.",
@@ -626,6 +647,10 @@ export function TodayTab({
       {isToday ? (
         <ReviewedBanner coachName={coachName} onOpenCheckin={onOpenCheckin} />
       ) : null}
+    {/* A horizontal swipe anywhere on the screen moves a day (Z12-40): a
+        native pan around the whole screen, so the empty space under a short
+        day counts too. */}
+    <GestureDetector gesture={dayState.swipeGesture}>
     <Screen
       chrome="app"
       title="Today"
@@ -637,8 +662,7 @@ export function TodayTab({
     >
       <View style={styles.stack}>
         <TodayHeader
-          selectedDate={selectedDate}
-          isToday={isToday}
+          eyebrow={dayEyebrow(selectedDate, dayState.kind)}
           unreadNotifications={unreadNotifications}
           onOpenSync={() => onOpenOverlay({ screen: "sync" })}
           onOpenNotifications={() => onOpenOverlay({ screen: "notifications" })}
@@ -654,7 +678,7 @@ export function TodayTab({
           selectedDate={selectedDate}
           onSelectDate={onSelectDate}
           weekState={weekState}
-          day={dayTotals}
+          day={dayTotals ?? stripDay}
           // The future-day banner below says what the "Preview" line did (TR-06d has no such line).
           showPreviewBanner={false}
         />
@@ -715,9 +739,8 @@ export function TodayTab({
 
         {!isToday && !isFuture && !loading ? (
           <PastDayBanner
-            localDate={selectedDate}
+            coachName={coachName}
             canStillLog={lateLoggableCount > 0}
-            onBackToToday={() => onSelectDate(today)}
           />
         ) : null}
 
@@ -1228,6 +1251,7 @@ export function TodayTab({
         ) : null}
       </View>
     </Screen>
+    </GestureDetector>
     {plannedMeal && isFuture ? (
       <PlannedMealSheet
         meal={plannedMeal}

@@ -13,7 +13,8 @@
  * (aliased to `react-native-web`, CU6). The last describe block renders the
  * real shell; everything above it is the loader on its own.
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -445,4 +446,9 @@ describe("TraineeShell initial plan state", () => {
       screen.queryByLabelText("Your coach is preparing your plan"),
     ).toBeNull();
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

@@ -1,0 +1,141 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-40 Moving between days (swipe, cached days, header)
+tags:
+  - device
+  - trainee
+  - z12-40
+---
+# Z12-40: moving between past, today and future days on Today, Diet and
+# Workout. A swipe on the tab body moves a day; a day already seen or
+# prefetched (±3 days) shows with no skeleton; the header eyebrow reads
+# "<Weekday>, <d> <Mon>" with "· past day" or "· planned".
+#
+# Account: the on-track trainee, aarav.ontrack on the local demo seed
+# (Asia/Kolkata). Env from the device harness: QA_ONTRACK_EMAIL, QA_PASSWORD.
+#
+# Screens (by v3 screen ID): TR-06a, TR-07a, W-01a. F29 (tag z12-39) runs
+# beside it for TR-06c, TR-06d, TR-07k and W-01e.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- takeScreenshot: TR-06a-today-default
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Today: swipe through seven days ahead and back ---------------------------
+# A left swipe is the next day. Each step lands within the ±3 days prefetched
+# around the day before it.
+- repeat:
+    times: 7
+    commands:
+      - swipe:
+          start: "85%, 62%"
+          end: "15%, 62%"
+          duration: 350
+      - extendedWaitUntil:
+          notVisible: ".*Loading your day.*"
+          timeout: 15000
+      - assertVisible: ".*· planned"
+- takeScreenshot: z12-40-today-plus-7
+# Back to today: every one of these days was just seen, so none may show the
+# skeleton at all, not even briefly.
+- repeat:
+    times: 7
+    commands:
+      - swipe:
+          start: "15%, 62%"
+          end: "85%, 62%"
+          duration: 350
+      - assertNotVisible: ".*Loading your day.*"
+- assertNotVisible: ".*· planned"
+- assertNotVisible: ".*· past day"
+# One more to the right is yesterday: a past day.
+- swipe:
+    start: "15%, 62%"
+    end: "85%, 62%"
+    duration: 350
+- assertNotVisible: ".*Loading your day.*"
+- assertVisible: ".*· past day"
+- assertVisible: "Past days are read-only.*"
+- takeScreenshot: z12-40-today-yesterday
+- swipe:
+    start: "85%, 62%"
+    end: "15%, 62%"
+    duration: 350
+- assertNotVisible: ".*· past day"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Diet: the same day state; swipe moves a day here too --------------------
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: ".*Rahul.s plan"
+    timeout: 30000
+- takeScreenshot: TR-07a-diet-day
+- swipe:
+    start: "85%, 62%"
+    end: "15%, 62%"
+    duration: 350
+- assertVisible: ".*· planned"
+- assertNotVisible: "Loading meals…"
+- assertVisible: "Opens on .*"
+- takeScreenshot: z12-40-diet-tomorrow
+# Back on the plain area under the meals (no card, no row): the swipe covers
+# the whole screen, not only the cards (review fix, the iOS Diet miss).
+- swipe:
+    start: "15%, 84%"
+    end: "85%, 84%"
+    duration: 350
+- assertVisible: ".*Rahul.s plan"
+- swipe:
+    start: "85%, 84%"
+    end: "15%, 84%"
+    duration: 350
+- assertVisible: ".*· planned"
+- assertNotVisible: "Loading meals…"
+- swipe:
+    start: "15%, 84%"
+    end: "85%, 84%"
+    duration: 350
+- assertVisible: ".*Rahul.s plan"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Workout: follows the shared day -----------------------------------------
+# The day a Workout swipe lands on is read on Today's eyebrow (the day state is
+# shared). "Start workout" cannot be the marker: on iOS it sits inside the
+# hero's accessible Pressable ("<day>, workout details"), which hides it from
+# Maestro, so an assertVisible on it fails and an assertNotVisible proves
+# nothing (run 44098030020).
+- tapOn: "Workout"
+- extendedWaitUntil:
+    notVisible: "Loading workouts…"
+    timeout: 30000
+- takeScreenshot: W-01a-workout-tab-not-started
+# Left on the exercise list (cards).
+- swipe:
+    start: "85%, 62%"
+    end: "15%, 62%"
+    duration: 350
+- assertNotVisible: "Loading workouts…"
+- tapOn: "Today"
+- assertVisible: ".*· planned"
+- tapOn: "Workout"
+# Right on the plain row beside "Exercises".
+- swipe:
+    start: "15%, 54%"
+    end: "85%, 54%"
+    duration: 350
+- tapOn: "Today"
+- assertNotVisible: ".*· planned"
+- assertNotVisible: ".*· past day"
+- runFlow: ../../common/assert-no-crash.yaml

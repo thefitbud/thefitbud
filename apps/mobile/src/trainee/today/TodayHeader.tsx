@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import {
   Bell,
   CloudAlert,
   CloudCheck,
   CloudUpload,
 } from "lucide-react-native";
-import { formatCivilDate } from "@fitbud/core";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { reportError } from "../../lib/reportError";
 import { useSyncEngine } from "../../sync/SyncProvider";
 import { indicatorFromCounts, type IndicatorKind } from "../../sync/outboxCopy";
@@ -68,24 +68,26 @@ function useSyncButtonState(): { kind: IndicatorKind; label: string } {
 }
 
 /**
- * Today's own title row (frame 04): the civil date as an eyebrow, the title,
- * and the two controls `AppTopBar` used to give this tab, the sync (cloud)
- * button and the bell, each 44 pt and labelled. On a past day the title is
- * the date ("Fri, 16 Oct"), not "Today".
+ * Today's own title row (TR-06a/c/d): the day as an eyebrow ("Thursday,
+ * 12 Nov · past day", "Monday, 16 Nov · planned", from `dayEyebrow`), the
+ * title "Today" on every day as in the mocks, and the two controls
+ * `AppTopBar` used to give this tab, the sync (cloud) button and the bell,
+ * each 44 pt and labelled.
  */
 export function TodayHeader({
-  selectedDate,
-  isToday,
+  eyebrow,
   unreadNotifications,
   onOpenSync,
   onOpenNotifications,
 }: {
-  selectedDate: string;
-  isToday: boolean;
+  /** `dayEyebrow(selectedDate, kind)` (`useDayState.ts`). */
+  eyebrow: string;
   unreadNotifications: number;
   onOpenSync: () => void;
   onOpenNotifications: () => void;
 }) {
+  const styles = useStyles();
+  const theme = useTheme();
   const syncState = useSyncButtonState();
   const SyncIcon =
     syncState.kind === "problem"
@@ -93,15 +95,18 @@ export function TodayHeader({
       : syncState.kind === "waiting" || syncState.kind === "syncing"
         ? CloudUpload
         : CloudCheck;
-  const date = formatCivilDate(selectedDate);
-  // "Fri 16 Oct" reads "Fri, 16 Oct" as a title (frame 04 past).
-  const title = isToday ? "Today" : date.replace(" ", ", ");
   return (
     <View style={styles.row}>
       <View style={styles.titles}>
-        <Text style={styles.eyebrow}>{date}</Text>
-        <Text style={styles.title} accessibilityRole="header">
-          {title}
+        <Text variant="subhead" tone="ink3" testID="day-eyebrow">
+          {eyebrow}
+        </Text>
+        <Text
+          variant="largeTitle"
+          style={styles.title}
+          accessibilityRole="header"
+        >
+          Today
         </Text>
       </View>
       <Pressable
@@ -110,7 +115,7 @@ export function TodayHeader({
         onPress={onOpenSync}
         style={styles.iconBtn}
       >
-        <SyncIcon size={22} color={colors.deepNavy} strokeWidth={1.75} />
+        <SyncIcon size={22} color={theme.colors.ink} strokeWidth={1.75} />
       </Pressable>
       <Pressable
         accessibilityRole="button"
@@ -118,14 +123,14 @@ export function TodayHeader({
         onPress={onOpenNotifications}
         style={styles.iconBtn}
       >
-        <Bell size={22} color={colors.deepNavy} strokeWidth={1.75} />
+        <Bell size={22} color={theme.colors.ink} strokeWidth={1.75} />
         {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
       </Pressable>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   row: {
     alignItems: "center",
     flexDirection: "row",
@@ -134,23 +139,13 @@ const styles = StyleSheet.create({
   titles: {
     flex: 1,
   },
-  eyebrow: {
-    color: colors.midGrey,
-    fontSize: 14,
-    fontWeight: "600",
-  },
   title: {
-    color: colors.deepNavy,
-    fontSize: 30,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    lineHeight: 36,
     marginTop: 2,
   },
   iconBtn: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 22,
     borderWidth: 1,
     height: 44,
@@ -158,7 +153,7 @@ const styles = StyleSheet.create({
     width: 44,
   },
   unreadDot: {
-    backgroundColor: colors.coral,
+    backgroundColor: t.colors.coralStrong,
     borderRadius: 5,
     height: 10,
     position: "absolute",
@@ -166,4 +161,4 @@ const styles = StyleSheet.create({
     top: 8,
     width: 10,
   },
-});
+}));

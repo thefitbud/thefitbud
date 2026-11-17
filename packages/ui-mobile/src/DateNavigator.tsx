@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, View } from "react-native";
 import { addDaysToLocalDate, formatCivilDate, labelFor } from "@fitbud/core";
 import { FitText as Text } from "./FitText.js";
-import { colors, radii, spacing, touchTargetMin } from "./theme.js";
+import { spacing, themes, touchTargetMin, type Theme } from "./theme.js";
 import { typeScale } from "./typography.js";
 
 export type DateNavigatorDay = {
@@ -19,28 +19,38 @@ type Props = {
   onToday: () => void;
   /** Hosts with their own way back to today (a past-day banner) pass false. */
   showTodayPill?: boolean;
+  /**
+   * The host's theme (`useTheme()`), so the strip follows a screen that opted
+   * in to dark (D-W12-12). Light when omitted.
+   */
+  theme?: Theme;
 };
 
-function dotColor(state: DateNavigatorDay["state"]): string {
+/**
+ * The dot under a day (TR-06a/c/d): green when the day is done, grey when it
+ * is planned. The colour is never the only signal: every state is also in the
+ * day's spoken label. Rest and unknown days have no dot, as in the mocks.
+ */
+export function dotColor(
+  state: DateNavigatorDay["state"],
+  colors: Theme["colors"] = themes.light.colors,
+): string {
   switch (state) {
     case "done":
-      return colors.success;
+      return colors.done;
     case "partial":
-      return colors.warning;
+      return colors.warn;
     case "due":
-      // Planned today, nothing logged yet: neutral and open, never the
-      // partial colour (D-W6-10).
-      return colors.darkGrey;
+      // Planned today, nothing logged yet: neutral, never the partial colour
+      // (D-W6-10).
+      return colors.ink3;
     case "open":
-      return colors.indigo;
-    case "rest":
-      return colors.lightGrey;
+      return colors.crit;
     case "future":
-      return colors.midGrey;
+      return colors.ink4;
+    case "rest":
     case "unknown":
-      // Same no-information colour the strip used when unknown was stored as
-      // rest. The spoken label is what tells the states apart.
-      return colors.lightGrey;
+      return "transparent";
   }
 }
 
@@ -60,6 +70,15 @@ function stateLabel(state: DateNavigatorDay["state"]): string {
   }
 }
 
+/**
+ * The week strip (v3, TR-06a/c/d, TR-07a/k, W-01a/e; Z12-40). One letter for
+ * the weekday, the day number in a 44 pt circle and a state dot. Today is
+ * the coral ring; another selected day is an ink ring. Changing day is a tap
+ * here, or a swipe on the host's body; the chevrons move a week.
+ *
+ * No hooks, so it renders as a plain function (see its unit test) and stays
+ * cheap on every day change: styles are built once per theme.
+ */
 export function DateNavigator({
   days,
   selectedDate,
@@ -67,8 +86,10 @@ export function DateNavigator({
   onSelect,
   onToday,
   showTodayPill: allowTodayPill = true,
+  theme = themes.light,
 }: Props) {
   const showTodayPill = allowTodayPill && selectedDate !== todayDate;
+  const styles = stylesFor(theme);
 
   return (
     <View style={styles.wrap}>
@@ -92,7 +113,7 @@ export function DateNavigator({
           onPress={() => onSelect(addDaysToLocalDate(selectedDate, -7))}
           style={styles.chevron}
         >
-          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u2039"}</Text>
+          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"‹"}</Text>
         </Pressable>
         {days.map((day) => {
           const selected = day.localDate === selectedDate;
@@ -104,27 +125,30 @@ export function DateNavigator({
               accessibilityState={{ selected }}
               accessibilityLabel={`${formatCivilDate(day.localDate)}, ${stateLabel(day.state)}`}
               onPress={() => onSelect(day.localDate)}
-              style={[
-                styles.day,
-                isToday && !selected ? styles.dayToday : null,
-                selected ? styles.daySelected : null,
-              ]}
+              style={styles.day}
             >
               <Text
-                style={[styles.weekday, selected ? styles.textSelected : null]}
+                style={[styles.weekday, selected ? styles.weekdaySelected : null]}
               >
-                {isToday && selected ? "Today" : String(day.weekdayLabel)}
-              </Text>
-              <Text
-                style={[styles.dayNum, selected ? styles.textSelected : null]}
-              >
-                {String(day.dayLabel)}
+                {String(day.weekdayLabel).charAt(0)}
               </Text>
               <View
                 style={[
+                  styles.circle,
+                  // Today keeps its coral ring when selected (TR-06a).
+                  isToday
+                    ? styles.circleToday
+                    : selected
+                      ? styles.circleSelected
+                      : null,
+                ]}
+              >
+                <Text style={styles.dayNum}>{String(day.dayLabel)}</Text>
+              </View>
+              <View
+                style={[
                   styles.dot,
-                  selected ? styles.dotOnSelected : null,
-                  { backgroundColor: dotColor(day.state) },
+                  { backgroundColor: dotColor(day.state, theme.colors) },
                 ]}
               />
             </Pressable>
@@ -137,98 +161,112 @@ export function DateNavigator({
           onPress={() => onSelect(addDaysToLocalDate(selectedDate, 7))}
           style={styles.chevron}
         >
-          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"\u203A"}</Text>
+          <Text style={styles.chevronGlyph} accessibilityElementsHidden importantForAccessibility="no">{"›"}</Text>
         </Pressable>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    marginBottom: spacing.sm,
-  },
-  // Full bleed: the host's 24 pt gutters would leave day cells under 44 pt
-  // at 393 wide, so the row takes them back (day cells >= 44 pt, chevrons
-  // 44 pt effective).
-  stripRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    marginHorizontal: -spacing.xl,
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginBottom: spacing.xs,
-  },
-  todayPill: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.pill,
-    justifyContent: "center",
-    minHeight: touchTargetMin,
-    paddingHorizontal: spacing.md,
-  },
-  todayPillText: {
-    color: colors.indigo,
-    fontSize: typeScale.caption,
-    fontWeight: "600",
-  },
-  // 40 wide plus 2 pt of hit slop each side is 44 effective; the strip runs
-  // edge to edge (see `stripRow`) so seven day cells still get 44 or more.
-  chevron: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: touchTargetMin,
-    width: 40,
-  },
-  chevronGlyph: {
-    color: colors.midGrey,
-    fontSize: 28,
-    lineHeight: 32,
-  },
-  day: {
-    alignItems: "center",
-    borderColor: "transparent",
-    borderRadius: 999,
-    borderWidth: 1.5,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 76,
-    minWidth: 44,
-    paddingVertical: spacing.sm,
-  },
-  dayToday: {
-    borderColor: colors.indigo,
-  },
-  daySelected: {
-    backgroundColor: colors.indigo,
-    borderColor: colors.indigo,
-  },
-  weekday: {
-    color: colors.midGrey,
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  dayNum: {
-    color: colors.deepNavy,
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  textSelected: {
-    color: colors.white,
-  },
-  dot: {
-    borderRadius: 4,
-    height: 6,
-    marginTop: 4,
-    width: 6,
-  },
-  // A white ring keeps the state colour readable on the indigo pill; the
-  // state is also in the day's spoken label, never colour alone.
-  dotOnSelected: {
-    borderColor: colors.white,
-    borderWidth: 1,
-    height: 8,
-    width: 8,
-  },
-});
+const cache = new Map<Theme, ReturnType<typeof buildStyles>>();
+
+function stylesFor(theme: Theme) {
+  let styles = cache.get(theme);
+  if (!styles) {
+    styles = buildStyles(theme);
+    cache.set(theme, styles);
+  }
+  return styles;
+}
+
+function buildStyles({ colors }: Theme) {
+  return StyleSheet.create({
+    wrap: {
+      marginBottom: spacing.sm,
+    },
+    // Full bleed: the host's 24 pt gutters would leave day cells under 44 pt
+    // at 393 wide, so the row takes them back (day cells >= 44 pt, chevrons
+    // 44 pt effective).
+    stripRow: {
+      alignItems: "center",
+      flexDirection: "row",
+      marginHorizontal: -spacing.xl,
+    },
+    header: {
+      flexDirection: "row",
+      justifyContent: "flex-end",
+      marginBottom: spacing.xs,
+    },
+    todayPill: {
+      backgroundColor: colors.brandTint,
+      borderRadius: 999,
+      justifyContent: "center",
+      minHeight: touchTargetMin,
+      paddingHorizontal: spacing.md,
+    },
+    todayPillText: {
+      color: colors.brandInk,
+      fontSize: typeScale.caption,
+      fontWeight: "600",
+    },
+    // 40 wide plus 2 pt of hit slop each side is 44 effective; the strip runs
+    // edge to edge (see `stripRow`) so seven day cells still get 44 or more.
+    chevron: {
+      alignItems: "center",
+      justifyContent: "center",
+      minHeight: touchTargetMin,
+      width: 40,
+    },
+    chevronGlyph: {
+      color: colors.ink4,
+      fontSize: 24,
+      lineHeight: 28,
+    },
+    day: {
+      alignItems: "center",
+      flex: 1,
+      justifyContent: "center",
+      minHeight: 76,
+      minWidth: 44,
+      paddingVertical: spacing.xs,
+    },
+    weekday: {
+      color: colors.ink3,
+      fontSize: 13,
+      fontWeight: "600",
+      lineHeight: 18,
+    },
+    weekdaySelected: {
+      color: colors.ink,
+      fontWeight: "700",
+    },
+    circle: {
+      alignItems: "center",
+      borderColor: "transparent",
+      borderRadius: 22,
+      borderWidth: 2,
+      height: 44,
+      justifyContent: "center",
+      marginTop: 4,
+      width: 44,
+    },
+    circleToday: {
+      borderColor: colors.coralStrong,
+    },
+    circleSelected: {
+      borderColor: colors.ink,
+      borderWidth: 1.5,
+    },
+    dayNum: {
+      color: colors.ink,
+      fontSize: 18,
+      fontWeight: "600",
+    },
+    dot: {
+      borderRadius: 3,
+      height: 6,
+      marginTop: 4,
+      width: 6,
+    },
+  });
+}
