@@ -11,7 +11,8 @@
 #          after `start`, copied next to the log as <name>.crash-<n>.ips.
 # Android: adb logcat -v threadtime, streamed (buffers enlarged to 16 MB and cleared
 #          first, as run-maestro.sh does), so a long run cannot wrap the ring buffer
-#          before the scan.
+#          before the scan. The stream restarts after an adb transport drop and counts
+#          each restart in logs/<name>.reconnects (android_stream below).
 #
 # scan-logs.mjs reads what this writes and fails the run on a crash, a red box, a JS
 # console.error or console.warn, or a React warning. The logs are uploaded with the
@@ -27,6 +28,7 @@ LOG_DIR="$DEVICE_RESULTS/logs"
 LOG="$LOG_DIR/$NAME.log"
 PID_FILE="$LOG_DIR/.$NAME.pid"
 MARK="$LOG_DIR/.$NAME.start"
+RECONNECTS="$LOG_DIR/$NAME.reconnects"
 mkdir -p "$LOG_DIR"
 
 ios_executable() {
@@ -34,6 +36,29 @@ ios_executable() {
   app="$(cat "$DEVICE_RESULTS/ios-app-path" 2>/dev/null || true)"
   [ -n "$app" ] && [ -d "$app" ] || device_die "no built app recorded in $DEVICE_RESULTS/ios-app-path; run build-app.sh ios first."
   plutil -extract CFBundleExecutable raw "$app/Info.plist"
+}
+
+# One `adb logcat` process ends when the emulator's adb transport drops. Runs
+# 44130567993 and 44135603252 kept 17,972 and 11,489 lines (a green run of the same
+# flows keeps about 120,000): the stream died at the first flow and the scan reported
+# capture-empty although the app ran every later flow. So the stream is restarted after
+# every drop, from the last timestamp it wrote (`-T`, inclusive: that one line can
+# repeat), and each restart is counted in <name>.reconnects and marked in the log.
+android_stream() {
+  local since
+  set +e # a dropped stream exits non-zero; this loop must outlive it
+  while :; do
+    timeout 60 adb wait-for-device >/dev/null 2>&1 || { sleep 2; continue; }
+    since="$(tail -n 200 "$LOG" 2>/dev/null | sed -n 's/^\([0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9]\.[0-9][0-9][0-9]\).*/\1/p' | tail -n 1)"
+    if [ -n "$since" ]; then
+      adb logcat -v threadtime -T "$since"
+    else
+      adb logcat -v threadtime
+    fi
+    echo "--------- device[logs]: logcat stream ended at $(date -u +%H:%M:%S) UTC (adb transport dropped?); reconnecting"
+    echo "$(date -u +%H:%M:%S)" >>"$RECONNECTS"
+    sleep 1
+  done
 }
 
 start() {
@@ -51,7 +76,8 @@ start() {
     android)
       adb logcat -G 16M >/dev/null 2>&1 || device_warn "could not resize the logcat buffers"
       adb logcat -c || true
-      adb logcat -v threadtime >>"$LOG" 2>&1 &
+      : >"$RECONNECTS"
+      android_stream >>"$LOG" 2>&1 &
       echo $! >"$PID_FILE"
       device_log "streaming logcat to $LOG"
       ;;
@@ -60,8 +86,16 @@ start() {
 
 stop() {
   if [ -f "$PID_FILE" ]; then
-    kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    local pid children
+    pid="$(cat "$PID_FILE")"
+    # The Android stream is a restart loop: stop the loop, then the adb logcat it runs.
+    children="$(pgrep -P "$pid" 2>/dev/null || true)"
+    kill "$pid" 2>/dev/null || true
+    for c in $children; do kill "$c" 2>/dev/null || true; done
     rm -f "$PID_FILE"
+  fi
+  if [ "$PLATFORM" = "android" ] && [ -s "$RECONNECTS" ]; then
+    device_warn "the logcat stream ended and was restarted $(wc -l <"$RECONNECTS" | tr -d ' ') time(s) (adb transport drops; see $NAME.reconnects)"
   fi
   if [ "$PLATFORM" = "ios" ] && [ -f "$MARK" ]; then
     local exe n=0 report

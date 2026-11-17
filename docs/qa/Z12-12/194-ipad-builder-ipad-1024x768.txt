@@ -1,0 +1,57 @@
+Skip to content
+RV
+Clients
+Search clients
+⌘K
+←
+Workout builder · Fat loss · Phase 2
+Plan title
+· Rohan Mehta
+Draft
+
+Workout plan · Draft v3 · Saved
+
+Workout
+Nutrition
+▤
+Library
+Undo
+Preview
+Publish & schedule
+Mon · Upper body A
+Tue · Lower body A
+Wed · Rest
+Thu · Upper body B
+Fri · Rest
+Sat · Lower body B
+Sun · Rest
+Session title
+
+Mon · Upper body A · 4 exercises · 12 sets
+
+⋮⋮
+1. Barbell Bench Press
+3 sets × 8 reps · 40 kg · rest 90 s
+⋯
+⋮⋮
+2. Dumbbell Shoulder Press
+3 sets × 10 reps · 12 kg · rest 75 s
+⋯
+⋮⋮
+3. Push-up
+3 sets × 12 reps · Bodyweight · rest 1 min
+⋯
+⋮⋮
+4. Barbell Curl
+3 sets × 12 reps · 15 kg · rest 1 min
+⋯
+Drag an exercise here or add one
+Barbell Bench Press
+⋯
+Sets
+Reps
+Weight
+Rest
+Coach cue
+
+Shown on the client's set screen.

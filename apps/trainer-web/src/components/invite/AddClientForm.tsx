@@ -1,12 +1,17 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
   CreateInvitationResponse,
   OnboardingFormTemplateSummary,
   OnboardingFormVersion,
 } from "@fitbud/contracts";
-import { formatPersonName, normalizeWhatsappE164 } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatPersonName,
+  normalizeWhatsappE164,
+} from "@fitbud/core";
+import { Clock } from "lucide-react";
 import { useAuth } from "../../auth/AuthProvider";
 import { Button } from "../Button";
 import { InviteShareCard } from "./InviteShareCard";
@@ -15,28 +20,63 @@ import { createIdempotencyKey } from "../../lib/idempotency";
 import { intakeFieldPreview } from "../../lib/intakePrefill";
 import { useOnline } from "../../hooks/useOnline";
 
+export type AddClientPhase = "form" | "reactivate" | "success";
+
 type Props = {
   embedded?: boolean;
   onSuccess?: (invite: CreateInvitationResponse) => void;
+  onPhaseChange?: (phase: AddClientPhase) => void;
+  onClientNameChange?: (name: string) => void;
 };
 
-export function AddClientForm({ embedded = false, onSuccess }: Props) {
+type ReactivateInfo = {
+  relationshipId: string;
+  endedOnLabel: string | null;
+};
+
+/** Frame 141 label for the seeded global default (DB name is still "Default onboarding"). */
+function templateOptionLabel(t: OnboardingFormTemplateSummary): string {
+  const base =
+    t.ownership === "global" && /^default onboarding$/i.test(t.name.trim())
+      ? "FitBud standard intake"
+      : t.name;
+  const scope = t.ownership === "global" ? " (global)" : "";
+  return `${base}${scope} · v${t.latestVersionNumber}`;
+}
+
+export function AddClientForm({
+  embedded = false,
+  onSuccess,
+  onPhaseChange,
+  onClientNameChange,
+}: Props) {
   const { me } = useAuth();
   const online = useOnline();
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [templateId, setTemplateId] = useState("");
-  const [templates, setTemplates] = useState<OnboardingFormTemplateSummary[]>([]);
+  const [templates, setTemplates] = useState<OnboardingFormTemplateSummary[]>(
+    [],
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [duplicateId, setDuplicateId] = useState<string | null>(null);
-  const [reactivateRid, setReactivateRid] = useState<string | null>(null);
+  const [reactivate, setReactivate] = useState<ReactivateInfo | null>(null);
   const [created, setCreated] = useState<CreateInvitationResponse | null>(null);
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(
     null,
   );
   const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    onClientNameChange?.(displayName);
+  }, [displayName, onClientNameChange]);
+
+  function setPhase(next: AddClientPhase) {
+    onPhaseChange?.(next);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -92,13 +132,46 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
     };
   }, [templateId]);
 
+  async function resolveEndedOn(relationshipId: string): Promise<string | null> {
+    try {
+      const directory = await apiClient.listClients({
+        status: ["ended"],
+        limit: 100,
+      });
+      const match = directory.items.find(
+        (row) => row.relationshipId === relationshipId,
+      );
+      const civil = match?.endedOn ?? match?.endedAt?.slice(0, 10) ?? null;
+      return civil ? formatCivilDate(civil) : null;
+    } catch {
+      try {
+        const rel = await apiClient.getRelationship(relationshipId);
+        return rel.endedAt
+          ? formatCivilDate(rel.endedAt.slice(0, 10))
+          : null;
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  function clearReactivateAndReset() {
+    setReactivate(null);
+    setError(null);
+    setEmail("");
+    setDisplayName("");
+    setWhatsapp("");
+    setPhase("form");
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!online) return;
     setSubmitting(true);
     setError(null);
     setDuplicateId(null);
-    setReactivateRid(null);
+    setReactivate(null);
+    setPhase("form");
     const digits = whatsapp.trim();
     let recipientWhatsapp: string | undefined;
     if (digits) {
@@ -124,6 +197,7 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
         createIdempotencyKey(),
       );
       setCreated(invitation);
+      setPhase("success");
       onSuccess?.(invitation);
     } catch (err) {
       if (err instanceof ApiClientError) {
@@ -135,7 +209,6 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
               ? String((err.details as { invitationId: string }).invitationId)
               : null;
           setDuplicateId(id);
-          // Link text supplies "Resend instead" — keep it out of the message.
           setError(
             `${formatPersonName(displayName) || "This client"} already has a pending invite.`,
           );
@@ -144,12 +217,19 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
             typeof err.details === "object" &&
             err.details &&
             "relationshipId" in err.details
-              ? String((err.details as { relationshipId: string }).relationshipId)
+              ? String(
+                  (err.details as { relationshipId: string }).relationshipId,
+                )
               : null;
-          setReactivateRid(rid);
-          setError(
-            `${formatPersonName(displayName) || "This client"} coached with you before. Reactivate instead?`,
-          );
+          if (rid) {
+            const endedOnLabel = await resolveEndedOn(rid);
+            setReactivate({ relationshipId: rid, endedOnLabel });
+            setPhase("reactivate");
+          } else {
+            setError(
+              `${formatPersonName(displayName) || "This client"} coached with you before. Reactivate instead?`,
+            );
+          }
         } else {
           setError(err.message);
         }
@@ -166,22 +246,26 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
       formatPersonName(created.recipientDisplayName) ||
       created.recipientEmail.split("@")[0] ||
       "your client";
+    const trainerFull =
+      formatPersonName(me?.trainerProfile?.displayName) || "you";
     return (
       <InviteShareCard
         name={name}
         inviteUrl={created.inviteUrl}
         whatsappE164={created.recipientWhatsappE164}
-        trainerFirstName={
-          me?.trainerProfile?.displayName?.split(/\s+/)[0] ?? "I"
-        }
+        trainerDisplayName={trainerFull}
         onInviteAnother={() => {
           setCreated(null);
           setEmail("");
           setDisplayName("");
           setWhatsapp("");
+          setReactivate(null);
+          setPhase("form");
         }}
         onEmailInvite={() => {
-          const subject = encodeURIComponent("You're invited to FitBud coaching");
+          const subject = encodeURIComponent(
+            "You're invited to FitBud coaching",
+          );
           const body = encodeURIComponent(
             `Join me on FitBud:\n${created.inviteUrl}`,
           );
@@ -191,11 +275,22 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
     );
   }
 
-  const selectedTemplate = templates.find((t) => t.id === templateId);
+  const person =
+    formatPersonName(displayName) || (displayName.trim() ? displayName : "This client");
+  const firstName = person.split(/\s+/)[0] || person;
+  const previewLabel = displayName.trim()
+    ? `Preview what ${firstName} will see`
+    : "Preview what your client will see";
+
+  const reactivateCopy = reactivate
+    ? reactivate.endedOnLabel
+      ? `${person} coached with you until ${reactivate.endedOnLabel}. Reactivate instead? Their history and your notes come back.`
+      : `${person} coached with you before. Reactivate instead? Their history and your notes come back.`
+    : null;
 
   return (
     <form
-      className={embedded ? "stack-form" : "stack-form"}
+      className="stack-form add-client-form"
       onSubmit={onSubmit}
       data-testid={embedded ? "welcome-invite-form" : "add-client-form"}
     >
@@ -204,8 +299,20 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
           You&apos;re offline. Changes can&apos;t be saved.
         </p>
       ) : null}
-      <label className="field" htmlFor="add-client-name">
-        <span>Client name</span>
+
+      {reactivate && reactivateCopy ? (
+        <div
+          className="add-client-reactivate-banner"
+          role="status"
+          data-testid="add-client-error"
+        >
+          <Clock size={18} strokeWidth={1.75} aria-hidden />
+          <p>{reactivateCopy}</p>
+        </div>
+      ) : null}
+
+      <div className="field">
+        <label htmlFor="add-client-name">Client name</label>
         <span className="input-shell">
           <input
             id="add-client-name"
@@ -215,9 +322,9 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
             disabled={submitting || !online}
           />
         </span>
-      </label>
-      <label className="field" htmlFor="add-client-email">
-        <span>Email</span>
+      </div>
+      <div className="field">
+        <label htmlFor="add-client-email">Email</label>
         <span className="input-shell">
           <input
             id="add-client-email"
@@ -229,9 +336,10 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
             disabled={submitting || !online}
           />
         </span>
-      </label>
-      <label className="field" htmlFor="add-client-wa">
-        <span>Mobile / WhatsApp</span>
+        <span className="field-hint">Used to sign in and for sign-in codes.</span>
+      </div>
+      <div className="field">
+        <label htmlFor="add-client-wa">Mobile / WhatsApp</label>
         <span className="input-shell">
           <span className="phone-prefix">+91</span>
           <input
@@ -248,40 +356,37 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
           Your client can sign in with this number, and you can message them on
           WhatsApp from FitBud.
         </span>
-      </label>
-      <label className="field">
-        <span className="field-label-row">
+      </div>
+      <div className="field">
+        <label htmlFor="add-client-form-select">
           <span>Onboarding form</span>
-          {templateId ? (
-            <button
-              type="button"
-              className="link"
-              onClick={() => setShowPreview(true)}
-            >
-              Preview
-            </button>
-          ) : null}
-        </span>
+        </label>
         <span className="input-shell">
           <select
+            id="add-client-form-select"
             value={templateId}
             onChange={(e) => setTemplateId(e.target.value)}
             disabled={submitting || !online}
           >
             {templates.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.ownership === "global"
-                  ? `${t.name} (global)`
-                  : t.name}
+                {templateOptionLabel(t)}
               </option>
             ))}
           </select>
         </span>
-        {selectedTemplate?.ownership === "global" ? (
-          <span className="field-hint">FitBud standard intake (global)</span>
+        {templateId ? (
+          <button
+            type="button"
+            className="field-preview-link"
+            onClick={() => setShowPreview(true)}
+          >
+            {previewLabel}
+          </button>
         ) : null}
-      </label>
-      {error ? (
+      </div>
+
+      {error && !reactivate ? (
         <p className="form-error" role="alert" data-testid="add-client-error">
           {error}{" "}
           {duplicateId ? (
@@ -292,24 +397,51 @@ export function AddClientForm({ embedded = false, onSuccess }: Props) {
               Resend instead
             </Link>
           ) : null}
-          {reactivateRid ? (
+        </p>
+      ) : null}
+
+      <div className="add-client-actions">
+        {reactivate ? (
+          <>
             <Link
-              to={`/clients/${reactivateRid}`}
+              to={`/clients/${reactivate.relationshipId}`}
+              className="button-primary btn-lg"
               data-testid="reactivate-client-link"
             >
               Reactivate
             </Link>
-          ) : null}
-        </p>
-      ) : null}
-      <Button
-        type="submit"
-        variant="primary"
-        className="btn-lg"
-        disabled={submitting || !online}
-      >
-        {submitting ? "Creating…" : "Create invite"}
-      </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="btn-lg"
+              onClick={clearReactivateAndReset}
+            >
+              Create a new invite
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button
+              type="submit"
+              variant="primary"
+              className="btn-lg"
+              disabled={submitting || !online}
+            >
+              {submitting ? "Creating…" : "Create invite"}
+            </Button>
+            {embedded ? null : (
+              <Button
+                type="button"
+                variant="secondary"
+                className="btn-lg"
+                onClick={() => navigate("/clients")}
+              >
+                Cancel
+              </Button>
+            )}
+          </>
+        )}
+      </div>
 
       {showPreview && definition ? (
         <div

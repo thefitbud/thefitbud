@@ -3,7 +3,7 @@ import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 export type BuilderMode = "wide" | "narrow" | "small";
 
-/** ≥1280 three panes; 1024–1279 library becomes a drawer; <1024 read-only. */
+/** ≥1280 three panes; 1024–1279 center + properties, library drawer; <1024 read-only. */
 export function useBuilderMode(): BuilderMode {
   const small = useMediaQuery("(max-width: 1023px)");
   const narrow = useMediaQuery("(max-width: 1279px)");
@@ -18,6 +18,7 @@ export function BuilderLayout({
   left,
   center,
   right,
+  overlay,
   smallScreen,
   footer,
 }: {
@@ -27,6 +28,8 @@ export function BuilderLayout({
   left: ReactNode;
   center: ReactNode;
   right: ReactNode;
+  /** Narrow-mode library drawer (fixed overlay), rendered outside the pane grid. */
+  overlay?: ReactNode;
   smallScreen: ReactNode;
   footer?: ReactNode;
 }) {
@@ -37,27 +40,25 @@ export function BuilderLayout({
       {mode === "small" ? (
         <div className="builder-small" data-testid="builder-small-screen">
           <div className="builder-small-note" role="status">
-            <h2>Open on a larger screen</h2>
             <p>
-              Editing plans needs more room. You can read this plan here, and edit it on a
-              screen at least 1024 px wide.
+              <strong>Open on a larger screen to edit.</strong> The builder needs a window at
+              least 1024 px wide. You can still read the plan here.
             </p>
           </div>
           {smallScreen}
         </div>
       ) : (
-        <div className="builder-panes">
-          <div className="builder-pane builder-left">{left}</div>
-          <div className="builder-pane builder-center">
-            {center}
-            {footer}
-          </div>
-          {mode === "wide" ? (
+        <>
+          <div className="builder-panes">
+            {mode === "wide" ? <div className="builder-pane builder-left">{left}</div> : null}
+            <div className="builder-pane builder-center">
+              {center}
+              {footer}
+            </div>
             <div className="builder-pane builder-right">{right}</div>
-          ) : (
-            right
-          )}
-        </div>
+          </div>
+          {overlay}
+        </>
       )}
     </div>
   );
