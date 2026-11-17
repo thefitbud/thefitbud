@@ -491,7 +491,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
   return (
     <M2Screen footer={footer}>
       <M2TopNav
-        title="Getting started"
+        title="Getting to know you"
         onBack={
           stepIndex > 0
             ? () => setStepIndex((s) => Math.max(0, s - 1))

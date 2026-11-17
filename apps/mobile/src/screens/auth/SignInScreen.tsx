@@ -13,7 +13,6 @@ import {
   InlineError,
   OrDivider,
   PasswordInput,
-  TextLink,
   WaitBanner,
 } from "./authParts";
 
@@ -106,14 +105,14 @@ export function SignInScreen({
         <InlineError message={wrongPasswordCopy(identifier)} testID="sign-in-wrong-password" />
       ) : null}
 
-      <View style={{ marginTop: -8 }}>
-        <TextLink
-          label="Forgot password?"
-          accessibilityLabel="Forgot password"
-          align="flex-end"
-          onPress={onForgotPassword}
-        />
-      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Forgot password"
+        onPress={onForgotPassword}
+        style={{ alignSelf: "flex-end", justifyContent: "center", marginTop: -8, minHeight: 44 }}
+      >
+        <Text tone="ink" style={{ fontSize: 16, fontWeight: "600" }}>Forgot password?</Text>
+      </Pressable>
 
       <View style={{ marginTop: 16 }}>
         <Button

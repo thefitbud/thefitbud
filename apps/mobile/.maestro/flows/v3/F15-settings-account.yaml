@@ -1,0 +1,126 @@
+appId: com.thefitbud.mobile.staging
+name: F15 More, reminders, account, help, profile, password, sign out (Z12-49)
+tags:
+  - device
+  - trainee
+  - z12-49
+---
+# F15 (Z12-49): trainee More (TR-20a) and every control on it: Reminders
+# (TR-16a; quiet hours and meal times open from it), Account (TR-20c) and its
+# Change password (TR-20g), Help (TR-20e), Profile (TR-20b), Sign out with
+# nothing unsent (straight to sign in). Each detail closes back to More.
+# Env: QA_ONTRACK_EMAIL (Aarav, coach Rahul), QA_PASSWORD.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+
+# TR-20a
+- tapOn: "More"
+- extendedWaitUntil:
+    visible: "Coached by Rahul.*"
+    timeout: 30000
+- assertVisible: "Reminders"
+- assertVisible: "Account"
+- assertVisible: "Help"
+- assertVisible: "Sign out"
+- assertNotVisible: "Lock-screen widget"
+- takeScreenshot: TR-20a
+- runFlow: ../../common/assert-no-crash.yaml
+
+# TR-16a: one switch per kind, and the quiet hours card.
+- tapOn: "Reminders"
+- extendedWaitUntil:
+    visible: "REMIND ME ABOUT"
+    timeout: 20000
+- assertVisible: "Quiet hours"
+- assertNotVisible: "WhatsApp reminders"
+- assertNotVisible: "Learn from my workouts"
+- takeScreenshot: TR-16a
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Quiet hours"
+- extendedWaitUntil:
+    visible: "Back"
+    timeout: 10000
+- takeScreenshot: z12-49-quiet-hours
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Coached by Rahul.*"
+    timeout: 10000
+- tapOn: "Reminders"
+- extendedWaitUntil:
+    visible: "REMIND ME ABOUT"
+    timeout: 20000
+- tapOn: "Meal times"
+- extendedWaitUntil:
+    visible: "Back"
+    timeout: 10000
+- takeScreenshot: z12-49-meal-times
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Coached by Rahul.*"
+    timeout: 10000
+
+# TR-20c, then TR-20g from its Password row.
+- tapOn: "Account"
+- extendedWaitUntil:
+    visible: "SIGN-IN"
+    timeout: 20000
+- assertVisible: "Time zone"
+- takeScreenshot: TR-20c
+- tapOn: "Password"
+- extendedWaitUntil:
+    visible: "Change password"
+    timeout: 10000
+- assertVisible: "Current password"
+- assertVisible: "Confirm new password"
+- takeScreenshot: TR-20g
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Cancel"
+- extendedWaitUntil:
+    visible: "Coached by Rahul.*"
+    timeout: 10000
+
+# TR-20e
+- tapOn: "Help"
+- extendedWaitUntil:
+    visible: "Email the FitBud team"
+    timeout: 10000
+- assertVisible: "Message Rahul.*"
+- takeScreenshot: TR-20e
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "Coached by Rahul.*"
+    timeout: 10000
+
+# TR-20b
+- tapOn: "Profile.*"
+- extendedWaitUntil:
+    visible: "Date of birth"
+    timeout: 10000
+- assertVisible: "Goals and targets are set by Rahul\\."
+- takeScreenshot: TR-20b
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Cancel"
+- extendedWaitUntil:
+    visible: "Coached by Rahul.*"
+    timeout: 10000
+
+# Sign out with nothing unsent goes straight to sign in.
+- scrollUntilVisible:
+    element: "Sign out"
+    direction: DOWN
+- tapOn: "Sign out"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 20000
+- runFlow: ../../common/assert-no-crash.yaml
