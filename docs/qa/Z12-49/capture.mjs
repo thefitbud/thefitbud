@@ -117,12 +117,14 @@ const SHOTS = {
     await page.getByText("More", { exact: true }).last().waitFor({ timeout: 60_000 });
     await page.getByText("More", { exact: true }).last().click();
     await waitText(page, "Coached by Rahul");
+    await waitText(page, "Aarav Shah");
   },
   "TR-16a": async (page) => {
     await SHOTS["TR-20a"](page);
     await page.getByRole("button", { name: "Reminders" }).click();
     await waitText(page, "REMIND ME ABOUT");
     await waitText(page, "Times use");
+    await page.getByLabel("Loading reminders").waitFor({ state: "detached", timeout: 30_000 });
   },
   "TR-16b": async (page) => {
     await page.route("**/reminder-status**", async (r) => {
