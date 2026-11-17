@@ -1,0 +1,61 @@
+{
+  "result": "mean screenshot luminance: light 0.746 (6), dark 0.791 (4)",
+  "light": 0.746,
+  "dark": 0.791,
+  "count": {
+    "light": 6,
+    "dark": 4
+  },
+  "shots": [
+    {
+      "file": "TM-03j-light-android.png",
+      "theme": "light",
+      "luma": 0.7
+    },
+    {
+      "file": "TM-04b-light-android.png",
+      "theme": "light",
+      "luma": 0.701
+    },
+    {
+      "file": "TM-04c-light-android.png",
+      "theme": "light",
+      "luma": 0.701
+    },
+    {
+      "file": "TM-04n-light-android.png",
+      "theme": "light",
+      "luma": 0.739
+    },
+    {
+      "file": "TM-04o-light-android.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.769
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-004-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.734
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workout.Needs_yo-dark-android.png",
+      "theme": "dark",
+      "luma": 0.734
+    }
+  ]
+}
