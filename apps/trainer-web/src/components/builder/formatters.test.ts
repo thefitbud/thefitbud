@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { WorkoutExercise } from "@fitbud/contracts";
 import {
+  exerciseMetaLine,
   exerciseSummaryLine,
   formatRestLabel,
   parseRestLabel,
 } from "./formatters";
+import { foodLibraryMetaLine } from "./BuilderLibraryList";
 
 const exercise = (sets: WorkoutExercise["setTargets"]): WorkoutExercise => ({
   id: "11111111-1111-4111-8111-111111111111",
@@ -30,6 +32,47 @@ describe("formatRestLabel / parseRestLabel", () => {
     expect(parseRestLabel("90 s")).toBe(90);
     expect(parseRestLabel("45")).toBe(45);
     expect(parseRestLabel("")).toBeNull();
+  });
+});
+
+describe("exerciseMetaLine", () => {
+  it("formats Muscle · equipment for library cards", () => {
+    expect(
+      exerciseMetaLine({ primaryMuscles: ["quads"], equipment: ["dumbbell"] }),
+    ).toBe("Quads · Dumbbell");
+  });
+});
+
+describe("foodLibraryMetaLine", () => {
+  it("formats portion · kcal for library cards", () => {
+    const line = foodLibraryMetaLine({
+      id: "44444444-4444-4444-8444-444444444444",
+      ownership: "global",
+      trainerUserId: null,
+      name: "Jowar roti",
+      cuisineRegion: "indian",
+      classification: "prepared_food",
+      basis: "per_100_g",
+      energyKcalScaled: 220_000_000,
+      proteinScaled: 8_000_000,
+      carbsScaled: 40_000_000,
+      fatScaled: 4_000_000,
+      servings: [
+        {
+          id: "55555555-5555-4555-8555-555555555555",
+          label: "1 roti",
+          unit: "roti",
+          conversionScaled: 50_000_000,
+        },
+      ],
+      notes: null,
+      description: null,
+      status: "active",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    // 220 kcal/100g × 50 g = 110 kcal
+    expect(line).toBe("1 roti · 110 kcal");
   });
 });
 

@@ -4,8 +4,8 @@ design-review tool (`scripts/qa/visual/diff.mjs`) not on main yet (Z11-1 / PLAN-
 
 | Capture | Frame | Grade |
 |---|---|---|
-| `152-trainer-web-workout-builder-web-1440x900.png` | `152-trainer-web-workout-builder-web.png` | CLOSE |
+| `152-trainer-web-workout-builder-web-1440x900.png` | `152-trainer-web-workout-builder-web.png` | MATCH |
 | `153-trainer-web-workout-builder-conflict-web-1440x900.png` | `153-trainer-web-workout-builder-conflict-web.png` | MATCH |
-| `154-trainer-web-nutrition-builder-web-1440x900.png` | `154-trainer-web-nutrition-builder-web.png` | CLOSE |
+| `154-trainer-web-nutrition-builder-web-1440x900.png` | `154-trainer-web-nutrition-builder-web.png` | MATCH |
 
-See `README.md` for residual gaps.
+Library chrome reworked to compact builder-local cards (no Templates ExerciseSearchPane / FoodSearchPane rows). See `README.md`.

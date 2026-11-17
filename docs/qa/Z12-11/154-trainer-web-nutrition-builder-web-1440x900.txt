@@ -20,7 +20,7 @@ Plan title
 · Rohan Mehta
 Draft
 
-Nutrition plan · Draft v3 · saved 7:08 pm
+Nutrition plan · Draft v3 · saved 7:21 pm
 
 Workout
 Nutrition
@@ -28,355 +28,157 @@ Undo
 Preview
 Publish & schedule
 Foods
-Name
-
+Search foods
+⋮⋮
 Aam milkshake
-
-1 glass (250 ml)
-1 cup (150 ml)
-100 ml
-Add to meal
-
+1 glass (250 ml) · 142 kcal
+⋮⋮
 Agave liquid sweetener
-
-1 tsp (6.8 g)
-1 cup (203 g)
-1 tbsp (20 g)
-100 g
-Add to meal
-
+1 tsp (6.8 g) · 21 kcal
+⋮⋮
 Alfalfa sprouts, raw
-
-1 cup (21 g)
-1 katori (150 g)
-100 g
-Add to meal
-
+1 cup (21 g) · 5 kcal
+⋮⋮
 Almond butter
-
-1 small handful (25 g)
-100 g
-Add to meal
-
+1 small handful (25 g) · 151 kcal
+⋮⋮
 Almond milk
-
-1 glass (250 ml)
-1 cup (150 ml)
-1 tbsp (15 ml)
-100 ml
-Add to meal
-
+1 glass (250 ml) · 52 kcal
+⋮⋮
 Almond milk, unsweetened
-
-1 glass (250 ml)
-1 cup (150 ml)
-100 ml
-Add to meal
-
+1 glass (250 ml) · 38 kcal
+⋮⋮
 Almond paste
-
-1 cup (144 g)
-1 tbsp (14 g)
-100 g
-Add to meal
-
+1 cup (144 g) · 659 kcal
+⋮⋮
 Almonds
-
-1 nut (1.2 g)
-100 g
-Add to meal
-
+1 nut (1.2 g) · 7 kcal
+⋮⋮
 Almonds (badam), raw
-
-1 small handful (25 g)
-1 nut (1.2 g)
-100 g
-Add to meal
-
+1 small handful (25 g) · 146 kcal
+⋮⋮
 Almonds, flavored
-
-1 nut (1.2 g)
-100 g
-Add to meal
-
+1 nut (1.2 g) · 7 kcal
+⋮⋮
 Almonds, honey roasted
-
-1 nut (1.2 g)
-100 g
-Add to meal
-
+1 nut (1.2 g) · 7 kcal
+⋮⋮
 Aloo gobhi
-
-1 katori (100 g)
-100 g
-Add to meal
-
+1 katori (100 g) · 106 kcal
+⋮⋮
 Aloo ka paratha
-
-1 paratha (93 g)
-100 g
-Add to meal
-
+1 paratha (93 g) · 192 kcal
+⋮⋮
 Aloo ki sabzi
-
-1 katori (100 g)
-100 g
-Add to meal
-
+1 katori (100 g) · 90 kcal
+⋮⋮
 Aloo matar
-
-1 katori (150 g)
-1 bowl (250 g)
-100 g
-Add to meal
-
+1 katori (150 g) · 151 kcal
+⋮⋮
 Aloo methi
-
-1 katori (100 g)
-100 g
-Add to meal
-
+1 katori (100 g) · 135 kcal
+⋮⋮
 Amaranth (rajgira) grain, raw
-
-1 cup (122 g)
-100 g
-Add to meal
-
+1 cup (122 g) · 454 kcal
+⋮⋮
 Amaranth flour
-
-100 g
-Add to meal
-
+100 g · 4 kcal
+⋮⋮
 Amaranth leaves (chaulai), raw
-
-1 leaf (14 g)
-1 cup (18 g)
-100 g
-Add to meal
-
+1 leaf (14 g) · 3 kcal
+⋮⋮
 Amaranth leaves, boiled
-
-1 katori cooked (150 g)
-1 cup (84 g)
-100 g
-Add to meal
-
+1 katori cooked (150 g) · 32 kcal
+⋮⋮
 Anchovies, canned in oil
-
-5 anchovies (20 g)
-1 anchovy (4 g)
-100 g
-Add to meal
-
+5 anchovies (20 g) · 8 kcal
+⋮⋮
 Animal fat or drippings
-
-1 tsp (4.1 g)
-1 cup (122 g)
-1 tbsp (12 g)
-100 g
-Add to meal
-
+1 tsp (4.1 g) · 34 kcal
+⋮⋮
 Appam
-
-1 appam (153 g)
-100 g
-Add to meal
-
+1 appam (153 g) · 409 kcal
+⋮⋮
 Apple
-
-1 slice/chunk (8 g)
-100 g
-Add to meal
-
+1 slice/chunk (8 g) · 19 kcal
+⋮⋮
 Apple cider
-
-1 glass (250 ml)
-1 cup (150 ml)
-100 ml
-Add to meal
-
+1 glass (250 ml) · 121 kcal
+⋮⋮
 Apple juice
-
-1 glass (250 ml)
-1 cup (150 ml)
-100 ml
-Add to meal
-
+1 glass (250 ml) · 123 kcal
+⋮⋮
 Apple juice, 100%
-
-1 glass (250 ml)
-1 cup (150 ml)
-100 ml
-Add to meal
-
+1 glass (250 ml) · 93 kcal
+⋮⋮
 Apple juice, 100%, with calcium added
-
-1 glass (250 ml)
-1 cup (150 ml)
-100 ml
-Add to meal
-
+1 glass (250 ml) · 126 kcal
+⋮⋮
 Apple pie filling
-
-1 cup (165 g)
-100 g
-Add to meal
-
+1 cup (165 g) · 165 kcal
+⋮⋮
 Apple, baked
-
-1 cup (120 g)
-100 g
-Add to meal
-
+1 cup (120 g) · 136 kcal
+⋮⋮
 Apple, raw
-
-1 medium (200 g)
-1 small (165 g)
-1 large (242 g)
-1 extra large (295 g)
-1 slice (25 g)
-100 g
-Add to meal
-
+1 medium (200 g) · 122 kcal
+⋮⋮
 Apple, with skin (seb)
-
-1 medium (182 g)
-1 small (149 g)
-1 extra small (101 g)
-1 large (223 g)
-1 cup slices (69 g)
-100 g
-Add to meal
-
+1 medium (182 g) · 95 kcal
+⋮⋮
 Applesauce, flavored
-
-1 cup (159 g)
-100 g
-Add to meal
-
+1 cup (159 g) · 119 kcal
+⋮⋮
 Applesauce, regular
-
-1 cup (159 g)
-100 g
-Add to meal
-
+1 cup (159 g) · 119 kcal
+⋮⋮
 Applesauce, unsweetened
-
-1 cup (155 g)
-100 g
-Add to meal
-
+1 cup (155 g) · 81 kcal
+⋮⋮
 Apricot, fresh
-
-1 apricot (35 g)
-1 slice/chunk (10 g)
-100 g
-Add to meal
-
+1 apricot (35 g) · 15 kcal
+⋮⋮
 Apricots, dried
-
-1 slice/chunk (8 g)
-1 half (3.5 g)
-1 cup, halves (82 g)
-100 g
-Add to meal
-
+1 slice/chunk (8 g) · 19 kcal
+⋮⋮
 Artichoke
-
-1 whole (125 g)
-1 heart (30 g)
-100 g
-Add to meal
-
+1 whole (125 g) · 66 kcal
+⋮⋮
 Arugula / rocket
-
-1 leaf (2 g)
-1 cup (13 g)
-100 g
-Add to meal
-
+1 leaf (2 g) · 1 kcal
+⋮⋮
 Ash gourd / wax gourd (petha), raw
-
-1 cup, cubes (84 g)
-100 g
-Add to meal
-
+1 cup, cubes (84 g) · 11 kcal
+⋮⋮
 Asian stir fry vegetables, cooked (fat added)
-
-1 cup (84 g)
-1 katori (150 g)
-100 g
-Add to meal
-
+1 cup (84 g) · 59 kcal
+⋮⋮
 Asparagus, cooked (no fat added)
-
-1 piece (4 g)
-1 spear (16 g)
-100 g
-Add to meal
-
+1 piece (4 g) · 1 kcal
+⋮⋮
 Asparagus, cooked (with oil)
-
-1 piece (4 g)
-1 spear (16 g)
-100 g
-Add to meal
-
+1 piece (4 g) · 2 kcal
+⋮⋮
 Asparagus, raw
-
-1 spear, medium (16 g)
-1 piece (4 g)
-1 spear (16 g)
-1 spear, extra large (24 g)
-1 spear, large (20 g)
-1 spear tip (3.5 g)
-1 spear, small (12 g)
-1 cup (85 g)
-100 g
-Add to meal
-
+1 spear, medium (16 g) · 3 kcal
+⋮⋮
 Avial
-
-1 katori (100 g)
-100 g
-Add to meal
-
+1 katori (100 g) · 125 kcal
+⋮⋮
 Avocado, Hass
-
-1 fruit, without skin and seed (136 g)
-1 cup, pureed (146 g)
-100 g
-Add to meal
-
+1 fruit, without skin and seed (136 g) · 227 kcal
+⋮⋮
 Avocado, raw
-
-1 fruit (150 g)
-1 slice (15 g)
-100 g
-Add to meal
-
+1 fruit (150 g) · 240 kcal
+⋮⋮
 Baby corn / sweet corn, boiled
-
-1 katori cooked (150 g)
-1 cup (105 g)
-100 g
-Add to meal
-
+1 katori cooked (150 g) · 122 kcal
+⋮⋮
 Bacon, cooked
-
-1 katori cooked (150 g)
-100 g
-Add to meal
-
+1 katori cooked (150 g) · 750 kcal
+⋮⋮
 Bagel, plain
-
-1 medium bagel (105 g)
-1 large bagel (131 g)
-1 mini bagel (26 g)
-1 small bagel (69 g)
-1 bagel (99 g)
-100 g
-Add to meal
+1 medium bagel (105 g) · 277 kcal
 Load more foods
 Calories
 1,745 kcal

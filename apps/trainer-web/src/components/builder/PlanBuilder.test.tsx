@@ -11,11 +11,6 @@ vi.mock("../../hooks/useMediaQuery", () => ({
   useMediaQuery: () => false,
 }));
 
-vi.mock("../../pages/templates/LibrarySearch", () => ({
-  ExerciseSearchPane: () => <div data-testid="exercise-search">Exercise search</div>,
-  FoodSearchPane: () => <div data-testid="food-search">Food search</div>,
-}));
-
 vi.mock("../../lib/api", () => ({
   apiClient: {
     listFoodLibrary: vi.fn(async () => ({ items: [], nextCursor: null })),

@@ -6,9 +6,9 @@ import type {
   WorkoutDay,
 } from "@fitbud/contracts";
 import {
-  ExerciseSearchPane,
-  FoodSearchPane,
-} from "../../pages/templates/LibrarySearch";
+  BuilderExerciseLibrary,
+  BuilderFoodLibrary,
+} from "./BuilderLibraryList";
 
 export function LibraryDrawer({
   kind,
@@ -52,9 +52,9 @@ export function LibraryDrawer({
         ) : null}
       </header>
       {kind === "workout" ? (
-        <ExerciseSearchPane compact day={day} onAdd={onAddExercise} searchRef={searchRef} />
+        <BuilderExerciseLibrary day={day} onAdd={onAddExercise} searchRef={searchRef} />
       ) : (
-        <FoodSearchPane compact meal={meal} onAdd={onAddFood} searchRef={searchRef} />
+        <BuilderFoodLibrary meal={meal} onAdd={onAddFood} searchRef={searchRef} />
       )}
     </aside>
   );

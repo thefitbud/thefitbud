@@ -52,7 +52,11 @@ export function exerciseSummaryLine(exercise: WorkoutExercise): string {
   return parts.join(" · ");
 }
 
-export function exerciseMetaLine(exercise: WorkoutExercise): string {
+/** Compact library / properties meta: `Muscle · equipment`. */
+export function exerciseMetaLine(exercise: {
+  primaryMuscles: readonly string[];
+  equipment: readonly string[];
+}): string {
   const muscle = exercise.primaryMuscles[0]
     ? labelFor("body_part", exercise.primaryMuscles[0])
     : null;
