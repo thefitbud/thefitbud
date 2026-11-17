@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, Outlet, useParams } from "react-router-dom";
+import { Outlet, useParams } from "react-router-dom";
 import { ApiClientError } from "@fitbud/api-client";
 import type { ClientWorkspace } from "@fitbud/contracts";
 import {
   ErrorState,
   ForbiddenState,
+  NotFoundState,
   errorKindFromFailure,
   type ErrorKind,
 } from "../components/StatePanels";
@@ -141,23 +142,19 @@ export function ClientWorkspaceLayout() {
   function renderContent() {
     if (forbidden) {
       return (
-        <section className="page centered-status" data-testid="screen-TW-33">
-          <ForbiddenState />
+        <section
+          className="page state-card-mount"
+          data-testid="screen-TW-33-forbidden"
+        >
+          <ForbiddenState screenId="TW-09" />
         </section>
       );
     }
 
     if (notFound) {
       return (
-        <section className="page centered-status" data-testid="screen-TW-33">
-          <h1>Client not found</h1>
-          <p className="lede">
-            This coaching relationship doesn&apos;t exist or you don&apos;t have
-            access.
-          </p>
-          <Link className="button-primary" to="/clients">
-            Back to clients
-          </Link>
+        <section className="page state-card-mount" data-testid="screen-TW-33">
+          <NotFoundState />
         </section>
       );
     }
@@ -172,11 +169,18 @@ export function ClientWorkspaceLayout() {
 
     if (!workspace) {
       return (
-        <section className="page workspace-shell" data-testid="screen-TW-33">
+        <section
+          className="page state-card-mount"
+          data-testid="screen-TW-33"
+        >
           <ErrorState
             kind={workspaceErrorKind}
-            title="We couldn't load this client"
-            message={workspaceError ?? undefined}
+            title="Couldn't load this page"
+            message={
+              workspaceErrorKind === "server" || workspaceErrorKind === "network"
+                ? undefined
+                : (workspaceError ?? undefined)
+            }
             requestId={workspaceErrorRequestId}
             onRetry={reloadWorkspace}
             screenId="TW-09"
