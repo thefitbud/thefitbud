@@ -40,6 +40,6 @@ Created by Z12-32 (planning, 14 Nov 2026). Source of the flows: `docs/design/v3/
 | F26 | Trainer | `flows/v3/F26-ended-reactivation.yaml` | `trainer/clients.yaml` (client status) | planned |
 | F27 | Trainer | `flows/v3/F27-offline-loading-errors.yaml` | none (new) | planned |
 | F28 | Trainer | `flows/v3/F28-settings-inperson-signout.yaml` | `trainer/notes-more.yaml` (More) | planned |
-| F29 | Trainee | `flows/v3/F29-future-days.yaml` | `trainee/today.yaml` (day navigation) | planned |
+| F29 | Trainee | `flows/v3/F29-future-days.yaml` | `trainee/today.yaml` (day navigation) | written (Z12-39) |
 
 28 flows. Owner by task (who first writes the file for its device gate): F02, F02b, F15, F16, F17 → Z12-49 (F01 too); F03–F06 → Z12-45 (F03 summary part → Z12-44); F07, F09 → Z12-42; F08 → Z12-43; F10 → Z12-41; F11, F12 → Z12-46; F13 → Z12-47 (Live Activity steps Z12-48); F14 → Z12-49; F20, F25 → Z12-50 then Z12-53; F21 → Z12-51; F22–F28 → Z12-53 (F28 in-person meal → Z12-52); F29 → Z12-39. Z12-58 writes any not yet written.

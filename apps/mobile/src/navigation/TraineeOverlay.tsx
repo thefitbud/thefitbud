@@ -44,7 +44,16 @@ export type TraineeOverlay =
   | { screen: "food_search"; assignmentId: string }
   | { screen: "something_different"; assignmentId: string }
   | { screen: "meal_plan" }
-  | { screen: "workout_overview"; assignmentId: string }
+  | {
+      screen: "workout_overview";
+      assignmentId: string;
+      /**
+       * D-W12-7 (Z12-39): a workout on a future day is a preview. The
+       * overview shows the exercises with no Start; the API refuses a start
+       * with 422 FUTURE_DAY in any case.
+       */
+      viewOnly?: boolean;
+    }
   | {
       screen: "ask_coach";
       itemType: CoachAskItemType;
@@ -295,7 +304,7 @@ export function TraineeOverlayHost({
           coachName={coachName}
           onBack={onClose}
           onStart={
-            onStartWorkout
+            onStartWorkout && !overlay.viewOnly
               ? (assignment) => {
                   onClose();
                   onStartWorkout(assignment.id);
