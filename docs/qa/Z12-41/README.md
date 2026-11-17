@@ -164,8 +164,30 @@ Other states captured: `TR-19a-unreachable-light-web.png`, `TR-19a-sending-light
 
 ### Not covered on web
 
-- **Cold start with no network.** On web the session restore is a different code path (`localStorage`, no user id stored), so a reload with the API unreachable shows sign-in, as it did before. The native path is covered by `AuthProvider.coldStartOffline.test.ts` (the real provider, native session storage, token session and snapshot over an in-memory keychain) and by the device flow `F10b` (stop the app, relaunch offline).
+- **Cold start with no network.** On web the session restore is a different code path (`localStorage`, no user id stored), so a reload with the API unreachable shows sign-in, as it did before. The native path is covered by `AuthProvider.coldStartOffline.test.ts` (the real provider, native session storage, token session and snapshot over an in-memory keychain) and by the device flow `F10b` (stop the app, relaunch offline), which passes on both platforms (see "Device run").
 - Native layout, the keychain-backed outbox on a real device, and the OS reachability signal.
+
+## Device run (D-W12-16, D-W12-34)
+
+`device.yml`, `flows=launch,z12-41`, both platforms, both themes, against the API seeded and run on the runner.
+
+| Run | App head | Result |
+|---|---|---|
+| [43714008509](https://github.com/thefitbud/thefitbud/actions/runs/43714008509) | 3ce3d0a3 | Not the gate result. iOS failed in the shared sign-in wait on a rest day (`common/sign-in-password.yaml` on this branch predated #447's fix), which took the launch trainee flow and F10 with it. Android light passed everything; Android dark failed F10c for a reason in my flow: the offline part also logged a meal when Diet offered one, Diet offered dinner at 6:12 pm, and the server refused it ("The log time is before this item's window opened."), so the sync screen correctly read "1 item couldn't be sent" where the flow expected "All saved". The flow now logs a weight and a waist only |
+| [43718038556](https://github.com/thefitbud/thefitbud/actions/runs/43718038556), attempt 1 | 9e12cf61 | **Android: pass**, 5 of 5 flows in light and in dark; log scan clean, 0 allowed. **iOS: F10, F10b and F10c pass in light and in dark**; launch trainee passes in both; launch trainer passes in light and failed in dark on a mistyped sign-in email (the simulator dropped characters: "rl.coach@…"), which is the harness's launch flow and not this change. iOS log scan: pass, 4 allowed (the D-W12-33 shadow advice) |
+| 43718038556, attempt 2 (the one flake re-run, failed jobs only) | 9e12cf61 | **Gate result: green on both platforms.** iOS: every flow passes in light and in dark, the launch trainer flow included; log scan pass, 4 allowed. Android: carried over from attempt 1 (pass) |
+
+What the F10 flows prove on both platforms, in both themes:
+
+1. **F10** (online): after sign-in the sync screen reads "All saved", with nothing waiting and nothing failed.
+2. **F10b** (device offline: Android airplane mode, iOS local API stopped): a weight and a waist are logged; sync status reads "2 items waiting to send" with both lines "Saved on phone" (screenshot `TR-19a`); "Try sending now" answers "Can't reach FitBud. Check your connection." and nothing is marked failed. Then the app is **stopped and relaunched offline**: it opens on the shell (not the error screen, not sign-in) and the two logs are still listed. This is the kill-and-relaunch case on the real native storage.
+3. **F10c** (online again): with no tap on "Try sending now" the screen reaches "All saved" and "Last sent …" (in 33 s to 64 s per flow, start to finish), and no pill is left.
+
+Screenshots from the run: `TR-19a-light-ios.png`, `TR-19a-dark-ios.png`, `TR-19a-light-android.png`, `TR-19a-dark-android.png`. Native grade for TR-19a, both platforms, both themes: **CLOSE**, for the same reasons as on web (a screen, not a sheet over More; no "Last sent" before the first send). The dark captures have a mean luminance of 0.09, so the screen really follows the system theme on both platforms.
+
+Not on the device run: TR-19b (a coach has to republish while a log waits); a meal and a set logged offline (meal windows make it clock-dependent; both are in the Expo-web run above with the D1 comparison); the D1 comparison itself (the runner's database is not kept).
+
+The 4 allowed iOS lines are the shadow advice of D-W12-33. That decision expects them only in the trainee workout flow; this run has no workout flow, so they come from another trainee screen. I did not trace which view.
 
 ## Screen → control → result
 
