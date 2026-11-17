@@ -224,7 +224,16 @@ describe("rawEnumGuard: web", () => {
       );
       expect(rawEnumHits(view.container), segment).toEqual([]);
       if (segment === "foods") {
-        expect(view.container.textContent).toContain("Per 100 ml");
+        // List shows classification labels (Serving · kcal replaced the Basis column).
+        expect(view.container.textContent).toContain("Generic");
+        expect(view.container.textContent).toContain("Prepared");
+        // Basis labels live on the add/edit form.
+        fireEvent.click(screen.getByRole("button", { name: /Add food/i }));
+        await waitFor(() =>
+          expect(view.container.textContent).toContain("Per 100 ml"),
+        );
+        expect(view.container.textContent).toContain("Per 100 g");
+        expect(rawEnumHits(view.container), "foods-form").toEqual([]);
       }
       cleanup();
     }
