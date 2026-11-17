@@ -1,0 +1,56 @@
+[
+  {
+    "control": "identifier field focus + type",
+    "result": "PASS"
+  },
+  {
+    "control": "password field + show/hide",
+    "result": "PASS"
+  },
+  {
+    "control": "Forgot password? navigates",
+    "result": "PASS"
+  },
+  {
+    "control": "Sign in with a code instead navigates",
+    "result": "PASS"
+  },
+  {
+    "control": "code sign-in: identifier + Send code button enabled",
+    "result": "PASS"
+  },
+  {
+    "control": "code sign-in: Use password instead",
+    "result": "PASS"
+  },
+  {
+    "control": "Need help? mailto",
+    "result": "PASS"
+  },
+  {
+    "control": "Legal: Privacy",
+    "result": "PASS"
+  },
+  {
+    "control": "Legal: Terms",
+    "result": "PASS"
+  },
+  {
+    "control": "Legal: Credits and licences",
+    "result": "PASS",
+    "focusTrail": "INPUT:password:null",
+    "focusStyles": {
+      "outline": "rgb(70, 68, 95) none 3px",
+      "boxShadow": "rgba(69, 39, 198, 0.16) 0px 0px 0px 3px",
+      "borderColor": "rgb(74, 63, 191)"
+    }
+  },
+  {
+    "control": "keyboard focus rings (Tab through form)",
+    "result": "PASS"
+  },
+  {
+    "control": "primary Sign in button is ink (not coral)",
+    "result": "PASS"
+  }
+]

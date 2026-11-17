@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { Users } from "lucide-react";
+import { Info, OctagonAlert, TriangleAlert, Users } from "lucide-react";
 import { BrandMark } from "../components/BrandMark";
 import { useConfig } from "../lib/config";
+import "./AuthLayout.css";
 
 export function AuthLayout({
   title,
@@ -48,21 +49,30 @@ export function AuthLayout({
                     <span className="av c3">RM</span>Rohan Mehta
                   </span>
                   <span>Missed 2 workouts</span>
-                  <span className="chip crit">Critical</span>
+                  <span className="chip crit">
+                    <OctagonAlert size={13} strokeWidth={1.75} aria-hidden="true" />
+                    Critical
+                  </span>
                 </div>
                 <div className="auth-glimpse-row">
                   <span className="auth-glimpse-who">
                     <span className="av c6">NR</span>Neha Reddy
                   </span>
                   <span>Breakfast not logged (Sat)</span>
-                  <span className="chip attn">Attention</span>
+                  <span className="chip attn">
+                    <TriangleAlert size={13} strokeWidth={1.75} aria-hidden="true" />
+                    Attention
+                  </span>
                 </div>
                 <div className="auth-glimpse-row">
                   <span className="auth-glimpse-who">
                     <span className="av c7">PS</span>Priya Sharma
                   </span>
                   <span>Check-in submitted · Fri</span>
-                  <span className="chip info">To review</span>
+                  <span className="chip info">
+                    <Info size={13} strokeWidth={1.75} aria-hidden="true" />
+                    To review
+                  </span>
                 </div>
               </div>
             </div>
