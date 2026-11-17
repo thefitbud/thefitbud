@@ -48,7 +48,11 @@ import { openContextualWhatsApp } from "./whatsapp";
 import type { NudgePickItem } from "./sheets/NudgePickSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import { exceptionDateLabel } from "./sheets/exceptionSheetContent";
-import { nudgeTargetFromException, type NudgeTarget } from "./sheets/nudgeContent";
+import {
+  isNudgeableExceptionType,
+  nudgeTargetFromException,
+  type NudgeTarget,
+} from "./sheets/nudgeContent";
 
 type Props = {
   relationshipId: string;
@@ -206,12 +210,9 @@ export function ClientStatusScreen({
     try {
       const page = await api.listExceptions(relationshipId);
       const items: NudgePickItem[] = page.items
-        // A skipped item is already settled (the API answers ACTIVITY_RESOLVED), as on web.
+        // Only unlogged items can be nudged; logged or skipped ones are settled (ACTIVITY_RESOLVED).
         .filter(
-          (item) =>
-            item.status !== "resolved" &&
-            item.type !== "skipped_meal" &&
-            item.type !== "skipped_workout",
+          (item) => item.status !== "resolved" && isNudgeableExceptionType(item.type),
         )
         .sort(
           (a, b) =>

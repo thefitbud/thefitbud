@@ -108,6 +108,8 @@ function NudgeSheetBody({
   const [pre, setPre] = useState<NudgePreState>({ kind: "ready" });
   const [sending, setSending] = useState(false);
   const [limit, setLimit] = useState<string | null>(null);
+  // TM-04n: the body of the nudge already sent today, shown instead of the draft.
+  const [storedBody, setStoredBody] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const sendingRef = useRef(false);
 
@@ -124,6 +126,7 @@ function NudgeSheetBody({
     setSending(false);
     sendingRef.current = false;
     setLimit(null);
+    setStoredBody(null);
     setError(null);
     let cancelled = false;
     void api
@@ -182,6 +185,8 @@ function NudgeSheetBody({
       const outcome = nudgeOutcome(result, first);
       if (outcome.kind === "limit") {
         setLimit(outcome.line);
+        const stored = result.notification?.body;
+        if (stored) setStoredBody(stored);
       } else {
         onSent(outcome.toast);
       }
@@ -287,7 +292,7 @@ function NudgeSheetBody({
       ) : (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${title}. ${body}. Tap to edit the message`}
+          accessibilityLabel={`${title}. ${storedBody ?? body}. Tap to edit the message`}
           disabled={blocked}
           onPress={() => setEditing(true)}
           style={styles.preview}
@@ -303,7 +308,9 @@ function NudgeSheetBody({
               </Text>
               <Text variant="caption">now</Text>
             </View>
-            <Text variant="body">{trimmed || "Write a message"}</Text>
+            <Text variant="body">
+              {storedBody ?? (trimmed || "Write a message")}
+            </Text>
           </View>
         </Pressable>
       )}

@@ -121,6 +121,24 @@ describe("NudgeSheet", () => {
     expect(send.getAttribute("aria-disabled") === "true" || send.disabled).toBe(true);
   });
 
+  it("a deduped nudge shows the stored body in the preview (TM-04n)", async () => {
+    const api = makeApi({
+      nudgeActivity: vi.fn(async () => ({
+        notification: { body: "Earlier today: please log Dinner." } as never,
+        deduped: true,
+        nudgedAt: "2026-11-17T06:00:00.000Z",
+        delivery: "push" as const,
+        inboxReason: null,
+      })),
+    });
+    renderSheet(api);
+    fireEvent.click(screen.getByText("Send nudge"));
+    await screen.findByText("Earlier today: please log Dinner.");
+    expect(
+      screen.queryByText("Lower body A is waiting. Can you fit it in soon?"),
+    ).toBeNull();
+  });
+
   it("a link in the body blocks Send before any request", () => {
     const api = makeApi();
     renderSheet(api);

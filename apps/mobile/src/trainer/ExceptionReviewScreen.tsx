@@ -22,7 +22,10 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { labelFor } from "./labels";
 import { firstNameOf, nudgeDraftText } from "./sheets/exceptionSheetContent";
-import { nudgeTargetFromException } from "./sheets/nudgeContent";
+import {
+  isNudgeableExceptionType,
+  nudgeTargetFromException,
+} from "./sheets/nudgeContent";
 import { clientStatusApi } from "./clientStatus/api";
 import { openContextualWhatsApp } from "./whatsapp";
 import { MoreSheet } from "./sheets/MoreSheet";
@@ -393,8 +396,7 @@ export function ExceptionReviewScreen({
 
           {!resolved &&
           coaching === "active" &&
-          detail.type !== "skipped_meal" &&
-          detail.type !== "skipped_workout" ? (
+          isNudgeableExceptionType(detail.type) ? (
             <PrimaryButton
               label="Nudge"
               variant="ghost"

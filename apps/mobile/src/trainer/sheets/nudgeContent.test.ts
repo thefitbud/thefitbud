@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   NUDGE_BODY_MAX,
   NUDGE_CHIPS,
+  isNudgeableExceptionType,
   bodyLooksLikeLink,
   nudgeChipBody,
   nudgeLimitLine,
@@ -174,5 +175,16 @@ describe("outcomes", () => {
     expect(
       nudgeOutcome({ notification, deduped: false, delivery: "push" }, "Rohan"),
     ).toEqual({ kind: "sent", toast: "Nudge sent to Rohan" });
+  });
+});
+
+describe("nudgeable exception types", () => {
+  it("allows only unlogged items", () => {
+    for (const type of ["missed_workout", "overdue_meal", "overdue_checkin"]) {
+      expect(isNudgeableExceptionType(type)).toBe(true);
+    }
+    for (const type of ["meal_deviation", "meal_logged_later", "skipped_meal", "skipped_workout"]) {
+      expect(isNudgeableExceptionType(type)).toBe(false);
+    }
   });
 });

@@ -38,6 +38,21 @@ export type NudgeTarget = {
   dayLabel: string | null;
 };
 
+/**
+ * Z12-50: the only exception types a nudge can be about. Each is an item that
+ * was due and never logged. meal_deviation and meal_logged_later are logged
+ * meals, so the API answers ACTIVITY_RESOLVED for them.
+ */
+const NUDGEABLE_EXCEPTION_TYPES: ReadonlySet<string> = new Set([
+  "missed_workout",
+  "overdue_meal",
+  "overdue_checkin",
+]);
+
+export function isNudgeableExceptionType(type: string): boolean {
+  return NUDGEABLE_EXCEPTION_TYPES.has(type);
+}
+
 export function nudgeActivityType(
   sourceEntityType: ExceptionDetail["sourceEntityType"],
 ): NudgeActivityType {
