@@ -212,7 +212,7 @@ export function checkinFormLoadFailure(err: unknown): CheckinFormLoadFailure {
 }
 
 /** Same test as `authErrors.ts`: only a real request failure says "connection". */
-function isNetworkFailure(err: unknown): boolean {
+export function isNetworkFailure(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   return (
     err.name === "AbortError" ||

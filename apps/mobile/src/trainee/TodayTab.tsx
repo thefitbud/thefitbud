@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { Text } from "../components/Text";
 import type {
@@ -14,9 +14,19 @@ import {
   formatClockTime,
   formatKcal,
   formatNumber,
+  whatsappHref,
 } from "@fitbud/core";
 import { spacing } from "@fitbud/ui-mobile";
-import { Check, Clock, CloudUpload, List, Moon } from "lucide-react-native";
+import {
+  Check,
+  ClipboardCheck,
+  Clock,
+  CloudUpload,
+  List,
+  MessageCircle,
+  Moon,
+} from "lucide-react-native";
+import { Button } from "../components/Button";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
@@ -747,18 +757,59 @@ function TodayTabInner({
           </View>
         ) : null}
 
+        {/*
+          No plan yet (Z12-46; no Today mock, TR-10b's pattern, recorded in the
+          PR): a calm card, never a server message. The words "preparing your
+          plan" are the established label; the WhatsApp button is a wa.me
+          prefill the trainee sends (AGENTS.md: no auto-send).
+        */}
         {planState.status === "none" ? (
           <View
-            style={styles.card}
+            style={[styles.card, styles.noPlanCard]}
             accessibilityLabel="Your coach is preparing your plan"
           >
-            <Text style={styles.cardTitle}>
+            <View style={styles.bigTile}>
+              <ClipboardCheck
+                size={30}
+                color={theme.colors.ink}
+                strokeWidth={1.75}
+              />
+            </View>
+            <Text
+              variant="headline"
+              style={styles.noPlanText}
+              accessibilityRole="header"
+            >
               Your coach is preparing your plan
             </Text>
-            <Text style={styles.body}>
-              {coachName} will publish your meals and workouts soon. Pull down
-              to check for updates.
+            <Text variant="body" tone="ink2" style={styles.noPlanText}>
+              {`${coachName} will publish your meals and workouts soon. You'll get a notification when they're ready.`}
             </Text>
+            {relationship.trainerWhatsappE164 &&
+            relationship.trainerWhatsappE164.replace(/\D/g, "").length >= 10 ? (
+              <Button
+                label={`Message ${coachName} on WhatsApp`}
+                variant="outline"
+                icon={
+                  <MessageCircle
+                    size={20}
+                    color={theme.colors.ink}
+                    strokeWidth={1.75}
+                  />
+                }
+                onPress={() => {
+                  void Linking.openURL(
+                    whatsappHref({
+                      phoneE164: relationship.trainerWhatsappE164,
+                      draftText: `Hi ${coachName}, `,
+                    }),
+                  ).catch((err: unknown) =>
+                    reportError("TodayTab.openWhatsApp", err),
+                  );
+                }}
+                style={styles.noPlanButton}
+              />
+            ) : null}
           </View>
         ) : null}
 
@@ -1263,6 +1314,7 @@ function TodayTabInner({
         <TodayCheckinCard
           relationship={relationship}
           onOpen={onOpenCheckin}
+          noPlan={planState.status === "none"}
         />
 
         {planState.status === "loaded" ? (
@@ -1581,6 +1633,18 @@ const useStyles = createThemedStyles((t) => ({
     color: t.colors.ink3,
     fontSize: 12,
   },
+  noPlanCard: { alignItems: "center", paddingVertical: 28 },
+  bigTile: {
+    alignItems: "center",
+    backgroundColor: t.colors.brandTint,
+    borderRadius: 22,
+    height: 76,
+    justifyContent: "center",
+    marginBottom: spacing.sm,
+    width: 76,
+  },
+  noPlanText: { textAlign: "center" },
+  noPlanButton: { alignSelf: "stretch", marginTop: spacing.md },
   planLink: {
     color: t.colors.coachInk,
     fontSize: 15,
