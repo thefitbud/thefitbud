@@ -95,6 +95,7 @@ function AuthPageBody({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={backLabel}
+                testID="auth-back"
                 onPress={onBack}
                 style={styles.back}
                 hitSlop={8}

@@ -87,7 +87,8 @@ tags:
     timeout: 20000
 - assertVisible: "Back"
 - takeScreenshot: z12-49-role-select-from-more
-- tapOn: "Back"
+- tapOn:
+    id: "auth-back"
 - extendedWaitUntil:
     notVisible: "How do you want to use FitBud\\?"
     timeout: 20000

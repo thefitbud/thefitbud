@@ -61,11 +61,13 @@ tags:
 - runFlow: ../../common/assert-no-crash.yaml
 
 # Back to the address, back to sign in, then sign in with the password.
-- tapOn: "Back"
+- tapOn:
+    id: "auth-back"
 - extendedWaitUntil:
     visible: "Send code"
     timeout: 10000
-- tapOn: "Back to sign in"
+- tapOn:
+    id: "auth-back"
 - extendedWaitUntil:
     visible: "Sign in with a code instead"
     timeout: 10000

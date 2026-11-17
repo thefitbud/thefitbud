@@ -218,7 +218,7 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Profile. ${displayName ?? ""}`}
+        accessibilityLabel={`Profile. ${displayName ?? ""}. ${profileLine}`}
         onPress={() => onOpenOverlay({ screen: "profile" })}
         style={styles.card}
       >
