@@ -55,11 +55,14 @@ test.describe("TW-F templates, forms, libraries", () => {
     });
   });
 
-  test("TW-24 onboarding builder two panes", async ({ page }) => {
+  test("TW-24 onboarding builder list and Question panel", async ({ page }) => {
     await page.goto(`/templates/onboarding/${ONBOARDING}`);
     await expect(page.getByTestId("screen-TW-24")).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expect(page.getByRole("button", { name: /Fork to edit/i })).toBeVisible();
+    await expect(page.getByRole("complementary", { name: "Question" })).toBeVisible();
+    await expect(page.getByRole("list", { name: "Questions" })).toBeVisible();
+    await page.getByRole("button", { name: /^Preview$/i }).click();
     await expect(page.getByLabel("Trainee phone preview")).toBeVisible();
   });
 
@@ -70,13 +73,17 @@ test.describe("TW-F templates, forms, libraries", () => {
     await expect(page.getByLabel("Trainee phone preview")).toBeVisible();
   });
 
-  test("TW-26 libraries sticky table and selects", async ({ page }) => {
+  test("TW-26 libraries table, source filter, and drawers", async ({ page }) => {
     await page.goto("/templates/libraries/exercises");
     await expect(page.getByTestId("screen-TW-26")).toBeVisible();
-    await expect(page.getByRole("columnheader", { name: "Name" })).toBeVisible({
+    await expect(page.getByRole("columnheader", { name: "Exercise" })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole("columnheader", { name: "Primary muscles" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Equipment" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Source" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Logged by clients, not in library/i }),
+    ).toBeVisible();
     await expect(page.getByText("defaultReps")).toHaveCount(0);
     await expect(page.getByText("defaultLoadLabel")).toHaveCount(0);
     await expect(
@@ -85,9 +92,17 @@ test.describe("TW-F templates, forms, libraries", () => {
       }),
     ).toBeVisible();
     await page.getByRole("link", { name: "Foods" }).click();
-    await expect(page.getByRole("columnheader", { name: "Basis" })).toBeVisible({
+    await expect(page.getByRole("columnheader", { name: "Food" })).toBeVisible({
       timeout: 20_000,
     });
+    await expect(
+      page.getByRole("columnheader", { name: "Serving · kcal" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /Source/i })).toBeVisible();
+    const firstFood = page.locator(".libraries-table tbody tr").first();
+    await firstFood.click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Make my copy|Edit/i })).toBeVisible();
   });
 
   test("TW-25.1 configure has check-in form select", async ({ page }) => {
