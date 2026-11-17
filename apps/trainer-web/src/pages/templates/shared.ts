@@ -53,6 +53,28 @@ export function templateTypeLabel(type: PlanTemplateType): string {
   return labelFor("plan_template_type", type);
 }
 
+/** Frame 168 type words: Nutrition (not Diet), Intake form, Check-in form. */
+export function hubTypeLabel(
+  kind: "workout" | "nutrition" | "combined" | "onboarding" | "checkin",
+): string {
+  switch (kind) {
+    case "workout":
+      return "Workout";
+    case "nutrition":
+      return "Nutrition";
+    case "combined":
+      return "Full plan";
+    case "onboarding":
+      return "Intake form";
+    case "checkin":
+      return "Check-in form";
+    default: {
+      const _exhaustive: never = kind;
+      return _exhaustive;
+    }
+  }
+}
+
 export function withRelationship(
   items: ClientDirectoryItem[],
 ): ApplyClient[] {
@@ -78,7 +100,7 @@ export function structureSummary(
   content: PlanContent | null | undefined,
 ): string {
   if (!content) {
-    return templateTypeLabel(templateType);
+    return "";
   }
   const days = content.workoutDays?.length ?? 0;
   const exercises =
@@ -94,6 +116,29 @@ export function structureSummary(
     return `${meals} meal${meals === 1 ? "" : "s"}`;
   }
   return `${days} day${days === 1 ? "" : "s"} · ${meals} meal${meals === 1 ? "" : "s"}`;
+}
+
+export function hubRowSubtitle(
+  kind: "workout" | "nutrition" | "combined" | "onboarding" | "checkin",
+  detail: string,
+  versionNumber?: number,
+): string {
+  const type = hubTypeLabel(kind);
+  const version =
+    typeof versionNumber === "number" && versionNumber > 0
+      ? ` · v${versionNumber}`
+      : "";
+  const trimmed = detail.trim();
+  if (
+    !trimmed ||
+    trimmed === type ||
+    trimmed === "Diet" ||
+    trimmed === "Full plan" ||
+    trimmed === "Workout"
+  ) {
+    return `${type}${version}`;
+  }
+  return `${type} · ${trimmed}${version}`;
 }
 
 export function newButtonLabel(templateType: PlanTemplateType): string {
@@ -113,4 +158,69 @@ export function newButtonLabel(templateType: PlanTemplateType): string {
 
 export function emptyMineCopy(kind: string): string {
   return `You haven't made any ${kind} yet. Fork a FitBud base or start blank.`;
+}
+
+/** Frame 169 empty copy by type filter. */
+export function emptyMineTitle(
+  typeFilter: "all" | "workout" | "nutrition" | "onboarding" | "checkin" | "combined",
+): string {
+  switch (typeFilter) {
+    case "nutrition":
+      return "No nutrition templates of your own yet";
+    case "workout":
+      return "No workout templates of your own yet";
+    case "onboarding":
+      return "No intake forms of your own yet";
+    case "checkin":
+      return "No check-in forms of your own yet";
+    case "combined":
+      return "No full plan templates of your own yet";
+    default:
+      return "No templates of your own yet";
+  }
+}
+
+export function emptyMineBody(
+  typeFilter: "all" | "workout" | "nutrition" | "onboarding" | "checkin" | "combined",
+): string {
+  switch (typeFilter) {
+    case "nutrition":
+      return "Make your own copy of a FitBud base nutrition plan, or save a client's plan as a template.";
+    case "workout":
+      return "Make your own copy of a FitBud base workout, or save a client's plan as a template.";
+    case "onboarding":
+      return "Make your own copy of a FitBud base intake form, or start blank.";
+    case "checkin":
+      return "Make your own copy of a FitBud base check-in form, or start blank.";
+    default:
+      return "Make your own copy of a FitBud base, or save a client's plan as a template.";
+  }
+}
+
+export function clientInitials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.charAt(0).toUpperCase())
+    .join("");
+}
+
+export function forkDefaultName(
+  templateTitle: string,
+  trainerDisplayName: string | null | undefined,
+): string {
+  const first =
+    (trainerDisplayName ?? "").trim().split(/\s+/).filter(Boolean)[0] ?? "";
+  if (!first) return templateTitle;
+  if (templateTitle.toLowerCase().includes(first.toLowerCase())) {
+    return templateTitle;
+  }
+  return `${templateTitle} - ${first}`;
+}
+
+export function clientStatusLabel(status: string): string {
+  // Use-modal clients are already coaching-ready; frame 174 reads "Ready to coach".
+  if (status === "active" || status === "coaching_ready") return "Ready to coach";
+  return labelFor("onboarding_status", status);
 }

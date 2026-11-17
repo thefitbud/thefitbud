@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from "react";
+import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
+import { useAuth } from "../../auth/AuthProvider";
 import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
-import { errorText } from "./shared";
+import { errorText, forkDefaultName } from "./shared";
 
 export function ForkTemplateModal({
   templateId,
@@ -21,7 +23,11 @@ export function ForkTemplateModal({
   onForked?: (id: string) => void;
 }) {
   const navigate = useNavigate();
-  const [name, setName] = useState(`Copy of ${templateTitle}`);
+  const { me } = useAuth();
+  const trainerName = me?.trainerProfile?.displayName ?? "";
+  const [name, setName] = useState(
+    forkDefaultName(templateTitle, trainerName),
+  );
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -71,7 +77,7 @@ export function ForkTemplateModal({
   return (
     <div className="modal-scrim" role="presentation" onClick={onClose}>
       <div
-        className="modal-card fork-template-modal"
+        className="modal-card fork-template-modal templates-modal-v3"
         role="dialog"
         aria-modal="true"
         aria-labelledby="fork-template-title"
@@ -79,10 +85,15 @@ export function ForkTemplateModal({
         onClick={(event) => event.stopPropagation()}
       >
         <header className="modal-header">
-          <h2 id="fork-template-title">Fork to edit</h2>
-          <Button variant="tertiary" onClick={onClose}>
-            Close
-          </Button>
+          <h2 id="fork-template-title">Make your own copy</h2>
+          <button
+            type="button"
+            className="templates-modal-close"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <X size={18} strokeWidth={2} aria-hidden="true" />
+          </button>
         </header>
         <form onSubmit={(event) => void onSubmit(event)}>
           <label className="field">
@@ -94,8 +105,9 @@ export function ForkTemplateModal({
               required
             />
           </label>
-          <p className="use-template-copy">
-            Your copy is yours to edit. The FitBud base won&apos;t change.
+          <p className="templates-modal-copy use-template-copy">
+            Your copy starts as a draft and is yours to edit. Clients on{" "}
+            {templateTitle} keep it until you move them.
           </p>
           {error ? (
             <p className="form-error" role="alert">
@@ -103,11 +115,11 @@ export function ForkTemplateModal({
             </p>
           ) : null}
           <div className="button-row">
-            <Button variant="primary" disabled={acting} type="submit">
-              {acting ? "Forking…" : "Fork"}
-            </Button>
-            <Button variant="tertiary" type="button" onClick={onClose}>
+            <Button variant="secondary" type="button" onClick={onClose}>
               Cancel
+            </Button>
+            <Button variant="primary" disabled={acting} type="submit">
+              {acting ? "Making copy…" : "Make copy"}
             </Button>
           </div>
         </form>
