@@ -13,10 +13,23 @@ tags:
     clearKeychain: true
     permissions:
       all: allow
-- runFlow:
-    file: ../../common/sign-in-password.yaml
-    env:
-      SIGN_IN_EMAIL: harpreet.ready@demo.fitbud.test
+# The steps of common/sign-in-password.yaml, which ends by waiting for "Today's
+# workout", a heading a trainee with no plan never gets (CU22): this one waits for
+# the trainee tab bar instead (device run 44131228416).
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- tapOn: "you@example.com or 9876543210"
+- inputText: harpreet.ready@demo.fitbud.test
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Your coach's plan for today is waiting\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "Diet"
+    timeout: 60000
 - extendedWaitUntil:
     notVisible: ".*Loading your day.*"
     timeout: 30000
