@@ -90,46 +90,59 @@ function summarizeContent(content: PlanContent): string[] {
   return lines.length > 0 ? lines : ["Empty plan"];
 }
 
-function ReadOnlySummary({ content }: { content: PlanContent }) {
+function daySummaryLine(day: {
+  name: string;
+  exercises: { setTargets: unknown[] }[];
+}): string {
+  const exerciseCount = day.exercises.length;
+  const setCount = day.exercises.reduce((sum, exercise) => sum + exercise.setTargets.length, 0);
+  const bits = [
+    day.name,
+    `${exerciseCount} ${exerciseCount === 1 ? "exercise" : "exercises"}`,
+  ];
+  if (setCount > 0) {
+    bits.push(`${setCount} ${setCount === 1 ? "set" : "sets"}`);
+  }
+  return bits.join(" · ");
+}
+
+/** Portrait / <1024 read-only week card (frame 195). */
+function ReadOnlySummary({
+  content,
+  title,
+  clientName,
+}: {
+  content: PlanContent;
+  title: string;
+  clientName?: string;
+}) {
+  const byWeekday = new Map(
+    content.workoutDays
+      .filter((day) => day.weekday != null)
+      .map((day) => [day.weekday as number, day]),
+  );
+  const heading = [title.trim(), clientName?.trim()].filter(Boolean).join(" · ");
+
   return (
-    <div className="builder-readonly">
-      {content.workoutDays.length > 0 ? (
-        <section>
-          <h3>Sessions</h3>
-          <ul>
-            {[...content.workoutDays]
-              .sort(
-                (a, b) =>
-                  WEEK_ORDER.indexOf((a.weekday ?? 9) as (typeof WEEK_ORDER)[number]) -
-                  WEEK_ORDER.indexOf((b.weekday ?? 9) as (typeof WEEK_ORDER)[number]),
-              )
-              .map((day) => (
-                <li key={day.id}>
-                  <strong>
-                    {day.weekday != null ? weekdayShort(day.weekday) : "Unscheduled"}
-                  </strong>{" "}
-                  {day.name} · {day.exercises.length}{" "}
-                  {day.exercises.length === 1 ? "exercise" : "exercises"}
-                </li>
-              ))}
-          </ul>
-        </section>
-      ) : null}
-      {content.mealPrescriptions.length > 0 ? (
-        <section>
-          <h3>Meals</h3>
-          <ul>
-            {sortedMealsByTime(content.mealPrescriptions).map((meal) => (
-              <li key={meal.id}>
-                <strong>{meal.name}</strong>
-                {meal.localTime ? ` · ${formatHhMmTime(meal.localTime)}` : ""} ·{" "}
-                {(meal.items ?? []).length} {(meal.items ?? []).length === 1 ? "food" : "foods"}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-    </div>
+    <article className="builder-readonly" data-testid="builder-readonly-summary">
+      <header className="builder-readonly-head">
+        <h2 className="builder-readonly-title">{heading || "Plan"}</h2>
+        <span className="builder-draft-pill">
+          <span aria-hidden="true">✎ </span>Draft
+        </span>
+      </header>
+      <ul className="builder-readonly-week">
+        {WEEK_ORDER.map((weekday) => {
+          const day = byWeekday.get(weekday);
+          return (
+            <li key={weekday} className={day ? undefined : "is-rest"}>
+              <strong>{weekdayShort(weekday)}</strong>
+              <span>{day ? daySummaryLine(day) : "Rest"}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </article>
   );
 }
 
@@ -224,7 +237,7 @@ export function PlanBuilder({
   const meals = sortedMealsByTime(content.mealPrescriptions);
   const activeMeal = meals.find((meal) => meal.id === selectedMealId) ?? meals[0] ?? null;
   const editable = !readOnly && mode !== "small";
-  const overlay = mode === "narrow";
+  const narrow = mode === "narrow";
   const conflict = saveState.kind === "conflict";
 
   useEffect(() => {
@@ -244,7 +257,7 @@ export function PlanBuilder({
     function onKey(event: KeyboardEvent) {
       if (event.key === "/" && !isTypingTarget(event.target) && editable) {
         event.preventDefault();
-        if (mode === "narrow") setLibraryOpen(true);
+        if (narrow) setLibraryOpen(true);
         window.setTimeout(() => searchRef.current?.focus(), 0);
         return;
       }
@@ -261,7 +274,7 @@ export function PlanBuilder({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editable, mode, undo]);
+  }, [editable, narrow, undo]);
 
   function addExercise(item: ExerciseLibraryItem) {
     if (!activeDay) return;
@@ -402,7 +415,7 @@ export function PlanBuilder({
           </p>
         </div>
       </div>
-      {onTabChange ? (
+      {onTabChange && mode !== "small" ? (
         <div className="builder-tabs" role="tablist" aria-label="Plan section">
           {(["workout", "nutrition"] as const).map((value) => (
             <button
@@ -419,23 +432,36 @@ export function PlanBuilder({
         </div>
       ) : null}
       <div className="builder-topbar-actions">
-        {overlay && editable ? (
-          <button type="button" className="button-secondary" onClick={openLibrary}>
-            Library
+        {narrow && editable ? (
+          <button
+            type="button"
+            className="button-secondary builder-library-toggle"
+            onClick={openLibrary}
+            aria-label="Library"
+            title="Library"
+          >
+            <span className="builder-library-toggle-icon" aria-hidden="true">
+              ▤
+            </span>
+            <span className="sr-only">Library</span>
           </button>
         ) : null}
-        <button
-          type="button"
-          className="button-ghost"
-          disabled={!canUndo || !editable}
-          onClick={undo}
-          aria-label="Undo"
-        >
-          Undo
-        </button>
-        <button type="button" className="button-secondary" onClick={() => void openPreview()}>
-          Preview
-        </button>
+        {mode === "small" ? null : (
+          <button
+            type="button"
+            className="button-ghost"
+            disabled={!canUndo || !editable}
+            onClick={undo}
+            aria-label="Undo"
+          >
+            Undo
+          </button>
+        )}
+        {mode === "small" ? null : (
+          <button type="button" className="button-secondary" onClick={() => void openPreview()}>
+            Preview
+          </button>
+        )}
         {onPublish ? (
           <button
             type="button"
@@ -484,31 +510,53 @@ export function PlanBuilder({
     </>
   );
 
-  const library = editable ? (
-    <>
-      <LibraryDrawer
-        kind={tab}
-        day={activeDay}
-        meal={activeMeal}
-        onAddExercise={addExercise}
-        onAddFood={addFood}
-        searchRef={searchRef}
-        overlay={overlay}
-        open={libraryOpen || !overlay}
-        onClose={() => setLibraryOpen(false)}
-      />
-      {libraryError ? (
-        <p className="form-error library-error" role="alert">
-          {libraryError}
-        </p>
-      ) : null}
-    </>
-  ) : (
-    <aside className="builder-props">
-      <h2 className="builder-pane-title">{tab === "workout" ? "Exercises" : "Foods"}</h2>
-      <p className="muted">Library is available when you can edit.</p>
-    </aside>
-  );
+  const libraryPane =
+    editable && !narrow ? (
+      <>
+        <LibraryDrawer
+          kind={tab}
+          day={activeDay}
+          meal={activeMeal}
+          onAddExercise={addExercise}
+          onAddFood={addFood}
+          searchRef={searchRef}
+          overlay={false}
+          open
+        />
+        {libraryError ? (
+          <p className="form-error library-error" role="alert">
+            {libraryError}
+          </p>
+        ) : null}
+      </>
+    ) : (
+      <aside className="builder-props">
+        <h2 className="builder-pane-title">{tab === "workout" ? "Exercises" : "Foods"}</h2>
+        <p className="muted">Library is available when you can edit.</p>
+      </aside>
+    );
+
+  const libraryOverlay =
+    editable && narrow ? (
+      <>
+        <LibraryDrawer
+          kind={tab}
+          day={activeDay}
+          meal={activeMeal}
+          onAddExercise={addExercise}
+          onAddFood={addFood}
+          searchRef={searchRef}
+          overlay
+          open={libraryOpen}
+          onClose={() => setLibraryOpen(false)}
+        />
+        {libraryError && libraryOpen ? (
+          <p className="form-error library-error" role="alert">
+            {libraryError}
+          </p>
+        ) : null}
+      </>
+    ) : null;
 
   const center =
     tab === "workout" ? (
@@ -527,7 +575,7 @@ export function PlanBuilder({
           onChange={setContent}
           readOnly={!editable}
           onOpenLibrary={openLibrary}
-          showLibraryToggle={overlay}
+          showLibraryToggle={narrow}
         />
       </div>
     ) : (
@@ -540,7 +588,7 @@ export function PlanBuilder({
         readOnly={!editable}
         photoRequirement={expectations?.photoRequirement ?? null}
         onOpenLibrary={openLibrary}
-        showLibraryToggle={overlay}
+        showLibraryToggle={narrow}
       />
     );
 
@@ -563,20 +611,20 @@ export function PlanBuilder({
       <MealProperties meal={activeMeal} onChange={setContent} readOnly={!editable} />
     );
 
-  // Wide: library left / workspace / properties. Narrow: properties left, library overlay.
-  const leftPane = overlay ? properties : library;
-  const rightPane = overlay ? library : properties;
-
+  // Wide: library left / workspace / properties. Narrow (iPad 1024): workspace + properties right; library drawer.
   return (
     <section className="page plan-builder-page builder-v3" data-testid={screenId}>
       <BuilderLayout
         mode={mode}
         topbar={topbar}
         banner={bannerNode}
-        left={leftPane}
+        left={libraryPane}
         center={center}
-        right={rightPane}
-        smallScreen={<ReadOnlySummary content={content} />}
+        right={properties}
+        overlay={libraryOverlay}
+        smallScreen={
+          <ReadOnlySummary content={content} title={title} clientName={clientName} />
+        }
       />
       {comparing ? (
         <CompareVersionsModal
