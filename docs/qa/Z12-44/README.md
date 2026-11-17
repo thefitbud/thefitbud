@@ -24,7 +24,16 @@ Expo web proves copy, structure and values, not native layout; no screen is clai
 
 ## 2. Device run
 
-Filled in from the scoped run (D-W12-34): see the PR body and `docs/qa/W12/parity.md`.
+Scoped run (D-W12-34) **44144088662**, flows `launch,z12-44,device/z12-36/3-trainee-workout.yaml,device/z12-40/*.yaml`, app `7d8ababa` (confirmed in both job logs), harness `cc29fc3d`:
+
+| Platform | Light | Dark | Log scan |
+|---|---|---|---|
+| iOS simulator | 7/7 | 7/7 | pass, 0 findings, 0 allowed |
+| Android emulator | 7/7 | 7/7 | pass, 0 findings, 0 allowed |
+
+Shots: `docs/qa/Z12-44/<screen ID>-<theme>-<platform>.png` (copied with `copy-shots.sh` from `refs/device-gate/44144088662`). Every screen of this task in both themes on both platforms, except TR-10c dark: in the dark pass the light run had already opened Monday's missed workout, so no banner was left (Expo web shows it in dark).
+
+The first run (44131228416, app `5d40b638`) failed on flow problems, not app defects: the no-plan flow used the shared sign-in, which waits for "Today's workout" (a trainee with no plan never gets it), and dark iOS stalled on the startup spinner after a cold relaunch. Both flows were fixed (sign-in inline for the no-plan flow; wait for the tab bar after a relaunch) and the run above is the one allowed re-run. It also covers Z12-47, merged into the branch in between.
 
 ## 3. Departures from the mocks, with reasons
 
