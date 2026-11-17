@@ -83,6 +83,10 @@ tags:
       # Kill and relaunch: still done, still View summary only.
       - launchApp:
           clearState: false
+      # A cold relaunch shows the startup spinner first: wait for the tab bar.
+      - extendedWaitUntil:
+          visible: "Diet"
+          timeout: 120000
       - extendedWaitUntil:
           notVisible: ".*Loading your day.*"
           timeout: 60000
