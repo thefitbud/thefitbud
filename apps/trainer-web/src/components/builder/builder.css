@@ -258,6 +258,15 @@
   font-size: 1.125rem;
 }
 
+/* Read-only in portrait: keep title ink (not washed-out disabled chrome). */
+.builder-v3 .builder[data-builder-mode="small"] .builder-title-field input:disabled {
+  opacity: 1;
+  color: var(--deep-navy, var(--ink));
+  -webkit-text-fill-color: var(--deep-navy, var(--ink));
+  background: transparent;
+  cursor: default;
+}
+
 .builder-v3 .builder[data-builder-mode="small"] .builder-status,
 .builder-v3 .builder[data-builder-mode="small"] .builder-topbar .builder-draft-pill,
 .builder-v3 .builder[data-builder-mode="small"] .builder-title-client {

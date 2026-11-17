@@ -168,7 +168,7 @@ describe("PlanBuilder Z12-12 iPad", () => {
 
   it("small (<1024): read-only week card and larger-screen notice", () => {
     setMode("small");
-    renderBuilder();
+    const { save } = renderBuilder();
     const notice = screen.getByTestId("builder-small-screen");
     expect(notice.textContent).toMatch(/Open on a larger screen to edit/);
     expect(notice.textContent).toMatch(/1024 px/);
@@ -180,6 +180,9 @@ describe("PlanBuilder Z12-12 iPad", () => {
     expect(
       (screen.getByRole("button", { name: "Publish & schedule" }) as HTMLButtonElement).disabled,
     ).toBe(true);
+    const titleInput = screen.getByRole("textbox", { name: /Plan title/i }) as HTMLInputElement;
+    expect(titleInput.disabled).toBe(true);
     expect(screen.queryByRole("tab", { name: /Tue · Lower A/i })).toBeNull();
+    expect(save).not.toHaveBeenCalled();
   });
 });

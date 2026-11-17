@@ -188,13 +188,15 @@ export function PlanBuilder({
   conflictHandlers?: ConflictHandlers;
 }) {
   const mode = useBuilderMode();
+  // Portrait / <1024: same as readOnly for edits (frame 195) — no title or draft writes.
+  const editable = !readOnly && mode !== "small";
   const [title, setTitle] = useState(initialTitle);
   const { content, setContent, undo, canUndo, saveState, flush, keepMine, takeTheirs } =
     useBuilderDraft({
       initialContent,
       title,
       save,
-      enabled: !readOnly && online,
+      enabled: editable && online,
     });
   const contentRef = useRef(content);
   contentRef.current = content;
@@ -236,7 +238,6 @@ export function PlanBuilder({
         null;
   const meals = sortedMealsByTime(content.mealPrescriptions);
   const activeMeal = meals.find((meal) => meal.id === selectedMealId) ?? meals[0] ?? null;
-  const editable = !readOnly && mode !== "small";
   const narrow = mode === "narrow";
   const conflict = saveState.kind === "conflict";
 
@@ -391,7 +392,7 @@ export function PlanBuilder({
             <input
               value={title}
               maxLength={160}
-              disabled={readOnly}
+              disabled={!editable}
               onChange={(event) => setTitle(event.target.value)}
             />
           </label>
@@ -466,7 +467,7 @@ export function PlanBuilder({
           <button
             type="button"
             className="button-primary"
-            disabled={readOnly || !online || conflict || mode === "small"}
+            disabled={!editable || !online || conflict}
             onClick={() => void publish()}
           >
             {publishLabel}
