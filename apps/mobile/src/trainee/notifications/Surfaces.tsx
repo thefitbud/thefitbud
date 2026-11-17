@@ -752,7 +752,11 @@ const styles = StyleSheet.create({
   onDarkMuted: { color: "#D6D2E6", fontSize: 12 },
   banner: {
     alignItems: "center",
-    backgroundColor: "rgba(250,249,253,0.97)",
+    // Opaque (D-W12-33): iOS cannot draw a shadow efficiently over a
+    // translucent fill and logs an RCTView ADVICE line, which fails the device
+    // gate. The live in-app banner is now NoticeHost's (Z12-38); this one is
+    // the hostless fallback and the widget-tips preview.
+    backgroundColor: "#FAF9FD",
     borderRadius: 20,
     flexDirection: "row",
     gap: 10,
