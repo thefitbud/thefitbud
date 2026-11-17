@@ -15,7 +15,7 @@ test("add a private trainer note on QA Rohan", async ({ trainerPage: page, qa })
   await expect(composer).toBeVisible();
   await shot(page, "web-notes__composer");
 
-  await expect(composer.getByLabel(/visible to client/i)).not.toBeChecked();
+  await expect(composer.getByRole("switch", { name: /visible to/i })).not.toBeChecked();
   await composer.locator("textarea").first().fill(body);
   await composer.getByRole("button", { name: /save note/i }).click();
 
