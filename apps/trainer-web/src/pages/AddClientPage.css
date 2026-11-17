@@ -1,0 +1,281 @@
+/* Z12-4 Add client · colocated (D-W12b-2). Do not edit styles/clients.css. */
+
+.add-client-page .page-header {
+  display: block;
+  text-align: left;
+  margin: 0 0 1.25rem;
+}
+
+.add-client-page .page-header h1 {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--ink-900, var(--deep-navy, var(--ink)));
+  text-align: left;
+}
+
+.add-client-page .add-client-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.add-client-page .add-client-layout.is-success {
+  grid-template-columns: minmax(0, 42rem);
+}
+
+@media (max-width: 960px) {
+  .add-client-page .add-client-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.add-client-page .add-client-form-card,
+.add-client-page .add-client-side-card,
+.add-client-page .invite-share-card {
+  background: var(--white, var(--surface, var(--card)));
+  border: 1px solid var(--border, var(--line));
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+}
+
+.add-client-page .add-client-side-card h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-900, var(--ink));
+}
+
+.add-client-page .whats-next-stepper {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0 0;
+  display: grid;
+  gap: 0.875rem;
+  counter-reset: none;
+}
+
+.add-client-page .whats-next-stepper li {
+  display: grid;
+  grid-template-columns: 0.625rem 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+.add-client-page .whats-next-stepper li::before {
+  /* Override numbered counters from styles/clients.css (frame 141: dots). */
+  content: "";
+  counter-increment: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: var(--ink-300, var(--line2, #c9c5d8));
+  color: transparent;
+  font-size: 0;
+  display: block;
+}
+
+.add-client-page .whats-next-stepper li:first-child::before {
+  background: var(--indigo, var(--coach-ink));
+}
+
+.add-client-page .whats-next-reactivate {
+  margin: 1rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+/* Form fields */
+.add-client-form .field {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.add-client-form .field-hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+}
+
+.add-client-form .field-preview-link {
+  justify-self: start;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--indigo, var(--coach-ink));
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.add-client-form .field-preview-link:focus-visible {
+  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.add-client-form .add-client-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.add-client-form .add-client-actions .button-primary,
+.add-client-form .add-client-actions .button-secondary,
+.add-client-form .add-client-actions a.button-primary {
+  width: auto;
+  min-height: 44px;
+  padding-inline: 1.25rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Reactivate info banner (frame 143) — not coral / not form-error */
+.add-client-reactivate-banner {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: var(--info-tint, var(--semantic-info-fill, #e8f1ff));
+  color: var(--ink-900, var(--ink));
+  border: 1px solid transparent;
+}
+
+.add-client-reactivate-banner svg {
+  color: var(--info, var(--indigo, var(--coach-ink)));
+  margin-top: 0.1rem;
+  flex: none;
+}
+
+.add-client-reactivate-banner p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* Success share card (frame 142) */
+.invite-share-card .invite-share-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  margin-bottom: 0.75rem;
+}
+
+.invite-share-card .invite-share-check {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--done, var(--success, #1a9f6a));
+  color: var(--white, #fff);
+  flex: none;
+}
+
+.invite-share-card h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--ink-900, var(--ink));
+}
+
+.invite-share-card .invite-share-lede {
+  margin: 0.15rem 0 0;
+  font-size: 0.875rem;
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+}
+
+.invite-share-preview {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  background: var(--page-bg, var(--bg, #f4f3f8));
+  border: 1px solid var(--border, var(--line));
+}
+
+.invite-share-preview p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-900, var(--ink));
+  word-break: break-word;
+}
+
+.invite-share-preview .invite-share-signed {
+  margin-top: 0.65rem;
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+}
+
+.add-client-page .invite-share-actions,
+.invite-share-card .invite-share-actions {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap !important;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.invite-share-actions .button-primary,
+.invite-share-actions .button-secondary,
+.invite-share-actions a.button-primary,
+.invite-share-actions a.button-secondary {
+  width: auto !important;
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding-inline: 1rem;
+  text-decoration: none;
+}
+
+.invite-share-actions .invite-share-qr {
+  width: auto;
+}
+
+.invite-share-note {
+  margin: 1rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+}
+
+.invite-share-card .auth-alt-links {
+  margin-top: 0.75rem;
+}
+
+.invite-qr {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px dashed var(--border-strong, var(--line2));
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
