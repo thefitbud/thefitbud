@@ -7,10 +7,9 @@ tags:
 ---
 # F20 (D-W12-9, D-W12-10, D-W12-22, Z12-50 part 2). Account: the demo trainer rahul.coach
 # on the local seed. Env from the device harness: QA_TRAINER_EMAIL, QA_PASSWORD,
-# DEVICE_THEME. One local DB per job, and a nudge is one per item per client day, so the
-# two themes of a job cannot both send the same nudge: light nudges Rohan Mehta (push
-# on), dark nudges Priya Nair (push on). Whatever the theme, a repeat about the same
-# item is sent again to show the TM-04n state.
+# DEVICE_THEME. One local DB per job and one nudge per item per client day, so only the
+# first theme of a job really sends (TM-04m); the second shows TM-04n at once. A repeat
+# about the same item is then sent again to show the TM-04n state in both.
 #
 # Screens and screenshots (named by v3 screen ID, see scripts/qa/device/collect-shots.mjs):
 #   TM-03j  "Nudge {First} about…" picker (only when the client has several open items)
@@ -38,13 +37,14 @@ tags:
 - extendedWaitUntil:
     notVisible: "Loading"
     timeout: 90000
-- evalScript: "${output.client = (DEVICE_THEME == 'dark') ? 'Priya Nair' : 'Rohan Mehta'}"
-
 # ---- A push-on client: sheet, send, sent toast ------------------------------------------
+# Rohan Mehta in both themes (his open items are stable; other clients' differ with the
+# clock). One local DB per job and one nudge per item per client day, so the first theme of
+# a job sends it (TM-04m) and the second finds it already sent (TM-04n straight away).
 - runFlow:
     file: ../../device/z12-50/nudge-client.yaml
     env:
-      CLIENT: ${output.client}
+      CLIENT: Rohan Mehta
 - runFlow: ../../device/z12-50/open-sheet.yaml
 - takeScreenshot: TM-04b
 - runFlow:
@@ -58,17 +58,27 @@ tags:
     visible: "Nudge sent.*"
     timeout: 8000
     optional: true
-# The sheet closes when the send succeeds and the toast stays about 4 s: a slow hierarchy
-# dump can miss it (run 44127718482), so the toast is captured when it is there and the
-# proof that the first send worked is the TM-04n state below.
-- extendedWaitUntil:
-    notVisible: "PREVIEW · TAP TO EDIT"
-    timeout: 20000
+# The toast stays about 4 s and a slow hierarchy dump can miss it (run 44127718482): it is
+# captured when it is there. The sheet closes on a send; it stays on TM-04n when the item
+# was already nudged today.
 - runFlow:
     when:
       visible: "Nudge sent.*"
     commands:
       - takeScreenshot: TM-04m
+- extendedWaitUntil:
+    visible: "You nudged .* again tomorrow.*"
+    timeout: 6000
+    optional: true
+- runFlow:
+    when:
+      visible: "You nudged .* again tomorrow.*"
+    commands:
+      - takeScreenshot: TM-04n
+      - tapOn: "Close"
+- extendedWaitUntil:
+    notVisible: "PREVIEW · TAP TO EDIT"
+    timeout: 20000
 - runFlow: ../../common/assert-no-crash.yaml
 
 # ---- The same item again: the TM-04n state (no second push) -----------------------------
