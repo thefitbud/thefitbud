@@ -4,7 +4,7 @@ The first W12 orchestrator session hands over to a fresh one here. The session e
 
 ## 1. State at handover
 
-**Merged W12 tasks (10.5 of 32):**
+**Merged W12 tasks (11.5 of 32: Z12-29 to Z12-60; Z12-50 counts as half until part 2 merges):**
 
 | Task | PR |
 |---|---|
@@ -12,8 +12,8 @@ The first W12 orchestrator session hands over to a fresh one here. The session e
 | Z12-32 | #436 |
 | Z12-33 | #435 |
 | Z12-34 | #439 |
-| Z12-35 | #438, with follow-ups #444, #445, #447, #452 |
-| Z12-36 | #440 |
+| Z12-35 | #438, with harness follow-ups #444, #447, #452 |
+| Z12-36 | #440, plus #445 (the temporary D-W12-33 allow-list entry) |
 | Z12-37 | #451 |
 | Z12-41 | #449 |
 | Z12-54 | #437 |
@@ -41,9 +41,10 @@ The plan revision is #446.
 
 **Models (Firoz):**
 - **Z12-45:** Fable, as the run prompt says.
-- **Z12-60:** Opus at **high effort** (Firoz, 17 Nov 2026). This replaces the prompt's Fable.
+- **Z12-60:** Opus at **high effort** (Firoz, 17 Nov 2026). This replaces the run prompt's Fable; this PR also updates W12.md's lane table to match.
 - **Implementers:** Sonnet for standard tasks (CLAUDE.md), Opus for complex ones (sync, auth, data, the active workout).
-- **Reviewers:** Opus for code PRs; Sonnet is fine for docs-only or harness-only deltas.
+- **Reviewers:** every fresh reviewer runs on Opus (CLAUDE.md). Keep each review to the delta. If a Sonnet reviewer is ever used for a trivial docs delta, that is a model switch (AGENTS.md "Model switches") and must be recorded. This handoff PR's own review ran on Sonnet, the first such switch.
+- **Concurrency:** at most 3 implementers at once (D-W12-19, which overrides CLAUDE.md's "No agent cap" for W12). Reviewers don't count, and nor does a task waiting only on its device run.
 - Record every model choice in the report.
 
 ## 2. Usage rules (learned the hard way)
@@ -66,7 +67,8 @@ The budget ran out three times: two 5-hour limits on 15 Nov and the weekly limit
   - Commits after the run that change nothing under `apps/mobile/src` or `packages/` (docs, QA, main merges without mobile code) don't need a new run.
   - A main merge needed only to satisfy the up-to-date rule also keeps the evidence valid, even if it brings another task's already device-tested mobile code, as long as `ci`, `e2e` and `banned-strings` are green on the merged head. The task's own code didn't change, CI tests the combination, and Z12-58's full pass tests it on devices. Re-running a 40-minute device check after every main merge would serialise the whole batch. Record each use in the PR. (Orchestrator decision, 17 Nov 2026; first used for Z12-39 after Z12-41 merged.)
 - **Maestro flows come from the app ref.** `device.yml` overlays only `scripts/qa` from the workflow commit, and adds only harness flows the ref lacks. A branch that hasn't merged main keeps old copies of `common/*.yaml`, so merge main before dispatching.
-- **Screenshots:** `git fetch origin refs/device-gate/<run id>:refs/device-gate/<run id>`, then `git archive refs/device-gate/<run id> | tar -x -C <dir>`, then `scripts/qa/device/copy-shots.sh <dir> docs/qa/<ID>`. A re-run publishes `refs/device-gate/<run id>-<attempt>`. Never propose environment or network changes: nobody is there to approve them, and one agent sat blocked for 2 hours on exactly that.
+- **Screenshots:** `git fetch origin refs/device-gate/<run id>:refs/device-gate/<run id>`, then `git archive refs/device-gate/<run id> | tar -x -C <dir>`, then `scripts/qa/device/copy-shots.sh <dir> docs/qa/<ID>`. A re-run publishes `refs/device-gate/<run id>-<attempt>`.
+- **Environment:** never propose environment or network changes. Nobody is there to approve them, and one agent sat blocked for 2 hours on exactly that.
 - **Implementer brief.** Give every implementer these:
   - AGENTS.md, CLAUDE.md, the spec and the W12 decisions;
   - opt migrated screens into dark (`<Screen v3>`);
@@ -174,4 +176,4 @@ Don't message anyone else about it.
 
 ## 7. Timeline as of handover
 
-About 21 tasks remain, plus Z12-58, 59 and 60. With the 38-hour weekly pause, the earlier estimate moves to about Fri 20 Nov, and later if another weekly limit hits. The binding constraint is the usage budget, not the order of the work.
+About 17–18 tasks remain (Z12-39 and Z12-38 are nearly done), plus Z12-58, 59 and 60. With the 38-hour weekly pause, the earlier estimate moves to about Fri 20 Nov, and later if another weekly limit hits. The binding constraint is the usage budget, not the order of the work.
