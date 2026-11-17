@@ -3,6 +3,7 @@ import type { DeviceTokenPlatform, DeviceTokenProvider } from "@fitbud/contracts
 import Constants from "expo-constants";
 import { Platform } from "react-native";
 import { reportError } from "../lib/reportError";
+import { clearMealSnoozes } from "./actions";
 import { localInstallationId } from "./routing";
 
 /**
@@ -65,6 +66,31 @@ async function prepareForPermissionPrompt(
   await ensureAndroidNotificationChannels();
 }
 
+/**
+ * Where a push lands (Z12-47): every Android channel and every iOS category
+ * (with its stack summary and the meal buttons) exists before the first push,
+ * so a push names its group and stacks with its kind. Once per app run; a
+ * failure is reported and the push still shows, ungrouped.
+ */
+let presentationReady: Promise<void> | null = null;
+
+export function preparePushPresentation(
+  platform: DeviceTokenPlatform = defaultPlatform(),
+): Promise<void> {
+  if (platform === "web") return Promise.resolve();
+  presentationReady ??= (async () => {
+    try {
+      await prepareForPermissionPrompt(platform);
+      const { ensureMealNotificationActions } = await import("./nativeActions");
+      await ensureMealNotificationActions();
+    } catch (err) {
+      presentationReady = null; // The next sign-in tries again.
+      reportError("push-presentation", err);
+    }
+  })();
+  return presentationReady;
+}
+
 export type PushPermissionResult = "granted" | "denied" | "blocked";
 
 /**
@@ -101,6 +127,7 @@ export function currentPushRegistration(): PushRegistration | null {
 
 /** Clears in-memory push state and stops the token watch (sign-out, tests). */
 export function resetPushRegistration(): void {
+  presentationReady = null;
   tokenWatch?.remove();
   tokenWatch = null;
   registeredToken = null;
@@ -191,6 +218,7 @@ export async function registerDeviceTokenForPush(
   options: RegisterOptions = {},
 ): Promise<PushRegistrationOutcome> {
   const platform = options.platform ?? defaultPlatform();
+  if (platform !== "web") void preparePushPresentation(platform);
 
   if (options.testMode || platform === "web") {
     return sendRegistration(api, {
@@ -315,10 +343,21 @@ export async function unregisterDeviceTokenForPush(
   }
 }
 
+/** Best-effort: a failure is reported and never blocks sign-out. */
+async function cancelLocalMealReminders(): Promise<void> {
+  if (defaultPlatform() === "web") return;
+  try {
+    const { cancelMealSnoozeReminders } = await import("./nativeActions");
+    await cancelMealSnoozeReminders();
+  } catch (err) {
+    reportError("push-signout-reminders", err);
+  }
+}
+
 /**
  * Sign-out teardown, the one path the provider takes. The module singletons
- * (the registered token and registration) are cleared
- * unconditionally, so no state of the signed-out user can reach the next
+ * (the registered token and registration), the meal snooze record and the
+ * scheduled meal snooze reminders are cleared unconditionally, so no state of the signed-out user can reach the next
  * session in the same app run; the revoke is best-effort on top of that and
  * only runs when there is something to revoke and a client to revoke with.
  */
@@ -329,6 +368,8 @@ export function signOutPushRegistration(input: {
 }): void {
   const installationId = input.installationId ?? registration?.installationId;
   resetPushRegistration();
+  clearMealSnoozes();
+  void cancelLocalMealReminders();
   if (!installationId || !input.client) return;
   void unregisterDeviceTokenForPush(input.client, installationId);
 }

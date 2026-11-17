@@ -5,7 +5,7 @@ tags:
   - trainee
   - z12-38
 env:
-  BANNER: "Rahul has a note for you.*"
+  BANNER: "Rahul left a note.*"
   NOTE: "Try 42.5 kg on the RDLs today if set 2 feels easy."
 ---
 # Aarav Shah (on track, local demo seed; his coach is Rahul Verma). While Aarav is on
