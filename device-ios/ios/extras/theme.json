@@ -1,0 +1,101 @@
+{
+  "result": "mean screenshot luminance: light 0.856 (9), dark 0.855 (9)",
+  "light": 0.856,
+  "dark": 0.855,
+  "count": {
+    "light": 9,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.79
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.79
+    },
+    {
+      "file": "TR-07a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.949
+    },
+    {
+      "file": "TR-07a-light-ios.png",
+      "theme": "light",
+      "luma": 0.949
+    },
+    {
+      "file": "W-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.775
+    },
+    {
+      "file": "W-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.775
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.79
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.79
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-129-assertCondition-Start_workout-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.775
+    },
+    {
+      "file": "step-129-assertCondition-Start_workout-light-ios.png",
+      "theme": "light",
+      "luma": 0.775
+    },
+    {
+      "file": "z12-40-diet-tomorrow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.943
+    },
+    {
+      "file": "z12-40-diet-tomorrow-light-ios.png",
+      "theme": "light",
+      "luma": 0.943
+    },
+    {
+      "file": "z12-40-today-plus-7-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.944
+    },
+    {
+      "file": "z12-40-today-plus-7-light-ios.png",
+      "theme": "light",
+      "luma": 0.944
+    },
+    {
+      "file": "z12-40-today-yesterday-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.785
+    },
+    {
+      "file": "z12-40-today-yesterday-light-ios.png",
+      "theme": "light",
+      "luma": 0.785
+    }
+  ]
+}

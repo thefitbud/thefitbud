@@ -1,0 +1,91 @@
+{
+  "result": "mean screenshot luminance: light 0.846 (8), dark 0.846 (8)",
+  "light": 0.846,
+  "dark": 0.846,
+  "count": {
+    "light": 8,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.773
+    },
+    {
+      "file": "TR-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.773
+    },
+    {
+      "file": "TR-07a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.914
+    },
+    {
+      "file": "TR-07a-light-android.png",
+      "theme": "light",
+      "luma": 0.911
+    },
+    {
+      "file": "W-01a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.763
+    },
+    {
+      "file": "W-01a-light-android.png",
+      "theme": "light",
+      "luma": 0.763
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.773
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.773
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "z12-40-diet-tomorrow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.925
+    },
+    {
+      "file": "z12-40-diet-tomorrow-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "z12-40-today-plus-7-dark-android.png",
+      "theme": "dark",
+      "luma": 0.925
+    },
+    {
+      "file": "z12-40-today-plus-7-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "z12-40-today-yesterday-dark-android.png",
+      "theme": "dark",
+      "luma": 0.766
+    },
+    {
+      "file": "z12-40-today-yesterday-light-android.png",
+      "theme": "light",
+      "luma": 0.766
+    }
+  ]
+}
