@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   mealAssignmentSchema,
@@ -136,4 +137,9 @@ describe("DietTab meal logged offline (frame 86)", () => {
       screen.getByText("2 of 3 meals logged · Lunch is counted as planned until it's sent"),
     ).toBeTruthy();
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

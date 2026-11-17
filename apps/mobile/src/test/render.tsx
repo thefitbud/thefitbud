@@ -164,6 +164,48 @@ const svgComponentProxy = new Proxy(
 vi.mock("react-native-svg", () => svgComponentProxy);
 vi.mock("lucide-react-native", () => svgComponentProxy);
 
+/*
+ * react-native-gesture-handler has the same CommonJS problem, and its web
+ * build attaches through findDOMNode, which React reports as deprecated (a
+ * console.error under the Z12-35 gate). Native gestures are not exercised by
+ * this harness (see above), so a gesture builder records its config and
+ * handlers the way the real one does (`gesture.handlers.onEnd`), letting a
+ * test call them, and `GestureDetector` renders its child as is. The device
+ * gate covers the real gesture (Z12-40 day swipe).
+ */
+vi.mock("react-native-gesture-handler", () => {
+  type Handler = (...args: unknown[]) => void;
+  function builder() {
+    const gesture: Record<string, unknown> & {
+      config: Record<string, unknown>;
+      handlers: Record<string, Handler>;
+    } = { config: {}, handlers: {} };
+    return new Proxy(gesture, {
+      get(target, key, receiver) {
+        if (typeof key !== "string" || key in target) {
+          return Reflect.get(target, key, receiver);
+        }
+        return (...args: unknown[]) => {
+          if (key.startsWith("on") && typeof args[0] === "function") {
+            target.handlers[key] = args[0] as Handler;
+          } else {
+            target.config[key] = args.length > 1 ? args : args[0];
+          }
+          return receiver;
+        };
+      },
+    });
+  }
+  const passThrough = ({ children }: { children?: ReactNode }) =>
+    (children ?? null) as ReactNode;
+  return {
+    Gesture: new Proxy({}, { get: () => builder }),
+    GestureDetector: passThrough,
+    GestureHandlerRootView: passThrough,
+    Swipeable: passThrough,
+  };
+});
+
 afterEach(() => {
   cleanup();
 });

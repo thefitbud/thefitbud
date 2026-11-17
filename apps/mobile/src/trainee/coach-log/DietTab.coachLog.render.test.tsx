@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "../dataCache";
 import {
   coachingRelationshipSchema,
   mealAssignmentSchema,
@@ -145,4 +146,9 @@ describe("DietTab coach-logged meals", () => {
     // Read-only per R1: the server rejects an edit of a coach-logged entry.
     expect(screen.getAllByText("Change")).toHaveLength(1);
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

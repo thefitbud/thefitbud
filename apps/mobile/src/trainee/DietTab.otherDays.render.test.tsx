@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   mealAssignmentSchema,
@@ -186,4 +187,9 @@ describe("DietTab counts the selected day only (Z11b-1)", () => {
     expect(screen.queryByText("Breakfast")).toBeNull();
     network = "online";
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

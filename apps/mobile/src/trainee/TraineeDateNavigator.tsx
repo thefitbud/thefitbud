@@ -12,15 +12,16 @@ import {
   type DateNavigatorDay,
 } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
+import { useTheme } from "../providers/ThemeProvider";
 import {
   dayOfMonth,
   formatHeadingDate,
-  localDateInTimezone,
   startOfWeekMonday,
   weekDatesFrom,
   weekdayShort,
 } from "../lib/dates";
 import { reportError } from "../lib/reportError";
+import { useLocalToday } from "./futureDay";
 import { WebDateHeading } from "./web/WebTraineeChrome";
 
 /**
@@ -184,26 +185,29 @@ export function TraineeDateNavigator({
   day = null,
 }: Props) {
   const { me } = useAuth();
+  const theme = useTheme();
   const timeZone = me?.timezone ?? "UTC";
-  const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
+  // Kept current across local midnight, like the hosts (Z12-39).
+  const today = useLocalToday(timeZone);
   const isFuture = selectedDate > today;
 
   const weekStart = useMemo(
     () => startOfWeekMonday(selectedDate),
     [selectedDate],
   );
+  const weekDates = useMemo(() => weekDatesFrom(weekStart), [weekStart]);
 
   const navigatorDays = useMemo(
     (): DateNavigatorDay[] =>
       navigatorDaysFor({
         weekState,
-        dates: weekDatesFrom(weekStart),
+        dates: weekDates,
         timeZone,
         weekdayShortOf: weekdayShort,
         dayOfMonthOf: dayOfMonth,
         day,
       }),
-    [weekState, weekStart, timeZone, day],
+    [weekState, weekDates, timeZone, day],
   );
 
   if (Platform.OS === "web") {
@@ -235,9 +239,10 @@ export function TraineeDateNavigator({
   return (
     <>
       {/*
-        A past day's notice is the host's PastDayBanner (frame 04 past); this
-        component no longer repeats it, and its "Today" pill shows only for
-        a future day (the past banner has "Back to today").
+        A past day's notice is the host's PastDayBanner; this component does
+        not repeat it. The "Today" pill shows only when today is not in the
+        week on screen (Z12-40): in that week the coral ring is the way back,
+        as in TR-06c, and the mocks draw no pill there.
       */}
       {showPreviewBanner && isFuture ? (
         <Text style={styles.previewBanner}>
@@ -250,7 +255,8 @@ export function TraineeDateNavigator({
         todayDate={today}
         onSelect={onSelectDate}
         onToday={() => onSelectDate(today)}
-        showTodayPill={isFuture}
+        showTodayPill={!weekDates.includes(today)}
+        theme={theme}
       />
     </>
   );

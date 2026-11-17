@@ -9,8 +9,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import {
-  colors,
   DateNavigator,
+  themes,
   type DateNavigatorDay,
 } from "@fitbud/ui-mobile";
 import { fireEvent, render, screen } from "../test/render";
@@ -66,7 +66,7 @@ function dotColourOf(button: HTMLElement): string {
 }
 
 describe("DateNavigator dot colours", () => {
-  it("paints due neutral dark grey, never the partial colour (D-W6-10)", () => {
+  it("paints due neutral grey, never the partial colour (D-W6-10)", () => {
     render(
       <DateNavigator
         days={[day("due", 0), day("partial", 1)]}
@@ -86,8 +86,8 @@ describe("DateNavigator dot colours", () => {
         name: `${formatCivilDate("2026-10-13")}, ${labelFor("week_day_state", "partial")}`,
       }),
     );
-    expect(due).toBe(rgba(colors.darkGrey));
-    expect(partial).toBe(rgba(colors.warning));
+    expect(due).toBe(rgba(themes.light.colors.ink3));
+    expect(partial).toBe(rgba(themes.light.colors.warn));
     expect(due).not.toBe(partial);
   });
 });
@@ -99,17 +99,16 @@ describe("DateNavigator strip (Z10-20, frame 04)", () => {
     onToday: () => {},
   };
 
-  it("labels today's cell 'Today' and moves a week with the chevrons", () => {
+  it("moves a week with the chevrons", () => {
     const onSelect = vi.fn();
     render(<DateNavigator {...props} selectedDate="2026-10-12" onSelect={onSelect} />);
-    expect(screen.getByText("Today")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Next week" }));
     expect(onSelect).toHaveBeenLastCalledWith("2026-10-19");
     fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
     expect(onSelect).toHaveBeenLastCalledWith("2026-10-05");
   });
 
-  it("shows 'Today' only on the selected today; an unselected today keeps its weekday", () => {
+  it("draws one weekday letter per day, as in TR-06a; the date is in the spoken label", () => {
     render(
       <DateNavigator
         {...props}
@@ -123,7 +122,22 @@ describe("DateNavigator strip (Z10-20, frame 04)", () => {
     expect(
       screen.getByRole("button", { name: /^Mon 12 Oct, Done$/ }),
     ).toBeTruthy();
-    expect(screen.getAllByText("Wed").length).toBe(2);
+    expect(screen.getAllByText("W").length).toBe(2);
+  });
+
+  it("follows the host's theme (dark)", () => {
+    render(
+      <DateNavigator
+        {...props}
+        selectedDate="2026-10-12"
+        onSelect={() => {}}
+        theme={themes.dark}
+      />,
+    );
+    const done = dotColourOf(
+      screen.getByRole("button", { name: /^Mon 12 Oct, Done$/ }),
+    );
+    expect(done).toBe(rgba(themes.dark.colors.done));
   });
 
   it("hides its own Today pill when the host has another way back", () => {

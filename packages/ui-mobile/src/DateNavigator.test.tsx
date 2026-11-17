@@ -113,3 +113,71 @@ describe("DateNavigator spoken day labels", () => {
     }
   });
 });
+
+/** Every ring (a non-transparent border) on the element tree, with its day's label. */
+function ringBorders(
+  node: ReactNode,
+  label: string | null = null,
+  out: Array<{ label: string | null; borderColor: unknown }> = [],
+) {
+  if (node == null || typeof node !== "object") return out;
+  if (Array.isArray(node)) {
+    for (const child of node) ringBorders(child, label, out);
+    return out;
+  }
+  if (!isValidElement(node)) return out;
+  const props = node.props as {
+    accessibilityLabel?: string;
+    style?: unknown;
+    children?: ReactNode;
+  };
+  const here =
+    typeof props.accessibilityLabel === "string" ? props.accessibilityLabel : label;
+  const styles = (Array.isArray(props.style) ? props.style : [props.style]).filter(
+    (style): style is Record<string, unknown> =>
+      Boolean(style) && typeof style === "object",
+  );
+  for (const style of styles) {
+    if ("borderColor" in style && style.borderColor !== "transparent") {
+      out.push({ label: here, borderColor: style.borderColor });
+    }
+  }
+  ringBorders(props.children, here, out);
+  return out;
+}
+
+describe("DateNavigator rings (TR-06a/c, Z12-40)", () => {
+  it("rings today in coral and a selected other day in ink; nothing else", async () => {
+    const { themes } = await import("./theme.js");
+    const rings = ringBorders(
+      DateNavigator({
+        days: [day("done", 0), day("done", 1), day("future", 2)],
+        selectedDate: "2026-10-13",
+        todayDate: "2026-10-12",
+        onSelect: () => {},
+        onToday: () => {},
+        showTodayPill: false,
+      }),
+    );
+    expect(rings).toEqual([
+      { label: "Mon 12 Oct, Done", borderColor: themes.light.colors.coralStrong },
+      { label: "Tue 13 Oct, Done", borderColor: themes.light.colors.ink },
+    ]);
+  });
+
+  it("keeps the coral ring on today when today is selected (TR-06a)", async () => {
+    const { themes } = await import("./theme.js");
+    const rings = ringBorders(
+      DateNavigator({
+        days: [day("done", 0), day("future", 1)],
+        selectedDate: "2026-10-12",
+        todayDate: "2026-10-12",
+        onSelect: () => {},
+        onToday: () => {},
+      }),
+    );
+    expect(rings).toEqual([
+      { label: "Mon 12 Oct, Done", borderColor: themes.light.colors.coralStrong },
+    ]);
+  });
+});

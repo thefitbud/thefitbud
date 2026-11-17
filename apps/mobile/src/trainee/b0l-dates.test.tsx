@@ -2,7 +2,8 @@
  * B0L (Z11-3): no ISO date reaches a trainee on Today or Diet in any state, and
  * the Diet day summary kcal equals the sum of the logged meal rows (D-W11-6).
  */
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -318,4 +319,9 @@ describe("no ISO dates on Today or Diet", () => {
     await waitFor(() => expect(view.container.textContent).toMatch(/You're offline\. Your logs are saved on this phone/));
     expect(view.container.textContent).toMatch(/993\s*of\s*1,200\s*kcal/);
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

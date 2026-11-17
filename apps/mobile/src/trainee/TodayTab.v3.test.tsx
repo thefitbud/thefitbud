@@ -4,6 +4,8 @@
  * text, roles and labels, not layout (the Expo web captures do that).
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
+import { longDayLabel } from "./useDayState";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -12,7 +14,6 @@ import {
   type MealAssignment,
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor, fireEvent, act } from "../test/render";
-import { formatCivilDate } from "@fitbud/core";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
@@ -518,19 +519,23 @@ function queuedRow(n: number, status = "pending") {
 describe("Today v3 past day, loading and offline", () => {
   const PAST = dayBefore(TODAY, 2);
 
-  it("past day: banner with the date and Back to today, no workout card", async () => {
+  it("past day: TR-06c banner (late logging still open), no workout card", async () => {
     workouts = [
       { ...workoutAssignment, localDate: PAST, windowStartsAt: `${PAST}T13:00:00.000Z`, windowEndsAt: `${PAST}T15:00:00.000Z` },
     ];
     meals = [{ ...meal(1, "Breakfast", "overdue"), localDate: PAST }];
     renderToday(PAST);
     const banner = await screen.findByLabelText(/^Past day\./);
-    expect(banner.textContent).toMatch(/you can still log it/);
+    await waitFor(() =>
+      expect(banner.textContent).toBe(
+        "Past days are read-only. You can still log a missed meal until Rahul reviews the day.",
+      ),
+    );
     expect(banner.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}/);
     expect(screen.queryByText("Start workout")).toBeNull();
     expect(screen.queryByText("Today's workout")).toBeNull();
-    screen.getByRole("button", { name: "Back to today" }).click();
-    expect(onSelectDate).toHaveBeenCalledWith(TODAY);
+    // The way back is the coral-ringed today in the strip (TR-06c).
+    expect(screen.queryByRole("button", { name: "Back to today" })).toBeNull();
   });
 
   it("today has no past banner", async () => {
@@ -826,7 +831,8 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     renderToday(TODAY, { unreadNotifications: 2 });
     await screen.findByText("Meals");
     expect(screen.getByRole("heading", { name: "Today" })).toBeTruthy();
-    expect(screen.getAllByText(formatCivilDate(TODAY)).length).toBeGreaterThan(0);
+    // TR-06a: today's eyebrow is the long date alone.
+    expect(screen.getByTestId("day-eyebrow").textContent).toBe(longDayLabel(TODAY));
     fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
     expect(openOverlay).toHaveBeenCalledWith({ screen: "notifications" });
   });
@@ -862,20 +868,17 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     ).toBeTruthy();
   });
 
-  it("past day: the title is the date and exactly one past-day notice shows", async () => {
+  it("past day: the title stays Today, the eyebrow says past day, one notice shows", async () => {
     const past = dayBefore(TODAY, 2);
     const view = renderToday(past);
     await screen.findByLabelText(/^Past day\./);
-    expect(
-      screen.getByRole("heading", {
-        name: formatCivilDate(past).replace(" ", ", "),
-      }),
-    ).toBeTruthy();
+    // TR-06c: "Thursday, 12 Nov · past day" over the "Today" title.
+    expect(screen.getByRole("heading", { name: "Today" })).toBeTruthy();
+    expect(screen.getByTestId("day-eyebrow").textContent).toBe(
+      `${longDayLabel(past)} · past day`,
+    );
     expect(screen.getAllByLabelText(/^Past day\./)).toHaveLength(1);
     expect(view.container.textContent).not.toMatch(/read-only except late logging/);
-    // The banner carries the way back; the strip's own Today pill is off.
-    expect(screen.queryByRole("button", { name: "Go to today" })).toBeNull();
-    expect(screen.getAllByRole("button", { name: "Back to today" })).toHaveLength(1);
   });
 
   it("done card: executed of planned, and View summary hands the execution id on", async () => {
@@ -922,4 +925,90 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     renderToday(TODAY, { onViewSummary: () => undefined });
     expect(await screen.findByText("2 exercises · 52 min")).toBeTruthy();
   });
+});
+
+describe("Moving between days (Z12-40)", () => {
+  function rerenderToday(
+    view: ReturnType<typeof renderToday>,
+    selectedDate: string,
+  ) {
+    view.rerender(
+      <TodayTab
+        relationship={relationship}
+        planState={effectivePlanStateFor(livePlan)}
+        planCacheError={null}
+        selectedDate={selectedDate}
+        onSelectDate={onSelectDate}
+        onStartWorkout={() => undefined}
+        onOpenDiet={() => undefined}
+        onOpenCheckin={() => undefined}
+        onRefreshPlan={() => undefined}
+        onOpenOverlay={openOverlay}
+      />,
+    );
+  }
+
+  it("a prefetched day (±3) paints in the same render, with no skeleton", async () => {
+    const yesterday = dayBefore(TODAY, 1);
+    meals = [{ ...meal(1, "Breakfast", "confirmed"), localDate: yesterday }];
+    const view = renderToday(TODAY);
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Loading today")).toBeNull();
+    });
+    // Let the ±3 prefetch settle, then hold every later load: a day that
+    // still needed the network would now sit on the skeleton.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    holdDay = new Promise<void>(() => undefined);
+    rerenderToday(view, yesterday);
+    // Synchronously after the move: no skeleton, the past day is on screen.
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByTestId("day-eyebrow").textContent).toBe(
+      `${longDayLabel(yesterday)} · past day`,
+    );
+    expect(screen.getByLabelText(/^Past day\./)).toBeTruthy();
+    // And back to today, also from cache.
+    rerenderToday(view, TODAY);
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+  });
+
+  it("a first visit beyond the prefetch window shows the skeleton until it loads", async () => {
+    const view = renderToday(TODAY);
+    await screen.findByLabelText("Open diet");
+    let release: () => void = () => undefined;
+    holdDay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    rerenderToday(view, dayBefore(TODAY, 6));
+    expect(screen.getByLabelText("Loading today")).toBeTruthy();
+    release();
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Loading today")).toBeNull();
+    });
+  });
+
+  it("a cached day refetches underneath without a spinner when a log marks it stale", async () => {
+    renderToday(TODAY);
+    await screen.findByLabelText("Open diet");
+    const { invalidateRelationshipDayData } = await import("./dataCache");
+    let release: () => void = () => undefined;
+    holdDay = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    act(() => {
+      invalidateRelationshipDayData(relationship.id);
+    });
+    // The refetch is held: the day keeps showing, with no skeleton.
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByLabelText("Loading today")).toBeNull();
+    expect(screen.getByLabelText("Open diet")).toBeTruthy();
+  });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });
