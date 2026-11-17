@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="4" failures="0" time="207.019" timestamp="2026-11-17T18:16:08">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="43.575" timestamp="2026-11-17T18:16:08" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="37.921" timestamp="2026-11-17T18:16:51" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F07 Diet day (Z12-42)" name="F07 Diet day (Z12-42)" classname="F07 Diet day (Z12-42)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F07-diet-day.yaml" time="65.347" timestamp="2026-11-17T18:17:29" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+    </testcase>
+    <testcase id="F09 Diet edit and late log (Z12-42)" name="F09 Diet edit and late log (Z12-42)" classname="F09 Diet edit and late log (Z12-42)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F09-diet-edit-delete-late.yaml" time="60.101" timestamp="2026-11-17T18:18:34" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
