@@ -636,7 +636,7 @@ export function CheckinReviewPage() {
                 )}
                 {context.activeExceptions.length > 0 ? (
                   <ul className="checkin-open-list" aria-label="Open items">
-                    {context.activeExceptions.map((item) => (
+                    {context.activeExceptions.slice(0, 3).map((item) => (
                       <li key={item.id}>
                         <div className="workspace-row-copy">
                           <p className="workspace-row-title">{item.summary}</p>
@@ -651,6 +651,11 @@ export function CheckinReviewPage() {
                       </li>
                     ))}
                   </ul>
+                ) : null}
+                {context.activeExceptions.length > 3 ? (
+                  <p className="muted" style={{ margin: "0.5rem 0 0" }}>
+                    +{context.activeExceptions.length - 3} more open
+                  </p>
                 ) : null}
               </section>
 
