@@ -66,10 +66,14 @@ test("only an early adb-link failure of a clean-install flow, with no app step a
     classify({ ...ok, testCase: failed("Command failed (host:transport:emulator-5554): device 'emulator-5554' not found", 2) }).retry,
     true,
   );
-  assert.equal(classify({ ...ok, completed: null, testCase: failed("Unknown error", 3) }).retry, true);
   const refused = [
     [{ testCase: failed('Assertion is false: "Today\'s workout.*" is visible', 3) }, /not an infrastructure failure/],
     [{ testCase: failed("Unknown error: something", 3) }, /not an infrastructure failure/],
+    // Quoted screen text inside an assertion or lookup failure never qualifies.
+    [{ testCase: failed('Assertion is false: "device offline" is visible', 3) }, /not an infrastructure failure/],
+    [{ testCase: failed("Element not found: Text matching regex: device 'emulator-5554' not found", 3) }, /not an infrastructure failure/],
+    // Fail closed: no command log means no proof that no app step ran.
+    [{ testCase: failed("Unknown error", 3), completed: null }, /no Maestro command log/],
     [{ testCase: failed("Unknown error", 40) }, /long enough to reach the app/],
     [{ testCase: failed("Unknown error", 3), completed: ["launchAppCommand", "runFlowCommand"] }, /completed app steps \(runFlowCommand\)/],
     [{ testCase: failed("Unknown error", 3), appFailures: [{ kind: "crash" }] }, /app crash/],
@@ -96,7 +100,12 @@ test("startsClean reads the flow's first command only", () => {
 });
 
 test("run 44130567993's report retries the first launch flow; a crash in the log or completed app steps stop it", () => {
-  const base = { junitXml: JUNIT_ADB_DROP, junitLabel: "junit.xml", theme: "light", outputsDir: null };
+  const logDir = tmp();
+  write(
+    path.join(logDir, "maestro/2026-11-17_165636/commands-(Launch smoke, trainee Today loads).json"),
+    JSON.stringify([{ command: { launchAppCommand: {} }, metadata: { status: "COMPLETED" } }]),
+  );
+  const base = { junitXml: JUNIT_ADB_DROP, junitLabel: "junit.xml", theme: "light", outputsDir: path.join(logDir, "maestro") };
   const d = decide({ ...base, logText: LOGCAT_CLEAN });
   assert.equal(d.length, 1);
   assert.equal(d[0].flow, "Launch smoke, trainee Today loads");
@@ -119,11 +128,32 @@ test("run 44130567993's report retries the first launch flow; a crash in the log
   assert.match(stepped[0].reason, /runFlowCommand/);
 });
 
+test("a missing or misnamed commands-(<flow>).json fails closed: no retry", () => {
+  const base = { junitXml: JUNIT_ADB_DROP, junitLabel: "junit.xml", theme: "light", logText: LOGCAT_CLEAN };
+  const body = JSON.stringify([{ command: { launchAppCommand: {} }, metadata: { status: "COMPLETED" } }]);
+  const misnamed = tmp();
+  write(path.join(misnamed, "maestro/commands-(Some other flow).json"), body);
+  const empty = tmp();
+  for (const outputsDir of [null, path.join(empty, "nope"), empty, path.join(misnamed, "maestro")]) {
+    const d = decide({ ...base, outputsDir });
+    assert.equal(d[0].retry, false, String(outputsDir));
+    assert.match(d[0].reason, /no Maestro command log/);
+  }
+  // The same flow with its correctly named log is retried.
+  const named = tmp();
+  write(path.join(named, "maestro/commands-(Launch smoke, trainee Today loads).json"), body);
+  assert.equal(decide({ ...base, outputsDir: path.join(named, "maestro") })[0].retry, true);
+});
+
 test("the CLI prints the flows to retry, appends every decision, and reads the log from the pass's offset", () => {
   const dir = tmp();
   write(path.join(dir, "light/junit.xml"), JUNIT_ADB_DROP);
   // A crash before this pass began (an earlier theme) does not block this pass's retry.
   write(path.join(dir, "logs/android-device.log"), `${LOGCAT_CRASH}\n`);
+  write(
+    path.join(dir, "light/maestro/commands-(Launch smoke, trainee Today loads).json"),
+    JSON.stringify([{ command: { launchAppCommand: {} }, metadata: { status: "COMPLETED" } }]),
+  );
   const from = fs.statSync(path.join(dir, "logs/android-device.log")).size;
   fs.appendFileSync(path.join(dir, "logs/android-device.log"), `${LOGCAT_CLEAN}\n`);
   const run = (extra) =>
@@ -131,6 +161,7 @@ test("the CLI prints the flows to retry, appends every decision, and reads the l
       path.join(here, "infra-retry.mjs"),
       "--junit", path.join(dir, "light/junit.xml"),
       "--theme", "light",
+      "--outputs", path.join(dir, "light/maestro"),
       "--log", path.join(dir, "logs/android-device.log"),
       "--out", path.join(dir, "light/retry.json"),
       ...extra,
@@ -266,11 +297,50 @@ esac`,
   assert.equal(fs.readFileSync(path.join(dir, "calls"), "utf8"), calls, "the stream kept restarting after stop");
 });
 
+test("logs.sh stop kills a long-running adb logcat child, not just the restart loop", { skip: linuxOnly }, async () => {
+  const dir = tmp();
+  // A streaming `adb logcat` that never ends by itself, as on a healthy link.
+  const env = fakeAdb(
+    dir,
+    `case "$*" in
+  "logcat -v threadtime"*) echo $$ >"$FAKE_ADB_DIR/logcat.pid"; echo '11-17 17:32:09.123  1234  1250 I ReactNativeJS: up'; exec sleep 300 ;;
+  *) exit 0 ;;
+esac`,
+  );
+  const logs = path.join(here, "logs.sh");
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const start = spawnSync("bash", [logs, "android", "start", "t"], { env, encoding: "utf8" });
+  assert.equal(start.status, 0, start.stderr);
+  const pidFile = path.join(dir, "logcat.pid");
+  for (let i = 0; i < 50 && !fs.existsSync(pidFile); i++) await sleep(100);
+  const pid = Number(fs.readFileSync(pidFile, "utf8"));
+  assert.ok(alive(pid), "the fake logcat should be running before stop");
+  try {
+    const stop = spawnSync("bash", [logs, "android", "stop", "t"], { env, encoding: "utf8" });
+    assert.equal(stop.status, 0, stop.stderr);
+    for (let i = 0; i < 30 && alive(pid); i++) await sleep(100);
+    assert.equal(alive(pid), false, "stop left the adb logcat child running");
+  } finally {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
+  }
+});
+
 test("run-gate waits for a steady adb link before the install, each theme and a retry, and retries once, through infra-retry only", () => {
   const gate = fs.readFileSync(path.join(here, "run-gate.sh"), "utf8");
   assert.match(gate, /adb_wait "boot"/);
   assert.match(gate, /adb_wait "theme \$theme"/);
   assert.match(gate, /adb_wait "retry \(\$theme\)"/);
+  // The wait (and the logcat catch-up) come BEFORE the retry decision reads the log.
+  assert.ok(gate.indexOf('adb_wait "retry ($theme)"') < gate.indexOf('infra-retry.mjs" --junit'), "adb_wait must precede infra-retry.mjs");
   assert.match(gate, /infra-retry\.mjs" --junit "\$junit"/);
   assert.match(gate, /\[ "\$PLATFORM" = "android" \] \|\| return 1/);
   // Two call sites (all flows in one run, or one flow at a time); neither reads a retry report.

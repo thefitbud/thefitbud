@@ -192,6 +192,10 @@ done
 retry_infra() {
   local dir="$1" theme="$2" junit="$3" rjunit="$4" from="$5" s
   [ "$PLATFORM" = "android" ] || return 1
+  # Wait for the link first (and for the restarted logcat stream to catch up), so a crash
+  # that happened during the adb drop is in the log when the retry decision reads it.
+  adb_wait "retry ($theme)"
+  sleep 2
   local retry_files=()
   while IFS= read -r f; do [ -n "$f" ] && retry_files+=("$f"); done < <(
     node "$DEVICE_LIB_DIR/infra-retry.mjs" --junit "$junit" --theme "$theme" \
@@ -200,7 +204,6 @@ retry_infra() {
   )
   [ "${#retry_files[@]}" -gt 0 ] || return 1
   device_warn "theme $theme: ${#retry_files[@]} flow(s) failed on the adb link, not in the app; running them once more: $(for f in "${retry_files[@]}"; do basename "$f"; done | tr '\n' ' ')"
-  adb_wait "retry ($theme)"
   echo "--- infra retry: ${retry_files[*]}" >>"$dir/maestro.log"
   MAESTRO_OUT=maestro-retry run_maestro "$dir" "$rjunit" "$theme" "${retry_files[@]}"
   s=$?

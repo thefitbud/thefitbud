@@ -113,12 +113,12 @@ android_wait_stable() {
       printf 'not steady after %ss (%s drop(s) seen)' "$timeout" "$drops"
       return 1
     fi
-    state="$(adb get-state 2>/dev/null | tr -d '\r[:space:]')"
+    state="$(timeout 10 adb get-state 2>/dev/null | tr -d '\r[:space:]')"
     boot=""
     pm=""
     if [ "$state" = "device" ]; then
-      boot="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r[:space:]')"
-      pm="$(adb shell pm path android 2>/dev/null | tr -d '\r')"
+      boot="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r[:space:]')"
+      pm="$(timeout 10 adb shell pm path android 2>/dev/null | tr -d '\r')"
     fi
     case "$boot:$pm" in
       1:*package:*)
@@ -131,7 +131,7 @@ android_wait_stable() {
       *)
         if [ "$stable" -gt 0 ]; then drops=$((drops + 1)); fi
         stable=0
-        timeout 30 adb wait-for-device >/dev/null 2>&1 || true
+        timeout 10 adb wait-for-device >/dev/null 2>&1 || true
         ;;
     esac
     sleep 1

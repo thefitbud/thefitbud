@@ -20,8 +20,8 @@
 //      adb transport error (device not found / offline, host:transport failed);
 //   2. it failed within MAX_SECONDS: a cold start plus sign-in takes over 30 s, so the
 //      flow cannot have reached an app screen;
-//   3. Maestro's command log for the flow (when it wrote one) shows no completed command
-//      past launching the app, so no screen step ran;
+//   3. Maestro's command log for the flow exists and shows no completed command past
+//      launching the app, so no screen step ran (a missing log fails closed: no retry);
 //   4. the flow starts from a clean install (its first command is launchApp with
 //      clearState: true), so running it again, later, does not depend on other flows;
 //   5. the device log since this pass began shows no app crash, ANR, tombstone or red box.
@@ -36,6 +36,7 @@ import { scanAndroid } from "./scan-logs.mjs";
 export const MAX_SECONDS = 15;
 export const INFRA_MESSAGE =
   /^Unknown error$|device '[^']*' not found|\bdevice offline\b|Command failed \(host:transport|no devices\/emulators found/;
+export const ASSERTION_MESSAGE = /^\s*(Assertion is false|Element not found)/i;
 // Commands that run before any app screen exists. Anything else completed means the
 // flow got as far as the app.
 const SETUP_COMMANDS = new Set([
@@ -111,10 +112,14 @@ export function completedCommands(outputsDir, flowName, flowFile) {
 export function classify({ testCase, flowText, completed, appFailures, maxSeconds = MAX_SECONDS }) {
   const message = String(testCase.message ?? "").split("\n")[0].trim();
   if (testCase.status !== "fail") return { retry: false, reason: "did not fail" };
-  if (!INFRA_MESSAGE.test(message)) return { retry: false, reason: "not an infrastructure failure" };
+  // An assertion or lookup failure quotes screen text; that text must never qualify.
+  if (ASSERTION_MESSAGE.test(message) || !INFRA_MESSAGE.test(message)) return { retry: false, reason: "not an infrastructure failure" };
   const seconds = testCase.durationMs / 1000;
   if (seconds > maxSeconds) return { retry: false, reason: `ran ${seconds.toFixed(1)} s, long enough to reach the app` };
-  const appSteps = (completed ?? []).filter((c) => !SETUP_COMMANDS.has(c));
+  // Fail closed: without Maestro's command log (missing, or named differently than the
+  // lookup expects) there is no proof that no app step ran.
+  if (completed == null) return { retry: false, reason: "no Maestro command log for the flow, so app steps cannot be ruled out" };
+  const appSteps = completed.filter((c) => !SETUP_COMMANDS.has(c));
   if (appSteps.length) return { retry: false, reason: `completed app steps (${appSteps.slice(0, 3).join(", ")})` };
   if (flowText == null) return { retry: false, reason: "flow file not found" };
   if (!startsClean(flowText)) return { retry: false, reason: "does not start from a clean install" };
