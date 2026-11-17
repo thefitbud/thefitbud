@@ -15,19 +15,16 @@ import {
   formatKcal,
   formatNumber,
 } from "@fitbud/core";
-import {
-  WeeklyConsistency,
-  colors,
-  fontFamilySemiBold,
-  radii,
-  semanticColors,
-  spacing,
-} from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { Check, Clock, CloudUpload, List, Moon } from "lucide-react-native";
-import { surface } from "@fitbud/tokens";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 import { StatusChip } from "../components/StatusChip";
 import { formatInstant } from "@fitbud/core";
 import { addDays } from "../lib/dates";
@@ -81,7 +78,9 @@ import {
   TodaySummaryCard,
   type StepsChipState,
 } from "./today/TodaySummaryCard";
-import { INFO_BORDER, PastDayBanner } from "./today/PastDayBanner";
+import { PastDayBanner } from "./today/PastDayBanner";
+import { WeekCard } from "./today/WeekCard";
+import { workoutTimeLabel } from "./today/workoutTime";
 import { TodayHeader } from "./today/TodayHeader";
 import { TodaySkeleton } from "./today/TodaySkeleton";
 import {
@@ -228,7 +227,9 @@ function mealStatusChip(
  * so the same chip shape is drawn here from the shared tokens.
  */
 function UpNextChip({ label }: { label: string }) {
-  const palette = semanticColors.brandSelected;
+  const theme = useTheme();
+  const styles = useStyles();
+  const palette = { fill: theme.colors.brandTint, text: theme.colors.brandInk };
   return (
     <View style={[styles.upNextChip, { backgroundColor: palette.fill }]}>
       <Clock size={14} color={palette.text} strokeWidth={1.75} />
@@ -239,13 +240,12 @@ function UpNextChip({ label }: { label: string }) {
 
 /** A log saved on the phone and not yet sent (frame 104). */
 function WaitingChip() {
-  const palette = semanticColors.info;
+  const theme = useTheme();
+  const styles = useStyles();
+  const palette = { fill: theme.colors.infoTint, text: theme.colors.info };
   return (
     <View
-      style={[
-        styles.upNextChip,
-        { backgroundColor: palette.fill, borderColor: INFO_BORDER, borderWidth: 1 },
-      ]}
+      style={[styles.upNextChip, { backgroundColor: palette.fill }]}
       accessibilityLabel="Waiting to send"
     >
       <CloudUpload size={14} color={palette.text} strokeWidth={1.75} />
@@ -275,20 +275,20 @@ export type TodayDayBundle = {
   checkin: Checkin | null;
 };
 
-export function TodayTab({
-  relationship,
-  planState,
-  planCacheError,
-  selectedDate,
-  onSelectDate,
-  onStartWorkout,
-  onOpenDiet,
-  onOpenCheckin,
-  onRefreshPlan,
-  onOpenOverlay,
-  unreadNotifications = 0,
-  onViewSummary,
-}: {
+/**
+ * Today. Opted in to the system theme (`ThemeScope`, D-W12-12): everything
+ * the tab draws, including the reviewed banner and the planned-meal sheet,
+ * reads the v3 tokens through `useTheme()` in the inner component.
+ */
+export function TodayTab(props: TodayTabProps) {
+  return (
+    <ThemeScope scheme="system">
+      <TodayTabInner {...props} />
+    </ThemeScope>
+  );
+}
+
+type TodayTabProps = {
   relationship: CoachingRelationship;
   /** Three-state, never a nullable plan: see `EffectivePlanState` above. */
   planState: EffectivePlanState;
@@ -308,7 +308,24 @@ export function TodayTab({
    * that execution's summary (D-W10-9).
    */
   onViewSummary?: (executionId: string) => void;
-}) {
+};
+
+function TodayTabInner({
+  relationship,
+  planState,
+  planCacheError,
+  selectedDate,
+  onSelectDate,
+  onStartWorkout,
+  onOpenDiet,
+  onOpenCheckin,
+  onRefreshPlan,
+  onOpenOverlay,
+  unreadNotifications = 0,
+  onViewSummary,
+}: TodayTabProps) {
+  const theme = useTheme();
+  const styles = useStyles();
   const { api, me } = useAuth();
   const sync = useSyncEngine();
   const s1 = stage1Api(api);
@@ -659,6 +676,7 @@ export function TodayTab({
         day counts too. */}
     <GestureDetector gesture={dayState.swipeGesture}>
     <Screen
+      v3
       chrome="app"
       title="Today"
       showHeader={false}
@@ -770,8 +788,15 @@ export function TodayTab({
             testID="future-day-workout"
           >
             <Text style={styles.heroEyebrow}>
-              {/* "Mon 16 · 6:30 pm": the day without its month, as in TR-06d. */}
-              {`${formatCivilDate(selectedDate).split(" ").slice(0, 2).join(" ")} · ${formatClockTime(workout.windowStartsAt, timeZone)}`}
+              {/* "Mon 16 · 6:30 pm": the day without its month, as in TR-06d. A
+                  workout has no clock time of its own: its window opens at
+                  local midnight, which is not a time (no "12:00 am"). */}
+              {[
+                formatCivilDate(selectedDate).split(" ").slice(0, 2).join(" "),
+                workoutTimeLabel(workout.windowStartsAt, timeZone),
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </Text>
             <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
             <Text style={styles.heroItems}>
@@ -794,7 +819,7 @@ export function TodayTab({
                 }
                 style={[styles.heroPrimary, styles.heroPreview]}
               >
-                <List size={20} color={colors.deepNavy} strokeWidth={2} />
+                <List size={20} color={theme.colors.heroBtnFg} strokeWidth={2} />
                 <Text style={styles.heroPrimaryLabel}>Preview exercises</Text>
               </Pressable>
             </View>
@@ -843,7 +868,7 @@ export function TodayTab({
             accessibilityLabel={`Workout done: ${workout.workoutDayName}`}
           >
             <View style={styles.doneChip}>
-              <Check size={16} color={colors.white} strokeWidth={2.25} />
+              <Check size={16} color={theme.colors.heroFg} strokeWidth={2.25} />
               <Text style={styles.doneChipLabel}>
                 {workout.execution?.completedAt
                   ? `Done · ${formatClockTime(workout.execution.completedAt, timeZone)}`
@@ -878,13 +903,17 @@ export function TodayTab({
             accessibilityLabel="Rest day. Recovery is part of the plan"
           >
             <View style={styles.restChip}>
-              <Moon size={16} color={semanticColors.neutral.text} strokeWidth={1.75} />
+              <Moon size={16} color={theme.colors.ink2} strokeWidth={1.75} />
               <Text style={styles.restChipLabel}>Rest day</Text>
             </View>
             <Text style={styles.restTitle}>Recovery is part of the plan</Text>
             {nextWorkout && isToday ? (
               <Text style={styles.restNext}>
-                {`Next: ${nextWorkout.workoutDayName} · ${formatCivilDate(nextWorkout.localDate)}, ${formatClockTime(nextWorkout.windowStartsAt, timeZone)}`}
+                {`Next: ${nextWorkout.workoutDayName} · ${formatCivilDate(nextWorkout.localDate)}${
+                  workoutTimeLabel(nextWorkout.windowStartsAt, timeZone)
+                    ? `, ${workoutTimeLabel(nextWorkout.windowStartsAt, timeZone)}`
+                    : ""
+                }`}
               </Text>
             ) : null}
           </View>
@@ -896,7 +925,9 @@ export function TodayTab({
               {hero.kind === "workout" &&
               hero.workout.status !== "in_progress" &&
               hero.workout.status !== "paused"
-                ? `Today · ${formatClockTime(hero.workout.windowStartsAt, timeZone)}`
+                ? ["Today", workoutTimeLabel(hero.workout.windowStartsAt, timeZone)]
+                    .filter(Boolean)
+                    .join(" · ")
                 : nextUpEyebrow(hero)}
             </Text>
             {hero.kind === "meal" ? (
@@ -1166,8 +1197,8 @@ export function TodayTab({
             <View style={styles.secHead}>
               <Text style={styles.secTitle}>This week</Text>
             </View>
-            <View style={styles.card}>
-              <WeeklyConsistency
+            <View>
+              <WeekCard
                 workoutCompleted={weekState.week.workouts.completed}
                 workoutAssigned={weekState.week.workouts.assigned}
                 mealsLogged={weekState.week.meals.logged}
@@ -1258,18 +1289,18 @@ export function TodayTab({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   stack: {
     gap: spacing.md,
     paddingTop: spacing.sm,
   },
   offlineHint: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "600",
   },
   hero: {
-    backgroundColor: colors.deepNavy,
+    backgroundColor: t.colors.ink,
     borderRadius: 22,
     gap: spacing.sm,
     padding: spacing.xl,
@@ -1278,7 +1309,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 13,
-    color: colors.white,
+    color: t.colors.heroFg,
     fontSize: 13,
     fontWeight: "600",
     overflow: "hidden",
@@ -1286,7 +1317,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   heroTitle: {
-    color: colors.white,
+    color: t.colors.heroFg,
     fontSize: 24,
     fontWeight: "700",
     letterSpacing: -0.3,
@@ -1303,7 +1334,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   heroMacroBold: {
-    color: colors.white,
+    color: t.colors.heroFg,
     fontWeight: "700",
   },
   heroBtns: {
@@ -1312,15 +1343,15 @@ const styles = StyleSheet.create({
   },
   heroPrimary: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: radii.control,
+    backgroundColor: t.colors.heroBtn,
+    borderRadius: t.radii.button,
     justifyContent: "center",
     minHeight: 48,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
   heroPrimaryLabel: {
-    color: colors.deepNavy,
+    color: t.colors.heroBtnFg,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -1338,7 +1369,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   heroSecondaryLabel: {
-    color: colors.white,
+    color: t.colors.heroFg,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -1349,7 +1380,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   secTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
   },
@@ -1359,45 +1390,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
   },
   secLinkText: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 15,
     fontWeight: "600",
   },
   retry: {
     alignItems: "center",
     alignSelf: "flex-start",
-    borderColor: colors.indigo,
-    borderRadius: radii.card,
+    borderColor: t.colors.coachInk,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     justifyContent: "center",
     minHeight: 44,
     paddingHorizontal: spacing.lg,
   },
   retryLabel: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 15,
     fontWeight: "600",
   },
   card: {
-    backgroundColor: colors.white,
-    borderColor: surface.border,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     gap: spacing.sm,
     padding: spacing.xl,
   },
   cardTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 20,
     fontWeight: "700",
   },
   body: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
     lineHeight: 22,
   },
   footnote: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
     lineHeight: 16,
   },
@@ -1406,7 +1437,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   exRow: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 15,
     lineHeight: 22,
   },
@@ -1418,18 +1449,18 @@ const styles = StyleSheet.create({
   },
   mealsSection: { gap: spacing.xs, marginTop: spacing.sm },
   mealsList: {
-    backgroundColor: colors.white,
-    borderColor: surface.border,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     overflow: "hidden",
   },
   mealRowRule: {
-    borderTopColor: colors.lightGrey,
+    borderTopColor: t.colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
   mealTime: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 14,
     minWidth: 64,
     ...({ fontVariant: ["tabular-nums"] } as object),
@@ -1441,26 +1472,25 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   mealsLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
   },
   mealsCount: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     fontWeight: "500",
   },
   upNextChip: {
     alignItems: "center",
     alignSelf: "flex-start",
-    borderRadius: radii.pill,
+    borderRadius: t.radii.pill,
     flexDirection: "row",
     gap: 4,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
   },
   upNextLabel: {
-    fontFamily: fontFamilySemiBold,
     fontSize: 12,
     fontWeight: "600",
   },
@@ -1474,10 +1504,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  doneChipLabel: { color: colors.white, fontSize: 14, fontWeight: "600" },
+  doneChipLabel: { color: t.colors.heroFg, fontSize: 14, fontWeight: "600" },
   restCard: {
-    backgroundColor: colors.white,
-    borderColor: surface.border,
+    backgroundColor: t.colors.heroFg,
+    borderColor: t.colors.line,
     borderRadius: 22,
     borderWidth: 1,
     gap: spacing.sm,
@@ -1486,7 +1516,7 @@ const styles = StyleSheet.create({
   restChip: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: semanticColors.neutral.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 16,
     flexDirection: "row",
     gap: 6,
@@ -1494,18 +1524,18 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   restChipLabel: {
-    color: semanticColors.neutral.text,
+    color: t.colors.ink2,
     fontSize: 14,
     fontWeight: "600",
   },
   restTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 24,
     fontWeight: "700",
     letterSpacing: -0.3,
     marginTop: spacing.xs,
   },
-  restNext: { color: colors.darkGrey, fontSize: 15 },
+  restNext: { color: t.colors.ink2, fontSize: 15 },
   mealRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -1518,12 +1548,12 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   mealName: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   mealMeta: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -1532,30 +1562,30 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   mealKcal: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 14,
     fontWeight: "700",
   },
   note: {
-    borderTopColor: colors.lightGrey,
+    borderTopColor: t.colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.xs,
     paddingTop: spacing.sm,
   },
   noteBody: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 15,
     lineHeight: 22,
   },
   noteMeta: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
   },
   planLink: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 15,
     fontWeight: "600",
     paddingVertical: spacing.md,
     textAlign: "center",
   },
-});
+}));

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import {
   Bell,
@@ -9,62 +8,20 @@ import {
 import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
-import { reportError } from "../../lib/reportError";
-import { useSyncEngine } from "../../sync/SyncProvider";
-import { indicatorFromCounts, type IndicatorKind } from "../../sync/outboxCopy";
+import { pillFromStatus, type IndicatorKind } from "../../sync/outboxCopy";
+import { useSyncView } from "../../sync/useSyncStatus";
 
 /**
- * The sync button's state, read from the outbox the way `SyncIndicator` reads
- * it (same counts, same `indicatorFromCounts`). Unlike that indicator the
- * button is always there (frame 04), so the idle state is "Synced".
+ * The sync button's state, from the same outbox view as `SyncIndicator`
+ * (`useSyncView`, Z12-41): "Saved on phone" while a log waits, "Sending…"
+ * while one is in flight, "Couldn't send" after a refusal. The button is
+ * always there (TR-06a), so the idle state is "Synced". An outbox that could
+ * not be read says so; it is never "Synced".
  */
-function useSyncButtonState(): { kind: IndicatorKind; label: string } {
-  const sync = useSyncEngine();
-  const [state, setState] = useState<{ kind: IndicatorKind; label: string }>({
-    kind: "synced",
-    label: "Synced",
-  });
-  useEffect(() => {
-    let active = true;
-    let reported = false;
-    async function read() {
-      try {
-        const [rows, meta] = await Promise.all([
-          sync.store.listOutbox(),
-          sync.store.getMeta(),
-        ]);
-        if (!active) return;
-        const count = (...statuses: string[]) =>
-          rows.filter((row) => statuses.includes(row.status)).length;
-        const syncedAt = meta.lastSyncedAt
-          ? new Date(meta.lastSyncedAt).getTime()
-          : null;
-        const view = indicatorFromCounts({
-          pending: count("pending"),
-          inFlight: count("in_flight"),
-          failed: count("rejected", "conflicted"),
-          offline:
-            typeof navigator !== "undefined" && navigator.onLine === false,
-          syncedAt: Number.isFinite(syncedAt) ? syncedAt : null,
-          now: Date.now(),
-        });
-        setState({ kind: view.kind, label: view.label });
-      } catch (err) {
-        // Keeps the last known state; reported once, not on every poll.
-        if (!reported) reportError("TodayHeader.syncState", err);
-        reported = true;
-      }
-    }
-    void read();
-    const timer = setInterval(() => {
-      void read();
-    }, 1000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [sync]);
-  return state;
+export function useSyncButtonState(): { kind: IndicatorKind; label: string } {
+  const view = useSyncView();
+  if (!view) return { kind: "problem", label: "Couldn't check" };
+  return pillFromStatus(view.status) ?? { kind: "synced", label: "Synced" };
 }
 
 /**

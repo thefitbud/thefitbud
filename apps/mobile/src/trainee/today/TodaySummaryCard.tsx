@@ -1,11 +1,11 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { Check, Dumbbell, Footprints, Utensils } from "lucide-react-native";
-import { brand, rings, semantic, surface } from "@fitbud/tokens";
 import { formatNumber } from "@fitbud/core";
 import type { RingDatum } from "@fitbud/ui-mobile";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 /**
  * Steps chip content (D-W9-3): read from `GET /me/steps/today`, so Today does
@@ -36,7 +36,6 @@ export type TodaySummaryProps = {
   workoutUnknown?: boolean;
 };
 
-const NUM = { fontVariant: ["tabular-nums" as const] };
 const RING_SIZE = 108;
 const RING_STROKE = 10;
 
@@ -56,7 +55,26 @@ function ringValueSize(text: string): number {
   return 20;
 }
 
+/**
+ * The ring shows what was eaten; "kcal left" and the goal sit beside it
+ * (TR-06a). Over the goal the line reads "kcal over" with the excess.
+ */
+export function kcalLeftText(
+  logged: number,
+  assigned: number,
+): { value: string; unit: string; goal: string | null } | null {
+  if (assigned <= 0) return null;
+  const over = logged > assigned;
+  return {
+    value: formatNumber(Math.abs(assigned - logged)),
+    unit: over ? "kcal over" : "kcal left",
+    goal: `Goal ${formatNumber(assigned)}`,
+  };
+}
+
 function KcalRing({ datum }: { datum: RingDatum | undefined }) {
+  const theme = useTheme();
+  const styles = useStyles();
   const logged = Math.round(datum?.logged ?? 0);
   const assigned = Math.round(datum?.assigned ?? 0);
   const radius = (RING_SIZE - RING_STROKE) / 2;
@@ -79,7 +97,7 @@ function KcalRing({ datum }: { datum: RingDatum | undefined }) {
           cx={RING_SIZE / 2}
           cy={RING_SIZE / 2}
           r={radius}
-          stroke={rings.track}
+          stroke={theme.colors.fill2}
           strokeWidth={RING_STROKE}
           fill="none"
         />
@@ -88,7 +106,7 @@ function KcalRing({ datum }: { datum: RingDatum | undefined }) {
             cx={RING_SIZE / 2}
             cy={RING_SIZE / 2}
             r={radius}
-            stroke={rings.kcal}
+            stroke={theme.colors.brand}
             strokeWidth={RING_STROKE}
             fill="none"
             strokeDasharray={`${dash} ${circumference}`}
@@ -99,24 +117,22 @@ function KcalRing({ datum }: { datum: RingDatum | undefined }) {
       </Svg>
       <View style={[styles.ringCenter, { pointerEvents: "none" }]}>
         <Text
-          style={[
-            styles.ringValue,
-            NUM,
-            { fontSize: ringValueSize(`${prefix}${formatNumber(logged)}`) },
-          ]}
+          variant="numberMd"
+          style={{
+            fontSize: ringValueSize(`${prefix}${formatNumber(logged)}`),
+            maxWidth: RING_SIZE - 2 * RING_STROKE - 8,
+            textAlign: "center",
+          }}
           numberOfLines={1}
           adjustsFontSizeToFit
+          maxFontSizeMultiplier={1.2}
         >
           {prefix}
           {formatNumber(logged)}
         </Text>
-        {assigned > 0 ? (
-          <Text style={[styles.ringSub, NUM]}>
-            of {formatNumber(assigned)} kcal
-          </Text>
-        ) : (
-          <Text style={styles.ringSub}>kcal</Text>
-        )}
+        <Text variant="caption" tone="ink3" style={styles.ringSub}>
+          kcal eaten
+        </Text>
       </View>
     </View>
   );
@@ -131,19 +147,28 @@ function MacroBar({
   label: string;
   color: string;
 }) {
+  const styles = useStyles();
   const logged = Math.round(datum?.logged ?? 0);
   const assigned = Math.round(datum?.assigned ?? 0);
   const prefix = datum?.unknown ? "≥ " : "";
   const fraction = fillFraction(logged, assigned);
   const value =
     assigned > 0
-      ? `${prefix}${formatNumber(logged)} of ${formatNumber(assigned)} g`
+      ? `${prefix}${formatNumber(logged)} / ${formatNumber(assigned)} g`
       : `${prefix}${formatNumber(logged)} g`;
   return (
-    <View style={styles.macro} accessible accessibilityLabel={`${label} ${value}`}>
+    <View
+      style={styles.macro}
+      accessible
+      accessibilityLabel={`${label} ${prefix}${formatNumber(logged)}${assigned > 0 ? ` of ${formatNumber(assigned)}` : ""} g`}
+    >
       <View style={styles.macroHead}>
-        <Text style={styles.macroLabel}>{label}</Text>
-        <Text style={[styles.macroValue, NUM]}>{value}</Text>
+        <Text variant="subhead" tone="ink2">
+          {label}
+        </Text>
+        <Text variant="subhead" style={styles.macroValue} numberOfLines={1}>
+          {value}
+        </Text>
       </View>
       <View style={styles.track}>
         {fraction > 0 ? (
@@ -167,6 +192,7 @@ function Chip({
   value,
   accessibilityLabel,
   variant = "default",
+  fraction = null,
   onPress,
 }: {
   icon: React.ReactNode;
@@ -174,8 +200,12 @@ function Chip({
   value: string;
   accessibilityLabel: string;
   variant?: ChipVariant;
+  /** 0 to 1: the thin bar under the value (TR-06a); null draws none. */
+  fraction?: number | null;
   onPress?: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   const variantStyle =
     variant === "done"
       ? styles.chipDone
@@ -186,15 +216,26 @@ function Chip({
     <>
       <View style={styles.chipHead}>
         {variant === "done" ? (
-          <Check size={16} color={semantic.positive.text} strokeWidth={2.25} />
+          <Check size={16} color={theme.colors.done} strokeWidth={2.25} />
         ) : (
           icon
         )}
-        <Text style={styles.chipLabel}>{label}</Text>
+        <Text variant="caption" tone="ink2" numberOfLines={1}>
+          {label}
+        </Text>
       </View>
-      <Text style={[styles.chipValue, NUM]} numberOfLines={1}>
+      <Text variant="bodyStrong" style={styles.chipValue} numberOfLines={1}>
         {value}
       </Text>
+      {fraction != null ? (
+        <View style={styles.chipTrack}>
+          {fraction > 0 ? (
+            <View
+              style={[styles.chipFill, { width: `${fraction * 100}%` }]}
+            />
+          ) : null}
+        </View>
+      ) : null}
     </>
   );
   if (onPress) {
@@ -244,34 +285,56 @@ export function stepsChipText(steps: StepsChipState): {
 }
 
 export function TodaySummaryCard(props: TodaySummaryProps) {
+  const theme = useTheme();
+  const styles = useStyles();
   const kcal = find(props.rings, "kcal");
   const stepsText = stepsChipText(props.steps);
-  const icon = { size: 16, color: colors.indigo, strokeWidth: 2 };
+  const icon = { size: 16, color: theme.colors.ink2, strokeWidth: 1.75 };
   const workoutUnknown = props.workoutUnknown === true;
   const workoutRest = props.workoutTotal === 0 && !workoutUnknown;
   const workoutDone = !workoutRest && !workoutUnknown && props.workoutDone >= props.workoutTotal;
   const mealsDone = props.mealsTotal > 0 && props.mealsDone >= props.mealsTotal;
   const stepsDone =
     props.steps.status === "synced" && props.steps.steps >= props.steps.target;
+  const left = kcalLeftText(
+    Math.round(kcal?.logged ?? 0),
+    Math.round(kcal?.assigned ?? 0),
+  );
   return (
     <View style={styles.card} testID="today-summary">
       <View style={styles.top}>
         <KcalRing datum={kcal} />
         <View style={styles.macros}>
+          {left ? (
+            <View style={styles.leftRow}>
+              <Text
+                variant="numberMd"
+                numberOfLines={1}
+                style={styles.leftLine}
+                accessibilityLabel={`${left.value} ${left.unit}, ${left.goal}`}
+              >
+                {left.value}
+                <Text variant="subhead" tone="ink2">{` ${left.unit}`}</Text>
+              </Text>
+              <Text variant="caption" tone="ink3" numberOfLines={1}>
+                {left.goal}
+              </Text>
+            </View>
+          ) : null}
           <MacroBar
             datum={find(props.rings, "protein")}
             label="Protein"
-            color={rings.protein}
+            color={theme.colors.protein}
           />
           <MacroBar
             datum={find(props.rings, "carbs")}
             label="Carbs"
-            color={rings.carbs}
+            color={theme.colors.carbs}
           />
           <MacroBar
             datum={find(props.rings, "fat")}
             label="Fat"
-            color={rings.fat}
+            color={theme.colors.fat}
           />
         </View>
       </View>
@@ -280,7 +343,7 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
           icon={
             <Dumbbell
               {...icon}
-              color={workoutRest ? semantic.neutral.text : colors.indigo}
+              color={workoutRest ? theme.colors.ink3 : theme.colors.ink2}
             />
           }
           label="Workout"
@@ -299,6 +362,11 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
               : `Workout ${props.workoutDone} of ${props.workoutTotal}${workoutDone ? ", done" : ""}`
           }
           variant={workoutRest ? "rest" : workoutDone ? "done" : "default"}
+          fraction={
+            workoutUnknown || workoutRest
+              ? null
+              : fillFraction(props.workoutDone, props.workoutTotal)
+          }
         />
         <Chip
           icon={<Utensils {...icon} />}
@@ -306,6 +374,7 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
           value={`${props.mealsDone} of ${props.mealsTotal}`}
           accessibilityLabel={`Meals ${props.mealsDone} of ${props.mealsTotal}${mealsDone ? ", done" : ""}`}
           variant={mealsDone ? "done" : "default"}
+          fraction={fillFraction(props.mealsDone, props.mealsTotal)}
         />
         <Chip
           icon={<Footprints {...icon} />}
@@ -315,6 +384,11 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
             stepsDone ? `${stepsText.a11y}, done` : stepsText.a11y
           }
           variant={stepsDone ? "done" : "default"}
+          fraction={
+            props.steps.status === "synced"
+              ? fillFraction(props.steps.steps, props.steps.target)
+              : null
+          }
           onPress={props.onOpenSteps}
         />
       </View>
@@ -322,11 +396,11 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   card: {
-    backgroundColor: colors.white,
-    borderColor: surface.border,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.md,
@@ -343,15 +417,22 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
-  ringValue: { color: colors.deepNavy, fontSize: 32, fontWeight: "600", maxWidth: RING_SIZE - 2 * RING_STROKE - 8, textAlign: "center" },
-  ringSub: { color: colors.darkGrey, fontSize: 11, textAlign: "center" },
+  ringSub: { textAlign: "center" },
   macros: { flex: 1, gap: spacing.sm },
+  leftRow: {
+    alignItems: "baseline",
+    borderBottomColor: t.colors.line,
+    borderBottomWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingBottom: spacing.xs,
+  },
+  leftLine: { flexShrink: 1 },
   macro: { gap: 4, minHeight: 32 },
   macroHead: { flexDirection: "row", justifyContent: "space-between" },
-  macroLabel: { color: colors.darkGrey, fontSize: 16 },
-  macroValue: { color: colors.deepNavy, fontSize: 16 },
+  macroValue: { fontVariant: ["tabular-nums" as const] },
   track: {
-    backgroundColor: rings.track,
+    backgroundColor: t.colors.fill2,
     borderRadius: 3,
     height: 6,
     overflow: "hidden",
@@ -359,26 +440,30 @@ const styles = StyleSheet.create({
   fill: { borderRadius: 3, height: 6 },
   chips: { flexDirection: "row", gap: spacing.sm },
   chip: {
-    backgroundColor: colors.white,
-    borderColor: brand.paleLavender,
-    borderRadius: radii.control,
-    borderWidth: 1,
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.button,
     flex: 1,
     gap: 2,
-    height: 60,
+    minHeight: 64,
     justifyContent: "center",
     paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
   },
   chipPressed: { opacity: 0.6 },
-  chipDone: {
-    backgroundColor: semantic.positive.fill,
-    borderColor: `${semantic.positive.text}40`,
-  },
-  chipRest: {
-    backgroundColor: semantic.neutral.fill,
-    borderColor: surface.border,
-  },
+  chipDone: { backgroundColor: t.colors.doneTint },
+  chipRest: { backgroundColor: t.colors.fill },
   chipHead: { alignItems: "center", flexDirection: "row", gap: 6 },
-  chipLabel: { color: colors.darkGrey, fontSize: 12 },
-  chipValue: { color: colors.deepNavy, fontSize: 14, fontWeight: "600" },
-});
+  chipValue: { fontVariant: ["tabular-nums" as const] },
+  chipTrack: {
+    backgroundColor: t.colors.fill2,
+    borderRadius: 2,
+    height: 4,
+    marginTop: 2,
+    overflow: "hidden",
+  },
+  chipFill: {
+    backgroundColor: t.colors.brand,
+    borderRadius: 2,
+    height: 4,
+  },
+}));

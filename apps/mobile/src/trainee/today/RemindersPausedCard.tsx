@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Pause } from "lucide-react-native";
 import type { ReminderStatus } from "@fitbud/contracts";
 import { ApiClientError } from "@fitbud/api-client";
 import { formatCivilDate, formatLocalDate } from "@fitbud/core";
-import { colors, radii, semanticColors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { useAuth } from "../../auth/AuthProvider";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
@@ -39,6 +40,8 @@ export function remindersPausedCopy(
  * reminder status; it renders nothing in any other mode or if the read fails.
  */
 export function RemindersPausedCard() {
+  const theme = useTheme();
+  const styles = useStyles();
   const { api, me } = useAuth();
   const timeZone = me?.timezone || "Asia/Kolkata";
   const [status, setStatus] = useState<ReminderStatus | null>(null);
@@ -80,7 +83,7 @@ export function RemindersPausedCard() {
 
   const copy = status ? remindersPausedCopy(status, timeZone) : null;
   if (!copy) return null;
-  const palette = semanticColors.brandSelected;
+  const palette = { fill: theme.colors.brandTint, text: theme.colors.brandInk };
   return (
     <View style={styles.card} accessibilityLabel={copy.title}>
       <View style={styles.row}>
@@ -111,11 +114,11 @@ export function RemindersPausedCard() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   card: {
-    backgroundColor: colors.white,
-    borderColor: "#E4E3EE",
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     gap: spacing.md,
     padding: spacing.lg,
@@ -129,9 +132,9 @@ const styles = StyleSheet.create({
     width: 48,
   },
   copy: { flex: 1, gap: 4, minWidth: 0 },
-  title: { color: colors.deepNavy, fontSize: 17, fontWeight: "600" },
-  body: { color: colors.midGrey, fontSize: 15, lineHeight: 21 },
-  error: { color: semanticColors.critical.text, fontSize: 14 },
+  title: { fontSize: 17, fontWeight: "600" },
+  body: { color: t.colors.ink3, fontSize: 15, lineHeight: 21 },
+  error: { color: t.colors.crit, fontSize: 14 },
   button: {
     alignItems: "center",
     borderRadius: 16,
@@ -139,4 +142,4 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   buttonLabel: { fontSize: 16, fontWeight: "600" },
-});
+}));
