@@ -1,0 +1,71 @@
+{
+  "result": "mean screenshot luminance: light 0.855 (5), dark 0.543 (7)",
+  "light": 0.855,
+  "dark": 0.543,
+  "count": {
+    "light": 5,
+    "dark": 7
+  },
+  "shots": [
+    {
+      "file": "TM-03j-light-ios.png",
+      "theme": "light",
+      "luma": 0.723
+    },
+    {
+      "file": "TM-04b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.301
+    },
+    {
+      "file": "TM-04c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.301
+    },
+    {
+      "file": "TM-04n-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.262
+    },
+    {
+      "file": "TM-04o-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.297
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.785
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.785
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-032-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "step-037-assertCondition-PREVIEW___TAP_TO_EDIT-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "step-054-assertCondition-Nudge_sent-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.909
+    }
+  ]
+}
