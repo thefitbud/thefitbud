@@ -19,9 +19,26 @@ Method: local API on port 8791 against this worktree's own D1 (`pnpm db:reset`),
 
 The script waited for each banner to leave on its own after the screenshot: 3.8 s after the shot, which was taken about 0.4 s after the banner appeared, so about 4.2 s in all. No console error came from the new code. The remaining web console errors were already there before this change: the realtime WebSocket through the Metro proxy, and `accessibilityElementsHidden` on TraineeShell's tab bar.
 
-## Device run
+## Device runs
 
-See the PR for the run id, the flows and why they cover the change. Flows: `launch` (trainee Today, trainer Needs you), `device/z12-38/1-trainee-note-banner.yaml` (TR-06h: shows, leaves by itself, swipe up, tap) and `device/z12-36/3-trainee-workout.yaml` (D-W12-33: where the iOS shadow ADVICE lines appeared).
+Flows (D-W12-34, exactly these): `launch` (trainee Today, trainer Needs you), `device/z12-38/1-trainee-note-banner.yaml` and `device/z12-36/3-trainee-workout.yaml`.
+
+- **TR-06h flow:** signs in as Aarav and goes to Progress. While he is there, the coach shares a note through the local API (`share-note.js`, run on the Maestro host against the runner's local API). Going back to Today shows the banner below the status bar (screenshot `TR-06h`). The flow checks the banner leaves by itself. It then does a swipe up (screenshot `z12-38-after-swipe`, which shows it gone) and a tap that lands on Today. Each step uses a new note. The "gone at once, not after 4 s" timing of the swipe is proved by `NoticeHost.render.test.tsx` and Z12-58's phone checklist, not on the simulator (approved by the orchestrator).
+- **W-03 trainee workout flow:** where the D-W12-33 shadow ADVICE lines appeared.
+
+**D-W12-33 evidence: run 43715594740, iOS PASS.** All 8 flows passed in light and dark, the W-03 workout flow included, the device log was clean and `allowed: []`. That run's harness came from `main`, where the D-W12-33 allow-list entry was still live, so an allowed count of 0 means the shadow lines were not logged at all. Every later run's log scan was clean with 0 allowed, on both platforms.
+
+**Final device run: 44069358004 at `8a6e1b5`** (app ref `claude/Z12-38-notice-queue`).
+
+| Attempt | Platform | Light | Dark | Device log |
+|---|---|---|---|---|
+| 1 | Android | 4 / 4 | 4 / 4 | clean, 0 allowed |
+| 1 | iOS | 4 / 4 | 3 / 4: z12-36 W-03 sign-in, Maestro typed "ran.srohan.slipping@…" (dropped keystrokes) | clean, 0 allowed |
+| 2 (failed jobs re-run) | iOS | 3 / 4: z12-38 sign-in timed out on Today (same keystroke flake) | 3 / 4: z12-38 step 1, banner still visible after the 8 s wait | clean, 0 allowed |
+
+At `8a6e1b5`, every flow passed on both platforms in both themes in at least one attempt, but no single attempt was green on both platforms. The iOS dark failure in attempt 2 is the open item. The banner was still on screen when the 8 s wait to leave ran out, and the same wait failed on iOS in runs 43744259140 and 44063388981. My working hypothesis is not proved. XCUITest serialises the accessibility tree on the app's main thread, `extendedWaitUntil notVisible` polls it back to back, and on a cold CI simulator that can starve the main-thread display link that drives React Native's JS timers, so the 4 s timer fires late while it is being watched. The unit, render and integration tests (fake timers, the real queue) show the 4 s timer. A passive wait on the host before checking (for example a `runScript` busy-wait) would test the hypothesis. It is not done here because the orchestrator stopped flow changes after run 6. Real-phone timing is on the Z12-58 checklist below.
+
+Earlier runs, for the record: 43715594740 (iOS 8 / 8; Android light: a launch flake, and the TR-06h banner missed after a cold relaunch), 43719430750 (Android 8 / 8; iOS light DeviceUnreachableException), 43741069030, 43744259140 and 44063388981 (flow fixes between them, see the commits).
 
 ## Decisions (decided and noted)
 
@@ -34,8 +51,12 @@ See the PR for the run id, the flows and why they cover the change. Flows: `laun
 7. **Hostless fallback.** Outside `NoticeHost` (render tests, the primitive gallery), `Snackbar` and `ForegroundBanner` draw in place as before. Existing callers and tests need no change.
 8. **Foreground pushes.** The app sets no foreground notification handler, so expo-notifications shows no system banner while FitBud is open (unchanged). The push reaches `addNotificationReceivedListener`, and the banner's words come from the authoritative notification record (or the coach note), with the app's copy as the fallback. A tap routes like a system notification tap (`handleNotificationOpen`) and marks the notification read. Pushes queue in arrival order even when one needs an extra read.
 9. **Reduced motion:** no slide or fade; a swipe dismisses at once. Every banner and toast is announced (`announceForAccessibility`); a banner also has a VoiceOver escape action to dismiss it.
+10. **Device evidence for the gestures** (approved by the orchestrator): the flow screenshots the screen right after the swipe and waits generously for the banner to go. The "gone at once" timing is proved by `NoticeHost.render.test.tsx` and Z12-58's phone checklist, because simulator accessibility snapshots are too slow to time a 4 s banner.
+11. **Capture-mode push hook.** In `EXPO_PUBLIC_SCREEN_CAPTURE=1` builds only (Expo web QA), `globalThis.__fitbudReceivePush` hands a payload to the real receive handler, because web has no push delivery. Used for the TM-13b web screenshot.
 
 ## Not covered here (follow-ups)
+
+- **Harness:** (1) iOS `DeviceUnreachableException` on a whole theme (run 43719430750). (2) `device/z12-36/3-trainee-workout.yaml` ends by opening the gallery deep link, which leaves the iOS "Open in FitBud Staging?" alert for the next flow (run 43741069030). The z12-38 flow now dismisses it. (3) Maestro drops keystrokes on sign-in: the password typed into the email field, or a truncated or garbled email (runs 43719430750, 44063388981, 44069358004). (4) The gate cannot send a push in the middle of a flow, so TM-13b and the real foreground-push path cannot be shown on a device. (5) On `main`, `device-harness-tests` fails `scripts/qa/mobile-build.test.mjs` (`run-maestro` flow-directory order guard), because `flows/v3` (F29, Z12-39) changed the sort. (6) The open TR-06h item above: the banner outliving the 8 s wait on iOS while it is polled.
 
 - **Trainer same-screen suppression.** `TrainerShell.tsx` is not in this task's `files_owned`, so trainer screens do not report their screen key. A trainer banner is never suppressed. `useNoticeScreen(key)` is ready for the trainer lane (Z12-53).
 - **Today's check-in reviewed banner** (`trainee/today/ReviewedBanner.tsx`, Z12-46's file) is still drawn by Today, not queued. It waits while a queued banner is up (`bannerSlot`), as before, but it has no timer or swipe. Z12-46 moves it onto the queue with `queue.showBanner` (`useNoticeQueue()`).
