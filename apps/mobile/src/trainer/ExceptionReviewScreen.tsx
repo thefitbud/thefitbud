@@ -391,7 +391,10 @@ export function ExceptionReviewScreen({
             </Text>
           </View>
 
-          {!resolved && coaching === "active" ? (
+          {!resolved &&
+          coaching === "active" &&
+          detail.type !== "skipped_meal" &&
+          detail.type !== "skipped_workout" ? (
             <PrimaryButton
               label="Nudge"
               variant="ghost"

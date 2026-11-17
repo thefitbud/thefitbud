@@ -204,7 +204,18 @@ export function ClientStatusScreen({
     try {
       const page = await api.listExceptions(relationshipId);
       const items: NudgePickItem[] = page.items
-        .filter((item) => item.status !== "resolved")
+        // A skipped item is already settled (the API answers ACTIVITY_RESOLVED), as on web.
+        .filter(
+          (item) =>
+            item.status !== "resolved" &&
+            item.type !== "skipped_meal" &&
+            item.type !== "skipped_workout",
+        )
+        .sort(
+          (a, b) =>
+            Number(b.severity === "critical") - Number(a.severity === "critical") ||
+            b.detectedAt.localeCompare(a.detectedAt),
+        )
         .map((item) => ({
           id: item.id,
           title: item.summary,
@@ -653,7 +664,8 @@ export function ClientStatusScreen({
         onDismiss={() => setNudgePick(null)}
         onNext={(target) => {
           setNudgePick(null);
-          setNudgeTarget(target);
+          // iOS cannot present a modal while another is still leaving.
+          setTimeout(() => setNudgeTarget(target), 450);
         }}
       />
       <NudgeSheet
