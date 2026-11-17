@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="0" time="164.438" timestamp="2026-11-17T12:37:35">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="42.744" timestamp="2026-11-17T12:37:35" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="36.647" timestamp="2026-11-17T12:38:17" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" name="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" classname="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-38/1-trainee-note-banner.yaml" time="84.999" timestamp="2026-11-17T12:38:54" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-38"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
