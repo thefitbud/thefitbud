@@ -1,0 +1,191 @@
+{
+  "result": "mean screenshot luminance: light 0.922 (19), dark 0.517 (17)",
+  "light": 0.922,
+  "dark": 0.517,
+  "count": {
+    "light": 19,
+    "dark": 17
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "TR-07a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "TR-07a-light-ios.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "TR-10a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.16
+    },
+    {
+      "file": "TR-10a-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "TR-10b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.157
+    },
+    {
+      "file": "TR-10b-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    },
+    {
+      "file": "TR-10c-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "W-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.16
+    },
+    {
+      "file": "W-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "W-01b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.204
+    },
+    {
+      "file": "W-01b-light-ios.png",
+      "theme": "light",
+      "luma": 0.913
+    },
+    {
+      "file": "W-01c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.173
+    },
+    {
+      "file": "W-01c-light-ios.png",
+      "theme": "light",
+      "luma": 0.944
+    },
+    {
+      "file": "W-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.162
+    },
+    {
+      "file": "W-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.89
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    },
+    {
+      "file": "W-17a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "W-17a-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    },
+    {
+      "file": "W-17b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.134
+    },
+    {
+      "file": "W-17b-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.949
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.949
+    },
+    {
+      "file": "step-051-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    },
+    {
+      "file": "step-054-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    },
+    {
+      "file": "step-055-tapOnElement-Open-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "z12-40-diet-tomorrow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.943
+    },
+    {
+      "file": "z12-40-diet-tomorrow-light-ios.png",
+      "theme": "light",
+      "luma": 0.943
+    },
+    {
+      "file": "z12-40-today-plus-7-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.944
+    },
+    {
+      "file": "z12-40-today-plus-7-light-ios.png",
+      "theme": "light",
+      "luma": 0.944
+    },
+    {
+      "file": "z12-40-today-yesterday-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.785
+    },
+    {
+      "file": "z12-40-today-yesterday-light-ios.png",
+      "theme": "light",
+      "luma": 0.784
+    }
+  ]
+}
