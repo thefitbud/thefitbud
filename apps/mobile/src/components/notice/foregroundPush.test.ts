@@ -188,7 +188,7 @@ describe("foreground push → notice queue (Z12-38, TR-06h, TM-13b)", () => {
     native.deliver(note.routing);
     await flush();
     const banner = queue.getSnapshot().banner;
-    expect(banner?.title).toBe("Rahul has a note for you");
+    expect(banner?.title).toBe("Rahul left a note");
     expect(banner?.body).toBe("Try 42.5 kg on the RDLs today if set 2 feels easy.");
     expect(banner?.leading).toEqual({ kind: "initials", name: "Rahul Verma", tone: "coach" });
     vi.advanceTimersByTime(BANNER_MS);
@@ -215,9 +215,9 @@ describe("foreground push → notice queue (Z12-38, TR-06h, TM-13b)", () => {
     native.deliver(note.routing);
     native.deliver(plan.routing);
     await flush();
-    expect(queue.getSnapshot().banner?.title).toBe("Rahul has a note for you");
+    expect(queue.getSnapshot().banner?.title).toBe("Rahul left a note");
     vi.advanceTimersByTime(BANNER_MS);
-    expect(queue.getSnapshot().banner?.title).toBe("Your plan is updated");
+    expect(queue.getSnapshot().banner?.title).toBe("Rahul changed your plan");
   });
 
   it("trainer on Clients: a client's question shows with the client's initials (TM-13b)", async () => {
@@ -261,7 +261,7 @@ describe("foreground push → notice queue (Z12-38, TR-06h, TM-13b)", () => {
     await flush();
     native.deliver(plan.routing);
     await flush();
-    expect(queue.getSnapshot().banner?.title).toBe("Your plan is updated");
+    expect(queue.getSnapshot().banner?.title).toBe("Rahul changed your plan");
   });
 
   it("the same note from a push and from Today is one banner", () => {

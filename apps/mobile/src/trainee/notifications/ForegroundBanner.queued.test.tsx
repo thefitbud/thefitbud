@@ -168,7 +168,7 @@ describe("ForegroundBanner on the notice queue (Z12-38)", () => {
     await settle();
     expect(screen.getByText("Evening snack isn't logged yet")).toBeTruthy();
     expect(screen.getByText("Roasted chana · tap to log")).toBeTruthy();
-    expect(screen.queryByText("Rahul has a note for you")).toBeNull();
+    expect(screen.queryByText("Rahul left a note")).toBeNull();
     // Today's reviewed banner waits while a queued banner is up.
     expect(screen.getByText("slot:busy")).toBeTruthy();
 
@@ -176,13 +176,13 @@ describe("ForegroundBanner on the notice queue (Z12-38)", () => {
       vi.advanceTimersByTime(BANNER_MS);
     });
     expect(screen.queryByText("Evening snack isn't logged yet")).toBeNull();
-    expect(screen.getByText("Rahul has a note for you")).toBeTruthy();
+    expect(screen.getByText("Rahul left a note")).toBeTruthy();
     expect(screen.getByText("Try 42.5 kg on the RDLs today if set 2 feels easy.")).toBeTruthy();
 
     act(() => {
       vi.advanceTimersByTime(BANNER_MS);
     });
-    expect(screen.queryByText("Rahul has a note for you")).toBeNull();
+    expect(screen.queryByText("Rahul left a note")).toBeNull();
     expect(screen.getByText("slot:free")).toBeTruthy();
   });
 
@@ -191,7 +191,7 @@ describe("ForegroundBanner on the notice queue (Z12-38)", () => {
     await settle();
     fireEvent.click(screen.getByRole("button", { name: /^Evening snack isn't logged yet/ }));
     expect(onOpenMeal).toHaveBeenCalledWith(snack.id);
-    fireEvent.click(screen.getByRole("button", { name: /^Rahul has a note for you/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Rahul left a note/ }));
     expect(onGoToday).toHaveBeenCalledTimes(1);
     expect(markNotificationRead).toHaveBeenCalledWith(NOTIFICATION_ID);
   });
@@ -206,7 +206,7 @@ describe("ForegroundBanner on the notice queue (Z12-38)", () => {
     renderToday();
     await settle();
     expect(screen.queryByText("Evening snack isn't logged yet")).toBeNull();
-    expect(screen.queryByText("Rahul has a note for you")).toBeNull();
+    expect(screen.queryByText("Rahul left a note")).toBeNull();
   });
 
   it("no meal banner while that meal is open", async () => {
@@ -214,6 +214,6 @@ describe("ForegroundBanner on the notice queue (Z12-38)", () => {
     renderToday();
     await settle();
     expect(screen.queryByText("Evening snack isn't logged yet")).toBeNull();
-    expect(screen.getByText("Rahul has a note for you")).toBeTruthy();
+    expect(screen.getByText("Rahul left a note")).toBeTruthy();
   });
 });
