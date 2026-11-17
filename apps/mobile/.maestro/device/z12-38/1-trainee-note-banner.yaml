@@ -17,7 +17,7 @@ env:
 # hierarchy dumps can outlast a 4 s banner (run 43715594740, Android light).
 #
 # What this proves on the device: the banner shows over Today below the status bar,
-# leaves by itself (about 4 s), a swipe up removes it at once, and a tap removes it
+# leaves by itself (about 4 s), a swipe up removes it, and a tap removes it
 # and lands on Today. A push received in the foreground goes through the same queue
 # (unit-tested through the receive handler, foregroundPush.test.ts); the gate cannot
 # send a push in the middle of a flow, so that path is on the Z12-58 checklist.
@@ -68,7 +68,7 @@ env:
     timeout: 8000
 - runFlow: ../../common/assert-no-crash.yaml
 
-# 2. Swipe up removes it at once (well before its 4 s).
+# 2. Swipe up removes it.
 - tapOn: "Progress"
 - runScript:
     file: share-note.js
@@ -88,9 +88,15 @@ env:
     from: "${BANNER}"
     direction: UP
     duration: 300
+# Evidence of the gesture: the frame right after the swipe. The 4 s timer would
+# remove the banner anyway, so the timing itself (gone at once, not after 4 s) is
+# proved by NoticeHost.render.test.tsx and on Firoz's phone checklist (Z12-58): a
+# simulator's slow accessibility snapshots cannot time it reliably (runs 43744259140,
+# 44063388981).
+- takeScreenshot: z12-38-after-swipe
 - extendedWaitUntil:
     notVisible: "${BANNER}"
-    timeout: 2500
+    timeout: 8000
 
 # 3. A tap removes it and lands on Today (a coach note opens Today); it marks it read.
 - tapOn: "Progress"
@@ -111,6 +117,6 @@ env:
 - tapOn: "${BANNER}"
 - extendedWaitUntil:
     notVisible: "${BANNER}"
-    timeout: 2500
+    timeout: 8000
 - assertVisible: "Today's workout.*"
 - runFlow: ../../common/assert-no-crash.yaml
