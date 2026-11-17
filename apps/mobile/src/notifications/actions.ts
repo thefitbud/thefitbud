@@ -145,6 +145,16 @@ export function resetNotificationActionState(): void {
   }
 }
 
+/** Sign-out: the snooze record belongs to the signed-out trainee. */
+export function clearMealSnoozes(): void {
+  memory.delete(SNOOZE_KEY);
+  try {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(SNOOZE_KEY);
+  } catch {
+    // Ignore.
+  }
+}
+
 export function isMealSnoozed(mealId: string, now = new Date()): boolean {
   const row = readSnoozes()[mealId];
   if (!row?.until) return false;
