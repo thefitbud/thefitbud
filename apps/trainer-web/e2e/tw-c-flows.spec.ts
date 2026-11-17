@@ -143,8 +143,11 @@ test.describe("TW-C workspace", () => {
     ).toBeVisible();
 
     await page.goto(`/clients/${UNKNOWN}/overview`);
-    await expect(page.getByRole("heading", { name: /Client not found/i })).toBeVisible();
-    await expect(page.getByRole("link", { name: /Back to clients/i })).toBeVisible();
+    // Z12-17 NotFoundState copy (frame 185): centred card, not the old "Client not found" page.
+    await expect(
+      page.getByRole("heading", { name: /We couldn't find that/i }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: /Go to Clients/i })).toBeVisible();
     await expect(
       page.getByRole("link", { name: /Message on WhatsApp/i }),
     ).toHaveCount(0);

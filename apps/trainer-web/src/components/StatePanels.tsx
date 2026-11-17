@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
+import { CloudAlert, Lock, Mail, SearchX } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Button } from "./Button";
+import "./StatePanels.css";
 
 /** TW-33 error kinds from api-client status/code mapping. */
 export type ErrorKind =
@@ -12,7 +15,7 @@ export type ErrorKind =
 
 const ERROR_COPY: Record<ErrorKind, { title: string; message: string }> = {
   network: {
-    title: "Connection problem",
+    title: "Couldn't load this page",
     message: "Check your network and try again. Your session is still signed in.",
   },
   unauthorized: {
@@ -33,8 +36,9 @@ const ERROR_COPY: Record<ErrorKind, { title: string; message: string }> = {
     message: "Reload to see the latest, then try again.",
   },
   server: {
-    title: "Something went wrong",
-    message: "Please retry in a moment. If it keeps happening, email support.",
+    title: "Couldn't load this page",
+    message:
+      "Something went wrong on our side. Your data is safe. Try again in a moment.",
   },
 };
 
@@ -66,6 +70,21 @@ function sanitizeMessage(message: string | undefined, kind: ErrorKind): string {
   return message;
 }
 
+function supportMailto(input: {
+  supportEmail: string;
+  screenId: string;
+  errorKind: string;
+  requestId: string;
+}): string {
+  const subject = encodeURIComponent(
+    `FitBud support · Trainer web · ${input.screenId}`,
+  );
+  const body = encodeURIComponent(
+    `\n\n---\nApp: Trainer web\nScreen: ${input.screenId}\nError: ${input.errorKind}\nRequest id: ${input.requestId}\nLocal time: ${new Date().toISOString()}`,
+  );
+  return `mailto:${input.supportEmail}?subject=${subject}&body=${body}`;
+}
+
 export function ErrorState({
   title,
   message,
@@ -92,42 +111,68 @@ export function ErrorState({
   const resolvedTitle = title ?? copy.title;
   const resolvedMessage = sanitizeMessage(message, resolvedKind);
   const resolvedRequestId = requestId?.trim() || "n/a";
-
-  const mailto = (() => {
-    const subject = encodeURIComponent(
-      `FitBud support · Trainer web · ${screenId}`,
-    );
-    const body = encodeURIComponent(
-      `\n\n---\nApp: Trainer web\nScreen: ${screenId}\nError: ${resolvedKind}\nRequest id: ${resolvedRequestId}\nLocal time: ${new Date().toISOString()}`,
-    );
-    return `mailto:${supportEmail}?subject=${subject}&body=${body}`;
-  })();
+  const mailto = supportMailto({
+    supportEmail,
+    screenId,
+    errorKind: resolvedKind,
+    requestId: resolvedRequestId,
+  });
 
   return (
     <div
-      className="state-panel is-error"
+      className="state-panel state-card is-error"
       role="alert"
       data-testid="error-state"
       data-error-kind={resolvedKind}
     >
+      <span className="state-card-icon is-error" aria-hidden="true">
+        <CloudAlert size={28} strokeWidth={1.75} />
+      </span>
       <h2>{resolvedTitle}</h2>
       <p>{resolvedMessage}</p>
-      <div
-        className="button-row"
-        style={{ display: "flex", gap: 8, flexWrap: "wrap" }}
-      >
+      <div className="state-card-actions">
         {onRetry ? (
           <Button variant="primary" onClick={onRetry}>
             Retry
           </Button>
         ) : null}
-        <details>
-          <summary>Details</summary>
-          <p className="muted">Request id: {resolvedRequestId}</p>
-        </details>
         <a className="button-secondary" href={mailto}>
+          <Mail size={16} aria-hidden="true" />
           Email support
         </a>
+      </div>
+      <details className="state-card-details">
+        <summary>Details</summary>
+        <p className="muted">Request id: {resolvedRequestId}</p>
+      </details>
+    </div>
+  );
+}
+
+export function NotFoundState({
+  title = "We couldn't find that",
+  message = "The link may be old, or the client was removed. Check the address or go back to your clients.",
+  clientsHref = "/clients",
+}: {
+  title?: string;
+  message?: string;
+  clientsHref?: string;
+}) {
+  return (
+    <div
+      className="state-panel state-card"
+      role="status"
+      data-testid="not-found-state"
+    >
+      <span className="state-card-icon is-neutral" aria-hidden="true">
+        <SearchX size={28} strokeWidth={1.75} />
+      </span>
+      <h2>{title}</h2>
+      <p>{message}</p>
+      <div className="state-card-actions">
+        <Link className="button-primary" to={clientsHref}>
+          Go to Clients
+        </Link>
       </div>
     </div>
   );
@@ -161,22 +206,44 @@ export function LoadingBlock({ label = "Loading…" }: { label?: string }) {
 
 export function ForbiddenState({
   title = "You don't have access to this client",
-  message = "This client belongs to another coach, or the link is no longer valid.",
+  message = "This client belongs to another coach. If you think this is wrong, email us.",
+  clientsHref = "/clients",
+  supportEmail = "tech@thefitbud.com",
+  screenId = "TW-33",
 }: {
   title?: string;
   message?: string;
+  clientsHref?: string;
+  supportEmail?: string;
+  screenId?: string;
 }) {
+  const mailto = supportMailto({
+    supportEmail,
+    screenId,
+    errorKind: "forbidden",
+    requestId: "n/a",
+  });
+
   return (
     <div
-      className="state-panel is-error"
+      className="state-panel state-card"
       role="alert"
       data-testid="forbidden-state"
     >
+      <span className="state-card-icon is-lock" aria-hidden="true">
+        <Lock size={28} strokeWidth={1.75} />
+      </span>
       <h2>{title}</h2>
       <p>{message}</p>
-      <a className="button-primary" href="/">
-        Back to Home
-      </a>
+      <div className="state-card-actions">
+        <Link className="button-primary" to={clientsHref}>
+          Go to Clients
+        </Link>
+        <a className="button-secondary" href={mailto}>
+          <Mail size={16} aria-hidden="true" />
+          Email support
+        </a>
+      </div>
     </div>
   );
 }
