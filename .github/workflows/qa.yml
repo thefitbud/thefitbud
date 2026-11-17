@@ -757,6 +757,19 @@ jobs:
   #     reports exactly that message, 6 attempts with 15/30/60/120/240 s between them.
   #     A refused import never started, so retrying it applies nothing twice. Any other
   #     error fails at once, as before.
+  #
+  # NO SUITE TRAFFIC DURING AN IMPORT. While an import runs, D1 refuses EVERY query on
+  # fitbud-staging, so the staging API answers it with an error. api-smoke, web-staging
+  # and android used to start as soon as their own seed finished, while the later seeds
+  # were still importing: Sentry FITBUD-API-J/K/M/N/R (13-17 Nov 2026, "D1_ERROR:
+  # Currently processing a long-running import") each fell inside a seed-android or
+  # seed-ios import of that night's run, and api-smoke logged 500 INTERNAL_ERROR in the
+  # same seconds (run 43656339304). So every suite job also `needs: seed-ios`, the last
+  # link; its `always()` gate runs it whatever seed-ios's result (skipped when ios is not
+  # selected), and its own seed result gate is unchanged. The cost: api-smoke, web-staging
+  # and android start about 3 minutes later, and wait for queue-ios when another run's
+  # ios suite holds the iOS queue. The staging cron (every 5 min) can still meet an
+  # import; the API answers 503 DATABASE_BUSY and skips that tick (apps/api/src/lib/d1-busy.ts).
   seed-api:
     name: seed-api
     needs: changes
@@ -1320,7 +1333,8 @@ jobs:
   # reads `suites.api`), so it waits for its own seed and nothing else (D-W5-14).
   api-smoke:
     name: api-smoke
-    needs: [changes, seed-api]
+    # After the LAST seed import, not just its own: see "No suite traffic during an import" at seed-api.
+    needs: [changes, seed-api, seed-ios]
     if: >-
       ${{ always() && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'api')
@@ -1414,7 +1428,8 @@ jobs:
     # Signs in as the `web` suite's QA accounts only (e2e-staging/support/env.ts reads
     # `suites.web`), so it no longer waits for api-smoke: the two never share an
     # account (D-W5-14).
-    needs: [changes, seed-web]
+    # After the LAST seed import, not just its own: see "No suite traffic during an import" at seed-api.
+    needs: [changes, seed-web, seed-ios]
     if: >-
       ${{ always() && needs.changes.outputs.staging == 'true'
           && (needs.changes.outputs.suites == 'all' || needs.changes.outputs.suites == 'web')
@@ -1523,7 +1538,8 @@ jobs:
     # Maestro runner" below), so it no longer waits for api-smoke or web-staging. On a
     # pull request seed-android is skipped and the PR smoke uses the accounts the last
     # nightly or dispatched run seeded, as before.
-    needs: [changes, queue-android, seed-android]
+    # After the LAST seed import, not just its own: see "No suite traffic during an import" at seed-api.
+    needs: [changes, queue-android, seed-android, seed-ios]
     if: >-
       ${{ always()
           && needs.queue-android.result == 'success'

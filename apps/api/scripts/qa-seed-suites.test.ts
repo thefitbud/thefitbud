@@ -532,7 +532,7 @@ describe("qa.yml wires one seed per suite (D-W5-14)", () => {
     }
   });
 
-  it("runs each suite after its own seed only, in its own group", () => {
+  it("runs each suite after its own seed only (and the last import), in its own group", () => {
     const allSuiteJobs = new Set(Object.values(suiteJob));
     for (const suite of QA_SUITES) {
       const name = suiteJob[suite];
@@ -542,8 +542,15 @@ describe("qa.yml wires one seed per suite (D-W5-14)", () => {
       expect(needs, name).toContain(`seed-${suite}`);
       expect(job).toContain(`needs.seed-${suite}.result`);
       for (const other of needs) {
-        // Another suite's seed or suite job would put the shared chain back.
+        // Another suite's seed or suite job would put the shared chain back. The one
+        // exception is seed-ios, the last D1 import: every suite waits for it so no suite
+        // queries staging while an import holds the database (Sentry FITBUD-API-J/K/M/N/R,
+        // scripts/qa/seed-serial.test.mjs). It orders only; the gate never reads its result.
         if (other === `seed-${suite}`) continue;
+        if (other === "seed-ios") {
+          expect(job, `${name} must not gate on seed-ios's result`).not.toContain("needs.seed-ios.result");
+          continue;
+        }
         expect(other.startsWith("seed-"), `${name} needs ${other}`).toBe(false);
         expect(allSuiteJobs.has(other), `${name} needs ${other}`).toBe(false);
       }
