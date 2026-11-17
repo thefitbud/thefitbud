@@ -280,6 +280,174 @@ describe("ClientOverviewPage week strip uses WeekCircle (D-W7-10, D-W6-10)", () 
   });
 });
 
+describe("ClientOverviewPage week nav + activity (Z12-6)", () => {
+  function day(
+    date: string,
+    state: WeekReadModel["days"][number]["state"] = "rest",
+    workoutLabel = "Rest",
+  ) {
+    return {
+      date,
+      state,
+      workoutLabel,
+      mealsAssigned: 4,
+      mealsLogged: 3,
+      mealSlots: ["logged", "logged", "logged", "missed"] as Array<
+        "logged" | "missed" | "later" | "upcoming"
+      >,
+    };
+  }
+
+  function weekModel(start: string, nutritionDate: string, assignedKcal = 1745): WeekReadModel {
+    const days = [0, 1, 2, 3, 4, 5, 6].map((i) => {
+      const d = new Date(`${start}T12:00:00.000Z`);
+      d.setUTCDate(d.getUTCDate() + i);
+      const iso = d.toISOString().slice(0, 10);
+      return day(iso, iso === nutritionDate ? "due" : "done", "Upper A");
+    });
+    return {
+      start,
+      workouts: { assigned: 4, completed: 3 },
+      meals: { assigned: 28, logged: 24 },
+      days,
+      todayNutrition: {
+        date: nutritionDate,
+        logged: { kcal: 620, proteinG: 40, carbsG: 68, fatG: 25 },
+        assigned: { kcal: assignedKcal, proteinG: 101, carbsG: 198, fatG: 77 },
+      },
+    };
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2026-11-17T10:00:00.000Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("shows week arrows, · week N, and drops the raw kcal prose line", async () => {
+    // Coaching started Mon 4 Aug 2026 → week of Mon 16 Nov is week 16.
+    stage1.getWorkspaceWeek.mockResolvedValue(weekModel("2026-11-16", "2026-11-17"));
+    renderPage("active", "current", {
+      header: { startedAt: "2026-08-04T04:30:00.000Z" },
+    });
+    expect(await screen.findByRole("heading", { name: "This week" })).toBeTruthy();
+    expect(screen.getByText(/Mon 16 Nov – Sun 22 Nov · week 16/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Previous week" })).toBeTruthy();
+    const next = screen.getByRole("button", { name: "Next week" });
+    expect(next.hasAttribute("disabled")).toBe(true);
+    expect(screen.queryByText(/620 kcal \/ 1,745 kcal/)).toBeNull();
+    expect(screen.queryByText(/P 40\/101/)).toBeNull();
+    expect(screen.getByText(/Today · Tue 17 Nov/)).toBeTruthy();
+  });
+
+  it("previous week renames the card and shows the This week pill (03b)", async () => {
+    const current = weekModel("2026-11-16", "2026-11-17");
+    const previous = weekModel("2026-11-09", "2026-11-17");
+    stage1.getWorkspaceWeek.mockImplementation(async (_id: string, start?: string) => {
+      if (start === "2026-11-09") return previous;
+      return current;
+    });
+    renderPage("active", "current", {
+      header: { startedAt: "2026-08-04T04:30:00.000Z" },
+    });
+    await screen.findByRole("heading", { name: "This week" });
+    fireEvent.click(screen.getByRole("button", { name: "Previous week" }));
+    expect(await screen.findByRole("heading", { name: "Week 15" })).toBeTruthy();
+    expect(screen.getByText(/Mon 9 Nov – Sun 15 Nov/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "This week" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Next week" }).hasAttribute("disabled"),
+    ).toBe(false);
+    expect(stage1.getWorkspaceWeek).toHaveBeenCalledWith(REL_ID, "2026-11-09");
+    fireEvent.click(screen.getByRole("button", { name: "This week" }));
+    expect(await screen.findByRole("heading", { name: "This week" })).toBeTruthy();
+  });
+
+  it("Recent activity uses absolute civil dates and Logged/Changed status labels", async () => {
+    stage1.getWorkspaceWeek.mockResolvedValue(weekModel("2026-11-16", "2026-11-17"));
+    const workspaceOverrides = {
+      header: { startedAt: "2026-08-04T04:30:00.000Z" },
+    };
+    // renderPage builds overview.recentActivity as []; override via a custom render.
+    const workspace = {
+      header: {
+        relationshipId: REL_ID,
+        traineeDisplayName: "Rohan Mehta",
+        onboardingStatus: "active",
+        renewalState: "current",
+        traineeProfile: { displayName: "Rohan Mehta", age: 29, gender: "male" },
+        traineeTimezone: "Asia/Kolkata",
+        hasCustomMealTimes: false,
+        trainerWhatsappE164: null,
+        clientWhatsappE164: null,
+        startedAt: "2026-08-04T04:30:00.000Z",
+      },
+      overview: {
+        openException: null,
+        pendingReviewCheckin: null,
+        nextCheckin: null,
+        recentActivity: [
+          {
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            type: "meal",
+            state: "confirmed",
+            title: "Breakfast · logged as planned",
+            occurredAt: "2026-11-17T02:50:00.000Z",
+            localDate: "2026-11-17",
+            planVersionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          },
+          {
+            id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            type: "meal",
+            state: "modified",
+            title: "Dinner · something different",
+            occurredAt: "2026-11-16T15:35:00.000Z",
+            localDate: "2026-11-16",
+            planVersionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+          },
+        ],
+        progress: { measurements: [] },
+      },
+      plan: { plan: null, version: null },
+      configuration: { configuration: null },
+    };
+    void workspaceOverrides;
+    render(
+      <MemoryRouter initialEntries={[`/clients/${REL_ID}/overview`]}>
+        <Routes>
+          <Route
+            path="/clients/:relationshipId"
+            element={
+              <Outlet
+                context={{
+                  workspace,
+                  openWorkspaceModal: vi.fn(),
+                  refreshEpoch: 0,
+                  relationshipId: REL_ID,
+                  online: true,
+                  ended: false,
+                }}
+              />
+            }
+          >
+            <Route path="overview" element={<ClientOverviewPage />} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText("Logged")).toBeTruthy();
+    expect(screen.getByText("Changed")).toBeTruthy();
+    expect(screen.getByText("Tue 17 Nov")).toBeTruthy();
+    expect(screen.getByText("Mon 16 Nov")).toBeTruthy();
+    expect(screen.queryByText(/ago/)).toBeNull();
+    expect(screen.queryByText("Confirmed")).toBeNull();
+    expect(screen.queryByText("Modified")).toBeNull();
+  });
+});
+
 describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
   const ENDED_HEADER = {
     // Mon 6 Jul 10:00 IST and Sat 3 Oct 5:30 pm IST.
