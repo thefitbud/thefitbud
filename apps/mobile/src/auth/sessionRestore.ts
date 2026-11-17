@@ -1,6 +1,7 @@
 import { ApiClientError } from "@fitbud/api-client";
 import type { MeResponse, Role } from "@fitbud/contracts";
 import type { SessionRefresh } from "../lib/api";
+import type { MeSnapshot } from "./meSnapshot";
 
 /**
  * Native startup restore (AB3, D-W3-11). Pure: every effect is a dependency, so
@@ -11,6 +12,9 @@ import type { SessionRefresh } from "../lib/api";
  * - Anything else (no network, timeout, 429, 5xx, unreadable storage) leaves
  *   storage untouched and reports `offline`, so the caller offers Retry.
  *   A user is never signed out because the network was down.
+ * - Cold start with no network (Z12-41): an `offline` result carries the
+ *   snapshot of this user's last `/me`, when there is one, so the app opens
+ *   on cached data. The snapshot is asked for by the stored user id only.
  */
 
 export const SIGNED_OUT_MESSAGE = "You've been signed out. Please sign in again.";
@@ -21,6 +25,8 @@ export type RestoreStored = {
   /** AUTH_MODE=test only: the short test token (there is no refresh token). */
   testToken: string | null;
   selectedRole: Extract<Role, "trainee" | "trainer"> | null;
+  /** The user the stored session belongs to, once `/me` has named them. */
+  userId?: string | null;
 };
 
 export type RestoreDeps = {
@@ -36,16 +42,48 @@ export type RestoreDeps = {
   fetchMe: () => Promise<MeResponse>;
   /** Clear memory and storage (the caller's sign-out path). */
   clearSession: () => void;
+  /** The stored snapshot for this user id, or null (`meSnapshot.ts`). */
+  loadSnapshot?: (userId: string) => Promise<MeSnapshot | null>;
+  /**
+   * The refresh could not reach the server: give the token session the
+   * stored refresh token, so it mints an ID token as soon as it can.
+   */
+  holdRefreshToken?: (refreshToken: string) => void;
 };
 
 export type RestoreResult =
   | { status: "signed_out"; reason: "nothing_stored" | "refused" }
-  | { status: "offline" }
+  | {
+      status: "offline";
+      /** Null: nothing cached for this user, so the caller offers Retry. */
+      snapshot: MeSnapshot | null;
+      preferredRole: Role | null;
+    }
   | { status: "signed_in"; me: MeResponse; preferredRole: Role | null };
 
 /** The server said no: the session is gone for good. */
 export function isDefinitiveRefusal(error: unknown, statuses: readonly number[]): boolean {
   return error instanceof ApiClientError && statuses.includes(error.status);
+}
+
+async function offlineResult(
+  deps: RestoreDeps,
+  stored: RestoreStored | null,
+): Promise<RestoreResult> {
+  let snapshot: MeSnapshot | null = null;
+  if (stored?.userId && deps.loadSnapshot) {
+    try {
+      snapshot = await deps.loadSnapshot(stored.userId);
+    } catch {
+      // Unreadable storage is "no snapshot": the caller offers Retry.
+      snapshot = null;
+    }
+  }
+  return {
+    status: "offline",
+    snapshot,
+    preferredRole: stored?.selectedRole ?? null,
+  };
 }
 
 export async function restoreSession(deps: RestoreDeps): Promise<RestoreResult> {
@@ -55,7 +93,7 @@ export async function restoreSession(deps: RestoreDeps): Promise<RestoreResult> 
   } catch {
     // The keystore can fail to answer (for example while the device is still
     // starting). That says nothing about the session.
-    return { status: "offline" };
+    return offlineResult(deps, null);
   }
   if (!stored.refreshToken && !stored.testToken) {
     return { status: "signed_out", reason: "nothing_stored" };
@@ -73,7 +111,8 @@ export async function restoreSession(deps: RestoreDeps): Promise<RestoreResult> 
         deps.clearSession();
         return { status: "signed_out", reason: "refused" };
       }
-      return { status: "offline" };
+      deps.holdRefreshToken?.(stored.refreshToken);
+      return offlineResult(deps, stored);
     }
   } else if (stored.testToken) {
     deps.adoptTokens(stored.testToken);
@@ -87,6 +126,6 @@ export async function restoreSession(deps: RestoreDeps): Promise<RestoreResult> 
       deps.clearSession();
       return { status: "signed_out", reason: "refused" };
     }
-    return { status: "offline" };
+    return offlineResult(deps, stored);
   }
 }

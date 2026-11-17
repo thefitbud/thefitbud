@@ -1,38 +1,48 @@
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
-  useCallback,
-  useEffect,
-  useState,
-  useSyncExternalStore,
-} from "react";
-import { StyleSheet, View } from "react-native";
+  Modal,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  View,
+} from "react-native";
 import {
-  Check,
+  ChevronLeft,
+  CloudAlert,
   CloudOff,
-  Dumbbell,
-  Stethoscope,
-  Utensils,
+  CloudUpload,
+  GitCompareArrows,
+  RefreshCw,
 } from "lucide-react-native";
-import { brand, ink, semantic } from "@fitbud/tokens";
-import { fontFamilySemiBold } from "@fitbud/ui-mobile";
+import type { ColorToken } from "@fitbud/tokens";
+import { useAuth } from "../../auth/AuthProvider";
+import { Button } from "../../components/Button";
 import { Text } from "../../components/Text";
-import { BottomSheet } from "../../components/BottomSheet";
-import { ErrorBanner } from "../../components/ErrorBanner";
-import { useConfig } from "../../providers/ConfigProvider";
-import {
-  buildSupportMailto,
-  DEFAULT_SUPPORT_EMAIL,
-} from "../../lib/support";
-import { Linking } from "react-native";
-import { useSyncEngine } from "../../sync/SyncProvider";
-import {
-  conflictCopy,
-  createKeptRowsBinding,
-  describeOutboxEntry,
-  lastSyncedLabel,
-} from "../../sync/outboxCopy";
+import { reportError } from "../../lib/reportError";
 import { liveActivityKeptRows } from "../../notifications/liveActivityOutbox";
-import type { OutboxEntry } from "../../sync/engine";
-import { M2Button, M2Group, M2Hero, M2Note, M2Page, M2Row } from "./m2";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../../providers/ThemeProvider";
+import { useSyncEngine } from "../../sync/SyncProvider";
+import type { SendOutcome } from "../../sync/engine";
+import {
+  NO_SHEET_NAMES,
+  SHEET_EMPTY_BODY,
+  SHEET_FAILED_BODY,
+  SHEET_WAITING_BODY,
+  conflictSheetCopy,
+  createKeptRowsBinding,
+  lastSentLabel,
+  sendOutcomeLine,
+  sheetItems,
+  sheetTitle,
+  type SheetItem,
+  type SheetNames,
+} from "../../sync/outboxCopy";
+import { useSyncView } from "../../sync/useSyncStatus";
 
 /**
  * Sets tapped on the lock screen (iOS Live Activity) or in the notification
@@ -42,249 +52,544 @@ import { M2Button, M2Group, M2Hero, M2Note, M2Page, M2Row } from "./m2";
  */
 const keptRows = createKeptRowsBinding(liveActivityKeptRows);
 
-type Props = {
-  onBack: () => void;
+type ContentProps = {
   coachName?: string;
+  /** "See {coach}'s change" on a conflict; defaults to closing the screen. */
+  onSeeChange?: () => void;
 };
 
-export function SyncStatusScreen({ onBack, coachName = "your coach" }: Props) {
+type Props = ContentProps & {
+  onBack: () => void;
+};
+
+/**
+ * Sync status (TR-19a) and the plan-change conflict (TR-19b), Z12-41.
+ *
+ * Everything shown is the outbox's real state, read through `useSyncView`:
+ * the lines are the rows waiting, sending or refused, and a row the server
+ * accepted is simply no longer there. Nothing here keeps its own idea of
+ * whether the phone is online.
+ *
+ * The mock presents this as a sheet over More. The trainee shell mounts it as
+ * a screen, so `SyncStatusScreen` is that screen and `SyncStatusContent` is
+ * the mock's content on its own, ready to be put in a sheet.
+ */
+export function SyncStatusScreen({ onBack, coachName, onSeeChange }: Props) {
+  return (
+    <ThemeScope scheme="system">
+      <ScreenBody
+        onBack={onBack}
+        coachName={coachName}
+        onSeeChange={onSeeChange ?? onBack}
+      />
+    </ThemeScope>
+  );
+}
+
+function ScreenBody({ onBack, coachName, onSeeChange }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
+  return (
+    <SafeAreaView style={styles.page}>
+      <ScrollView contentContainerStyle={styles.pageContent}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={onBack}
+          style={styles.back}
+        >
+          <ChevronLeft color={theme.colors.ink2} size={20} strokeWidth={1.75} />
+          <Text variant="body" tone="ink2">
+            Back
+          </Text>
+        </Pressable>
+        <SyncStatusContent coachName={coachName} onSeeChange={onSeeChange} />
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+type RecordPayload = Record<string, unknown>;
+
+function parse(json: string | null): RecordPayload | null {
+  if (!json) return null;
+  try {
+    const value = JSON.parse(json) as unknown;
+    return value && typeof value === "object" ? (value as RecordPayload) : null;
+  } catch {
+    return null;
+  }
+}
+
+const str = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value.trim() : null;
+
+/**
+ * Meal and workout names for the lines, from the records already on the
+ * phone. A name that is not there is left to the plain fallback ("Meal",
+ * "Workout"): nothing is fetched for this screen and nothing is invented.
+ */
+function useSheetNames(): SheetNames {
   const sync = useSyncEngine();
-  const { config } = useConfig();
-  const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
-  const first = coachName.split(/\s+/)[0] || "your coach";
-  const [rows, setRows] = useState<OutboxEntry[]>([]);
-  const [syncedAt, setSyncedAt] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [diagOpen, setDiagOpen] = useState(false);
+  const [names, setNames] = useState<SheetNames>(NO_SHEET_NAMES);
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [meals, assignments, executions] = await Promise.all([
+          sync.store.listLocal("meal_assignment"),
+          sync.store.listLocal("workout_assignment"),
+          sync.store.listLocal("workout_execution"),
+        ]);
+        const mealNames = new Map<string, string>();
+        for (const row of meals) {
+          const name = str(parse(row.payloadJson)?.mealName);
+          if (name) mealNames.set(row.recordId, name);
+        }
+        const workoutNames = new Map<string, string>();
+        for (const row of assignments) {
+          const body = parse(row.payloadJson);
+          const day = body?.workoutDay as RecordPayload | undefined;
+          const name = str(body?.workoutDayName) ?? str(day?.name);
+          if (name) workoutNames.set(row.recordId, name);
+        }
+        for (const row of executions) {
+          const assignmentId = str(parse(row.payloadJson)?.assignmentId);
+          const name = assignmentId ? workoutNames.get(assignmentId) : undefined;
+          if (name) workoutNames.set(row.recordId, name);
+        }
+        if (active) {
+          setNames({
+            meal: (id) => mealNames.get(id) ?? null,
+            workout: (id) => workoutNames.get(id) ?? null,
+          });
+        }
+      } catch (error) {
+        reportError("SyncStatus.names", error);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [sync]);
+  return names;
+}
+
+const CHIPS: Record<
+  SheetItem["state"],
+  { fill: ColorToken; ink: ColorToken; label: string }
+> = {
+  waiting: { fill: "warnTint", ink: "warn", label: "Saved on phone" },
+  sending: { fill: "infoTint", ink: "info", label: "Sending…" },
+  failed: { fill: "critTint", ink: "crit", label: "Couldn't send" },
+};
+
+function StateChip({ item }: { item: SheetItem }) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const chip = CHIPS[item.state];
+  const label = item.conflict && item.kept ? "Kept on phone" : chip.label;
+  const color = theme.colors[chip.ink];
+  const Icon =
+    item.state === "sending"
+      ? CloudUpload
+      : item.state === "failed"
+        ? CloudAlert
+        : CloudOff;
+  return (
+    <View style={[styles.chip, { backgroundColor: theme.colors[chip.fill] }]}>
+      <Icon color={color} size={15} strokeWidth={2} />
+      <Text variant="caption" style={[styles.chipLabel, { color }]}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+export function SyncStatusContent({
+  coachName = "your coach",
+  onSeeChange,
+}: ContentProps) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const sync = useSyncEngine();
+  const { me } = useAuth();
+  const view = useSyncView();
+  const names = useSheetNames();
+  const coachFirstName = coachName.split(/\s+/)[0] || "Your coach";
+  const timeZone = me?.timezone ?? undefined;
+  const [sending, setSending] = useState(false);
+  const [outcome, setOutcome] = useState<SendOutcome | null>(null);
+  /** Conflicts closed with "See change" in this visit; they stay on the list. */
+  const [seen, setSeen] = useState<ReadonlySet<string>>(new Set());
+  const [openConflict, setOpenConflict] = useState<string | null>(null);
   const keptRowsCopy = useSyncExternalStore(
     keptRows.subscribe,
     keptRows.snapshot,
     keptRows.snapshot,
   );
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const [outbox, meta] = await Promise.all([
-        sync.store.listOutbox(),
-        sync.store.getMeta(),
-      ]);
-      setRows(outbox);
-      setSyncedAt(meta.lastSyncedAt);
-    } catch {
-      setError("Could not load sync status.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [sync]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const waiting = rows.filter(
-    (row) => row.status === "pending" || row.status === "in_flight",
+  const items = useMemo(
+    () =>
+      view
+        ? sheetItems(view.rows, { names, coachFirstName, timeZone })
+        : [],
+    [view, names, coachFirstName, timeZone],
   );
-  const failed = rows.filter(
-    (row) => row.status === "rejected" || row.status === "conflicted",
-  );
-  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
 
-  async function syncNow() {
-    setBusy(true);
-    setError(null);
+  // A plan-change conflict the trainee has not answered opens on its own.
+  const pending = items.find(
+    (item) => item.conflict && !item.kept && !seen.has(item.key),
+  );
+  const conflict =
+    items.find((item) => item.key === openConflict && item.conflict) ??
+    pending ??
+    null;
+
+  async function trySendingNow() {
+    setSending(true);
+    setOutcome(null);
     try {
-      await sync.runCycle();
-    } catch {
-      setError(
-        offline
-          ? "You're offline. Your logs stay on this phone."
-          : "Could not sync just now.",
-      );
+      setOutcome(await sync.sendNow());
     } finally {
-      setBusy(false);
-      await load();
+      setSending(false);
     }
   }
 
-  async function retry(row: OutboxEntry) {
-    await sync.store.updateOutboxStatus(row.mutationId, "pending", null);
-    await syncNow();
+  function closeConflict(item: SheetItem) {
+    setSeen((current) => new Set(current).add(item.key));
+    setOpenConflict(null);
   }
 
-  const quiet =
-    waiting.length === 0 && failed.length === 0 && !offline;
-  const heroTitle = offline
-    ? `Offline · ${waiting.length} waiting`
-    : quiet
-      ? "All saved"
-      : `${waiting.length} waiting`;
+  if (!view) {
+    // The outbox could not be read. That is not "nothing waiting".
+    return (
+      <View style={styles.content}>
+        <Text variant="title" accessibilityRole="header">
+          Sync status
+        </Text>
+        <Text variant="body" tone="ink2">
+          Couldn't read what's saved on this phone (SYNC-STORE). Close this and
+          open it again.
+        </Text>
+      </View>
+    );
+  }
+
+  const open = items.filter((item) => item.state !== "failed").length;
+  const quiet = items.length === 0;
+  const resultLine = outcome ? sendOutcomeLine(outcome) : null;
+  const lastSent = lastSentLabel(view.status.lastSentAt, timeZone);
+  const HeaderIcon = quiet ? CloudUpload : open > 0 ? CloudOff : CloudAlert;
+  const headerTone: ColorToken = quiet ? "done" : open > 0 ? "warn" : "crit";
 
   return (
-    <M2Page
-      title="Sync status"
-      subtitle={`Your logs are saved on this phone and sent to ${first} when you're online.`}
-      onBack={onBack}
-      refreshing={refreshing}
-      onRefresh={() => {
-        setRefreshing(true);
-        void load();
-      }}
-    >
-      {error ? <ErrorBanner message={error} /> : null}
-      {offline ? (
-        <Text style={styles.muted}>You're offline. Nothing is lost.</Text>
-      ) : null}
-      {loading ? (
-        <Text accessibilityLabel="Loading sync status" style={styles.muted}>
-          Loading…
+    <View style={styles.content}>
+      <View style={styles.header}>
+        <HeaderIcon
+          color={theme.colors[headerTone]}
+          size={26}
+          strokeWidth={2}
+        />
+        <Text variant="title" accessibilityRole="header" style={styles.title}>
+          {sheetTitle(items)}
         </Text>
-      ) : null}
-      <M2Hero
-        tone={quiet ? "ok" : "wait"}
-        icon={
-          quiet ? (
-            <Check color={brand.indigo} size={22} strokeWidth={2} />
-          ) : (
-            <CloudOff color={ink[700]} size={22} strokeWidth={1.75} />
-          )
-        }
-        title={heroTitle}
-        subtitle={lastSyncedLabel(syncedAt)}
-      />
+      </View>
+      <Text variant="body" tone="ink2">
+        {quiet
+          ? SHEET_EMPTY_BODY
+          : open > 0
+            ? SHEET_WAITING_BODY
+            : SHEET_FAILED_BODY}
+      </Text>
 
       {keptRowsCopy ? (
-        // Announced when a drain makes it appear: the whole point of the
-        // notice is telling a trainee something they would otherwise never
-        // learn. Informational, not an error, so "polite" (the screen's
-        // other dynamic text uses the same prop).
-        <View accessibilityLiveRegion="polite">
-          <M2Note>{keptRowsCopy}</M2Note>
+        // Announced when a drain makes it appear: the trainee would otherwise
+        // never learn that a lock-screen set is being held.
+        <View accessibilityLiveRegion="polite" style={styles.note}>
+          <Text variant="subhead">{keptRowsCopy}</Text>
         </View>
       ) : null}
 
-      {waiting.length === 0 ? (
-        <Text style={styles.muted}>Nothing waiting.</Text>
-      ) : (
-        <M2Group>
-          {waiting.map((row) => (
-            <M2Row
-              key={row.mutationId}
-              icon={queueIcon(row.operation)}
-              label={describeOutboxEntry(row)}
-              showChevron={false}
-            />
-          ))}
-        </M2Group>
-      )}
-
-      <Text style={styles.section}>Couldn't send ({failed.length})</Text>
-      {failed.length === 0 ? (
-        <Text style={styles.muted}>Nothing failed.</Text>
-      ) : (
-        <View style={styles.stack}>
-          {failed.map((row) => (
-            <View key={row.mutationId} style={styles.fail}>
-              <Text style={styles.failTitle}>{describeOutboxEntry(row)}</Text>
-              <Text style={styles.failWhy}>{conflictCopy(row.lastError)}</Text>
-              <M2Button
-                label="Retry"
-                variant="secondary"
-                onPress={() => {
-                  void retry(row);
-                }}
-              />
+      {items.length > 0 ? (
+        <View style={styles.group}>
+          {items.map((item, index) => (
+            <View
+              key={item.key}
+              style={[styles.row, index > 0 ? styles.rowDivider : null]}
+            >
+              <View style={styles.rowTop}>
+                <View style={styles.rowText}>
+                  <Text variant="bodyStrong">{item.title}</Text>
+                  <Text variant="subhead">{item.detail}</Text>
+                </View>
+                <StateChip item={item} />
+              </View>
+              {item.state === "failed" ? (
+                <View style={styles.failed}>
+                  {item.reason ? (
+                    <Text variant="subhead" tone="crit">
+                      {item.reason}
+                    </Text>
+                  ) : null}
+                  <View style={styles.actions}>
+                    {item.conflict ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        label="What changed"
+                        accessibilityLabel={`What changed for ${item.title}`}
+                        onPress={() => setOpenConflict(item.key)}
+                      />
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        label="Try again"
+                        accessibilityLabel={`Try again: ${item.title}`}
+                        disabled={sending}
+                        onPress={() => {
+                          void (async () => {
+                            for (const id of item.mutationIds) {
+                              await sync.retryEntry(id);
+                            }
+                            await trySendingNow();
+                          })();
+                        }}
+                      />
+                    )}
+                    <Button
+                      size="sm"
+                      variant="text"
+                      label="Remove"
+                      accessibilityLabel={`Remove ${item.title} from this phone`}
+                      onPress={() => {
+                        void (async () => {
+                          for (const id of item.mutationIds) {
+                            await sync.discardEntry(id);
+                          }
+                        })();
+                      }}
+                    />
+                  </View>
+                </View>
+              ) : null}
             </View>
           ))}
         </View>
-      )}
-
-      <M2Button
-        label={busy ? "Syncing…" : "Sync now"}
-        disabled={busy}
-        onPress={() => {
-          void syncNow();
-        }}
-      />
-
-      <M2Group>
-        <M2Row
-          icon={<Stethoscope color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label="Diagnostics"
-          hint="FitBud on this phone"
-          onPress={() => setDiagOpen((open) => !open)}
-        />
-      </M2Group>
-      {diagOpen ? (
-        <M2Note>
-          FitBud on this phone. Email support includes this screen.
-        </M2Note>
       ) : null}
-      <M2Button
-        label="Email support"
-        variant="secondary"
+
+      <Button
+        variant="tint"
+        label={sending ? "Sending…" : "Try sending now"}
+        loading={sending}
+        disabled={open === 0}
+        icon={
+          <RefreshCw
+            color={open === 0 ? theme.colors.ink4 : theme.colors.brandInk}
+            size={18}
+            strokeWidth={2}
+          />
+        }
         onPress={() => {
-          const url = buildSupportMailto({
-            supportEmail,
-            screenId: "TR-19",
-            role: "trainee",
-            extra: `Last synced: ${syncedAt ?? "never"}\nWaiting: ${waiting.length}\nCouldn't send: ${failed.length}`,
-          });
-          void Linking.canOpenURL(url).then(async (can) => {
-            if (can) {
-              await Linking.openURL(url);
-              return;
-            }
-            setHelpOpen(true);
-          });
+          void trySendingNow();
         }}
       />
+      <View accessibilityLiveRegion="polite" style={styles.footer}>
+        {resultLine ? (
+          <Text variant="subhead" style={styles.center}>
+            {resultLine}
+          </Text>
+        ) : null}
+        {lastSent ? (
+          <Text variant="caption" style={styles.center}>
+            {lastSent}
+          </Text>
+        ) : null}
+      </View>
 
-      <BottomSheet
-        visible={helpOpen}
-        title="Email support"
-        subtitle="Copy this address if mail didn't open."
-        onDismiss={() => setHelpOpen(false)}
-      >
-        <Text style={styles.mail}>{supportEmail}</Text>
-      </BottomSheet>
-    </M2Page>
+      {conflict ? (
+        <ConflictDialog
+          item={conflict}
+          coachFirstName={coachFirstName}
+          onKeep={() => {
+            void (async () => {
+              for (const id of conflict.mutationIds) await sync.keepEntry(id);
+              closeConflict(conflict);
+            })();
+          }}
+          onSee={() => {
+            closeConflict(conflict);
+            onSeeChange?.();
+          }}
+        />
+      ) : null}
+    </View>
   );
 }
 
-function queueIcon(operation: string) {
-  if (operation.startsWith("meal.")) {
-    return <Utensils color={brand.indigo} size={18} strokeWidth={1.75} />;
-  }
-  if (operation.startsWith("workout.")) {
-    return <Dumbbell color={brand.indigo} size={18} strokeWidth={1.75} />;
-  }
-  return <CloudOff color={ink[700]} size={18} strokeWidth={1.75} />;
+/** TR-19b: the coach changed the plan while the log waited on the phone. */
+function ConflictDialog({
+  item,
+  coachFirstName,
+  onKeep,
+  onSee,
+}: {
+  item: SheetItem;
+  coachFirstName: string;
+  onKeep: () => void;
+  onSee: () => void;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const named = item.title !== "Meal" && item.title !== "Workout";
+  const copy = conflictSheetCopy({
+    coachFirstName,
+    kind: item.kind,
+    subject: item.kind === "meal" && named ? item.title.toLowerCase() : null,
+  });
+  return (
+    <Modal
+      transparent
+      visible
+      animationType="fade"
+      statusBarTranslucent
+      onRequestClose={onSee}
+    >
+      <View style={styles.scrim} accessibilityViewIsModal>
+        <View style={styles.dialog} accessibilityRole="alert">
+          <View style={styles.dialogIcon}>
+            <GitCompareArrows
+              color={theme.colors.info}
+              size={26}
+              strokeWidth={2}
+            />
+          </View>
+          <Text variant="headline" accessibilityRole="header" style={styles.center}>
+            {copy.title}
+          </Text>
+          <Text variant="body" tone="ink2" style={styles.center}>
+            {copy.body}
+          </Text>
+          <View style={styles.dialogActions}>
+            <Button label={copy.keep} onPress={onKeep} />
+            <Button variant="secondary" label={copy.see} onPress={onSee} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
 }
 
-const styles = StyleSheet.create({
-  muted: { color: ink[500], fontSize: 15 },
-  section: {
-    color: ink[700],
-    fontFamily: fontFamilySemiBold,
-    fontSize: 14,
-    marginTop: 4,
+const useStyles = createThemedStyles((t) => ({
+  page: {
+    backgroundColor: t.colors.bg,
+    flex: 1,
   },
-  stack: { gap: 8 },
-  fail: {
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 8,
-    padding: 14,
+  pageContent: {
+    gap: t.spacing.md,
+    padding: t.spacing.lg,
+    paddingBottom: t.spacing.xxl,
   },
-  failTitle: { color: ink[900], fontSize: 15, lineHeight: 21 },
-  failWhy: { color: semantic.critical.text, fontSize: 14, lineHeight: 20 },
-  mail: { color: brand.deepNavy, fontSize: 16 },
-});
+  back: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    gap: 2,
+    minHeight: t.touchTarget,
+  },
+  content: {
+    gap: t.spacing.md,
+  },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: t.spacing.sm,
+  },
+  title: {
+    flex: 1,
+  },
+  note: {
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.group,
+    padding: t.spacing.md,
+  },
+  group: {
+    backgroundColor: t.scheme === "dark" ? t.colors.card : t.colors.fill,
+    borderRadius: t.radii.group,
+    paddingHorizontal: t.spacing.lg,
+  },
+  row: {
+    gap: t.spacing.sm,
+    paddingVertical: t.spacing.md,
+  },
+  rowDivider: {
+    borderTopColor: t.colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  rowTop: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: t.spacing.md,
+  },
+  rowText: {
+    flex: 1,
+    gap: 2,
+  },
+  chip: {
+    alignItems: "center",
+    borderRadius: t.radii.pill,
+    flexDirection: "row",
+    gap: 5,
+    height: 30,
+    paddingHorizontal: 10,
+  },
+  chipLabel: {
+    fontWeight: "600",
+  },
+  failed: {
+    gap: t.spacing.sm,
+  },
+  actions: {
+    flexDirection: "row",
+    gap: t.spacing.sm,
+  },
+  footer: {
+    gap: t.spacing.xs,
+    minHeight: 20,
+  },
+  center: {
+    textAlign: "center",
+  },
+  scrim: {
+    alignItems: "center",
+    backgroundColor: t.colors.scrim,
+    flex: 1,
+    justifyContent: "center",
+    padding: t.spacing.xl,
+  },
+  dialog: {
+    alignItems: "stretch",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.edge,
+    borderRadius: t.radii.dialog,
+    borderWidth: t.scheme === "dark" ? 1 : 0,
+    gap: t.spacing.md,
+    maxWidth: 420,
+    padding: t.spacing.xl,
+    width: "100%",
+  },
+  dialogIcon: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: t.colors.infoTint,
+    borderRadius: 28,
+    height: 56,
+    justifyContent: "center",
+    width: 56,
+  },
+  dialogActions: {
+    gap: t.spacing.sm,
+    marginTop: t.spacing.xs,
+  },
+}));

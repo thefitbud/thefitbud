@@ -1,106 +1,74 @@
-import { useEffect, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable } from "react-native";
+import { CloudAlert, CloudOff, CloudUpload } from "lucide-react-native";
+import type { ColorToken } from "@fitbud/tokens";
 import { Text } from "./Text";
-import { createThemedStyles } from "../providers/ThemeProvider";
-import { useSyncEngine } from "../sync/SyncProvider";
-import { indicatorFromCounts, type IndicatorKind } from "../sync/outboxCopy";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { pillFromStatus, type IndicatorKind } from "../sync/outboxCopy";
+import { useSyncView } from "../sync/useSyncStatus";
 
 type Props = {
   onPress?: () => void;
 };
 
+/** Kit sync chips: the v2 status hues at v3 values (DESIGN-SYSTEM-v3 §5). */
+const TONES: Record<
+  Exclude<IndicatorKind, "synced">,
+  { fill: ColorToken; ink: ColorToken }
+> = {
+  waiting: { fill: "warnTint", ink: "warn" },
+  syncing: { fill: "infoTint", ink: "info" },
+  problem: { fill: "critTint", ink: "crit" },
+};
+
+/**
+ * The sync pill (Z12-41). It shows the outbox's real state and nothing else:
+ * "Saved on phone" while a log waits, "Sending…" while a request is in
+ * flight, "Couldn't send" when the server refused one. With an empty outbox
+ * there is no pill. Always an icon and a word, never colour alone.
+ */
 export function SyncIndicator({ onPress }: Props) {
+  const theme = useTheme();
   const styles = useStyles();
-  const sync = useSyncEngine();
-  const [view, setView] = useState<{
-    kind: IndicatorKind;
-    label: string;
-    visible: boolean;
-  } | null>(null);
+  const view = useSyncView();
+  const pill = view ? pillFromStatus(view.status) : null;
+  if (!pill || pill.kind === "synced") return null;
 
-  useEffect(() => {
-    let active = true;
-    async function read() {
-      const [rows, meta] = await Promise.all([
-        sync.store.listOutbox(),
-        sync.store.getMeta(),
-      ]);
-      if (!active) return;
-      const pending = rows.filter((row) => row.status === "pending").length;
-      const inFlight = rows.filter((row) => row.status === "in_flight").length;
-      const failed = rows.filter(
-        (row) => row.status === "rejected" || row.status === "conflicted",
-      ).length;
-      const syncedAt = meta.lastSyncedAt
-        ? new Date(meta.lastSyncedAt).getTime()
-        : null;
-      setView(
-        indicatorFromCounts({
-          pending,
-          inFlight,
-          failed,
-          offline: typeof navigator !== "undefined" && navigator.onLine === false,
-          syncedAt: Number.isFinite(syncedAt) ? syncedAt : null,
-          now: Date.now(),
-        }),
-      );
-    }
-    void read();
-    const timer = setInterval(() => {
-      void read();
-    }, 1000);
-    return () => {
-      active = false;
-      clearInterval(timer);
-    };
-  }, [sync]);
-
-  if (!view?.visible) return null;
+  const tone = TONES[pill.kind];
+  const color = theme.colors[tone.ink];
+  const Icon =
+    pill.kind === "syncing"
+      ? CloudUpload
+      : pill.kind === "problem"
+        ? CloudAlert
+        : CloudOff;
 
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={view.label}
+      accessibilityLabel={`Sync status, ${pill.label}`}
       onPress={onPress}
-      style={styles.wrap}
+      // A 32 pt chip with a 44 pt tap target.
+      hitSlop={6}
+      style={[styles.pill, { backgroundColor: theme.colors[tone.fill] }]}
     >
-      <View
-        style={[
-          styles.dot,
-          view.kind === "problem"
-            ? styles.dotProblem
-            : view.kind === "syncing"
-              ? styles.dotSyncing
-              : view.kind === "synced"
-                ? styles.dotSynced
-                : styles.dotNeutral,
-        ]}
-      />
-      <Text style={styles.text}>{view.label}</Text>
+      <Icon color={color} size={16} strokeWidth={2} />
+      <Text variant="caption" style={[styles.label, { color }]}>
+        {pill.label}
+      </Text>
     </Pressable>
   );
 }
 
-/** Status dot plus a word (never colour alone): ink3 idle, warn problem, info syncing, done synced. */
 const useStyles = createThemedStyles((t) => ({
-  wrap: {
+  pill: {
     alignItems: "center",
+    borderRadius: t.radii.pill,
     flexDirection: "row",
-    gap: t.spacing.xs,
-    minHeight: t.touchTarget,
-    paddingHorizontal: t.spacing.sm,
+    gap: 5,
+    height: 32,
+    paddingHorizontal: t.spacing.md,
   },
-  dot: {
-    borderRadius: 4,
-    height: 8,
-    width: 8,
-  },
-  dotNeutral: { backgroundColor: t.colors.ink3 },
-  dotProblem: { backgroundColor: t.colors.warn },
-  dotSyncing: { backgroundColor: t.colors.info },
-  dotSynced: { backgroundColor: t.colors.done },
-  text: {
-    ...t.text.caption.style,
-    color: t.colors.ink3,
+  label: {
+    fontWeight: "600",
   },
 }));

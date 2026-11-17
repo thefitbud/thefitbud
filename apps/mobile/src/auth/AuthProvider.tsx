@@ -24,6 +24,7 @@ import {
   createMobileApiClient,
   createTokenSession,
   isForegroundAppState,
+  onApiActivity,
   type SessionRefresh,
   type TokenSession,
 } from "../lib/api";
@@ -42,6 +43,13 @@ import {
   SIGNED_OUT_MESSAGE,
   restoreSession,
 } from "./sessionRestore";
+import {
+  clearMeSnapshot,
+  loadMeSnapshot,
+  saveMeSnapshot,
+  type MeSnapshot,
+} from "./meSnapshot";
+import { clearSyncDataOnSignOut } from "../sync/userStore";
 import {
   coachViewSwitchPrompt,
   mobilePermittedRoles,
@@ -68,6 +76,13 @@ type AuthContextValue = {
   relationships: CoachingRelationship[];
   route: AppRoute;
   errorMessage: string | null;
+  /**
+   * Set while the app is open on the stored snapshot of the last `/me`
+   * because a cold start could not reach the server (Z12-41). `me` and
+   * `relationships` are then the cached ones, saved at `savedAt`. Null once
+   * the server has answered.
+   */
+  offlineSnapshot: { savedAt: string } | null;
   api: FitBudApiClient;
   pendingNotificationLink: NotificationDeepLink | null;
   /**
@@ -116,13 +131,23 @@ function messageFromError(error: unknown): string {
 }
 
 /**
- * Every path that ends the session drops the trainer's offline snapshots and
- * the cache owner, so the next person on this phone never reads them (Z11-8).
+ * Every path that ends the session drops the trainer's offline snapshots, the
+ * cache owner and the stored `/me` snapshot, so the next person on this phone
+ * never reads them (Z11-8, Z12-41).
  */
 function endTrainerCacheSession(): void {
   clearTrainerCache();
   setTrainerCacheOwner(null);
+  void clearMeSnapshot();
 }
+
+/** How often an app opened on the snapshot asks the server again. */
+const SNAPSHOT_RETRY_MS = 30_000;
+/**
+ * Route resolution only: stands in for the ID token while the app is open on
+ * the snapshot and the token has not been minted yet. Never sent anywhere.
+ */
+const SNAPSHOT_SESSION = "offline-snapshot";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Read once: later renders must not re-read storage.
@@ -157,6 +182,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionHydrated, setSessionHydrated] = useState(
     !persisted.accessToken && Platform.OS === "web",
   );
+  const [offlineSnapshot, setOfflineSnapshot] = useState<{
+    savedAt: string;
+  } | null>(null);
+  const snapshotModeRef = useRef(false);
+  const leaveSnapshotMode = useCallback(() => {
+    snapshotModeRef.current = false;
+    setOfflineSnapshot(null);
+  }, []);
 
   const selectedRoleRef = useRef<Role | null>(persisted.selectedRole);
   selectedRoleRef.current = selectedRole;
@@ -271,6 +304,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // different user than the current owner removes the previous trainer's
       // entries and drops any write from a fetch started before (Z12-33).
       setTrainerCacheOwner(meResponse.userId);
+      // The server answered: whatever was on screen from the snapshot is
+      // replaced by this.
+      leaveSnapshotMode();
       setMe(meResponse);
       setSelectedRole(role);
       selectedRoleRef.current = role;
@@ -287,7 +323,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setRelationshipsLoaded(true);
       }
     },
-    [loadRelationships, registerPushToken],
+    [leaveSnapshotMode, loadRelationships, registerPushToken],
   );
 
   const restorePhaseRef = useRef(restorePhase);
@@ -315,12 +351,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       clearPersistedSession();
       endTrainerCacheSession();
     };
+    /**
+     * Cold start with no network (Z12-41): open on this user's stored `/me`
+     * instead of the error screen. The trainer cache owner is not set here:
+     * it comes only from a `/me` the server answered (Z11-8).
+     */
+    const openFromSnapshot = (snapshot: MeSnapshot, preferredRole: Role | null) => {
+      const autoRole = selectInitialMobileRole(snapshot.me.permittedRoles);
+      const role =
+        preferredRole && snapshot.me.permittedRoles.includes(preferredRole)
+          ? preferredRole
+          : autoRole;
+      snapshotModeRef.current = true;
+      setOfflineSnapshot({ savedAt: snapshot.savedAt });
+      setMe(snapshot.me);
+      setSelectedRole(role);
+      selectedRoleRef.current = role;
+      setRelationships(snapshot.relationships);
+      setRelationshipsLoaded(true);
+      setNeedsAccountLink(false);
+      setErrorMessage(null);
+      restorePhaseRef.current = "done";
+      setRestorePhase("done");
+      setBootstrapping(false);
+      setSessionHydrated(true);
+    };
     const result = await restoreSession({
       load: loadNativeSession,
       refreshAuth: (refreshToken) => api.refreshAuth(refreshToken),
       adoptTokens: (token, refresh) => tokens.signIn(token, refresh),
       fetchMe: () => api.me(),
       clearSession,
+      loadSnapshot: loadMeSnapshot,
+      holdRefreshToken: (refreshToken) => tokens.hold(refreshToken),
     });
     // Native knows the stored "Remember my choice" only once it has loaded.
     setRememberRole(loadRememberRole());
@@ -352,11 +415,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setSessionHydrated(true);
           return;
         }
+        // `/me` answered but the rest did not (the network dropped between
+        // the two calls): the snapshot still opens the app.
+        const snapshot = await loadMeSnapshot(result.me.userId).catch(() => null);
+        if (snapshot) {
+          openFromSnapshot(snapshot, result.preferredRole);
+          return;
+        }
         offline();
         return;
       }
     }
     if (result.status === "offline") {
+      if (result.snapshot) {
+        openFromSnapshot(result.snapshot, result.preferredRole);
+        return;
+      }
       offline();
       return;
     }
@@ -374,6 +448,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   /** `/me` answered 401 after the client's own refresh: the session is gone. */
   const dropRefusedSession = useCallback(() => {
+    leaveSnapshotMode();
     setMe(null);
     setSelectedRole(null);
     selectedRoleRef.current = null;
@@ -384,7 +459,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRelationshipsLoaded(true);
     setNeedsAccountLink(true);
     setRoleSelectRequested(false);
-  }, [tokens]);
+  }, [leaveSnapshotMode, tokens]);
+
+  /**
+   * The app is open on the snapshot: ask the server again, quietly. On
+   * success `applyMe` replaces the cached account and leaves snapshot mode.
+   * A network failure changes nothing; only a definitive refusal ends the
+   * session.
+   */
+  const snapshotRestoreRunningRef = useRef(false);
+  const finishSnapshotRestore = useCallback(async () => {
+    if (!snapshotModeRef.current || snapshotRestoreRunningRef.current) return;
+    snapshotRestoreRunningRef.current = true;
+    try {
+      if (!tokens.getAccessToken()) {
+        // Held refresh token: a refusal here ends the session through
+        // `onExpired`; a network failure returns null.
+        const token = await tokens.refresh();
+        if (!token) return;
+      }
+      const meResponse = await api.me();
+      if (!snapshotModeRef.current) return;
+      await applyMe(meResponse, selectedRoleRef.current, api);
+      persistSession({
+        accessToken: tokens.getAccessToken(),
+        selectedRole: selectedRoleRef.current,
+        userId: meResponse.userId,
+      });
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        dropRefusedSession();
+      } else if (!isNetworkFailure(error)) {
+        reportError("auth-snapshot-restore", error);
+      }
+    } finally {
+      snapshotRestoreRunningRef.current = false;
+    }
+  }, [api, applyMe, dropRefusedSession, tokens]);
+
+  useEffect(() => {
+    if (!offlineSnapshot) return;
+    const timer = setInterval(() => {
+      void finishSnapshotRestore();
+    }, SNAPSHOT_RETRY_MS);
+    const subscription = AppState.addEventListener("change", (next) => {
+      if (isForegroundAppState(next)) void finishSnapshotRestore();
+    });
+    // Any call that got through (the sync probe included) means the server
+    // is reachable again.
+    const stopListening = onApiActivity((activity) => {
+      if (activity === "success") void finishSnapshotRestore();
+    });
+    return () => {
+      clearInterval(timer);
+      subscription.remove();
+      stopListening();
+    };
+  }, [finishSnapshotRestore, offlineSnapshot]);
+
+  // The held refresh token minted an ID token: finish the restore.
+  useEffect(() => {
+    if (offlineSnapshot && accessToken) void finishSnapshotRestore();
+  }, [accessToken, finishSnapshotRestore, offlineSnapshot]);
+
+  // Keep the snapshot equal to what the server last said. Never written
+  // from the snapshot itself. A trainer's client list is left out: the
+  // trainer shell does not route on it.
+  useEffect(() => {
+    if (!me || !relationshipsLoaded || offlineSnapshot) return;
+    void saveMeSnapshot({
+      me,
+      relationships: selectedRole === "trainee" ? relationships : [],
+    });
+  }, [me, offlineSnapshot, relationships, relationshipsLoaded, selectedRole]);
 
   const refreshSession = useCallback(async () => {
     if (restorePhaseRef.current === "offline") {
@@ -512,6 +659,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       selectedRoleRef.current = null;
       // No owner until this sign-in's `/me` answers (Z11-8).
       setTrainerCacheOwner(null);
+      leaveSnapshotMode();
+      void clearMeSnapshot();
       tokens.signIn(trimmed, refresh);
       persistSession({ accessToken: trimmed, selectedRole: null });
       setBootstrapping(true);
@@ -551,10 +700,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionHydrated(true);
       }
     },
-    [api, applyMe, tokens],
+    [api, applyMe, leaveSnapshotMode, tokens],
   );
 
-  const signOut = useCallback(() => {
+  /**
+   * Ends the session. An explicit sign-out also drops the unsent logs, as
+   * the sign-out sheet says (TR-20f). A session the server ended keeps them:
+   * they are keyed by user id, so the same user gets them back on the next
+   * sign-in and nobody else can read them (Z12-41).
+   */
+  const endSession = useCallback((unsentLogs: "drop" | "keep") => {
     // Clear push state and unregister this installation before the session is
     // cleared. The revoke runs on a client that holds the current token and
     // role, so the request is authenticated whatever order the promises settle
@@ -596,8 +751,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Cleared with the session: the next sign-in starts ticked.
     setRememberRole(true);
     endTrainerCacheSession();
-  }, [tokens]);
-  onExpiredRef.current = signOut;
+    leaveSnapshotMode();
+    if (unsentLogs === "drop") void clearSyncDataOnSignOut();
+  }, [leaveSnapshotMode, tokens]);
+  const signOut = useCallback(() => endSession("drop"), [endSession]);
+  onExpiredRef.current = () => endSession("keep");
 
   const setActiveRelationship = useCallback(
     (relationship: CoachingRelationship) => {
@@ -660,7 +818,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [me]);
 
   const resolvedRoute = resolveAppRoute({
-    accessToken,
+    accessToken: accessToken ?? (offlineSnapshot ? SNAPSHOT_SESSION : null),
     bootstrapping: bootstrapping || !sessionHydrated,
     me,
     selectedRole,
@@ -689,6 +847,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       relationships,
       route,
       errorMessage,
+      offlineSnapshot,
       api,
       pendingNotificationLink,
       pendingDeepLink: visibleDeepLink,
@@ -715,6 +874,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       relationships,
       route,
       errorMessage,
+      offlineSnapshot,
       api,
       pendingNotificationLink,
       visibleDeepLink,

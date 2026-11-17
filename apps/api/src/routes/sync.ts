@@ -3,7 +3,6 @@ import {
   cursorParameter,
   limitParameter,
 } from "../openapi/document";
-import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Hono as HonoApp } from "hono";
 import {
@@ -18,13 +17,14 @@ import {
   type SyncMutationResult,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
-import { syncMutations } from "../db/schema";
 import {
   appendChangeLog,
-  mutationResultFromStored,
+  failedSyncResult,
+  findStoredSyncVerdict,
   pullChangesForTrainee,
+  recordSyncResult,
+  resolveWorkoutMutationPayload,
 } from "../domain/sync";
-import { createId, nowIso } from "../lib/crypto";
 import { fail, ok } from "../lib/envelope";
 import {
   optionalAuthMiddleware,
@@ -231,129 +231,6 @@ function extractRecordMeta(
   return { recordId, serverVersion, relationshipId };
 }
 
-function statusFromHttp(
-  httpStatus: number,
-  alreadyApplied: boolean,
-): SyncMutationResult["status"] {
-  if (alreadyApplied) return "already_applied";
-  if (httpStatus === 409) return "conflicted";
-  if (httpStatus >= 200 && httpStatus < 300) return "applied";
-  return "rejected";
-}
-
-/**
- * Persist a sync mutation result. Retries must never 500 on UNIQUE — return the
- * prior stored result when the same mutationId / idempotency key already exists.
- * First successful insert keeps status "applied"; only true retries become
- * "already_applied".
- */
-async function persistSyncMutationResult(
-  db: ReturnType<typeof createDb>,
-  input: {
-    actorUserId: string;
-    mutation: SyncMutationRequest;
-    result: SyncMutationResult;
-  },
-): Promise<SyncMutationResult> {
-  // Pre-check — avoid D1 quirks with RETURNING + ON CONFLICT (can 500 or
-  // mis-report first apply as already_applied).
-  const existingByMutation = await db
-    .select()
-    .from(syncMutations)
-    .where(
-      and(
-        eq(syncMutations.actorUserId, input.actorUserId),
-        eq(syncMutations.mutationId, input.mutation.mutationId),
-      ),
-    )
-    .limit(1);
-  if (existingByMutation[0]) {
-    const prior = mutationResultFromStored(existingByMutation[0].resultBody);
-    if (
-      prior.status === "applied" ||
-      prior.status === "already_applied"
-    ) {
-      return { ...prior, status: "already_applied" };
-    }
-    return prior;
-  }
-
-  const existingByKey = await db
-    .select()
-    .from(syncMutations)
-    .where(
-      and(
-        eq(syncMutations.actorUserId, input.actorUserId),
-        eq(syncMutations.idempotencyKey, input.mutation.idempotencyKey),
-      ),
-    )
-    .limit(1);
-  if (existingByKey[0]) {
-    const prior = mutationResultFromStored(existingByKey[0].resultBody);
-    if (existingByKey[0].mutationId !== input.mutation.mutationId) {
-      return {
-        mutationId: input.mutation.mutationId,
-        status: "rejected",
-        recordId: prior.recordId,
-        serverVersion: prior.serverVersion,
-        entityType: prior.entityType,
-        error: {
-          code: "IDEMPOTENCY_KEY_REUSE",
-          message:
-            "Idempotency key was already used by a different mutation id.",
-        },
-      };
-    }
-    if (
-      prior.status === "applied" ||
-      prior.status === "already_applied"
-    ) {
-      return { ...prior, status: "already_applied" };
-    }
-    return prior;
-  }
-
-  try {
-    await db.insert(syncMutations).values({
-      id: createId(),
-      mutationId: input.mutation.mutationId,
-      actorUserId: input.actorUserId,
-      idempotencyKey: input.mutation.idempotencyKey,
-      operation: input.mutation.operation,
-      entityType: input.mutation.entityType,
-      recordId: input.result.recordId,
-      resultStatus: input.result.status,
-      serverVersion: input.result.serverVersion,
-      resultBody: JSON.stringify(input.result),
-      createdAt: nowIso(),
-    });
-    return input.result;
-  } catch {
-    // Race: another writer persisted first — return prior without 500.
-    const raced = await db
-      .select()
-      .from(syncMutations)
-      .where(
-        and(
-          eq(syncMutations.actorUserId, input.actorUserId),
-          eq(syncMutations.mutationId, input.mutation.mutationId),
-        ),
-      )
-      .limit(1);
-    if (raced[0]) {
-      const prior = mutationResultFromStored(raced[0].resultBody);
-      if (
-        prior.status === "applied" ||
-        prior.status === "already_applied"
-      ) {
-        return { ...prior, status: "already_applied" };
-      }
-      return prior;
-    }
-    return input.result;
-  }
-}
-
 syncRoutes.post(
   "/push",
   operation({
@@ -404,60 +281,24 @@ syncRoutes.post(
         continue;
       }
 
-      const existingByMutation = await db
-        .select()
-        .from(syncMutations)
-        .where(
-          and(
-            eq(syncMutations.actorUserId, actor.userId),
-            eq(syncMutations.mutationId, mutation.mutationId),
-          ),
-        )
-        .limit(1);
-      if (existingByMutation[0]) {
-        const prior = mutationResultFromStored(existingByMutation[0].resultBody);
-        results.push({
-          ...prior,
-          status:
-            prior.status === "applied" || prior.status === "already_applied"
-              ? "already_applied"
-              : prior.status,
-        });
+      // Dedupe: an applied mutation is answered `already_applied` and never
+      // dispatched again. A refusal on record is processed again (Z12-41).
+      const stored = await findStoredSyncVerdict(db, {
+        actorUserId: actor.userId,
+        mutation,
+      });
+      if (stored.kind !== "process") {
+        results.push(stored.result);
         continue;
       }
 
-      const existingByKey = await db
-        .select()
-        .from(syncMutations)
-        .where(
-          and(
-            eq(syncMutations.actorUserId, actor.userId),
-            eq(syncMutations.idempotencyKey, mutation.idempotencyKey),
-          ),
-        )
-        .limit(1);
-      if (existingByKey[0]) {
-        const prior = mutationResultFromStored(existingByKey[0].resultBody);
-        if (existingByKey[0].mutationId !== mutation.mutationId) {
-          results.push({
-            mutationId: mutation.mutationId,
-            status: "rejected",
-            recordId: prior.recordId,
-            serverVersion: prior.serverVersion,
-            entityType: prior.entityType,
-            error: {
-              code: "IDEMPOTENCY_KEY_REUSE",
-              message:
-                "Idempotency key was already used by a different mutation id.",
-            },
-          });
-          continue;
-        }
-        results.push(prior);
-        continue;
-      }
-
-      const mapped = mapMutationToRequest(mutation);
+      // A workout opened with no network carries the plan's own ids.
+      const payload = await resolveWorkoutMutationPayload(db, {
+        actorUserId: actor.userId,
+        operation: mutation.operation,
+        payload: mutation.payload,
+      });
+      const mapped = mapMutationToRequest({ ...mutation, payload });
       if ("error" in mapped) {
         results.push({
           mutationId: mutation.mutationId,
@@ -492,23 +333,13 @@ syncRoutes.post(
       } | null;
 
       if (!response.ok) {
-        const result: SyncMutationResult = {
-          mutationId: mutation.mutationId,
-          status: statusFromHttp(response.status, false),
-          recordId: mutation.recordId,
-          serverVersion: null,
-          entityType: mutation.entityType,
-          error: {
-            code: json?.error?.code ?? "SYNC_MUTATION_FAILED",
-            message: json?.error?.message ?? "Mutation failed.",
-            details: json?.error?.details,
-          },
-        };
+        // A transient failure (5xx, 408, 429) is marked `retryable` and is
+        // not stored; any other refusal is stored and reported as it is.
         results.push(
-          await persistSyncMutationResult(db, {
+          await recordSyncResult(db, {
             actorUserId: actor.userId,
             mutation,
-            result,
+            result: failedSyncResult(mutation, response.status, json?.error),
           }),
         );
         continue;
@@ -536,7 +367,7 @@ syncRoutes.post(
       }
 
       results.push(
-        await persistSyncMutationResult(db, {
+        await recordSyncResult(db, {
           actorUserId: actor.userId,
           mutation,
           result,

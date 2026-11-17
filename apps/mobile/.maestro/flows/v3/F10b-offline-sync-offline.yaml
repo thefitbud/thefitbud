@@ -1,0 +1,87 @@
+appId: com.thefitbud.mobile.staging
+name: F10 offline sync, part 2 (offline; log, sync status TR-19a, kill and relaunch)
+tags:
+  - device
+  - trainee
+  - z12-41
+  - device-offline
+---
+# Tagged device-offline: the harness takes the device offline before this file and back
+# online after it (Android: airplane mode; iOS: the local API is stopped). Continues
+# from F10-offline-sync.yaml: Rohan is signed in and Diet is on screen.
+- launchApp:
+    stopApp: false
+
+# Log with no network: a weight and a waist measurement, which can be logged at any
+# hour. No meal here: the Diet screen offers "Eaten as planned" on a meal whose window
+# has not opened and the server refuses that log (run 43714008509, dark: dinner logged
+# at 6:12 pm), so a meal would make this flow depend on the run's clock. Meals are
+# covered on Expo web and in the engine tests (docs/qa/Z12-41/README.md).
+- tapOn: "Progress"
+- extendedWaitUntil:
+    visible: "Log weight"
+    timeout: 20000
+- tapOn: "Log weight"
+- tapOn: "Increase"
+- tapOn: "Save"
+- extendedWaitUntil:
+    notVisible: "Adjust with the stepper, then save\\."
+    timeout: 20000
+- tapOn: "Log Waist"
+- tapOn: "Increase"
+- tapOn: "Save"
+- extendedWaitUntil:
+    notVisible: "Adjust with the stepper, then save\\."
+    timeout: 20000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Sync status (TR-19a): the outbox as it is. Every line is "Saved on phone".
+- tapOn: "More"
+- scrollUntilVisible:
+    element: "Sync status"
+    timeout: 20000
+- tapOn: "Sync status"
+- extendedWaitUntil:
+    visible: "2 items waiting to send"
+    timeout: 20000
+- assertVisible: "They're saved on this phone and send on their own when you're online\\."
+- assertVisible: "Weight .* kg"
+- assertVisible: "Waist .* cm"
+- assertVisible: "Progress · .*"
+- assertVisible: "Saved on phone"
+- assertNotVisible: "Couldn't send"
+- assertNotVisible: "Sending…"
+- takeScreenshot: TR-19a
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Try sending now with no network: it says why, and nothing is lost or marked failed.
+- tapOn: "Try sending now"
+- extendedWaitUntil:
+    visible: "Can't reach FitBud\\. Check your connection\\."
+    timeout: 45000
+- assertVisible: "2 items waiting to send"
+- assertVisible: "Saved on phone"
+- assertNotVisible: "Couldn't send"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Kill and relaunch offline: the app opens on cached data, never on the error screen,
+# and the logs are still there.
+- stopApp
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "More"
+    timeout: 60000
+- assertNotVisible: ".*We could not load your coaching account.*"
+- assertNotVisible: "Sign in with a code instead"
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "More"
+- scrollUntilVisible:
+    element: "Sync status"
+    timeout: 20000
+- tapOn: "Sync status"
+- extendedWaitUntil:
+    visible: "2 items waiting to send"
+    timeout: 20000
+- assertVisible: "Saved on phone"
+- runFlow: ../../common/assert-no-crash.yaml
