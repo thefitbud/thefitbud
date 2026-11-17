@@ -1,0 +1,61 @@
+Skip to content
+FitBud
+Home
+9
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Templates
+Search clients
+⌘K
+Templates › Onboarding forms
+Quick intake — returning client
+Draft · v2
+
+Onboarding form · 5 questions · Mine
+
+Preview
+Publish v2
+⋮⋮
+What changed since we last worked together?
+Long text · required
+⋯
+⋮⋮
+Current weight
+Number · required
+⋯
+⋮⋮
+Any new injuries or pain?
+Long text · flagged for review
+⋯
+⋮⋮
+Days you can realistically train
+Number · required
+⋯
+⋮⋮
+Main goal now
+Single choice · required
+⋯
++
+Add question
+Question
+Question
+Help text
+Answer type
+Short text
+Long text
+Single choice
+Multiple choice
+Number
+Yes / no
+Required
+Flag for review
+Max length
+
+Clients who already answered v1 keep their answers. v2 applies to new submissions.
