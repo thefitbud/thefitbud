@@ -111,35 +111,31 @@ tags:
 - runFlow: ../../common/assert-no-crash.yaml
 
 # ---- Workout: follows the shared day -----------------------------------------
+# The day a Workout swipe lands on is read on Today's eyebrow (the day state is
+# shared). "Start workout" cannot be the marker: on iOS it sits inside the
+# hero's accessible Pressable ("<day>, workout details"), which hides it from
+# Maestro, so an assertVisible on it fails and an assertNotVisible proves
+# nothing (run 44098030020).
 - tapOn: "Workout"
 - extendedWaitUntil:
     notVisible: "Loading workouts…"
     timeout: 30000
 - takeScreenshot: W-01a-workout-tab-not-started
-# On a card (the exercise list), then on the plain row beside "Exercises".
+# Left on the exercise list (cards).
 - swipe:
     start: "85%, 62%"
     end: "15%, 62%"
     duration: 350
 - assertNotVisible: "Loading workouts…"
-- assertNotVisible: "Start workout"
-- swipe:
-    start: "15%, 62%"
-    end: "85%, 62%"
-    duration: 350
-- extendedWaitUntil:
-    visible: "Start workout"
-    timeout: 15000
-- swipe:
-    start: "85%, 54%"
-    end: "15%, 54%"
-    duration: 350
-- assertNotVisible: "Start workout"
+- tapOn: "Today"
+- assertVisible: ".*· planned"
+- tapOn: "Workout"
+# Right on the plain row beside "Exercises".
 - swipe:
     start: "15%, 54%"
     end: "85%, 54%"
     duration: 350
-- extendedWaitUntil:
-    visible: "Start workout"
-    timeout: 15000
+- tapOn: "Today"
+- assertNotVisible: ".*· planned"
+- assertNotVisible: ".*· past day"
 - runFlow: ../../common/assert-no-crash.yaml

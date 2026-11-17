@@ -43,8 +43,8 @@ Template row (W12-PROMPT §3):
 | TR-04 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-04-waiting-for-coach.png` | — |
 | TR-05 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-05-reminder-setup.png` | — |
 | TR-05 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-05-reminder-setup.png` | — |
-| TR-06a | light | yes · device/z12-40/1 (Aarav signs in) | CLOSE | CLOSE | `docs/qa/Z12-40/TR-06a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-06a-today-default.png` | Z12-40: eyebrow "Tuesday, 17 Nov", "Today" title and the v3 strip (one-letter weekdays, coral ring on today, dots) match; summary card, hero and rows are v2 (Today v3: Z12-46); the strip keeps ‹ › week chevrons the mock does not draw; run 44080890973 |
-| TR-06a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/TR-06a-dark-ios.png` (run 44073717375), `…-android.png` | `docs/design/v3/png-dark/trainee/TR-06a-today-default.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44080890973 |
+| TR-06a | light | yes · device/z12-40/1 (Aarav signs in) | CLOSE | CLOSE | `docs/qa/Z12-40/TR-06a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-06a-today-default.png` | Z12-40: eyebrow "Tuesday, 17 Nov", "Today" title and the v3 strip (one-letter weekdays, coral ring on today, dots) match; summary card, hero and rows are v2 (Today v3: Z12-46); the strip keeps ‹ › week chevrons the mock does not draw; run 44098030020 (review fixes, app e4d67bf) |
+| TR-06a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/TR-06a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-06a-today-default.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44098030020 (review fixes, app e4d67bf) |
 | TR-06a2 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06a2-today-scrolled.png` | — |
 | TR-06a2 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06a2-today-scrolled.png` | — |
 | TR-06b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06b-today-rest-day.png` | — |
@@ -61,8 +61,8 @@ Template row (W12-PROMPT §3):
 | TR-06g | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06g-today-refresh-error.png` | — |
 | TR-06h | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06h-today-inapp-banner.png` | — |
 | TR-06h | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06h-today-inapp-banner.png` | — |
-| TR-07a | light | yes · device/z12-40/1 (Aarav → Diet) | CLOSE | CLOSE | `docs/qa/Z12-40/TR-07a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-07a-diet-day.png` | Z12-40: eyebrow "Tuesday, 17 Nov · Rahul’s plan" over "Diet" and the shared v3 strip match; summary and rows v2 (Diet v3: Z12-42); run 44080890973 |
-| TR-07a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/TR-07a-dark-ios.png` (run 44073717375), `…-android.png` | `docs/design/v3/png-dark/trainee/TR-07a-diet-day.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44080890973 |
+| TR-07a | light | yes · device/z12-40/1 (Aarav → Diet) | CLOSE | CLOSE | `docs/qa/Z12-40/TR-07a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-07a-diet-day.png` | Z12-40: eyebrow "Tuesday, 17 Nov · Rahul’s plan" over "Diet" and the shared v3 strip match; summary and rows v2 (Diet v3: Z12-42); run 44098030020 (review fixes, app e4d67bf) |
+| TR-07a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/TR-07a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-07a-diet-day.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44098030020 (review fixes, app e4d67bf) |
 | TR-07b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07b-eaten-as-planned-undo.png` | — |
 | TR-07b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07b-eaten-as-planned-undo.png` | — |
 | TR-07c | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07c-diet-no-meals-planned.png` | — |
@@ -175,8 +175,8 @@ Template row (W12-PROMPT §3):
 | TR-26e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-26e-custom-food.png` | — |
 | TR-26f | light | — | — | — | — | `docs/design/v3/png/trainee/TR-26f-manual-log-saved.png` | — |
 | TR-26f | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-26f-manual-log-saved.png` | — |
-| W-01a | light | yes · device/z12-40/1 (Aarav → Workout) | — | GAP | `docs/qa/Z12-40/W-01a-light-android.png` | `docs/design/v3/png/trainee/W-01a-workout-tab-not-started.png` | Z12-40: Workout follows the shared day and the swipe; it keeps its own v2 week strip (workout names, Maestro labels such as "Sat Lower B") and v2 hero until the Workout v3 rework (Z12-44); iOS shot not captured (the flow stopped earlier on iOS, see the PR); run 44080890973 |
-| W-01a | dark | yes · device/z12-40/1 | — | GAP | `docs/qa/Z12-40/W-01a-dark-android.png` | `docs/design/v3/png-dark/trainee/W-01a-workout-tab-not-started.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); iOS not captured; run 44080890973 |
+| W-01a | light | yes · device/z12-40/1 (Aarav → Workout) | GAP | GAP | `docs/qa/Z12-40/W-01a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-01a-workout-tab-not-started.png` | Z12-40: Workout follows the shared day and the swipe; it keeps its own v2 week strip (workout names, Maestro labels such as "Sat Lower B") and v2 hero until the Workout v3 rework (Z12-44); run 44098030020 (review fixes, app e4d67bf) |
+| W-01a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/W-01a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-01a-workout-tab-not-started.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44098030020 (review fixes, app e4d67bf) |
 | W-01b | light | — | — | — | — | `docs/design/v3/png/trainee/W-01b-workout-tab-in-progress.png` | — |
 | W-01b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01b-workout-tab-in-progress.png` | — |
 | W-01c | light | — | — | — | — | `docs/design/v3/png/trainee/W-01c-workout-tab-done.png` | — |

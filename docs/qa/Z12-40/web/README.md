@@ -62,3 +62,22 @@ TR-06c banner: "Past days are read-only." (Mon 16 is fully logged, so there is n
 | W-01a, W-01e | GAP | GAP | Workout keeps its own week strip and v2 hero until the Workout v3 rework (Z12-44); here it only follows the shared day and the swipe. |
 
 Console: the same web-only React DOM warnings and the realtime WebSocket line that Z12-39 recorded (they come before this task).
+
+## Review fixes: the native-pan day swipe (code commit e4d67bfc)
+
+Same harness (API 127.0.0.1:8797, `expo start --web` on 8097, fresh `pnpm db:reset`, Tue 17 Nov, light, 393×852). The swipe is now a react-native-gesture-handler `Pan` in a `GestureDetector` around each tab's whole screen; on web it runs on RNGH's web implementation. Drags are Playwright mouse moves (pointer events), 12 steps over about 200 ms.
+
+| Tab | Drag | Start | Result |
+|---|---|---|---|
+| Today | left at 62% | Tuesday, 17 Nov | Wednesday, 18 Nov · planned |
+| Today | right at 62% | Wednesday, 18 Nov · planned | Tuesday, 17 Nov |
+| Today | right at 62% | Tuesday, 17 Nov | Monday, 16 Nov · past day |
+| Today | left at 62% | Monday, 16 Nov · past day | Tuesday, 17 Nov |
+| Today | vertical drag (250 px up, 4 px across) | Tuesday, 17 Nov | Tuesday, 17 Nov (no day change) |
+| Diet | left at 62% (on the meal rows) | Tuesday, 17 Nov · Rahul’s plan | Wednesday, 18 Nov · planned |
+| Diet | right at 89% (empty space under the list) | Wednesday, 18 Nov · planned | Tuesday, 17 Nov · Rahul’s plan |
+| Diet | left at 89% | Tuesday, 17 Nov · Rahul’s plan | Wednesday, 18 Nov · planned, no "Loading meals…" (`review-diet-plain-swipe-light-web.png`) |
+| Diet | right at 89% | Wednesday, 18 Nov · planned | Tuesday, 17 Nov · Rahul’s plan |
+| Workout | left, then right, at 54% | "Start workout" shown | hidden on Wed 18 (rest day), shown again on Tue 17 |
+
+All 11 checks passed. Console: one new web-only dev warning, "findDOMNode is deprecated", from RNGH's web `GestureDetector`; native builds attach by view tag and do not use it. The other lines are the pre-existing React DOM warnings and the realtime WebSocket line noted above.
