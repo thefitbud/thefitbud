@@ -301,8 +301,10 @@ test.describe("TW-B first-run welcome", () => {
     // Invalid WhatsApp on step 1 already saved; prove field error path on re-edit via draft is optional —
     // Skip for now and assert finish copy.
     await page.getByRole("button", { name: /skip for now/i }).click();
-    await expect(page.getByTestId("welcome-done")).toContainText(
-      "You're set. FitBud will show you who needs attention here.",
+    const done = page.getByTestId("welcome-done");
+    await expect(done.getByRole("heading", { name: /you're set/i })).toBeVisible();
+    await expect(done).toContainText(
+      "FitBud will show you who needs attention here.",
     );
     await page.getByRole("link", { name: /go to home/i }).click();
     await page.waitForURL(/\/$/, { timeout: 30_000 });
