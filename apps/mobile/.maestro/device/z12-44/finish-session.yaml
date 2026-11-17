@@ -1,0 +1,158 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow (no tags) of 2-finish-workout.yaml: opens the workout ist-days.js chose
+# (output.fwKind / output.fwLabel), logs a set, relaunches, finishes it, and checks
+# that the day offers View summary only. Starts on the Workout tab, today focused.
+
+# ---- Open a session ---------------------------------------------------------------
+- runFlow:
+    when:
+      true: ${output.fwKind == 'today'}
+    commands:
+      - tapOn: "Start workout"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${output.fwKind == 'banner'}
+    commands:
+      - tapOn: "Log it"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${output.fwKind == 'day'}
+    commands:
+      - runFlow:
+          file: select-day.yaml
+          env:
+            LABEL: ${output.fwLabel}
+      - tapOn: "Log workout|Continue workout"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+- tapOn: "Log set [0-9]+ ·.*"
+- runFlow:
+    when:
+      visible: "REST"
+    commands:
+      - tapOn: "Skip rest"
+- launchApp:
+    clearState: false
+# A cold relaunch shows the startup spinner first: wait for the tab bar.
+- extendedWaitUntil:
+    visible: "Diet"
+    timeout: 120000
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 60000
+- runFlow: open-workout-tab.yaml
+# Back on the session's own day (the relaunch lands on today).
+- runFlow:
+    when:
+      true: ${output.fwKind != 'today'}
+    commands:
+      - runFlow:
+          file: select-day.yaml
+          env:
+            LABEL: ${output.fwLabel}
+- assertVisible: "Continue workout"
+- assertVisible: "(In progress|Paused) · [0-9:]+"
+# The set count comes from the full execution, read after the card paints.
+- extendedWaitUntil:
+    visible: "[0-9]+ of [0-9]+ sets"
+    timeout: 20000
+- takeScreenshot: W-01b-workout-tab-in-progress
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Finish it ----------------------------------------------------------------------
+- tapOn: "Continue workout"
+- extendedWaitUntil:
+    visible: "Log set [0-9]+ ·.*|Finish workout"
+    timeout: 30000
+- repeat:
+    times: 30
+    commands:
+      - runFlow:
+          when:
+            visible: "Log set [0-9]+ ·.*"
+          commands:
+            - tapOn: "Log set [0-9]+ ·.*"
+            - waitForAnimationToEnd:
+                timeout: 500
+- assertNotVisible: "Log set [0-9]+ ·.*"
+- tapOn: "Finish workout"
+- runFlow:
+    when:
+      visible: "How hard was the session\\?"
+    commands:
+      - tapOn: "RPE 7.*"
+      - tapOn: "Finish workout"
+- extendedWaitUntil:
+    visible: "Workout done"
+    timeout: 30000
+- takeScreenshot: W-17a-summary
+- tapOn: "Save and share with .*"
+- extendedWaitUntil:
+    visible: "This week"
+    timeout: 10000
+- assertVisible: "[0-9]+ of [0-9]+ done"
+- takeScreenshot: W-17b-summary-shared
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible: "View summary"
+    timeout: 30000
+- assertNotVisible: "Start workout"
+- assertNotVisible: "Continue workout"
+# Not a W-01c shot: it is a day the pass chose (often a past one); Aarav's flow has W-01c.
+- takeScreenshot: z12-44-finished-day
+
+# ---- Today's workout was the one finished: done on Workout and on Today -------------
+- runFlow:
+    when:
+      true: ${output.fwKind == 'today'}
+    commands:
+      - assertVisible: "${output.today}, Done"
+      - tapOn: "Today"
+      - extendedWaitUntil:
+          notVisible: ".*Loading your day.*"
+          timeout: 30000
+      - scrollUntilVisible:
+          element: "View summary"
+          timeout: 20000
+      - assertNotVisible: "Start workout"
+      - assertNotVisible: "Continue workout"
+      - takeScreenshot: z12-44-today-done-card
+      - runFlow: open-workout-tab.yaml
+
+# ---- Kill and relaunch: still View summary only ------------------------------------
+- launchApp:
+    clearState: false
+# A cold relaunch shows the startup spinner first: wait for the tab bar.
+- extendedWaitUntil:
+    visible: "Diet"
+    timeout: 120000
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 60000
+- runFlow: open-workout-tab.yaml
+- runFlow:
+    when:
+      true: ${output.fwKind != 'today'}
+    commands:
+      - runFlow:
+          file: select-day.yaml
+          env:
+            LABEL: ${output.fwLabel}
+- assertVisible: "View summary"
+- assertNotVisible: "Start workout"
+- assertNotVisible: "Continue workout"
+- runFlow:
+    when:
+      true: ${output.fwKind == 'today'}
+    commands:
+      - assertVisible: "${output.today}, Done"
+- runFlow: ../../common/assert-no-crash.yaml
