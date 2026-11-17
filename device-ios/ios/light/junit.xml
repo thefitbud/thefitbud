@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - F81187DF-5D4B-441D-8D73-12237A6BEA30" tests="3" failures="0" time="623.478" timestamp="2026-11-18T04:38:47">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="157.541" timestamp="2026-11-18T04:38:47" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="136.584" timestamp="2026-11-18T04:41:24" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F20 Trainer nudges a client as a FitBud push (Z12-50)" name="F20 Trainer nudges a client as a FitBud push (Z12-50)" classname="F20 Trainer nudges a client as a FitBud push (Z12-50)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F20-triage-nudge.yaml" time="328.947" timestamp="2026-11-18T04:43:41" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-50"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
