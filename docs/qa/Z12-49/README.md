@@ -55,3 +55,16 @@ MATCH, CLOSE or GAP against `docs/design/v3/png/` (light) and `png-dark/` (dark)
 | TM-08b | render test | `/me` with no mobile role cannot be stubbed (the contract needs a role); covered by `RoleSelectScreen.test.tsx` |
 | TM-08c | CLOSE / CLOSE | the trainee-side sheet ("Switch to coach view?") |
 | TM-08d | CLOSE / CLOSE | no "4 clients · 2 need you": trainer data is not readable in the trainee role |
+
+## Device gate
+
+Run 44191354664 (`device.yml`, flows `launch,z12-49`) on code commit `ae1297709966d3748486a8d8a527691b84c8e44b` (the job logs' `git log -1`). An earlier run, 44179371246 on `76a913f`, found two flow and label bugs, fixed in `ae12977`.
+
+| Platform | Light | Dark | Device log |
+|---|---|---|---|
+| iOS | 8/8 PASS | 8/8 PASS | clean |
+| Android | 7/8: launch smoke dropped keystrokes ("arav.ontrack"), a known emulator flake | 6/8: F01 tapped Sign out while the account sheet slid in (flow now waits for the sheet); F02b typed email dropped (keystroke flake) | clean |
+
+All 17 device-reachable screens have shots on both platforms and both themes (Android shots come from the flows that passed in the other theme or before the failing step). Device grades are CLOSE for every captured screen, with the same notes as Expo web.
+
+Postdate the evidence: `130a5ce` (v3 screens clear the Android status bar; the More title sat under it in the shots, also on `main` before this PR) and the F01 wait-for-sheet fix. Not re-run on the device (one scoped run plus one re-run per the gate budget).

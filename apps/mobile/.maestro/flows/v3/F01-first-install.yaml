@@ -76,8 +76,10 @@ env:
     visible: ".* is building your plan"
     timeout: 20000
 - tapOn: "Account"
+# Wait for the sheet to finish opening before tapping inside it (Android
+# took the tap on the scrim while the sheet slid in).
 - extendedWaitUntil:
-    visible: "Sign out"
+    visible: "Your plan will be here as soon as it's ready\\."
     timeout: 10000
 - tapOn: "Sign out"
 - extendedWaitUntil:

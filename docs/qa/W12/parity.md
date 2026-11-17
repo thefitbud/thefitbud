@@ -19,30 +19,30 @@ Template row (W12-PROMPT §3):
 
 | Screen | Theme | Reachable | iOS | Android | App screenshots | Mock | Remaining differences |
 |---|---|---|---|---|---|---|---|
-| TR-01a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-01a-signin-password.png` | — |
-| TR-01a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-01a-signin-password.png` | — |
-| TR-01b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-01b-signin-code-request.png` | — |
-| TR-01b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-01b-signin-code-request.png` | — |
-| TR-01c | light | — | — | — | — | `docs/design/v3/png/trainee/TR-01c-signin-code-entry.png` | — |
-| TR-01c | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-01c-signin-code-entry.png` | — |
-| TR-01d | light | — | — | — | — | `docs/design/v3/png/trainee/TR-01d-set-new-password.png` | — |
-| TR-01d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-01d-set-new-password.png` | — |
-| TR-01e | light | — | — | — | — | `docs/design/v3/png/trainee/TR-01e-signin-wrong-password.png` | — |
-| TR-01e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-01e-signin-wrong-password.png` | — |
-| TR-01f | light | — | — | — | — | `docs/design/v3/png/trainee/TR-01f-signin-rate-limited.png` | — |
-| TR-01f | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-01f-signin-rate-limited.png` | — |
-| TR-01g | light | — | — | — | — | `docs/design/v3/png/trainee/TR-01g-signin-code-expired.png` | — |
-| TR-01g | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-01g-signin-code-expired.png` | — |
-| TR-02a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-02a-invite-accept.png` | — |
-| TR-02a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-02a-invite-accept.png` | — |
-| TR-02b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-02b-invite-expired.png` | — |
-| TR-02b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-02b-invite-expired.png` | — |
-| TR-03 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-03-intake-form.png` | — |
-| TR-03 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-03-intake-form.png` | — |
-| TR-04 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-04-waiting-for-coach.png` | — |
-| TR-04 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-04-waiting-for-coach.png` | — |
-| TR-05 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-05-reminder-setup.png` | — |
-| TR-05 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-05-reminder-setup.png` | — |
+| TR-01a | light | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01a-light-ios.png`, `TR-01a-light-android.png` | `docs/design/v3/png/trainee/TR-01a-signin-password.png` | Placeholder copy kept (shared Maestro subflows tap it) |
+| TR-01a | dark | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01a-dark-ios.png`, `TR-01a-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-01a-signin-password.png` | Placeholder copy kept (shared Maestro subflows tap it) |
+| TR-01b | light | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01b-light-ios.png`, `TR-01b-light-android.png` | `docs/design/v3/png/trainee/TR-01b-signin-code-request.png` | Label "Mobile number or email" (a number finds the account; the code is emailed) |
+| TR-01b | dark | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01b-dark-ios.png`, `TR-01b-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-01b-signin-code-request.png` | Label "Mobile number or email" (a number finds the account; the code is emailed) |
+| TR-01c | light | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01c-light-ios.png`, `TR-01c-light-android.png` | `docs/design/v3/png/trainee/TR-01c-signin-code-entry.png` | Auto-submits on the sixth digit |
+| TR-01c | dark | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01c-dark-ios.png`, `TR-01c-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-01c-signin-code-entry.png` | Auto-submits on the sixth digit |
+| TR-01d | light | no device state | — | — | `docs/qa/Z12-49/web/TR-01d-light-web.png` | `docs/design/v3/png/trainee/TR-01d-set-new-password.png` | Web only (CLOSE): needs the emailed reset code; `docs/qa/Z12-49/web/` |
+| TR-01d | dark | no device state | — | — | `docs/qa/Z12-49/web/TR-01d-dark-web.png` | `docs/design/v3/png-dark/trainee/TR-01d-set-new-password.png` | Web only (CLOSE): needs the emailed reset code; `docs/qa/Z12-49/web/` |
+| TR-01e | light | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01e-light-ios.png`, `TR-01e-light-android.png` | `docs/design/v3/png/trainee/TR-01e-signin-wrong-password.png` | "That email and password don't match." (or "number"); inline only behind 401 INVALID_CREDENTIALS |
+| TR-01e | dark | yes · F02 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-01e-dark-ios.png`, `TR-01e-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-01e-signin-wrong-password.png` | "That email and password don't match." (or "number"); inline only behind 401 INVALID_CREDENTIALS |
+| TR-01f | light | no device state | — | — | `docs/qa/Z12-49/web/TR-01f-light-web.png` | `docs/design/v3/png/trainee/TR-01f-signin-rate-limited.png` | Web only (CLOSE): 15 failed tries would lock later flows; no countdown (429 has no retry window) |
+| TR-01f | dark | no device state | — | — | `docs/qa/Z12-49/web/TR-01f-dark-web.png` | `docs/design/v3/png-dark/trainee/TR-01f-signin-rate-limited.png` | Web only (CLOSE): 15 failed tries would lock later flows; no countdown (429 has no retry window) |
+| TR-01g | light | no device state | — | — | `docs/qa/Z12-49/web/TR-01g-light-web.png` | `docs/design/v3/png/trainee/TR-01g-signin-code-expired.png` | Web only (CLOSE, stubbed OTP_EXPIRED): today's API answers an expired code with OTP_INVALID |
+| TR-01g | dark | no device state | — | — | `docs/qa/Z12-49/web/TR-01g-dark-web.png` | `docs/design/v3/png-dark/trainee/TR-01g-signin-code-expired.png` | Web only (CLOSE, stubbed OTP_EXPIRED): today's API answers an expired code with OTP_INVALID |
+| TR-02a | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-02a-invite-accept.png` | Not captured: needs an invite token; tokens and dark |
+| TR-02a | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-02a-invite-accept.png` | Not captured: needs an invite token; tokens and dark |
+| TR-02b | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-02b-invite-expired.png` | Not captured: needs an invite token; tokens and dark |
+| TR-02b | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-02b-invite-expired.png` | Not captured: needs an invite token; tokens and dark |
+| TR-03 | light | yes · F01 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-03-light-ios.png`, `TR-03-light-android.png` | `docs/design/v3/png/trainee/TR-03-intake-form.png` | Questions come from the pinned form version |
+| TR-03 | dark | yes · F01 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-03-dark-ios.png`, `TR-03-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-03-intake-form.png` | Questions come from the pinned form version |
+| TR-04 | light | yes · F01 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-04-light-ios.png`, `TR-04-light-android.png` | `docs/design/v3/png/trainee/TR-04-waiting-for-coach.png` | Steps row only with the steps flag; sign-out behind the account button |
+| TR-04 | dark | yes · F01 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-04-dark-ios.png`, `TR-04-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-04-waiting-for-coach.png` | Steps row only with the steps flag; sign-out behind the account button |
+| TR-05 | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-05-reminder-setup.png` | Not captured: Android-only entry; tokens and dark |
+| TR-05 | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-05-reminder-setup.png` | Not captured: Android-only entry; tokens and dark |
 | TR-06a | light | yes · device/z12-40/1 (Aarav signs in) | CLOSE | CLOSE | `docs/qa/Z12-40/TR-06a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-06a-today-default.png` | Z12-40: eyebrow "Tuesday, 17 Nov", "Today" title and the v3 strip (one-letter weekdays, coral ring on today, dots) match; summary card, hero and rows are v2 (Today v3: Z12-46); the strip keeps ‹ › week chevrons the mock does not draw; run 44098030020 (review fixes, app e4d67bf) |
 | TR-06a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/TR-06a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-06a-today-default.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44098030020 (review fixes, app e4d67bf) |
 | TR-06a2 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06a2-today-scrolled.png` | — |
@@ -127,42 +127,42 @@ Template row (W12-PROMPT §3):
 | TR-15c | dark | no · as light | GAP | GAP | as light | `docs/design/v3/png-dark/trainee/TR-15c-lockscreen-push.png` | lock-screen text is the server's (`apps/api/src/lib/expo-push.ts`: title "FitBud", body = type label), outside this task's files; Expo push has no iOS thread id; the iOS gate tap found no entry even with permission granted; follow-ups in PR #459 and Z12-58's phone checklist |
 | TR-15d | light | — | — | — | — | `docs/design/v3/png/trainee/TR-15d-lockscreen-live-activity.png` | — |
 | TR-15d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-15d-lockscreen-live-activity.png` | — |
-| TR-16a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-16a-reminders.png` | — |
-| TR-16a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-16a-reminders.png` | — |
-| TR-16b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-16b-reminders-permission-off.png` | — |
-| TR-16b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-16b-reminders-permission-off.png` | — |
-| TR-18 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-18-ask-coach-sheet.png` | — |
-| TR-18 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-18-ask-coach-sheet.png` | — |
+| TR-16a | light | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-16a-light-ios.png`, `TR-16a-light-android.png` | `docs/design/v3/png/trainee/TR-16a-reminders.png` | Extra "Evening summary" row; "Updates from Rahul" is the coach-log setting; "Reminders not arriving?" on Android |
+| TR-16a | dark | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-16a-dark-ios.png`, `TR-16a-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-16a-reminders.png` | Extra "Evening summary" row; "Updates from Rahul" is the coach-log setting; "Reminders not arriving?" on Android |
+| TR-16b | light | no device state | — | — | `docs/qa/Z12-49/web/TR-16b-light-web.png` | `docs/design/v3/png/trainee/TR-16b-reminders-permission-off.png` | Web only (CLOSE, stubbed pushDeliverable false) |
+| TR-16b | dark | no device state | — | — | `docs/qa/Z12-49/web/TR-16b-dark-web.png` | `docs/design/v3/png-dark/trainee/TR-16b-reminders-permission-off.png` | Web only (CLOSE, stubbed pushDeliverable false) |
+| TR-18 | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-18-ask-coach-sheet.png` | Not captured: header and copy only; topic chips kept (the API records the topic) |
+| TR-18 | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-18-ask-coach-sheet.png` | Not captured: header and copy only; topic chips kept (the API records the topic) |
 | TR-19a | light | yes · F10 (More → Sync status with logs waiting; run 43718038556) | CLOSE | CLOSE | `docs/qa/Z12-41/TR-19a-light-ios.png`, `TR-19a-light-android.png` | `docs/design/v3/png/trainee/TR-19a-sync-status.png` | A screen with a Back row, not a sheet over More (approved departure; `SyncStatusContent` is exported for Z12-49). Device run logged a weight and a waist, so no meal or workout line; a meal reads "Meal" until the caller passes its name. No "Last sent" before the first send |
 | TR-19a | dark | yes · F10 (More → Sync status with logs waiting; run 43718038556) | CLOSE | CLOSE | `docs/qa/Z12-41/TR-19a-dark-ios.png`, `TR-19a-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-19a-sync-status.png` | A screen with a Back row, not a sheet over More (approved departure; `SyncStatusContent` is exported for Z12-49). Device run logged a weight and a waist, so no meal or workout line; a meal reads "Meal" until the caller passes its name. No "Last sent" before the first send |
 | TR-19b | light | yes · state: the coach republishes a meal while its log waits (not reachable in a device flow; on Z12-58's real-phone checklist) | not run on device (Expo web: CLOSE) | not run on device (Expo web: CLOSE) | `docs/qa/Z12-41/TR-19b-light-web.png` (Expo web) | `docs/design/v3/png/trainee/TR-19b-sync-conflict.png` | Body says "Your log is kept on this phone.", not "…he'll see both" (approved departure: the server writes nothing for a log on a replaced item). Opens over the sync screen, not over More |
 | TR-19b | dark | yes · state: the coach republishes a meal while its log waits (not reachable in a device flow; on Z12-58's real-phone checklist) | not run on device (Expo web: CLOSE) | not run on device (Expo web: CLOSE) | `docs/qa/Z12-41/TR-19b-dark-web.png` (Expo web) | `docs/design/v3/png-dark/trainee/TR-19b-sync-conflict.png` | Body says "Your log is kept on this phone.", not "…he'll see both" (approved departure: the server writes nothing for a log on a replaced item). Opens over the sync screen, not over More |
-| TR-20a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20a-more-root.png` | — |
-| TR-20a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20a-more-root.png` | — |
-| TR-20b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20b-profile-edit.png` | — |
-| TR-20b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20b-profile-edit.png` | — |
-| TR-20c | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20c-account.png` | — |
-| TR-20c | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20c-account.png` | — |
+| TR-20a | light | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20a-light-ios.png`, `TR-20a-light-android.png` | `docs/design/v3/png/trainee/TR-20a-more-root.png` | Coach line "Since …" (no programme/week source); Credits in the footer; title under the status bar fixed after this run (130a5ce) |
+| TR-20a | dark | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20a-dark-ios.png`, `TR-20a-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-20a-more-root.png` | Coach line "Since …" (no programme/week source); Credits in the footer; title under the status bar fixed after this run (130a5ce) |
+| TR-20b | light | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20b-light-ios.png`, `TR-20b-light-android.png` | `docs/design/v3/png/trainee/TR-20b-profile-edit.png` | Name and email read-only (the API updates date of birth and gender only); no height (no source) |
+| TR-20b | dark | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20b-dark-ios.png`, `TR-20b-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-20b-profile-edit.png` | Name and email read-only (the API updates date of birth and gender only); no height (no source) |
+| TR-20c | light | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20c-light-ios.png`, `TR-20c-light-android.png` | `docs/design/v3/png/trainee/TR-20c-account.png` | No "Download my data" (no source); time zone, language, privacy, past coaching here; Delete account is Z12-29's |
+| TR-20c | dark | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20c-dark-ios.png`, `TR-20c-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-20c-account.png` | No "Download my data" (no source); time zone, language, privacy, past coaching here; Delete account is Z12-29's |
 | TR-20d | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20d-delete-account-confirm.png` | — |
 | TR-20d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20d-delete-account-confirm.png` | — |
-| TR-20e | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20e-help.png` | — |
-| TR-20e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20e-help.png` | — |
-| TR-20f | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20f-signout-unsent.png` | — |
-| TR-20f | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20f-signout-unsent.png` | — |
-| TR-20g | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20g-change-password.png` | — |
-| TR-20g | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20g-change-password.png` | — |
-| TR-21 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-21-generic-error.png` | — |
-| TR-21 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-21-generic-error.png` | — |
-| TR-22a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-22a-ended-coaching.png` | — |
-| TR-22a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-22a-ended-coaching.png` | — |
-| TR-22b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-22b-reactivation-confirm.png` | — |
-| TR-22b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-22b-reactivation-confirm.png` | — |
-| TR-23 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-23-item-unavailable.png` | — |
-| TR-23 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-23-item-unavailable.png` | — |
-| TR-24 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-24-session-expired.png` | — |
-| TR-24 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-24-session-expired.png` | — |
-| TR-25 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-25-steps-settings.png` | — |
-| TR-25 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-25-steps-settings.png` | — |
+| TR-20e | light | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20e-light-ios.png`, `TR-20e-light-android.png` | `docs/design/v3/png/trainee/TR-20e-help.png` | — |
+| TR-20e | dark | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20e-dark-ios.png`, `TR-20e-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-20e-help.png` | — |
+| TR-20f | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-20f-signout-unsent.png` | Render test only (needs unsent logs); layout here, behaviour Z12-41's |
+| TR-20f | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-20f-signout-unsent.png` | Render test only (needs unsent logs); layout here, behaviour Z12-41's |
+| TR-20g | light | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20g-light-ios.png`, `TR-20g-light-android.png` | `docs/design/v3/png/trainee/TR-20g-change-password.png` | "At least 8 characters" (the API's rule; mock says 10); no "other devices signed out" (not what the API does) |
+| TR-20g | dark | yes · F15 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-20g-dark-ios.png`, `TR-20g-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-20g-change-password.png` | "At least 8 characters" (the API's rule; mock says 10); no "other devices signed out" (not what the API does) |
+| TR-21 | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-21-generic-error.png` | Not captured: the app error view uses the TR-21 layout |
+| TR-21 | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-21-generic-error.png` | Not captured: the app error view uses the TR-21 layout |
+| TR-22a | light | yes · F16 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-22a-light-ios.png`, `TR-22a-light-android.png` | `docs/design/v3/png/trainee/TR-22a-ended-coaching.png` | Standalone without the tab bar until TraineeShell is free (#461); Sign out link kept there |
+| TR-22a | dark | yes · F16 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-22a-dark-ios.png`, `TR-22a-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-22a-ended-coaching.png` | Standalone without the tab bar until TraineeShell is free (#461); Sign out link kept there |
+| TR-22b | light | yes · F16 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-22b-light-ios.png`, `TR-22b-light-android.png` | `docs/design/v3/png/trainee/TR-22b-reactivation-confirm.png` | Ended relationship copy, not "coaching with Asha now" |
+| TR-22b | dark | yes · F16 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TR-22b-dark-ios.png`, `TR-22b-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-22b-reactivation-confirm.png` | Ended relationship copy, not "coaching with Asha now" |
+| TR-23 | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-23-item-unavailable.png` | Not captured: only the reason line has a source; tokens and dark |
+| TR-23 | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-23-item-unavailable.png` | Not captured: only the reason line has a source; tokens and dark |
+| TR-24 | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-24-session-expired.png` | Render test only (`AuthScreen.sessionExpired.render.test.tsx`) |
+| TR-24 | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-24-session-expired.png` | Render test only (`AuthScreen.sessionExpired.render.test.tsx`) |
+| TR-25 | light | no device state | — | — | — | `docs/design/v3/png/trainee/TR-25-steps-settings.png` | Not captured: steps flag off on the seed; tokens and dark |
+| TR-25 | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainee/TR-25-steps-settings.png` | Not captured: steps flag off on the seed; tokens and dark |
 | TR-26a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-26a-food-search-default.png` | — |
 | TR-26a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-26a-food-search-default.png` | — |
 | TR-26b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-26b-food-search-results-added.png` | — |
@@ -358,14 +358,14 @@ Template row (W12-PROMPT §3):
 | TM-07f | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-07f-signout-confirm.png` | — |
 | TM-07g | light | — | — | — | — | `docs/design/v3/png/trainer/TM-07g-more-offline.png` | — |
 | TM-07g | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-07g-more-offline.png` | — |
-| TM-08a | light | — | — | — | — | `docs/design/v3/png/trainer/TM-08a-role-select.png` | — |
-| TM-08a | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-08a-role-select.png` | — |
-| TM-08b | light | — | — | — | — | `docs/design/v3/png/trainer/TM-08b-unsupported-role.png` | — |
-| TM-08b | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-08b-unsupported-role.png` | — |
-| TM-08c | light | — | — | — | — | `docs/design/v3/png/trainer/TM-08c-switch-role-sheet.png` | — |
-| TM-08c | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-08c-switch-role-sheet.png` | — |
-| TM-08d | light | — | — | — | — | `docs/design/v3/png/trainer/TM-08d-trainee-more-switch.png` | — |
-| TM-08d | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-08d-trainee-more-switch.png` | — |
+| TM-08a | light | yes · F17 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TM-08a-light-ios.png`, `TM-08a-light-android.png` | `docs/design/v3/png/trainer/TM-08a-role-select.png` | Client hint without the coach's name before a role is picked |
+| TM-08a | dark | yes · F17 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TM-08a-dark-ios.png`, `TM-08a-dark-android.png` | `docs/design/v3/png-dark/trainer/TM-08a-role-select.png` | Client hint without the coach's name before a role is picked |
+| TM-08b | light | no device state | — | — | — | `docs/design/v3/png/trainer/TM-08b-unsupported-role.png` | Render test only (`RoleSelectScreen.test.tsx`) |
+| TM-08b | dark | no device state | — | — | — | `docs/design/v3/png-dark/trainer/TM-08b-unsupported-role.png` | Render test only (`RoleSelectScreen.test.tsx`) |
+| TM-08c | light | yes · F17 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TM-08c-light-ios.png`, `TM-08c-light-android.png` | `docs/design/v3/png/trainer/TM-08c-switch-role-sheet.png` | Trainee-side sheet ("Switch to coach view?") |
+| TM-08c | dark | yes · F17 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TM-08c-dark-ios.png`, `TM-08c-dark-android.png` | `docs/design/v3/png-dark/trainer/TM-08c-switch-role-sheet.png` | Trainee-side sheet ("Switch to coach view?") |
+| TM-08d | light | yes · F17 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TM-08d-light-ios.png`, `TM-08d-light-android.png` | `docs/design/v3/png/trainer/TM-08d-trainee-more-switch.png` | No "4 clients · 2 need you" (trainer data is not readable in the trainee role) |
+| TM-08d | dark | yes · F17 (run 44191354664) | CLOSE | CLOSE | `docs/qa/Z12-49/TM-08d-dark-ios.png`, `TM-08d-dark-android.png` | `docs/design/v3/png-dark/trainer/TM-08d-trainee-more-switch.png` | No "4 clients · 2 need you" (trainer data is not readable in the trainee role) |
 | TM-09a | light | — | — | — | — | `docs/design/v3/png/trainer/TM-09a-activity-feed.png` | — |
 | TM-09a | dark | — | — | — | — | `docs/design/v3/png-dark/trainer/TM-09a-activity-feed.png` | — |
 | TM-09b | light | — | — | — | — | `docs/design/v3/png/trainer/TM-09b-activity-meal-sheet.png` | — |
