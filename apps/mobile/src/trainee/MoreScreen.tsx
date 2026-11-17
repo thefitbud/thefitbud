@@ -109,9 +109,9 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
     relationship.trainerDisplayName?.trim() || "Your coach",
   );
   const coachFirst = coachName.split(/\s+/)[0] || "your coach";
-  const [displayName, setDisplayName] = useState(
-    formatPersonName(me?.email?.split("@")[0] ?? "You"),
-  );
+  // The profile's name; the email's local part only if the profile can't load,
+  // so the card never flashes a made-up name first.
+  const [displayName, setDisplayName] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [signOutCount, setSignOutCount] = useState<number | null>(null);
@@ -127,10 +127,11 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
     } catch (err) {
       // The name falls back to the email; nothing else on this screen needs the call.
       reportError("TraineeMore.load", err);
+      setDisplayName((current) => current ?? formatPersonName(me?.email?.split("@")[0] ?? "You"));
     } finally {
       setRefreshing(false);
     }
-  }, [api]);
+  }, [api, me?.email]);
 
   useEffect(() => {
     void load();
@@ -217,18 +218,18 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
 
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Profile. ${displayName}`}
+        accessibilityLabel={`Profile. ${displayName ?? ""}`}
         onPress={() => onOpenOverlay({ screen: "profile" })}
         style={styles.card}
       >
         <View style={[styles.avatar, dual ? styles.avatarDual : null]}>
           <Text style={[styles.avatarText, dual ? styles.avatarTextDual : null]}>
-            {initials(displayName)}
+            {displayName ? initials(displayName) : ""}
           </Text>
         </View>
         <View style={styles.flex}>
           <Text style={styles.name} numberOfLines={1}>
-            {displayName}
+            {displayName ?? " "}
           </Text>
           <Text tone="ink2" style={styles.sub} numberOfLines={1}>
             {profileLine}
