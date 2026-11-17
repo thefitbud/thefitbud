@@ -14,6 +14,8 @@ vi.mock("react", async (importOriginal) => ({
 
 vi.mock("react-native", () => ({
   Linking: { openURL: vi.fn(), openSettings: vi.fn() },
+  Platform: { OS: "ios", select: (options: Record<string, unknown>) => options.ios ?? options.default },
+  Appearance: { getColorScheme: () => "light", addChangeListener: () => ({ remove: () => undefined }) },
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
   Pressable: "Pressable",
   RefreshControl: "RefreshControl",
@@ -23,17 +25,8 @@ vi.mock("react-native", () => ({
   View: "View",
 }));
 vi.mock("expo-notifications", () => ({ getPermissionsAsync: vi.fn() }));
-vi.mock("@fitbud/ui-mobile", () => ({
-  colors: {},
-  spacing: {},
-  radii: {},
-  typeScale: {},
-  fontFamily: "",
-  fontFamilyMedium: "",
-  fontFamilySemiBold: "",
-  fontFamilyBold: "",
-  defaultTextStyle: {},
-  touchTargetMin: 44,
+vi.mock("@fitbud/ui-mobile", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@fitbud/ui-mobile")>()),
   FitText: "Text",
 }));
 vi.mock("../components/Text", () => ({ Text: "Text" }));
@@ -69,7 +62,6 @@ import {
   legalUrlHint,
   trainerWebUrl,
 } from "./legalLinks";
-import { SignInScreen } from "../screens/auth/SignInScreen";
 import { TrainerMoreScreen } from "../trainer/MoreScreen";
 
 type Element = {
@@ -96,10 +88,6 @@ function find(
     return find(element.props.children, match);
   }
   return null;
-}
-
-function byAccessibilityLabel(label: string) {
-  return (element: Element) => element.props.accessibilityLabel === label;
 }
 
 function byLabelProp(label: string) {
@@ -184,49 +172,8 @@ describe("the env var is read so Expo can inline it", () => {
   });
 });
 
-describe("sign-in footer (ds5-ios-signin-footer.png)", () => {
-  function signIn() {
-    return SignInScreen({
-      loading: false,
-      error: null,
-      onSignIn: async () => undefined,
-      onUseCode: () => undefined,
-      onForgotPassword: () => undefined,
-    });
-  }
-
-  it("Privacy opens the privacy page", () => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
-    press(signIn(), byAccessibilityLabel("Privacy policy, opens in your browser"));
-    expect(Linking.openURL).toHaveBeenCalledWith("https://app.thefitbud.com/privacy");
-  });
-
-  it("Terms opens the terms page", () => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
-    press(signIn(), byAccessibilityLabel("Terms of use, opens in your browser"));
-    expect(Linking.openURL).toHaveBeenCalledWith("https://app.thefitbud.com/terms");
-  });
-
-  it("follows the env var on staging builds", () => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", "https://app-staging.thefitbud.com");
-    press(signIn(), byAccessibilityLabel("Privacy policy, opens in your browser"));
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://app-staging.thefitbud.com/privacy",
-    );
-  });
-
-  it("gives each footer link a 44pt tap target", () => {
-    // BT3's review found footer links that looked right but were only ~32px
-    // hittable. Assert the Pressable's own minimum height, not the text size.
-    const link = find(
-      signIn(),
-      byAccessibilityLabel("Privacy policy, opens in your browser"),
-    );
-    expect(link).not.toBeNull();
-    const style = link!.props.style as { minHeight?: number };
-    expect(style.minHeight).toBeGreaterThanOrEqual(44);
-  });
-});
+// The sign-in footer links (Terms, Privacy) are covered by a render test since
+// Z12-49 moved them into a footer component: screens/auth/SignInScreen.render.test.tsx.
 
 describe("trainer More legal rows", () => {
   function trainerMore() {
@@ -348,60 +295,5 @@ vi.mock("../sync/SyncProvider", () => ({
 vi.mock("./stage1Api", () => ({ stage1Api: () => ({}) }));
 vi.mock("../components/BottomSheet", () => ({ BottomSheet: "BottomSheet" }));
 
-describe("trainee More legal rows (ds5-ios-more-legal.png)", () => {
-  async function traineeMore() {
-    const { MoreScreen } = await import("../trainee/MoreScreen");
-    return MoreScreen({
-      relationship: {
-        id: "r1",
-        trainerName: "Rahul Verma",
-        startedAt: null,
-        endedAt: null,
-      } as never,
-      onOpenOverlay: () => undefined,
-    });
-  }
-
-  it.each([
-    ["Privacy policy", "https://app.thefitbud.com/privacy"],
-    ["Terms of use", "https://app.thefitbud.com/terms"],
-    ["Credits and licences", "https://app.thefitbud.com/credits"],
-  ])("%s opens %s", async (label, url) => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
-    press(await traineeMore(), byLabelProp(label));
-    expect(Linking.openURL).toHaveBeenCalledWith(url);
-  });
-
-  it("follows the env var on staging builds", async () => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", "https://app-staging.thefitbud.com");
-    press(await traineeMore(), byLabelProp("Terms of use"));
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://app-staging.thefitbud.com/terms",
-    );
-  });
-
-  it("shows the address it will open under each link row", async () => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
-    const tree = await traineeMore();
-    expect(find(tree, byLabelProp("Privacy policy"))!.props.hint).toBe(
-      "Opens app.thefitbud.com/privacy",
-    );
-    expect(find(tree, byLabelProp("Terms of use"))!.props.hint).toBe(
-      "Opens app.thefitbud.com/terms",
-    );
-    expect(find(tree, byLabelProp("Credits and licences"))!.props.hint).toBe(
-      "Exercise drawings and food data",
-    );
-  });
-
-  it("keeps the in-app Privacy row that opens what your coach can see", async () => {
-    // A separate row from "Privacy policy": it stays, and it does not open a URL.
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
-    const tree = await traineeMore();
-    const inApp = find(tree, byLabelProp("Privacy"));
-    expect(inApp).not.toBeNull();
-    expect(inApp!.props.hint).toBe("What your coach can see");
-    (inApp!.props.onPress as () => void)();
-    expect(Linking.openURL).not.toHaveBeenCalled();
-  });
-});
+// Trainee More's legal links (Terms, Privacy, Credits in the footer since
+// Z12-49, TR-20a) are covered by trainee/MoreScreen.v3.render.test.tsx.
