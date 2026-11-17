@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { Notification } from "@fitbud/contracts";
+import { notificationTypeSchema, type Notification, type NotificationType } from "@fitbud/contracts";
 import {
+  PUSH_BODY_MAX,
+  PUSH_GROUPS,
+  PUSH_TITLE_MAX,
+  pushGroupFor,
   checkinPushCopy,
   mealPushCopy,
   noteBannerCopy,
@@ -33,10 +37,8 @@ const base: Notification = {
 
 describe("notificationRowTitle", () => {
   it("uses guide copy for meal reminders", () => {
-    expect(notificationRowTitle(base)).toBe("Lunch isn't logged yet");
-    expect(notificationRowBody(base)).toBe(
-      "Open it in Diet, or snooze for 30 minutes.",
-    );
+    expect(notificationRowTitle(base)).toBe("Lunch is due");
+    expect(notificationRowBody(base)).toBe("Tap to log it.");
     expect(notificationRowBody(base)).not.toMatch(/chicken|rice|kcal/i);
     expect(mealPushCopy("Lunch", true).title).toBe(
       "You have something to log in FitBud.",
@@ -61,24 +63,24 @@ describe("notificationRowTitle", () => {
       checkinPushCopy("Rahul Verma").body,
     );
     expect(notificationRowTitle(note, { coachName: "Rahul Verma" })).toBe(
-      "Rahul has a note for you!",
+      "Rahul left a note",
     );
     expect(notificationRowBody(note, { coachName: "Rahul Verma" })).toBe(
       "Tap to read.",
     );
     expect(notePushCopy("Rahul Verma").body).toBe("Tap to read.");
     expect(noteBannerCopy("Rahul Verma")).toEqual({
-      title: "Rahul has a note for you",
+      title: "Rahul left a note",
     });
   });
 
   it("names the client on trainer inbox and push copy", () => {
     const cases = [
-      ["trainer_ask_coach", "Priya Shah asked on WhatsApp"],
-      ["trainer_checkin_submitted", "Priya Shah sent their check-in"],
-      ["trainer_intake_submitted", "Priya Shah finished their intake"],
-      ["trainer_renewal", "Priya Shah's renewal is due"],
-      ["trainer_meal_times_changed", "Priya Shah changed meal times"],
+      ["trainer_ask_coach", "Priya asked you"],
+      ["trainer_checkin_submitted", "Priya sent their check-in"],
+      ["trainer_intake_submitted", "Priya finished their intake"],
+      ["trainer_renewal", "Priya's renewal is due"],
+      ["trainer_meal_times_changed", "Priya changed meal times"],
     ] as const;
     for (const [type, title] of cases) {
       const row = {
@@ -164,5 +166,88 @@ describe("coach log updates (Z6-19, D-W6-33)", () => {
     expect(notificationRowTitle(unknown)).toBe("Update from your coach");
     expect(notificationRowBody(unknown)).toBe("");
     expect(notificationRowTitle(unknown)).not.toContain("_");
+  });
+});
+
+/** A routing payload entity type each type plausibly carries (for the meal label). */
+function rowFor(type: NotificationType, overrides: Partial<Notification> = {}): Notification {
+  return {
+    ...base,
+    type,
+    notificationType: type,
+    route: type === "meal_reminder" ? "/meal/evening-snack" : "/today",
+    routing: { ...base.routing, notificationType: type },
+    ...overrides,
+  };
+}
+
+describe("every push type reads well on the lock screen (Z12-47, TR-15c, TM-13a)", () => {
+  const types = notificationTypeSchema.options;
+  // A long-ish coach and client name, and the fallbacks when there is none.
+  const contexts = [
+    { coachName: "Rahul Verma", clientName: "Aarav Shah" },
+    { coachName: "Venkataraman Iyer", clientName: "Shreyashree Nair" },
+    {},
+  ];
+
+  it.each(types)("%s: short title, two-line body, no enum, no FitBud prefix", (type) => {
+    for (const context of contexts) {
+      const row = rowFor(type);
+      const title = notificationRowTitle(row, context);
+      const body = notificationRowBody(row, context);
+      expect(title.length, `${type} title "${title}"`).toBeGreaterThan(0);
+      expect(title.length, `${type} title "${title}"`).toBeLessThanOrEqual(PUSH_TITLE_MAX);
+      expect(body.length, `${type} body "${body}"`).toBeLessThanOrEqual(PUSH_BODY_MAX);
+      for (const text of [title, body]) {
+        expect(text).not.toMatch(/_/);
+        expect(text).not.toMatch(/^FitBud\s*·/);
+        expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+        expect(text).not.toMatch(/%/);
+      }
+    }
+  });
+
+  it("names the coach on coach rows and the client by first name on trainer rows", () => {
+    const ctx = { coachName: "Rahul Verma" };
+    expect(notificationRowTitle(rowFor("plan_published"), ctx)).toBe("Rahul changed your plan");
+    expect(notificationRowTitle(rowFor("trainer_note_shared"), ctx)).toBe("Rahul left a note");
+    expect(notificationRowTitle(rowFor("coach_answered"), ctx)).toBe("Rahul answered your question");
+    expect(notificationRowTitle(rowFor("reactivation_requested"), ctx)).toBe("Restart coaching?");
+    expect(notificationRowBody(rowFor("reactivation_requested"), ctx)).toBe(
+      "Rahul wants to restart coaching. Tap to review.",
+    );
+    expect(notificationRowBody(rowFor("checkin_reviewed"), ctx)).toBe("See Rahul's review.");
+    expect(notificationRowTitle(rowFor("plan_published"))).toBe("Your coach changed your plan");
+    expect(
+      notificationRowTitle(rowFor("trainer_ask_coach", { clientDisplayName: "Aarav Shah" })),
+    ).toBe("Aarav asked you");
+    expect(notificationRowTitle(rowFor("trainer_ask_coach"))).toBe("A client asked you");
+    expect(notificationRowTitle(rowFor("meal_reminder"))).toBe("Snack is due");
+  });
+
+  it("hides coaching detail on the lock screen when asked", () => {
+    for (const type of ["meal_reminder", "workout_reminder", "trainer_note_shared"] as const) {
+      expect(notificationRowBody(rowFor(type), { hideLockDetails: true })).toBe(
+        "You have something to log in FitBud.",
+      );
+    }
+  });
+
+  it("every type has one group; every group has a channel, a category and a summary", () => {
+    for (const type of types) {
+      expect(PUSH_GROUPS, type).toContain(pushGroupFor(type));
+    }
+    const categories = new Set<string>();
+    for (const group of PUSH_GROUPS) {
+      expect(group.channelId).toBe(group.id);
+      // Expo category ids cannot contain ":" or "-".
+      expect(group.categoryId).toMatch(/^[a-z_]+$/);
+      expect(group.summary).toMatch(/^%u more /);
+      categories.add(group.categoryId);
+    }
+    expect(categories.size).toBe(PUSH_GROUPS.length);
+    expect(pushGroupFor("meal_reminder").categoryId).toBe("meal_actions");
+    expect(pushGroupFor("trainer_ask_coach").id).toBe("clients");
+    expect(pushGroupFor("activity_nudge").id).toBe("coach");
   });
 });
