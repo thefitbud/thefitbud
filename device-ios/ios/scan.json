@@ -1,0 +1,21 @@
+{
+  "platform": "ios",
+  "files": [
+    "ios-device.log"
+  ],
+  "sentinel": false,
+  "status": "fail",
+  "counts": {
+    "capture-empty": 1
+  },
+  "findings": [
+    {
+      "kind": "capture-empty",
+      "file": "ios-device.log",
+      "line": 0,
+      "text": "no log shows Running \"main\": the app's output was not captured, so the scan proved nothing"
+    }
+  ],
+  "truncated": 0,
+  "allowed": []
+}

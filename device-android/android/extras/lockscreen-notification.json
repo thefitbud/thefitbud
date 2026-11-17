@@ -1,0 +1,7 @@
+{
+  "platform": "android",
+  "target": "notification",
+  "match": "FitBud",
+  "outcome": "opened-app",
+  "note": "tapped at 911 1971 twice; com.thefitbud.mobile.staging has the window focus"
+}

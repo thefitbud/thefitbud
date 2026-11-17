@@ -1,0 +1,10 @@
+{
+  "result": "mean screenshot luminance: light — (0), dark — (0)",
+  "light": null,
+  "dark": null,
+  "count": {
+    "light": 0,
+    "dark": 0
+  },
+  "shots": []
+}

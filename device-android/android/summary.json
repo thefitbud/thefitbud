@@ -1,0 +1,96 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: no JUnit report (Maestro did not finish)",
+    "dark: no JUnit report (Maestro did not finish)"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": "no JUnit report (Maestro did not finish)"
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": "no JUnit report (Maestro did not finish)"
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "full in 321 s",
+      "mode": "full",
+      "seconds": 321,
+      "cacheKey": "device-native-android-e45bacfe8191e3358bff94b5e87d2128bbfbeaa7"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "opened-app",
+      "note": "tapped at 911 1971 twice; com.thefitbud.mobile.staging has the window focus"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light — (0), dark — (0)",
+      "light": null,
+      "dark": null,
+      "count": {
+        "light": 0,
+        "dark": 0
+      },
+      "shots": []
+    }
+  ]
+}

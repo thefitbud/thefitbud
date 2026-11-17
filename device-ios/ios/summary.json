@@ -1,0 +1,106 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: no JUnit report (Maestro did not finish)",
+    "dark: no JUnit report (Maestro did not finish)",
+    "device log: capture-empty 1"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": "no JUnit report (Maestro did not finish)"
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": "no JUnit report (Maestro did not finish)"
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": false,
+    "status": "fail",
+    "counts": {
+      "capture-empty": 1
+    },
+    "findings": [
+      {
+        "kind": "capture-empty",
+        "file": "ios-device.log",
+        "line": 0,
+        "text": "no log shows Running \"main\": the app's output was not captured, so the scan proved nothing"
+      }
+    ],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 144 s",
+      "mode": "cache-hit",
+      "seconds": 144,
+      "cacheKey": "device-native-ios-b7ec8fc53ab84a2898c2fea80da6c8d7ffd2d6f2"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light — (0), dark — (0)",
+      "light": null,
+      "dark": null,
+      "count": {
+        "light": 0,
+        "dark": 0
+      },
+      "shots": []
+    }
+  ]
+}
