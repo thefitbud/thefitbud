@@ -1,0 +1,351 @@
+/**
+ * Z12-2 first-run chrome (D-W12b-2). Global styles.css / styles/* stay frozen.
+ * Ink primary; coral never a button. Existing CSS variables only.
+ */
+
+.welcome-shell {
+  min-height: 100vh;
+  background: var(--bg, #f4f3f8);
+  color: var(--ink, var(--deep-navy));
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome-shell .button-primary {
+  background: var(--brand, var(--ink));
+  color: var(--on-brand, var(--white));
+  box-shadow: none;
+}
+
+.welcome-shell .button-primary:hover,
+.welcome-shell .button-primary:focus-visible {
+  filter: brightness(1.04);
+  outline: 2px solid var(--brand, var(--ink));
+  outline-offset: 2px;
+}
+
+.welcome-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 28px 40px 8px;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.welcome-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--ink, var(--deep-navy));
+  letter-spacing: -0.01em;
+}
+
+.welcome-draft-note {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--ink3, #6b6880));
+  text-align: right;
+}
+
+.welcome-main {
+  flex: 1;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 12px 24px 48px;
+  box-sizing: border-box;
+}
+
+.welcome-stepper {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 8px 0 28px;
+  list-style: none;
+  padding: 0;
+}
+
+.welcome-stepper-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.welcome-stepper-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+}
+
+.welcome-stepper-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  background: var(--line, var(--border, #e4e2ec));
+  color: var(--ink-500, var(--ink3, #6b6880));
+}
+
+.welcome-stepper-item.is-active .welcome-stepper-num,
+.welcome-stepper-item.is-done .welcome-stepper-num {
+  background: var(--brand, var(--ink));
+  color: var(--on-brand, var(--white));
+}
+
+.welcome-stepper-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-500, var(--ink3, #6b6880));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.welcome-stepper-item.is-active .welcome-stepper-title {
+  color: var(--ink, var(--deep-navy));
+}
+
+.welcome-stepper-rail {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line, var(--border, #e4e2ec));
+}
+
+.welcome-stepper-item.is-active .welcome-stepper-rail,
+.welcome-stepper-item.is-done .welcome-stepper-rail {
+  background: var(--brand, var(--ink));
+}
+
+.welcome-card {
+  background: var(--white, #fff);
+  border: 1px solid var(--line, var(--border, #e4e2ec));
+  border-radius: 16px;
+  padding: 28px 32px 32px;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+}
+
+.welcome-kicker {
+  margin: 0 0 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink-500, var(--ink3, #6b6880));
+}
+
+.welcome-card h1 {
+  margin: 0 0 6px;
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink, var(--deep-navy));
+}
+
+.welcome-lede {
+  margin: 0 0 24px;
+  font-size: 0.9375rem;
+  color: var(--ink-500, var(--ink3, #6b6880));
+}
+
+.welcome-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.welcome-shell .field > span:first-child {
+  font-weight: 600;
+  color: var(--ink, var(--deep-navy));
+}
+
+.welcome-field-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--ink3, #6b6880));
+  line-height: 1.35;
+}
+
+.welcome-step-block {
+  display: flex;
+  flex-direction: column;
+}
+
+.welcome-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  min-height: 44px;
+}
+
+.welcome-actions .link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  color: var(--brand, var(--ink));
+  font-weight: 600;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.welcome-actions .link:focus-visible {
+  outline: 2px solid var(--brand, var(--ink));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.welcome-template-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.welcome-template-card {
+  border: 1px solid var(--line, var(--border, #e4e2ec));
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 148px;
+  background: var(--white, #fff);
+}
+
+.welcome-template-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--brand, var(--ink)) 12%, white);
+  color: var(--brand, var(--ink));
+}
+
+.welcome-template-card h2 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--ink, var(--deep-navy));
+}
+
+.welcome-template-meta {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--ink3, #6b6880));
+  line-height: 1.4;
+  flex: 1;
+}
+
+.welcome-template-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg, #f4f3f8);
+  color: var(--ink-500, var(--ink3, #6b6880));
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.welcome-invite-preview {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+}
+
+.welcome-invite-preview .link {
+  color: var(--brand, var(--ink));
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  min-height: 44px;
+}
+
+.welcome-invite-preview .link:focus-visible {
+  outline: 2px solid var(--brand, var(--ink));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.welcome-done {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 24px;
+  gap: 12px;
+}
+
+.welcome-done h1 {
+  margin: 16px 0 0;
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink, var(--deep-navy));
+}
+
+.welcome-done p {
+  margin: 0;
+  font-size: 1rem;
+  color: var(--ink-500, var(--ink3, #6b6880));
+  max-width: 28rem;
+}
+
+.welcome-done .button-primary {
+  margin-top: 20px;
+  min-height: 44px;
+  min-width: 140px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+@media (max-width: 720px) {
+  .welcome-top {
+    padding: 20px 20px 4px;
+  }
+
+  .welcome-main {
+    padding: 8px 16px 40px;
+  }
+
+  .welcome-stepper-title {
+    font-size: 0.75rem;
+  }
+
+  .welcome-template-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-card {
+    padding: 22px 18px 24px;
+  }
+}
