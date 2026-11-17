@@ -793,7 +793,7 @@ describe("Today v3 past day, loading and offline", () => {
         { id: "00000000-0000-4000-8000-0000000c0099", body: "Other note.", seenAt: null },
       ];
       renderBanner();
-      await screen.findByText("Rahul has a note for you");
+      await screen.findByText("Rahul left a note");
       await waitFor(() => expect(screen.queryByText(/Other note/)).toBeNull());
     });
 
@@ -815,7 +815,7 @@ describe("Today v3 past day, loading and offline", () => {
         },
       ];
       renderBanner();
-      await screen.findByText("Rahul has a note for you");
+      await screen.findByText("Rahul left a note");
       screen.getByText('"Keep protein up on rest days."');
     });
   });

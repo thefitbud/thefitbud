@@ -5,6 +5,7 @@ import {
   quietWindow,
   snoozeMeal,
 } from "./actions";
+import { pushGroupFor, PUSH_GROUPS } from "./copy";
 
 export type MealNotificationResponse = {
   kind: "open" | "snooze";
@@ -27,25 +28,38 @@ function emit(event: MealNotificationResponse): void {
 }
 
 /**
- * Registers Open and Snooze 30 min on the meal category.
- * No-ops on web: the system notification UI needs a dev build.
+ * Registers one notification category per push group (copy.ts `PUSH_GROUPS`),
+ * each with its iOS stack summary, and Open and Snooze 30 min on the meal
+ * category. No-ops on web: the system notification UI needs a dev build.
  */
 export async function ensureMealNotificationActions(): Promise<void> {
   if (Platform.OS === "web" || nativeReady) return;
   const Notifications = await import("expo-notifications");
-  await Notifications.setNotificationCategoryAsync(
-    MEAL_ACTION_CATEGORY,
-    MEAL_NOTIFICATION_ACTIONS.map((action) => ({
-      identifier: action.identifier,
-      buttonTitle: action.buttonTitle,
-      options: { opensAppToForeground: action.opensAppToForeground },
-    })),
-  );
+  for (const group of PUSH_GROUPS) {
+    const actions =
+      group.categoryId === MEAL_ACTION_CATEGORY
+        ? MEAL_NOTIFICATION_ACTIONS.map((action) => ({
+            identifier: action.identifier,
+            buttonTitle: action.buttonTitle,
+            options: { opensAppToForeground: action.opensAppToForeground },
+          }))
+        : [];
+    await Notifications.setNotificationCategoryAsync(group.categoryId, actions, {
+      categorySummaryFormat: group.summary,
+    });
+  }
   Notifications.addNotificationResponseReceivedListener((response) => {
     const actionId = response.actionIdentifier;
     const data = response.notification.request.content.data ?? {};
+    // The local snooze reminder carries mealAssignmentId; a server meal push
+    // carries the routing payload (domainEntityType + domainEntityId).
     const mealAssignmentId =
-      typeof data.mealAssignmentId === "string" ? data.mealAssignmentId : null;
+      typeof data.mealAssignmentId === "string"
+        ? data.mealAssignmentId
+        : data.domainEntityType === "meal_assignment" &&
+            typeof data.domainEntityId === "string"
+          ? data.domainEntityId
+          : null;
     if (actionId === "meal_snooze_30") {
       if (mealAssignmentId) {
         const result = snoozeMeal(mealAssignmentId, new Date(), quietWindow("Asia/Kolkata"));
@@ -53,7 +67,7 @@ export async function ensureMealNotificationActions(): Promise<void> {
           const title =
             typeof response.notification.request.content.title === "string"
               ? response.notification.request.content.title
-              : "Meal isn't logged yet";
+              : "Meal is due";
           void scheduleMealSnoozeNotification({
             title,
             body: "Open it in Diet, or snooze for 30 minutes.",
@@ -65,9 +79,15 @@ export async function ensureMealNotificationActions(): Promise<void> {
       emit({ kind: "snooze", mealAssignmentId });
       return;
     }
+    // A body tap on a server push routes through openListener.ts (it carries
+    // the routing payload). Only the local snooze reminder, which carries a
+    // mealAssignmentId and no routing payload, opens from here; otherwise
+    // every tap would also jump to Diet.
     if (
       actionId === "meal_open" ||
-      actionId === Notifications.DEFAULT_ACTION_IDENTIFIER
+      (actionId === Notifications.DEFAULT_ACTION_IDENTIFIER &&
+        mealAssignmentId &&
+        typeof data.notificationType !== "string")
     ) {
       emit({ kind: "open", mealAssignmentId });
     }
@@ -94,6 +114,8 @@ export async function scheduleMealSnoozeNotification(input: {
     trigger: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
       date: input.until,
+      // Android: the meal channel, so it stacks with the other meal reminders.
+      channelId: pushGroupFor("meal_reminder").channelId,
     },
   });
   return "scheduled";

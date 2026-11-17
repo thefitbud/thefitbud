@@ -12,6 +12,11 @@ import {
   DEFAULT_TAP_ACTION,
   type NotificationTap,
 } from "./openListener.js";
+import {
+  deepLinkFromNotificationPayload,
+  TRAINEE_NOTIFICATION_TYPES,
+  TRAINER_NOTIFICATION_TYPES,
+} from "./routing.js";
 
 const USER_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const USER_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
@@ -443,5 +448,79 @@ describe("bindNotificationResponses", () => {
     expect(calls).toEqual(["listen", "getLast"]);
     expect(receive).not.toHaveBeenCalled();
     expect(remove).toHaveBeenCalledTimes(1);
+  });
+});
+
+/**
+ * Z12-47: every push type, from every app state, reaches its screen.
+ * Cold start: the tap arrives before the session (getLastNotificationResponseAsync)
+ * and routes once the role is known. Background: the listener delivers it to a
+ * running session. Foreground: the in-app banner (Z12-38's queue) hands the same
+ * payload to the same handler (`openPayload` → handleNotificationOpen), so it
+ * goes through `deepLinkFromNotificationPayload` like the others.
+ */
+describe("every push type from cold start, background and foreground (Z12-47)", () => {
+  const ID = "22222222-2222-4222-8222-222222222222";
+  type Expected = { role: "trainee" | "trainer"; route: unknown };
+  const TABLE: Array<[NotificationType, PushPayload["domainEntityType"], Expected]> = [
+    ["workout_reminder", "workout_assignment", { role: "trainee", route: { type: "workout_overview", assignmentId: ID } }],
+    ["meal_reminder", "meal_assignment", { role: "trainee", route: { type: "meal", assignmentId: ID } }],
+    ["checkin_reminder", "checkin", { role: "trainee", route: { type: "checkin", checkinId: ID } }],
+    ["checkin_reviewed", "checkin", { role: "trainee", route: { type: "checkin", checkinId: ID } }],
+    ["daily_summary", "coaching_relationship", { role: "trainee", route: { type: "tab", tab: "today" } }],
+    ["subscription_renewal_reminder", "coaching_relationship", { role: "trainee", route: { type: "tab", tab: "today" } }],
+    ["activity_nudge", "workout_assignment", { role: "trainee", route: { type: "workout_overview", assignmentId: ID } }],
+    ["activity_nudge", "meal_assignment", { role: "trainee", route: { type: "meal", assignmentId: ID } }],
+    ["plan_published", "coaching_relationship", { role: "trainee", route: { type: "tab", tab: "workout" } }],
+    ["coach_answered", "meal_assignment", { role: "trainee", route: { type: "meal", assignmentId: ID } }],
+    ["coach_answered", "coaching_relationship", { role: "trainee", route: { type: "tab", tab: "today" } }],
+    ["reminders_paused", "coaching_relationship", { role: "trainee", route: { type: "reminders" } }],
+    ["relationship_ended", "coaching_relationship", { role: "trainee", route: { type: "tab", tab: "today" } }],
+    ["trainer_note_shared", "coaching_relationship", { role: "trainee", route: { type: "note", noteId: ID } }],
+    ["reactivation_requested", "coaching_relationship", { role: "trainee", route: { type: "reactivate", requestId: ID } }],
+    ["coach_log_updated", "workout_assignment", { role: "trainee", route: { type: "workout_overview", assignmentId: ID } }],
+    ["trainer_ask_coach", "coaching_relationship", { role: "trainer", route: { kind: "attention" } }],
+    ["trainer_checkin_submitted", "checkin", { role: "trainer", route: { kind: "checkin", checkinId: ID } }],
+    ["trainer_intake_submitted", "coaching_relationship", { role: "trainer", route: { kind: "client", relationshipId: ID } }],
+    ["trainer_meal_times_changed", "coaching_relationship", { role: "trainer", route: { kind: "client", relationshipId: ID } }],
+  ];
+
+  function landing(data: unknown, role: "trainee" | "trainer") {
+    const link = deepLinkFromNotificationPayload(data);
+    return role === "trainer" ? link?.trainerRoute : link?.route;
+  }
+
+  it.each(TABLE)("%s (%s) lands on its screen in every app state", (type, entity, expected) => {
+    const data = payload(type, entity);
+    const routed: unknown[] = [];
+    const handle = (raw: unknown) => routed.push(landing(raw, expected.role));
+
+    // Cold start: tapped before sign-in finished; routed once the role is known.
+    const cold = createNotificationOpenController({ handle });
+    expect(cold.receive(tap(`cold-${type}-${entity}`, data))).toBe("queued");
+    cold.setSession({ userId: USER_A, role: expected.role });
+    // Background: the app is running with the session.
+    const background = createNotificationOpenController({ handle });
+    background.setSession({ userId: USER_A, role: expected.role });
+    expect(background.receive(tap(`bg-${type}-${entity}`, data))).toBe("routed");
+    // Foreground: the banner tap hands the payload straight to the same handler.
+    handle(data);
+
+    expect(routed).toEqual([expected.route, expected.route, expected.route]);
+
+    // The other role never routes it.
+    const other = createNotificationOpenController({ handle });
+    other.setSession({
+      userId: USER_A,
+      role: expected.role === "trainee" ? "trainer" : "trainee",
+    });
+    expect(other.receive(tap(`other-${type}-${entity}`, data))).toBe("ignored");
+  });
+
+  it("covers every routable type", () => {
+    const covered = new Set(TABLE.map(([type]) => type));
+    for (const type of [...TRAINEE_NOTIFICATION_TYPES, ...TRAINER_NOTIFICATION_TYPES]) {
+      expect(covered.has(type), type).toBe(true);
+    }
   });
 });

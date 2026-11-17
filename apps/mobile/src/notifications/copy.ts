@@ -17,14 +17,19 @@ export type NotificationCopyContext = {
   hideLockDetails?: boolean;
 };
 
+/**
+ * The client's given name for a trainer notification (TM-13a: "Aarav mentions
+ * pain", "Sneha sent her check-in"), so the title fits one lock-screen line.
+ * A raw enum or an email that leaked into the name field is not a name.
+ */
 function trainerClientName(
   notification: Notification,
   context: NotificationCopyContext,
 ): string | null {
-  const fromContext = context.clientName?.trim();
-  if (fromContext) return fromContext;
-  const onRow = notification.clientDisplayName?.trim();
-  return onRow || null;
+  const name =
+    context.clientName?.trim() || notification.clientDisplayName?.trim() || null;
+  if (!name || /[_@]/.test(name)) return null;
+  return name.split(/\s+/)[0] ?? null;
 }
 
 const LOCK_DETAIL_TYPES = new Set<NotificationType>([
@@ -73,13 +78,14 @@ export function notePushCopy(coachName?: string | null): {
   body: string;
 } {
   return {
-    title: `${coachOrFallback(coachName)} has a note for you!`,
+    title: `${coachOrFallback(coachName)} left a note`,
     body: "Tap to read.",
   };
 }
 
+/** TR-06h: the in-app banner over Today reads "Rahul left a note". */
 export function noteBannerCopy(coachName?: string | null): { title: string } {
-  return { title: `${coachOrFallback(coachName)} has a note for you` };
+  return { title: `${coachOrFallback(coachName)} left a note` };
 }
 
 /**
@@ -135,9 +141,10 @@ export function notificationRowTitle(
   const meal = mealLabelFromRoute(notification);
   switch (type) {
     case "meal_reminder":
-      return mealPushCopy(meal).title;
+      // TR-15a names the meal; the record names it only when its route does.
+      return meal === "Meal" ? "A meal is due" : `${meal} is due`;
     case "workout_reminder":
-      return "Time for your workout?";
+      return "Your workout is waiting";
     case "checkin_reminder":
       return checkinPushCopy(context.coachName).title;
     case "daily_summary":
@@ -147,11 +154,11 @@ export function notificationRowTitle(
     case "subscription_renewal_reminder":
       return "Plan renewal coming up";
     case "plan_published":
-      return "Your plan is updated";
+      return `${coachOrFallback(context.coachName)} changed your plan`;
     case "checkin_reviewed":
-      return "Your coach reviewed your check-in";
+      return "Check-in reviewed";
     case "coach_answered":
-      return "Your coach answered your question";
+      return `${coachOrFallback(context.coachName)} answered your question`;
     case "reminders_paused":
       return "Reminders paused for a while";
     case "relationship_ended":
@@ -159,8 +166,12 @@ export function notificationRowTitle(
     case "trainer_note_shared":
       return notePushCopy(context.coachName).title;
     case "reactivation_requested":
-      return "Your coach wants to restart coaching";
-    case "trainer_ask_coach":
+      return "Restart coaching?";
+    case "trainer_ask_coach": {
+      // TM-13b: "Aarav asked you". The ask itself goes out on WhatsApp.
+      const client = trainerClientName(notification, context);
+      return client ? `${client} asked you` : "A client asked you";
+    }
     case "trainer_checkin_submitted":
     case "trainer_intake_submitted":
     case "trainer_renewal":
@@ -194,10 +205,9 @@ export function notificationRowBody(
   }
   switch (notification.type) {
     case "meal_reminder":
-      return mealPushCopy(mealLabelFromRoute(notification), context.hideLockDetails)
-        .body;
+      return "Tap to log it.";
     case "workout_reminder":
-      return "If you've already trained, log it in a tap. If today's not the day, that's okay too.";
+      return "Open it to start, or log it if you've trained.";
     case "checkin_reminder":
       return checkinPushCopy(context.coachName).body;
     case "daily_summary":
@@ -209,7 +219,7 @@ export function notificationRowBody(
     case "plan_published":
       return "See what's new in your plan.";
     case "checkin_reviewed":
-      return "Tap to see your coach's review.";
+      return `See ${coachOrFallback(context.coachName)}'s review.`;
     case "coach_answered":
       return "Tap to open the item they answered about.";
     case "reminders_paused":
@@ -219,7 +229,7 @@ export function notificationRowBody(
     case "trainer_note_shared":
       return notePushCopy(context.coachName).body;
     case "reactivation_requested":
-      return "Tap to review the request.";
+      return `${coachOrFallback(context.coachName)} wants to restart coaching. Tap to review.`;
     case "trainer_ask_coach":
     case "trainer_checkin_submitted":
     case "trainer_intake_submitted":
@@ -239,6 +249,94 @@ export function notificationRowBody(
       return "";
   }
 }
+
+/**
+ * How a push groups on the phone (Z12-47): one Android channel and one iOS
+ * notification category per kind, with the summary iOS shows on a collapsed
+ * stack ("%u" is the count of the others). The copy above is the text; this is
+ * where it lands. Expo's push service has no iOS thread id, so iOS stacks by
+ * category summary and app, never per thread, until a native extension exists.
+ */
+export type PushGroupId =
+  | "meal"
+  | "workout"
+  | "checkin"
+  | "summary"
+  | "coach"
+  | "plan"
+  | "account"
+  | "clients";
+
+export type PushGroup = {
+  id: PushGroupId;
+  /** Android channel id (androidChannels.ts registers every one). */
+  channelId: PushGroupId;
+  /** iOS category id: letters and underscores only (Expo rejects ":" and "-"). */
+  categoryId: string;
+  /** iOS stack summary, "%u" = the number of other notifications. */
+  summary: string;
+};
+
+const GROUPS: Record<PushGroupId, PushGroup> = {
+  meal: {
+    id: "meal",
+    channelId: "meal",
+    // The meal category also carries the Open and Snooze 30 min buttons.
+    categoryId: "meal_actions",
+    summary: "%u more meal reminders",
+  },
+  workout: { id: "workout", channelId: "workout", categoryId: "fitbud_workout", summary: "%u more workout reminders" },
+  checkin: { id: "checkin", channelId: "checkin", categoryId: "fitbud_checkin", summary: "%u more check-in reminders" },
+  summary: { id: "summary", channelId: "summary", categoryId: "fitbud_summary", summary: "%u more daily summaries" },
+  coach: { id: "coach", channelId: "coach", categoryId: "fitbud_coach", summary: "%u more from your coach" },
+  plan: { id: "plan", channelId: "plan", categoryId: "fitbud_plan", summary: "%u more plan updates" },
+  account: { id: "account", channelId: "account", categoryId: "fitbud_account", summary: "%u more coaching updates" },
+  clients: { id: "clients", channelId: "clients", categoryId: "fitbud_clients", summary: "%u more client updates" },
+};
+
+export const PUSH_GROUPS: readonly PushGroup[] = Object.values(GROUPS);
+
+export function pushGroupFor(type: NotificationType): PushGroup {
+  switch (type) {
+    case "meal_reminder":
+      return GROUPS.meal;
+    case "workout_reminder":
+      return GROUPS.workout;
+    case "checkin_reminder":
+      return GROUPS.checkin;
+    case "daily_summary":
+      return GROUPS.summary;
+    case "activity_nudge":
+    case "trainer_note_shared":
+    case "checkin_reviewed":
+    case "coach_answered":
+    case "coach_log_updated":
+      return GROUPS.coach;
+    case "plan_published":
+      return GROUPS.plan;
+    case "subscription_renewal_reminder":
+    case "reminders_paused":
+    case "relationship_ended":
+    case "reactivation_requested":
+    case "admin_whatsapp_budget":
+      return GROUPS.account;
+    case "trainer_ask_coach":
+    case "trainer_checkin_submitted":
+    case "trainer_intake_submitted":
+    case "trainer_renewal":
+    case "trainer_meal_times_changed":
+    case "trainer_critical_digest":
+      return GROUPS.clients;
+    default: {
+      const _exhaustive: never = type;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Lock-screen limits (TR-15c, TM-13a at 393 pt): one title line, two body lines. */
+export const PUSH_TITLE_MAX = 36;
+export const PUSH_BODY_MAX = 90;
 
 export function notificationTypeIcon(type: NotificationType): string {
   switch (type) {

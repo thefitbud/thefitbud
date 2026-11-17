@@ -41,7 +41,13 @@ vi.mock("./androidChannels", () => ({
   ensureAndroidNotificationChannels: ensureChannels,
 }));
 
+const ensureCategories = vi.fn(async () => undefined);
+vi.mock("./nativeActions", () => ({
+  ensureMealNotificationActions: ensureCategories,
+}));
+
 import {
+  preparePushPresentation,
   requestPushPermission,
   currentPushRegistration,
   installationIdForToken,
@@ -477,7 +483,8 @@ describe("Android 13 notification permission", () => {
       platform: "android",
     });
     expect(outcome.status).toBe("registered");
-    expect(ensureChannels).toHaveBeenCalledTimes(1);
+    // Once for the prompt, once for push presentation (Z12-47); both idempotent.
+    expect(ensureChannels).toHaveBeenCalled();
     expect(notificationsMock.requestPermissionsAsync).toHaveBeenCalledTimes(1);
   });
 
@@ -510,5 +517,37 @@ describe("Android 13 notification permission", () => {
     });
     expect(await requestPushPermission("android")).toBe("granted");
     expect(notificationsMock.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe("push presentation (Z12-47)", () => {
+  beforeEach(() => {
+    resetPushRegistration();
+    ensureChannels.mockClear();
+    ensureCategories.mockClear();
+  });
+
+  it("creates the Android channels and the categories once per session", async () => {
+    await preparePushPresentation("android");
+    await preparePushPresentation("android");
+    expect(ensureChannels).toHaveBeenCalledTimes(1);
+    expect(ensureCategories).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers the iOS categories without touching Android channels", async () => {
+    await preparePushPresentation("ios");
+    expect(ensureChannels).not.toHaveBeenCalled();
+    expect(ensureCategories).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing on web", async () => {
+    await preparePushPresentation("web");
+    expect(ensureCategories).not.toHaveBeenCalled();
+  });
+
+  it("runs on the registration path before the token is sent", async () => {
+    const api = fakeApi();
+    await registerDeviceTokenForPush(api.client, { platform: "ios" });
+    expect(ensureCategories).toHaveBeenCalledTimes(1);
   });
 });

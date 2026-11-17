@@ -1,9 +1,10 @@
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
+import type { PushGroupId } from "./copy";
 
 /** TR-16 §4 — Android notification channels mapped to reminder categories. */
 const CHANNELS: Array<{
-  id: string;
+  id: PushGroupId;
   name: string;
   description: string;
 }> = [
@@ -37,7 +38,20 @@ const CHANNELS: Array<{
     name: "Plan updates",
     description: "When your coach publishes plan changes.",
   },
+  {
+    id: "account",
+    name: "Coaching updates",
+    description: "Renewals, paused reminders and changes to your coaching.",
+  },
+  {
+    id: "clients",
+    name: "Client updates",
+    description: "Check-ins, intakes and questions from your clients.",
+  },
 ];
+
+/** Every push group has a channel (copy.ts `PUSH_GROUPS`; checked in copy.test.ts). */
+export const ANDROID_CHANNEL_IDS: readonly PushGroupId[] = CHANNELS.map((c) => c.id);
 
 let channelsReady = false;
 
