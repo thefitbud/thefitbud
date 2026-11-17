@@ -38,7 +38,7 @@ tags:
 - extendedWaitUntil:
     notVisible: "Loading"
     timeout: 90000
-- evalScript: ${output.client = (DEVICE_THEME == 'dark') ? 'Priya Nair' : 'Rohan Mehta'}
+- evalScript: "${output.client = (DEVICE_THEME == 'dark') ? 'Priya Nair' : 'Rohan Mehta'}"
 
 # ---- A push-on client: sheet, send, sent toast ------------------------------------------
 - runFlow:
