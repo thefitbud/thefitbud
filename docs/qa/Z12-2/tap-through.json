@@ -1,0 +1,35 @@
+[
+  {
+    "control": "profile Continue (ink primary)",
+    "result": "PASS"
+  },
+  {
+    "control": "templates Back + Continue",
+    "result": "PASS"
+  },
+  {
+    "control": "invite Skip for now → You're set",
+    "result": "PASS"
+  },
+  {
+    "control": "Go to Home link",
+    "result": "PASS"
+  },
+  {
+    "control": "keyboard focus on Display name",
+    "result": "PASS",
+    "focusStyles": {
+      "outline": "rgb(74, 63, 191) solid 2px",
+      "boxShadow": "none",
+      "borderColor": "rgb(26, 18, 72)"
+    }
+  },
+  {
+    "control": "primary Continue is ink (not coral)",
+    "result": "PASS",
+    "styles": {
+      "background": "rgb(26, 18, 72)",
+      "color": "rgb(255, 255, 255)"
+    }
+  }
+]
