@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - F3B6491E-5498-465F-85A9-2554CA4E3E88" tests="4" failures="1" time="649.805" timestamp="2026-11-17T18:47:18">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="99.397" timestamp="2026-11-17T18:47:18" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="185.043" timestamp="2026-11-17T18:48:57" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-40 Moving between days (swipe, cached days, header)" name="Z12-40 Moving between days (swipe, cached days, header)" classname="Z12-40 Moving between days (swipe, cached days, header)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-40/1-day-moves.yaml" time="146.735" timestamp="2026-11-17T18:52:02" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-40"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="F29 Future days are view only (Z12-39)" name="F29 Future days are view only (Z12-39)" classname="F29 Future days are view only (Z12-39)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F29-future-days.yaml" time="218.402" timestamp="2026-11-17T18:54:29" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-39"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
