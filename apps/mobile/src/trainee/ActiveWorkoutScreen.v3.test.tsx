@@ -319,3 +319,18 @@ describe("ActiveWorkoutScreen set entry", () => {
     expect(screen.getByText("Next: Romanian deadlift, set 2 · RPE 7")).toBeTruthy();
   });
 });
+
+describe("offline addressing (Z12-41)", () => {
+  it("sends the plan's own ids with a logged set, so a workout opened offline can be found", () => {
+    renderScreen("20 kg");
+    tap(/^Log set 1/);
+    const row = enqueued.at(-1)!;
+    expect(row.operation).toBe("workout.complete_set");
+    expect(JSON.parse(row.payloadJson)).toMatchObject({
+      executionId: uuid(1),
+      setExecutionId: uuid(10),
+      assignmentId: uuid(2),
+      setTargetId: uuid(110),
+    });
+  });
+});

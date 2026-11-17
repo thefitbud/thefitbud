@@ -1,0 +1,41 @@
+appId: com.thefitbud.mobile.staging
+name: F10 offline sync, part 3 (online again; everything sends without a tap)
+tags:
+  - device
+  - trainee
+  - z12-41
+---
+# Continues from F10b-offline-sync-offline.yaml: the device is online again, the app
+# was relaunched offline and is on Sync status with the logs waiting. Nothing here
+# taps "Try sending now": the queue must go out on its own (the app coming to the
+# front, the reachability probe, or the 30 s timer, whichever is first).
+- launchApp:
+    stopApp: false
+- runFlow:
+    when:
+      notVisible: "Try sending now"
+    commands:
+      - tapOn: "More"
+      - scrollUntilVisible:
+          element: "Sync status"
+          timeout: 20000
+      - tapOn: "Sync status"
+- extendedWaitUntil:
+    visible: "All saved"
+    timeout: 120000
+- assertVisible: "Everything you logged has been sent\\."
+- assertVisible: "Last sent .*"
+- assertNotVisible: "Saved on phone"
+- assertNotVisible: "Couldn't send"
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+
+# The logs are on the server's side of the app now: the weight shows on Progress and
+# no pill is left anywhere.
+- tapOn: "Progress"
+- extendedWaitUntil:
+    visible: "Log weight"
+    timeout: 30000
+- assertNotVisible: "Sync status, Saved on phone"
+- assertNotVisible: "Sync status, Couldn't send"
+- runFlow: ../../common/assert-no-crash.yaml

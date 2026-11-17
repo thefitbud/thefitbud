@@ -140,7 +140,7 @@ describe("restoreSession (native startup)", () => {
       },
     });
 
-    expect(await restoreSession(d)).toEqual({ status: "offline" });
+    expect(await restoreSession(d)).toMatchObject({ status: "offline", snapshot: null });
     await flushPersistedSession();
     expect(keys()).toEqual(before);
     expect(secure.map.get("fitbud.refreshToken")).toBe("refresh-stored");
@@ -155,7 +155,7 @@ describe("restoreSession (native startup)", () => {
       },
     });
 
-    expect(await restoreSession(d)).toEqual({ status: "offline" });
+    expect(await restoreSession(d)).toMatchObject({ status: "offline", snapshot: null });
     await flushPersistedSession();
     expect(secure.map.get("fitbud.refreshToken")).toBe("refresh-stored");
     expect(secure.map.has("fitbud.session")).toBe(true);
@@ -173,7 +173,7 @@ describe("restoreSession (native startup)", () => {
       },
     });
 
-    expect(await restoreSession(d)).toEqual({ status: "offline" });
+    expect(await restoreSession(d)).toMatchObject({ status: "offline", snapshot: null });
     await flushPersistedSession();
     expect(secure.map.get("fitbud.refreshToken")).toBe("refresh-rotated");
   });
@@ -188,7 +188,7 @@ describe("restoreSession (native startup)", () => {
       },
     });
 
-    expect(await restoreSession(d)).toEqual({ status: "offline" });
+    expect(await restoreSession(d)).toMatchObject({ status: "offline", snapshot: null });
     online = true;
     expect((await restoreSession(d)).status).toBe("signed_in");
   });
@@ -198,7 +198,7 @@ describe("restoreSession (native startup)", () => {
     secure.failReads = true;
     const { calls, deps: d } = deps();
 
-    expect(await restoreSession(d)).toEqual({ status: "offline" });
+    expect(await restoreSession(d)).toMatchObject({ status: "offline", snapshot: null });
     expect(calls).toEqual({ refresh: 0, me: 0 });
     secure.failReads = false;
     expect(secure.map.get("fitbud.refreshToken")).toBe("refresh-stored");

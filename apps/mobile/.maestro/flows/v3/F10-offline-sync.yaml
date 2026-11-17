@@ -1,0 +1,52 @@
+appId: com.thefitbud.mobile.staging
+name: F10 offline sync, part 1 (online; sign in and load what will be used offline)
+tags:
+  - device
+  - trainee
+  - z12-41
+---
+# Z12-41 device check (docs/specs/Z12-41.md, docs/qa/Z12-41/README.md), through the
+# Z12-35 harness. Dispatch: flows=launch,z12-41. The three F10 files run in path
+# order, one Maestro invocation each (scripts/qa/device/README.md, "Flows that need the
+# device offline"):
+#   F10-offline-sync.yaml             online: sign in, load Progress and Diet
+#   F10b-offline-sync-offline.yaml    offline: log, sync status (TR-19a), kill, relaunch
+#   F10c-offline-sync-reconnect.yaml  online again: everything sends without a tap
+# Trainee: Rohan (QA_SLIPPING_EMAIL, local demo seed).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Nothing is waiting on a fresh sign-in: the sync screen says so and has no "Last sent".
+- tapOn: "More"
+- scrollUntilVisible:
+    element: "Sync status"
+    timeout: 20000
+- tapOn: "Sync status"
+- extendedWaitUntil:
+    visible: "All saved"
+    timeout: 20000
+- assertVisible: "Everything you logged has been sent\\."
+- assertNotVisible: "Saved on phone"
+- assertNotVisible: "Couldn't send"
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back"
+
+# Load the screens the offline part logs from. Diet is last, so it is on screen, with
+# today's meals loaded, when the device goes offline.
+- tapOn: "Progress"
+- extendedWaitUntil:
+    visible: "Log weight"
+    timeout: 30000
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "Today's meals"
+    timeout: 30000
+- runFlow: ../../common/assert-no-crash.yaml

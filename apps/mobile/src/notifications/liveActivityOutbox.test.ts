@@ -304,7 +304,11 @@ describe("drainLiveActivityOutbox", () => {
 
     expect(result).toMatchObject({ rows: 2, enqueued: 1, duplicates: 1, cleared: 2 });
     expect(pushed).toHaveLength(1);
-    expect(await engine.store.listOutbox()).toHaveLength(1);
+    // Sent rows leave the outbox (Z12-41). Another sync must not send again.
+    expect(await engine.store.listOutbox()).toHaveLength(0);
+    const pushedSoFar = pushed.length;
+    await engine.pushPending();
+    expect(pushed).toHaveLength(pushedSoFar);
     expect(mod.state.rows).toEqual([]);
   });
 
@@ -318,7 +322,11 @@ describe("drainLiveActivityOutbox", () => {
 
     expect(mod.readOutbox).toHaveBeenCalledTimes(2);
     expect(new Set(pushed.map((mutation) => mutation.mutationId)).size).toBe(1);
-    expect(await engine.store.listOutbox()).toHaveLength(1);
+    // Sent rows leave the outbox (Z12-41). Another sync must not send again.
+    expect(await engine.store.listOutbox()).toHaveLength(0);
+    const pushedSoFar = pushed.length;
+    await engine.pushPending();
+    expect(pushed).toHaveLength(pushedSoFar);
   });
 
   it("stops at the first row it cannot place and keeps the rest", async () => {
@@ -360,7 +368,11 @@ describe("drainLiveActivityOutbox", () => {
       expect(ids, `set ${String(setId)}`).toHaveLength(1);
     }
     expect(pushed.map((mutation) => mutation.payload.setExecutionId)).toEqual([SET_1_ID]);
-    expect(await engine.store.listOutbox()).toHaveLength(1);
+    // Sent rows leave the outbox (Z12-41). Another sync must not send again.
+    expect(await engine.store.listOutbox()).toHaveLength(0);
+    const pushedSoFar = pushed.length;
+    await engine.pushPending();
+    expect(pushed).toHaveLength(pushedSoFar);
     expect(first).toMatchObject({ rows: 3, enqueued: 1, kept: 2, cleared: 1 });
     expect(mod.state.rows).toHaveLength(2);
   });
@@ -566,7 +578,11 @@ describe("drainLiveActivityOutbox on Android (LA3b)", () => {
 
     expect(result).toMatchObject({ rows: 2, enqueued: 1, duplicates: 1, cleared: 2 });
     expect(pushed).toHaveLength(1);
-    expect(await engine.store.listOutbox()).toHaveLength(1);
+    // Sent rows leave the outbox (Z12-41). Another sync must not send again.
+    expect(await engine.store.listOutbox()).toHaveLength(0);
+    const pushedSoFar = pushed.length;
+    await engine.pushPending();
+    expect(pushed).toHaveLength(pushedSoFar);
     expect(mod.state.rows).toEqual([]);
   });
 

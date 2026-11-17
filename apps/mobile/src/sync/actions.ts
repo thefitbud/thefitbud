@@ -7,9 +7,17 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import type { SyncEngine } from "./engine";
 
 /**
- * Enqueues one logical offline mutation with a stable mutation UUID and
- * idempotency key, then attempts a push when online. Retries reuse the same keys.
- * File uploads must not go through this helper — use engine.enqueueFileUpload.
+ * Saves one logical action on the phone, then tries to send it.
+ *
+ * - The row is written to the outbox (durable storage) before any request.
+ * - One action is one row: the mutation id is also the idempotency key, and
+ *   both are reused on every retry.
+ * - A send that cannot reach the API is not an error here: the row stays
+ *   waiting and the sync triggers send it later.
+ *
+ * `results` holds the server's verdict on this action, and only this action,
+ * when there is one.
+ * File uploads must not go through this helper: use engine.enqueueFileUpload.
  */
 export async function enqueueAndPush(
   engine: SyncEngine,
@@ -28,10 +36,12 @@ export async function enqueueAndPush(
   idempotencyKey: string;
   results: SyncMutationResult[];
 }> {
-  const mutationId = input.mutationId ?? createIdempotencyKey();
-  const idempotencyKey = input.idempotencyKey ?? mutationId;
   const entityType = SYNC_OPERATION_ENTITY[input.operation];
   const clientOccurredAt = new Date().toISOString();
+  const payloadJson = JSON.stringify(input.payload);
+
+  const mutationId = input.mutationId ?? createIdempotencyKey();
+  const idempotencyKey = input.idempotencyKey ?? mutationId;
 
   if (input.localPayload !== undefined) {
     await engine.store.upsertLocal({
@@ -52,14 +62,21 @@ export async function enqueueAndPush(
     operation: input.operation,
     expectedServerVersion: input.expectedServerVersion ?? null,
     clientOccurredAt,
-    payloadJson: JSON.stringify(input.payload),
+    payloadJson,
   });
 
   let results: SyncMutationResult[] = [];
   try {
     results = await engine.pushPending();
   } catch {
-    // Leave pending for reconnect retry (airplane mode / network failure).
+    // Not sent this time. The row is waiting in the outbox with the reason,
+    // and the triggers (reconnect, foreground, 30 s, next API call) retry it.
   }
-  return { mutationId, idempotencyKey, results };
+  // Only this action's verdict: another row refused in the same request is
+  // not this action's failure (the sync status screen shows that one).
+  return {
+    mutationId,
+    idempotencyKey,
+    results: results.filter((result) => result.mutationId === mutationId),
+  };
 }
