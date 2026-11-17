@@ -1,0 +1,7 @@
+{
+  "platform": "android",
+  "target": "notification",
+  "match": "FitBud",
+  "outcome": "not-found",
+  "note": "no lock-screen element matches /FitBud/i, on the lock screen or in the shade over it (dumps: lockscreen/android-notification-locked*.xml)"
+}

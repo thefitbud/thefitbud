@@ -1,0 +1,91 @@
+{
+  "result": "mean screenshot luminance: light 0.859 (15), dark 0.773 (1)",
+  "light": 0.859,
+  "dark": 0.773,
+  "count": {
+    "light": 15,
+    "dark": 1
+  },
+  "shots": [
+    {
+      "file": "TR-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.773
+    },
+    {
+      "file": "TR-06c-light-android.png",
+      "theme": "light",
+      "luma": 0.766
+    },
+    {
+      "file": "TR-06d-light-android.png",
+      "theme": "light",
+      "luma": 0.924
+    },
+    {
+      "file": "TR-07a-light-android.png",
+      "theme": "light",
+      "luma": 0.911
+    },
+    {
+      "file": "TR-07f-light-android.png",
+      "theme": "light",
+      "luma": 0.927
+    },
+    {
+      "file": "TR-07k-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "W-01a-light-android.png",
+      "theme": "light",
+      "luma": 0.763
+    },
+    {
+      "file": "W-01e-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "f29-planned-meal-readonly-light-android.png",
+      "theme": "light",
+      "luma": 0.728
+    },
+    {
+      "file": "f29-today-future-meals-light-android.png",
+      "theme": "light",
+      "luma": 0.924
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.773
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.773
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "z12-40-diet-tomorrow-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "z12-40-today-plus-7-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "z12-40-today-yesterday-light-android.png",
+      "theme": "light",
+      "luma": 0.766
+    }
+  ]
+}

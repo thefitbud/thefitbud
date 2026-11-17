@@ -1,0 +1,91 @@
+{
+  "result": "mean screenshot luminance: light 0.791 (7), dark 0.894 (9)",
+  "light": 0.791,
+  "dark": 0.894,
+  "count": {
+    "light": 7,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.79
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.79
+    },
+    {
+      "file": "TR-07a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.949
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.79
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.79
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.951
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.708
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workout.Needs_yo-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.951
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+      "theme": "light",
+      "luma": 0.708
+    },
+    {
+      "file": "step-032-repeat-light-ios.png",
+      "theme": "light",
+      "luma": 0.797
+    },
+    {
+      "file": "step-049-assertCondition-Loading_your_day-light-ios.png",
+      "theme": "light",
+      "luma": 0.797
+    },
+    {
+      "file": "step-097-assertCondition-__planned-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.942
+    },
+    {
+      "file": "z12-40-today-plus-7-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.944
+    },
+    {
+      "file": "z12-40-today-yesterday-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.785
+    }
+  ]
+}

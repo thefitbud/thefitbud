@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 81998E33-03E9-4F1D-BAEF-ADB583C8168B" tests="4" failures="2" time="648.37" timestamp="2026-11-17T17:23:05">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="163.351" timestamp="2026-11-17T17:23:05" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="132.463" timestamp="2026-11-17T17:25:49" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-40 Moving between days (swipe, cached days, header)" name="Z12-40 Moving between days (swipe, cached days, header)" classname="Z12-40 Moving between days (swipe, cached days, header)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-40/1-day-moves.yaml" time="216.21" timestamp="2026-11-17T17:28:01" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-40"/>
+      </properties>
+      <failure>Assertion is false: ".*· planned" is visible</failure>
+    </testcase>
+    <testcase id="F29 Future days are view only (Z12-39)" name="F29 Future days are view only (Z12-39)" classname="F29 Future days are view only (Z12-39)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F29-future-days.yaml" time="135.797" timestamp="2026-11-17T17:31:38" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-39"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
