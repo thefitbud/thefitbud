@@ -69,6 +69,12 @@ import {
   resolveLogInstant,
 } from "../domain/log-time-bounds.js";
 import {
+  FUTURE_DAY_ERROR,
+  FUTURE_DAY_LOG_ERROR_DOC,
+  FUTURE_DAY_OPENAPI_NOTE,
+  isFutureLocalDate,
+} from "../domain/future-day.js";
+import {
   CoachLogConflict,
   LOG_WRITE_CONFLICT,
   recordCoachLogChange,
@@ -170,6 +176,26 @@ function endedPeriodError(c: AppContext) {
     LOG_TIME_ERROR_CODES.ended_period,
     LOG_TIME_ERROR_MESSAGES.ended_period,
   );
+}
+
+/**
+ * D-W12-7: a workout on a day after the trainee's today is view only. It
+ * cannot be started or skipped, and an execution dated on it takes no sets,
+ * pause, resume or completion.
+ */
+async function workoutOnFutureDay(
+  db: Db,
+  input: { traineeUserId: string; localDate: string; now: string },
+): Promise<boolean> {
+  return isFutureLocalDate({
+    localDate: input.localDate,
+    now: input.now,
+    timeZone: await loadTraineeTimezone(db, input.traineeUserId),
+  });
+}
+
+function futureDayError(c: AppContext) {
+  return fail(c, 422, FUTURE_DAY_ERROR.code, FUTURE_DAY_ERROR.message);
 }
 
 async function loadEffectivePlanVersion(db: Db, relationshipId: string) {
@@ -745,8 +771,9 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/assignments/:assignmentId/start.",
-    description: "Workouts operation for POST /workouts/assignments/:assignmentId/start.",
+    description: `Workouts operation for POST /workouts/assignments/:assignmentId/start. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     idempotency: true,
     body: startWorkoutRequestSchema,
     bodyRequired: false,
@@ -838,6 +865,15 @@ workoutRoutes.post(
       })
     ) {
       return endedPeriodError(c);
+    }
+    if (
+      await workoutOnFutureDay(db, {
+        traineeUserId: relationship.traineeUserId,
+        localDate: loaded.assignment.localDate,
+        now,
+      })
+    ) {
+      return futureDayError(c);
     }
     if (loaded.execution?.loggedByRole === "coach") {
       return coachLoggedReadOnlyError(c);
@@ -1024,22 +1060,31 @@ async function requireTraineeOwnedOpenExecution(
     }
     throw error;
   }
-  if (relationship.reactivatedAt) {
-    const [assignment] = await db
-      .select({ localDate: workoutAssignments.localDate })
-      .from(workoutAssignments)
-      .where(eq(workoutAssignments.id, bundle.execution.assignmentId))
-      .limit(1);
-    if (
-      assignment &&
-      (await workoutInEndedPeriod(db, {
-        relationship,
-        localDate: assignment.localDate,
-        loggedAt: bundle.execution.startedAt,
-      }))
-    ) {
-      return { errorStatus: "ended_period" as const };
-    }
+  const [assignment] = await db
+    .select({ localDate: workoutAssignments.localDate })
+    .from(workoutAssignments)
+    .where(eq(workoutAssignments.id, bundle.execution.assignmentId))
+    .limit(1);
+  if (
+    relationship.reactivatedAt &&
+    assignment &&
+    (await workoutInEndedPeriod(db, {
+      relationship,
+      localDate: assignment.localDate,
+      loggedAt: bundle.execution.startedAt,
+    }))
+  ) {
+    return { errorStatus: "ended_period" as const };
+  }
+  if (
+    assignment &&
+    (await workoutOnFutureDay(db, {
+      traineeUserId: relationship.traineeUserId,
+      localDate: assignment.localDate,
+      now: nowIso(),
+    }))
+  ) {
+    return { errorStatus: "future_day" as const };
   }
   // R1: an entry the coach created is read-only to the trainee.
   if (bundle.execution.loggedByRole === "coach") {
@@ -1053,6 +1098,7 @@ type OwnershipFailure =
   | "not_found"
   | "ended"
   | "ended_period"
+  | "future_day"
   | "coach_logged";
 
 function isOwnershipFailure(
@@ -1067,6 +1113,7 @@ function isOwnershipFailure(
     loaded.errorStatus === "not_found" ||
     loaded.errorStatus === "ended" ||
     loaded.errorStatus === "ended_period" ||
+    loaded.errorStatus === "future_day" ||
     loaded.errorStatus === "coach_logged"
   );
 }
@@ -1077,6 +1124,9 @@ function ownershipError(
 ) {
   if (loaded.errorStatus === "ended_period") {
     return endedPeriodError(c);
+  }
+  if (loaded.errorStatus === "future_day") {
+    return futureDayError(c);
   }
   if (loaded.errorStatus === "coach_logged") {
     return coachLoggedReadOnlyError(c);
@@ -1100,8 +1150,9 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/pause.",
-    description: "Workouts operation for POST /workouts/executions/:executionId/pause.",
+    description: `Workouts operation for POST /workouts/executions/:executionId/pause. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     response: workoutExecutionSchema,
   }),
   optionalAuthMiddleware,
@@ -1153,8 +1204,9 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/resume.",
-    description: "Workouts operation for POST /workouts/executions/:executionId/resume.",
+    description: `Workouts operation for POST /workouts/executions/:executionId/resume. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     response: workoutExecutionSchema,
   }),
   optionalAuthMiddleware,
@@ -1206,8 +1258,9 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete.",
-    description: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete.",
+    description: `Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     body: completeSetRequestSchema,
     response: workoutExecutionSchema,
   }),
@@ -1304,8 +1357,9 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/skip.",
-    description: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/skip.",
+    description: `Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/skip. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     response: workoutExecutionSchema,
   }),
   optionalAuthMiddleware,
@@ -1382,8 +1436,9 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/complete.",
-    description: "Workouts operation for POST /workouts/executions/:executionId/complete.",
+    description: `Workouts operation for POST /workouts/executions/:executionId/complete. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     idempotency: true,
     body: completeWorkoutRequestSchema,
     response: workoutExecutionSchema,
@@ -1509,8 +1564,9 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/assignments/:assignmentId/skip.",
-    description: "Workouts operation for POST /workouts/assignments/:assignmentId/skip.",
+    description: `Workouts operation for POST /workouts/assignments/:assignmentId/skip. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     idempotency: true,
     body: skipWorkoutRequestSchema,
     bodyRequired: false,
@@ -1604,6 +1660,17 @@ workoutRoutes.post(
       })
     ) {
       return endedPeriodError(c);
+    }
+    // Checked whether or not a client time is sent: the bounds below only
+    // run with one, and a future day must never be skippable.
+    if (
+      await workoutOnFutureDay(db, {
+        traineeUserId: relationship.traineeUserId,
+        localDate: loaded.assignment.localDate,
+        now,
+      })
+    ) {
+      return futureDayError(c);
     }
     if (loaded.execution?.loggedByRole === "coach") {
       return coachLoggedReadOnlyError(c);

@@ -1,0 +1,142 @@
+appId: com.thefitbud.mobile.staging
+name: F29 Future days are view only (Z12-39)
+tags:
+  - device
+  - trainee
+  - z12-39
+---
+# F29 (D-W12-7, Z12-39): a day after the trainee's today shows the plan with
+# no way to log it; a past day stays loggable as a late log.
+#
+# Account: the on-track trainee, aarav.ontrack on the local demo seed
+# (Asia/Kolkata). Env from the device harness: QA_ONTRACK_EMAIL, QA_PASSWORD.
+# Tagged `device` (docs/qa/W12/maestro-map.md rules): it runs in device.yml,
+# not in qa.yml's staging suite.
+#
+# Screens and screenshots (named by v3 screen ID, see
+# scripts/qa/device/collect-shots.mjs):
+#   TR-06d  Today, tomorrow selected: "Logging opens on the day.", no log action
+#   TR-07k  Diet, tomorrow: "Opens on {day}", planned rows only
+#   W-01e   Workout, tomorrow: "Opens on {day}" where Start workout was
+#   TR-06c  Today, yesterday (past day, late logging stays)
+#   TR-07f  Diet, yesterday
+#
+# Dates are never written here: the flow works out yesterday and tomorrow in
+# the trainee's zone (UTC+05:30, no DST) and matches the date strip's
+# accessibility label, "Tue 17 Nov, <state>".
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+# ".*": on a rest day iOS exposes the header as "Today's workout: rest day".
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- evalScript: ${output.tomorrow = (function () { var d = new Date(Date.now() + (5.5 * 3600 + 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
+- evalScript: ${output.yesterday = (function () { var d = new Date(Date.now() + (5.5 * 3600 - 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
+
+# ---- Tomorrow on Today (TR-06d) -------------------------------------------
+# On a Sunday, tomorrow is in the next week of the strip.
+- runFlow:
+    when:
+      notVisible: "${output.tomorrow}, .*"
+    commands:
+      - tapOn: "Next week"
+- tapOn: "${output.tomorrow}, .*"
+- extendedWaitUntil:
+    visible: ".*Logging opens on the day\\..*"
+    timeout: 30000
+- assertNotVisible: "Start workout"
+- assertNotVisible: "Eaten as planned"
+- assertNotVisible: "Something different"
+- takeScreenshot: TR-06d-today-future-day
+- runFlow: ../../common/assert-no-crash.yaml
+# A planned workout previews with no Start (absent on a rest day).
+- runFlow:
+    when:
+      visible: "Preview exercises"
+    commands:
+      - tapOn: "Preview exercises"
+      - extendedWaitUntil:
+          visible: "Back to workout"
+          timeout: 20000
+      - assertNotVisible: "Start workout"
+      - assertNotVisible: "Continue workout"
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Back to workout"
+# A planned meal opens read-only.
+- scrollUntilVisible:
+    element: ".*, planned"
+    timeout: 60000
+# TR-06d's meal rows (Planned, no log action), below the fold of the first shot.
+- takeScreenshot: f29-today-future-meals
+- tapOn: ".*, planned"
+- extendedWaitUntil:
+    visible: "Planned for .*"
+    timeout: 20000
+- assertNotVisible: "Eaten as planned"
+- assertNotVisible: "Something different"
+# Not named TR-07j: that frame is the logging sheet (Z12-42); this is its
+# read-only variant.
+- takeScreenshot: f29-planned-meal-readonly
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Close"
+
+# ---- Tomorrow on Diet (TR-07k) ----------------------------------------------
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "Opens on ${output.tomorrow}\\. You can see .*"
+    timeout: 30000
+- assertNotVisible: "Eaten as planned"
+- assertNotVisible: "Something different"
+- assertNotVisible: "More options"
+- takeScreenshot: TR-07k-diet-future-day
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Tomorrow on Workout (W-01e) --------------------------------------------
+- tapOn: "Workout"
+- extendedWaitUntil:
+    notVisible: "Loading workouts…"
+    timeout: 30000
+- assertNotVisible: "Start workout"
+# The note shows when tomorrow has a workout; a rest day has no card.
+- runFlow:
+    when:
+      visible: "Opens on ${output.tomorrow}"
+    commands:
+      - assertNotVisible: "Not today"
+- takeScreenshot: W-01e-workout-tab-future-day
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Yesterday: past days stay loggable (TR-06c, TR-07f) --------------------
+- tapOn: "Today"
+- runFlow:
+    when:
+      visible: "Go to today"
+    commands:
+      - tapOn: "Go to today"
+- runFlow:
+    when:
+      notVisible: "${output.yesterday}, .*"
+    commands:
+      - tapOn: "Previous week"
+- tapOn: "${output.yesterday}, .*"
+- extendedWaitUntil:
+    notVisible: ".*Logging opens on the day\\..*"
+    timeout: 30000
+- takeScreenshot: TR-06c-today-past-day
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Diet"
+- extendedWaitUntil:
+    notVisible: "Opens on .*"
+    timeout: 30000
+- takeScreenshot: TR-07f-diet-locked-and-missed
+- runFlow: ../../common/assert-no-crash.yaml
