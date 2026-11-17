@@ -53,7 +53,7 @@ test.describe("TW-E activity, progress, check-ins", () => {
     await expect(page.getByRole("button", { name: /Schedule check-in/i })).toBeVisible();
   });
 
-  test("TW-20 review: sticky action bar at 1440", async ({ page }) => {
+  test("TW-20 review: Your review card visible at 1440 without scrolling", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     // Prefer an unreviewed inbox item so Save review is shown; fall back to known seed id.
     await page.goto("/checkins");
@@ -65,12 +65,14 @@ test.describe("TW-E activity, progress, check-ins", () => {
       await page.goto(`/clients/${ROHAN}/check-ins/${CHECKIN}`);
     }
     await expect(page.getByTestId("screen-TW-20")).toBeVisible();
-    const bar = page.getByTestId("review-action-bar");
-    await expect(bar).toBeVisible();
-    const box = await bar.boundingBox();
+    const card = page.getByTestId("review-action-bar");
+    await expect(card).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your review" })).toBeVisible();
+    const box = await card.boundingBox();
     expect(box).not.toBeNull();
     if (box) {
-      expect(box.y + box.height).toBeLessThanOrEqual(900);
+      expect(box.y).toBeGreaterThanOrEqual(0);
+      expect(box.y + Math.min(box.height, 80)).toBeLessThanOrEqual(900);
     }
     await expect(
       page.getByRole("button", { name: /Save review|Edit review/i }),

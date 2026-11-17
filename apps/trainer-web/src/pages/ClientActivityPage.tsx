@@ -19,9 +19,11 @@ import {
   type DateRangeMode,
   type MealStateFilter,
   type WorkoutStateFilter,
+  feedCardTitle,
   groupByDay,
   mealDayHeaderSummary,
   parseItemParam,
+  plannedDailyKcalMeta,
   resolveDateRange,
   todayInTimezone,
 } from "../components/activity/activityUtils";
@@ -31,6 +33,7 @@ import { apiClient } from "../lib/api";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
 import { useAuth } from "../auth/AuthProvider";
 import type { WorkspaceOutletContext } from "./workspaceContext";
+import "../components/activity/activity.css";
 
 const MEAL_PILLS: Array<{ value: MealStateFilter; label: string }> = [
   { value: "", label: "All" },
@@ -332,6 +335,10 @@ export function ClientActivityPage() {
     !error &&
     rangeMode === "this_week";
 
+  const cardTitle = feedCardTitle(activityType, rangeMode);
+  const plannedMeta =
+    activityType === "meal" ? plannedDailyKcalMeta(mealAssignments) : null;
+
   return (
     <div className="workspace-page activity-page" data-testid="screen-TW-17">
       <header className="workspace-page-head">
@@ -494,27 +501,39 @@ export function ClientActivityPage() {
         </ul>
       ) : null}
 
-      {groups.map((group) => (
-        <ActivityDayGroup
-          key={group.date}
-          date={group.date}
-          headerSuffix={
-            activityType === "meal"
-              ? mealDayHeaderSummary(group.items)
-              : null
-          }
-          items={group.items}
-          clientTimezone={clientTimezone}
-          trainerTimezone={trainerTimezone}
-          mealAssignments={mealAssignments}
-          nudgeState={nudgeState}
-          nudgingId={nudgingId}
-          online={online}
-          readOnly={ended}
-          onNudge={(item) => void nudge(item)}
-          onView={openPanel}
-        />
-      ))}
+      {!loading && !emptyCopy && groups.length > 0 ? (
+        <section className="activity-feed-card" aria-labelledby="activity-feed-title">
+          <div className="activity-feed-card-head">
+            <h2 id="activity-feed-title" className="activity-feed-card-title">
+              {cardTitle}
+            </h2>
+            {plannedMeta ? (
+              <p className="activity-feed-card-meta">{plannedMeta}</p>
+            ) : null}
+          </div>
+          {groups.map((group) => (
+            <ActivityDayGroup
+              key={group.date}
+              date={group.date}
+              headerSuffix={
+                activityType === "meal"
+                  ? mealDayHeaderSummary(group.items)
+                  : null
+              }
+              items={group.items}
+              clientTimezone={clientTimezone}
+              trainerTimezone={trainerTimezone}
+              mealAssignments={mealAssignments}
+              nudgeState={nudgeState}
+              nudgingId={nudgingId}
+              online={online}
+              readOnly={ended}
+              onNudge={(item) => void nudge(item)}
+              onView={openPanel}
+            />
+          ))}
+        </section>
+      ) : null}
 
       {nextCursor ? (
         <Button
