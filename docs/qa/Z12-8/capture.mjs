@@ -72,18 +72,36 @@ async function main() {
     });
     await capture(page, "158-trainer-web-activity-web", { width: 1440, height: 900 });
 
-    const viewBtn = page.getByRole("button", { name: /^View$/ }).nth(1);
+    // Frame 159: open a Changed meal (planned vs logged), not an empty Pending row.
+    const changedFilter = page.getByRole("button", { name: /^Changed$/ });
+    await changedFilter.click();
+    await page.waitForTimeout(500);
+    const changedRow = page
+      .locator('[data-testid="activity-row"]')
+      .filter({ hasText: "Changed" })
+      .first();
+    const viewBtn = changedRow.getByRole("button", { name: /^View$/ });
     if (await viewBtn.isVisible().catch(() => false)) {
       await viewBtn.click();
       await page.getByTestId("activity-drawer").waitFor({ state: "visible", timeout: 15_000 });
       await page.getByTestId("meal-panel").waitFor({ state: "visible", timeout: 15_000 });
+      await page.getByText("Changed", { exact: true }).first().waitFor({
+        state: "visible",
+        timeout: 10_000,
+      });
+      // Planned vs logged compare must be on screen (not "Not logged yet").
+      const mealPanel = page.getByTestId("meal-panel");
+      await mealPanel
+        .getByRole("heading", { name: "Logged" })
+        .waitFor({ state: "visible", timeout: 10_000 });
+      await mealPanel.getByText("Not logged yet.").waitFor({ state: "hidden", timeout: 5_000 }).catch(() => {});
       await page.waitForTimeout(400);
       await capture(page, "159-trainer-web-activity-meal-panel-web", {
         width: 1440,
         height: 900,
       });
     } else {
-      console.warn("159: no View button; skipped meal panel capture");
+      console.warn("159: no Changed meal View button; skipped meal panel capture");
     }
 
     await openCheckin(page, DEEPAK, DEEPAK_UNREVIEWED);

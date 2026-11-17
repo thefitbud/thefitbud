@@ -1,7 +1,7 @@
 Skip to content
 FitBud
 Home
-8
+9
 Clients
 Check-ins
 6
@@ -25,7 +25,7 @@ Coaching plan
 Week 13
 Next check-in Sat 21 Nov
 35 · Male
-Deepak's time 12:50 am · 1 h 30 m behind you
+Deepak's time 12:59 am · 1 h 30 m behind you
 Custom meal times
 Message on WhatsApp
 Review issue
@@ -56,18 +56,6 @@ Photos
 
 No photos.
 
-Context · last 7 days
-Workouts
-8 of 8
-Meals logged
-60 of 60
-Weight trend
-+2 kg / week
-
-Skipped workout
-
-Attention
-Review
 Your review
 Acknowledged
 Needs follow-up
@@ -83,5 +71,17 @@ Message on WhatsApp
 Saving closes this check-in in Needs attention.
 
 Schedule next
-Deepak's time 12:50 am · 1 h 30 m behind you
+Deepak's time 12:59 am · 1 h 30 m behind you
 ⋯
+Context · last 7 days
+Workouts
+8 of 8
+Meals logged
+60 of 60
+Weight trend
++2 kg / week
+
+Skipped workout
+
+Attention
+Review

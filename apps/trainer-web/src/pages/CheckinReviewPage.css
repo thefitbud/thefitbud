@@ -37,9 +37,15 @@
   align-items: start;
 }
 
-@media (max-width: 1023px) {
+/* Frame 198: stack at iPad landscape 1024×768 (not only ≤1023). */
+@media (max-width: 1024px) {
   .checkin-review-grid {
     grid-template-columns: 1fr;
+  }
+
+  .checkin-review-card {
+    position: static;
+    max-height: none;
   }
 }
 
@@ -150,10 +156,20 @@
   font-weight: 600;
 }
 
+/* Sticky in the first viewport so Save / Reviewed stay visible (163/164). */
 .checkin-review-card {
   position: sticky;
   top: 0.75rem;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  max-height: min(34rem, calc(100vh - 5.5rem));
+  overflow: hidden;
+}
+
+.checkin-review-card-body {
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .checkin-review-card h2,
@@ -213,7 +229,7 @@
 
 .checkin-review-note textarea {
   width: 100%;
-  min-height: 6rem;
+  min-height: 4.5rem;
   resize: vertical;
   box-sizing: border-box;
   border: 1px solid var(--border, #e7e9f2);
@@ -251,6 +267,8 @@
   flex-direction: column;
   gap: 0.55rem;
   margin-top: 0.9rem;
+  flex-shrink: 0;
+  background: var(--card, var(--white));
 }
 
 .checkin-review-actions .button-primary,
@@ -290,6 +308,7 @@
   justify-content: space-between;
   gap: 0.5rem;
   margin-top: 1rem;
+  flex-shrink: 0;
 }
 
 .checkin-reviewed-pill {

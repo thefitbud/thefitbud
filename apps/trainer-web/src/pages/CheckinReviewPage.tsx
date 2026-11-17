@@ -617,48 +617,9 @@ export function CheckinReviewPage() {
             </div>
 
             <aside className="checkin-review-side">
-              <section
-                className="workspace-card checkin-side-card"
-                aria-labelledby="context-h"
-              >
-                <h2 id="context-h">Context · last 7 days</h2>
-                {contextRows.length === 0 ? (
-                  <p className="muted">No activity counted in this period.</p>
-                ) : (
-                  <dl className="checkin-context-list">
-                    {contextRows.map((row) => (
-                      <div key={row.label}>
-                        <dt>{row.label}</dt>
-                        <dd>{row.text}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-                {context.activeExceptions.length > 0 ? (
-                  <ul className="checkin-open-list" aria-label="Open items">
-                    {context.activeExceptions.slice(0, 3).map((item) => (
-                      <li key={item.id}>
-                        <div className="workspace-row-copy">
-                          <p className="workspace-row-title">{item.summary}</p>
-                          <StatusChip kind="severity" value={item.severity} />
-                        </div>
-                        <Link
-                          className="button-ghost"
-                          to={`/clients/${relationshipId}?exception=${item.id}`}
-                        >
-                          Review
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-                {context.activeExceptions.length > 3 ? (
-                  <p className="muted" style={{ margin: "0.5rem 0 0" }}>
-                    +{context.activeExceptions.length - 3} more open
-                  </p>
-                ) : null}
-              </section>
-
+              {/* Your review first so Save / Reviewed stay in the first
+                  viewport (163/164); Context follows below. At ≤1024 the
+                  grid stacks answers then this review card (198). */}
               <section
                 className="workspace-card checkin-review-card"
                 aria-labelledby="review-h"
@@ -666,21 +627,23 @@ export function CheckinReviewPage() {
               >
                 {alreadyReviewed ? (
                   <>
-                    <h2 id="review-h">Your review</h2>
-                    <p className="checkin-reviewed-meta">
-                      Reviewed by you ·{" "}
-                      {formatInstant(
-                        context.checkin.review!.createdAt,
-                        trainerTz,
-                      )}
-                    </p>
-                    {context.checkin.review!.notes ? (
-                      <p className="checkin-reviewed-body">
-                        {context.checkin.review!.notes}
+                    <div className="checkin-review-card-body">
+                      <h2 id="review-h">Your review</h2>
+                      <p className="checkin-reviewed-meta">
+                        Reviewed by you ·{" "}
+                        {formatInstant(
+                          context.checkin.review!.createdAt,
+                          trainerTz,
+                        )}
                       </p>
-                    ) : (
-                      <p className="muted">No note saved.</p>
-                    )}
+                      {context.checkin.review!.notes ? (
+                        <p className="checkin-reviewed-body">
+                          {context.checkin.review!.notes}
+                        </p>
+                      ) : (
+                        <p className="muted">No note saved.</p>
+                      )}
+                    </div>
                     <div className="checkin-reviewed-pill-row">
                       <span className="checkin-reviewed-pill">
                         <CheckCircle2 size={14} strokeWidth={2} aria-hidden="true" />
@@ -702,58 +665,60 @@ export function CheckinReviewPage() {
                   </>
                 ) : (
                   <>
-                    <h2 id="review-h">Your review</h2>
-                    <div
-                      className="segment"
-                      role="group"
-                      aria-label="Outcome"
-                    >
-                      {OUTCOMES.map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          className={
-                            outcome === opt.value
-                              ? "segment-btn is-on"
-                              : "segment-btn"
-                          }
-                          aria-pressed={outcome === opt.value}
-                          onClick={() => setOutcome(opt.value)}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="checkin-review-note field">
-                      <label>
-                        <span>Note to {firstName}</span>
-                        <textarea
-                          rows={4}
-                          value={noteBody}
-                          onChange={(e) => setNoteBody(e.target.value)}
-                          maxLength={2000}
-                          placeholder="Optional note"
+                    <div className="checkin-review-card-body">
+                      <h2 id="review-h">Your review</h2>
+                      <div
+                        className="segment"
+                        role="group"
+                        aria-label="Outcome"
+                      >
+                        {OUTCOMES.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            className={
+                              outcome === opt.value
+                                ? "segment-btn is-on"
+                                : "segment-btn"
+                            }
+                            aria-pressed={outcome === opt.value}
+                            onClick={() => setOutcome(opt.value)}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                      <div className="checkin-review-note field">
+                        <label>
+                          <span>Note to {firstName}</span>
+                          <textarea
+                            rows={3}
+                            value={noteBody}
+                            onChange={(e) => setNoteBody(e.target.value)}
+                            maxLength={2000}
+                            placeholder="Optional note"
+                          />
+                        </label>
+                        {visibleToClient ? (
+                          <p className="checkin-review-helper">
+                            {firstName} sees this in the app with a push
+                            notification.
+                          </p>
+                        ) : (
+                          <p className="checkin-review-helper">
+                            Private unless you mark it visible to {firstName}.
+                          </p>
+                        )}
+                      </div>
+                      <label className="checkin-review-visible">
+                        <input
+                          type="checkbox"
+                          checked={visibleToClient}
+                          onChange={(e) => setVisibleToClient(e.target.checked)}
                         />
+                        Visible to client
                       </label>
-                      {visibleToClient ? (
-                        <p className="checkin-review-helper">
-                          {firstName} sees this in the app with a push
-                          notification.
-                        </p>
-                      ) : (
-                        <p className="checkin-review-helper">
-                          Private unless you mark it visible to {firstName}.
-                        </p>
-                      )}
                     </div>
-                    <label className="checkin-review-visible">
-                      <input
-                        type="checkbox"
-                        checked={visibleToClient}
-                        onChange={(e) => setVisibleToClient(e.target.checked)}
-                      />
-                      Visible to client
-                    </label>
                     <div className="checkin-review-actions">
                       <Button
                         variant="primary"
@@ -804,6 +769,48 @@ export function CheckinReviewPage() {
                     </div>
                   </>
                 )}
+              </section>
+
+              <section
+                className="workspace-card checkin-side-card"
+                aria-labelledby="context-h"
+              >
+                <h2 id="context-h">Context · last 7 days</h2>
+                {contextRows.length === 0 ? (
+                  <p className="muted">No activity counted in this period.</p>
+                ) : (
+                  <dl className="checkin-context-list">
+                    {contextRows.map((row) => (
+                      <div key={row.label}>
+                        <dt>{row.label}</dt>
+                        <dd>{row.text}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {context.activeExceptions.length > 0 ? (
+                  <ul className="checkin-open-list" aria-label="Open items">
+                    {context.activeExceptions.slice(0, 3).map((item) => (
+                      <li key={item.id}>
+                        <div className="workspace-row-copy">
+                          <p className="workspace-row-title">{item.summary}</p>
+                          <StatusChip kind="severity" value={item.severity} />
+                        </div>
+                        <Link
+                          className="button-ghost"
+                          to={`/clients/${relationshipId}?exception=${item.id}`}
+                        >
+                          Review
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+                {context.activeExceptions.length > 3 ? (
+                  <p className="muted" style={{ margin: "0.5rem 0 0" }}>
+                    +{context.activeExceptions.length - 3} more open
+                  </p>
+                ) : null}
               </section>
             </aside>
           </div>

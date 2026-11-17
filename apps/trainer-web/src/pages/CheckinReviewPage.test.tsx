@@ -279,6 +279,20 @@ describe("CheckinReviewPage answers (Z6-2c / Z12-8)", () => {
     expect(screen.getByRole("heading", { name: /Context · last 7 days/ })).toBeTruthy();
   });
 
+  it("places Your review above Context so actions stay in the first viewport", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    const { container } = render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    const side = container.querySelector(".checkin-review-side");
+    expect(side).toBeTruthy();
+    const headings = Array.from(
+      side!.querySelectorAll("h2"),
+    ).map((node) => node.textContent?.trim());
+    expect(headings[0]).toBe("Your review");
+    expect(headings[1]).toMatch(/Context · last 7 days/);
+    expect(screen.getByRole("button", { name: "Save review" })).toBeTruthy();
+  });
+
   it("reviewed state shows a Reviewed pill on the right card", async () => {
     api.getCheckinReviewContext.mockResolvedValue(reviewContext(true));
     render(pageTree(0));

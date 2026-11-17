@@ -1,19 +1,19 @@
 # Z12-8 · Activity + check-in review
 
-Captures: Playwright Chromium, demo seed (`rahul.coach@demo.fitbud.test`), API `:8788` / web `:5174`.
+Captures: Playwright Chromium, demo seed (`rahul.coach@demo.fitbud.test`), API `:8787` / web `:5173` (or `:8788` / `:5174`).
 
 **design-review tool:** not on main yet (Z11-1). Grades are by eye vs locked frames.
 
 | Frame | Viewport | Grade | Notes |
 |---|---|---|---|
-| `158-trainer-web-activity-web.png` | 1440×900 | **CLOSE** | Segments styled; `Meals · this week` card; semantic chips (As planned / Changed / Not logged yet). Seed this-week meals are all pending (frame shows mixed Sat/Fri history). Type filter stays Workouts/Meals/Check-ins per TW-17 (frame shows All/Meals/Workouts/Weight). State pills kept (TW-17). |
-| `159-trainer-web-activity-meal-panel-web.png` | 1440×900 | **CLOSE** | Planned vs Logged compare cards with kcal; WhatsApp + Add note. Seed opened a pending meal (Not logged yet) rather than a Changed lunch with photo/reason. |
-| `163-trainer-web-checkin-review-web.png` | 1440×900 | **CLOSE** | Right **Your review** card (outcome segment, Note to Deepak, Save review, Message on WhatsApp). **Context · last 7 days** kv layout. No `Form v1 (pinned)`. Deepak seed answers are sparse vs Rohan frame copy. |
-| `164-trainer-web-checkin-reviewed-web.png` | 1440×900 | **CLOSE** | Reviewed right card with **Reviewed** pill + Edit review (not footer strip). Context kv. Seed has many open exceptions (capped to 3 + more). |
-| `198-ipad-checkin-review-ipad.png` | 1024×768 | **CLOSE** | Same review card at iPad width; stacks Context then Your review under answers. |
+| `158-trainer-web-activity-web.png` | 1440×900 | **CLOSE** | Segments styled; `Meals · this week` card; semantic chips. Seed this-week mix differs from frame Sat/Fri history. Type filter stays Workouts/Meals/Check-ins per TW-17. |
+| `159-trainer-web-activity-meal-panel-web.png` | 1440×900 | **PASS** | Opens **Changed** lunch (Tue 17 Nov): Planned vs Logged compare, reason, logged-at. Seed has no itemised logged items / photo (frame shows both) — kcal compare + Changed pill match. |
+| `163-trainer-web-checkin-review-web.png` | 1440×900 | **PASS** | **Your review** first in the right column; Save review + Message on WhatsApp in the first viewport. Context below (not burying actions). |
+| `164-trainer-web-checkin-reviewed-web.png` | 1440×900 | **PASS** | Reviewed card first; **Reviewed** pill + Edit review in the first viewport. Context under review. |
+| `198-ipad-checkin-review-ipad.png` | 1024×768 | **PASS** | Stacks at 1024×768: answers then Your review (then Context). |
 
 ## Tap-through
-1. Clients → Rohan → Activity → Meals / This week → open View on a meal (drawer planned vs logged).
+1. Clients → Rohan → Activity → Meals → **Changed** → View on the Changed lunch (drawer planned vs logged).
 2. Check-ins inbox or Deepak → submitted check-in → Your review → Save / WhatsApp.
 3. Rohan reviewed check-in → Reviewed pill → Edit review.
 

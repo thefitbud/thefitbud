@@ -1,7 +1,7 @@
 Skip to content
 FitBud
 Home
-8
+9
 Clients
 Check-ins
 6
@@ -56,6 +56,17 @@ Photos
 
 No photos.
 
+Your review
+
+Reviewed by you · 12 Oct, 2:00 pm
+
+Missed sessions are fine, just do the two most important ones next week.
+
+Reviewed
+Edit review
+
+Needs follow-up
+
 Context · last 7 days
 Workouts
 7 of 8 · 1 modified
@@ -76,20 +87,9 @@ Skipped meal
 Attention
 Review
 
-Skipped workout
+Overdue meal
 
-Attention
+Critical
 Review
 
 +3 more open
-
-Your review
-
-Reviewed by you · 12 Oct, 2:00 pm
-
-Missed sessions are fine, just do the two most important ones next week.
-
-Reviewed
-Edit review
-
-Needs follow-up
