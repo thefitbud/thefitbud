@@ -12,6 +12,7 @@
  * not layout. The device flow F29 covers the rest.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   NUTRIENT_SCALE,
   coachingRelationshipSchema,
@@ -380,4 +381,9 @@ describe("Workout on a future day (W-01e)", () => {
     await waitFor(() => expect(screen.getByLabelText("Start workout")).toBeTruthy());
     expect(screen.queryByText(/^Opens on /)).toBeNull();
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

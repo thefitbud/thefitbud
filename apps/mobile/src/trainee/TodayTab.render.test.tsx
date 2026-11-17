@@ -18,6 +18,7 @@
  * stay the authority on those.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -387,4 +388,9 @@ describe("TodayTab plan unavailable", () => {
       view.unmount();
     }
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });

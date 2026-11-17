@@ -6,6 +6,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import Svg, { Circle } from "react-native-svg";
 import {
   Bell,
@@ -29,16 +30,15 @@ import {
   radii,
   semanticColors,
   spacing,
-  type DateNavigatorDay,
 } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
-import { startOfWeekMonday, weekDatesFrom, weekdayShort, dayOfMonth } from "../lib/dates";
+import { reportError } from "../lib/reportError";
 import { FutureDayBanner } from "./FutureDayBanner";
 import { PlannedMealSheet } from "./PlannedMealSheet";
-import { dietFutureBannerText, isFutureDay, useLocalToday } from "./futureDay";
+import { dietFutureBannerText } from "./futureDay";
 import { plannedSummaryLine } from "../lib/plannedMealItems";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
@@ -57,7 +57,13 @@ import {
   cleanFoodLabel,
   mealLockCopy,
 } from "./mealHelpers";
-import { invalidateRelationshipDayData, subscribeAll } from "./dataCache";
+import { cacheKey, invalidateRelationshipDayData } from "./dataCache";
+import { dayEyebrow, useDayState } from "./useDayState";
+import {
+  sharedRead,
+  useTraineeDayCache,
+  useTraineeWeek,
+} from "./useTraineeDayCache";
 import { mealDueStatusLabel, nextUp } from "./nextUp";
 import {
   buildNutritionRings,
@@ -72,10 +78,8 @@ import {
   sortMealsByTime,
 } from "./scheduledAssignments";
 import {
+  TraineeDateNavigator,
   WEEK_UNAVAILABLE_MESSAGE,
-  loadWeekModel,
-  navigatorDaysFor,
-  type WeekModelState,
 } from "./TraineeDateNavigator";
 import { CoachLogBadge } from "./coach-log/CoachLogBadge";
 
@@ -171,6 +175,27 @@ function MealPill({ kind }: { kind: MealPillKind }) {
   );
 }
 
+type MeDay = Awaited<ReturnType<ReturnType<typeof stage1Api>["getMeDay"]>>;
+
+/** One day of Diet as cached per relationship and civil date (Z12-40). */
+type DietDayBundle = {
+  meals: MealAssignment[];
+  day: MeDay | null;
+};
+
+/**
+ * A load that failed for want of a connection. Diet then shows its offline
+ * banner over the cached day rather than an error (frame 86).
+ */
+function isNetworkFailure(err: unknown): boolean {
+  return (
+    err instanceof TypeError ||
+    (err instanceof ApiClientError &&
+      (err.status === 0 || err.code === "NETWORK_ERROR")) ||
+    (err instanceof Error && /fetch|network|offline|aborted/i.test(err.message))
+  );
+}
+
 export function DietTab({
   relationship,
   selectedDate,
@@ -187,31 +212,98 @@ export function DietTab({
   const { api, me } = useAuth();
   const s1 = stage1Api(api);
   const sync = useSyncEngine();
-  const [loadedAssignments, setAssignments] = useState<MealAssignment[]>([]);
-  // Z11b-1: every count, ring and row reads the selected day's meals only, even
-  // while the last-loaded list still holds another day (offline day switch).
-  const assignments = useMemo(
-    () => mealsForDay(loadedAssignments, selectedDate),
-    [loadedAssignments, selectedDate],
+  const timeZone = me?.timezone ?? "UTC";
+  // One day state for Today, Diet and Workout (Z12-40); kept current across
+  // local midnight and app foregrounding (Z12-39).
+  const dayState = useDayState({ selectedDate, onSelectDate, timeZone });
+  const { today } = dayState;
+  /** D-W12-7: a future day shows the plan with no way to log it. */
+  const isFuture = dayState.isFuture;
+  /** A planned meal opened read-only on a future day (TR-07j without actions). */
+  const [plannedMeal, setPlannedMeal] = useState<MealAssignment | null>(null);
+
+  /**
+   * One day of Diet, cached per relationship and date (Z12-40). The meals and
+   * the week are reads Today shares, so a day seen on either tab is not
+   * fetched twice.
+   */
+  const fetchDay = useCallback(
+    async (date: string, { force }: { force: boolean }): Promise<DietDayBundle> => {
+      const [listed, day] = await Promise.all([
+        sharedRead(
+          cacheKey("meals", relationship.id, date, date),
+          () =>
+            api.listMealAssignments(relationship.id, {
+              fromDate: date,
+              toDate: date,
+            }),
+          { force },
+        ),
+        s1.getMeDay(date).catch(() => null),
+      ]);
+      return {
+        meals: sortMealsByTime(
+          mealsForDay(scheduledAssignments(listed.items), date),
+        ),
+        day,
+      };
+    },
+    [api, relationship.id, s1],
   );
-  const [loading, setLoading] = useState(true);
-  const [lockStateKnown, setLockStateKnown] = useState(false);
+  const dayCache = useTraineeDayCache({
+    screen: "diet",
+    relationshipId: relationship.id,
+    date: selectedDate,
+    fetchDay,
+  });
+  const bundle = dayCache.data;
+  /** The skeleton case only: a first visit to a day with nothing cached. */
+  const loading = dayCache.firstLoad;
+  const loadError = dayCache.error;
+  const loadFailedOffline = loadError != null && isNetworkFailure(loadError);
+  const offline = loadFailedOffline;
+  const lockStateKnown = bundle !== undefined && loadError == null;
+  const dayTotals = bundle?.day ?? null;
+  // Four-state, never a nullable model: see `WeekModelState` (CU23,
+  // D-W3b-25). Cached per week and shared with Today (Z12-40).
+  const { weekState, refresh: refreshWeek } = useTraineeWeek({
+    relationshipId: relationship.id,
+    selectedDate,
+    getMeWeek: (start) => s1.getMeWeek(start),
+    where: "DietTab.getMeWeek",
+  });
+  // The strip keeps the last `GET /me/day` answer while the next day loads;
+  // `navigatorDaysFor` applies it only to the date it names (Z5-8).
+  const [stripDay, setStripDay] = useState<MeDay | null>(null);
+  useEffect(() => {
+    if (bundle?.day) setStripDay(bundle.day);
+  }, [bundle]);
+
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const error =
+    actionError ??
+    (loadError != null && !loadFailedOffline
+      ? loadError instanceof ApiClientError
+        ? loadError.message
+        : "Couldn't refresh diet. Pull to try again."
+      : null);
   const deviceOffline = useDeviceOffline();
   const [actingId, setActingId] = useState<string | null>(null);
-  const [dayTotals, setDayTotals] = useState<Awaited<
-    ReturnType<typeof s1.getMeDay>
-  > | null>(null);
   const unresolvedExceptions = 1;
   const [skippedUndo, setSkippedUndo] = useState<{
     assignmentId: string;
     mealName: string;
   } | null>(null);
+  /**
+   * Statuses this phone applied before the server has them (a log saved in
+   * the outbox). Shown over the cached day until the server's copy is logged
+   * or the outbox no longer holds the log.
+   */
   const optimisticStatus = useRef(
     new Map<string, MealAssignment["status"]>(),
   );
+  const [optimisticVersion, setOptimisticVersion] = useState(0);
   const [pendingSendIds, setPendingSendIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -220,125 +312,62 @@ export function DietTab({
   const coachName =
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
-  const timeZone = me?.timezone ?? "UTC";
-  // Kept current across local midnight and app foregrounding (Z12-39).
-  const today = useLocalToday(timeZone);
-  /** D-W12-7: a future day shows the plan with no way to log it. */
-  const isFuture = isFutureDay(selectedDate, today);
-  /** A planned meal opened read-only on a future day (TR-07j without actions). */
-  const [plannedMeal, setPlannedMeal] = useState<MealAssignment | null>(null);
-  const weekStart = useMemo(
-    () => startOfWeekMonday(selectedDate),
-    [selectedDate],
-  );
-  // Four-state, never a nullable model: see `WeekModelState` (CU23,
-  // D-W3b-25). The old `catch { setWeekModel(null) }` made a failed
-  // `GET /me/week` indistinguishable from "not loaded", and the strip below
-  // then derived every past day as `missed` from the date alone.
-  const [weekState, setWeekState] = useState<WeekModelState>({
-    status: "loading",
-  });
+  // Z11b-1: every count, ring and row reads the selected day's meals only.
+  const assignments = useMemo(() => {
+    void optimisticVersion;
+    return mealsForDay(bundle?.meals ?? [], selectedDate).map((meal) => {
+      const next = optimisticStatus.current.get(meal.id);
+      if (!next || isMealLoggedForCount(meal.status)) return meal;
+      return meal.status === "pending" || meal.status === "overdue"
+        ? { ...meal, status: next }
+        : meal;
+    });
+  }, [bundle, selectedDate, optimisticVersion]);
 
-  const loadWeek = useCallback(async () => {
-    setWeekState(
-      await loadWeekModel(
-        (start) => s1.getMeWeek(start),
-        weekStart,
-        "DietTab.getMeWeek",
-      ),
-    );
-  }, [s1, weekStart]);
-
-  const load = useCallback(async () => {
-    setError(null);
-    setLockStateKnown(false);
-    try {
-      const [listed, day] = await Promise.all([
-        api.listMealAssignments(relationship.id, {
-          fromDate: selectedDate,
-          toDate: selectedDate,
-        }),
-        s1.getMeDay(selectedDate).catch(() => null),
-      ]);
-      const scheduled = sortMealsByTime(
-        mealsForDay(scheduledAssignments(listed.items), selectedDate),
-      );
-      let pendingIds = new Set<string>();
+  // After each load of the day: read which logs still wait in the outbox,
+  // and drop optimistic statuses the server now has (or the outbox lost).
+  useEffect(() => {
+    if (!bundle) return;
+    let active = true;
+    void (async () => {
+      let pendingIds: Set<string>;
       try {
-        const outbox = await sync.store.listOutbox();
-        pendingIds = pendingMealLogIds(outbox);
-      } catch {
+        pendingIds = pendingMealLogIds(await sync.store.listOutbox());
+      } catch (err) {
+        // Unreadable outbox: keep what this phone applied as waiting rather
+        // than claiming it was sent.
+        reportError("DietTab.listOutbox", err);
         pendingIds = new Set(optimisticStatus.current.keys());
       }
-      setPendingSendIds(pendingIds);
-      setAssignments(
-        scheduled.map((meal) => {
-          const next = optimisticStatus.current.get(meal.id);
-          if (!next) return meal;
-          if (isMealLoggedForCount(meal.status)) {
-            optimisticStatus.current.delete(meal.id);
-            return meal;
-          }
-          if (
-            pendingIds.has(meal.id) &&
-            (meal.status === "pending" || meal.status === "overdue")
-          ) {
-            return { ...meal, status: next };
-          }
+      if (!active) return;
+      let changed = false;
+      for (const meal of bundle.meals) {
+        if (!optimisticStatus.current.has(meal.id)) continue;
+        const stillWaiting =
+          pendingIds.has(meal.id) &&
+          (meal.status === "pending" || meal.status === "overdue");
+        if (isMealLoggedForCount(meal.status) || !stillWaiting) {
           optimisticStatus.current.delete(meal.id);
-          return meal;
-        }),
-      );
-      setDayTotals(day);
-      setOffline(false);
-      setLockStateKnown(true);
-    } catch (err) {
-      const network =
-        err instanceof TypeError ||
-        (err instanceof ApiClientError &&
-          (err.status === 0 || err.code === "NETWORK_ERROR")) ||
-        (err instanceof Error &&
-          /fetch|network|offline|aborted/i.test(err.message));
-      if (network) {
-        setOffline(true);
-        setError(null);
-      } else {
-        setOffline(false);
-        setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Couldn't refresh diet. Pull to try again.",
-        );
+          changed = true;
+        }
       }
-      // Keep the last-loaded meals of this day only; a different day's are dropped.
-      setAssignments((prev) => mealsForDay(prev, selectedDate));
-      setLockStateKnown(false);
-    } finally {
-      setLoading(false);
-    }
-  }, [api, relationship.id, selectedDate, s1, sync]);
+      setPendingSendIds(pendingIds);
+      if (changed) setOptimisticVersion((n) => n + 1);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [bundle, sync]);
 
-  useEffect(() => {
-    setLoading(true);
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    void loadWeek();
-  }, [loadWeek]);
-
-  useEffect(() => {
-    return subscribeAll(() => {
-      void load();
-    });
-  }, [load]);
+  /** A plain refetch of the selected day (after a log). */
+  const load = dayCache.refresh;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await load();
-    await loadWeek();
+    setActionError(null);
+    await Promise.all([dayCache.refresh(), refreshWeek()]);
     setRefreshing(false);
-  }, [load, loadWeek]);
+  }, [dayCache, refreshWeek]);
 
   const nutritionRings = useMemo(
     () => buildNutritionRings(assignments, dayTotals?.totals ?? null),
@@ -365,21 +394,6 @@ export function DietTab({
   const carbsRing = nutritionRings.find((r) => r.key === "carbs");
   const fatRing = nutritionRings.find((r) => r.key === "fat");
 
-  const weekDays = useMemo(
-    (): DateNavigatorDay[] =>
-      navigatorDaysFor({
-        weekState,
-        dates: weekDatesFrom(weekStart),
-        timeZone,
-        weekdayShortOf: weekdayShort,
-        dayOfMonthOf: dayOfMonth,
-        // The same `GET /me/day` state Today's strip reads (Z5-8), so the
-        // two tabs never disagree about a day when the week fails to load.
-        day: dayTotals,
-      }),
-    [weekState, weekStart, timeZone, dayTotals],
-  );
-
   const focusMealId = useMemo(() => {
     if (photoPromptId) return photoPromptId;
     // A future day has no "due now" meal: every meal is a planned row.
@@ -395,14 +409,12 @@ export function DietTab({
 
   function applyOptimistic(id: string, status: MealAssignment["status"]) {
     optimisticStatus.current.set(id, status);
-    setAssignments((current) =>
-      current.map((meal) => (meal.id === id ? { ...meal, status } : meal)),
-    );
+    setOptimisticVersion((n) => n + 1);
   }
 
   async function confirmMeal(assignment: MealAssignment) {
     setActingId(assignment.id);
-    setError(null);
+    setActionError(null);
     applyOptimistic(assignment.id, "confirmed");
     try {
       await confirmMealAssignment(
@@ -422,7 +434,7 @@ export function DietTab({
       }
       await load();
     } catch (err) {
-      setError(
+      setActionError(
         err instanceof MealSyncError
           ? err.message
           : err instanceof ApiClientError
@@ -430,13 +442,7 @@ export function DietTab({
             : "Could not confirm meal.",
       );
       optimisticStatus.current.delete(assignment.id);
-      setAssignments((current) =>
-        current.map((meal) =>
-          meal.id === assignment.id
-            ? { ...meal, status: assignment.status }
-            : meal,
-        ),
-      );
+      setOptimisticVersion((n) => n + 1);
     } finally {
       setActingId(null);
     }
@@ -752,6 +758,10 @@ export function DietTab({
   });
 
   return (
+    // A horizontal swipe anywhere on the screen moves a day (Z12-40): a
+    // native pan around the whole screen, so the empty space under a short
+    // day counts too.
+    <GestureDetector gesture={dayState.swipeGesture}>
     <Screen
       chrome="app"
       title="Diet"
@@ -759,10 +769,16 @@ export function DietTab({
       refreshing={refreshing}
       onRefresh={() => void onRefresh()}
     >
+      <View style={styles.swipeBody}>
       <View style={styles.ttlrow}>
-        <Text style={styles.h1} accessibilityRole="header">
-          Diet
-        </Text>
+        <View style={styles.titles}>
+          <Text style={styles.eyebrow} testID="day-eyebrow">
+            {dayEyebrow(selectedDate, dayState.kind, `${coachName}’s plan`)}
+          </Text>
+          <Text style={styles.h1} accessibilityRole="header">
+            Diet
+          </Text>
+        </View>
         <View style={styles.headerActions}>
           {pendingSendIds.size > 0 ? (
             <View
@@ -795,34 +811,18 @@ export function DietTab({
         </View>
       </View>
 
-      <View style={styles.wk7}>
-        {weekDays.map((day) => {
-          const selected = day.localDate === selectedDate;
-          return (
-            <Pressable
-              key={day.localDate}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => onSelectDate(day.localDate)}
-              style={[styles.wkDay, selected && styles.wkDayOn]}
-            >
-              <Text style={[styles.wkDow, selected && styles.wkTextOn]}>
-                {day.weekdayLabel}
-              </Text>
-              <Text style={[styles.wkNum, selected && styles.wkTextOn]}>
-                {day.dayLabel}
-              </Text>
-              <View
-                style={[
-                  styles.wkDot,
-                  selected && styles.wkDotOn,
-                  day.state === "future" && !selected && styles.wkDotFut,
-                ]}
-              />
-            </Pressable>
-          );
-        })}
-      </View>
+      {/*
+        The shared v3 strip (Z12-40): the same control, day states and moves
+        as Today and Workout. Its states come from `GET /me/week` and the
+        day's own `GET /me/day` (Z5-8), so the two tabs never disagree.
+      */}
+      <TraineeDateNavigator
+        selectedDate={selectedDate}
+        onSelectDate={onSelectDate}
+        weekState={weekState}
+        day={dayTotals ?? stripDay}
+        showPreviewBanner={false}
+      />
 
       {error ? <ErrorBanner message={error} /> : null}
       {/*
@@ -940,7 +940,7 @@ export function DietTab({
           actionLabel="Undo"
           onAction={() => {
             setSkippedUndo(null);
-            setError(
+            setActionError(
               "Undo is not synced yet — log the meal again if you skipped by mistake.",
             );
           }}
@@ -955,7 +955,9 @@ export function DietTab({
           onClose={() => setPlannedMeal(null)}
         />
       ) : null}
+      </View>
     </Screen>
+    </GestureDetector>
   );
 }
 
@@ -1000,58 +1002,17 @@ const styles = StyleSheet.create({
     top: 10,
     width: 9,
   },
-  wk7: {
-    flexDirection: "row",
-    gap: 2,
-    marginBottom: 14,
-    marginHorizontal: -4,
+  swipeBody: {
+    flexGrow: 1,
   },
-  wkDay: {
-    alignItems: "center",
-    borderRadius: 14,
+  titles: {
     flex: 1,
-    gap: 3,
-    paddingBottom: 8,
-    paddingTop: 7,
   },
-  wkDayOn: {
-    backgroundColor: colors.indigo,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.indigo,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.4,
-        shadowRadius: 5,
-      },
-      default: { elevation: 4 },
-    }),
-  },
-  wkDow: {
+  eyebrow: {
     color: colors.midGrey,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: "600",
-  },
-  wkNum: {
-    color: colors.deepNavy,
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 22,
-  },
-  wkTextOn: {
-    color: colors.white,
-  },
-  wkDot: {
-    backgroundColor: colors.deepNavy,
-    borderRadius: 3,
-    height: 6,
-    width: 6,
-  },
-  wkDotOn: {
-    backgroundColor: colors.white,
-    opacity: 0.6,
-  },
-  wkDotFut: {
-    backgroundColor: "#D5D6DE",
+    marginBottom: 2,
   },
   daysum2: {
     alignItems: "center",

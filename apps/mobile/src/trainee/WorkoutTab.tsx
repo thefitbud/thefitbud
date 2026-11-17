@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import {
   AlertTriangle,
   Bell,
@@ -45,6 +46,8 @@ import {
   subscribeAll,
 } from "./dataCache";
 import { scheduledAssignments } from "./scheduledAssignments";
+import { useDayState } from "./useDayState";
+import { fetchDayInto } from "./useTraineeDayCache";
 import {
   EFFECTIVE_PLAN_LOADING,
   PLAN_UNAVAILABLE_MESSAGE,
@@ -272,8 +275,24 @@ export function WorkoutTab({
   /** D-W12-7: a workout on a future day is a preview; it cannot be started or skipped. */
   const onFutureDay = (assignment: WorkoutAssignment) =>
     isFutureDay(assignment.localDate, today);
+  // One day state for Today, Diet and Workout (Z12-40): with a shell, the
+  // day is the shell's `selectedDate`; the local pick is only for a tab
+  // rendered on its own.
   const [pickedDate, setPickedDate] = useState<string | null>(null);
-  const focusDate = pickedDate ?? selectedDate ?? today;
+  const focusDate =
+    (onSelectDate ? selectedDate : (pickedDate ?? selectedDate)) ?? today;
+  const pickDate = useCallback(
+    (date: string) => {
+      if (onSelectDate) onSelectDate(date);
+      else setPickedDate(date);
+    },
+    [onSelectDate],
+  );
+  const dayState = useDayState({
+    selectedDate: focusDate,
+    onSelectDate: pickDate,
+    timeZone,
+  });
   const weekStart = useMemo(
     () => startOfWeekMonday(focusDate),
     [focusDate],
@@ -317,6 +336,28 @@ export function WorkoutTab({
       );
     }
   }, [api, relationship.id, weekStart, rangeEnd, workoutsCacheKey]);
+
+  // The weeks either side are fetched once the week on screen has loaded,
+  // so a swipe or a chevron across a week boundary paints from cache
+  // (Z12-40). A failed prefetch shows nothing; the visit retries it.
+  useEffect(() => {
+    if (weekState.status !== "loaded") return;
+    for (const start of [addDays(weekStart, -7), addDays(weekStart, 7)]) {
+      const end = addDays(start, 6);
+      const key = cacheKey("workouts", relationship.id, start, end);
+      if (getCached(key)) continue;
+      fetchDayInto(key, async () =>
+        scheduledAssignments(
+          (
+            await api.listWorkoutAssignments(relationship.id, {
+              fromDate: start,
+              toDate: end,
+            })
+          ).items as WorkoutAssignment[],
+        ),
+      ).catch(() => undefined);
+    }
+  }, [api, relationship.id, weekStart, weekState.status]);
 
   useEffect(() => {
     const cached = getCached<WorkoutAssignment[]>(workoutsCacheKey);
@@ -794,6 +835,10 @@ export function WorkoutTab({
     : [];
 
   return (
+    // A horizontal swipe anywhere on the screen moves a day (Z12-40): a
+    // native pan around the whole screen, so the empty space under a short
+    // day counts too.
+    <GestureDetector gesture={dayState.swipeGesture}>
     <Screen
       chrome="app"
       title="Workout"
@@ -803,6 +848,7 @@ export function WorkoutTab({
         void onRefresh();
       }}
     >
+      <View style={styles.swipeBody}>
       {error ? <ErrorBanner message={error} /> : null}
       {offline ? (
         <Text style={styles.offline}>Saved on phone · Not sent yet</Text>
@@ -843,7 +889,7 @@ export function WorkoutTab({
               accessibilityLabel={`${weekdayShort(timeZone, date)} ${shortName}`}
               disabled={!assignment}
               onPress={() => {
-                setPickedDate(date);
+                pickDate(date);
                 if (assignment) openDayDetail(assignment);
               }}
               style={[styles.wksDay, isOn ? styles.wksDayOn : null]}
@@ -1212,11 +1258,16 @@ export function WorkoutTab({
           }}
         />
       </BottomSheet>
+      </View>
     </Screen>
+    </GestureDetector>
   );
 }
 
 const styles = StyleSheet.create({
+  swipeBody: {
+    flexGrow: 1,
+  },
   ttlrow: {
     flexDirection: "row",
     justifyContent: "space-between",

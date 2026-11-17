@@ -16,6 +16,7 @@
  * the native strip (`DateNavigator`) rendered directly.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -331,10 +332,9 @@ describe("the strip hosts pass the day through", () => {
 });
 
 /**
- * Diet reads the same `/me/day` state as Today (#249 review). Diet's own
- * strip marks only unselected `future` days, and the selected day's style
- * overrides that, so the state shows on a day Diet still holds a `/me/day`
- * answer for after the trainee moves to another day whose load is pending.
+ * Diet reads the same `/me/day` state as Today (#249 review) through the
+ * shared strip (Z12-40), and keeps a day's `/me/day` answer on the strip
+ * after the trainee moves to another day whose load is pending.
  */
 describe("DietTab passes the day through", () => {
   it("marks a day /me/day called future, with the week unavailable", async () => {
@@ -397,7 +397,8 @@ describe("DietTab passes the day through", () => {
       ).find((node) => node.textContent === label);
       if (!button) throw new Error(`no strip button for ${date}`);
       const dot = button.lastElementChild as HTMLElement;
-      return dot.className;
+      // The shared strip (Z12-40) paints the state inline.
+      return `${dot.className} ${dot.style.backgroundColor}`;
     }
 
     // Unselected, no week: a day nothing answered for (nextWeek[4]) carries
@@ -407,4 +408,9 @@ describe("DietTab passes the day through", () => {
     });
     view.unmount();
   });
+});
+
+// Each test starts with no cached day views (Z12-40's per-day cache).
+beforeEach(() => {
+  clearDayViews();
 });
