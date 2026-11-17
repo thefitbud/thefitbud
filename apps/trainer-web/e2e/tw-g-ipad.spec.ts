@@ -74,7 +74,10 @@ test.describe("TW-G iPad shell smoke", () => {
       timeout: 20_000,
     });
 
-    // Sidebar should be present as icon rail (not bottom nav) at tablet widths.
+    // Z12-4: tablet portrait uses hamburger + drawer (not always-visible icon rail).
+    const menuBtn = page.getByTestId("shell-menu-btn");
+    await expect(menuBtn).toBeVisible();
+    await menuBtn.click();
     await expect(page.locator(".shell-side")).toBeVisible();
 
     const overflow = page.getByRole("button", { name: /More actions|Open menu/i }).first();
