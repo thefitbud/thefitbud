@@ -1,0 +1,76 @@
+appId: com.thefitbud.mobile.staging
+name: F07 Diet day (Z12-42)
+tags:
+  - device
+  - trainee
+  - z12-42
+---
+# F07 (Z12-42): the Diet day in v3. The ring and its number, "kcal left" or
+# "kcal over" with the goal, three macros as "logged / goal g", one card per
+# meal with a check, a lock or nothing at the end, and a meal that has not
+# opened yet offering no log.
+#
+# Account: the on-track trainee, aarav.ontrack on the local demo seed
+# (Asia/Kolkata). Env from the device harness: QA_ONTRACK_EMAIL, QA_PASSWORD.
+# Read-only: nothing is logged, so the flow can run any time of day. The meal
+# windows are relative to the clock, so "Eaten as planned" is checked only
+# where the screen shows it (a meal whose window is open).
+#
+# Screens (named by v3 screen ID, see scripts/qa/device/collect-shots.mjs):
+#   TR-07a  Diet today
+#   TR-07f  Diet, yesterday selected (closed and past meals)
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "kcal eaten"
+    timeout: 30000
+# One rounding: the ring's number, then "kcal left" or "kcal over" and the goal.
+- assertVisible: ".*kcal (left|over)"
+- assertVisible: "Goal .*"
+- assertVisible: "Protein"
+- assertVisible: "Carbs"
+- assertVisible: "Fat"
+# Macros read on one line: "logged / goal g", never split across lines.
+- assertVisible: "[0-9,]+ / [0-9,]+ g"
+- assertVisible: "Meals"
+- assertVisible: "[0-9]+ of [0-9]+ logged"
+- assertNotVisible: ".*Waiting to send.*"
+- assertNotVisible: "Couldn.t load your meals"
+- takeScreenshot: TR-07a-diet-day
+- runFlow: ../../common/assert-no-crash.yaml
+# A meal that is due offers both actions together, or neither.
+- runFlow:
+    when:
+      visible: "Eaten as planned"
+    commands:
+      - assertVisible: "Something different"
+      - runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Yesterday: closed and past meals (TR-07f) ------------------------------
+- evalScript: ${output.yesterday = (function () { var d = new Date(Date.now() + (5.5 * 3600 - 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
+- runFlow:
+    when:
+      notVisible: "${output.yesterday}, .*"
+    commands:
+      - tapOn: "Previous week"
+- tapOn: "${output.yesterday}, .*"
+- extendedWaitUntil:
+    visible: "kcal eaten"
+    timeout: 30000
+- assertVisible: "Meals"
+- takeScreenshot: TR-07f-diet-locked-and-missed
+- runFlow: ../../common/assert-no-crash.yaml

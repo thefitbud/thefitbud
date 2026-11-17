@@ -68,10 +68,7 @@ import {
   isMealLoggedForCount,
   nutrientsFromMealPrescription,
 } from "./nutrition";
-import {
-  scheduledAssignments,
-  sortMealsByTime,
-} from "./scheduledAssignments";
+import { scheduledAssignments, sortMealsByTime } from "./scheduledAssignments";
 import {
   TraineeDateNavigator,
   WEEK_UNAVAILABLE_MESSAGE,
@@ -164,8 +161,8 @@ export function KcalRing({
 }) {
   const theme = useTheme();
   const styles = useStyles();
-  const size = 132;
-  const stroke = 13;
+  const size = 120;
+  const stroke = 12;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = assigned > 0 ? Math.min(logged / assigned, 1) : 0;
@@ -174,7 +171,7 @@ export function KcalRing({
       ? Math.min((logged - assigned) / assigned, 1)
       : 0;
   const mid = size / 2;
-  const slot = size - stroke * 2 - 12;
+  const slot = size - stroke * 2 - 6;
   return (
     <View
       style={{ width: size, height: size }}
@@ -263,19 +260,22 @@ function DaySummaryCard({
       <View style={styles.summaryBody}>
         {planned > 0 ? (
           <View style={styles.leftRow}>
-            <Text
-              variant="numberLg"
-              tone={over ? "crit" : "ink"}
-              numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.7}
-              maxFontSizeMultiplier={1.2}
-            >
-              {formatNumber(diff)}
-              <Text variant="body" tone={over ? "crit" : "ink"}>
-                {over ? " kcal over" : " kcal left"}
+            <View style={styles.leftNums}>
+              <Text
+                variant="numberLg"
+                tone={over ? "crit" : "ink"}
+                maxFontSizeMultiplier={1.2}
+              >
+                {formatNumber(diff)}
               </Text>
-            </Text>
+              <Text
+                variant="subhead"
+                tone={over ? "crit" : "ink"}
+                maxFontSizeMultiplier={1.2}
+              >
+                {over ? "kcal over" : "kcal left"}
+              </Text>
+            </View>
             <Text variant="caption" maxFontSizeMultiplier={1.2}>
               Goal {formatNumber(planned)}
             </Text>
@@ -315,7 +315,11 @@ function StateCard({
       <View style={styles.stateTile}>
         <Icon size={30} strokeWidth={2} color={theme.colors.ink} />
       </View>
-      <Text variant="title" style={styles.stateTitle} accessibilityRole="header">
+      <Text
+        variant="title"
+        style={styles.stateTitle}
+        accessibilityRole="header"
+      >
         {title}
       </Text>
       {body ? (
@@ -434,7 +438,10 @@ function DietTabBody({
    * fetched twice.
    */
   const fetchDay = useCallback(
-    async (date: string, { force }: { force: boolean }): Promise<DietDayBundle> => {
+    async (
+      date: string,
+      { force }: { force: boolean },
+    ): Promise<DietDayBundle> => {
       const [listed, day] = await Promise.all([
         sharedRead(
           cacheKey("meals", relationship.id, date, date),
@@ -494,9 +501,7 @@ function DietTabBody({
    * the outbox). Shown over the cached day until the server's copy is logged
    * or the outbox no longer holds the log.
    */
-  const optimisticStatus = useRef(
-    new Map<string, MealAssignment["status"]>(),
-  );
+  const optimisticStatus = useRef(new Map<string, MealAssignment["status"]>());
   const [optimisticVersion, setOptimisticVersion] = useState(0);
   const [pendingSendIds, setPendingSendIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -700,7 +705,8 @@ function DietTabBody({
     if (isFuture) return renderPlannedRow(meal);
     const lockCopy = lockStateKnown ? mealLockCopy(meal, coachName) : null;
     const isLocked = Boolean(lockCopy);
-    const isLogged = isMealLoggedForCount(meal.status) && meal.id !== photoPromptId;
+    const isLogged =
+      isMealLoggedForCount(meal.status) && meal.id !== photoPromptId;
     const isSkipped = meal.status === "skipped";
     const waiting = pendingSendIds.has(meal.id) && isLogged && !isSkipped;
     const kcalRow = kcalRowById.get(meal.id);
@@ -752,59 +758,76 @@ function DietTabBody({
             ? theme.colors.crit
             : theme.colors.ink2;
 
+    // An unlogged, unlocked row opens its planned meal (TR-07j).
+    const opensDetail = !isLogged && !isLocked;
     return (
       <View key={meal.id} style={styles.rowCard}>
         <View style={styles.row}>
-          <View style={[styles.tile, tileStyle]}>
-            <Glyph size={22} strokeWidth={1.9} color={iconColor} />
-          </View>
-          <View style={styles.rowText}>
-            <Text variant="headline" numberOfLines={1} style={isLocked ? styles.muted : null}>
-              {name}
-              <Text variant="caption"> {timeLabel}</Text>
-            </Text>
-            {isLocked ? (
-              <Text variant="subhead" numberOfLines={1}>
-                {lockCopy}
-              </Text>
-            ) : waiting ? (
-              <Text variant="subhead" numberOfLines={1}>
-                Eaten as planned · not sent yet
-              </Text>
-            ) : isSkipped ? (
-              <Text variant="subhead" numberOfLines={1}>
-                Skipped
-              </Text>
-            ) : (
-              <Text variant="subhead" numberOfLines={1}>
-                {meal.status === "modified" ? (
-                  <Text variant="subhead" tone="warn" style={styles.strong}>
-                    Changed
-                  </Text>
-                ) : missed ? (
-                  <Text variant="subhead" tone="crit" style={styles.strong}>
-                    Not logged yet
-                  </Text>
-                ) : null}
-                {meal.status === "modified" || missed ? " · " : ""}
-                {summary}
-              </Text>
-            )}
-            {isLogged ? (
-              <CoachLogBadge
-                loggedByRole={meal.compliance?.loggedByRole}
-                lastEditedByRole={meal.compliance?.lastEditedByRole}
-                editedAt={meal.compliance?.updatedAt}
-                timeZone={timeZone}
-              />
-            ) : null}
-          </View>
-          {shownKcal != null && !isSkipped ? (
-            <View style={styles.kcalCol}>
-              <Text variant="numberMd">{formatNumber(shownKcal)}</Text>
-              <Text variant="caption">{isLogged ? "kcal" : "planned"}</Text>
+          <Pressable
+            disabled={!opensDetail}
+            accessibilityRole={opensDetail ? "button" : undefined}
+            accessibilityLabel={opensDetail ? `${name}, planned` : undefined}
+            accessibilityHint={
+              opensDetail ? "Shows the planned meal" : undefined
+            }
+            onPress={() => setPlannedMeal(meal)}
+            style={styles.rowMain}
+          >
+            <View style={[styles.tile, tileStyle]}>
+              <Glyph size={22} strokeWidth={1.9} color={iconColor} />
             </View>
-          ) : null}
+            <View style={styles.rowText}>
+              <Text
+                variant="headline"
+                numberOfLines={1}
+                style={isLocked ? styles.muted : null}
+              >
+                {name}
+                <Text variant="caption"> {timeLabel}</Text>
+              </Text>
+              {isLocked ? (
+                <Text variant="subhead" numberOfLines={1}>
+                  {lockCopy}
+                </Text>
+              ) : waiting ? (
+                <Text variant="subhead" numberOfLines={1}>
+                  Eaten as planned · not sent yet
+                </Text>
+              ) : isSkipped ? (
+                <Text variant="subhead" numberOfLines={1}>
+                  Skipped
+                </Text>
+              ) : (
+                <Text variant="subhead" numberOfLines={1}>
+                  {meal.status === "modified" ? (
+                    <Text variant="subhead" tone="warn" style={styles.strong}>
+                      Changed
+                    </Text>
+                  ) : missed ? (
+                    <Text variant="subhead" tone="crit" style={styles.strong}>
+                      Not logged yet
+                    </Text>
+                  ) : null}
+                  {meal.status === "modified" || missed ? " · " : ""}
+                  {summary}
+                </Text>
+              )}
+              {isLogged ? (
+                <CoachLogBadge
+                  loggedByRole={meal.compliance?.loggedByRole}
+                  lastEditedByRole={meal.compliance?.lastEditedByRole}
+                  editedAt={meal.compliance?.updatedAt}
+                  timeZone={timeZone}
+                />
+              ) : null}
+            </View>
+            {shownKcal != null && !isSkipped ? (
+              <View style={styles.kcalCol}>
+                <Text variant="numberMd">{formatNumber(shownKcal)}</Text>
+                <Text variant="caption">{isLogged ? "kcal" : "planned"}</Text>
+              </View>
+            ) : null}
+          </Pressable>
           {waiting ? (
             <View
               style={[styles.badge, styles.tileWarn]}
@@ -875,17 +898,29 @@ function DietTabBody({
         testID="diet-focus-meal"
       >
         <View style={styles.row}>
-          <View style={[styles.tile, showPhotoPrompt ? styles.tileDone : styles.tileBrand]}>
+          <View
+            style={[
+              styles.tile,
+              showPhotoPrompt ? styles.tileDone : styles.tileBrand,
+            ]}
+          >
             {showPhotoPrompt ? (
               <Check size={22} color={theme.colors.done} strokeWidth={2.4} />
             ) : (
-              <Glyph size={22} strokeWidth={1.9} color={theme.colors.brandInk} />
+              <Glyph
+                size={22}
+                strokeWidth={1.9}
+                color={theme.colors.brandInk}
+              />
             )}
           </View>
           <View style={styles.rowText}>
             <Text variant="headline" numberOfLines={1}>
               {name}
-              <Text variant="caption"> {formatClockTime(meal.windowStartsAt, timeZone)}</Text>
+              <Text variant="caption">
+                {" "}
+                {formatClockTime(meal.windowStartsAt, timeZone)}
+              </Text>
               {!showPhotoPrompt ? (
                 <Text
                   variant="caption"
@@ -915,13 +950,20 @@ function DietTabBody({
               accessibilityLabel="Eaten as planned"
               disabled={actingId === meal.id}
               onPress={() => void confirmMeal(meal)}
-              style={[styles.primaryBtn, actingId === meal.id && styles.btnDisabled]}
+              style={[
+                styles.primaryBtn,
+                actingId === meal.id && styles.btnDisabled,
+              ]}
             >
               {actingId === meal.id ? (
                 <ActivityIndicator color={theme.colors.onBrand} />
               ) : (
                 <>
-                  <Check size={18} color={theme.colors.onBrand} strokeWidth={2.2} />
+                  <Check
+                    size={18}
+                    color={theme.colors.onBrand}
+                    strokeWidth={2.2}
+                  />
                   <Text variant="bodyStrong" tone="onBrand" numberOfLines={1}>
                     Eaten as planned
                   </Text>
@@ -963,7 +1005,10 @@ function DietTabBody({
               </Pressable>
             </View>
             {photoUploadingId === meal.id ? (
-              <ActivityIndicator color={theme.colors.brand} style={styles.photoSpinner} />
+              <ActivityIndicator
+                color={theme.colors.brand}
+                style={styles.photoSpinner}
+              />
             ) : null}
           </View>
         ) : null}
@@ -971,11 +1016,14 @@ function DietTabBody({
     );
   }
 
-  const loggedCount = assignments.filter((m) => isMealLoggedForCount(m.status)).length;
+  const loggedCount = assignments.filter((m) =>
+    isMealLoggedForCount(m.status),
+  ).length;
   // The centred error state: nothing to show for the day and the load failed
   // (TR-07i). With a cached day the content stays and a short banner says so.
   const showLoadError = loadError != null && bundle === undefined;
-  const staleError = loadError != null && bundle !== undefined && !loadFailedOffline;
+  const staleError =
+    loadError != null && bundle !== undefined && !loadFailedOffline;
   const sentCount = pendingSendIds.size;
   const offlineNote =
     sentCount > 0
@@ -1006,19 +1054,16 @@ function DietTabBody({
               </Text>
             </View>
             <View style={styles.headerActions}>
-              {showOffline ? (
-                <View style={styles.chip} accessibilityLabel="Offline">
-                  <WifiOff size={16} strokeWidth={2} color={theme.colors.ink2} />
-                  <Text variant="bodyStrong" tone="ink2">
-                    Offline
-                  </Text>
-                </View>
-              ) : sentCount > 0 ? (
+              {!showOffline && sentCount > 0 ? (
                 <View
                   style={styles.chip}
                   accessibilityLabel={`Waiting to send ${sentCount}`}
                 >
-                  <CloudOff size={16} strokeWidth={2} color={theme.colors.warn} />
+                  <CloudOff
+                    size={16}
+                    strokeWidth={2}
+                    color={theme.colors.warn}
+                  />
                   <Text variant="bodyStrong" tone="ink2">
                     Waiting to send {sentCount}
                   </Text>
@@ -1030,7 +1075,11 @@ function DietTabBody({
                 onPress={() => onOpenOverlay({ screen: "meal_plan" })}
                 style={styles.iconBtn}
               >
-                <BookOpen size={22} color={theme.colors.ink2} strokeWidth={1.9} />
+                <BookOpen
+                  size={22}
+                  color={theme.colors.ink2}
+                  strokeWidth={1.9}
+                />
               </Pressable>
               <Pressable
                 accessibilityRole="button"
@@ -1039,7 +1088,9 @@ function DietTabBody({
                 style={styles.iconBtn}
               >
                 <Bell size={22} color={theme.colors.ink2} strokeWidth={1.9} />
-                {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
+                {unreadNotifications > 0 ? (
+                  <View style={styles.unreadDot} />
+                ) : null}
               </Pressable>
             </View>
           </View>
@@ -1149,18 +1200,44 @@ function DietTabBody({
               </View>
               <View style={styles.list}>
                 {assignments.map((meal) =>
-                  meal.id === focusMealId ? renderFocusMeal(meal) : renderRow(meal),
+                  meal.id === focusMealId
+                    ? renderFocusMeal(meal)
+                    : renderRow(meal),
                 )}
               </View>
             </>
           )}
 
-          {plannedMeal && isFuture ? (
+          {plannedMeal ? (
             <PlannedMealSheet
               meal={plannedMeal}
               coachName={coachName}
               timeZone={timeZone}
               onClose={() => setPlannedMeal(null)}
+              actions={
+                !isFuture &&
+                canShowMealLogActions({
+                  lockStateKnown,
+                  selectedDate,
+                  today,
+                  meal: plannedMeal,
+                  unresolvedExceptionCount: unresolvedExceptions,
+                }) &&
+                windowOpened(plannedMeal, now)
+                  ? {
+                      onEaten: () => {
+                        const meal = plannedMeal;
+                        setPlannedMeal(null);
+                        void confirmMeal(meal);
+                      },
+                      onDifferent: () => {
+                        const meal = plannedMeal;
+                        setPlannedMeal(null);
+                        openSomethingDifferent(meal);
+                      },
+                    }
+                  : undefined
+              }
             />
           ) : null}
         </View>
@@ -1224,19 +1301,26 @@ const useStyles = createThemedStyles((t) => ({
     borderRadius: t.radii.card + 4,
     borderWidth: 1,
     flexDirection: "row",
-    gap: 16,
+    gap: 14,
     marginTop: 4,
-    padding: 16,
+    padding: 14,
   },
   summaryBody: { flex: 1, minWidth: 0 },
   leftRow: {
     alignItems: "baseline",
     borderBottomColor: t.colors.line,
     borderBottomWidth: 1,
+    columnGap: 8,
     flexDirection: "row",
-    gap: 8,
+    flexWrap: "wrap",
     justifyContent: "space-between",
     paddingBottom: 8,
+  },
+  leftNums: {
+    alignItems: "baseline",
+    columnGap: 4,
+    flexDirection: "row",
+    flexShrink: 0,
   },
   macros: { gap: 8, paddingTop: 8 },
   macroRow: { gap: 4 },
@@ -1263,7 +1347,7 @@ const useStyles = createThemedStyles((t) => ({
     right: 0,
     top: 0,
   },
-  ringNumber: { textAlign: "center" },
+  ringNumber: { fontSize: 28, lineHeight: 32, textAlign: "center" },
   sectionHead: {
     alignItems: "baseline",
     flexDirection: "row",
@@ -1287,6 +1371,13 @@ const useStyles = createThemedStyles((t) => ({
     gap: 12,
     minHeight: 72,
     padding: 12,
+  },
+  rowMain: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    minWidth: 0,
   },
   rowText: { flex: 1, gap: 2, minWidth: 0 },
   muted: { color: t.colors.ink3 },
