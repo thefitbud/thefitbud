@@ -154,7 +154,8 @@ test("share a client-visible note", async ({ page }) => {
     await page.getByRole("button", { name: /^add note$/i }).click();
   }
   await page.getByTestId("screen-TW-34").waitFor();
-  await page.getByLabel(/visible to client/i).check();
+  // Z12-7: switch label is “Visible to {firstName}” (frame 188).
+  await page.getByLabel(/visible to rohan/i).check();
   await page.locator("textarea").first().fill("E2E visible note for client");
   await page.getByRole("button", { name: /save note/i }).click();
   // Seeded history already has client-visible notes (answered coach asks); assert on the new one.

@@ -1,0 +1,243 @@
+/**
+ * Z12-7 Note composer (D-W12b-2). Colocated — do not edit styles/workspace.css.
+ * Ink Save; coral never a button. Destructive delete uses button-destructive.
+ */
+
+.note-composer {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-height: 0;
+  flex: 1;
+  height: 100%;
+  overflow: auto;
+  padding-bottom: 0.25rem;
+}
+
+.note-composer .field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.note-composer .field > span {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink-700, var(--ink2));
+}
+
+.note-composer textarea,
+.note-composer select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border, var(--line));
+  border-radius: 12px;
+  background: var(--white, #fff);
+  color: var(--ink-900, var(--ink));
+  font: inherit;
+  padding: 0.75rem 0.875rem;
+}
+
+.note-composer textarea {
+  min-height: 8rem;
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.note-composer select {
+  min-height: 44px;
+}
+
+.note-composer .field-hint {
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--ink3));
+}
+
+.note-vis-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.note-vis-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.note-vis-copy strong {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--ink-900, var(--ink));
+}
+
+.note-vis-copy span {
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ink-500, var(--ink3));
+}
+
+.note-vis-row input[role="switch"] {
+  appearance: none;
+  width: 2.75rem;
+  height: 1.625rem;
+  min-width: 2.75rem;
+  min-height: 1.625rem;
+  margin: 0.15rem 0 0;
+  border-radius: 999px;
+  border: 0;
+  background: var(--line2, #c9c5d8);
+  position: relative;
+  cursor: pointer;
+  flex: none;
+  transition: background 120ms ease;
+}
+
+.note-vis-row input[role="switch"]::after {
+  content: "";
+  position: absolute;
+  top: 0.2rem;
+  left: 0.2rem;
+  width: 1.225rem;
+  height: 1.225rem;
+  border-radius: 999px;
+  background: var(--white, #fff);
+  box-shadow: 0 1px 2px rgb(26 18 72 / 18%);
+  transition: transform 120ms ease;
+}
+
+.note-vis-row input[role="switch"]:checked {
+  background: var(--deep-navy, var(--ink, #1a1248));
+}
+
+.note-vis-row input[role="switch"]:checked::after {
+  transform: translateX(1.1rem);
+}
+
+.note-vis-row input[role="switch"]:focus-visible {
+  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline-offset: 2px;
+}
+
+.note-visible-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.note-preview-chip {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  background: var(--coach-tint, #ebe8ff);
+  color: var(--coach-ink, #3b2f7a);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.note-earlier {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.note-earlier-title {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-500, var(--ink3));
+}
+
+.note-earlier-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.note-earlier-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.note-earlier-list p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-900, var(--ink));
+}
+
+.note-earlier-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.65rem;
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--ink3));
+}
+
+.note-earlier-meta .text-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.note-composer-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: auto;
+  padding: 0.75rem 0 0.25rem;
+  background: linear-gradient(
+    to top,
+    var(--white, #fff) 70%,
+    rgb(255 255 255 / 0%)
+  );
+}
+
+.note-composer-actions .button-primary {
+  min-height: 44px;
+}
+
+.note-composer-helper {
+  margin: 0;
+  width: 100%;
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--ink3));
+}
+
+.note-delete-modal {
+  max-width: 28rem;
+}
+
+.note-delete-modal h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.125rem;
+}
+
+.note-delete-modal p {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+.note-delete-modal .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
