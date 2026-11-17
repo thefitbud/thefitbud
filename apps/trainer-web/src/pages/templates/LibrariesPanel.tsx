@@ -1357,8 +1357,12 @@ function FoodLibrary({
                     })
                   }
                 >
-                  <option value="per_100_g">per 100 g</option>
-                  <option value="per_100_ml">per 100 ml</option>
+                  <option value="per_100_g">
+                    {labelFor("nutrition_basis", "per_100_g")}
+                  </option>
+                  <option value="per_100_ml">
+                    {labelFor("nutrition_basis", "per_100_ml")}
+                  </option>
                 </select>
               </label>
               <div className="libraries-macro-grid">
