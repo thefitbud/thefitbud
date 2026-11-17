@@ -1,0 +1,329 @@
+/**
+ * Z12-7 Intake review (D-W12b-2). Colocated — do not edit styles/plan.css.
+ * Ink primary; coral only for Review flags (never a button).
+ */
+
+.intake-review-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding-bottom: 1.5rem;
+}
+
+.intake-review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .intake-review-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.intake-review-main,
+.intake-side-card {
+  background: var(--white, var(--surface, var(--card)));
+  border: 1px solid var(--border, var(--line));
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+}
+
+.intake-side {
+  display: grid;
+  gap: 1rem;
+}
+
+.intake-side-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-900, var(--ink));
+}
+
+.intake-side-card p {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+.intake-side-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.intake-side-actions .button-primary,
+.intake-side-actions .button-secondary,
+.intake-side-actions a.button-primary,
+.intake-side-actions a.button-secondary {
+  width: 100%;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-decoration: none;
+}
+
+.intake-stepper {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.intake-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.intake-step-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.intake-step-num {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border: 1.5px solid var(--border-strong, var(--line2, #c9c5d8));
+  background: var(--white, #fff);
+  color: var(--ink-500, var(--ink3));
+}
+
+.intake-step.is-done .intake-step-num,
+.intake-step.is-active .intake-step-num {
+  border-color: var(--deep-navy, var(--ink, #1a1248));
+  background: var(--deep-navy, var(--ink, #1a1248));
+  color: var(--white, #fff);
+}
+
+.intake-step-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-500, var(--ink3));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.intake-step.is-done .intake-step-label,
+.intake-step.is-active .intake-step-label {
+  color: var(--ink-900, var(--ink));
+}
+
+.intake-step-rail {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line, var(--border, #e4e2ec));
+}
+
+.intake-step.is-done .intake-step-rail,
+.intake-step.is-active .intake-step-rail {
+  background: var(--deep-navy, var(--ink, #1a1248));
+}
+
+.intake-review-heading {
+  margin: 0 0 0.25rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--deep-navy, var(--ink));
+  line-height: 1.35;
+}
+
+.intake-review-submitted {
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+  color: var(--ink-500, var(--ink3));
+}
+
+.intake-answer-list {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.intake-answer-list > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.intake-answer-list dt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--ink-500, var(--ink3));
+}
+
+.intake-answer-list dd {
+  margin: 0;
+  font-size: 0.9375rem;
+  color: var(--ink-700, var(--ink2));
+  line-height: 1.45;
+}
+
+.intake-review-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  min-height: 1.5rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--coral, #e07a5f);
+  color: var(--coral, #e07a5f);
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.intake-review-flag svg {
+  flex: none;
+}
+
+.intake-choice-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.intake-choice-chips li {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.2rem 0.625rem;
+  border-radius: 999px;
+  background: var(--coach-tint);
+  color: var(--coach-ink);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid #ddd6ff;
+}
+
+.intake-answer-body .intake-answer-text {
+  margin: 0;
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  overflow: hidden;
+}
+
+.intake-answer-body.is-expanded .intake-answer-text {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+
+.intake-show-more {
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+}
+
+.intake-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  padding: 2.5rem 1.5rem;
+}
+
+.intake-empty-icon {
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--coach-tint, #ebe8ff);
+  color: var(--deep-navy, var(--ink, #1a1248));
+}
+
+.intake-empty-state h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--deep-navy, var(--ink));
+}
+
+.intake-empty-state p {
+  margin: 0;
+  max-width: 28rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+.intake-empty-state .button-primary,
+.intake-empty-state a.button-primary {
+  margin-top: 0.5rem;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  text-decoration: none;
+  padding-inline: 1.25rem;
+}
+
+.intake-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.intake-timeline li {
+  display: grid;
+  grid-template-columns: 0.625rem 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--ink-700, var(--ink2));
+}
+
+.intake-timeline-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-top: 0.3rem;
+  border-radius: 999px;
+  background: var(--deep-navy, var(--ink, #1a1248));
+}
+
+.intake-timeline-dot.is-muted {
+  background: var(--line2, #c9c5d8);
+}
+
+.intake-ready-mark {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--ink-500, var(--ink3));
+}
