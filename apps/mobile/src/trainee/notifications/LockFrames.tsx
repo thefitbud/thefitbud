@@ -80,7 +80,7 @@ export function MealLockCard({
   return (
     <View style={styles.card}>
       <View style={styles.cardTop}>
-        <Text style={styles.app}>Lunch isn't logged yet</Text>
+        <Text style={styles.app}>Lunch is due</Text>
         <Text style={styles.when}>now</Text>
       </View>
       <View style={styles.mealActions}>
