@@ -240,7 +240,7 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
         onPendingSummaryConsumed={consumed}
       />,
     );
-    expect(await screen.findByText("How hard it felt")).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Save and share with Rahul" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
   });
@@ -261,7 +261,7 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
     // summary have neither.
     expect(await screen.findByRole("button", { name: "Back" })).toBeTruthy();
     expect(screen.getByLabelText("Exercise 1, 1 set")).toBeTruthy();
-    expect(screen.queryByText("How hard it felt")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save and share with Rahul" })).toBeNull();
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
   });
 
@@ -277,6 +277,6 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
       />,
     );
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText("How hard it felt")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save and share with Rahul" })).toBeNull();
   });
 });

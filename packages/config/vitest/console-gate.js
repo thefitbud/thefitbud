@@ -16,35 +16,12 @@
  * Each entry needs a written reason and the ID of the task that removes it. Nothing else
  * is allowed.
  *
- * 1. React DOM's `validateDOMNesting`, `<button>` inside `<button>`, and only when the
- *    component stack runs through `WorkoutTab` (apps/mobile render tests).
- *    react-native-web renders a Pressable with role "button" as an HTML
- *    `<button>`, and HTML forbids nesting them; on a device the nesting is legal React
- *    Native, so this message never reaches a device log. It still points at something
- *    worth fixing: in `WorkoutTab` the `OverflowMenu` button sits inside the day card's
- *    button, and on iOS an accessible parent hides the inner control from VoiceOver.
- *    Owner: Z12-44/Z12-45 (WorkoutTab), who un-nest the menu and drop this entry. Tests
- *    that hit it when the gate was turned on: WorkoutTab.render.test.tsx,
- *    WorkoutTab.week.test.tsx, WorkoutTab.pendingSummary.test.tsx,
- *    workout/coach-logged/WorkoutTab.gating.test.tsx.
+ * The list is empty. Its one entry (nested `<button>`s under `WorkoutTab` in
+ * react-native-web) was removed by Z12-44, which un-nested the day card's controls.
  */
 
 /** @type {ReadonlyArray<{ reason: string; owner: string; matches: (args: unknown[]) => boolean }>} */
-export const ALLOWED = [
-  {
-    reason: "react-native-web renders nested Pressables as nested <button> (HTML-only rule)",
-    owner: "Z12-44/Z12-45",
-    matches: (args) =>
-      typeof args[0] === "string" &&
-      args[0].startsWith("Warning: validateDOMNesting(...): %s cannot appear as a descendant of <%s>.") &&
-      args[1] === "<button>" &&
-      args[2] === "button" &&
-      // Only inside WorkoutTab (React's component stack, the last argument, names it):
-      // its day card nests the OverflowMenu and other Pressables in a Pressable.
-      typeof args[3] === "string" &&
-      /\n\s+at WorkoutTab \(/.test(args[3]),
-  },
-];
+export const ALLOWED = [];
 
 /** @param {unknown[]} args */
 export function isAllowedConsoleError(args) {

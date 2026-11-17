@@ -165,7 +165,7 @@ const { WorkoutTab } = await import("./WorkoutTab");
 const { PLAN_UNAVAILABLE_MESSAGE } = await import("./TodayTab");
 const { invalidateRelationshipDayData } = await import("./dataCache");
 
-const NO_PLAN_YET = "No plan yet";
+const NO_PLAN_YET = "No workouts planned yet";
 
 function renderWorkout() {
   return render(
@@ -207,7 +207,7 @@ describe("WorkoutTab week state", () => {
       expect(screen.getByText(NO_PLAN_YET)).toBeTruthy();
     });
     expect(
-      screen.getByText("Workouts appear here when Rahul publishes your plan."),
+      screen.getByText("Rahul hasn’t added workouts to your plan. You’ll get a notification when they’re added."),
     ).toBeTruthy();
     expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
   });

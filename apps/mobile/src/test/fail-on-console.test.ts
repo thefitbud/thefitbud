@@ -27,23 +27,20 @@ describe("console-error gate (Z12-35, D-W12-28)", () => {
     expect(c.error).toBe(original);
   });
 
-  it("allows only the written allow-list entry", () => {
+  it("allows nothing: the WorkoutTab nested-button entry is gone (Z12-44)", () => {
     const nested = [
       "Warning: validateDOMNesting(...): %s cannot appear as a descendant of <%s>.%s",
       "<button>",
       "button",
       "\n    at button\n    at OverflowMenu (src/components/OverflowMenu.tsx:8:25)\n    at div\n    at WorkoutTab (src/trainee/WorkoutTab.tsx:121:3)",
     ];
-    expect(isAllowedConsoleError(nested)).toBe(true);
-    expect(
-      isAllowedConsoleError([nested[0], "<button>", "button", "\n    at button\n    at SomeOtherButton (x.tsx:1:1)\n    at TodayTab (src/trainee/TodayTab.tsx:1:1)"]),
-    ).toBe(false);
+    expect(isAllowedConsoleError(nested)).toBe(false);
     expect(isAllowedConsoleError([nested[0], "<div>", "p", ""])).toBe(false);
     expect(isAllowedConsoleError([new Error("boom")])).toBe(false);
     const c = fakeConsole();
     const finish = startConsoleGate(c);
     c.error(...nested);
-    expect(() => finish()).not.toThrow();
+    expect(() => finish()).toThrow(/console\.error was called 1 time/);
   });
 
   it("lets a test that expects an error opt out with a mocked spy", () => {

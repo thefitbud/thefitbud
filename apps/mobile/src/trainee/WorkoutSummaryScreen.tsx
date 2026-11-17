@@ -1,24 +1,39 @@
 import { useMemo, useState } from "react";
-import { StyleSheet, TextInput, View } from "react-native";
-import { Check, TrendingDown, X } from "lucide-react-native";
+import { View } from "react-native";
+import { ArrowUpRight, Check, Send, SkipForward } from "lucide-react-native";
 import { Text } from "../components/Text";
 import type { WorkoutAssignment, WorkoutExecution } from "@fitbud/contracts";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
-import { PrimaryButton } from "../components/PrimaryButton";
+import { formatClockTime, formatNumber } from "@fitbud/core";
+import { Button } from "../components/Button";
 import { Screen } from "../components/Screen";
-import { weekDatesFrom } from "../lib/dates";
+import { startOfWeekMonday, weekdayShort } from "../lib/dates";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { CoachLogBanner } from "./workout/coach-logged/CoachLogBanner";
 import { coachLogState } from "./workout/coach-logged/coachLogged";
 import { durationMinutesFromExecution } from "./workoutDuration";
+import { formatCivilDateShort, planChangeRows } from "./workoutDisplay";
 import {
-  coachInitials,
-  formatCivilDateShort,
-  planChangeRows,
-  weekDotStatus,
-} from "./workoutDisplay";
+  weekWorkoutSummary,
+  withFinishedExecution,
+} from "./workoutHeroState";
+import { sessionSetCounts, sessionVolumeKg } from "./workoutSession";
 
-const TARGET = 44;
-
+/**
+ * The workout summary (v3 W-17a), then the shared confirmation (W-17b).
+ *
+ * The week card's dots and its "N of M done" come from one list
+ * (`weekWorkoutSummary`) with the finished assignment patched to done
+ * (`withFinishedExecution`), so they cannot disagree (ISSUE-MAP #10: "3 of 3"
+ * beside two ticks, from a week list loaded before the finish).
+ *
+ * The workout is already saved and visible to the coach when this screen
+ * opens: the finish sent it (or queued it, offline). "Save and share" moves
+ * to the confirmation; it sends nothing new. The mock's RPE picker, note
+ * field and record card have no backend after a finish (no trainee endpoint
+ * takes an RPE or a note on a finished execution; nothing computes records),
+ * so the RPE shows only as recorded at the finish and the other two are left
+ * out (recorded in the PR; the old note field was silently discarded).
+ */
 export function WorkoutSummaryScreen({
   execution,
   assignment = null,
@@ -27,8 +42,6 @@ export function WorkoutSummaryScreen({
   weekAssignments = [],
   weekStart,
   today = "",
-  weekCompleted,
-  weekTotal,
   timeZone = "Asia/Kolkata",
   offline = false,
 }: {
@@ -36,182 +49,178 @@ export function WorkoutSummaryScreen({
   assignment?: WorkoutAssignment | null;
   onDone: () => void;
   coachName?: string;
-  weekAssignments?: WorkoutAssignment[];
+  weekAssignments?: readonly WorkoutAssignment[];
   weekStart?: string;
   timeZone?: string;
   today?: string;
-  weekCompleted?: number;
-  weekTotal?: number;
   offline?: boolean;
 }) {
-  const [note, setNote] = useState("");
-
-  const exercisesDone = execution.exercises.filter((exercise) =>
-    exercise.sets.every((set) => set.status !== "pending"),
-  ).length;
-  const exercisesTotal = execution.exercises.length;
-
-  const setsDone = execution.exercises.reduce(
-    (count, exercise) =>
-      count +
-      exercise.sets.filter(
-        (set) => set.status === "completed" || set.status === "modified",
-      ).length,
-    0,
-  );
-  const setsSkipped = execution.exercises.reduce(
-    (count, exercise) =>
-      count + exercise.sets.filter((set) => set.status === "skipped").length,
-    0,
-  );
-  const setsTotal = execution.exercises.reduce(
-    (count, exercise) => count + exercise.sets.length,
-    0,
-  );
-
-  const changeRows = useMemo(() => planChangeRows(execution), [execution]);
-
-  const durationMinutes = durationMinutesFromExecution(execution);
+  const [shared, setShared] = useState(false);
   const trimmedCoach = coachName.trim() || "Your coach";
-  const coachLabel =
+  const coachFirst =
     trimmedCoach.toLowerCase() === "your coach"
-      ? "Your coach"
-      : trimmedCoach.split(/\s+/)[0] || "Your coach";
+      ? "your coach"
+      : trimmedCoach.split(/\s+/)[0]!;
 
-  const sessionTitle = assignment?.workoutDayName ?? "Workout";
-  const sessionDate =
-    assignment?.localDate != null
-      ? formatCivilDateShort(assignment.localDate)
-      : null;
-  const eyebrow =
-    sessionDate != null ? `${sessionTitle} · ${sessionDate}` : sessionTitle;
-
-  const showWeek =
-    weekCompleted != null &&
-    weekTotal != null &&
-    weekTotal > 0 &&
-    Number.isFinite(weekCompleted) &&
-    Number.isFinite(weekTotal);
-
-  const weekDates = weekStart ? weekDatesFrom(weekStart) : [];
-  const byDate = useMemo(() => {
-    const map = new Map<string, WorkoutAssignment>();
-    for (const item of weekAssignments) {
-      if (!map.has(item.localDate)) map.set(item.localDate, item);
-    }
-    return map;
-  }, [weekAssignments]);
-
-  const rpe = execution.sessionRpe;
-  const rpeLabel =
-    rpe != null ? `${rpe}` : execution.requireSessionRpe ? "—" : "—";
-
-  const footer = (
-    <View style={styles.abar}>
-      <PrimaryButton
-        label="Done"
-        onPress={onDone}
-        style={styles.doneBtn}
-        variant="primary"
-      />
-    </View>
+  const footer = shared ? (
+    <SummaryFooter label="Done" onPress={onDone} />
+  ) : (
+    <SummaryFooter
+      label={`Save and share with ${coachFirst}`}
+      share
+      onPress={() => setShared(true)}
+    />
   );
 
   return (
     <Screen
+      v3
       chrome="app"
-      title="Workout done"
+      title={shared ? `Shared with ${coachFirst}` : "Workout done"}
       showHeader={false}
       footer={footer}
     >
+      {shared ? (
+        <SharedBody
+          execution={execution}
+          assignment={assignment}
+          coachFirst={coachFirst}
+          weekAssignments={weekAssignments}
+          weekStart={weekStart ?? assignment?.localDate ?? today}
+          timeZone={timeZone}
+          offline={offline}
+        />
+      ) : (
+        <SummaryBody
+          execution={execution}
+          assignment={assignment}
+          coachName={trimmedCoach}
+          coachFirst={coachFirst}
+          timeZone={timeZone}
+          offline={offline}
+        />
+      )}
+    </Screen>
+  );
+}
+
+function SummaryFooter({
+  label,
+  share = false,
+  onPress,
+}: {
+  label: string;
+  share?: boolean;
+  onPress: () => void;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  return (
+    <View style={styles.abar}>
+      <Button
+        label={label}
+        icon={
+          share ? (
+            <Send size={20} color={theme.colors.onBrand} strokeWidth={1.75} />
+          ) : undefined
+        }
+        onPress={onPress}
+        style={styles.footerBtn}
+      />
+    </View>
+  );
+}
+
+function SummaryBody({
+  execution,
+  assignment,
+  coachName,
+  coachFirst,
+  timeZone,
+  offline,
+}: {
+  execution: WorkoutExecution;
+  assignment: WorkoutAssignment | null;
+  coachName: string;
+  coachFirst: string;
+  timeZone: string;
+  offline: boolean;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const counts = sessionSetCounts(execution);
+  const volume = sessionVolumeKg(execution);
+  const minutes = durationMinutesFromExecution(execution);
+  const changeRows = useMemo(() => planChangeRows(execution), [execution]);
+  const sessionTitle = assignment?.workoutDayName ?? "Workout";
+  const eyebrow = (
+    assignment?.localDate != null
+      ? `${sessionTitle} · ${formatCivilDateShort(assignment.localDate)}`
+      : sessionTitle
+  ).toUpperCase();
+
+  return (
+    <View>
       <View style={styles.head}>
-        <Text style={styles.eyebrow}>{eyebrow}</Text>
-        <Text style={styles.h1} accessibilityRole="header">
+        <Text variant="label" tone="ink">
+          {eyebrow}
+        </Text>
+        <Text variant="largeTitle" accessibilityRole="header">
           Workout done
         </Text>
-        <View style={styles.coral} />
       </View>
 
       {coachLogState(execution) === "edited" ? (
-        <View style={{ marginTop: 16 }}>
+        <View style={styles.banner}>
           <CoachLogBanner
             state="edited"
             execution={execution}
-            coachName={trimmedCoach}
+            coachName={coachName}
             timeZone={timeZone}
           />
         </View>
       ) : null}
 
-      <View style={styles.stat4}>
-        <View style={styles.statTile}>
-          <Text style={styles.statB}>
-            {durationMinutes ?? "—"}
-            {durationMinutes != null ? (
-              <Text style={styles.statSmall}> min</Text>
-            ) : null}
-          </Text>
-          <Text style={styles.statS}>Duration</Text>
-        </View>
-        <View style={styles.statTile}>
-          <Text style={styles.statB}>
-            {exercisesDone}
-            <Text style={styles.statSmall}> of {exercisesTotal}</Text>
-          </Text>
-          <Text style={styles.statS}>Exercises</Text>
-        </View>
-        <View style={styles.statTile}>
-          <Text style={styles.statB}>
-            {setsDone}
-            <Text style={styles.statSmall}> of {setsTotal}</Text>
-          </Text>
-          <Text style={styles.statS}>
-            Sets{setsSkipped > 0 ? ` · ${setsSkipped} skipped` : ""}
-          </Text>
-        </View>
-        <View style={styles.statTile}>
-          <Text style={styles.statB}>
-            {rpeLabel}
-            {execution.requireSessionRpe ? (
-              <Text style={styles.statSmall}> of 10</Text>
-            ) : null}
-          </Text>
-          <Text style={styles.statS}>How hard it felt</Text>
-        </View>
+      <View style={styles.stats}>
+        <Stat label="Duration" value={minutes != null ? String(minutes) : "—"} unit={minutes != null ? " min" : ""} />
+        <Stat
+          label="Volume"
+          value={volume != null ? formatNumber(volume) : "—"}
+          unit={volume != null ? " kg" : ""}
+        />
+        <Stat label="Sets" value={String(counts.done)} unit={` / ${counts.total}`} />
       </View>
 
       {changeRows.length > 0 ? (
         <>
-          <View style={styles.sh}>
-            <Text style={styles.shTitle} accessibilityRole="header">
-              Changed from the plan
-            </Text>
-          </View>
-          <View style={styles.changeCard}>
-            {changeRows.map((row) => (
-              <View key={row.id} style={styles.changeRow}>
+          <Text variant="label" tone="ink2" style={styles.section}>
+            {`CHANGED FROM THE PLAN · ${coachFirst.toUpperCase()} SEES THIS`}
+          </Text>
+          <View style={styles.card}>
+            {changeRows.map((row, index) => (
+              <View
+                key={row.id}
+                style={[styles.changeRow, index > 0 ? styles.changeBorder : null]}
+              >
                 <View
                   style={[
                     styles.changeTile,
-                    row.skipped ? styles.changeTileNeu : null,
+                    row.skipped ? styles.changeTileNeutral : styles.changeTileUp,
                   ]}
                 >
                   {row.skipped ? (
-                    <X color={colors.midGrey} size={18} />
+                    <SkipForward size={18} color={theme.colors.ink2} strokeWidth={1.75} />
                   ) : (
-                    <TrendingDown color={colors.indigo} size={18} />
+                    <ArrowUpRight size={18} color={theme.colors.done} strokeWidth={2} />
                   )}
                 </View>
-                <View style={styles.changeTx}>
-                  <Text style={styles.changeName}>{row.exerciseName}</Text>
-                  <Text style={styles.changeDetail}>{row.detail}</Text>
+                <View style={styles.flex}>
+                  <Text variant="body">{row.exerciseName}</Text>
+                  <Text variant="subhead" tone="ink2">
+                    {row.detail}
+                  </Text>
                 </View>
-                <Text
-                  style={[
-                    styles.changeVal,
-                    row.skipped ? styles.changeValMuted : null,
-                  ]}
-                >
+                <Text variant="body" tone={row.skipped ? "ink3" : "ink"}>
                   {row.value}
                 </Text>
               </View>
@@ -220,322 +229,276 @@ export function WorkoutSummaryScreen({
         </>
       ) : null}
 
-      {showWeek && weekDates.length > 0 ? (
-        <View style={styles.wkline}>
-          <View style={styles.wklineTx}>
-            <Text style={styles.wklineTitle}>
-              {weekCompleted} of {weekTotal} workouts
+      {execution.sessionRpe != null ? (
+        <View style={styles.rpeRow}>
+          <Text variant="label" tone="ink2">
+            HOW HARD IT FELT
+          </Text>
+          <Text variant="bodyStrong">{`${execution.sessionRpe} of 10`}</Text>
+        </View>
+      ) : null}
+
+      {offline ? (
+        <Text variant="subhead" tone="ink3" style={styles.offline}>
+          Saved on phone. Will sync when you&apos;re online.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  unit,
+}: {
+  label: string;
+  value: string;
+  unit: string;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={styles.stat} accessible accessibilityLabel={`${label} ${value}${unit}`}>
+      <Text variant="subhead" tone="ink2">
+        {label}
+      </Text>
+      <Text variant="numberLg">
+        {value}
+        {unit ? (
+          <Text variant="body" tone="ink2">
+            {unit}
+          </Text>
+        ) : null}
+      </Text>
+    </View>
+  );
+}
+
+function SharedBody({
+  execution,
+  assignment,
+  coachFirst,
+  weekAssignments,
+  weekStart,
+  timeZone,
+  offline,
+}: {
+  execution: WorkoutExecution;
+  assignment: WorkoutAssignment | null;
+  coachFirst: string;
+  weekAssignments: readonly WorkoutAssignment[];
+  weekStart: string;
+  timeZone: string;
+  offline: boolean;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const week = useMemo(() => {
+    const patched = withFinishedExecution(
+      // The finished workout's own assignment counts even when the list the
+      // tab had did not include it.
+      assignment && !weekAssignments.some((item) => item.id === assignment.id)
+        ? [...weekAssignments, assignment]
+        : weekAssignments,
+      execution,
+    );
+    return weekWorkoutSummary(patched, startOfWeekMonday(weekStart));
+  }, [assignment, execution, weekAssignments, weekStart]);
+  const doneDates = new Set(
+    week.days.filter((day) => day.done).map((day) => day.localDate),
+  );
+  const finishedDate = assignment?.localDate ?? null;
+  const savedAt = execution.completedAt
+    ? formatClockTime(execution.completedAt, timeZone)
+    : null;
+  const coachLabel = coachFirst === "your coach" ? "Your coach" : coachFirst;
+
+  return (
+    <View style={styles.sharedWrap}>
+      <View style={styles.bigCheck}>
+        <Check size={40} color={theme.colors.done} strokeWidth={2.5} />
+      </View>
+      <Text variant="largeTitle" style={styles.center} accessibilityRole="header">
+        {offline ? "Saved on your phone" : `Shared with ${coachFirst}`}
+      </Text>
+      <Text variant="body" tone="ink2" style={[styles.center, styles.sharedBody]}>
+        {offline
+          ? `It goes to ${coachFirst} when you’re back online.`
+          : `${savedAt ? `Saved at ${savedAt}. ` : ""}${coachLabel} will see your sets.`}
+      </Text>
+
+      {week.total > 0 ? (
+        <View style={[styles.card, styles.weekCard]}>
+          <View style={styles.weekHead}>
+            <Text variant="headline">This week</Text>
+            <Text variant="body" tone="ink2">
+              {`${week.completed} of ${week.total} done`}
             </Text>
-            <Text style={styles.wklineSub}>This week</Text>
           </View>
-          <View style={styles.dots7}>
-            {weekDates.map((date) => {
-              const item = byDate.get(date);
-              const status = weekDotStatus(date, today, item);
+          <View style={styles.weekRow}>
+            {week.dates.map((date) => {
+              const done = doneDates.has(date);
               return (
                 <View
                   key={date}
-                  style={[
-                    styles.dot,
-                    status === "done" ? styles.dotDone : null,
-                    status === "miss" ? styles.dotMiss : null,
-                    status === "rest" ? styles.dotRest : null,
-                    status === "future" ? styles.dotFut : null,
-                  ]}
+                  style={styles.weekDay}
+                  accessible
+                  accessibilityLabel={`${weekdayShort(timeZone, date)}, ${done ? "done" : "not done"}`}
                 >
-                  {status === "done" ? (
-                    <Check color={colors.white} size={12} strokeWidth={3} />
-                  ) : null}
-                  {status === "miss" ? (
-                    <X color={colors.coral} size={12} strokeWidth={3} />
-                  ) : null}
-                  {status === "rest" ? <View style={styles.dotDash} /> : null}
+                  <Text variant="subhead" tone="ink3">
+                    {weekdayShort(timeZone, date).charAt(0)}
+                  </Text>
+                  <View
+                    style={[
+                      styles.weekDot,
+                      done ? styles.weekDotDone : null,
+                      done && date === finishedDate ? styles.weekDotNew : null,
+                    ]}
+                  >
+                    {done ? (
+                      <Check size={18} color={theme.colors.onBrand} strokeWidth={2.5} />
+                    ) : null}
+                  </View>
                 </View>
               );
             })}
           </View>
         </View>
       ) : null}
-
-      <View style={styles.seen}>
-        <View style={styles.seenAv}>
-          <Text style={styles.seenAvText}>
-            {coachInitials(
-              trimmedCoach.toLowerCase() === "your coach"
-                ? "Your Coach"
-                : trimmedCoach,
-            )}
-          </Text>
-        </View>
-        <Text style={styles.seenText}>{coachLabel} will see this.</Text>
-      </View>
-
-      <Text style={styles.noteLbl}>
-        Note for {coachLabel} <Text style={styles.noteOpt}>· optional</Text>
-      </Text>
-      <TextInput
-        accessibilityLabel="Note for coach"
-        value={note}
-        onChangeText={setNote}
-        placeholder="How did it feel?"
-        placeholderTextColor={colors.midGrey}
-        multiline
-        style={styles.noteInput}
-      />
-
-      {offline ? (
-        <Text style={styles.offline}>
-          Saved on phone. Will sync when you're online.
-        </Text>
-      ) : null}
-
-      <View style={styles.footerSpacer} />
-    </Screen>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   head: {
-    paddingHorizontal: 4,
-    paddingTop: 10,
+    gap: t.spacing.xs,
+    paddingTop: t.spacing.xl,
   },
-  eyebrow: {
-    color: colors.midGrey,
-    fontSize: 14,
-    fontWeight: "600",
+  banner: {
+    marginTop: t.spacing.lg,
   },
-  h1: {
-    color: colors.deepNavy,
-    fontSize: 30,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    lineHeight: 36,
-    marginTop: 4,
-  },
-  coral: {
-    backgroundColor: colors.coral,
-    borderRadius: 2,
-    height: 3,
-    marginTop: 10,
-    width: 48,
-  },
-  stat4: {
+  stats: {
     flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginTop: 16,
+    gap: t.spacing.md,
+    marginTop: t.spacing.xl,
+    paddingHorizontal: t.spacing.xs,
   },
-  statTile: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: 20,
+  stat: {
+    flex: 1,
+    gap: 2,
+  },
+  section: {
+    marginBottom: t.spacing.sm,
+    marginTop: t.spacing.xl,
+    paddingHorizontal: t.spacing.xs,
+  },
+  card: {
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
-    flexBasis: "47%",
-    flexGrow: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    shadowColor: "#0F0C28",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.04,
-    shadowRadius: 6,
-  },
-  statB: {
-    color: colors.deepNavy,
-    fontSize: 28,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-    lineHeight: 34,
-  },
-  statSmall: {
-    color: colors.midGrey,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  statS: {
-    color: colors.midGrey,
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 2,
-  },
-  sh: {
-    marginBottom: 10,
-    marginTop: 20,
-    paddingHorizontal: 4,
-  },
-  shTitle: {
-    color: colors.deepNavy,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  changeCard: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    overflow: "hidden",
   },
   changeRow: {
     alignItems: "center",
-    borderTopColor: colors.lightGrey,
-    borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
-    gap: spacing.md,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: 12,
+    gap: t.spacing.md,
+    minHeight: 64,
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.md,
+  },
+  changeBorder: {
+    borderTopColor: t.colors.line,
+    borderTopWidth: 1,
   },
   changeTile: {
     alignItems: "center",
-    backgroundColor: "#F6F4FF",
     borderRadius: 12,
     height: 40,
     justifyContent: "center",
     width: 40,
   },
-  changeTileNeu: {
-    backgroundColor: colors.background,
+  changeTileUp: {
+    backgroundColor: t.colors.doneTint,
   },
-  changeTx: {
+  changeTileNeutral: {
+    backgroundColor: t.colors.fill,
+  },
+  flex: {
     flex: 1,
     minWidth: 0,
   },
-  changeName: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  changeDetail: {
-    color: colors.midGrey,
-    fontSize: 13,
-    marginTop: 2,
-  },
-  changeVal: {
-    color: colors.deepNavy,
-    fontSize: 14,
-    fontWeight: "700",
-    maxWidth: 110,
-    textAlign: "right",
-  },
-  changeValMuted: {
-    color: colors.midGrey,
-    fontWeight: "600",
-  },
-  wkline: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: spacing.md,
-    marginTop: 12,
-    padding: spacing.lg,
-  },
-  wklineTx: {
-    flex: 1,
-  },
-  wklineTitle: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  wklineSub: {
-    color: colors.midGrey,
-    fontSize: 14,
-    marginTop: 2,
-  },
-  dots7: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 6,
-  },
-  dot: {
-    alignItems: "center",
-    borderRadius: 11,
-    height: 22,
-    justifyContent: "center",
-    width: 22,
-  },
-  dotDone: {
-    backgroundColor: colors.deepNavy,
-  },
-  dotMiss: {
-    borderColor: colors.coral,
-    borderWidth: 1.5,
-  },
-  dotRest: {},
-  dotFut: {
-    borderColor: colors.lightGrey,
-    borderWidth: 1.5,
-  },
-  dotDash: {
-    backgroundColor: colors.midGrey,
-    borderRadius: 1,
-    height: 2,
-    width: 8,
-  },
-  seen: {
+  rpeRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: 10,
-    marginTop: 20,
-  },
-  seenAv: {
-    alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    borderRadius: 16,
-    height: 32,
-    justifyContent: "center",
-    width: 32,
-  },
-  seenAvText: {
-    color: colors.indigo,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  seenText: {
-    color: colors.darkGrey,
-    fontSize: 15,
-  },
-  noteLbl: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "600",
-    marginTop: 16,
-  },
-  noteOpt: {
-    color: colors.midGrey,
-    fontWeight: "500",
-  },
-  noteInput: {
-    backgroundColor: colors.background,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.control,
-    borderWidth: 1,
-    color: colors.nearBlack,
-    fontSize: 16,
-    marginTop: 8,
-    minHeight: TARGET * 2,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    textAlignVertical: "top",
+    justifyContent: "space-between",
+    marginTop: t.spacing.xl,
+    paddingHorizontal: t.spacing.xs,
   },
   offline: {
-    color: colors.midGrey,
-    fontSize: 14,
-    marginTop: spacing.md,
-  },
-  footerSpacer: {
-    height: 80,
+    marginTop: t.spacing.lg,
   },
   abar: {
-    backgroundColor: "rgba(255,255,255,0.94)",
-    borderTopColor: colors.lightGrey,
+    backgroundColor: t.colors.bg,
+    borderTopColor: t.colors.line,
     borderTopWidth: 1,
-    paddingBottom: spacing.xl,
-    paddingHorizontal: spacing.lg,
-    paddingTop: 12,
+    paddingBottom: t.spacing.xl,
+    paddingHorizontal: t.spacing.lg,
+    paddingTop: t.spacing.md,
   },
-  doneBtn: {
+  footerBtn: {
     minHeight: 56,
   },
-});
+  sharedWrap: {
+    alignItems: "stretch",
+    paddingTop: 48,
+  },
+  bigCheck: {
+    alignItems: "center",
+    alignSelf: "center",
+    backgroundColor: t.colors.doneTint,
+    borderRadius: 48,
+    height: 96,
+    justifyContent: "center",
+    marginBottom: t.spacing.xl,
+    width: 96,
+  },
+  center: {
+    textAlign: "center",
+  },
+  sharedBody: {
+    marginTop: t.spacing.sm,
+  },
+  weekCard: {
+    marginTop: t.spacing.xxl,
+    padding: 20,
+  },
+  weekHead: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: t.spacing.lg,
+  },
+  weekRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  weekDay: {
+    alignItems: "center",
+    gap: t.spacing.sm,
+  },
+  weekDot: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  weekDotDone: {
+    backgroundColor: t.colors.done,
+  },
+  weekDotNew: {
+    borderColor: t.colors.doneTint,
+    borderWidth: 3,
+  },
+}));

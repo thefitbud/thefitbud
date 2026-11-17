@@ -846,8 +846,6 @@ export function TraineeShell({
         weekStart={captureWorkoutSummary.weekStart}
         today={today}
         timeZone={timeZone}
-        weekCompleted={2}
-        weekTotal={4}
         onDone={() => setCaptureWorkoutSummary(null)}
       />
     );
