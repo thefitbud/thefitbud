@@ -119,9 +119,70 @@ export type ApiSession = {
   refreshAccessToken?: () => Promise<string | null>;
 };
 
+/**
+ * What the app's own API calls say about the network (Z12-41). The sync
+ * triggers listen: a call that succeeded means the API is reachable, so a
+ * waiting outbox is sent; a call that could not connect starts the
+ * reachability probe. Sync's own calls are left out, so a push never
+ * triggers the next push.
+ */
+export type ApiActivity = "success" | "unreachable";
+
+const apiActivityListeners = new Set<(activity: ApiActivity) => void>();
+
+export function onApiActivity(
+  listener: (activity: ApiActivity) => void,
+): () => void {
+  apiActivityListeners.add(listener);
+  return () => {
+    apiActivityListeners.delete(listener);
+  };
+}
+
+function emitApiActivity(activity: ApiActivity): void {
+  for (const listener of [...apiActivityListeners]) {
+    try {
+      listener(activity);
+    } catch {
+      // A listener must never fail the request it is told about.
+    }
+  }
+}
+
+function requestUrl(input: Parameters<typeof fetch>[0]): string {
+  if (typeof input === "string") return input;
+  if (input instanceof URL) return input.href;
+  return input.url;
+}
+
+/** `/sync/push` and `/sync/pull`: the outbox's own traffic. */
+export function isSyncRequest(url: string): boolean {
+  return /\/sync\/(push|pull)(\?|$)/.test(url);
+}
+
+/** `fetch` that reports each call's outcome to `onApiActivity` listeners. */
+export function createObservedFetch(
+  inner: typeof fetch = (input, init) => globalThis.fetch(input, init),
+): typeof fetch {
+  return async (input, init) => {
+    const observed = !isSyncRequest(requestUrl(input));
+    let response: Response;
+    try {
+      response = await inner(input, init);
+    } catch (error) {
+      // `fetch` rejects only when no HTTP answer came back.
+      if (observed) emitApiActivity("unreachable");
+      throw error;
+    }
+    if (observed && response.ok) emitApiActivity("success");
+    return response;
+  };
+}
+
 export function createMobileApiClient(session: ApiSession): FitBudApiClient {
   const client = new FitBudApiClient({
     baseUrl: resolveApiBaseUrl(),
+    fetch: createObservedFetch(),
     getAccessToken: session.getAccessToken,
     getSelectedRole: session.getSelectedRole,
     ...(session.refreshAccessToken
@@ -230,6 +291,11 @@ export function createTokenSession(deps: TokenSessionDeps) {
   }
 
   function schedule() {
+    if (state.refreshToken && state.accessToken === null) {
+      // Held refresh token (cold start with no network): mint a token now.
+      arm(0);
+      return;
+    }
     if (state.expiresAt === null || !state.refreshToken) {
       cancel();
       return;
@@ -290,6 +356,16 @@ export function createTokenSession(deps: TokenSessionDeps) {
         expiresAt: refreshFields ? now() + refreshFields.expiresIn * 1000 : null,
       });
       schedule();
+    },
+    /**
+     * Cold start with no network (Z12-41): keep the stored refresh token with
+     * no ID token yet. The session then refreshes on its retry timer, on the
+     * return to the foreground, and when a request answers 401, so the app
+     * gets a token as soon as the server is reachable.
+     */
+    hold(refreshToken: string) {
+      write({ accessToken: null, refreshToken, expiresAt: null });
+      arm(REFRESH_RETRY_MS);
     },
     clear,
     refresh,

@@ -10,6 +10,7 @@ import {
   mealAssignments,
   traineeCustomFoods,
 } from "../db/schema.js";
+import { isFutureLocalDate } from "./future-day.js";
 import { resolveLibraryId } from "./library-redirects.js";
 import { createId, nowIso } from "../lib/crypto.js";
 import {
@@ -72,6 +73,22 @@ export async function assertMealLogAllowed(
       ok: false,
       code: LOG_TIME_ERROR_CODES.ended_period,
       reason: "ended_period",
+      status: 422,
+    };
+  }
+  // D-W12-7: a meal on a day after the trainee's today is view only. Judged
+  // before the window bounds so it reads FUTURE_DAY, not BEFORE_WINDOW.
+  if (
+    isFutureLocalDate({
+      localDate: assignment.localDate,
+      now: input.nowIso,
+      timeZone: input.traineeTimezone,
+    })
+  ) {
+    return {
+      ok: false,
+      code: LOG_TIME_ERROR_CODES.future_day,
+      reason: "future_day",
       status: 422,
     };
   }

@@ -67,20 +67,34 @@ const workoutStartPayloadSchema = z.object({
   assignmentId: uuidSchema,
 });
 
+/**
+ * A workout opened with no network has no server execution yet: the phone
+ * builds one with its own ids. `assignmentId` (and `setTargetId` for a set)
+ * are the ids the plan gave the phone, so the server can find the real
+ * execution and set when it does not know `executionId` (Z12-41).
+ */
+const offlineWorkoutAddressSchema = {
+  assignmentId: uuidSchema.optional(),
+};
+
 const workoutExecutionActionPayloadSchema = z.object({
   executionId: uuidSchema,
+  ...offlineWorkoutAddressSchema,
   expectedVersion: z.number().int().nonnegative().optional(),
 });
 
 const workoutCompleteSetPayloadSchema = z.object({
   executionId: uuidSchema,
   setExecutionId: uuidSchema,
+  ...offlineWorkoutAddressSchema,
+  setTargetId: uuidSchema.optional(),
   expectedVersion: z.number().int().nonnegative().optional(),
   body: completeSetRequestSchema.default({}),
 });
 
 const workoutCompletePayloadSchema = z.object({
   executionId: uuidSchema,
+  ...offlineWorkoutAddressSchema,
   expectedVersion: z.number().int().nonnegative().optional(),
   body: completeWorkoutRequestSchema,
 });
@@ -167,6 +181,13 @@ export const syncMutationResultSchema = z.object({
   serverVersion: z.number().int().nonnegative().nullable(),
   entityType: syncEntityTypeSchema.nullable(),
   error: syncMutationErrorSchema.nullable(),
+  /**
+   * Only with `rejected`: the server could not process the mutation this time
+   * (it failed or was busy) and stored no verdict. The client keeps the row
+   * waiting and sends it again with the same ids. Absent means the refusal is
+   * the answer to this mutation as it stands.
+   */
+  retryable: z.boolean().optional(),
 });
 export type SyncMutationResult = z.infer<typeof syncMutationResultSchema>;
 

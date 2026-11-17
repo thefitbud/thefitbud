@@ -431,6 +431,10 @@ export function ActiveWorkoutScreen({
           payload: {
             executionId: execution.id,
             setExecutionId: setId,
+            // The plan's own ids: a workout opened with no network has ids
+            // the server has never seen, and finds the set by these (Z12-41).
+            assignmentId: execution.assignmentId,
+            setTargetId: targetSet.setTargetId,
             expectedVersion: execution.recordVersion,
             body: {
               actualReps:
@@ -466,6 +470,7 @@ export function ActiveWorkoutScreen({
       expectedServerVersion: execution.recordVersion,
       payload: {
         executionId: execution.id,
+        assignmentId: execution.assignmentId,
         expectedVersion: execution.recordVersion,
       },
     }).catch(() => {
@@ -486,6 +491,7 @@ export function ActiveWorkoutScreen({
       expectedServerVersion: execution.recordVersion,
       payload: {
         executionId: execution.id,
+        assignmentId: execution.assignmentId,
         expectedVersion: execution.recordVersion,
       },
     }).catch(() => {
@@ -519,6 +525,7 @@ export function ActiveWorkoutScreen({
           expectedServerVersion: execution.recordVersion,
           payload: {
             executionId: execution.id,
+            assignmentId: execution.assignmentId,
             expectedVersion: execution.recordVersion,
             body: { sessionRpe },
           },

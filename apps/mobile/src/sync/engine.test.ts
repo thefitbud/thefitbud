@@ -127,8 +127,9 @@ describe("trainee offline sync engine", () => {
     const results = await engine.pushPending();
     expect(sawMutations).toHaveLength(1);
     expect(results[0]?.status).toBe("applied");
-    const row = await store.getOutbox(mutationId);
-    expect(row?.status).toBe("acked");
+    // Sent: the row leaves the outbox, so nothing is left to miscount.
+    expect(await store.getOutbox(mutationId)).toBeNull();
+    expect(await store.listOutbox()).toEqual([]);
   });
 
   it("retry: reuses the same mutation UUID and idempotency key", async () => {
@@ -223,14 +224,29 @@ describe("trainee offline sync engine", () => {
     const first = await engine.pushPending();
     expect(first[0]?.status).toBe("applied");
 
-    await store.updateOutboxStatus(mutationId, "pending");
+    expect(await store.listOutbox()).toEqual([]);
+
+    // The same action delivered again (the phone never saw the first answer
+    // and re-created the row from the same ids).
+    await engine.enqueue({
+      mutationId,
+      idempotencyKey: mutationId,
+      entityType: "measurement",
+      recordId: mutationId,
+      operation: "measurement.create",
+      expectedServerVersion: null,
+      clientOccurredAt: new Date().toISOString(),
+      payloadJson: JSON.stringify({
+        coachingRelationshipId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        id: mutationId,
+        body: { type: "body_weight_kg", value: 71, unit: "kg" },
+      }),
+    });
     const second = await engine.pushPending();
     expect(second[0]?.status).toBe("already_applied");
     expect(deliveries).toBe(2);
-    expect(await store.getOutbox(mutationId)).toMatchObject({
-      mutationId,
-      status: "acked",
-    });
+    expect(await store.listOutbox()).toEqual([]);
+    expect(await store.listLocal("measurement")).toHaveLength(1);
   });
 
   it("advances sync cursor only after applying pull changes", async () => {

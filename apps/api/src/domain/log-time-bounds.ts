@@ -1,4 +1,5 @@
 import { addDaysToLocalDate, formatLocalDate } from "@fitbud/core";
+import { FUTURE_DAY_ERROR } from "./future-day.js";
 
 /** EC1 rule 2: how far ahead of the server clock a client-stated log time may be. */
 export const LOG_TIME_FUTURE_DRIFT_MS = 5 * 60 * 1000;
@@ -17,6 +18,11 @@ export type LogTimeBoundsResult =
  * Only the future bound uses the server clock. The lower bound compares the
  * time the log was made, never the time the server received it, so a queued
  * offline log that was valid when made still passes when delivered late.
+ *
+ * This judges the instant only. Whether the item's civil day has started is a
+ * separate check (D-W12-7, `isFutureLocalDate` in `future-day.ts`) that the
+ * log routes run first, so a future-day item reads `FUTURE_DAY` rather than
+ * `LOG_TIME_BEFORE_WINDOW`, including on paths that skip these bounds.
  */
 export function assertLogTimeWithinBounds(input: {
   clientLoggedAt: string;
@@ -136,12 +142,15 @@ export const LOG_TIME_ERROR_CODES = {
   future: "LOG_TIME_IN_FUTURE",
   before_window: "LOG_TIME_BEFORE_WINDOW",
   ended_period: "ENDED_PERIOD",
+  /** D-W12-7: the item is dated after the trainee's today (422). */
+  future_day: FUTURE_DAY_ERROR.code,
 } as const;
 
 export const LOG_TIME_ERROR_MESSAGES = {
   future: "The log time is in the future.",
   before_window: "The log time is before this item's window opened.",
   ended_period: "This item is from before coaching restarted and cannot be logged.",
+  future_day: FUTURE_DAY_ERROR.message,
 } as const;
 
 export type LogTimeRejection = keyof typeof LOG_TIME_ERROR_CODES;

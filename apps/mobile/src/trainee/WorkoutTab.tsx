@@ -26,11 +26,12 @@ import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import {
   addDays,
-  localDateInTimezone,
   startOfWeekMonday,
   weekDatesFrom,
   weekdayShort,
 } from "../lib/dates";
+import { FutureDayOpensNote } from "./FutureDayBanner";
+import { isFutureDay, opensOnLabel, useLocalToday } from "./futureDay";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
@@ -266,7 +267,11 @@ export function WorkoutTab({
     "Your coach";
 
   const timeZone = me?.timezone ?? "Asia/Kolkata";
-  const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
+  // Kept current across local midnight and app foregrounding (Z12-39).
+  const today = useLocalToday(timeZone);
+  /** D-W12-7: a workout on a future day is a preview; it cannot be started or skipped. */
+  const onFutureDay = (assignment: WorkoutAssignment) =>
+    isFutureDay(assignment.localDate, today);
   const [pickedDate, setPickedDate] = useState<string | null>(null);
   const focusDate = pickedDate ?? selectedDate ?? today;
   const weekStart = useMemo(
@@ -440,6 +445,9 @@ export function WorkoutTab({
       void viewLoggedWorkout(assignment);
       return;
     }
+    // No control offers this on a future day; the guard keeps any other path
+    // (a stale render, a deep link) from queueing a start the API would refuse.
+    if (onFutureDay(assignment)) return;
     setDayDetailAssignmentId(null);
     setActingId(assignment.id);
     setError(null);
@@ -521,6 +529,7 @@ export function WorkoutTab({
       onOpenOverlay({
         screen: "workout_overview",
         assignmentId: assignment.id,
+        viewOnly: onFutureDay(assignment),
       });
       return;
     }
@@ -530,6 +539,10 @@ export function WorkoutTab({
   async function confirmSkip(reason: string | null) {
     if (!skipTarget) return;
     const assignment = skipTarget;
+    if (onFutureDay(assignment)) {
+      setSkipTarget(null);
+      return;
+    }
     setActingId(`skip-${assignment.id}`);
     setError(null);
     try {
@@ -621,15 +634,23 @@ export function WorkoutTab({
   }
 
   if (dayDetailAssignmentId) {
+    const detailAssignment = assignments.find(
+      (item) => item.id === dayDetailAssignmentId,
+    );
     return (
       <WorkoutOverviewScreen
         assignmentId={dayDetailAssignmentId}
         coachName={coachName}
         startLoading={actingId === dayDetailAssignmentId}
         onBack={() => setDayDetailAssignmentId(null)}
-        onStart={(assignment) => {
-          void startOrContinue(assignment);
-        }}
+        // D-W12-7: a future day's overview is a preview with no Start.
+        onStart={
+          detailAssignment && onFutureDay(detailAssignment)
+            ? undefined
+            : (assignment) => {
+                void startOrContinue(assignment);
+              }
+        }
         onAskCoach={
           onOpenOverlay
             ? (assignment) =>
@@ -736,9 +757,12 @@ export function WorkoutTab({
   );
   const heroInstructions = focusAssignment?.workoutDay.instructions?.trim();
 
+  const focusIsFuture =
+    focusAssignment != null && onFutureDay(focusAssignment);
   const heroOverflowItems = focusAssignment
     ? [
-        ...(focusAssignment.status === "assigned"
+        // "Not today" skips the workout, which a future day cannot take.
+        ...(focusAssignment.status === "assigned" && !focusIsFuture
           ? [
               {
                 id: "not-today",
@@ -915,7 +939,14 @@ export function WorkoutTab({
                 {coachLogTitle(heroLogState)}
               </Text>
             ) : null}
-            {heroLogState === "logged" ? null : (
+            {focusIsFuture ? (
+              <View style={styles.wheroFuture}>
+                <FutureDayOpensNote
+                  surface="brand"
+                  text={opensOnLabel(focusAssignment.localDate)}
+                />
+              </View>
+            ) : heroLogState === "logged" ? null : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={startLabel}
@@ -1383,6 +1414,9 @@ const styles = StyleSheet.create({
   wheroNoteBold: {
     color: colors.white,
     fontWeight: "700",
+  },
+  wheroFuture: {
+    marginTop: 14,
   },
   wheroStart: {
     alignItems: "center",

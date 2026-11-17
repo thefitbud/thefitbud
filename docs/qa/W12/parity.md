@@ -49,10 +49,10 @@ Template row (W12-PROMPT §3):
 | TR-06a2 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06a2-today-scrolled.png` | — |
 | TR-06b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06b-today-rest-day.png` | — |
 | TR-06b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06b-today-rest-day.png` | — |
-| TR-06c | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06c-today-past-day.png` | — |
-| TR-06c | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06c-today-past-day.png` | — |
-| TR-06d | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06d-today-future-day.png` | — |
-| TR-06d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06d-today-future-day.png` | — |
+| TR-06c | light | yes · state: Today, yesterday selected | GAP | GAP | `docs/qa/Z12-39/TR-06c-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-06c-today-past-day.png` | past day unchanged by Z12-39 (late logging kept); v2 layout, PastDayBanner instead of the lock banner (Today v3: Z12-46); run 43743416490 |
+| TR-06c | dark | yes · state: Today, yesterday selected | GAP | GAP | `docs/qa/Z12-39/TR-06c-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-06c-today-past-day.png` | renders light; unchanged by Z12-39 (Z12-46); run 43743416490 |
+| TR-06d | light | yes · F29 step 1 | CLOSE | CLOSE | `docs/qa/Z12-39/TR-06d-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-06d-today-future-day.png` | banner copy, workout preview (Preview exercises), meal rows Planned with no log action match (rows: `docs/qa/Z12-39/flows/f29-today-future-meals-*`); day summary card still shown and header/meal rows v2 (Today v3: Z12-46); run 43743416490 |
+| TR-06d | dark | yes · F29 step 1 | GAP | GAP | `docs/qa/Z12-39/TR-06d-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-06d-today-future-day.png` | renders light: Today not opted in to v3 dark yet (Z12-46); content as light; run 43743416490 |
 | TR-06e | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06e-today-offline.png` | — |
 | TR-06e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-06e-today-offline.png` | — |
 | TR-06f | light | — | — | — | — | `docs/design/v3/png/trainee/TR-06f-today-loading.png` | — |
@@ -71,8 +71,8 @@ Template row (W12-PROMPT §3):
 | TR-07d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07d-diet-offline.png` | — |
 | TR-07e | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07e-diet-over-budget.png` | — |
 | TR-07e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07e-diet-over-budget.png` | — |
-| TR-07f | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07f-diet-locked-and-missed.png` | — |
-| TR-07f | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07f-diet-locked-and-missed.png` | — |
+| TR-07f | light | yes · state: Diet, yesterday selected | GAP | GAP | `docs/qa/Z12-39/TR-07f-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-07f-diet-locked-and-missed.png` | past day unchanged by Z12-39; v2 Diet layout (Diet v3: Z12-42); run 43743416490 |
+| TR-07f | dark | yes · state: Diet, yesterday selected | GAP | GAP | `docs/qa/Z12-39/TR-07f-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-07f-diet-locked-and-missed.png` | renders light; unchanged by Z12-39 (Z12-42); run 43743416490 |
 | TR-07g | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07g-logged-meal-detail.png` | — |
 | TR-07g | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07g-logged-meal-detail.png` | — |
 | TR-07h | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07h-delete-log-confirm.png` | — |
@@ -81,8 +81,8 @@ Template row (W12-PROMPT §3):
 | TR-07i | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07i-diet-load-error.png` | — |
 | TR-07j | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07j-planned-meal-detail.png` | — |
 | TR-07j | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07j-planned-meal-detail.png` | — |
-| TR-07k | light | — | — | — | — | `docs/design/v3/png/trainee/TR-07k-diet-future-day.png` | — |
-| TR-07k | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-07k-diet-future-day.png` | — |
+| TR-07k | light | yes · F29 step 2 | CLOSE | CLOSE | `docs/qa/Z12-39/TR-07k-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-07k-diet-future-day.png` | banner copy and planned rows (kcal + planned, no actions) match; row opens the read-only planned meal; summary card layout and header eyebrow v2 (Diet v3: Z12-42); run 43743416490 |
+| TR-07k | dark | yes · F29 step 2 | GAP | GAP | `docs/qa/Z12-39/TR-07k-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-07k-diet-future-day.png` | renders light: Diet not opted in to v3 dark yet (Z12-42); run 43743416490 |
 | TR-08a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-08a-something-different.png` | — |
 | TR-08a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-08a-something-different.png` | — |
 | TR-08b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-08b-changed-portion.png` | — |
@@ -133,10 +133,10 @@ Template row (W12-PROMPT §3):
 | TR-16b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-16b-reminders-permission-off.png` | — |
 | TR-18 | light | — | — | — | — | `docs/design/v3/png/trainee/TR-18-ask-coach-sheet.png` | — |
 | TR-18 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-18-ask-coach-sheet.png` | — |
-| TR-19a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-19a-sync-status.png` | — |
-| TR-19a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-19a-sync-status.png` | — |
-| TR-19b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-19b-sync-conflict.png` | — |
-| TR-19b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-19b-sync-conflict.png` | — |
+| TR-19a | light | yes · F10 (More → Sync status with logs waiting; run 43718038556) | CLOSE | CLOSE | `docs/qa/Z12-41/TR-19a-light-ios.png`, `TR-19a-light-android.png` | `docs/design/v3/png/trainee/TR-19a-sync-status.png` | A screen with a Back row, not a sheet over More (approved departure; `SyncStatusContent` is exported for Z12-49). Device run logged a weight and a waist, so no meal or workout line; a meal reads "Meal" until the caller passes its name. No "Last sent" before the first send |
+| TR-19a | dark | yes · F10 (More → Sync status with logs waiting; run 43718038556) | CLOSE | CLOSE | `docs/qa/Z12-41/TR-19a-dark-ios.png`, `TR-19a-dark-android.png` | `docs/design/v3/png-dark/trainee/TR-19a-sync-status.png` | A screen with a Back row, not a sheet over More (approved departure; `SyncStatusContent` is exported for Z12-49). Device run logged a weight and a waist, so no meal or workout line; a meal reads "Meal" until the caller passes its name. No "Last sent" before the first send |
+| TR-19b | light | yes · state: the coach republishes a meal while its log waits (not reachable in a device flow; on Z12-58's real-phone checklist) | not run on device (Expo web: CLOSE) | not run on device (Expo web: CLOSE) | `docs/qa/Z12-41/TR-19b-light-web.png` (Expo web) | `docs/design/v3/png/trainee/TR-19b-sync-conflict.png` | Body says "Your log is kept on this phone.", not "…he'll see both" (approved departure: the server writes nothing for a log on a replaced item). Opens over the sync screen, not over More |
+| TR-19b | dark | yes · state: the coach republishes a meal while its log waits (not reachable in a device flow; on Z12-58's real-phone checklist) | not run on device (Expo web: CLOSE) | not run on device (Expo web: CLOSE) | `docs/qa/Z12-41/TR-19b-dark-web.png` (Expo web) | `docs/design/v3/png-dark/trainee/TR-19b-sync-conflict.png` | Body says "Your log is kept on this phone.", not "…he'll see both" (approved departure: the server writes nothing for a log on a replaced item). Opens over the sync screen, not over More |
 | TR-20a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20a-more-root.png` | — |
 | TR-20a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-20a-more-root.png` | — |
 | TR-20b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-20b-profile-edit.png` | — |
@@ -183,8 +183,8 @@ Template row (W12-PROMPT §3):
 | W-01c | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01c-workout-tab-done.png` | — |
 | W-01d | light | — | — | — | — | `docs/design/v3/png/trainee/W-01d-plan-changed-banner.png` | — |
 | W-01d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01d-plan-changed-banner.png` | — |
-| W-01e | light | — | — | — | — | `docs/design/v3/png/trainee/W-01e-workout-tab-future-day.png` | — |
-| W-01e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01e-workout-tab-future-day.png` | — |
+| W-01e | light | yes · F29 step 3 | GAP | GAP | `docs/qa/Z12-39/W-01e-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-01e-workout-tab-future-day.png` | behaviour matches (Opens on Mon 16 Nov in place of Start, no Not today); layout is the navy hero with exercises below, not W-01e's white day card (Workout tab v3: Z12-44); run 43743416490 |
+| W-01e | dark | yes · F29 step 3 | GAP | GAP | `docs/qa/Z12-39/W-01e-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-01e-workout-tab-future-day.png` | renders light: Workout not opted in to v3 dark yet (Z12-44); run 43743416490 |
 | W-02 | light | — | — | — | — | `docs/design/v3/png/trainee/W-02-active-start.png` | — |
 | W-02 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-02-active-start.png` | — |
 | W-03 | light | yes · state: Rohan → Workout → Sat Lower B → set 1 logged (device/z12-36/3) | GAP | GAP | docs/qa/Z12-36/W-03-light-ios.png, …-android.png | `docs/design/v3/png/trainee/W-03-active-mid.png` | Z12-36 anchor for primitives only: active workout not migrated yet (v2 indigo log bar and set rows); Inter is in |

@@ -691,14 +691,15 @@ describe("meal assignment and compliance", () => {
       expect(atStart.status).toBe(200);
     });
 
-    it("rejects confirming tomorrow's meal before its window opens", async () => {
+    it("rejects confirming tomorrow's meal: the day has not started (FUTURE_DAY)", async () => {
       const { plan, meal, confirm } = await setup("lt-tomorrow");
       const tomorrowBreakfast = meal("Breakfast", plan.toDate);
       const response = await confirm(tomorrowBreakfast.id, "lt-tomorrow-1");
       expect(response.status).toBe(422);
+      // D-W12-7 (Z12-39): a later day is view only; that wins over the window bound.
       expect(
         ((await response.json()) as { error: { code: string } }).error.code,
-      ).toBe("LOG_TIME_BEFORE_WINDOW");
+      ).toBe("FUTURE_DAY");
       const stored = await db
         .select()
         .from(schema.mealCompliance)

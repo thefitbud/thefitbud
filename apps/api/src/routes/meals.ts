@@ -68,6 +68,10 @@ import {
   isWithinCoachLogWindow,
   resolveLogInstant,
 } from "../domain/log-time-bounds.js";
+import {
+  FUTURE_DAY_LOG_ERROR_DOC,
+  FUTURE_DAY_OPENAPI_NOTE,
+} from "../domain/future-day.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { appendChangeLog } from "../domain/sync";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
@@ -1050,12 +1054,18 @@ mealRoutes.post(
   operation({
     tag: "Meals",
     summary: "Meals operation for POST /meals/assignments/:assignmentId/confirm.",
-    description: "Meals operation for POST /meals/assignments/:assignmentId/confirm.",
+    description: `Meals operation for POST /meals/assignments/:assignmentId/confirm. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
     idempotency: true,
     body: confirmMealRequestSchema,
     response: mealComplianceSchema,
-    errors: [{ status: 422, description: "A required meal photo was missing or invalid." }],
+    errors: [
+      {
+        status: 422,
+        description:
+          "A required meal photo was missing or invalid, the log time was out of bounds, or the meal is on a future day (FUTURE_DAY).",
+      },
+    ],
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -1085,11 +1095,12 @@ mealRoutes.post(
   operation({
     tag: "Meals",
     summary: "Meals operation for POST /meals/assignments/:assignmentId/deviate.",
-    description: "Meals operation for POST /meals/assignments/:assignmentId/deviate.",
+    description: `Meals operation for POST /meals/assignments/:assignmentId/deviate. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
     idempotency: true,
     body: deviateMealRequestSchema,
     response: mealComplianceSchema,
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,
@@ -1122,11 +1133,12 @@ mealRoutes.post(
   operation({
     tag: "Meals",
     summary: "Meals operation for POST /meals/assignments/:assignmentId/skip.",
-    description: "Meals operation for POST /meals/assignments/:assignmentId/skip.",
+    description: `Meals operation for POST /meals/assignments/:assignmentId/skip. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
     idempotency: true,
     body: skipMealRequestSchema,
     response: mealComplianceSchema,
+    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
   }),
   optionalAuthMiddleware,
   requireAuthMiddleware,

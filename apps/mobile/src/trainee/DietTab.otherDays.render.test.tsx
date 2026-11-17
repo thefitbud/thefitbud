@@ -180,7 +180,8 @@ describe("DietTab counts the selected day only (Z11b-1)", () => {
         onOpenOverlay={() => undefined}
       />,
     );
-    await waitFor(() => expect(screen.getByText("No meals planned today.")).toBeTruthy());
+    // Tomorrow is a future day, so the empty state does not say "today" (Z12-39).
+    await waitFor(() => expect(screen.getAllByText("No meals planned").length).toBeGreaterThan(0));
     expect(screen.queryByText(/of 4 meals/)).toBeNull();
     expect(screen.queryByText("Breakfast")).toBeNull();
     network = "online";

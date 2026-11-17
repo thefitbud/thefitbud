@@ -755,6 +755,10 @@ describe("workout assignment and execution", () => {
     );
     expect(skipTarget).toBeTruthy();
 
+    // D-W12-7 (Z12-39): the target is on a later day, so skip it on its day.
+    const restoreClock = pinServerNow(
+      new Date(Date.parse(skipTarget!.windowStartsAt) + 60_000).toISOString(),
+    );
     const skipped = await app.request(
       `/workouts/assignments/${skipTarget!.id}/skip`,
       {
@@ -767,6 +771,7 @@ describe("workout assignment and execution", () => {
       },
       testEnv(),
     );
+    restoreClock();
     expect(skipped.status).toBe(200);
     expect(
       ((await skipped.json()) as { data: { status: string } }).data.status,
@@ -813,9 +818,10 @@ describe("workout assignment and execution", () => {
       );
     const early = await start(future.id, "lt-start-1");
     expect(early.status).toBe(422);
+    // D-W12-7 (Z12-39): a later day is view only; that wins over the window bound.
     expect(
       ((await early.json()) as { error: { code: string } }).error.code,
-    ).toBe("LOG_TIME_BEFORE_WINDOW");
+    ).toBe("FUTURE_DAY");
     const executions = await getTestDbOverride()!
       .select()
       .from(schema.workoutExecutions)
@@ -999,7 +1005,7 @@ describe("workout assignment and execution", () => {
       "The log time is before this item's window opened.",
     );
 
-    const ahead = await post(future.id, "lt-client-2", {
+    const ahead = await post(todays.id, "lt-client-2", {
       clientLoggedAt: new Date(Date.now() + 6 * 60_000).toISOString(),
     });
     expect(ahead.status).toBe(422);
@@ -1007,6 +1013,15 @@ describe("workout assignment and execution", () => {
       ((await ahead.json()) as { error: { code: string; message: string } }).error
         .code,
     ).toBe("LOG_TIME_IN_FUTURE");
+    // D-W12-7 (Z12-39): a later day reads FUTURE_DAY whatever the client time.
+    const later = await post(future.id, "lt-client-4", {
+      clientLoggedAt: new Date(Date.now() + 6 * 60_000).toISOString(),
+    });
+    expect(later.status).toBe(422);
+    expect(
+      ((await later.json()) as { error: { code: string; message: string } }).error
+        .code,
+    ).toBe("FUTURE_DAY");
 
     const bad = await post(todays.id, "lt-client-3", {
       clientLoggedAt: "not-a-time",
@@ -1047,10 +1062,9 @@ describe("workout assignment and execution", () => {
       }
     ).data.items.sort((a, b) => a.localDate.localeCompare(b.localDate));
     const todays = items.find((item) => item.localDate === today)!;
-    const [future1, future2] = items.filter((item) => item.localDate > today);
+    const [future1] = items.filter((item) => item.localDate > today);
     expect(todays).toBeTruthy();
     expect(future1).toBeTruthy();
-    expect(future2).toBeTruthy();
 
     const db = getTestDbOverride()!;
     const startedAt = todays.windowStartsAt;
@@ -1130,48 +1144,66 @@ describe("workout assignment and execution", () => {
       expect(skippedRow?.createdAt).toBe(serverAt);
       expect(skippedRow?.updatedAt).toBe(serverAt);
 
-      // A sent skip time is bounded: before the window and too far ahead fail
-      // with the static log-time errors and store nothing.
-      const early = await post("skip", future1!.id, "lt-idem-early", {
-        clientLoggedAt: serverAt,
-      });
-      expect(early.status).toBe(422);
-      const earlyError = (
-        (await early.json()) as { error: { code: string; message: string } }
-      ).error;
-      expect(earlyError).toMatchObject({
-        code: "LOG_TIME_BEFORE_WINDOW",
-        message: "The log time is before this item's window opened.",
-      });
-      const ahead = await post("skip", future2!.id, "lt-idem-ahead", {
-        clientLoggedAt: new Date(Date.parse(serverAt) + 6 * 60_000).toISOString(),
-      });
-      expect(ahead.status).toBe(422);
-      const aheadError = (
-        (await ahead.json()) as { error: { code: string; message: string } }
-      ).error;
-      expect(aheadError).toMatchObject({
-        code: "LOG_TIME_IN_FUTURE",
-        message: "The log time is in the future.",
-      });
-      for (const id of [future1!.id, future2!.id]) {
+      // D-W12-7 (Z12-39): a later day is view only, so skipping it is
+      // refused with or without a client time (it used to be allowed without
+      // one), and nothing is stored.
+      for (const [key, body] of [
+        ["lt-idem-future-time", { clientLoggedAt: serverAt }],
+        ["lt-idem-future-notime", {}],
+      ] as const) {
+        const refused = await post("skip", future1!.id, key, body);
+        expect(refused.status, key).toBe(422);
+        expect(
+          ((await refused.json()) as { error: { code: string; message: string } }).error,
+        ).toMatchObject({ code: "FUTURE_DAY", message: "Logging opens on the day." });
+      }
+
+      // On that day, a sent skip time is bounded: before the window and too
+      // far ahead fail with the static log-time errors and store nothing.
+      const dayAt = new Date(Date.parse(future1!.windowStartsAt) + 10 * 60_000).toISOString();
+      const restoreDay = pinServerNow(dayAt);
+      try {
+        const early = await post("skip", future1!.id, "lt-idem-early", {
+          clientLoggedAt: new Date(Date.parse(future1!.windowStartsAt) - 1000).toISOString(),
+        });
+        expect(early.status).toBe(422);
+        const earlyError = (
+          (await early.json()) as { error: { code: string; message: string } }
+        ).error;
+        expect(earlyError).toMatchObject({
+          code: "LOG_TIME_BEFORE_WINDOW",
+          message: "The log time is before this item's window opened.",
+        });
+        const ahead = await post("skip", future1!.id, "lt-idem-ahead", {
+          clientLoggedAt: new Date(Date.parse(dayAt) + 6 * 60_000).toISOString(),
+        });
+        expect(ahead.status).toBe(422);
+        const aheadError = (
+          (await ahead.json()) as { error: { code: string; message: string } }
+        ).error;
+        expect(aheadError).toMatchObject({
+          code: "LOG_TIME_IN_FUTURE",
+          message: "The log time is in the future.",
+        });
         const none = await db
           .select()
           .from(schema.workoutExecutions)
-          .where(eq(schema.workoutExecutions.assignmentId, id));
+          .where(eq(schema.workoutExecutions.assignmentId, future1!.id));
         expect(none).toEqual([]);
-      }
 
-      // Without a client time, skipping ahead of the window works as before.
-      const noTime = await post("skip", future1!.id, "lt-idem-notime", {});
-      expect(noTime.status).toBe(200);
-      const [noTimeRow] = await db
-        .select()
-        .from(schema.workoutExecutions)
-        .where(eq(schema.workoutExecutions.assignmentId, future1!.id));
-      expect(noTimeRow?.status).toBe("skipped");
-      expect(noTimeRow?.startedAt).toBe(serverAt);
-      expect(noTimeRow?.clientLoggedAt).toBeNull();
+        // Without a client time, skipping on the day works as before.
+        const noTime = await post("skip", future1!.id, "lt-idem-notime", {});
+        expect(noTime.status).toBe(200);
+        const [noTimeRow] = await db
+          .select()
+          .from(schema.workoutExecutions)
+          .where(eq(schema.workoutExecutions.assignmentId, future1!.id));
+        expect(noTimeRow?.status).toBe("skipped");
+        expect(noTimeRow?.startedAt).toBe(dayAt);
+        expect(noTimeRow?.clientLoggedAt).toBeNull();
+      } finally {
+        restoreDay();
+      }
     } finally {
       restore();
     }
