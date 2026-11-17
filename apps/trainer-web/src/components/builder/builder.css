@@ -82,9 +82,9 @@
   gap: 0.75rem;
 }
 
-.builder-v3[data-builder-mode="narrow"] .builder-panes,
+/* Frame 194: center workspace + properties right; library is a drawer. */
 .builder-v3 .builder[data-builder-mode="narrow"] .builder-panes {
-  grid-template-columns: 16rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) 18rem;
 }
 
 .builder-v3 .builder-pane {
@@ -109,22 +109,24 @@
   min-height: 100%;
 }
 
-/* Day tabs */
+/* Day tabs — track + pill (frames 152 / 194) */
 .builder-day-tabs {
   display: flex;
   flex-wrap: nowrap;
-  gap: 0.375rem;
+  gap: 0.25rem;
   overflow-x: auto;
-  padding-bottom: 0.25rem;
+  padding: 0.25rem;
+  border-radius: 999px;
+  background: var(--fill, #eef0f5);
 }
 
 .builder-day-tab {
   flex: 0 0 auto;
   min-height: 2.75rem;
   padding: 0 0.875rem;
-  border: 1px solid var(--border, var(--line));
+  border: 0;
   border-radius: 999px;
-  background: var(--white);
+  background: transparent;
   color: var(--ink-700, var(--ink2));
   font-size: 0.8125rem;
   font-weight: 600;
@@ -138,14 +140,137 @@
 }
 
 .builder-day-tab.is-active {
-  background: var(--pale-lavender, var(--coach-tint));
-  border-color: var(--indigo);
-  color: var(--indigo);
+  background: var(--white);
+  color: var(--deep-navy, var(--ink));
+  box-shadow: 0 1px 2px rgb(26 18 72 / 10%);
 }
 
 .builder-day-tab:focus-visible {
   outline: 2px solid var(--indigo);
   outline-offset: 2px;
+}
+
+/* Narrow library toggle (frame 194) */
+.builder-v3 .builder-library-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+}
+
+.builder-v3 .builder-library-toggle-icon {
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+/* Frame 195 — portrait read-only */
+.builder-v3 .builder-small {
+  gap: 1rem;
+}
+
+.builder-v3 .builder-small-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.875rem 1rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--indigo, #5b3cc4) 22%, white);
+  background: color-mix(in srgb, var(--pale-lavender, #edeaff) 70%, white);
+  color: var(--deep-navy, var(--ink));
+}
+
+.builder-v3 .builder-small-note p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.builder-v3 .builder-small-note strong {
+  font-weight: 700;
+}
+
+.builder-v3 .builder-readonly {
+  background: var(--white);
+  border: 1px solid var(--border, var(--line));
+  border-radius: 16px;
+  padding: 1.125rem 1.25rem;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+}
+
+.builder-v3 .builder-readonly-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.builder-v3 .builder-readonly-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--deep-navy, var(--ink));
+  line-height: 1.3;
+}
+
+.builder-v3 .builder-readonly-week {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.builder-v3 .builder-readonly-week > li {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border, var(--line));
+  font-size: 0.9375rem;
+  color: var(--ink-700, var(--ink2));
+  font-variant-numeric: tabular-nums;
+}
+
+.builder-v3 .builder-readonly-week > li:first-child {
+  border-top: 0;
+  padding-top: 0.25rem;
+}
+
+.builder-v3 .builder-readonly-week > li strong {
+  color: var(--deep-navy, var(--ink));
+  font-weight: 700;
+}
+
+.builder-v3 .builder-readonly-week > li.is-rest {
+  color: var(--ink-500, var(--ink3));
+}
+
+/* Small mode: quieter topbar — title + Draft live on the week card (frame 195). */
+.builder-v3 .builder[data-builder-mode="small"] .builder-topbar {
+  gap: 0.5rem;
+}
+
+.builder-v3 .builder[data-builder-mode="small"] .builder-title-field input {
+  font-size: 1.125rem;
+}
+
+/* Read-only in portrait: keep title ink (not washed-out disabled chrome). */
+.builder-v3 .builder[data-builder-mode="small"] .builder-title-field input:disabled {
+  opacity: 1;
+  color: var(--deep-navy, var(--ink));
+  -webkit-text-fill-color: var(--deep-navy, var(--ink));
+  background: transparent;
+  cursor: default;
+}
+
+.builder-v3 .builder[data-builder-mode="small"] .builder-status,
+.builder-v3 .builder[data-builder-mode="small"] .builder-topbar .builder-draft-pill,
+.builder-v3 .builder[data-builder-mode="small"] .builder-title-client {
+  display: none;
 }
 
 /* Session board / exercise cards */
