@@ -289,11 +289,14 @@ test.describe("TW-B first-run welcome", () => {
     await page.getByPlaceholder(/98765/i).fill("9876500999");
     await page.getByLabel(/timezone/i).selectOption("Asia/Kolkata");
     await page.getByRole("button", { name: /^continue$/i }).click();
-    await expect(page.getByText(/your starting templates/i)).toBeVisible({
-      timeout: 15_000,
-    });
+    await expect(
+      page.getByRole("heading", { name: /your starting templates/i }),
+    ).toBeVisible({ timeout: 15_000 });
     await page.getByRole("button", { name: /^continue$/i }).click();
-    await expect(page.getByText(/invite your first client/i)).toBeVisible();
+    // Stepper title + page h1 both say this; assert the heading only (Z12-2).
+    await expect(
+      page.getByRole("heading", { name: /invite your first client/i }),
+    ).toBeVisible();
     await expect(page.getByTestId("welcome-invite-form")).toBeVisible();
     // Invalid WhatsApp on step 1 already saved; prove field error path on re-edit via draft is optional —
     // Skip for now and assert finish copy.
