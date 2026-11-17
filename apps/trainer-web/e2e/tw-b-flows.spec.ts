@@ -581,7 +581,9 @@ test.describe("TW-B invite lifecycle (serial)", () => {
 
     await page.getByRole("button", { name: /more actions/i }).click();
     await page.getByRole("menuitem", { name: /revoke invite/i }).click();
-    await expect(page.getByText(/revoke this invite/i)).toBeVisible();
+    await expect(
+      page.getByRole("dialog", { name: /revoke .+ invite\?/i }),
+    ).toBeVisible();
     await page.getByRole("button", { name: /^revoke invite$/i }).click();
     await expect(page.getByText(/revoked on/i)).toBeVisible({
       timeout: 15_000,

@@ -1,0 +1,325 @@
+/* Z12-5 Invite detail · colocated (D-W12b-2). Do not edit styles/clients.css. */
+
+.pending-invite-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.pending-invite-page > .wsh {
+  margin: 0;
+}
+
+.pending-invite-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 1.75rem;
+  padding: 0.15rem 0.65rem;
+  border-radius: 999px;
+  background: var(--ink-100, var(--bg-2, #eceaf3));
+  color: var(--ink-700, var(--ink2, #4a4660));
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.pending-invite-pill svg {
+  flex: none;
+}
+
+.pending-invite-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+}
+
+.pending-invite-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .pending-invite-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pending-invite-page .invite-detail-card,
+.pending-invite-side-card {
+  background: var(--white, var(--surface, var(--card)));
+  border: 1px solid var(--border, var(--line));
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+}
+
+.pending-invite-side {
+  display: grid;
+  gap: 1rem;
+}
+
+.pending-invite-side-card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink-900, var(--ink));
+}
+
+.pending-invite-side-card p {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+.pending-invite-stepper {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.pending-invite-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pending-invite-step-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.pending-invite-step-num {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  border: 1.5px solid var(--border-strong, var(--line2, #c9c5d8));
+  background: var(--white, #fff);
+  color: var(--ink-500, var(--ink3));
+}
+
+.pending-invite-step.is-done .pending-invite-step-num,
+.pending-invite-step.is-active .pending-invite-step-num {
+  border-color: var(--deep-navy, var(--ink, #1a1248));
+  background: var(--deep-navy, var(--ink, #1a1248));
+  color: var(--white, #fff);
+}
+
+.pending-invite-step-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--ink-500, var(--ink3));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pending-invite-step.is-done .pending-invite-step-label,
+.pending-invite-step.is-active .pending-invite-step-label {
+  color: var(--ink-900, var(--ink));
+}
+
+.pending-invite-step-rail {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line, var(--border, #e4e2ec));
+}
+
+.pending-invite-step.is-done .pending-invite-step-rail,
+.pending-invite-step.is-active .pending-invite-step-rail {
+  background: var(--deep-navy, var(--ink, #1a1248));
+}
+
+.pending-invite-fields {
+  display: grid;
+  gap: 0.85rem;
+  margin: 0 0 1.25rem;
+}
+
+.pending-invite-fields div {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+  font-size: 0.875rem;
+}
+
+.pending-invite-fields dt {
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+  font-weight: 500;
+}
+
+.pending-invite-fields dd {
+  margin: 0;
+  font-weight: 600;
+  color: var(--deep-navy, var(--ink));
+  text-align: left;
+  word-break: break-word;
+}
+
+.pending-invite-preview-link {
+  font-weight: 600;
+  color: var(--indigo, var(--coach-ink));
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.pending-invite-preview-link:focus-visible {
+  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.pending-invite-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.25rem;
+}
+
+.pending-invite-actions .button-primary,
+.pending-invite-actions .button-secondary,
+.pending-invite-actions a.button-primary {
+  width: auto;
+  flex: 0 0 auto;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding-inline: 1rem;
+  text-decoration: none;
+}
+
+.pending-invite-helper {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+}
+
+.pending-invite-reissue {
+  flex: 1 1 100%;
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+  background: var(--page-bg, var(--bg, #f4f3f8));
+  border: 1px solid var(--border, var(--line));
+}
+
+.pending-invite-reissue p {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--ink-900, var(--ink));
+}
+
+.pending-invite-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+
+.pending-invite-timeline li {
+  display: grid;
+  grid-template-columns: 0.625rem 1fr;
+  gap: 0.75rem;
+  align-items: start;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+.pending-invite-timeline-dot {
+  width: 0.625rem;
+  height: 0.625rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: var(--deep-navy, var(--ink, #1a1248));
+}
+
+.pending-invite-revoke-modal {
+  width: min(28rem, 100%);
+}
+
+.pending-invite-revoke-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.pending-invite-revoke-head h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--ink-900, var(--ink));
+  letter-spacing: -0.02em;
+}
+
+.pending-invite-revoke-close {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: -0.35rem -0.35rem 0 0;
+}
+
+.pending-invite-revoke-modal > p {
+  margin: 0 0 1.25rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink-700, var(--ink2));
+}
+
+.pending-invite-revoke-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.pending-invite-revoke-actions .button-secondary,
+.pending-invite-revoke-actions .button-destructive {
+  min-height: 44px;
+  width: auto;
+  padding-inline: 1.1rem;
+}
+
+@media (max-width: 720px) {
+  .pending-invite-stepper {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pending-invite-fields div {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
+}
