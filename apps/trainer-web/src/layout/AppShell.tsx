@@ -20,6 +20,7 @@ import {
   HelpCircle,
   Home,
   LayoutGrid,
+  Menu,
   MoreHorizontal,
   Search,
   Users,
@@ -34,6 +35,7 @@ import {
   getShellClientTitle,
   subscribeShellClientTitle,
 } from "../lib/shell-title";
+import "./AppShell.css";
 
 type PaletteHit = {
   relationshipId: string;
@@ -107,6 +109,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     Array<{ id: string; title: string; href: string }>
   >([]);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const goChordRef = useRef(false);
   const paletteListId = useId();
@@ -141,6 +144,19 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     void loadBadges();
   }, [loadBadges, location.pathname]);
+
+  useEffect(() => {
+    setNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") setNavOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [navOpen]);
 
   useEffect(() => {
     if (!paletteOpen) return;
@@ -301,42 +317,83 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const navItems = (
     <>
-      <NavLink to="/" end className={navClass}>
+      <NavLink to="/" end className={navClass} onClick={() => setNavOpen(false)}>
         <Home size={20} strokeWidth={1.75} aria-hidden />
         <span className="shell-nav-label">Home</span>
         {attentionCount !== null && attentionCount > 0 ? (
           <span className="shell-nav-badge">{attentionCount}</span>
         ) : null}
       </NavLink>
-      <NavLink to="/clients" className={navClass}>
+      <NavLink
+        to="/clients"
+        className={navClass}
+        onClick={() => setNavOpen(false)}
+      >
         <Users size={20} strokeWidth={1.75} aria-hidden />
         <span className="shell-nav-label">Clients</span>
       </NavLink>
-      <NavLink to="/checkins" className={navClass}>
+      <NavLink
+        to="/checkins"
+        className={navClass}
+        onClick={() => setNavOpen(false)}
+      >
         <ClipboardCheck size={20} strokeWidth={1.75} aria-hidden />
         <span className="shell-nav-label">Check-ins</span>
         {checkinBadge !== null && checkinBadge > 0 ? (
           <span className="shell-nav-badge">{checkinBadge}</span>
         ) : null}
       </NavLink>
-      <NavLink to="/templates" className={navClass}>
+      <NavLink
+        to="/templates"
+        className={navClass}
+        onClick={() => setNavOpen(false)}
+      >
         <LayoutGrid size={20} strokeWidth={1.75} aria-hidden />
         <span className="shell-nav-label">Templates</span>
       </NavLink>
-      <NavLink to="/settings" className={navClass}>
+      <NavLink
+        to="/settings"
+        className={navClass}
+        onClick={() => setNavOpen(false)}
+      >
         <MoreHorizontal size={20} strokeWidth={1.75} aria-hidden />
         <span className="shell-nav-label">More</span>
       </NavLink>
     </>
   );
 
+  const crumb =
+    location.pathname.startsWith("/clients/add") ? (
+      <>
+        <NavLink to="/clients" className="shell-crumb-link">
+          Clients
+        </NavLink>
+        <span aria-hidden="true"> › </span>
+        <span>Add client</span>
+      </>
+    ) : (
+      pageTitle
+    );
+
   return (
-    <div className="app-shell" data-testid="screen-TW-03">
+    <div
+      className={`app-shell${navOpen ? " is-nav-open" : ""}`}
+      data-testid="screen-TW-03"
+    >
       <a className="skip-link" href="#main">
         Skip to content
       </a>
 
-      <aside className="shell-side" aria-label="Primary">
+      {navOpen ? (
+        <button
+          type="button"
+          className="shell-nav-backdrop"
+          aria-label="Close menu"
+          onClick={() => setNavOpen(false)}
+        />
+      ) : null}
+
+      <aside className="shell-side" aria-label="Primary" id="shell-side-nav">
         <div className="shell-brand">
           <BrandMark size={34} variant="inverse" />
           <b>FitBud</b>
@@ -350,7 +407,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <HelpCircle size={20} strokeWidth={1.75} aria-hidden />
             <span className="shell-nav-label">Help</span>
           </a>
-          <NavLink to="/settings/profile" className="shell-me">
+          <NavLink
+            to="/settings/profile"
+            className="shell-me"
+            onClick={() => setNavOpen(false)}
+          >
             <span className="shell-av" aria-hidden>
               {initials(displayName)}
             </span>
@@ -364,7 +425,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="shell-main">
         <header className="shell-topbar">
-          <div className="shell-crumb">{pageTitle}</div>
+          <button
+            type="button"
+            className="shell-menu-btn"
+            aria-label={navOpen ? "Close menu" : "Open menu"}
+            aria-expanded={navOpen}
+            aria-controls="shell-side-nav"
+            onClick={() => setNavOpen((v) => !v)}
+            data-testid="shell-menu-btn"
+          >
+            <Menu size={22} strokeWidth={1.75} aria-hidden />
+          </button>
+          <div className="shell-crumb">{crumb}</div>
           <button
             type="button"
             className="shell-search"
