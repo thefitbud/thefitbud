@@ -375,7 +375,7 @@ export function TraineeOverlayHost({
       return (
         <ProfileScreen
           onBack={onClose}
-          onChangePassword={() => onOpen({ screen: "password" })}
+          coachName={coachName}
         />
       );
     case "past_coaching":

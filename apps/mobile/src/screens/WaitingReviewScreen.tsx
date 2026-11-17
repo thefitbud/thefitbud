@@ -1,6 +1,7 @@
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import type { CoachingRelationship } from "@fitbud/contracts";
 import { formatCivilDate, whatsappHref } from "@fitbud/core";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import {
@@ -70,11 +71,13 @@ function coachFirstName(relationship: CoachingRelationship): string {
   return raw.split(/\s+/)[0] ?? raw;
 }
 
-export function WaitingReviewScreen({
+function WaitingReviewScreenBody({
   relationship,
 }: {
   relationship: CoachingRelationship;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   const { refreshSession, signOut, api } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,7 +174,7 @@ export function WaitingReviewScreen({
                   ]}
                 >
                   {step.state === "done" ? (
-                    <Check size={15} color={colors.white} strokeWidth={3} />
+                    <Check size={15} color={theme.colors.card} strokeWidth={3} />
                   ) : null}
                 </View>
                 <View>
@@ -198,7 +201,7 @@ export function WaitingReviewScreen({
       <Card2 style={styles.listCard}>
         <Pressable accessibilityRole="button" style={styles.lrow}>
           <View style={styles.tile}>
-            <Bell size={19} color={colors.indigo} strokeWidth={1.75} />
+            <Bell size={19} color={theme.colors.brand} strokeWidth={1.75} />
           </View>
           <View style={styles.lrowText}>
             <Text style={styles.lrowTitle}>Set up reminders</Text>
@@ -206,18 +209,18 @@ export function WaitingReviewScreen({
               Two minutes, so logging is easy later
             </Text>
           </View>
-          <ChevronRight size={18} color={colors.midGrey} />
+          <ChevronRight size={18} color={theme.colors.ink3} />
         </Pressable>
         <View style={styles.rowDivider} />
         <Pressable accessibilityRole="button" style={styles.lrow}>
           <View style={styles.tile}>
-            <Scale size={19} color={colors.indigo} strokeWidth={1.75} />
+            <Scale size={19} color={theme.colors.brand} strokeWidth={1.75} />
           </View>
           <View style={styles.lrowText}>
             <Text style={styles.lrowTitle}>Add your starting weight</Text>
             <Text style={styles.lrowSub}>Optional</Text>
           </View>
-          <ChevronRight size={18} color={colors.midGrey} />
+          <ChevronRight size={18} color={theme.colors.ink3} />
         </Pressable>
       </Card2>
 
@@ -251,25 +254,25 @@ export function WaitingReviewScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   hero: {
     marginTop: spacing.md,
   },
   h1: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 30,
     fontWeight: "700",
     letterSpacing: -0.4,
     lineHeight: 36,
   },
   lead: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
     lineHeight: 21,
     marginTop: 4,
   },
   offline: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "600",
     marginBottom: spacing.md,
@@ -286,12 +289,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   coachTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
   },
   coachSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     marginTop: 2,
   },
@@ -312,38 +315,38 @@ const styles = StyleSheet.create({
     width: 28,
   },
   chkIconDone: {
-    backgroundColor: colors.deepNavy,
+    backgroundColor: t.colors.ink,
   },
   chkIconCurrent: {
-    borderColor: colors.indigo,
+    borderColor: t.colors.brand,
     borderWidth: 2,
   },
   chkIconLater: {
-    borderColor: "#D5D6DE",
+    borderColor: t.colors.line2,
     borderStyle: "dashed",
     borderWidth: 2,
   },
   chkLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   chkLabelLater: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontWeight: "500",
   },
   chkDetail: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
   },
   chkLine: {
-    backgroundColor: "#E7E9F2",
+    backgroundColor: t.colors.line,
     height: 10,
     marginLeft: 13,
     width: 2,
   },
   section: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
     marginBottom: spacing.sm,
@@ -362,13 +365,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   rowDivider: {
-    backgroundColor: "#E7E9F2",
+    backgroundColor: t.colors.line,
     height: StyleSheet.hairlineWidth,
     marginLeft: spacing.lg + 36 + spacing.md,
   },
   tile: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 11,
     height: 36,
     justifyContent: "center",
@@ -378,12 +381,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   lrowTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   lrowSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
   },
   waNoteRow: {
@@ -394,7 +397,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   waNote: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 17,
     textAlign: "center",
@@ -406,8 +409,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   refreshLabel: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "600",
   },
-});
+}));
+
+/** WaitingReviewScreen in the system theme (Z12-49): its own styles read the scope. */
+export function WaitingReviewScreen(props: Parameters<typeof WaitingReviewScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <WaitingReviewScreenBody {...props} />
+    </ThemeScope>
+  );
+}

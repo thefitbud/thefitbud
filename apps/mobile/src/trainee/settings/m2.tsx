@@ -422,6 +422,13 @@ export function M2Page(props: {
   refreshing?: boolean;
   onRefresh?: () => void;
   testID?: string;
+  /** Edit sheets (TR-20b, TR-20g): "Cancel" left and a "Save" action right, instead of Back. */
+  onCancel?: () => void;
+  onSave?: () => void;
+  saveDisabled?: boolean;
+  saving?: boolean;
+  /** The kit's white page (edit sheets) instead of the grey canvas. */
+  plain?: boolean;
 }) {
   return (
     <ThemeScope scheme="system">
@@ -439,6 +446,11 @@ function M2PageBody({
   refreshing,
   onRefresh,
   testID,
+  onCancel,
+  onSave,
+  saveDisabled = false,
+  saving = false,
+  plain = false,
 }: {
   title: string;
   subtitle?: string;
@@ -448,13 +460,29 @@ function M2PageBody({
   refreshing?: boolean;
   onRefresh?: () => void;
   testID?: string;
+  /** Edit sheets (TR-20b, TR-20g): "Cancel" left and a "Save" action right, instead of Back. */
+  onCancel?: () => void;
+  onSave?: () => void;
+  saveDisabled?: boolean;
+  saving?: boolean;
+  /** The kit's white page (edit sheets) instead of the grey canvas. */
+  plain?: boolean;
 }) {
   const theme = useTheme();
   const styles = useStyles();
   return (
-    <SafeAreaView style={styles.page} testID={testID}>
+    <SafeAreaView style={[styles.page, plain ? styles.pagePlain : null]} testID={testID}>
       <View style={styles.nav}>
-        {onBack ? (
+        {onCancel ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cancel"
+            onPress={onCancel}
+            style={styles.navAction}
+          >
+            <Text style={styles.navActionText}>Cancel</Text>
+          </Pressable>
+        ) : onBack ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Back"
@@ -469,7 +497,30 @@ function M2PageBody({
         <Text style={styles.navTitle} accessibilityRole="header" numberOfLines={1}>
           {title}
         </Text>
-        <View style={styles.back} />
+        {onSave ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Save"
+            accessibilityState={{ disabled: saveDisabled || saving, busy: saving }}
+            disabled={saveDisabled || saving}
+            onPress={onSave}
+            style={[styles.navAction, styles.navActionRight]}
+          >
+            <Text
+              style={[
+                styles.navActionText,
+                styles.navSave,
+                saveDisabled || saving ? styles.navSaveOff : null,
+              ]}
+            >
+              {saving ? "Saving…" : "Save"}
+            </Text>
+          </Pressable>
+        ) : onCancel ? (
+          <View style={styles.navAction} />
+        ) : (
+          <View style={styles.back} />
+        )}
       </View>
       <ScrollView
         contentContainerStyle={styles.pageContent}
@@ -722,6 +773,12 @@ const useStyles = createThemedStyles((t) => ({
     backgroundColor: t.colors.bg,
     flex: 1,
   },
+  pagePlain: { backgroundColor: t.colors.bgPlain },
+  navAction: { justifyContent: "center", minHeight: 44, minWidth: 72, paddingHorizontal: 8 },
+  navActionRight: { alignItems: "flex-end" },
+  navActionText: { color: t.colors.ink, fontSize: 18 },
+  navSave: { fontWeight: "600" },
+  navSaveOff: { color: t.colors.ink4 },
   nav: {
     alignItems: "center",
     flexDirection: "row",

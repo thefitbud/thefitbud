@@ -1,5 +1,6 @@
+import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
@@ -8,7 +9,7 @@ import type {
   OnboardingFormVersion,
   OnboardingFieldDefinition,
 } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { useAuth, messageFromError } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Button } from "../components/Button";
@@ -138,7 +139,8 @@ function hasRoutineTypedFields(fields: OnboardingFieldDefinition[]): boolean {
   });
 }
 
-export function IntakeScreen({ relationshipId }: Props) {
+function IntakeScreenBody({ relationshipId }: Props) {
+  const styles = useStyles();
   const { api, refreshSession } = useAuth();
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>({});
@@ -521,13 +523,13 @@ export function IntakeScreen({ relationshipId }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   muted: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 16,
   },
   hint: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: spacing.sm,
@@ -539,16 +541,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   stepTitle: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "600",
   },
   stepTitleBold: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontWeight: "700",
   },
   stepCount: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -559,8 +561,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   saveDraftText: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 15,
     fontWeight: "600",
   },
-});
+}));
+
+/** IntakeScreen in the system theme (Z12-49): its own styles read the scope. */
+export function IntakeScreen(props: Parameters<typeof IntakeScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <IntakeScreenBody {...props} />
+    </ThemeScope>
+  );
+}

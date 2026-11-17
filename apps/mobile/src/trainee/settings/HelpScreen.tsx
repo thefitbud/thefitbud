@@ -6,7 +6,7 @@ import { BottomSheet } from "../../components/BottomSheet";
 import { Button } from "../../components/Button";
 import { Text } from "../../components/Text";
 import { useConfig } from "../../providers/ConfigProvider";
-import { useTheme } from "../../providers/ThemeProvider";
+import { ThemeScope, useTheme } from "../../providers/ThemeProvider";
 import { reportError } from "../../lib/reportError";
 import { buildSupportMailto, DEFAULT_SUPPORT_EMAIL } from "../../lib/support";
 import { M2Group, M2Page, M2Row } from "./m2";
@@ -29,7 +29,7 @@ async function copyText(value: string): Promise<boolean> {
 }
 
 /** TR-20e Help: email the FitBud team, or message the coach (a wa.me draft). */
-export function HelpScreen({ onBack, coachName, coachWhatsappE164, coachingActive }: Props) {
+function HelpScreenBody({ onBack, coachName, coachWhatsappE164, coachingActive }: Props) {
   const theme = useTheme();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
@@ -117,5 +117,14 @@ export function HelpScreen({ onBack, coachName, coachWhatsappE164, coachingActiv
         </View>
       </BottomSheet>
     </M2Page>
+  );
+}
+
+/** HelpScreen in the system theme (Z12-49): its own styles read the scope. */
+export function HelpScreen(props: Parameters<typeof HelpScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <HelpScreenBody {...props} />
+    </ThemeScope>
   );
 }

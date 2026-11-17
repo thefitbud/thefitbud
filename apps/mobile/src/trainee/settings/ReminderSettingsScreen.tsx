@@ -12,7 +12,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
 import { ensureAndroidNotificationChannels } from "../../notifications/androidChannels";
-import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { clockLabel, shiftQuarterHour } from "./clock";
 import { zoneName } from "./AccountScreen";
 import { M2Group, M2Page, M2Section, M2Stepper, M2SwitchRow } from "./m2";
@@ -56,7 +56,7 @@ export function quietRangeLabel(start: string, end: string): string {
  * master switch, "Learn from my workouts" row, the coach-nudge note and the
  * WhatsApp card are gone (Z12-25 → Z12-49).
  */
-export function ReminderSettingsScreen({
+function ReminderSettingsScreenBody({
   onBack,
   onOpenQuietHours,
   onOpenMealTimes,
@@ -451,3 +451,12 @@ const useStyles = createThemedStyles((t) => ({
   link: { fontSize: 16, fontWeight: "600" },
   sheetActions: { gap: 8, marginTop: 16 },
 }));
+
+/** ReminderSettingsScreen in the system theme (Z12-49): its own styles read the scope. */
+export function ReminderSettingsScreen(props: Parameters<typeof ReminderSettingsScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <ReminderSettingsScreenBody {...props} />
+    </ThemeScope>
+  );
+}
