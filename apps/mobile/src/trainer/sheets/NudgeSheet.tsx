@@ -102,7 +102,7 @@ function NudgeSheetBody({
   const sendingRef = useRef(false);
 
   const targetKey = target
-    ? `${target.relationshipId}:${target.activityType}:${target.activityId}`
+    ? [target.relationshipId, target.activityType, target.activityId].join(":")
     : null;
 
   useEffect(() => {

@@ -1,0 +1,25 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow of flows/v3/F20-triage-nudge.yaml (Z12-50). No tags: it is only ever called.
+# Input: CLIENT (the name as the Clients list shows it). Starts from a signed-in trainer
+# at any screen after a relaunch, opens the client, and presses Nudge… (TM-03j picker when
+# the client has several open items, then the sheet).
+- launchApp:
+    stopApp: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Needs you [0-9]+"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
+- tapOn: "Clients"
+- scrollUntilVisible:
+    element: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
+    timeout: 30000
+- tapOn: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
+- extendedWaitUntil:
+    visible: "Nudge…"
+    timeout: 30000
+- tapOn: "Nudge…"
