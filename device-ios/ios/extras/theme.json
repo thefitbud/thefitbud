@@ -1,0 +1,81 @@
+{
+  "result": "mean screenshot luminance: light 0.878 (7), dark 0.51 (7)",
+  "light": 0.878,
+  "dark": 0.51,
+  "count": {
+    "light": 7,
+    "dark": 7
+  },
+  "shots": [
+    {
+      "file": "TR-06h-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.777
+    },
+    {
+      "file": "TR-06h-light-ios.png",
+      "theme": "light",
+      "luma": 0.777
+    },
+    {
+      "file": "TR-15a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "TR-15a-light-ios.png",
+      "theme": "light",
+      "luma": 0.954
+    },
+    {
+      "file": "TR-15b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.07
+    },
+    {
+      "file": "TR-15b-light-ios.png",
+      "theme": "light",
+      "luma": 0.95
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.78
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.78
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "z12-38-after-swipe-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.781
+    },
+    {
+      "file": "z12-38-after-swipe-light-ios.png",
+      "theme": "light",
+      "luma": 0.781
+    },
+    {
+      "file": "z12-47-read-all-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.107
+    },
+    {
+      "file": "z12-47-read-all-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    }
+  ]
+}
