@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   getOnboardingFormTemplate: vi.fn(),
   getOnboardingResponse: vi.fn(),
   listHistory: vi.fn(),
+  listInvitations: vi.fn(),
   reviewOnboarding: vi.fn(),
 }));
 
@@ -19,7 +20,7 @@ vi.mock("../lib/api", () => ({ apiClient: api }));
 
 import { OnboardingReviewPage } from "./OnboardingReviewPage";
 
-type Lifecycle = "ended" | "active" | "coaching_ready" | "onboarding_submitted";
+type Lifecycle = "ended" | "active" | "coaching_ready" | "onboarding_submitted" | "onboarding_pending";
 
 function pageTree(
   onboardingStatus: Lifecycle,
@@ -33,6 +34,8 @@ function pageTree(
         traineeProfile: { gender: "female" },
         onboardingStatus,
         clientWhatsappE164,
+        traineeTimezone: "Asia/Kolkata",
+        startedAt: "2026-07-04T04:00:00.000Z",
       },
     },
     relationshipId: REL_ID,
@@ -68,23 +71,98 @@ beforeEach(() => {
     templateId: "t1",
     key: "intake",
     version: 1,
-    fields: [],
+    fields: [
+      {
+        id: "goals",
+        type: "long_text",
+        label: "Goal",
+        required: true,
+        section: "Goals",
+      },
+      {
+        id: "injuries",
+        type: "long_text",
+        label: "Injuries",
+        required: false,
+        section: "Health",
+        highlight: true,
+      },
+    ],
   });
-  api.getOnboardingFormTemplate.mockResolvedValue({ name: "Standard intake" });
+  api.getOnboardingFormTemplate.mockResolvedValue({ name: "Default onboarding" });
   api.getOnboardingResponse.mockResolvedValue({
     status: "submitted",
     submittedAt: "2026-07-05T04:00:00.000Z",
+    createdAt: "2026-07-04T05:00:00.000Z",
     updatedAt: "2026-07-05T04:00:00.000Z",
-    answers: {},
+    answers: {
+      goals: "Lose 5 kg",
+      injuries: "Left knee pain",
+    },
   });
   api.listHistory.mockResolvedValue({
     items: [{ occurredAt: "2026-07-06T04:00:00.000Z" }],
+  });
+  api.listInvitations.mockResolvedValue({
+    items: [
+      {
+        id: "inv1",
+        coachingRelationshipId: REL_ID,
+        createdAt: "2026-07-01T04:00:00.000Z",
+      },
+    ],
   });
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("OnboardingReviewPage submitted (frame 146)", () => {
+  it("shows stepper, Review flag, Next step actions, and Timeline", async () => {
+    renderPage("onboarding_submitted", "+919876543210");
+    expect(
+      await screen.findByRole("button", { name: "Mark ready & configure" }),
+    ).toBeTruthy();
+    expect(screen.getByLabelText("Onboarding progress")).toBeTruthy();
+    expect(screen.getByText("Ready to coach")).toBeTruthy();
+    expect(screen.getByText("Review")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Next step" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Timeline" })).toBeTruthy();
+    expect(screen.getByText(/Intake submitted/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Message on WhatsApp/i })).toBeTruthy();
+    expect(screen.queryByText("Worth noting")).toBeNull();
+  });
+
+  it("submitted intake awaiting review: Mark ready & configure is unchanged", async () => {
+    renderPage("onboarding_submitted");
+    expect(
+      await screen.findByRole("button", { name: "Mark ready & configure" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "View coaching setup" })).toBeNull();
+  });
+});
+
+describe("OnboardingReviewPage not submitted (frame 147)", () => {
+  it("shows centred empty state with section progress and Remind on WhatsApp", async () => {
+    api.getOnboardingResponse.mockResolvedValue({
+      status: "draft",
+      submittedAt: null,
+      createdAt: "2026-07-04T05:00:00.000Z",
+      updatedAt: "2026-07-04T06:00:00.000Z",
+      answers: { goals: "Build strength" },
+    });
+    renderPage("onboarding_pending", "+919876543210");
+    expect(
+      await screen.findByText(/Kavya hasn't submitted her intake yet/),
+    ).toBeTruthy();
+    expect(screen.getByText(/answered 1 of 2 sections/i)).toBeTruthy();
+    const remind = screen.getByRole("link", { name: /Remind on WhatsApp/i });
+    expect(remind.getAttribute("href") ?? "").toMatch(/^https:\/\/wa\.me\//);
+    expect(screen.getByRole("heading", { name: "Next step" })).toBeTruthy();
+    expect(screen.getByText(/Intake started/)).toBeTruthy();
+  });
 });
 
 describe("OnboardingReviewPage footer (CE2)", () => {
@@ -95,15 +173,14 @@ describe("OnboardingReviewPage footer (CE2)", () => {
     fireEvent.click(button);
     expect(await screen.findByText("configure route")).toBeTruthy();
     expect(api.reviewOnboarding).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: "WhatsApp client" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "WhatsApp client" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /WhatsApp/i })).toBeNull();
+    expect(screen.queryByRole("link", { name: /WhatsApp/i })).toBeNull();
   });
 
   it("ended client with a WhatsApp number: the intake draft is hidden", async () => {
     renderPage("ended", "+919876543210");
     await screen.findByRole("button", { name: "View coaching setup" });
-    expect(screen.queryByRole("link", { name: "WhatsApp client" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "WhatsApp client" })).toBeNull();
+    expect(screen.queryByRole("link", { name: /WhatsApp/i })).toBeNull();
     expect(document.body.innerHTML).not.toMatch(/wa\.me/);
     expect(document.body.textContent).not.toMatch(/Thanks for filling your intake/);
   });
@@ -114,26 +191,18 @@ describe("OnboardingReviewPage footer (CE2)", () => {
       renderPage(status);
       expect(await screen.findByRole("button", { name: "Open configure" })).toBeTruthy();
       expect(screen.queryByRole("button", { name: "View coaching setup" })).toBeNull();
-      expect(screen.getByRole("button", { name: "WhatsApp client" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Message on WhatsApp/i })).toBeTruthy();
     },
   );
 
-  it("active client: WhatsApp client still opens the intake draft", async () => {
+  it("active client: WhatsApp still opens the intake draft", async () => {
     renderPage("active", "+919876543210");
-    const link = await screen.findByRole("link", { name: "WhatsApp client" });
+    const link = await screen.findByRole("link", { name: /Message on WhatsApp/i });
     const href = link.getAttribute("href") ?? "";
     expect(href).toMatch(/^https:\/\/wa\.me\/919876543210\?text=/);
     expect(decodeURIComponent(href)).toMatch(
       /Thanks for filling your intake, Kavya/,
     );
-  });
-
-  it("submitted intake awaiting review: Mark ready & configure is unchanged", async () => {
-    renderPage("onboarding_submitted");
-    expect(
-      await screen.findByRole("button", { name: "Mark ready & configure" }),
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "View coaching setup" })).toBeNull();
   });
 });
 

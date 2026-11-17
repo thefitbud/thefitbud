@@ -209,23 +209,28 @@ test.describe("TW-C workspace", () => {
     }
   });
 
-  test("TW-34 note composer: private default, counter after 800", async ({
+  test("TW-34 note composer: private default, About, Visible switch", async ({
     page,
   }) => {
     await page.goto(`/clients/${ROHAN}/overview`);
     // Z9-13: the entry point is the Overview "Coach notes" card.
     await page.getByRole("button", { name: /^Add note$/i }).click();
     await expect(page.getByTestId("screen-TW-34")).toBeVisible();
-    const visibility = page.getByRole("checkbox", {
-      name: /Visible to client/i,
+    await expect(page.getByText(/About · optional/i)).toBeVisible();
+    const visibility = page.getByRole("switch", {
+      name: /Visible to Rohan/i,
     });
     await expect(visibility).not.toBeChecked();
     const area = page.locator("textarea").first();
     await area.fill("x".repeat(820));
-    await expect(page.getByText(/820\s*\/\s*1000/)).toBeVisible();
+    // Frame 188: always-on "N of 1,000" counter (Z12-7).
+    await expect(page.getByText(/820 of 1,?000/)).toBeVisible();
     await visibility.check();
     await expect(
-      // Uses the client's pronoun ("his" for Rohan), like frame 188's "He sees it on Today".
+      // Frame 188 helper + TW-34 preview when switch is on.
+      page.getByText(/He sees it on Today and gets one notification/i),
+    ).toBeVisible();
+    await expect(
       page.getByText(/Rohan will see this on (his|her|their) Today screen/i),
     ).toBeVisible();
     await expect(page.getByText(/From rahul · just now/i)).toBeVisible();
