@@ -49,6 +49,7 @@ import {
   pendingMealLogIds,
 } from "./mealActions";
 import {
+  canChangeLoggedMeal,
   canShowMealLogActions,
   cleanFoodLabel,
   mealLockCopy,
@@ -475,6 +476,10 @@ function DietTabBody({
   const loadError = dayCache.error;
   const loadFailedOffline = loadError != null && isNetworkFailure(loadError);
   const lockStateKnown = bundle !== undefined && loadError == null;
+  // A failed load is reported once per error (AGENTS.md: client error handling).
+  useEffect(() => {
+    if (loadError != null) reportError("DietTab.load", loadError);
+  }, [loadError]);
   const dayTotals = bundle?.day ?? null;
   // Four-state, never a nullable model: see `WeekModelState` (CU23,
   // D-W3b-25). Cached per week and shared with Today (Z12-40).
@@ -732,11 +737,12 @@ function DietTabBody({
       windowOpened(meal, now);
     // A logged, changed meal can be changed again, unless it is closed
     // (TR-07f) or the coach logged it.
-    const canChange =
-      isLogged &&
-      meal.status === "modified" &&
-      !isLocked &&
-      meal.compliance?.loggedByRole !== "coach";
+    const canChange = canChangeLoggedMeal({
+      lockStateKnown,
+      isLogged,
+      meal,
+      isLocked,
+    });
     const summary = plannedSummaryLine(meal);
 
     const tileStyle = waiting
@@ -851,7 +857,7 @@ function DietTabBody({
               accessibilityRole="button"
               accessibilityLabel={`Log ${name}`}
               onPress={() => openSomethingDifferent(meal)}
-              style={styles.badge}
+              style={[styles.badge, styles.badgeTap]}
             >
               <Ellipsis size={22} color={theme.colors.ink2} />
             </Pressable>
@@ -1022,6 +1028,14 @@ function DietTabBody({
   // The centred error state: nothing to show for the day and the load failed
   // (TR-07i). With a cached day the content stays and a short banner says so.
   const showLoadError = loadError != null && bundle === undefined;
+  // The connection copy only when the failure was a connection one; an API
+  // error shows its own curated message, anything else (a ZodError included)
+  // stays neutral (AGENTS.md: no misleading catch).
+  const loadErrorBody = loadFailedOffline
+    ? "Check your connection. Anything you logged is saved on your phone."
+    : loadError instanceof ApiClientError
+      ? loadError.message
+      : "Something went wrong. Try again.";
   const staleError =
     loadError != null && bundle !== undefined && !loadFailedOffline;
   const sentCount = pendingSendIds.size;
@@ -1142,7 +1156,7 @@ function DietTabBody({
               testID="diet-load-error"
               icon={CloudOff}
               title="Couldn’t load your meals"
-              body="Check your connection. Anything you logged is saved on your phone."
+              body={loadErrorBody}
               primary={{
                 label: "Try again",
                 icon: RefreshCw,
@@ -1165,7 +1179,7 @@ function DietTabBody({
                 testID="diet-no-meals"
                 icon={UtensilsCrossed}
                 title="No meals planned today"
-                body={`${coachName} hasn’t set meals for today. If you eat something, you can still log it.`}
+                body={`${coachName} hasn’t set meals for today.`}
                 secondary={{
                   label: `Ask ${coachName} on WhatsApp`,
                   onPress: () =>
@@ -1402,6 +1416,8 @@ const useStyles = createThemedStyles((t) => ({
     justifyContent: "center",
     width: 36,
   },
+  /** 44 pt touch target for the "Log {meal}" ellipsis (AGENTS.md). */
+  badgeTap: { borderRadius: 22, height: 44, width: 44 },
   badgeDone: { backgroundColor: t.colors.done },
   changeBtn: {
     alignItems: "flex-start",

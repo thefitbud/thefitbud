@@ -35,41 +35,46 @@ export function isMealLoggedForCount(status: MealAssignment["status"]): boolean 
   );
 }
 
-/**
- * Macros contributed by one meal toward day rings.
- * - confirmed / logged_later → plan prescription values
- * - modified → compliance loggedTotals / loggedItems (actual foods)
- * - skipped → nothing (0)
- * - pending / overdue → nothing
- */
-export function loggedMacrosForMeal(meal: MealAssignment): MacroTotals {
-  if (meal.status === "skipped") {
-    return { kcal: 0, protein: 0, carbs: 0, fat: 0, unknown: false };
-  }
-  if (meal.status === "pending" || meal.status === "overdue") {
-    return { kcal: 0, protein: 0, carbs: 0, fat: 0, unknown: false };
-  }
+type ScaledItem = {
+  energyKcalScaled: number | null;
+  proteinScaled: number | null;
+  carbsScaled: number | null;
+  fatScaled: number | null;
+  partial?: boolean;
+} | null;
 
+/**
+ * A meal's contribution toward day rings, in scaled units and unrounded, so a
+ * day can sum meals first and round once (Z12-42).
+ * - confirmed / logged_later: plan prescription values
+ * - modified: compliance loggedTotals / loggedItems (actual foods)
+ * - skipped, pending, overdue: nothing
+ */
+function loggedScaledItemsForMeal(meal: MealAssignment): ScaledItem[] {
+  if (
+    meal.status === "skipped" ||
+    meal.status === "pending" ||
+    meal.status === "overdue"
+  ) {
+    return [];
+  }
   if (meal.status === "modified") {
     const totals = meal.compliance?.loggedTotals;
     if (totals) {
-      const unknown =
-        totals.energyKcal == null ||
-        totals.proteinG == null ||
-        totals.carbsG == null ||
-        totals.fatG == null;
-      return {
-        kcal: Math.round(totals.energyKcal ?? 0),
-        protein: Math.round(totals.proteinG ?? 0),
-        carbs: Math.round(totals.carbsG ?? 0),
-        fat: Math.round(totals.fatG ?? 0),
-        unknown,
-      };
+      const scale = (v: number | null | undefined) =>
+        v == null ? null : Math.round(v * NUTRIENT_SCALE);
+      return [
+        {
+          energyKcalScaled: scale(totals.energyKcal),
+          proteinScaled: scale(totals.proteinG),
+          carbsScaled: scale(totals.carbsG),
+          fatScaled: scale(totals.fatG),
+        },
+      ];
     }
     const items = meal.compliance?.loggedItems ?? [];
     if (items.length > 0) {
-      // Sum display units then round once via scaled path for consistency.
-      const scaled = items.map((item) => ({
+      return items.map((item) => ({
         energyKcalScaled:
           item.energyKcal != null ? Math.round(item.energyKcal * NUTRIENT_SCALE) : null,
         proteinScaled:
@@ -83,18 +88,23 @@ export function loggedMacrosForMeal(meal: MealAssignment): MacroTotals {
           item.carbsG == null ||
           item.fatG == null,
       }));
-      const day = dayMacrosFromScaledItems(scaled);
-      return {
-        kcal: day.kcal,
-        protein: day.proteinG,
-        carbs: day.carbsG,
-        fat: day.fatG,
-        unknown: day.unknown,
-      };
     }
   }
+  return meal.prescription.items.map((item) =>
+    "calculated" in item && item.calculated ? item.calculated : null,
+  );
+}
 
-  return nutrientsFromMealPrescription(meal);
+/** Macros contributed by one meal, rounded once for that meal. */
+export function loggedMacrosForMeal(meal: MealAssignment): MacroTotals {
+  const day = dayMacrosFromScaledItems(loggedScaledItemsForMeal(meal));
+  return {
+    kcal: day.kcal,
+    protein: day.proteinG,
+    carbs: day.carbsG,
+    fat: day.fatG,
+    unknown: day.unknown,
+  };
 }
 
 /** Assigned and logged day totals for nutrition rings from meal assignments. */
@@ -118,60 +128,36 @@ export function dayNutritionFromMeals(
 
   // Plan-derived meals are summed in scaled units and rounded once for the
   // day (Z12-42); a changed meal brings its own logged figures.
-  let loggedKcal = 0;
-  let loggedProtein = 0;
-  let loggedCarbs = 0;
-  let loggedFat = 0;
-  let unknown = false;
-  const planLoggedItems: Array<
-    (typeof assignedItems)[number]
-  > = [];
-  for (const meal of meals) {
-    if (!isMealLoggedForCount(meal.status)) continue;
-    if (meal.status === "skipped") continue;
-    if (meal.status === "modified") {
-      const macros = loggedMacrosForMeal(meal);
-      loggedKcal += macros.kcal;
-      loggedProtein += macros.protein;
-      loggedCarbs += macros.carbs;
-      loggedFat += macros.fat;
-      if (macros.unknown) unknown = true;
-      continue;
-    }
-    for (const item of meal.prescription.items) {
-      planLoggedItems.push("calculated" in item && item.calculated ? item.calculated : null);
-    }
-  }
-  const planLogged = dayMacrosFromScaledItems(planLoggedItems);
-  loggedKcal += planLogged.kcal;
-  loggedProtein += planLogged.proteinG;
-  loggedCarbs += planLogged.carbsG;
-  loggedFat += planLogged.fatG;
-  if (planLogged.unknown) unknown = true;
-
+  // Sum every logged meal in scaled units and round once (Z12-42), so changed
+  // meals add up like plan-derived ones: no per-meal rounding drift.
+  const loggedMeals = meals.filter((m) => isMealLoggedForCount(m.status));
+  const loggedDay = dayMacrosFromScaledItems(
+    loggedMeals.flatMap(loggedScaledItemsForMeal),
+  );
   const logged: MacroTotals = {
-    kcal: loggedKcal,
-    protein: loggedProtein,
-    carbs: loggedCarbs,
-    fat: loggedFat,
-    unknown,
+    kcal: loggedDay.kcal,
+    protein: loggedDay.proteinG,
+    carbs: loggedDay.carbsG,
+    fat: loggedDay.fatG,
+    unknown: loggedDay.unknown,
   };
 
   // Prefer authoritative day kcal from /me/day when present (scaled sum, unscale once).
-  // Ignore zero — legacy confirms stored null compliance kcal and would wipe rings.
+  // Ignore zero: legacy confirms stored null compliance kcal and would wipe rings.
   // Slots missing from perMeal are optimistic or still in the outbox: add their
-  // planned kcal once. Slots already listed are not added again.
+  // kcal once, in scaled units. Slots already listed are not added again.
   if (dayTotals?.kcalScaled != null && dayTotals.kcalScaled > 0) {
     const present = new Set(
       (dayTotals.perMeal ?? []).map((row) => row.slotKey),
     );
-    let extraKcal = 0;
-    for (const meal of meals) {
-      if (!isMealLoggedForCount(meal.status)) continue;
+    let extraScaled = 0;
+    for (const meal of loggedMeals) {
       if (present.has(meal.prescription.id)) continue;
-      extraKcal += loggedMacrosForMeal(meal).kcal;
+      for (const item of loggedScaledItemsForMeal(meal)) {
+        extraScaled += item?.energyKcalScaled ?? 0;
+      }
     }
-    logged.kcal = unscaleNutrient(dayTotals.kcalScaled) + extraKcal;
+    logged.kcal = unscaleNutrient(dayTotals.kcalScaled + extraScaled);
   }
 
   return { assigned, logged };

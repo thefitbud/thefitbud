@@ -308,3 +308,47 @@ describe("one rounding on the day sum (Z12-42)", () => {
     expect(out.loggedTotal).toBe(1745);
   });
 });
+
+describe("changed meals sum in scaled units, rounded once (Z12-42)", () => {
+  function changed(id: string, slot: string, kcal: number, protein: number): MealAssignment {
+    const base = meal({ id, status: "modified" });
+    return {
+      ...base,
+      prescription: { ...base.prescription, id: slot },
+      compliance: {
+        loggedTotals: {
+          energyKcal: kcal,
+          proteinG: protein,
+          carbsG: 0,
+          fatG: 0,
+        },
+      },
+    } as unknown as MealAssignment;
+  }
+  const slotA = "00000000-0000-4000-8000-0000000000c1";
+  const slotB = "00000000-0000-4000-8000-0000000000c2";
+
+  it("two changed meals add their unrounded macros, then round the day once", () => {
+    const rings = buildNutritionRings([
+      changed("c1", slotA, 872.6, 10.4),
+      changed("c2", slotB, 872.6, 10.4),
+    ]);
+    const get = (k: string) => rings.find((r) => r.key === k)?.logged;
+    // Per-meal rounding would give 873 + 873 = 1,746 kcal and 10 + 10 = 20 g.
+    expect(get("kcal")).toBe(1745);
+    expect(get("protein")).toBe(21);
+  });
+
+  it("changed meals not yet in the server day add their kcal unrounded to the server sum", () => {
+    const totals = {
+      kcalScaled: 100 * NUTRIENT_SCALE,
+      perMeal: [],
+    } as unknown as MeDayResponse["totals"];
+    const rings = buildNutritionRings(
+      [changed("c1", slotA, 872.6, 10.4), changed("c2", slotB, 872.6, 10.4)],
+      totals,
+    );
+    // 100 + 872.6 + 872.6 = 1,845.2; per-meal rounding would give 1,846.
+    expect(rings.find((r) => r.key === "kcal")?.logged).toBe(1845);
+  });
+});

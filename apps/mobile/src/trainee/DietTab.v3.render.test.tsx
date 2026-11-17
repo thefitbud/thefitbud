@@ -6,6 +6,8 @@ import {
   NUTRIENT_SCALE,
   type MealAssignment,
 } from "@fitbud/contracts";
+import { ApiClientError } from "@fitbud/api-client";
+import { reportError } from "../lib/reportError";
 import { fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 import { localDateInTimezone } from "../lib/dates";
 import { createMemorySyncStore, createSyncEngine } from "../sync/engine";
@@ -61,6 +63,7 @@ function meal(
 
 let items: MealAssignment[] = [];
 let listFails = false;
+let listError: unknown = null;
 const HOUR = 3_600_000;
 function at(offsetHours: number) {
   return new Date(Date.now() + offsetHours * HOUR).toISOString();
@@ -116,7 +119,7 @@ const api = new Proxy(
       if (key === "then") return undefined;
       if (key === "listMealAssignments")
         return async () => {
-          if (listFails) throw new Error("boom");
+          if (listFails) throw listError ?? new Error("boom");
           return { items, nextCursor: null };
         };
       if (key === "getMeDay") return async () => null;
@@ -224,6 +227,37 @@ describe("Diet day v3 (Z12-42)", () => {
     await waitFor(() => expect(screen.getByText("2 of 2 logged")).toBeTruthy());
     expect(screen.queryByLabelText("Change Breakfast")).toBeNull();
     expect(screen.getByLabelText("Change Lunch")).toBeTruthy();
+  });
+
+  it("the Log {meal} ellipsis on a missed meal is a 44 pt target", async () => {
+    items = [
+      mealAt(
+        "a1111111-1111-4111-8111-111111111111",
+        "Breakfast",
+        "overdue",
+        [-6, -5],
+      ),
+      mealAt(
+        "b2222222-2222-4222-8222-222222222222",
+        "Lunch",
+        "overdue",
+        [-4, -3],
+      ),
+    ];
+    render(
+      <DietTab
+        relationship={relationship}
+        selectedDate={DATE}
+        onSelectDate={() => undefined}
+        onOpenOverlay={() => undefined}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("0 of 2 logged")).toBeTruthy());
+    // The first missed meal is the focus card; the other is a row with the ellipsis.
+    const button = await screen.findByLabelText(/^Log (Breakfast|Lunch)$/);
+    const style = getComputedStyle(button);
+    expect(parseFloat(style.width)).toBeGreaterThanOrEqual(44);
+    expect(parseFloat(style.height)).toBeGreaterThanOrEqual(44);
   });
 
   it("offers Eaten as planned only once the meal's window has opened", async () => {
@@ -367,9 +401,7 @@ describe("Diet day v3 (Z12-42)", () => {
     );
   });
 
-  it("a failed load with nothing cached shows the centred state, never raw error text", async () => {
-    items = [];
-    listFails = true;
+  function renderDiet() {
     render(
       <DietTab
         relationship={relationship}
@@ -378,18 +410,68 @@ describe("Diet day v3 (Z12-42)", () => {
         onOpenOverlay={() => undefined}
       />,
     );
+  }
+  const CONNECTION_COPY =
+    "Check your connection. Anything you logged is saved on your phone.";
+
+  it("a non-network load failure shows a neutral body, never the connection copy or raw text", async () => {
+    items = [];
+    listFails = true;
+    renderDiet();
     await waitFor(() =>
       expect(screen.getByText("Couldn’t load your meals")).toBeTruthy(),
     );
-    expect(
-      screen.getByText(
-        "Check your connection. Anything you logged is saved on your phone.",
-      ),
-    ).toBeTruthy();
+    expect(screen.getByText("Something went wrong. Try again.")).toBeTruthy();
+    expect(screen.queryByText(CONNECTION_COPY)).toBeNull();
     expect(screen.getByLabelText("Try again")).toBeTruthy();
     expect(screen.queryByText(/boom/)).toBeNull();
     expect(screen.queryByTestId("diet-summary")).toBeNull();
-    listFails = false;
+    expect(reportError).toHaveBeenCalledWith("DietTab.load", expect.anything());
+  });
+
+  it("a ZodError never reads as a connection problem", async () => {
+    items = [];
+    listFails = true;
+    // A real contract-parse failure: the client and server disagree.
+    try {
+      mealAssignmentSchema.parse({});
+    } catch (err) {
+      listError = err;
+    }
+    expect(listError).toBeInstanceOf(Error);
+    renderDiet();
+    await waitFor(() =>
+      expect(screen.getByText("Couldn’t load your meals")).toBeTruthy(),
+    );
+    expect(screen.getByText("Something went wrong. Try again.")).toBeTruthy();
+    expect(screen.queryByText(CONNECTION_COPY)).toBeNull();
+    expect(screen.queryByText(/invalid_type|Required/i)).toBeNull();
+  });
+
+  it("an ApiClientError shows its own curated message", async () => {
+    items = [];
+    listFails = true;
+    listError = new ApiClientError({
+      code: "SERVER_BUSY",
+      message: "The server is busy. Try again in a moment.",
+      requestId: "r1",
+      status: 503,
+    });
+    renderDiet();
+    await waitFor(() =>
+      expect(
+        screen.getByText("The server is busy. Try again in a moment."),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText(CONNECTION_COPY)).toBeNull();
+  });
+
+  it("a connection failure with nothing cached shows the connection copy", async () => {
+    items = [];
+    listFails = true;
+    listError = new TypeError("Network request failed");
+    renderDiet();
+    await waitFor(() => expect(screen.getByText(CONNECTION_COPY)).toBeTruthy());
   });
 
   it("no meals planned today shows the centred state with no ring", async () => {
@@ -406,6 +488,8 @@ describe("Diet day v3 (Z12-42)", () => {
       expect(screen.getByText("No meals planned today")).toBeTruthy(),
     );
     expect(screen.getByText(/hasn’t set meals for today/)).toBeTruthy();
+    // "Log what I ate" arrives with Z12-43; until then no promise of it.
+    expect(screen.queryByText(/you can still log it/)).toBeNull();
     expect(screen.queryByTestId("diet-summary")).toBeNull();
   });
 });
@@ -413,4 +497,5 @@ describe("Diet day v3 (Z12-42)", () => {
 beforeEach(() => {
   clearDayViews();
   listFails = false;
+  listError = null;
 });

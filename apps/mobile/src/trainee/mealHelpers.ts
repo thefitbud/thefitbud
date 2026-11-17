@@ -44,6 +44,26 @@ export function canShowMealLogActions(input: {
   return canLogMealOnDate(input);
 }
 
+/**
+ * A logged, changed meal can be changed again, unless it is closed (TR-07f),
+ * the coach logged it, or the lock state is not known yet (same guard as
+ * `canShowMealLogActions`).
+ */
+export function canChangeLoggedMeal(input: {
+  lockStateKnown: boolean;
+  isLogged: boolean;
+  meal: MealAssignment;
+  isLocked: boolean;
+}): boolean {
+  return (
+    input.lockStateKnown &&
+    input.isLogged &&
+    input.meal.status === "modified" &&
+    !input.isLocked &&
+    input.meal.compliance?.loggedByRole !== "coach"
+  );
+}
+
 /** Plain-words reason when a meal can't be logged. */
 export function mealLockCopy(
   meal: MealAssignment,
