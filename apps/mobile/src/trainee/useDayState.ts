@@ -128,7 +128,9 @@ export function useDayState(input: {
         onMoveShouldSetPanResponder: (_e, g) => shouldClaimSwipe(g.dx, g.dy),
         onMoveShouldSetPanResponderCapture: (_e, g) =>
           shouldClaimSwipe(g.dx, g.dy),
-        onPanResponderTerminationRequest: () => true,
+        // Once a drag is clearly horizontal it stays a day swipe: the
+        // vertical scroll view must not take it over halfway (iOS).
+        onPanResponderTerminationRequest: () => false,
         onPanResponderRelease: (_e, g) => {
           const direction = swipeDirection(g.dx, g.dy);
           if (direction === 1) goNextDay();

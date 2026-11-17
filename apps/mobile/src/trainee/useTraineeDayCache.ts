@@ -173,20 +173,24 @@ export function useTraineeDayCache<T>(input: {
   useEffect(() => {
     if (!enabled) return;
     let cancelled = false;
-    void revalidate(false).then(() => {
-      if (cancelled) return;
+    void (async () => {
+      await revalidate(false);
+      // One prefetch at a time, nearest day first: a burst of six day loads
+      // at once would compete with the day on screen for a slow network.
       for (const near of prefetchDates(date, prefetchRadius, prefetchStepDays)) {
+        if (cancelled) return;
         const nearKey = dayViewKey(screen, relationshipId, near);
         if (getCacheEntry(nearKey)) continue;
-        // A failed prefetch shows nothing and is retried when the day is
-        // visited, where its failure is shown; nothing to report here.
-        fetchDayInto(nearKey, () =>
-          fetchRef.current(near, { force: false }),
-        ).catch(
-          () => undefined,
-        );
+        try {
+          await fetchDayInto(nearKey, () =>
+            fetchRef.current(near, { force: false }),
+          );
+        } catch {
+          // A failed prefetch shows nothing and is retried when the day is
+          // visited, where its failure is shown; nothing to report here.
+        }
       }
-    });
+    })();
     return () => {
       cancelled = true;
     };
