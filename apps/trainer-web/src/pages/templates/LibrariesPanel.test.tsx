@@ -28,7 +28,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../../lib/api", () => ({ apiClient: api }));
 vi.mock("../../hooks/useOnline", () => ({ useOnline: () => true }));
 
-import { LibrariesPanel } from "./LibrariesPanel";
+import { foodServingKcal, LibrariesPanel } from "./LibrariesPanel";
 
 const now = "2026-11-17T10:00:00.000Z";
 
@@ -111,6 +111,26 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("foodServingKcal", () => {
+  it("scales per-100g energy to a non-100g serving", () => {
+    // 265 kcal / 100 g × 150 g = 398 kcal for 1 katori
+    expect(
+      foodServingKcal(
+        food({
+          servings: [
+            {
+              id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+              label: "1 katori",
+              unit: "g",
+              conversionScaled: 150 * NUTRIENT_SCALE,
+            },
+          ],
+        }),
+      ),
+    ).toBe("1 katori · 398 kcal");
+  });
+});
+
 describe("LibrariesPanel", () => {
   it("shows foods as Food + Serving · kcal with Source filter", async () => {
     renderLibraries("foods");
@@ -128,6 +148,34 @@ describe("LibrariesPanel", () => {
     expect(screen.getByText(/100 g · 265 kcal/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Source/ })).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: "Basis" })).toBeNull();
+  });
+
+  it("shows serving-scaled kcal in the list and drawer for non-100g servings", async () => {
+    api.listFoodLibrary.mockResolvedValue({
+      items: [
+        food({
+          servings: [
+            {
+              id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+              label: "1 katori",
+              unit: "g",
+              conversionScaled: 150 * NUTRIENT_SCALE,
+            },
+          ],
+        }),
+      ],
+      nextCursor: null,
+    });
+    renderLibraries("foods");
+    expect(await screen.findByText(/1 katori · 398 kcal/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Paneer bhurji"));
+    const dialog = await screen.findByRole("dialog", { name: "Paneer bhurji" });
+    expect(within(dialog).getByText("1 katori")).toBeTruthy();
+    expect(within(dialog).getByText("398 kcal")).toBeTruthy();
+    // 18 / 6 / 19 g per 100g → 27 / 9 / 29 g for 150 g
+    expect(within(dialog).getByText("27 g")).toBeTruthy();
+    expect(within(dialog).getByText("9 g")).toBeTruthy();
+    expect(within(dialog).getByText("29 g")).toBeTruthy();
   });
 
   it("opens the food detail drawer on row click", async () => {

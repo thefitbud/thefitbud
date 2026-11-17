@@ -1,7 +1,7 @@
 Skip to content
 FitBud
 Home
-8
+9
 Clients
 Check-ins
 6
@@ -34,47 +34,47 @@ Food	Serving · kcal
 
 Aam milkshake
 Prepared
-	1 glass (250 ml) · 57 kcal
+	1 glass (250 ml) · 142 kcal
 
 Agave liquid sweetener
 Generic
-	1 tsp (6.8 g) · 310 kcal
+	1 tsp (6.8 g) · 21 kcal
 
 Alfalfa sprouts, raw
 Raw
-	1 cup (21 g) · 23 kcal
+	1 cup (21 g) · 5 kcal
 
 Almond butter
 Raw
-	1 small handful (25 g) · 603 kcal
+	1 small handful (25 g) · 151 kcal
 
 Almond milk
 Generic
-	1 glass (250 ml) · 21 kcal
+	1 glass (250 ml) · 52 kcal
 
 Almond milk, unsweetened
 Generic
-	1 glass (250 ml) · 15 kcal
+	1 glass (250 ml) · 38 kcal
 
 Almond paste
 Generic
-	1 cup (144 g) · 458 kcal
+	1 cup (144 g) · 659 kcal
 
 Almonds
 Generic
-	1 nut (1.2 g) · 598 kcal
+	1 nut (1.2 g) · 7 kcal
 
 Almonds (badam), raw
 Raw
-	1 small handful (25 g) · 584 kcal
+	1 small handful (25 g) · 146 kcal
 
 Almonds, flavored
 Generic
-	1 nut (1.2 g) · 599 kcal
+	1 nut (1.2 g) · 7 kcal
 
 Almonds, honey roasted
 Generic
-	1 nut (1.2 g) · 579 kcal
+	1 nut (1.2 g) · 7 kcal
 
 Aloo gobhi
 Prepared
@@ -82,7 +82,7 @@ Prepared
 
 Aloo ka paratha
 Prepared
-	1 paratha (93 g) · 205 kcal
+	1 paratha (93 g) · 192 kcal
 
 Aloo ki sabzi
 Prepared
@@ -90,7 +90,7 @@ Prepared
 
 Aloo matar
 Prepared
-	1 katori (150 g) · 101 kcal
+	1 katori (150 g) · 151 kcal
 
 Aloo methi
 Prepared
@@ -98,39 +98,39 @@ Prepared
 
 Amaranth (rajgira) grain, raw
 Raw
-	1 cup (122 g) · 371 kcal
+	1 cup (122 g) · 454 kcal
 
 Amaranth flour
 Raw
-	100 g · 378 kcal
+	100 g · 4 kcal
 
 Amaranth leaves (chaulai), raw
 Raw
-	1 leaf (14 g) · 23 kcal
+	1 leaf (14 g) · 3 kcal
 
 Amaranth leaves, boiled
 Generic
-	1 katori cooked (150 g) · 21 kcal
+	1 katori cooked (150 g) · 32 kcal
 
 Anchovies, canned in oil
 Generic
-	5 anchovies (20 g) · 210 kcal
+	5 anchovies (20 g) · 8 kcal
 
 Animal fat or drippings
 Generic
-	1 tsp (4.1 g) · 841 kcal
+	1 tsp (4.1 g) · 34 kcal
 
 Appam
 Prepared
-	1 appam (153 g) · 268 kcal
+	1 appam (153 g) · 409 kcal
 
 Apple
 Generic
-	1 slice/chunk (8 g) · 243 kcal
+	1 slice/chunk (8 g) · 19 kcal
 
 Apple cider
 Generic
-	1 glass (250 ml) · 48 kcal
+	1 glass (250 ml) · 121 kcal
 Load more
 Aam milkshake
 FitBud base
@@ -138,13 +138,13 @@ Close
 Serving
 1 glass (250 ml)
 Calories
-57 kcal
+142 kcal
 Protein
-2 g
+4 g
 Carbs
-7 g
+19 g
 Fat
-2 g
+6 g
 Used in
 —
 FitBud base foods can't be edited. Make your own copy to change it.

@@ -14,7 +14,7 @@ import type {
   NutritionBasis,
 } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
-import { formatNumber, labelFor } from "@fitbud/core";
+import { calculateServingNutrients, formatNumber, labelFor } from "@fitbud/core";
 import { Button } from "../../components/Button";
 import {
   EmptyState,
@@ -89,6 +89,30 @@ function scaledDisplay(value: number | null): string {
   return formatNumber(Math.round(value / NUTRIENT_SCALE));
 }
 
+/** First serving with a conversion — same pick as BuilderLibraryList.foodLibraryMetaLine. */
+function defaultFoodServing(item: FoodLibraryItem) {
+  return item.servings.find((candidate) => candidate.conversionScaled != null) ?? null;
+}
+
+/** Per-serving nutrients from per-100g (or basis) canonical values. */
+function foodServingNutrients(item: FoodLibraryItem) {
+  const serving = defaultFoodServing(item);
+  if (!serving || serving.conversionScaled == null) return null;
+  return {
+    serving,
+    calculated: calculateServingNutrients(
+      {
+        energyKcalScaled: item.energyKcalScaled,
+        proteinScaled: item.proteinScaled,
+        carbsScaled: item.carbsScaled,
+        fatScaled: item.fatScaled,
+      },
+      serving.conversionScaled,
+      NUTRIENT_SCALE,
+    ),
+  };
+}
+
 function sourceLabel(ownership: "global" | "trainer"): string {
   return ownership === "global" ? "FitBud base" : "Mine";
 }
@@ -100,12 +124,51 @@ function foodCategory(item: FoodLibraryItem): string {
   return "Uncategorised";
 }
 
-function foodServingKcal(item: FoodLibraryItem): string {
-  const serving = item.servings[0];
-  const servingLabel = serving?.label?.trim() || "—";
-  const kcal = scaledDisplay(item.energyKcalScaled);
+/** List meta: `portion · kcal` for the default serving (not raw per-100g). */
+export function foodServingKcal(item: FoodLibraryItem): string {
+  const nutrients = foodServingNutrients(item);
+  if (!nutrients) {
+    const fallback = item.servings[0]?.label?.trim() || "—";
+    return `${fallback} · —`;
+  }
+  const servingLabel = nutrients.serving.label.trim() || "—";
+  const kcal = scaledDisplay(nutrients.calculated.energyKcalScaled);
   if (kcal === "—") return `${servingLabel} · —`;
   return `${servingLabel} · ${kcal} kcal`;
+}
+
+function FoodDrawerMacroRows({ item }: { item: FoodLibraryItem }) {
+  const nutrients = foodServingNutrients(item);
+  const servingLabel =
+    nutrients?.serving.label ?? item.servings[0]?.label ?? "—";
+  const energy = scaledDisplay(nutrients?.calculated.energyKcalScaled ?? null);
+  const protein = scaledDisplay(nutrients?.calculated.proteinScaled ?? null);
+  const carbs = scaledDisplay(nutrients?.calculated.carbsScaled ?? null);
+  const fat = scaledDisplay(nutrients?.calculated.fatScaled ?? null);
+  return (
+    <>
+      <div>
+        <dt>Serving</dt>
+        <dd>{servingLabel}</dd>
+      </div>
+      <div>
+        <dt>Calories</dt>
+        <dd>{energy === "—" ? "—" : `${energy} kcal`}</dd>
+      </div>
+      <div>
+        <dt>Protein</dt>
+        <dd>{protein === "—" ? "—" : `${protein} g`}</dd>
+      </div>
+      <div>
+        <dt>Carbs</dt>
+        <dd>{carbs === "—" ? "—" : `${carbs} g`}</dd>
+      </div>
+      <div>
+        <dt>Fat</dt>
+        <dd>{fat === "—" ? "—" : `${fat} g`}</dd>
+      </div>
+    </>
+  );
 }
 
 function exerciseMuscle(item: ExerciseLibraryItem): string {
@@ -1147,42 +1210,7 @@ function FoodLibrary({
               </Button>
             </div>
             <dl className="libraries-drawer-dl">
-              <div>
-                <dt>Serving</dt>
-                <dd>{detail.servings[0]?.label ?? "—"}</dd>
-              </div>
-              <div>
-                <dt>Calories</dt>
-                <dd>
-                  {scaledDisplay(detail.energyKcalScaled) === "—"
-                    ? "—"
-                    : `${scaledDisplay(detail.energyKcalScaled)} kcal`}
-                </dd>
-              </div>
-              <div>
-                <dt>Protein</dt>
-                <dd>
-                  {scaledDisplay(detail.proteinScaled) === "—"
-                    ? "—"
-                    : `${scaledDisplay(detail.proteinScaled)} g`}
-                </dd>
-              </div>
-              <div>
-                <dt>Carbs</dt>
-                <dd>
-                  {scaledDisplay(detail.carbsScaled) === "—"
-                    ? "—"
-                    : `${scaledDisplay(detail.carbsScaled)} g`}
-                </dd>
-              </div>
-              <div>
-                <dt>Fat</dt>
-                <dd>
-                  {scaledDisplay(detail.fatScaled) === "—"
-                    ? "—"
-                    : `${scaledDisplay(detail.fatScaled)} g`}
-                </dd>
-              </div>
+              <FoodDrawerMacroRows item={detail} />
               <div>
                 <dt>Used in</dt>
                 <dd>—</dd>
