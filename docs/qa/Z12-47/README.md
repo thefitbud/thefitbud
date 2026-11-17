@@ -25,18 +25,20 @@ The browser console showed only React DOM prop warnings that predate this task (
 
 ## Device run (D-W12-34)
 
-**Run 44119639359**, app ref `claude/Z12-47-push-inbox` at `2cd1b9f` (both job logs: `app: 2cd1b9f8e857…`), harness from `main` at `636b6e2`. Flows `launch,z12-47,z12-38`: the launch smoke, F13 (this task) and Z12-38's TR-06h flow, because its banner copy changed here ("Rahul left a note").
+**Run 44130567993** (after the review fixes), app ref `claude/Z12-47-push-inbox` at `cd4742a` (every job log: `app: cd4742a98b40…`), harness from `main` at `4b07cad`. Flows `launch,z12-47`: the launch smoke and F13 (this task). TR-15a and TR-15b shots in this folder come from this run (`refs/device-gate/44130567993-2`).
 
 | Platform | Light | Dark | Device log |
 |---|---|---|---|
-| iOS simulator | 4 / 4 | 4 / 4 | clean, 0 allowed |
-| Android emulator | 4 / 4 | 4 / 4 | clean, 0 allowed |
+| iOS simulator | 3 / 3 | 3 / 3 | clean, 0 allowed (both attempts) |
+| Android emulator | 2 / 3 (F13 passed) | 3 / 3 | `capture-empty` |
 
-First attempt, no re-run. Screenshots in this folder: TR-15a, TR-15b and TR-06h, light and dark, iOS and Android.
+Android, both attempts (one flake re-run): the first flow of the run, "Launch smoke, trainee Today loads", fails after 3 s with Maestro's "Unknown error". In the same attempts the same flow passes in dark, and F13 (also a trainee) passes in light. The logcat capture never sees `Running "main"` (`capture-empty`), so the log scan proved nothing. Z12-50's run 44135603252 (other code, launched minutes later) failed the same way, so this is the emulator or harness, not this change. It is not marked as passed.
+
+**Earlier run 44119639359** at `2cd1b9f` (before the review fixes), flows `launch,z12-47,z12-38`: iOS and Android 4/4 in both themes, logs clean. The TR-06h shots come from that run; the review fixes do not touch the banner.
 
 What F13 does on the device: Aarav signs in, the coach shares a note (local API), the inbox shows it unread (TR-15a); a tap marks it read and lands on Today; Read all clears the rest and the button goes away; Back returns to Today. Then Tanvi, who has nothing in the last 30 days, opens the inbox (TR-15b).
 
-**Lock screen (extras).** The gate sends one `daily_summary` push after the flows, in the dark run only. iOS: `simctl push` delivered, but the lock screen showed no entry (`lockscreen-notification-dark-ios.png`), although F13 and every other flow launch with `permissions: all: allow`. So the Z12-35 guess (no permission) is not the cause, or not the only one; Z12-58's phone checklist covers it. Android: a shell notification (the CI APK has no Firebase config), which opens nothing by design (`lockscreen-notification-shade-dark-android.png`). Its text is the harness's copy of the server's text ("FitBud" + type label), not the app's.
+**Lock screen (extras).** The gate sends one `daily_summary` push after the flows, in the dark run only (same result in run 44130567993). iOS: `simctl push` delivered, but the lock screen showed no entry (`lockscreen-notification-dark-ios.png`), although F13 and every other flow launch with `permissions: all: allow`. So the Z12-35 guess (no permission) is not the cause, or not the only one; Z12-58's phone checklist covers it. Android: a shell notification (the CI APK has no Firebase config), which opens nothing by design (`lockscreen-notification-shade-dark-android.png`). Its text is the harness's copy of the server's text ("FitBud" + type label), not the app's.
 
 ## Controls on the changed screens (screen → control → result)
 
