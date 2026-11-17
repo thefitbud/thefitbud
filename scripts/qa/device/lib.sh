@@ -94,6 +94,50 @@ demo_password() {
   printf '%s' "$value"
 }
 
+# android_wait_stable [checks] [timeout s]: waits until the emulator's adb link has been
+# steady for <checks> one-second checks in a row: `adb get-state` says device,
+# sys.boot_completed is 1 and the package manager answers (`pm path android`). Prints
+# what it saw; returns 1 when the link is still not steady after <timeout> seconds.
+# Android only (ubuntu runner: GNU `timeout` is there).
+#
+# sys.boot_completed alone is not enough. After the snapshot boot every run first sees
+# "adb: device offline", and in runs 44130567993, 44135603252 and 44114041962 the
+# transport dropped again during the light pass ("device 'emulator-5554' not found"),
+# failing a flow in 2-4 s and ending the logcat stream.
+android_wait_stable() {
+  local need="${1:-${DEVICE_ADB_STABLE_CHECKS:-8}}" timeout="${2:-180}" start now stable=0 drops=0 state boot pm
+  start="$(date +%s)"
+  while :; do
+    now="$(date +%s)"
+    if [ $((now - start)) -ge "$timeout" ]; then
+      printf 'not steady after %ss (%s drop(s) seen)' "$timeout" "$drops"
+      return 1
+    fi
+    state="$(timeout 10 adb get-state 2>/dev/null | tr -d '\r[:space:]')"
+    boot=""
+    pm=""
+    if [ "$state" = "device" ]; then
+      boot="$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r[:space:]')"
+      pm="$(timeout 10 adb shell pm path android 2>/dev/null | tr -d '\r')"
+    fi
+    case "$boot:$pm" in
+      1:*package:*)
+        stable=$((stable + 1))
+        if [ "$stable" -ge "$need" ]; then
+          printf 'steady for %s checks after %ss (%s drop(s) seen)' "$need" "$((now - start))" "$drops"
+          return 0
+        fi
+        ;;
+      *)
+        if [ "$stable" -gt 0 ]; then drops=$((drops + 1)); fi
+        stable=0
+        timeout 10 adb wait-for-device >/dev/null 2>&1 || true
+        ;;
+    esac
+    sleep 1
+  done
+}
+
 # device_shot_name <screen or step> <theme> <platform> -> "<screen>-<theme>-<platform>.png"
 device_shot_name() {
   printf '%s-%s-%s.png' "$1" "$2" "$3"

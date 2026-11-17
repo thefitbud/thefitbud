@@ -9,11 +9,17 @@
 //   scan.json                  scan-logs.mjs
 //   extras/*.json              push, lock-screen and offline evidence (optional)
 //   flows.txt                  the flow files that were selected
+//   <theme>/retry.json         infra-retry.mjs decisions for the theme's failed flows
+//   <theme>/junit-retry*.xml   the one retry of the flows it allowed, and
+//   <theme>/maestro-exit-retry its exit code
 // Writes summary.json and summary.md next to them and exits 1 when the gate fails:
 //   * any Maestro flow failed or was skipped, a theme has no report, the reports hold a
 //     different number of flows than were selected, or Maestro exited non-zero;
 //   * the device-log scan failed (crash, red box, LogBox, JS console.error/warn, React
 //     warning, or a log that never showed the app starting).
+// A flow that failed on the emulator's adb link (infra-retry.mjs) and passed its one
+// retry counts as passed, and the summary says so; a retry that failed keeps the flow
+// failed. Every retry decision, taken or refused, is listed.
 // Extras are evidence, reported but not part of the verdict: each task names the push,
 // lock-screen or offline outcome it needs (prompt §3 item 5).
 import fs from "node:fs";
@@ -66,7 +72,52 @@ export function themeResult(dir, theme, expectedReports = null) {
       r.error = r.error ? `${r.error}; ${err.message}` : err.message;
     }
   }
+  applyRetries(r, themeDir);
   return r;
+}
+
+/**
+ * Folds the theme's infra retries into its result. A failure the retry passed becomes a
+ * pass; one it failed stays a failure with both messages. `r.retries` lists the flows
+ * retried, `r.notRetried` the failures infra-retry.mjs refused, with the reason.
+ */
+function applyRetries(r, themeDir) {
+  r.retries = [];
+  r.notRetried = [];
+  const decisions = readJson(path.join(themeDir, "retry.json"));
+  if (!Array.isArray(decisions) || decisions.length === 0) return;
+  const retryCases = new Map();
+  for (const f of fs.readdirSync(themeDir).filter((n) => /^junit-retry(-\d+)?\.xml$/.test(n)).sort()) {
+    try {
+      for (const c of parseJUnit(fs.readFileSync(path.join(themeDir, f), "utf8"), `${r.theme}/${f}`).cases) retryCases.set(c.name, c);
+    } catch (err) {
+      r.error = r.error ? `${r.error}; ${err.message}` : err.message;
+    }
+  }
+  for (const d of decisions) {
+    const i = r.failures.findIndex((f) => f.flow === d.flow);
+    if (!d.retry) {
+      r.notRetried.push({ flow: d.flow, reason: d.reason });
+      if (i >= 0) r.failures[i].notRetried = d.reason;
+      continue;
+    }
+    const again = retryCases.get(d.flow);
+    const outcome = again ? (again.status === "pass" ? "passed" : again.status === "fail" ? "failed" : "skipped") : "no report";
+    r.retries.push({ flow: d.flow, firstFailure: d.message, reason: d.reason, outcome });
+    if (i < 0) continue;
+    if (outcome === "passed") {
+      r.failures.splice(i, 1);
+      r.failed--;
+      r.passed++;
+    } else {
+      const second = again?.message ? again.message.split("\n")[0].slice(0, 200) : outcome;
+      r.failures[i].message = `${r.failures[i].message} (infra retry: ${second})`;
+    }
+  }
+  const exitFile = path.join(themeDir, "maestro-exit-retry");
+  const retryExit = fs.existsSync(exitFile) ? Number(fs.readFileSync(exitFile, "utf8").trim()) : null;
+  // Maestro's first exit code is non-zero because of the failures the retry recovered.
+  r.recoveredByRetry = r.retries.length > 0 && r.retries.every((x) => x.outcome === "passed") && retryExit === 0;
 }
 
 export function buildGateSummary({ dir, platform }) {
@@ -94,7 +145,7 @@ export function buildGateSummary({ dir, platform }) {
     if (!r.error && flows.length && r.total !== flows.length) {
       reasons.push(`${r.theme}: ${r.total} flow results for ${flows.length} selected flows`);
     }
-    if (!r.error && !r.failed && r.maestroExit !== 0) reasons.push(`${r.theme}: Maestro exited ${r.maestroExit}`);
+    if (!r.error && !r.failed && r.maestroExit !== 0 && !r.recoveredByRetry) reasons.push(`${r.theme}: Maestro exited ${r.maestroExit}`);
   }
   if (!scan) reasons.push("no device-log scan");
   else if (scan.status !== "pass") {
@@ -109,7 +160,12 @@ export function toMarkdown(s) {
   out.push(`Flows (${s.flows.length}): ${s.flows.map((f) => `\`${f}\``).join(", ") || "none"}`, "");
   out.push("| theme | flows | passed | failed | Maestro exit |", "|---|---|---|---|---|");
   for (const t of s.themes) out.push(`| ${t.theme} | ${t.total} | ${t.passed} | ${t.failed} | ${t.maestroExit ?? "—"} |`);
-  const failures = s.themes.flatMap((t) => t.failures.map((f) => `- ${t.theme} · ${f.flow}: ${f.message}`));
+  const retries = s.themes.flatMap((t) => (t.retries ?? []).map((x) => `- ${t.theme} · ${x.flow}: first run "${x.firstFailure}" → retried once → **${x.outcome}** (${x.reason})`));
+  if (s.platform === "android" || retries.length) out.push("", `**Infra retries:** ${retries.length ? `${retries.length} (a flow that failed on the emulator's adb link, run once more; infra-retry.mjs)` : "none"}`);
+  if (retries.length) out.push("", ...retries);
+  const failures = s.themes.flatMap((t) =>
+    t.failures.map((f) => `- ${t.theme} · ${f.flow}: ${f.message}${f.notRetried ? ` (not retried: ${f.notRetried})` : ""}`),
+  );
   if (failures.length) out.push("", "<details><summary>Failed flows</summary>", "", ...failures, "", "</details>");
   if (s.scan) {
     const counts = Object.entries(s.scan.counts).map(([k, n]) => `${k}: ${n}`).join(" · ");
