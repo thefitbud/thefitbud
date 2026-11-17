@@ -1,0 +1,134 @@
+Skip to content
+FitBud
+Home
+8
+Clients
+Check-ins
+6
+Templates
+More
+Help
+RV
+Rahul Verma
+Trainer
+Rohan Mehta
+Search clients
+⌘K
+Clients
+Rohan Mehta
+RM
+Rohan Mehta
+Active
+Needs attention
+Lose 6 kg
+Fat loss · Phase 2
+Week 15
+Next check-in Fri 20 Nov
+29 · Male
+Renewal expired · Sat 14 Nov
+Message on WhatsApp
+Review issue
+⋯
+Overview
+Plan
+Activity
+Progress
+Check-ins
+History
+Plans
+Coaching setup
+Replace from template
+Adjust plan
+⋯
+Plan and configuration differ
+This plan maps 4 workout sessions to weekdays, and the configuration expects 3 sessions per week. Adjust the plan, adjust the configuration, or acknowledge the difference.
+Adjust plan
+Adjust configuration
+Acknowledge the difference
+
+ROHAN'S CURRENT PROGRAM
+
+Fat loss · Phase 2
+Active
+
+Week 6 · Effective since Fri 9 Oct · v2 · ongoing · what Rohan sees in his app today
+
+WORKOUT
+
+4 sessions a week
+
+Fat loss · Phase 2 · v2 · since Fri 9 Oct
+
+Open builder
+for workouts
+
+NUTRITION
+
+1,745 kcal · 4 meals a day
+
+Fat loss · Phase 2 · v2 · since Fri 9 Oct
+
+Open builder
+for nutrition
+Mon
+Upper body A
+Mon
+4 meals
+1,745 kcal
+Tue
+(today)
+Lower body A
+Tue
+4 meals
+1,745 kcal
+Wed
+Rest
+Wed
+4 meals
+1,745 kcal
+Thu
+Upper body B
+Thu
+4 meals
+1,745 kcal
+Fri
+Rest
+Fri
+4 meals
+1,745 kcal
+Sat
+Lower body B
+Sat
+4 meals
+1,745 kcal
+Sun
+Rest
+Sun
+4 meals
+1,745 kcal
+Versions
+Hide
+All
+Workout
+Nutrition
+Status
+Status: any
+Status: Draft
+Status: Published
+Status: Scheduled
+Status: Active
+Status: Superseded
+Status: Superseded
+1 of 2
+Plan	Part	Version	Status	Effective	Published	
+Actions
+
+
+Fat loss · Phase 2	Workout	v1	
+Superseded	Tue 11 Aug — Fri 9 Oct	You · Tue 11 Aug	View
+Fat loss · Phase 2 v1
+Meal times
+Breakfast · plan 8:00 am
+Lunch · plan 1:00 pm
+Snack · plan 5:00 pm
+Dinner · plan 8:00 pm

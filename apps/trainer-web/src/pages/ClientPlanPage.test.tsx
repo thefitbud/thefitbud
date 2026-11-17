@@ -273,38 +273,65 @@ describe("ClientPlanPage current program card (frame 150)", () => {
     expect(screen.getByRole("button", { name: "Replace from template" })).toBeTruthy();
   });
 
-  it("shows the versions row open with plan, version, status and inclusive civil dates", async () => {
+  it("shows the versions row open with plan, part, version, status and inclusive civil dates", async () => {
     const view = renderPage({ plan: true });
     const table = await screen.findByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
     expect(rows.map((row) => row.textContent)).toEqual([
-      "Fat loss · phase 3v1ScheduledFrom Mon 16 NovYou · Sat 17 OctView Fat loss · phase 3 v1",
+      "Fat loss · phase 3Workout · Nutritionv1ScheduledFrom Mon 16 NovYou · Sat 17 OctView Fat loss · phase 3 v1",
       // Exclusive local-midnight boundary → the day before.
-      "Fat loss · phase 2v2ActiveMon 21 Sep — Sun 15 NovYou · Sat 19 SepView Fat loss · phase 2 v2",
+      "Fat loss · phase 2Workout · Nutritionv2ActiveMon 21 Sep — Sun 15 NovYou · Sat 19 SepView Fat loss · phase 2 v2",
       // Mid-day boundary → that same civil day.
-      "Fat loss · phase 2v1SupersededWed 2 Sep — Mon 14 SepYou · Tue 1 SepView Fat loss · phase 2 v1",
+      "Fat loss · phase 2Workout · Nutritionv1SupersededWed 2 Sep — Mon 14 SepYou · Tue 1 SepView Fat loss · phase 2 v1",
     ]);
     expect(screen.getByTestId("versions-count").textContent).toBe("3 of 3");
-    expect(table.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}|effective|superseded|%/);
+    expect(within(table).getByRole("columnheader", { name: "Part" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed")).toBe("true");
+    expect(table.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}|effective|%/);
     // The toggle still collapses it.
     fireEvent.click(screen.getByRole("button", { name: /Versions/ }));
     expect(view.container.querySelector(".versions-table")).toBeNull();
   });
 
-  it("filters versions by status through the API", async () => {
+  it("filters versions by status through the API and keeps N of M against the total", async () => {
     renderPage({ plan: true });
     await screen.findByRole("table");
     fireEvent.change(screen.getByRole("combobox", { name: "Status" }), {
       target: { value: "scheduled" },
     });
     await waitFor(() =>
-      expect(api.listPlans).toHaveBeenLastCalledWith(REL, {
+      expect(api.listPlans).toHaveBeenCalledWith(REL, {
         cursor: undefined,
         limit: 20,
         versionStatus: "scheduled",
       }),
     );
-    await waitFor(() => expect(screen.getByTestId("versions-count").textContent).toBe("1 of 1"));
+    await waitFor(() =>
+      expect(screen.getByTestId("versions-count").textContent).toMatch(/^1 of /),
+    );
+  });
+
+  it("filters the versions table by Workout / Nutrition part (frame 200)", async () => {
+    renderPage({ plan: true });
+    await screen.findByRole("table");
+    fireEvent.click(screen.getByRole("button", { name: "Workout" }));
+    expect(screen.getByRole("button", { name: "Workout" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    // Combined plans stay visible under Workout; Part column reads Workout.
+    const table = screen.getByRole("table");
+    expect(within(table).getAllByRole("row").slice(1).length).toBeGreaterThan(0);
+    expect(table.textContent).toContain("Workout");
+    fireEvent.change(screen.getByRole("combobox", { name: "Status" }), {
+      target: { value: "superseded" },
+    });
+    await waitFor(() =>
+      expect(api.listPlans).toHaveBeenCalledWith(REL, {
+        cursor: undefined,
+        limit: 20,
+        versionStatus: "superseded",
+      }),
+    );
   });
 
   it("is read-only for an ended client: no adjust actions, no app-today copy", () => {

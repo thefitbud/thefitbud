@@ -151,6 +151,18 @@ export function PlanBuilderPage() {
         }
         loadPreview={async () => (await apiClient.previewPlanVersion(planId, versionId)).content}
         onPublish={(args) => setPublishing(args)}
+        publishLabel="Publish & schedule"
+        conflictHandlers={{
+          prepareKeepMine: async () => {
+            const latest = await apiClient.getPlanVersion(planId, versionId);
+            recordVersion.current = latest.recordVersion;
+          },
+          loadRemote: async () => {
+            const latest = await apiClient.getPlanVersion(planId, versionId);
+            recordVersion.current = latest.recordVersion;
+            return { title: planTitle, content: latest.content };
+          },
+        }}
         screenId={tab === "nutrition" ? "screen-TW-14" : "screen-TW-13"}
       />
       {publishing ? (
