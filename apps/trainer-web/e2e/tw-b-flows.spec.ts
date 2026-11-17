@@ -287,7 +287,7 @@ test.describe("TW-B first-run welcome", () => {
     await page.getByTestId("screen-TW-02").waitFor({ state: "visible" });
     await page.getByLabel(/display name/i).fill("Nova Coach");
     await page.getByPlaceholder(/98765/i).fill("9876500999");
-    await page.getByLabel(/timezone/i).fill("Asia/Kolkata");
+    await page.getByLabel(/timezone/i).selectOption("Asia/Kolkata");
     await page.getByRole("button", { name: /^continue$/i }).click();
     await expect(page.getByText(/your starting templates/i)).toBeVisible({
       timeout: 15_000,
