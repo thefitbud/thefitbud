@@ -1,0 +1,16 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow (no tags). From Today, opens the Workout tab and waits for its week.
+# "Workout" also names a tile on Today; the tab is the later match. If the first tap
+# left Today on screen (its macro summary is still there), tap the tab bar's match.
+- tapOn: "Workout"
+- runFlow:
+    when:
+      visible: ".*of [0-9,]+ kcal"
+    commands:
+      - tapOn:
+          text: "Workout"
+          index: 1
+- extendedWaitUntil:
+    notVisible: "Loading workouts…"
+    timeout: 30000

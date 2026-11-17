@@ -16,19 +16,15 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await signIn(page);
   });
 
-  test("TW-21 history: week groups, kind pills, empty copy", async ({ page }) => {
+  test("TW-21 history: All events, absolute times, empty copy", async ({ page }) => {
     await page.goto(`/clients/${ROHAN}/history`);
     await expect(page.getByTestId("screen-TW-21")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole("heading", { name: /Week of /i }).first()).toBeVisible({
+    await expect(page.getByLabel("All events")).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".history-timeline-item").first()).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByRole("button", { name: /^All$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Workouts$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Meals$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Check-ins$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Plans$/i })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Account$/i })).toBeVisible();
-    await expect(page.locator(".history-kind-pills .filter-pill")).toHaveCount(6);
+    await expect(page.locator(".history-timeline-when").first()).toContainText(/[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}/);
+    await expect(page.getByText("Choose a date").first()).toBeVisible();
     await expect(page.getByText("clinical intervention")).toHaveCount(0);
   });
 

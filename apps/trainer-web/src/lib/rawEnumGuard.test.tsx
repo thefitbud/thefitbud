@@ -460,11 +460,10 @@ describe("rawEnumGuard: web", () => {
         );
         const text = view.container.textContent ?? "";
         expect(rawEnumHits(view.container), `${outcome}/${reviewed}`).toEqual([]);
-        expect(text).toContain(
-          `Cadence: ${{ weekly: "Weekly", biweekly: "Every 2 weeks", monthly: "Monthly" }[cadences[index % cadences.length]!]}`,
-        );
+        // Z12-8: header is “Weekly check-in · …” (frame 163); cadence no longer a Cadence: line.
+        expect(text).toContain("Weekly check-in");
         if (reviewed) {
-          expect(text).toContain("Reviewed ·");
+          expect(text).toMatch(/Reviewed( by you)?/);
           expect(text).not.toContain(outcome);
         }
         cleanup();

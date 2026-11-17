@@ -1,0 +1,24 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow (no tags: never run on its own). The trainee's days as the strip names
+# them ("Thu 19 Nov"), in Asia/Kolkata, the demo trainees' timezone, from the
+# device clock, and what the local demo seed must show for them (Z12-44 review).
+#
+# The seed's "today" is the IST date when the job seeded (apps/api/src/seed/demo/
+# build.ts, kolkataLocalDate), and it logs a workout only once its 07:00 IST slot
+# has opened (history.ts, workout window). The callers ASSERT these expectations
+# before they branch, so a seed whose day or slot disagrees with the device fails
+# the flow instead of skipping a branch.
+#
+# Sets:
+#   output.today        today, e.g. "Thu 19 Nov"
+#   output.lastSat      the most recent Saturday before today
+#   output.trainingDay  "yes" on the seeded plan's workout days (Mon, Tue, Thu,
+#                       Sat: personas.ts, Upper A / Lower A / Upper B / Lower B)
+#   output.aaravToday   Aarav's strip state for today: "Done" or "Rest"
+#   output.rohanToday   Rohan's strip state for today: "To do" or "Rest"
+- evalScript: ${output.today = (function () { var d = new Date(Date.now() + 5.5 * 3600 * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
+- evalScript: ${output.lastSat = (function () { var now = Date.now() + 5.5 * 3600 * 1000; var back = (new Date(now).getUTCDay() + 1) % 7 || 7; var d = new Date(now - back * 86400 * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
+- evalScript: "${output.trainingDay = [1, 2, 4, 6].indexOf(new Date(Date.now() + 5.5 * 3600 * 1000).getUTCDay()) >= 0 ? 'yes' : 'no'}"
+- evalScript: "${output.aaravToday = output.trainingDay == 'yes' ? 'Done' : 'Rest'}"
+- evalScript: "${output.rohanToday = output.trainingDay == 'yes' ? 'To do' : 'Rest'}"

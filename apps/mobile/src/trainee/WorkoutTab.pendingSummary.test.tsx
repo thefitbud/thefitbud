@@ -11,7 +11,7 @@ import {
   type CoachingRelationship,
   type WorkoutAssignment,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor } from "../test/render";
+import { act, fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 
 /*
  * `WorkoutTab` reaches `modules/live-activity` through the active-workout
@@ -100,13 +100,18 @@ function dayAssignment(opts: {
 
 let items: WorkoutAssignment[] = [];
 let executionDetail: unknown = null;
+/** When set, a week read waits on this promise (a reload still in flight). */
+let holdList: Promise<void> | null = null;
 
 const api = new Proxy(
   {},
   {
     get(_target, key: string) {
       if (key === "listWorkoutAssignments") {
-        return async () => ({ items, nextCursor: null });
+        return async () => {
+          if (holdList) await holdList;
+          return { items, nextCursor: null };
+        };
       }
       if (key === "getWorkoutExecution") return async () => executionDetail;
       if (key === "then") return undefined;
@@ -226,6 +231,7 @@ beforeEach(() => {
   invalidateRelationshipDayData(relationship.id);
   items = [];
   executionDetail = null;
+  holdList = null;
 });
 
 describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
@@ -240,7 +246,9 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
         onPendingSummaryConsumed={consumed}
       />,
     );
-    expect(await screen.findByText("How hard it felt")).toBeTruthy();
+    expect(
+      await screen.findByRole("button", { name: "Save and share with Rahul" }, { timeout: 5000 }),
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
   });
@@ -261,7 +269,7 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
     // summary have neither.
     expect(await screen.findByRole("button", { name: "Back" })).toBeTruthy();
     expect(screen.getByLabelText("Exercise 1, 1 set")).toBeTruthy();
-    expect(screen.queryByText("How hard it felt")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save and share with Rahul" })).toBeNull();
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
   });
 
@@ -277,6 +285,45 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
       />,
     );
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText("How hard it felt")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save and share with Rahul" })).toBeNull();
+  });
+});
+
+describe("WorkoutTab after a finish, before the reload answers (Z12-44 review)", () => {
+  it("shows the finished day as done, never the list read before the finish", async () => {
+    // The week was read while the session ran: the list says in progress and
+    // its execution summary says started. The finish then reached the server.
+    const done = doneToday("trainee");
+    items = [
+      workoutAssignmentSchema.parse({
+        ...done,
+        status: "in_progress",
+        execution: { ...done.execution, status: "started", completedAt: null },
+      }),
+    ];
+    render(
+      <WorkoutTab
+        relationship={relationship}
+        selectedDate={TODAY}
+        pendingSummaryExecutionId={uuid(8001)}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save and share with Rahul" }, { timeout: 5000 }),
+    );
+    // Leaving the summary reloads the week; hold that read in flight.
+    let release!: () => void;
+    holdList = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const doneButton = await screen.findByRole("button", { name: "Done" });
+    await act(async () => {});
+    fireEvent.click(doneButton);
+    expect(await screen.findByRole("button", { name: "View summary" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Continue workout" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start workout" })).toBeNull();
+    await act(async () => {
+      release();
+    });
   });
 });

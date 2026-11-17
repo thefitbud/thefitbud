@@ -89,12 +89,12 @@ Template row (W12-PROMPT §3):
 | TR-08b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-08b-changed-portion.png` | — |
 | TR-08c | light | — | — | — | — | `docs/design/v3/png/trainee/TR-08c-ate-out.png` | — |
 | TR-08c | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-08c-ate-out.png` | — |
-| TR-10a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-10a-workout-rest-day.png` | — |
-| TR-10a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-10a-workout-rest-day.png` | — |
-| TR-10b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-10b-workout-no-plan.png` | — |
-| TR-10b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-10b-workout-no-plan.png` | — |
-| TR-10c | light | — | — | — | — | `docs/design/v3/png/trainee/TR-10c-workout-missed-banner.png` | — |
-| TR-10c | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-10c-workout-missed-banner.png` | — |
+| TR-10a | light | yes · device/z12-44/1 (swipe to a rest day) | CLOSE | CLOSE | `docs/qa/Z12-44/TR-10a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-10a-workout-rest-day.png` | Z12-44: rest card and Next row; non-today body "No workout planned for this day."; run 44144088662 (app 7d8ababa) |
+| TR-10a | dark | yes · device/z12-44/1 (swipe to a rest day) | CLOSE | CLOSE | `docs/qa/Z12-44/TR-10a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-10a-workout-rest-day.png` | Z12-44: rest card and Next row; non-today body "No workout planned for this day."; run 44144088662 (app 7d8ababa) |
+| TR-10b | light | yes · device/z12-44/3 (Harpreet) | CLOSE | CLOSE | `docs/qa/Z12-44/TR-10b-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-10b-workout-no-plan.png` | Z12-44: copy "when they're added" (no gender in the data); WhatsApp only when the coach's number is known; run 44144088662 (app 7d8ababa) |
+| TR-10b | dark | yes · device/z12-44/3 (Harpreet) | CLOSE | CLOSE | `docs/qa/Z12-44/TR-10b-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/TR-10b-workout-no-plan.png` | Z12-44: copy "when they're added" (no gender in the data); WhatsApp only when the coach's number is known; run 44144088662 (app 7d8ababa) |
+| TR-10c | light | yes · device/z12-44/2 (Rohan) | CLOSE | CLOSE | `docs/qa/Z12-44/TR-10c-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/TR-10c-workout-missed-banner.png` | Z12-44: one-line banner + Log it; several misses read "You missed N workouts this week"; run 44144088662 (app 7d8ababa) |
+| TR-10c | dark | yes · device/z12-44/2 (Rohan) | — | — | `docs/qa/Z12-44/web/TR-10c-workout-missed-banner-dark-web.png` (web only) | `docs/design/v3/png-dark/trainee/TR-10c-workout-missed-banner.png` | no device shot: by the dark pass the light run had opened Monday's missed workout, so no banner was left; Expo web shows it in dark. one-line banner + Log it; several misses read "You missed N workouts this week"; run 44144088662 (app 7d8ababa) |
 | TR-13a | light | — | — | — | — | `docs/design/v3/png/trainee/TR-13a-progress-default.png` | — |
 | TR-13a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-13a-progress-default.png` | — |
 | TR-13b | light | — | — | — | — | `docs/design/v3/png/trainee/TR-13b-progress-empty.png` | — |
@@ -175,16 +175,16 @@ Template row (W12-PROMPT §3):
 | TR-26e | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-26e-custom-food.png` | — |
 | TR-26f | light | — | — | — | — | `docs/design/v3/png/trainee/TR-26f-manual-log-saved.png` | — |
 | TR-26f | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/TR-26f-manual-log-saved.png` | — |
-| W-01a | light | yes · device/z12-40/1 (Aarav → Workout) | GAP | GAP | `docs/qa/Z12-40/W-01a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-01a-workout-tab-not-started.png` | Z12-40: Workout follows the shared day and the swipe; it keeps its own v2 week strip (workout names, Maestro labels such as "Sat Lower B") and v2 hero until the Workout v3 rework (Z12-44); run 44098030020 (review fixes, app e4d67bf) |
-| W-01a | dark | yes · device/z12-40/1 | GAP | GAP | `docs/qa/Z12-40/W-01a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-01a-workout-tab-not-started.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44098030020 (review fixes, app e4d67bf) |
-| W-01b | light | — | — | — | — | `docs/design/v3/png/trainee/W-01b-workout-tab-in-progress.png` | — |
-| W-01b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01b-workout-tab-in-progress.png` | — |
-| W-01c | light | — | — | — | — | `docs/design/v3/png/trainee/W-01c-workout-tab-done.png` | — |
-| W-01c | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01c-workout-tab-done.png` | — |
+| W-01a | light | yes · device/z12-44/2 (Rohan, today not started; asserted from the device clock) | GAP | GAP | — (pending the re-run on a Tue/Thu IST) | `docs/design/v3/png/trainee/W-01a-workout-tab-not-started.png` | Z12-44 review: run 44144088662 had no W-01a. Its `W-01a-*` shots were z12-40/1's unconditional `takeScreenshot: W-01a…` on Aarav's Workout tab (a done day on Android, a rest day on iOS), so the earlier CLOSE grade and "missed banner on screen" were wrong; those shots are removed. z12-40's shot is renamed; z12-44/2 now captures Rohan's today in both themes. Expo web: CLOSE (`docs/qa/Z12-44/web/`) |
+| W-01a | dark | yes · device/z12-44/2 (Rohan, today not started; asserted from the device clock) | GAP | GAP | — (pending the re-run on a Tue/Thu IST) | `docs/design/v3/png-dark/trainee/W-01a-workout-tab-not-started.png` | Z12-44 review: as light, the run 44144088662 shots were z12-40/1's Aarav screens and are removed. Expo web: CLOSE (`docs/qa/Z12-44/web/`) |
+| W-01b | light | yes · device/z12-44/2 (session opened, app relaunched) | CLOSE | CLOSE | `docs/qa/Z12-44/W-01b-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-01b-workout-tab-in-progress.png` | Z12-44: clock and set count from the server after a kill and relaunch; no "Finish now" (W-16 is Z12-45's); run 44144088662 (app 7d8ababa) |
+| W-01b | dark | yes · device/z12-44/2 (session opened, app relaunched) | CLOSE | CLOSE | `docs/qa/Z12-44/W-01b-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-01b-workout-tab-in-progress.png` | Z12-44: clock and set count from the server after a kill and relaunch; no "Finish now" (W-16 is Z12-45's); run 44144088662 (app 7d8ababa) |
+| W-01c | light | yes · device/z12-44/1 (Aarav, today done; asserted from the device clock) | — | CLOSE | `docs/qa/Z12-44/W-01c-light-android.png` | `docs/design/v3/png/trainee/W-01c-workout-tab-done.png` | Z12-44: View summary only (ISSUE-MAP #4), also on Today and after a relaunch; no "1 PR" badge (no record data). Android: Aarav's today (run 44144088662, app 7d8ababa). iOS: not today's card: the iOS job ran after IST midnight on a Wednesday (a rest day), so z12-44/1's done-day block did not run and the kept shot was Rohan's finished Tuesday (a past day); removed, pending the re-run |
+| W-01c | dark | yes · device/z12-44/1 (Aarav, today done; asserted from the device clock) | — | CLOSE | `docs/qa/Z12-44/W-01c-dark-android.png` | `docs/design/v3/png-dark/trainee/W-01c-workout-tab-done.png` | Z12-44: as light. Android: Aarav's today (run 44144088662, app 7d8ababa). iOS: Rohan's finished past day, not today's card; removed, pending the re-run |
 | W-01d | light | — | — | — | — | `docs/design/v3/png/trainee/W-01d-plan-changed-banner.png` | — |
 | W-01d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01d-plan-changed-banner.png` | — |
-| W-01e | light | yes · F29 step 3 | GAP | GAP | `docs/qa/Z12-40/W-01e-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-01e-workout-tab-future-day.png` | behaviour matches ("Opens on …" in place of Start workout, on the shared day); layout v2 strip and hero (Z12-44); run 44080890973 |
-| W-01e | dark | yes · F29 step 3 | GAP | GAP | `docs/qa/Z12-40/W-01e-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-01e-workout-tab-future-day.png` | renders light under system dark: the tab body is not opted in to v3 dark (Z12-40 decision 2; its v3 task opts it in); run 44080890973 |
+| W-01e | light | yes · device/z12-44/1 (swipe to a planned day) | CLOSE | CLOSE | `docs/qa/Z12-44/W-01e-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-01e-workout-tab-future-day.png` | Z12-44: "Opens on …" in place of Start, no options; Monday-first strip; run 44144088662 (app 7d8ababa) |
+| W-01e | dark | yes · device/z12-44/1 (swipe to a planned day) | CLOSE | CLOSE | `docs/qa/Z12-44/W-01e-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-01e-workout-tab-future-day.png` | Z12-44: "Opens on …" in place of Start, no options; Monday-first strip; run 44144088662 (app 7d8ababa) |
 | W-02 | light | — | — | — | — | `docs/design/v3/png/trainee/W-02-active-start.png` | — |
 | W-02 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-02-active-start.png` | — |
 | W-03 | light | yes · state: Rohan → Workout → Sat Lower B → set 1 logged (device/z12-36/3) | GAP | GAP | docs/qa/Z12-36/W-03-light-ios.png, …-android.png | `docs/design/v3/png/trainee/W-03-active-mid.png` | Z12-36 anchor for primitives only: active workout not migrated yet (v2 indigo log bar and set rows); Inter is in |
@@ -215,10 +215,10 @@ Template row (W12-PROMPT §3):
 | W-15 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-15-discard-confirm.png` | — |
 | W-16 | light | — | — | — | — | `docs/design/v3/png/trainee/W-16-finish-early.png` | — |
 | W-16 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-16-finish-early.png` | — |
-| W-17a | light | — | — | — | — | `docs/design/v3/png/trainee/W-17a-summary.png` | — |
-| W-17a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-17a-summary.png` | — |
-| W-17b | light | — | — | — | — | `docs/design/v3/png/trainee/W-17b-summary-shared.png` | — |
-| W-17b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-17b-summary-shared.png` | — |
+| W-17a | light | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-17a-summary.png` | Z12-44: no RPE picker, note or record card (no backend after a finish); RPE shows read-only when recorded; run 44144088662 (app 7d8ababa) |
+| W-17a | dark | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-17a-summary.png` | Z12-44: no RPE picker, note or record card (no backend after a finish); RPE shows read-only when recorded; run 44144088662 (app 7d8ababa) |
+| W-17b | light | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17b-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-17b-summary-shared.png` | Z12-44: ticks equal "N of M done" (ISSUE-MAP #10); copy without "the record and your note"; Monday-first; run 44144088662 (app 7d8ababa) |
+| W-17b | dark | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17b-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-17b-summary-shared.png` | Z12-44: ticks equal "N of M done" (ISSUE-MAP #10); copy without "the record and your note"; Monday-first; run 44144088662 (app 7d8ababa) |
 | W-18 | light | — | — | — | — | `docs/design/v3/png/trainee/W-18-resume-after-kill.png` | — |
 | W-18 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-18-resume-after-kill.png` | — |
 | W-19 | light | — | — | — | — | `docs/design/v3/png/trainee/W-19-paused.png` | — |
