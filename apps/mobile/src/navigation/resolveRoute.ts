@@ -213,3 +213,36 @@ export function coachLinkSubject(linkKind: string): string {
       return "a coach screen";
   }
 }
+
+/**
+ * TM-08a (Z12-49): role select opened from More can be left with Back, which
+ * clears the request and returns to the role in use. Never on first run: with
+ * no permitted role selected there is nothing to go back to.
+ */
+export function roleSelectCanGoBack(input: {
+  roleSelectRequested: boolean;
+  selectedRole: Role | null;
+  permittedRoles: readonly Role[];
+}): boolean {
+  if (!input.roleSelectRequested || !input.selectedRole) return false;
+  return mobilePermittedRoles(input.permittedRoles).includes(input.selectedRole);
+}
+
+/**
+ * What a coach push opens, for the role prompt shown when it is tapped in
+ * trainee mode (Z12-49). The push carries ids only, so no client name.
+ */
+export function coachPushSubject(pushType: string): string {
+  switch (pushType) {
+    case "trainer_ask_coach":
+      return "a client's question";
+    case "trainer_checkin_submitted":
+      return "a client's check-in";
+    case "trainer_intake_submitted":
+      return "a client's intake form";
+    case "trainer_meal_times_changed":
+      return "a client's meal times";
+    default:
+      return "a coach screen";
+  }
+}

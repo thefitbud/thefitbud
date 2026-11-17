@@ -79,7 +79,7 @@ describe("the password screen reseeds from AuthScreen.identifier on remount", ()
     // The code screen is a different screen: the password field is gone.
     expect(screen.queryByLabelText("Password")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Use password instead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to sign in" }));
 
     // A fresh SignInScreen, seeded from AuthScreen rather than empty.
     expect(screen.getByLabelText("Password")).toBeTruthy();
@@ -92,7 +92,7 @@ describe("the password screen reseeds from AuthScreen.identifier on remount", ()
     fireEvent.click(screen.getByRole("button", { name: "Sign in with a code instead" }));
 
     typeIdentifier(EDITED_EMAIL);
-    fireEvent.click(screen.getByRole("button", { name: "Use password instead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to sign in" }));
 
     expect(identifierField().value).toBe(EDITED_EMAIL);
   });
@@ -113,7 +113,7 @@ describe("the password screen reseeds from AuthScreen.identifier on remount", ()
     render(<AuthScreen />);
     typeIdentifier(QA_EMAIL);
     fireEvent.click(screen.getByRole("button", { name: "Sign in with a code instead" }));
-    fireEvent.click(screen.getByRole("button", { name: "Use password instead" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back to sign in" }));
 
     fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "FitBud-demo-2026" },
@@ -144,7 +144,7 @@ describe("reset password uses the email typed on the password screen", () => {
       purpose: "reset",
     });
     await waitFor(() => {
-      expect(screen.getByText("Enter the code we sent to your email.")).toBeTruthy();
+      expect(screen.getByText("Enter your code")).toBeTruthy();
     });
   });
 });

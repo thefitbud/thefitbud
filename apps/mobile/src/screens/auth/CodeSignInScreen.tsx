@@ -1,190 +1,160 @@
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { Text } from "../../components/Text";
-import { colors, spacing, typeScale } from "@fitbud/ui-mobile";
-import { useConfig } from "../../providers/ConfigProvider";
+import { useState } from "react";
+import { View } from "react-native";
+import { RefreshCw } from "lucide-react-native";
+import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { Screen } from "../../components/Screen";
-import { isWhatsAppOtpEnabled } from "../../lib/config";
+import { Text } from "../../components/Text";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { AuthPage, CodeBoxes, InlineError, TextLink } from "./authParts";
 
 type Props = {
   identifier: string;
   loading: boolean;
   error: string | null;
+  /** The API said `OTP_EXPIRED` (TR-01g): the main action becomes "Send a new code". */
+  expired?: boolean;
   onChangeIdentifier: (value: string) => void;
   onSendCode: () => Promise<void>;
   onVerify: (code: string) => Promise<void>;
   onUsePassword: () => void;
+  /** Back from the code boxes to the email step. */
+  onChangeAddress: () => void;
   codeSent: boolean;
   resendSeconds: number;
 };
 
-function maskIdentifier(raw: string): string {
-  const value = raw.trim();
-  const at = value.indexOf("@");
-  if (at > 0) {
-    const local = value.slice(0, at);
-    const domain = value.slice(at);
-    if (local.length <= 2) return `${local[0] ?? ""}••${domain}`;
-    return `${local[0]}•••${local[local.length - 1]}${domain}`;
-  }
-  if (value.length < 4) return "••••";
-  return `••••${value.slice(-4)}`;
+function countdown(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+/**
+ * TR-01b (ask for a code), TR-01c (enter it) and TR-01g (it expired). The v3
+ * mock drops the WhatsApp channel chips (v3 DECISIONS #18): codes go by email.
+ */
 export function CodeSignInScreen({
   identifier,
   loading,
   error,
+  expired = false,
   onChangeIdentifier,
   onSendCode,
   onVerify,
   onUsePassword,
+  onChangeAddress,
   codeSent,
   resendSeconds,
 }: Props) {
-  const { config } = useConfig();
+  const theme = useTheme();
+  const styles = useStyles();
   const [code, setCode] = useState("");
-  const waSoon = !isWhatsAppOtpEnabled(config);
 
-  useEffect(() => {
-    if (!codeSent) return;
-    const id = setInterval(() => {
-      /* parent owns countdown */
-    }, 1000);
-    return () => clearInterval(id);
-  }, [codeSent]);
-
-  return (
-    <Screen
-      brandDisplay="mark"
-      title="Sign in with a code"
-      subtitle="We'll send a 6-digit code to your email."
-    >
-      {error ? <ErrorBanner message={error} /> : null}
-
-      <View style={styles.channelRow}>
-        <Text style={styles.channelSelected}>Email</Text>
-        <View style={styles.waDisabled}>
-          <Text style={styles.waText}>WhatsApp</Text>
-          {waSoon ? <Text style={styles.chip}>Coming soon</Text> : null}
-        </View>
-      </View>
-
-      <Field
-        label="Mobile number or email"
-        value={identifier}
-        onChangeText={onChangeIdentifier}
-        autoCapitalize="none"
-        keyboardType="email-address"
-      />
-
-      {!codeSent ? (
-        <PrimaryButton
+  if (!codeSent) {
+    return (
+      <AuthPage
+        onBack={onUsePassword}
+        backLabel="Back to sign in"
+        title="Sign in with a code"
+        subtitle="We'll email you a 6-digit code. It works for 10 minutes."
+        testID="sign-in-code-request"
+      >
+        {error ? <ErrorBanner message={error} /> : null}
+        <Field
+          label="Mobile number or email"
+          value={identifier}
+          onChangeText={onChangeIdentifier}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          textContentType="username"
+        />
+        <Button
           label="Send code"
           loading={loading}
           onPress={() => {
             void onSendCode();
           }}
         />
-      ) : (
-        <>
-          <Text style={styles.sentCopy}>
-            Sent to {maskIdentifier(identifier)}. If an account exists, we&apos;ve
-            emailed a code — check spam if you don&apos;t see it.
-          </Text>
-          <Field
-            label="6-digit code"
-            value={code}
-            onChangeText={setCode}
-            keyboardType="number-pad"
-            textContentType="oneTimeCode"
-            autoComplete="sms-otp"
-            maxLength={6}
-          />
-          <PrimaryButton
-            label="Verify and sign in"
+      </AuthPage>
+    );
+  }
+
+  return (
+    <AuthPage
+      onBack={onChangeAddress}
+      title="Enter your code"
+      subtitle={
+        <Text variant="body" tone="ink2" style={styles.sent}>
+          Sent to <Text style={styles.strong}>{identifier.trim()}</Text>
+          {expired ? "." : ". Check spam if it isn't there."}
+        </Text>
+      }
+      testID="sign-in-code-entry"
+    >
+      <CodeBoxes
+        value={code}
+        onChange={setCode}
+        invalid={Boolean(error)}
+        onComplete={(full) => {
+          void onVerify(full);
+        }}
+      />
+      {error ? <InlineError message={error} testID="sign-in-code-error" /> : null}
+
+      {expired ? (
+        <View style={styles.actions}>
+          <Button
+            label="Send a new code"
             loading={loading}
+            icon={<RefreshCw color={theme.colors.onBrand} size={20} strokeWidth={2.25} />}
             onPress={() => {
-              void onVerify(code.trim());
-            }}
-          />
-          <Pressable
-            accessibilityRole="button"
-            disabled={resendSeconds > 0}
-            onPress={() => {
+              setCode("");
               void onSendCode();
             }}
-            style={styles.linkWrap}
-          >
-            <Text style={[styles.link, resendSeconds > 0 ? styles.linkMuted : null]}>
-              {resendSeconds > 0 ? `Resend in ${resendSeconds}s` : "Resend code"}
+          />
+          <TextLink label="Use password instead" onPress={onUsePassword} />
+        </View>
+      ) : (
+        <>
+          <View style={styles.resendRow}>
+            <Text tone="ink2" style={styles.resendText}>
+              {resendSeconds > 0 ? `Resend in ${countdown(resendSeconds)}` : ""}
             </Text>
-          </Pressable>
+            <TextLink
+              label="Resend code"
+              disabled={resendSeconds > 0 || loading}
+              onPress={() => {
+                setCode("");
+                void onSendCode();
+              }}
+            />
+          </View>
+          {code.length === 6 && error ? (
+            <Button
+              label="Verify and sign in"
+              loading={loading}
+              onPress={() => {
+                void onVerify(code);
+              }}
+            />
+          ) : null}
         </>
       )}
-
-      <Pressable accessibilityRole="button" onPress={onUsePassword} style={styles.linkWrap}>
-        <Text style={styles.link}>Use password instead</Text>
-      </Pressable>
-    </Screen>
+    </AuthPage>
   );
 }
 
-const styles = StyleSheet.create({
-  channelRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-    marginBottom: spacing.lg,
-  },
-  channelSelected: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 999,
-    color: colors.indigo,
-    fontWeight: "700",
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  waDisabled: {
+const useStyles = createThemedStyles((t) => ({
+  sent: { lineHeight: 22 },
+  strong: { color: t.colors.ink, fontWeight: "600" },
+  actions: { gap: t.spacing.sm, marginTop: t.spacing.md },
+  resendRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
-    opacity: 0.5,
-    paddingVertical: spacing.sm,
+    justifyContent: "space-between",
+    marginBottom: t.spacing.md,
   },
-  waText: {
-    color: colors.midGrey,
-    fontWeight: "600",
-  },
-  chip: {
-    backgroundColor: colors.lightGrey,
-    borderRadius: 6,
-    color: colors.darkGrey,
-    fontSize: 11,
-    fontWeight: "600",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-  },
-  sentCopy: {
-    color: colors.midGrey,
-    fontSize: typeScale.body,
-    lineHeight: 22,
-    marginBottom: spacing.md,
-  },
-  linkWrap: {
-    alignItems: "center",
-    marginTop: spacing.md,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  link: {
-    color: colors.indigo,
-    fontSize: typeScale.body,
-    fontWeight: "600",
-  },
-  linkMuted: {
-    color: colors.midGrey,
-  },
-});
+  resendText: { fontSize: 16 },
+}));

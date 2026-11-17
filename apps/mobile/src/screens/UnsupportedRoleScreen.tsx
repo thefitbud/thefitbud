@@ -1,73 +1,36 @@
-import { Linking, StyleSheet, View } from "react-native";
-import { Mail } from "lucide-react-native";
+import { Linking } from "react-native";
+import { Mail, ShieldAlert } from "lucide-react-native";
 import { useAuth } from "../auth/AuthProvider";
-import { Text } from "../components/Text";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
 import { DEFAULT_SUPPORT_EMAIL } from "../lib/support";
 import { reportError } from "../lib/reportError";
 import { useConfig } from "../providers/ConfigProvider";
-import { BrandMark } from "../components/BrandMark";
-import { colors, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
+import { CenteredState } from "./auth/authParts";
 
-/** Frame 60: an account with no mobile role. Help and Sign out only. */
+/** TM-08b: an account with no mobile role. Email support and Sign out only. */
 export function UnsupportedRoleScreen() {
   const { signOut } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
 
   return (
-    <Screen
+    <CenteredState
+      testID="unsupported-role"
+      icon={(color) => <ShieldAlert color={color} size={30} strokeWidth={1.9} />}
       title="This account can't use the app yet"
-      showHeader={false}
-      footer={
-        <View style={styles.footer}>
-          <PrimaryButton
-            label="Email FitBud support"
-            icon={<Mail size={20} color={colors.white} />}
-            onPress={() => {
-              void Linking.openURL(
-                `mailto:${supportEmail}?subject=${encodeURIComponent("FitBud support · Account can't use the app")}`,
-              ).catch((error: unknown) => {
-                reportError("UnsupportedRoleScreen.emailSupport", error);
-              });
-            }}
-          />
-          <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
-        </View>
-      }
-    >
-      <View style={styles.center}>
-        <BrandMark size={36} />
-        <Text style={styles.title} accessibilityRole="header">
-          This account can't use the app yet
-        </Text>
-        <Text style={styles.body}>
-          Contact support and we'll sort it out. We'll get back to you within a day.
-        </Text>
-      </View>
-    </Screen>
+      body="Your account doesn't have a coach or client role. Contact support and we'll sort it out."
+      actionTint
+      action={{
+        label: "Email support",
+        icon: (color) => <Mail color={color} size={20} strokeWidth={2} />,
+        onPress: () => {
+          void Linking.openURL(
+            `mailto:${supportEmail}?subject=${encodeURIComponent("FitBud support · Account can't use the app")}`,
+          ).catch((error: unknown) => {
+            reportError("UnsupportedRoleScreen.emailSupport", error);
+          });
+        },
+      }}
+      link={{ label: "Sign out", onPress: signOut }}
+    />
   );
 }
-
-const styles = StyleSheet.create({
-  footer: { gap: spacing.sm },
-  center: {
-    alignItems: "center",
-    paddingTop: 140,
-    gap: spacing.lg,
-  },
-  title: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 26,
-    lineHeight: 32,
-    textAlign: "center",
-  },
-  body: {
-    color: colors.midGrey,
-    fontSize: 16,
-    lineHeight: 22,
-    textAlign: "center",
-  },
-});

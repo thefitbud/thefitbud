@@ -1,37 +1,34 @@
 import { useState } from "react";
-import {
-  Linking,
-  Pressable,
-  SafeAreaView,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
-import {
-  colors,
-  fontFamily,
-  fontFamilyMedium,
-  radii,
-  spacing,
-  typeScale,
-} from "@fitbud/ui-mobile";
-import { Text } from "../../components/Text";
-import { useConfig } from "../../providers/ConfigProvider";
-import { BrandMark } from "../../components/BrandMark";
+import { Linking, Pressable, View } from "react-native";
+import { Mail } from "lucide-react-native";
+import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";
-import { PrimaryButton } from "../../components/PrimaryButton";
-import { isWhatsAppOtpEnabled } from "../../lib/config";
-import { openSupportEmail, DEFAULT_SUPPORT_EMAIL } from "../../lib/support";
+import { Text } from "../../components/Text";
 import { legalUrl } from "../../lib/legalLinks";
+import { wrongPasswordCopy, type AuthErrorKind } from "../../lib/authErrors";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import {
+  AuthPage,
+  InlineError,
+  OrDivider,
+  PasswordInput,
+  TextLink,
+  WaitBanner,
+} from "./authParts";
 
 type Props = {
   loading: boolean;
   error: string | null;
+  /**
+   * Which inline state the error is (TR-01e wrong password, TR-01f rate
+   * limited). Set only when the API code or status proved it
+   * (`classifyAuthError`); any other error shows in the banner.
+   */
+  errorKind?: AuthErrorKind | null;
   onSignIn: (identifier: string, password: string) => Promise<void>;
   onUseCode: () => void;
   onForgotPassword: () => void;
-  onHaveInviteCode?: () => void;
   inviteTrainerName?: string | null;
   /**
    * Value already held by AuthScreen. This screen remounts when the mode
@@ -47,308 +44,150 @@ type Props = {
   onIdentifierChange?: (value: string) => void;
 };
 
+/**
+ * TR-01a sign in, with TR-01e (wrong password, inline under the password) and
+ * TR-01f (too many tries, a banner and a disabled Sign in). The v3 mock drops
+ * the old "Show password" text link (the eye is inside the field), "Have a
+ * code?", the WhatsApp "Coming soon" card and "Need help?" (Z12-18).
+ */
 export function SignInScreen({
   loading,
   error,
+  errorKind = null,
   onSignIn,
   onUseCode,
   onForgotPassword,
-  onHaveInviteCode,
   inviteTrainerName,
   initialIdentifier = "",
   onIdentifierChange,
 }: Props) {
-  const { config } = useConfig();
   const [identifier, setIdentifier] = useState(initialIdentifier);
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
-  const waSoon = !isWhatsAppOtpEnabled(config);
+  const wrongPassword = Boolean(error) && errorKind === "wrong-credentials";
+  const rateLimited = Boolean(error) && errorKind === "rate-limited";
 
   return (
-    <View style={styles.root}>
-      <View style={styles.hero} accessibilityLabel="FitBud">
-        <SafeAreaView>
-          <View style={styles.heroInner}>
-            <View style={styles.logoRow}>
-              <BrandMark size={48} />
-              <Text style={styles.logoWord}>FitBud</Text>
-            </View>
-            <Text style={styles.tagline}>Progress, guided.</Text>
-          </View>
-        </SafeAreaView>
+    <AuthPage
+      brand
+      title={inviteTrainerName ? `Join ${inviteTrainerName}'s coaching` : "Sign in"}
+      subtitle={
+        inviteTrainerName
+          ? "Create your account to start coaching."
+          : "Use the mobile number or email your coach invited."
+      }
+      footer={<SignInFooter />}
+      testID="sign-in"
+    >
+      {error && rateLimited ? <WaitBanner message={error} /> : null}
+      {error && !wrongPassword && !rateLimited ? <ErrorBanner message={error} /> : null}
+
+      <Field
+        label="Mobile number or email"
+        value={identifier}
+        onChangeText={(value) => {
+          setIdentifier(value);
+          onIdentifierChange?.(value);
+        }}
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        textContentType="username"
+        placeholder="you@example.com or 9876543210"
+      />
+      <PasswordInput
+        label="Password"
+        value={password}
+        onChangeText={setPassword}
+        textContentType="password"
+        placeholder="Your password"
+        invalid={wrongPassword}
+      />
+      {wrongPassword ? (
+        <InlineError message={wrongPasswordCopy(identifier)} testID="sign-in-wrong-password" />
+      ) : null}
+
+      <View style={{ marginTop: -8 }}>
+        <TextLink
+          label="Forgot password?"
+          accessibilityLabel="Forgot password"
+          align="flex-end"
+          onPress={onForgotPassword}
+        />
       </View>
 
-      <View style={styles.sheet}>
-        <ScrollView
-          contentContainerStyle={styles.sheetContent}
-          keyboardShouldPersistTaps="handled"
+      <View style={{ marginTop: 16 }}>
+        <Button
+          label="Sign in"
+          loading={loading}
+          disabled={rateLimited}
+          onPress={() => {
+            void onSignIn(identifier.trim(), password);
+          }}
+        />
+      </View>
+
+      <OrDivider />
+
+      <CodeInsteadButton onPress={onUseCode} />
+    </AuthPage>
+  );
+}
+
+function CodeInsteadButton({ onPress }: { onPress: () => void }) {
+  const theme = useTheme();
+  return (
+    <Button
+      label="Sign in with a code instead"
+      variant="outline"
+      icon={<Mail color={theme.colors.ink} size={22} strokeWidth={2} />}
+      onPress={onPress}
+    />
+  );
+}
+
+function SignInFooter() {
+  const styles = useStyles();
+  return (
+    <View style={styles.footer}>
+      <Text tone="ink3" style={styles.footerText}>
+        New to FitBud? Open the invite link your coach sent you.
+      </Text>
+      <View style={styles.legal}>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Terms of use, opens in your browser"
+          style={styles.legalLink}
+          onPress={() => {
+            void Linking.openURL(legalUrl("/terms"));
+          }}
         >
-          <Text style={styles.title} accessibilityRole="header">
-            {inviteTrainerName
-              ? `Join ${inviteTrainerName}'s coaching`
-              : "Sign in"}
+          <Text tone="ink3" style={styles.footerText}>
+            Terms
           </Text>
-          <Text style={styles.lead}>
-            {inviteTrainerName
-              ? "Create your account to start coaching."
-              : "Your coach's plan for today is waiting."}
+        </Pressable>
+        <Text tone="ink3" style={styles.footerText}>
+          ·
+        </Text>
+        <Pressable
+          accessibilityRole="link"
+          accessibilityLabel="Privacy policy, opens in your browser"
+          style={styles.legalLink}
+          onPress={() => {
+            void Linking.openURL(legalUrl("/privacy"));
+          }}
+        >
+          <Text tone="ink3" style={styles.footerText}>
+            Privacy
           </Text>
-
-          {error ? <ErrorBanner message={error} /> : null}
-
-          <Field
-            label="Mobile number or email"
-            value={identifier}
-            onChangeText={(value) => {
-              setIdentifier(value);
-              onIdentifierChange?.(value);
-            }}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            textContentType="username"
-            placeholder="you@example.com or 9876543210"
-          />
-          <Field
-            label="Password"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry={!showPassword}
-            textContentType="password"
-            placeholder="Your password"
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={showPassword ? "Hide password" : "Show password"}
-            onPress={() => setShowPassword((v) => !v)}
-            style={styles.showPwd}
-          >
-            <Text style={styles.link}>
-              {showPassword ? "Hide password" : "Show password"}
-            </Text>
-          </Pressable>
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Forgot password"
-            onPress={onForgotPassword}
-            style={styles.forgot}
-          >
-            <Text style={styles.link}>Forgot password?</Text>
-          </Pressable>
-
-          <PrimaryButton
-            label="Sign in"
-            loading={loading}
-            onPress={() => {
-              void onSignIn(identifier.trim(), password);
-            }}
-          />
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Sign in with a code instead"
-            onPress={onUseCode}
-            style={styles.linkWrap}
-          >
-            <Text style={styles.link}>Sign in with a code instead</Text>
-          </Pressable>
-
-          {onHaveInviteCode ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Have a code"
-              onPress={onHaveInviteCode}
-              style={styles.linkWrap}
-            >
-              <Text style={styles.link}>Have a code?</Text>
-            </Pressable>
-          ) : null}
-
-          {waSoon ? (
-            <View style={styles.note} accessibilityLabel="WhatsApp Coming soon">
-              <Text style={styles.noteTitle}>WhatsApp · Coming soon</Text>
-              <Text style={styles.noteBody}>
-                Codes on WhatsApp are coming soon. For now we&apos;ll email your
-                code; check spam if you don&apos;t see it.
-              </Text>
-            </View>
-          ) : null}
-
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Need help"
-            style={styles.help}
-            onPress={() => {
-              void openSupportEmail({
-                supportEmail: config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL,
-                screenId: "TR-01",
-                role: "trainee",
-              });
-            }}
-          >
-            <Text style={styles.link}>Need help?</Text>
-          </Pressable>
-
-          <View style={styles.legal}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Privacy policy, opens in your browser"
-              style={styles.legalLink}
-              onPress={() => {
-                void Linking.openURL(legalUrl("/privacy"));
-              }}
-            >
-              <Text style={styles.legalText}>Privacy</Text>
-            </Pressable>
-            <Text style={styles.legalDot}>·</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Terms of use, opens in your browser"
-              style={styles.legalLink}
-              onPress={() => {
-                void Linking.openURL(legalUrl("/terms"));
-              }}
-            >
-              <Text style={styles.legalText}>Terms</Text>
-            </Pressable>
-          </View>
-        </ScrollView>
+        </Pressable>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  hero: {
-    backgroundColor: colors.deepNavy,
-    paddingBottom: spacing.xxl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-  },
-  heroInner: {
-    gap: spacing.sm,
-    paddingTop: spacing.xxl,
-  },
-  logoRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
-  logoWord: {
-    color: colors.white,
-    fontFamily: fontFamilyMedium,
-    fontSize: 26,
-    fontWeight: "700",
-    letterSpacing: -0.4,
-  },
-  tagline: {
-    color: "rgba(255,255,255,0.8)",
-    fontFamily,
-    fontSize: 17,
-    lineHeight: 24,
-  },
-  sheet: {
-    backgroundColor: colors.background,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    flex: 1,
-    marginTop: -24,
-  },
-  sheetContent: {
-    paddingBottom: spacing.xxxl,
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.xl,
-  },
-  title: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilyMedium,
-    fontSize: 24,
-    fontWeight: "700",
-    letterSpacing: -0.3,
-  },
-  lead: {
-    color: colors.midGrey,
-    fontFamily,
-    fontSize: 16,
-    lineHeight: 22,
-    marginBottom: spacing.lg,
-    marginTop: 4,
-  },
-  showPwd: {
-    alignSelf: "flex-start",
-    minHeight: 44,
-    justifyContent: "center",
-    marginTop: -spacing.sm,
-  },
-  forgot: {
-    alignSelf: "flex-end",
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  linkWrap: {
-    alignItems: "center",
-    marginTop: spacing.md,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  link: {
-    fontFamily: fontFamilyMedium,
-    color: colors.indigo,
-    fontSize: typeScale.body,
-    fontWeight: "600",
-  },
-  note: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.card,
-    marginTop: spacing.xl,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  noteTitle: {
-    fontFamily: fontFamilyMedium,
-    color: colors.deepNavy,
-    fontSize: typeScale.body,
-    fontWeight: "700",
-  },
-  noteBody: {
-    fontFamily,
-    color: colors.midGrey,
-    fontSize: typeScale.body,
-    lineHeight: 22,
-  },
-  help: {
-    alignItems: "center",
-    marginTop: spacing.xxl,
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  legal: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.xs,
-    justifyContent: "center",
-    marginTop: spacing.xs,
-  },
-  legalLink: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-  },
-  legalText: {
-    color: colors.midGrey,
-    fontFamily: fontFamilyMedium,
-    fontSize: typeScale.caption,
-    textDecorationLine: "underline",
-  },
-  legalDot: {
-    color: colors.midGrey,
-    fontFamily,
-    fontSize: typeScale.caption,
-  },
-});
+const useStyles = createThemedStyles(() => ({
+  footer: { alignItems: "center", gap: 0 },
+  footerText: { fontSize: 14, lineHeight: 19, textAlign: "center" },
+  legal: { alignItems: "center", flexDirection: "row", gap: 4 },
+  legalLink: { justifyContent: "center", minHeight: 44, paddingHorizontal: 4 },
+}));
