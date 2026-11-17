@@ -1,18 +1,17 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useOutletContext, useParams, useSearchParams } from "react-router-dom";
+import { CalendarDays } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
-import { formatRelative } from "@fitbud/core";
+import {
+  formatCivilDate,
+  formatClockTime,
+  formatLocalDate,
+} from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
-import {
-  groupHistoryByWeek,
-  historyKindIcon,
-  historySourceHref,
-  historySourceLabel,
-  humanizeHistoryText,
-} from "../lib/history-ui";
+import { humanizeHistoryText } from "../lib/history-ui";
 import {
   ErrorState,
   LoadingBlock,
@@ -20,6 +19,7 @@ import {
   type ErrorKind,
 } from "../components/StatePanels";
 import type { WorkspaceOutletContext } from "./workspaceContext";
+import "./ClientHistoryPage.css";
 
 /** Keep-it-simple kind groups (TW-21) instead of one pill per schema kind. */
 const HISTORY_KIND_GROUPS = [
@@ -69,6 +69,67 @@ function parseKindGroup(value: string | null): HistoryKindGroupId | undefined {
   return HISTORY_KIND_GROUPS.find((group) => group.id === value)?.id;
 }
 
+/** Absolute civil datetime: "Fri 16 Oct, 9:30 pm". */
+export function formatHistoryWhen(
+  iso: string,
+  timeZone: string,
+  now: Date = new Date(),
+): string {
+  const civil = formatLocalDate(new Date(iso), timeZone);
+  const day = formatCivilDate(civil, { now });
+  const clock = formatClockTime(iso, timeZone);
+  return clock ? `${day}, ${clock}` : day;
+}
+
+function CivilDateFilter({
+  id,
+  label,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="history-civil-date" htmlFor={id}>
+      <span className="history-civil-date-label">{label}</span>
+      <span className="history-civil-date-control">
+        <span
+          className={
+            value
+              ? "history-civil-date-text"
+              : "history-civil-date-text is-empty"
+          }
+          aria-hidden
+        >
+          {value ? formatCivilDate(value) : "Choose a date"}
+        </span>
+        <CalendarDays
+          className="history-civil-date-icon"
+          size={18}
+          strokeWidth={1.75}
+          aria-hidden
+        />
+        <input
+          id={id}
+          type="date"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onClick={(event) => {
+            try {
+              event.currentTarget.showPicker?.();
+            } catch {
+              // showPicker is refused outside a user gesture; typing still works.
+            }
+          }}
+        />
+      </span>
+    </label>
+  );
+}
+
 export function ClientHistoryPage() {
   const { me } = useAuth();
   const timeZone =
@@ -89,6 +150,9 @@ export function ClientHistoryPage() {
     requestId?: string | null;
   } | null>(null);
   const requestId = useRef(0);
+  const kindSelectId = useId();
+  const fromId = useId();
+  const toId = useId();
 
   const kindGroup = parseKindGroup(searchParams.get("kind"));
   const selectedGroup = HISTORY_KIND_GROUPS.find((group) => group.id === kindGroup);
@@ -216,86 +280,71 @@ export function ClientHistoryPage() {
 
   const empty = listReady && items.length === 0 && !error;
   const filtersActive = Boolean(kindGroup || occurredFrom || occurredTo);
-  const weekGroups = groupHistoryByWeek(items, timeZone);
+  const now = new Date();
 
   return (
     <div className="workspace-page history-page" data-testid="screen-TW-21">
-      <header className="history-page-head">
-        <h1 className="workspace-page-title">History</h1>
-        <p className="lede muted">
-          A readable ledger of plans, check-ins, notes, and coaching events for
-          this client.
-        </p>
-      </header>
-
       {!online ? (
         <p className="form-error" role="status">
           You&apos;re offline. History may be out of date until you reconnect.
         </p>
       ) : null}
 
-      <section className="workspace-card" aria-labelledby="history-filters-heading">
-        <h2 id="history-filters-heading" className="sr-only">
-          History filters
-        </h2>
-
-        <div className="history-kind-pills" role="group" aria-label="Kind">
-          <button
-            type="button"
-            className={!kindGroup ? "filter-pill is-on" : "filter-pill"}
-            aria-pressed={!kindGroup}
-            onClick={() => updateFilters({ kind: null })}
+      <section
+        className="workspace-card history-card"
+        aria-labelledby="history-heading"
+      >
+        <header className="history-card-head">
+          <h1 id="history-heading" className="workspace-page-title">
+            History
+          </h1>
+          <label className="sr-only" htmlFor={kindSelectId}>
+            Event kind
+          </label>
+          <select
+            id={kindSelectId}
+            className="history-kind-select"
+            value={kindGroup ?? ""}
+            aria-label="All events"
+            onChange={(event) => {
+              const value = event.target.value;
+              updateFilters({
+                kind: value
+                  ? (value as HistoryKindGroupId)
+                  : null,
+              });
+            }}
           >
-            All
-          </button>
-          {HISTORY_KIND_GROUPS.map((group) => (
-            <button
-              key={group.id}
-              type="button"
-              className={
-                kindGroup === group.id ? "filter-pill is-on" : "filter-pill"
-              }
-              aria-pressed={kindGroup === group.id}
-              onClick={() =>
-                updateFilters({
-                  kind: kindGroup === group.id ? null : group.id,
-                })
-              }
-            >
-              {group.label}
-            </button>
-          ))}
-        </div>
+            <option value="">All events</option>
+            {HISTORY_KIND_GROUPS.map((group) => (
+              <option key={group.id} value={group.id}>
+                {group.label}
+              </option>
+            ))}
+          </select>
+        </header>
 
         <form
-          className="workspace-filters history-date-filters"
+          className="history-date-filters"
           aria-label="Date range"
           onSubmit={(event) => event.preventDefault()}
         >
-          <label className="field">
-            <span>From</span>
-            <input
-              type="date"
-              value={occurredFrom}
-              onChange={(event) =>
-                updateFilters({ occurredFrom: event.target.value })
-              }
-            />
-          </label>
-          <label className="field">
-            <span>To</span>
-            <input
-              type="date"
-              value={occurredTo}
-              onChange={(event) =>
-                updateFilters({ occurredTo: event.target.value })
-              }
-            />
-          </label>
+          <CivilDateFilter
+            id={fromId}
+            label="From"
+            value={occurredFrom}
+            onChange={(value) => updateFilters({ occurredFrom: value })}
+          />
+          <CivilDateFilter
+            id={toId}
+            label="To"
+            value={occurredTo}
+            onChange={(value) => updateFilters({ occurredTo: value })}
+          />
           {filtersActive ? (
             <button
               type="button"
-              className="button-ghost"
+              className="button-ghost history-clear-filters"
               onClick={() =>
                 updateFilters({
                   kind: null,
@@ -308,91 +357,84 @@ export function ClientHistoryPage() {
             </button>
           ) : null}
         </form>
+
+        {error && !listReady ? (
+          <ErrorState
+            message={error.message}
+            kind={error.kind}
+            requestId={error.requestId}
+            screenId="TW-21"
+            onRetry={() => void load()}
+          />
+        ) : null}
+
+        {!listReady && !error ? <LoadingBlock label="Loading history…" /> : null}
+
+        {listReady && error ? (
+          <ErrorState
+            message={error.message}
+            kind={error.kind}
+            requestId={error.requestId}
+            screenId="TW-21"
+            onRetry={() => void load()}
+          />
+        ) : null}
+
+        {empty ? (
+          <p className="workspace-empty" role="status">
+            Nothing recorded yet.
+          </p>
+        ) : null}
+
+        {listReady && items.length > 0 ? (
+          <ol className="history-timeline">
+            {items.map((item, index) => {
+              const sentence = humanizeHistoryText(item.title);
+              const when = formatHistoryWhen(item.occurredAt, timeZone, now);
+              return (
+                <li
+                  key={`${item.kind}:${item.id}`}
+                  className="history-timeline-item"
+                >
+                  <span
+                    className={
+                      index === 0
+                        ? "history-timeline-dot is-accent"
+                        : "history-timeline-dot"
+                    }
+                    aria-hidden="true"
+                  />
+                  <div className="history-timeline-body">
+                    <span className="history-timeline-title">{sentence}</span>
+                    <span className="history-timeline-sep" aria-hidden="true">
+                      ·
+                    </span>
+                    <time
+                      className="history-timeline-when"
+                      dateTime={item.occurredAt}
+                    >
+                      {when}
+                    </time>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        ) : null}
+
+        {listReady && nextCursor ? (
+          <button
+            type="button"
+            className="button-secondary history-load-more"
+            disabled={loadingMore || !online}
+            onClick={() => {
+              void load(nextCursor);
+            }}
+          >
+            {loadingMore ? "Loading…" : "Load more"}
+          </button>
+        ) : null}
       </section>
-
-      {error && !listReady ? (
-        <ErrorState
-          message={error.message}
-          kind={error.kind}
-          requestId={error.requestId}
-          screenId="TW-21"
-          onRetry={() => void load()}
-        />
-      ) : null}
-
-      {!listReady && !error ? <LoadingBlock label="Loading history…" /> : null}
-
-      {listReady && error ? (
-        <ErrorState
-          message={error.message}
-          kind={error.kind}
-          requestId={error.requestId}
-          screenId="TW-21"
-          onRetry={() => void load()}
-        />
-      ) : null}
-
-      {empty ? (
-        <p className="workspace-empty" role="status">
-          Nothing recorded yet.
-        </p>
-      ) : null}
-
-      {listReady && items.length > 0 ? (
-        <div className="history-week-groups">
-          {weekGroups.map((group) => (
-            <section
-              key={group.weekStart}
-              className="history-week-group workspace-card"
-              aria-labelledby={`week-${group.weekStart}`}
-            >
-              <h2 id={`week-${group.weekStart}`} className="history-week-heading">
-                {group.heading}
-              </h2>
-              <ol className="history-list history-row-list">
-                {group.items.map((item) => {
-                  const Icon = historyKindIcon(item.kind);
-                  const href = historySourceHref(relationshipId, item);
-                  const sentence = humanizeHistoryText(item.title);
-                  return (
-                    <li key={`${item.kind}:${item.id}`} className="history-row">
-                      <span className="history-row-icon" aria-hidden="true">
-                        <Icon size={20} strokeWidth={1.75} />
-                      </span>
-                      <div className="history-row-body">
-                        <p className="history-row-sentence">{sentence}</p>
-                        <div className="history-row-meta">
-                          <time dateTime={item.occurredAt}>
-                            {formatRelative(item.occurredAt)}
-                          </time>
-                          {href ? (
-                            <Link className="text-link" to={href}>
-                              {historySourceLabel(item)}
-                            </Link>
-                          ) : null}
-                        </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
-            </section>
-          ))}
-        </div>
-      ) : null}
-
-      {listReady && nextCursor ? (
-        <button
-          type="button"
-          className="button-secondary history-load-more"
-          disabled={loadingMore || !online}
-          onClick={() => {
-            void load(nextCursor);
-          }}
-        >
-          {loadingMore ? "Loading…" : "Load more"}
-        </button>
-      ) : null}
     </div>
   );
 }
