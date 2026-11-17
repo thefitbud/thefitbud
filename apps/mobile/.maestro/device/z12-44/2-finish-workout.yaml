@@ -6,16 +6,26 @@ tags:
   - z12-44
 ---
 # Z12-44: finish a workout on the device. Rohan Mehta (slipping, local demo seed):
-# today not started (W-01a) with Monday's missed banner (TR-10c). The flow opens a
-# session (open-session.yaml), logs a set, kills and relaunches the app: the Workout
-# tab shows it in progress with its clock and set count from the server (W-01b; the
-# duration survives the relaunch). It then finishes it: summary (W-17a), shared
-# (W-17b, week ticks equal to "N of M done"), and the day offers View summary only,
-# on Workout and on Today, also after another relaunch (ISSUE-MAP #4, #10).
+# today not started (W-01a), this week's missed workout in the banner (TR-10c).
+# The flow opens a session, logs a set, kills and relaunches the app: the Workout
+# tab shows it in progress with its clock and set count from the server (W-01b;
+# the duration survives the relaunch). It then finishes it: summary (W-17a),
+# shared (W-17b, week ticks equal to "N of M done"), and the day offers View
+# summary only, also after another relaunch (ISSUE-MAP #4, #10).
 #
-# Each theme uses one session: light finishes today's, dark a missed one (or the one
-# the z12-36 workout flow left open). Screens: W-01a, TR-10c, W-01b, W-17a, W-17b,
-# W-01c.
+# Today's state is asserted before anything branches on it (Z12-44 review): on a
+# training day it must read "To do", on the other days Rest (ist-days.yaml). A
+# seed made for another IST day fails here.
+#
+# One unlogged workout per use, so both themes get W-01a (Z12-44 review):
+#   * z12-36/3 opens last Saturday's (light starts it, dark continues it);
+#   * light here takes this week's missed one ("Log it", a late log), leaving
+#     today untouched for the dark pass's W-01a;
+#   * dark here takes today's ("Start workout"): the done-today path, checked
+#     on Workout and on Today.
+# Rohan's seed leaves those three open on a Tuesday or a Thursday (IST); on
+# other days the flow still asserts today's state, and the missing shots show.
+# Screens: W-01a, TR-10c, W-01b, W-17a, W-17b.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -28,20 +38,48 @@ tags:
 - extendedWaitUntil:
     notVisible: ".*Loading your day.*"
     timeout: 30000
+- runFlow: ist-days.yaml
 - runFlow: open-workout-tab.yaml
+# MANDATORY: the seed's day and the device's agree ("Thu 19 Nov, To do").
+- assertVisible: "${output.today}, ${output.rohanToday}"
+
+# ---- W-01a: today, not started (training day) -----------------------------------
+- runFlow:
+    when:
+      true: ${output.trainingDay == 'yes'}
+    commands:
+      - assertVisible: "Start workout"
+      - assertNotVisible: "Continue workout"
+      - assertNotVisible: "View summary"
+      - takeScreenshot: W-01a-workout-tab-not-started
 - runFlow:
     when:
       visible: "You missed .*"
     commands:
       - takeScreenshot: TR-10c-workout-missed-banner
-- runFlow:
-    when:
-      visible: "Start workout"
-    commands:
-      - takeScreenshot: W-01a-workout-tab-not-started
 - runFlow: ../../common/assert-no-crash.yaml
 
-# ---- Open a session, log a set, kill and relaunch --------------------------------
+# ---- Open a session ---------------------------------------------------------------
+# Dark, training day: today's (the done-today path).
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark' && output.trainingDay == 'yes'}
+    commands:
+      - tapOn: "Start workout"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+# Light: this week's missed workout, from the banner.
+- runFlow:
+    when:
+      true: ${DEVICE_THEME != 'dark'}
+      visible: "Log it"
+    commands:
+      - tapOn: "Log it"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+# Anything else (another weekday): whatever open-session finds.
 - runFlow: open-session.yaml
 - tapOn: "Log set [0-9]+ ·.*"
 - runFlow:
@@ -120,7 +158,26 @@ tags:
     timeout: 30000
 - assertNotVisible: "Start workout"
 - assertNotVisible: "Continue workout"
-- takeScreenshot: W-01c-workout-tab-done
+# Not a W-01c shot: the light pass finishes a past day; Aarav's flow has W-01c.
+- takeScreenshot: z12-44-finished-day
+
+# ---- Dark, training day: today is done on Workout and on Today --------------------
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark' && output.trainingDay == 'yes'}
+    commands:
+      - assertVisible: "${output.today}, Done"
+      - tapOn: "Today"
+      - extendedWaitUntil:
+          notVisible: ".*Loading your day.*"
+          timeout: 30000
+      - scrollUntilVisible:
+          element: "View summary"
+          timeout: 20000
+      - assertNotVisible: "Start workout"
+      - assertNotVisible: "Continue workout"
+      - takeScreenshot: z12-44-today-done-card
+      - runFlow: open-workout-tab.yaml
 
 # ---- Kill and relaunch: still View summary only ------------------------------------
 - launchApp:
@@ -148,4 +205,9 @@ tags:
 - assertVisible: "View summary"
 - assertNotVisible: "Start workout"
 - assertNotVisible: "Continue workout"
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark' && output.trainingDay == 'yes'}
+    commands:
+      - assertVisible: "${output.today}, Done"
 - runFlow: ../../common/assert-no-crash.yaml

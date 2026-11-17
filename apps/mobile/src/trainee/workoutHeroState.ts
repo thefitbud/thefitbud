@@ -33,6 +33,12 @@ export type WorkoutHeroKind =
   | "done"
   /** Before today and not done: it can still be logged late (TR-10c). */
   | "missed"
+  /**
+   * An optional workout (`required: false`) from an earlier day that was not
+   * done: nothing was owed, so it is not missed and offers no late log, as
+   * the missed banner (TR-10c) and the week count already leave it out.
+   */
+  | "optional_past"
   /** The trainee said "Not today": nothing to do. */
   | "skipped"
   /** Logged by the coach: read-only, View workout (R1). */
@@ -55,6 +61,8 @@ export type WorkoutHeroState = {
 };
 
 type HeroAssignment = Pick<WorkoutAssignment, "localDate" | "status"> & {
+  /** Optional workouts (`required: false`) are never missed. */
+  workoutDay?: { required?: boolean };
   execution?: Pick<
     WorkoutExecutionSummary,
     "status" | "loggedByRole" | "lastEditedByRole"
@@ -87,6 +95,7 @@ const ACTION: Record<WorkoutHeroKind, WorkoutHeroAction> = {
   in_progress: "continue",
   done: "view_summary",
   missed: "log_late",
+  optional_past: null,
   skipped: null,
   coach_logged: "view_workout",
 };
@@ -123,7 +132,7 @@ function heroKind(
     return "skipped";
   }
   if (assignment.status === "missed" || assignment.localDate < today) {
-    return "missed";
+    return assignment.workoutDay?.required === false ? "optional_past" : "missed";
   }
   return "not_started";
 }

@@ -6,16 +6,24 @@ tags:
   - z12-44
 ---
 # Z12-44: the v3 Workout tab. Aarav Shah (on track, local demo seed): his workouts
-# through today are logged, so a training day today is done (W-01c) and offers only
-# View summary, on Workout and on Today (ISSUE-MAP #4). The summary (W-17a) moves to
-# the shared step (W-17b), whose week ticks equal its "N of M done" (ISSUE-MAP #10).
-# After a kill and relaunch the day still offers View summary only. Then a planned
-# day ahead (W-01e, "Opens on …", no Start) and a rest day (TR-10a).
+# through today are logged, so on a training day today is done (W-01c) and offers
+# only View summary, on Workout and on Today (ISSUE-MAP #4). The summary (W-17a)
+# moves to the shared step (W-17b), whose week ticks equal its "N of M done"
+# (ISSUE-MAP #10). After a kill and relaunch the day still offers View summary
+# only. Then a planned day ahead (W-01e, "Opens on …", no Start) and a rest day
+# (TR-10a).
 #
-# Days are never written here: the flow moves by swiping (Z12-40) and reads the
-# cards it lands on.
+# Today's state is asserted before anything branches on it (Z12-44 review): on a
+# training day it must read Done, on the other days Rest (ist-days.yaml). A seed
+# made for another IST day, or before today's 07:00 IST slot opened, fails here
+# instead of skipping the done-day checks.
 #
-# Screens (v3 IDs): W-01a or W-01c (whichever today is), W-17a, W-17b, W-01e, TR-10a.
+# Days are never written here except today's label, computed from the device
+# clock: the flow moves by swiping (Z12-40) and reads the cards it lands on.
+#
+# Screens (v3 IDs): W-01c (training day) or the rest card, W-17a, W-17b, W-01e,
+# TR-10a. W-01a is Rohan's (2-finish-workout.yaml): Aarav never has a workout
+# left to start today.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -31,29 +39,25 @@ tags:
 - extendedWaitUntil:
     visible: "Today's workout.*"
     timeout: 60000
+- runFlow: ist-days.yaml
 
-# ---- Today's card on Workout ---------------------------------------------------
+# ---- Today's card on Workout: asserted, then branched -------------------------
 - runFlow: open-workout-tab.yaml
-- runFlow:
-    when:
-      visible: "View summary"
-    commands:
-      # W-01c: done, View summary only (ISSUE-MAP #4).
-      - assertNotVisible: "Start workout"
-      - assertNotVisible: "Continue workout"
-      - takeScreenshot: W-01c-workout-tab-done
-- runFlow:
-    when:
-      visible: "Start workout"
-    commands:
-      - takeScreenshot: W-01a-workout-tab-not-started
+# The strip speaks each day's state ("Thu 19 Nov, Done"). MANDATORY: a seed whose
+# day or slot disagrees with the device fails the flow here.
+- assertVisible: "${output.today}, ${output.aaravToday}"
+- assertNotVisible: "Start workout"
+- assertNotVisible: "Continue workout"
 - runFlow: ../../common/assert-no-crash.yaml
 
-# ---- Summary: W-17a, then W-17b -------------------------------------------------
+# ---- Training day: done (W-01c), summary (W-17a, W-17b), Today, relaunch -------
 - runFlow:
     when:
-      visible: "View summary"
+      true: ${output.trainingDay == 'yes'}
     commands:
+      # W-01c: done, View summary only (ISSUE-MAP #4).
+      - assertVisible: "View summary"
+      - takeScreenshot: W-01c-workout-tab-done
       - tapOn: "View summary"
       - extendedWaitUntil:
           visible: "Workout done"
@@ -70,6 +74,7 @@ tags:
       - extendedWaitUntil:
           visible: "View summary"
           timeout: 30000
+      - assertVisible: "${output.today}, Done"
       # Today agrees: its done card has View summary and no Start.
       - tapOn: "Today"
       - extendedWaitUntil:
@@ -94,9 +99,17 @@ tags:
       - extendedWaitUntil:
           visible: "View summary"
           timeout: 30000
+      - assertVisible: "${output.today}, Done"
       - assertNotVisible: "Start workout"
       - assertNotVisible: "Continue workout"
       - runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Rest day today: the rest card ----------------------------------------------
+- runFlow:
+    when:
+      true: ${output.trainingDay != 'yes'}
+    commands:
+      - assertVisible: "Rest day"
 
 # ---- A planned day ahead: W-01e -------------------------------------------------
 # Swipe a day at a time (Z12-40) until a planned workout shows "Opens on …".

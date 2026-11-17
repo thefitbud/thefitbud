@@ -589,6 +589,15 @@ export function TodayTab({
     return next && next.kind === "meal" && workoutCardLeads ? null : next;
   }, [checkin, isToday, meals, today, workout]);
 
+  // Continue or Start from the one hero state Workout reads too (Z12-44
+  // review): a session the list's status has not caught up with (the
+  // execution says started) is Continue on both tabs.
+  const workoutHeroLabel =
+    hero?.kind === "workout" &&
+    workoutHeroState(hero.workout, today).action === "continue"
+      ? "Continue workout"
+      : "Start workout";
+
   const nextOpenMeal = meals.find(
     (meal) => meal.status === "pending" || meal.status === "overdue",
   );
@@ -989,20 +998,12 @@ export function TodayTab({
                 <View style={styles.heroBtns}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      hero.workout.status === "in_progress" ||
-                      hero.workout.status === "paused"
-                        ? "Continue workout"
-                        : "Start workout"
-                    }
+                    accessibilityLabel={workoutHeroLabel}
                     onPress={onStartWorkout}
                     style={styles.heroPrimary}
                   >
                     <Text style={styles.heroPrimaryLabel}>
-                      {hero.workout.status === "in_progress" ||
-                      hero.workout.status === "paused"
-                        ? "Continue workout"
-                        : "Start workout"}
+                      {workoutHeroLabel}
                     </Text>
                   </Pressable>
                 </View>

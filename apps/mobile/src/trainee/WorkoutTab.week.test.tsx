@@ -67,6 +67,8 @@ function dayAssignment(opts: {
   setsEach: number;
   /** The list's execution summary, when the day was started or finished. */
   execution?: "started" | "completed";
+  /** False for an optional workout. */
+  required?: boolean;
 }): WorkoutAssignment {
   return workoutAssignmentSchema.parse({
     id: uuid(1000 + opts.n),
@@ -84,6 +86,7 @@ function dayAssignment(opts: {
       id: uuid(3000 + opts.n),
       order: opts.n,
       name: opts.name,
+      ...(opts.required === false ? { required: false } : {}),
       exercises: Array.from({ length: opts.exercises }, (_, e) => ({
         id: uuid(5000 + opts.n * 100 + e),
         order: e + 1,
@@ -183,7 +186,9 @@ vi.mock("../sync/SyncProvider", async () => {
 });
 
 const { WorkoutTab, missedBannerText } = await import("./WorkoutTab");
-const { invalidateRelationshipDayData } = await import("./dataCache");
+const { cacheKey, invalidateRelationshipDayData, setCached } = await import(
+  "./dataCache"
+);
 
 function renderWorkout() {
   return render(
@@ -370,3 +375,48 @@ describe("WorkoutTab default focus and header", () => {
   });
 });
 
+describe("WorkoutTab strip and count agree (Z12-44 review)", () => {
+  it("does not tick a day whose second workout is still owed", async () => {
+    items = [
+      dayAssignment({ n: 1, name: "Lower body B", localDate: FOCUS_DATE, status: "assigned", exercises: 2, setsEach: 3 }),
+      // Thursday: the first workout is done, the second was missed.
+      dayAssignment({ n: 2, name: "Upper body A", localDate: "2026-11-12", status: "completed", exercises: 2, setsEach: 3, execution: "completed" }),
+      dayAssignment({ n: 3, name: "Core", localDate: "2026-11-12", status: "missed", exercises: 2, setsEach: 3 }),
+    ];
+    renderWorkout();
+    expect(await screen.findByText("This week: 0 of 2 done")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Thu 12 Nov, Missed" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Thu 12 Nov, Done" })).toBeNull();
+  });
+
+  it("leaves a past optional workout that was not done out of the missed state", async () => {
+    items = [
+      dayAssignment({ n: 1, name: "Mobility", localDate: "2026-11-11", status: "assigned", exercises: 2, setsEach: 1, required: false }),
+    ];
+    render(<WorkoutTab relationship={relationship} selectedDate="2026-11-11" />);
+    expect(await screen.findByText("Mobility")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Log workout" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Wed 11 Nov, Rest" })).toBeTruthy();
+    expect(screen.queryByLabelText(/^You missed/)).toBeNull();
+  });
+});
+
+describe("WorkoutTab on a week cached before the finish (Z12-44 review)", () => {
+  it("ends on View summary only once the server answers, never Start", async () => {
+    const stale = dayAssignment({ n: 1, name: "Lower body B", localDate: FOCUS_DATE, status: "in_progress", exercises: 2, setsEach: 3, execution: "started" });
+    // The week as cached while the session ran (Monday 9 to Sunday 15 Nov).
+    setCached(
+      cacheKey("workouts", relationship.id, "2026-11-09", "2026-11-15"),
+      [stale],
+    );
+    items = [
+      dayAssignment({ n: 1, name: "Lower body B", localDate: FOCUS_DATE, status: "completed", exercises: 2, setsEach: 3, execution: "completed" }),
+    ];
+    renderWorkout();
+    // First paint is the cache: the session it knew about, never Start.
+    expect(screen.queryByRole("button", { name: "Start workout" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "View summary" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Continue workout" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start workout" })).toBeNull();
+  });
+});

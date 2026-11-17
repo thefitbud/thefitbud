@@ -76,7 +76,9 @@ import {
   isWorkoutDone,
   planWeekLabel,
   weekWorkoutSummary,
+  withFinishedExecution,
   workoutHeroState,
+  type WeekWorkoutDay,
   type WorkoutHeroState,
 } from "./workoutHeroState";
 import {
@@ -148,17 +150,25 @@ const SKIP_REASONS = [
  * day's workout is done, red when it was missed, grey ahead, none on a rest
  * day. Today's own workout, not yet done, is "to do". Every state is also in
  * the day's spoken label (DateNavigator), never colour alone.
+ *
+ * `day` is the day's entry in `weekWorkoutSummary(...).days`, the list the
+ * eyebrow's "N of M done" counts (Z12-44 review): a dot is green exactly when
+ * that count counts the day as done, so the two cannot disagree (a day with
+ * two workouts, one done, is not done). A day with only an optional workout
+ * that was not done is not in that list: ahead it is still planned, behind it
+ * owed nothing and has no dot.
  */
 export function workoutStripState(
   date: string,
   today: string,
-  assignment: WorkoutAssignment | undefined,
+  day: WeekWorkoutDay | undefined,
+  hasWorkout: boolean,
 ): DateNavigatorDay["state"] {
-  if (!assignment) return "rest";
-  if (isWorkoutDone(assignment)) return "done";
+  if (day?.done) return "done";
+  if (!hasWorkout) return "rest";
   if (date > today) return "future";
   if (date === today) return "due";
-  return "open";
+  return day ? "open" : "rest";
 }
 
 /** A newest-first list of this week's missed workouts as TR-10c's line. */
@@ -508,6 +518,23 @@ export function WorkoutTab({
     };
   }, [api, heroExecutionId, heroExecutionVersion]);
 
+  /**
+   * The week as it stands once `execution` has finished, kept until the
+   * reload answers (Z12-44 review). Leaving the summary invalidates the week
+   * and reloads it; without this the card painted the list read before the
+   * finish ("Continue workout" on a finished day) until that reload landed.
+   */
+  const markFinished = useCallback((execution: WorkoutExecution) => {
+    if (execution.status !== "completed" && execution.status !== "modified") {
+      return;
+    }
+    setWeekState((prev) => {
+      if (prev.status !== "loaded") return prev;
+      const next = withFinishedExecution(prev.assignments, execution);
+      return next === prev.assignments ? prev : workoutWeekStateFor(next);
+    });
+  }, []);
+
   async function startOrContinue(assignment: WorkoutAssignment) {
     const state = workoutHeroState(assignment, today);
     if (state.kind === "coach_logged") {
@@ -704,6 +731,7 @@ export function WorkoutTab({
         today={today}
         offline={offline}
         onDone={() => {
+          markFinished(summaryExecution);
           setSummaryExecution(null);
           setActiveAssignment(null);
           invalidateRelationshipDayData(relationship.id);
@@ -793,6 +821,7 @@ export function WorkoutTab({
     planState.status === "none" ||
     (planState.status !== "loaded" && weekState.status === "none");
   const week = weekWorkoutSummary(assignments, weekStart);
+  const weekDays = new Map(week.days.map((day) => [day.localDate, day]));
   const weekLabel = planWeekLabel(plan, weekStart);
   const planName = `${coachName}’s plan`;
   const eyebrow = noPlan
@@ -884,7 +913,12 @@ export function WorkoutTab({
             dayLabel: dayOfMonth(timeZone, date),
             state:
               weekState.status === "loaded" || weekState.status === "none"
-                ? workoutStripState(date, today, byDate.get(date))
+                ? workoutStripState(
+                    date,
+                    today,
+                    weekDays.get(date),
+                    byDate.has(date),
+                  )
                 : "unknown",
           }))}
           focusDate={focusDate}

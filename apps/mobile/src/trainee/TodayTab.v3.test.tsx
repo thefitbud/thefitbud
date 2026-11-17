@@ -366,6 +366,24 @@ describe("Today v3 summary", () => {
     expect(screen.getByLabelText("Start workout")).toBeTruthy();
   });
 
+  it("a session the list has not caught up with reads Continue, as on Workout (Z12-44)", async () => {
+    // The list still says assigned; the execution summary says started.
+    workouts = [
+      workoutAssignmentSchema.parse({
+        ...completedWorkout,
+        status: "assigned",
+        execution: {
+          ...completedWorkout.execution,
+          status: "started",
+          completedAt: null,
+        },
+      }),
+    ];
+    renderToday();
+    expect(await screen.findByLabelText("Continue workout")).toBeTruthy();
+    expect(screen.queryByLabelText("Start workout")).toBeNull();
+  });
+
   it("meals are a flat list with a logged count and a status chip per row", async () => {
     meals = [
       meal(1, "Early morning", "confirmed"),

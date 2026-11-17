@@ -94,6 +94,27 @@ describe("workoutHeroState: one state for Workout and Today (Z12-44)", () => {
     expect(workoutHeroState(day(YESTERDAY, "assigned"), TODAY).kind).toBe("missed");
   });
 
+  it("never reads a past optional workout that was not done as missed (as the banner)", () => {
+    for (const status of ["assigned", "missed"] as const) {
+      const state = workoutHeroState(
+        { ...day(YESTERDAY, status), workoutDay: { required: false } },
+        TODAY,
+      );
+      expect(state.kind).toBe("optional_past");
+      expect(state.action).toBeNull();
+    }
+    // Done, it is done like any other; today it can still be started.
+    expect(
+      workoutHeroState(
+        { ...day(YESTERDAY, "completed", { status: "completed" }), workoutDay: { required: false } },
+        TODAY,
+      ).kind,
+    ).toBe("done");
+    expect(
+      workoutHeroState({ ...day(TODAY, "assigned"), workoutDay: { required: false } }, TODAY).action,
+    ).toBe("start");
+  });
+
   it("keeps a session started on a past day continuable", () => {
     expect(
       workoutHeroState(day(YESTERDAY, "in_progress", { status: "started" }), TODAY).kind,
