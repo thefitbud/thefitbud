@@ -65,6 +65,7 @@ fail on the current app and are not part of this.
 - **Artifacts** `device-ios` / `device-android` (14 days): `shots/`, `<platform>/summary.md`,
   JUnit and Maestro logs per theme, `logs/` (device log, crash reports, API log),
   `lockscreen/` dumps, the native fingerprint manifest.
+- **Finding your run:** each run is named `Device gate · <app ref> · <flows>` (the `run-name`), so list the device.yml runs and pick the one named after your branch. Every dispatched run's `head_branch` is `main`.
 - **`refs/device-gate/<run id>`** (dispatched runs only; a re-run is `<run id>-<attempt>`):
   the screenshots and verdict files as one commit, for cloud agent sessions, which cannot download artifacts (the artifact
   blob host is not on their network allowlist).
