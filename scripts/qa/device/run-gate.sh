@@ -24,6 +24,11 @@
 #      (lockscreen-tap.sh, which uses push.sh), a lock-screen Live Activity tap attempt,
 #      and an offline -> online round trip (network.sh) with a screenshot of each state;
 #   5. stops the log stream and scans it (scan-logs.mjs);
+#   Android only: before the install, before each theme and before a retry it waits for
+#   a steady adb link (android_wait_stable in lib.sh); a flow that failed on that link
+#   (infra-retry.mjs: "Unknown error" or adb "device not found" within 15 s, no app step
+#   completed, no app crash in the log, a clean-install flow) runs once more, and the
+#   summary lists every retry and its outcome;
 #   6. writes summary.json / summary.md (gate-summary.mjs) and exits 1 when a flow
 #      failed or the log shows a crash, red box, LogBox, console.error/warn or a React
 #      warning.
@@ -61,6 +66,20 @@ mkdir -p "$OUT/extras" "$SHOTS" "$DEVICE_RESULTS/logs"
 # How the app was built (full native build or native-cache hit), for the summary.
 if [ -f "$DEVICE_RESULTS/build-$PLATFORM.json" ]; then cp "$DEVICE_RESULTS/build-$PLATFORM.json" "$OUT/extras/build.json"; fi
 
+# Android: wait for a steady adb link and keep a record for the summary (extras/adb.json).
+ADB_WAITS=()
+ADB_UNSTEADY=0
+adb_wait() {
+  local what="$1" out
+  if out="$(android_wait_stable)"; then
+    device_log "adb link before $what: $out"
+  else
+    ADB_UNSTEADY=1
+    device_warn "adb link before $what: $out"
+  fi
+  ADB_WAITS+=("$what: $out")
+}
+
 # --- 1. app and API -------------------------------------------------------------
 APP="$(cat "$DEVICE_RESULTS/$PLATFORM-app-path" 2>/dev/null || true)"
 [ -n "$APP" ] && [ -e "$APP" ] || device_die "no built app recorded in $DEVICE_RESULTS/$PLATFORM-app-path; run build-app.sh $PLATFORM first."
@@ -77,10 +96,16 @@ case "$PLATFORM" in
     adb wait-for-device
     # shellcheck disable=SC2016  # runs on the device
     adb shell 'while [ "$(getprop sys.boot_completed)" != "1" ]; do sleep 2; done'
+    adb_wait "boot"
     # shellcheck source=../android-emulator-prep.sh
     source "$DEVICE_ROOT/scripts/qa/android-emulator-prep.sh"
     suppress_emulator_error_dialogs || device_warn "could not hide emulator error dialogs"
-    adb install -r -d "$APP" >/dev/null || device_die "adb install failed."
+    if ! adb install -r -d "$APP" >/dev/null; then
+      device_warn "adb install failed once; waiting for a steady adb link and trying again"
+      adb_wait "install retry"
+      adb install -r -d "$APP" >/dev/null || device_die "adb install failed."
+    fi
+    adb shell pm path "$DEVICE_APP_ID" >/dev/null 2>&1 || device_die "$DEVICE_APP_ID is not installed after adb install."
     MAESTRO=(maestro)
     ;;
 esac
@@ -129,6 +154,7 @@ MAESTRO_ENV=(
 )
 
 # run_maestro <theme dir> <junit file> <theme> <flow>... ; appends to <theme dir>/maestro.log
+# Maestro's own output goes to <theme dir>/${MAESTRO_OUT:-maestro}.
 run_maestro() {
   local dir="$1" junit="$2" theme="$3"
   shift 3
@@ -136,7 +162,7 @@ run_maestro() {
     cd "$dir" && "${MAESTRO[@]}" test \
       "${MAESTRO_ENV[@]}" -e "DEVICE_THEME=$theme" \
       --format junit --output "$junit" \
-      --test-output-dir "$dir/maestro" \
+      --test-output-dir "$dir/${MAESTRO_OUT:-maestro}" \
       "$@"
   ) >>"$dir/maestro.log" 2>&1
   local s=$?
@@ -158,6 +184,36 @@ for f in "${FLOW_FILES[@]}"; do
 done
 [ "$SEQUENTIAL" = 1 ] && device_log "a device-offline flow is selected: running the flows one at a time, in order"
 
+# retry_infra <theme dir> <theme> <junit> <retry junit> <log offset>: Android only. Asks
+# infra-retry.mjs which failed flows of <junit> failed on the adb link (never one that
+# reached the app or crashed it), runs those once more into <retry junit> after a steady
+# adb link, and writes the retry's exit to <theme dir>/maestro-exit-retry. Returns 0
+# only when a retry ran and passed (1 when nothing was retried).
+retry_infra() {
+  local dir="$1" theme="$2" junit="$3" rjunit="$4" from="$5" s
+  [ "$PLATFORM" = "android" ] || return 1
+  local retry_files=()
+  while IFS= read -r f; do [ -n "$f" ] && retry_files+=("$f"); done < <(
+    node "$DEVICE_LIB_DIR/infra-retry.mjs" --junit "$junit" --theme "$theme" \
+      --log "$DEVICE_RESULTS/logs/$LOG_NAME.log" --log-from "$from" \
+      --outputs "$dir/${MAESTRO_OUT:-maestro}" --out "$dir/retry.json"
+  )
+  [ "${#retry_files[@]}" -gt 0 ] || return 1
+  device_warn "theme $theme: ${#retry_files[@]} flow(s) failed on the adb link, not in the app; running them once more: $(for f in "${retry_files[@]}"; do basename "$f"; done | tr '\n' ' ')"
+  adb_wait "retry ($theme)"
+  echo "--- infra retry: ${retry_files[*]}" >>"$dir/maestro.log"
+  MAESTRO_OUT=maestro-retry run_maestro "$dir" "$rjunit" "$theme" "${retry_files[@]}"
+  s=$?
+  echo "$s" >"$dir/maestro-exit-retry"
+  device_log "theme $theme: infra retry exited $s"
+  return "$s"
+}
+
+# Byte size of the device log now: where this pass's part of it starts.
+log_offset() {
+  wc -c <"$DEVICE_RESULTS/logs/$LOG_NAME.log" 2>/dev/null | tr -d ' ' || echo 0
+}
+
 launch_app() {
   case "$PLATFORM" in
     ios) xcrun simctl launch "$UDID" "$DEVICE_APP_ID" >/dev/null 2>&1 || true ;;
@@ -174,6 +230,8 @@ for theme in $THEMES; do
   last_theme="$theme"
   dir="$OUT/$theme"
   mkdir -p "$dir"
+  [ "$PLATFORM" = "android" ] && adb_wait "theme $theme"
+  pass_from="$(log_offset)"
   if ! "$DEVICE_LIB_DIR/theme.sh" "$PLATFORM" "$theme"; then
     echo 1 >"$dir/maestro-exit"
     continue
@@ -191,8 +249,12 @@ for theme in $THEMES; do
         offline=1
         "$DEVICE_LIB_DIR/network.sh" "$PLATFORM" offline >>"$dir/maestro.log" 2>&1 || device_warn "could not go offline before $(basename "$flow")"
       fi
+      flow_from="$(log_offset)"
       run_maestro "$dir" "$dir/junit-$(printf '%02d' "$n").xml" "$theme" "$flow"
       s=$?
+      if [ "$s" -ne 0 ] && retry_infra "$dir" "$theme" "$dir/junit-$(printf '%02d' "$n").xml" "$dir/junit-retry-$(printf '%02d' "$n").xml" "$flow_from"; then
+        s=0
+      fi
       if [ "$s" -ne 0 ]; then
         status=$s
         # What was on screen when it failed, in the job log (artifacts are not always at
@@ -210,6 +272,9 @@ for theme in $THEMES; do
   else
     run_maestro "$dir" "$dir/junit.xml" "$theme" "${FLOW_FILES[@]}"
     status=$?
+    if [ "$status" -ne 0 ]; then
+      retry_infra "$dir" "$theme" "$dir/junit.xml" "$dir/junit-retry.xml" "$pass_from" || true
+    fi
   fi
   echo "$status" >"$dir/maestro-exit"
   device_log "theme $theme: maestro exited $status"
@@ -265,6 +330,18 @@ fi
 log_files=("$DEVICE_RESULTS/logs/$LOG_NAME.log")
 for crash in "$DEVICE_RESULTS/logs/$LOG_NAME".crash-*.ips; do [ -f "$crash" ] && log_files+=("$crash"); done
 node "$DEVICE_LIB_DIR/scan-logs.mjs" --platform "$PLATFORM" --out "$OUT/scan.json" "${log_files[@]}"
+
+# Android: the adb link record (evidence, not part of the verdict; a retry it caused is
+# in the summary's "Infra retries").
+if [ "$PLATFORM" = "android" ]; then
+  reconnects="$(wc -l <"$DEVICE_RESULTS/logs/$LOG_NAME.reconnects" 2>/dev/null | tr -d ' ' || true)"
+  reconnects="${reconnects:-0}"
+  if [ "$ADB_UNSTEADY" = 1 ] || [ "$reconnects" != 0 ]; then adb_outcome="unsteady"; else adb_outcome="steady"; fi
+  printf '%s\n' ${ADB_WAITS[@]+"${ADB_WAITS[@]}"} \
+    | jq -R . | jq -s --arg o "$adb_outcome" --arg r "$reconnects" \
+      '{outcome: $o, logcatReconnects: ($r | tonumber), waits: ., note: ("logcat stream restarted " + $r + " time(s); " + (. | join("; ")))}' \
+      >"$OUT/extras/adb.json" || true
+fi
 
 # --- 6. verdict -----------------------------------------------------------------
 node "$DEVICE_LIB_DIR/gate-summary.mjs" --dir "$OUT" --platform "$PLATFORM"
