@@ -1,0 +1,46 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="8" failures="1" time="686.773" timestamp="2026-11-17T22:39:28">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="104.281" timestamp="2026-11-17T22:39:28" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="40.276" timestamp="2026-11-17T22:41:12" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F01 Onboarding states, intake and waiting for the coach (Z12-49)" name="F01 Onboarding states, intake and waiting for the coach (Z12-49)" classname="F01 Onboarding states, intake and waiting for the coach (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F01-first-install.yaml" time="90.581" timestamp="2026-11-17T22:41:52" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F02 Sign in, wrong password, code request and code entry (Z12-49)" name="F02 Sign in, wrong password, code request and code entry (Z12-49)" classname="F02 Sign in, wrong password, code request and code entry (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02-sign-in.yaml" time="90.554" timestamp="2026-11-17T22:43:23" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F02b Auth errors on the code path and reset (Z12-49)" name="F02b Auth errors on the code path and reset (Z12-49)" classname="F02b Auth errors on the code path and reset (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02b-auth-errors.yaml" time="59.147" timestamp="2026-11-17T22:44:53" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" name="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" classname="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F15-settings-account.yaml" time="121.399" timestamp="2026-11-17T22:45:53" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F16 Ended coaching and the coach's restart request (Z12-49)" name="F16 Ended coaching and the coach's restart request (Z12-49)" classname="F16 Ended coaching and the coach's restart request (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F16-expiry-errors-ended.yaml" time="91.752" timestamp="2026-11-17T22:47:54" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F17 Role select, switch to coach view and Back (Z12-49)" name="F17 Role select, switch to coach view and Back (Z12-49)" classname="F17 Role select, switch to coach view and Back (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F17-role-switch.yaml" time="88.707" timestamp="2026-11-17T22:49:26" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, dual, z12-49"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,3 @@
+Device gate run 44191354664, attempt 1
+App ref: claude/Z12-49-more-settings
+Run: https://github.com/thefitbud/thefitbud/actions/runs/44191354664
