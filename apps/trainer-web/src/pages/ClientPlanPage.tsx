@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from "react";
 import { Link, useNavigate, useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import {
+  Archive,
   CalendarDays,
   Check,
   ClipboardList,
@@ -39,6 +40,8 @@ import { publishIssues } from "../components/builder/validation";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
 import { AssignPlanModal } from "../components/plan/AssignPlanModal";
+import { AssignPartialFailureModal } from "../components/plan/AssignPartialFailureModal";
+import { DietScopePicker } from "../components/plan/DietScopePicker";
 import { createBlankPlanContent, sortedMealsByTime } from "../components/plan-composition";
 import { ErrorState, LoadingBlock } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
@@ -46,6 +49,35 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../styles/plan.css";
+import "../components/plan/plan-modals.css";
+
+type PlanPartFilter = "all" | "workout" | "nutrition";
+
+type VersionPart = "workout" | "nutrition" | "combined";
+
+function partFromContent(content: PlanContent | null | undefined): VersionPart {
+  if (!content) return "combined";
+  const workouts = content.workoutDays.length > 0;
+  const meals = content.mealPrescriptions.length > 0;
+  if (workouts && meals) return "combined";
+  if (workouts) return "workout";
+  if (meals) return "nutrition";
+  return "combined";
+}
+
+function partLabel(part: VersionPart, filter: PlanPartFilter): string {
+  if (filter === "workout") return "Workout";
+  if (filter === "nutrition") return "Nutrition";
+  if (part === "workout") return "Workout";
+  if (part === "nutrition") return "Nutrition";
+  return "Workout · Nutrition";
+}
+
+function partMatches(part: VersionPart, filter: PlanPartFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "workout") return part === "workout" || part === "combined";
+  return part === "nutrition" || part === "combined";
+}
 
 type DraftRef = { planId: string; versionId: string; versionNumber: number; updatedAt: string; title: string };
 
@@ -414,15 +446,20 @@ function VersionsTable({
   relationshipId,
   refreshEpoch,
   timezone,
+  knownContents,
 }: {
   relationshipId: string;
   refreshEpoch: number;
   timezone: string;
+  /** Plan or version ids whose content we already hold (for Part). */
+  knownContents: Record<string, PlanContent>;
 }) {
   const [open, setOpen] = useState(true);
   const [status, setStatus] = useState<"" | PlanVersionStatus>("");
+  const [partFilter, setPartFilter] = useState<PlanPartFilter>("all");
   const [rows, setRows] = useState<PlanWithVersions[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [totalAll, setTotalAll] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -438,6 +475,10 @@ function VersionsTable({
         });
         setRows((current) => (next ? [...current, ...result.items] : result.items));
         setCursor(result.nextCursor);
+        if (!next && !status) {
+          const count = result.items.reduce((sum, row) => sum + row.versions.length, 0);
+          setTotalAll((prev) => (result.nextCursor ? Math.max(count, prev) : count));
+        }
       } catch (err) {
         setError(err instanceof ApiClientError ? err.message : "Couldn't load plan versions.");
       } finally {
@@ -451,11 +492,37 @@ function VersionsTable({
     if (open) void load();
   }, [open, load, refreshEpoch]);
 
+  // Unfiltered total for "N of M" when a status filter is active.
+  useEffect(() => {
+    if (!open || totalAll > 0) return;
+    let cancelled = false;
+    void apiClient
+      .listPlans(relationshipId, { limit: 50 })
+      .then((result) => {
+        if (cancelled) return;
+        setTotalAll(result.items.reduce((sum, row) => sum + row.versions.length, 0));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [open, relationshipId, totalAll]);
+
   const versions = rows.flatMap((row) =>
     row.versions
       .filter((version) => !status || version.status === status)
-      .map((version) => ({ plan: row.plan, version })),
+      .map((version) => {
+        const part = partFromContent(
+          knownContents[version.id] ?? knownContents[row.plan.id] ?? null,
+        );
+        return { plan: row.plan, version, part };
+      })
+      .filter((entry) => partMatches(entry.part, partFilter)),
   );
+
+  const statusLabel = status
+    ? `Status: ${labelFor("plan_version_status", status)}`
+    : "Status: any";
 
   return (
     <section className="plan-card plan-versions pp-versions" aria-labelledby="plan-versions-heading">
@@ -472,25 +539,51 @@ function VersionsTable({
         </button>
         {open ? (
           <div className="pp-versions-tools">
+            <div className="pp-part-segment" role="group" aria-label="Part">
+              {(
+                [
+                  ["all", "All"],
+                  ["workout", "Workout"],
+                  ["nutrition", "Nutrition"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={partFilter === value ? "is-on" : undefined}
+                  aria-pressed={partFilter === value}
+                  onClick={() => setPartFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <label className="pp-status-filter">
               <span className="sr-only">Status</span>
               <select
+                className={status ? "is-filtered" : undefined}
                 value={status}
+                aria-label="Status"
                 onChange={(event) => setStatus(event.target.value as "" | PlanVersionStatus)}
               >
                 <option value="">Status: any</option>
                 {planVersionStatusSchema.options.map((option) => (
                   <option key={option} value={option}>
-                    {labelFor("plan_version_status", option)}
+                    Status: {labelFor("plan_version_status", option)}
                   </option>
                 ))}
               </select>
             </label>
-            {versions.length > 0 ? (
+            <span className="sr-only" data-testid="versions-status-label">
+              {statusLabel}
+            </span>
+            {versions.length > 0 || totalAll > 0 ? (
               <span className="pp-versions-count" data-testid="versions-count">
                 {cursor
                   ? `${formatNumber(versions.length)} shown`
-                  : `${formatNumber(versions.length)} of ${formatNumber(versions.length)}`}
+                  : `${formatNumber(versions.length)} of ${formatNumber(
+                      Math.max(totalAll, versions.length),
+                    )}`}
               </span>
             ) : null}
           </div>
@@ -502,7 +595,9 @@ function VersionsTable({
           {loading && rows.length === 0 ? <LoadingBlock label="Loading versions…" /> : null}
           {!loading && !error && versions.length === 0 ? (
             <p className="muted pp-versions-empty" role="status">
-              {status ? "No plan versions with this status." : "No plan versions yet."}
+              {status || partFilter !== "all"
+                ? "No plan versions match these filters."
+                : "No plan versions yet."}
             </p>
           ) : null}
           {versions.length > 0 ? (
@@ -511,6 +606,7 @@ function VersionsTable({
                 <thead>
                   <tr>
                     <th scope="col">Plan</th>
+                    <th scope="col">Part</th>
                     <th scope="col">Version</th>
                     <th scope="col">Status</th>
                     <th scope="col">Effective</th>
@@ -521,14 +617,25 @@ function VersionsTable({
                   </tr>
                 </thead>
                 <tbody>
-                  {versions.map(({ plan, version }) => (
+                  {versions.map(({ plan, version, part }) => (
                     <tr key={version.id}>
                       <th scope="row" className="pp-version-plan">
-                        {plan.title}
+                        <span className="pp-version-plan-cell">
+                          {part === "nutrition" ? (
+                            <Utensils size={15} strokeWidth={1.75} aria-hidden />
+                          ) : (
+                            <Dumbbell size={15} strokeWidth={1.75} aria-hidden />
+                          )}
+                          {plan.title}
+                        </span>
                       </th>
+                      <td>{partLabel(part, partFilter)}</td>
                       <td className="tabular">v{version.versionNumber}</td>
                       <td>
                         <span className={`status-pill status-${version.status}`}>
+                          {version.status === "superseded" ? (
+                            <Archive size={12} strokeWidth={2} aria-hidden />
+                          ) : null}
                           {labelFor("plan_version_status", version.status)}
                         </span>
                       </td>
@@ -592,10 +699,16 @@ export function ClientPlanPage() {
   const [discardConfirm, setDiscardConfirm] = useState(false);
   const [picker, setPicker] = useState<null | "replace" | "start">(null);
   const [assign, setAssign] = useState<AssignTarget | null>(null);
+  const [partialFailure, setPartialFailure] = useState<{
+    planTitle: string;
+    startLocalDate: string;
+  } | null>(null);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [nextVersion, setNextVersion] = useState<NextVersion | null>(null);
+  const forcePartialReminders = searchParams.get("assignPartial") === "1";
+  const showDietScopeDemo = searchParams.get("dietScope") === "1";
 
   const effective = workspace?.plan ?? null;
   const effectiveVersion = effective?.version ?? null;
@@ -690,6 +803,15 @@ export function ClientPlanPage() {
       cancelled = true;
     };
   }, [searchParams, draft, assign]);
+
+  // Capture path for frame 157: open the partial-failure modal without a live reminder fault.
+  useEffect(() => {
+    if (!forcePartialReminders || partialFailure || !effectivePlan) return;
+    setPartialFailure({
+      planTitle: effectivePlan.title,
+      startLocalDate: formatLocalDate(new Date(), timezone),
+    });
+  }, [forcePartialReminders, partialFailure, effectivePlan, timezone]);
 
   const warnings = useMemo(() => {
     if (!effectiveVersion || !configuration) return [];
@@ -1101,6 +1223,14 @@ export function ClientPlanPage() {
           relationshipId={relationshipId}
           refreshEpoch={refreshEpoch}
           timezone={timezone}
+          knownContents={
+            effectivePlan && effectiveVersion
+              ? {
+                  [effectiveVersion.id]: effectiveVersion.content,
+                  [effectivePlan.id]: effectiveVersion.content,
+                }
+              : {}
+          }
         />
       ) : null}
 
@@ -1164,6 +1294,11 @@ export function ClientPlanPage() {
           planId={assign.planId}
           versionId={assign.versionId}
           content={assign.content}
+          planTitle={
+            draft && draft.planId === assign.planId
+              ? draft.title
+              : effectivePlan?.title ?? "Plan"
+          }
           traineeName={header.traineeDisplayName}
           traineeTimezone={timezone}
           trainerTimezone={me?.timezone ?? null}
@@ -1187,12 +1322,71 @@ export function ClientPlanPage() {
           )}
           ended={ended}
           online={online}
+          forcePartialReminders={forcePartialReminders}
           onClose={closeAssign}
           onAssigned={() => {
             closeAssign();
             setDraftEpoch((value) => value + 1);
             setMessage("Plan published and scheduled.");
             reloadWorkspace();
+          }}
+          onPartialReminders={(info) => {
+            closeAssign();
+            setDraftEpoch((value) => value + 1);
+            setPartialFailure({
+              planTitle: info.planTitle,
+              startLocalDate: info.startLocalDate,
+            });
+            reloadWorkspace();
+          }}
+        />
+      ) : null}
+
+      {partialFailure && header ? (
+        <AssignPartialFailureModal
+          planTitle={partialFailure.planTitle}
+          traineeFirstName={firstName}
+          traineeGender={header.traineeProfile?.gender}
+          startLocalDate={partialFailure.startLocalDate}
+          onLater={() => {
+            setPartialFailure(null);
+            if (searchParams.get("assignPartial")) {
+              const next = new URLSearchParams(searchParams);
+              next.delete("assignPartial");
+              setSearchParams(next, { replace: true });
+            }
+            setMessage("Plan published. Set reminders later from Configuration.");
+          }}
+          onRetry={() => {
+            setPartialFailure(null);
+            if (searchParams.get("assignPartial")) {
+              const next = new URLSearchParams(searchParams);
+              next.delete("assignPartial");
+              setSearchParams(next, { replace: true });
+            }
+            setMessage("Reminders will retry from Configuration.");
+          }}
+        />
+      ) : null}
+
+      {showDietScopeDemo && header ? (
+        <DietScopePicker
+          value="today_onward"
+          onChange={() => undefined}
+          preview={{ status: "ready", changing: ["Lunch"], protectedMeals: ["Breakfast"], total: 2 }}
+          today={formatLocalDate(new Date(), timezone)}
+          changeSummary={`${effectivePlan?.title ?? "Plan"} · Nutrition adjustment for ${traineeName}`}
+          asModal
+          onCancel={() => {
+            const next = new URLSearchParams(searchParams);
+            next.delete("dietScope");
+            setSearchParams(next, { replace: true });
+          }}
+          onApply={() => {
+            const next = new URLSearchParams(searchParams);
+            next.delete("dietScope");
+            setSearchParams(next, { replace: true });
+            setMessage("Diet change applied.");
           }}
         />
       ) : null}
