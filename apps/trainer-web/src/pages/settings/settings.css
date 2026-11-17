@@ -1,0 +1,230 @@
+/**
+ * Z12-15 settings chrome (D-W12b-2). Global styles.css / styles/* stay frozen.
+ * Ink primary; coral never a button. Existing CSS variables only.
+ */
+
+.settings-page .settings-side-nav .settings-tab {
+  gap: 0.625rem;
+}
+
+.settings-tab-icon {
+  flex-shrink: 0;
+  width: 1.125rem;
+  height: 1.125rem;
+  color: currentColor;
+  opacity: 0.85;
+}
+
+.settings-tab.is-active .settings-tab-icon {
+  opacity: 1;
+}
+
+.settings-signout {
+  margin-top: 0.75rem;
+  color: var(--ink-500, var(--mid-grey, #6b6880));
+  font-weight: 500;
+  background: transparent;
+  border: none;
+}
+
+.settings-signout:hover,
+.settings-signout:focus-visible {
+  background: var(--pale-lavender, #ece8f8);
+  color: var(--deep-navy, var(--ink));
+  outline: none;
+}
+
+.settings-signout:focus-visible {
+  outline: 2px solid var(--indigo, var(--brand, var(--ink)));
+  outline-offset: 2px;
+}
+
+/* Profile */
+.settings-profile-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.settings-profile-avatar {
+  width: 4.5rem;
+  height: 4.5rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--indigo, var(--brand, #4527c6)) 14%, white);
+  color: var(--indigo, var(--brand, #4527c6));
+  font-weight: 700;
+  font-size: 1.25rem;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.settings-profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.settings-change-photo {
+  min-height: 44px;
+  padding: 0 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong, var(--line2, #d8d5e3));
+  background: var(--white, #fff);
+  color: var(--ink, var(--deep-navy));
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.settings-change-photo:hover,
+.settings-change-photo:focus-visible {
+  border-color: var(--indigo, var(--brand));
+  outline: 2px solid var(--indigo, var(--brand));
+  outline-offset: 2px;
+}
+
+.settings-change-photo:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-profile-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin-top: 0.5rem;
+}
+
+.settings-profile-actions .button-primary {
+  min-height: 44px;
+  min-width: 9.5rem;
+  width: auto;
+  padding: 0 1.25rem;
+  background: var(--brand, var(--ink, var(--deep-navy)));
+  color: var(--on-brand, var(--white));
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.settings-profile-actions .button-primary:hover,
+.settings-profile-actions .button-primary:focus-visible {
+  filter: brightness(1.04);
+  outline: 2px solid var(--brand, var(--ink));
+  outline-offset: 2px;
+}
+
+.settings-profile-actions .button-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  filter: none;
+}
+
+.settings-panel .field > .muted {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.8125rem;
+}
+
+.settings-password-panel {
+  margin-top: 1.25rem;
+}
+
+/* Notifications — toggle rows (frame 177) */
+.settings-notif-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-notif-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 44px;
+  padding: 0.875rem 0;
+  border-bottom: 1px solid var(--border, var(--line, #e4e2ec));
+}
+
+.settings-notif-row:last-child {
+  border-bottom: none;
+}
+
+.settings-notif-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.settings-notif-copy strong {
+  font-weight: 650;
+  color: var(--ink, var(--deep-navy));
+  font-size: 0.9375rem;
+}
+
+.settings-notif-copy .muted {
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  color: var(--ink-500, var(--mid-grey, #6b6880));
+}
+
+.settings-switch {
+  appearance: none;
+  flex-shrink: 0;
+  width: 2.75rem;
+  height: 1.625rem;
+  border-radius: 999px;
+  background: var(--border-strong, var(--line2, #d0cddc));
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin: 0;
+  border: none;
+}
+
+.settings-switch::after {
+  content: "";
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 50%;
+  background: var(--white);
+  box-shadow: 0 1px 2px rgb(26 18 72 / 18%);
+  transition: transform 0.15s;
+}
+
+.settings-switch:checked {
+  background: var(--indigo, var(--brand, #4527c6));
+}
+
+.settings-switch:checked::after {
+  transform: translateX(1.125rem);
+}
+
+.settings-switch:focus-visible {
+  outline: 2px solid var(--indigo, var(--brand));
+  outline-offset: 2px;
+}
+
+.settings-switch:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.settings-panel > .muted.settings-notif-lede {
+  margin: -0.25rem 0 0.25rem;
+  max-width: 36rem;
+}

@@ -1,11 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import {
+  clientInitials,
+  clientStatusLabel,
   errorText,
-  matchesName,
   usableApplyClients,
   type ApplyClient,
 } from "./shared";
@@ -23,19 +25,23 @@ export function UseTemplateModal({
 }) {
   const navigate = useNavigate();
   const usable = useMemo(() => usableApplyClients(clients), [clients]);
-  const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState(usable[0]?.relationshipId ?? "");
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const filtered = usable.filter((client) =>
-    matchesName(client.traineeDisplayName ?? "", query),
-  );
+  useEffect(() => {
+    if (selectedId && usable.some((c) => c.relationshipId === selectedId)) {
+      return;
+    }
+    setSelectedId(usable[0]?.relationshipId ?? "");
+  }, [usable, selectedId]);
+
   const selected =
-    filtered.find((c) => c.relationshipId === selectedId) ??
-    filtered[0] ??
+    usable.find((client) => client.relationshipId === selectedId) ??
+    usable[0] ??
     null;
   const clientName = selected?.traineeDisplayName ?? "this client";
+  const firstName = clientName.split(/\s+/).filter(Boolean)[0] ?? clientName;
 
   async function onConfirm() {
     if (!selected) return;
@@ -61,7 +67,7 @@ export function UseTemplateModal({
   return (
     <div className="modal-scrim" role="presentation" onClick={onClose}>
       <div
-        className="modal-card use-template-modal"
+        className="modal-card use-template-modal templates-modal-v3"
         role="dialog"
         aria-modal="true"
         aria-labelledby="use-template-title"
@@ -69,59 +75,52 @@ export function UseTemplateModal({
         onClick={(event) => event.stopPropagation()}
       >
         <header className="modal-header">
-          <h2 id="use-template-title">Use for client</h2>
-          <Button variant="tertiary" onClick={onClose}>
-            Close
-          </Button>
+          <h2 id="use-template-title">Use {templateTitle} for…</h2>
+          <button
+            type="button"
+            className="templates-modal-close"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            <X size={18} strokeWidth={2} aria-hidden="true" />
+          </button>
         </header>
+
         <label className="field">
           <span>Client</span>
-          <input
-            type="search"
-            role="combobox"
-            aria-expanded={filtered.length > 0}
-            aria-controls="use-template-client-list"
-            aria-autocomplete="list"
-            placeholder="Search clients"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-          />
-        </label>
-        <div
-          id="use-template-client-list"
-          className="use-client-list"
-          role="listbox"
-          aria-label="Ready clients"
-          tabIndex={0}
-        >
-          {filtered.length === 0 ? (
-            <p className="muted">No ready clients match that search.</p>
+          {usable.length === 0 ? (
+            <p className="muted">No ready clients to use this with.</p>
           ) : (
-            filtered.map((client) => (
-              <button
-                key={client.relationshipId}
-                type="button"
-                role="option"
-                aria-selected={
-                  (selected?.relationshipId ?? "") === client.relationshipId
-                }
-                className={
-                  (selected?.relationshipId ?? "") === client.relationshipId
-                    ? "use-client-row is-selected"
-                    : "use-client-row"
-                }
-                onClick={() => setSelectedId(client.relationshipId)}
+            <div className="templates-client-select">
+              <span className="templates-client-avatar" aria-hidden="true">
+                {clientInitials(clientName)}
+              </span>
+              <select
+                aria-label="Client"
+                value={selected?.relationshipId ?? ""}
+                onChange={(event) => setSelectedId(event.target.value)}
               >
-                {client.traineeDisplayName}
-              </button>
-            ))
+                {usable.map((client) => {
+                  const name = client.traineeDisplayName ?? "Client";
+                  const status = clientStatusLabel(client.status);
+                  return (
+                    <option
+                      key={client.relationshipId}
+                      value={client.relationshipId}
+                    >
+                      {name} · {status}
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
           )}
-        </div>
+        </label>
+
         {selected ? (
-          <p className="use-template-copy">
-            Creates a draft plan for {clientName} from{" "}
-            <em>{templateTitle}</em>. Nothing changes for {clientName} until you
-            publish.
+          <p className="templates-modal-copy use-template-copy">
+            This opens a draft plan for {firstName}. Nothing changes for{" "}
+            {firstName} until you publish. Your template stays as it is.
           </p>
         ) : null}
         {error ? (
@@ -130,15 +129,15 @@ export function UseTemplateModal({
           </p>
         ) : null}
         <div className="button-row">
+          <Button variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
           <Button
             variant="primary"
             disabled={!selected || acting}
             onClick={() => void onConfirm()}
           >
-            {acting ? "Creating draft…" : "Create draft"}
-          </Button>
-          <Button variant="tertiary" onClick={onClose}>
-            Cancel
+            {acting ? "Opening draft…" : "Open draft"}
           </Button>
         </div>
       </div>

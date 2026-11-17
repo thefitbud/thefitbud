@@ -11,6 +11,7 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { ApiClientError } from "@fitbud/api-client";
 
 const api = vi.hoisted(() => ({ listClients: vi.fn() }));
 vi.mock("../lib/api", () => ({ apiClient: api }));
@@ -224,5 +225,79 @@ describe("ClientsPage toolbar (Z8-19, D-W8-13)", () => {
     const setUp = screen.getByRole("link", { name: "Set up plan" });
     expect(setUp.className).toContain("button-tinted");
     expect(setUp.className).not.toContain("client-row-cta-outline");
+  });
+});
+
+describe("ClientsPage states (Z12-3)", () => {
+  it("shows a centred filtered-empty card with helper and keeps the toolbar", async () => {
+    api.listClients.mockImplementation(async () => ({
+      items: [],
+      nextCursor: null,
+      facets: FACETS,
+    }));
+    renderAt("/clients?adherenceState=no_recent_data&renewal=due");
+    const empty = await screen.findByTestId("clients-empty");
+    expect(empty.textContent).toContain("No clients match these filters");
+    expect(empty.textContent).toContain(
+      "Try fewer filters, or clear them to see everyone.",
+    );
+    expect(empty.querySelector(".clients-state-icon")).toBeTruthy();
+    expect(screen.getByTestId("filter-bar")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Adherence: No recent data" }).className,
+    ).toContain("has-selection");
+    expect(
+      screen.getByRole("button", { name: "Renewal: Due" }).className,
+    ).toContain("has-selection");
+    fireEvent.click(within(empty).getByRole("button", { name: "Clear filters" }));
+    await waitFor(() => {
+      expect(lastSearch).not.toContain("adherenceState=");
+      expect(lastSearch).not.toContain("renewal=");
+    });
+  });
+
+  it("hides the filter bar on true empty and shows the icon tile CTA", async () => {
+    api.listClients.mockImplementation(async () => ({
+      items: [],
+      nextCursor: null,
+      facets: { status: { ended: 0 }, adherence: {}, renewal: {} },
+    }));
+    renderAt("/clients");
+    const empty = await screen.findByTestId("clients-empty");
+    expect(empty.textContent).toContain("No clients yet");
+    expect(empty.textContent).toContain(
+      "Invite your first client to start coaching.",
+    );
+    expect(empty.querySelector(".clients-state-icon")).toBeTruthy();
+    expect(screen.queryByTestId("filter-bar")).toBeNull();
+    expect(
+      screen.getAllByRole("link", { name: /Add client/i }).length,
+    ).toBeGreaterThanOrEqual(2);
+    expect(
+      document.querySelector(".clients-count")?.textContent?.trim(),
+    ).toBe("No clients yet");
+  });
+
+  it("centres ErrorState with Retry and Email support on list failure", async () => {
+    api.listClients.mockRejectedValue(
+      new ApiClientError({
+        code: "INTERNAL",
+        message: "Please retry in a moment.",
+        requestId: "req-z12-3-error",
+        status: 500,
+      }),
+    );
+    renderAt("/clients");
+    const panel = await screen.findByTestId("error-state");
+    expect(panel.textContent).toContain("Couldn't load your clients");
+    expect(panel.textContent).toContain(
+      "Something went wrong on our side. Your data is safe. Try again in a moment.",
+    );
+    expect(panel.textContent).toContain("Request id: req-z12-3-error");
+    expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Email support/i })).toBeTruthy();
+    expect(panel.closest(".clients-state-mount")).toBeTruthy();
+    // Frame 139 keeps the toolbar above the error card.
+    expect(screen.getByTestId("filter-bar")).toBeTruthy();
   });
 });

@@ -1,0 +1,31 @@
+/* Z12-17 offline banner (frame 186). Colocated — do not edit styles.css. */
+
+.fb-offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.625rem;
+  width: auto;
+  box-sizing: border-box;
+  margin: 0.75rem 1.25rem 0;
+  padding: 0.75rem 1rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+  background: var(--warn-tint);
+  color: var(--warn);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.fb-offline-banner-icon {
+  flex-shrink: 0;
+  display: grid;
+  place-items: center;
+}
+
+.fb-offline-banner-copy {
+  margin: 0;
+  max-width: 52rem;
+}

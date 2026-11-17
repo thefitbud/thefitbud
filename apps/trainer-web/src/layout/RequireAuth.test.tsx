@@ -21,4 +21,13 @@ describe("RequireAuth trainee-only gate", () => {
       renderToStaticMarkup(createElement("span", null, "ok")),
     ).toContain("ok");
   });
+
+  it("exits AppShell on /welcome first-run", async () => {
+    const source = await import("node:fs").then((fs) =>
+      fs.readFileSync(new URL("./RequireAuth.tsx", import.meta.url), "utf8"),
+    );
+    expect(source).toContain('location.pathname.startsWith("/welcome")');
+    expect(source).toMatch(/if \(onWelcome\)[\s\S]*?<Outlet \/>/);
+    expect(source).toContain("First-run exits AppShell");
+  });
 });

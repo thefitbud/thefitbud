@@ -1,0 +1,79 @@
+/* Z12-3 Clients roster empty / filtered-empty / error. Colocated — do not
+   edit styles/clients.css or FilterBar (D-W12b-2). */
+
+/* Frame 137: selected filter chips get a periwinkle tint, not border-only. */
+.clients-page .filter-dropdown-trigger.has-selection {
+  background: var(--coach-tint, var(--pale-lavender));
+  border-color: transparent;
+  color: var(--coach-ink, var(--indigo));
+}
+
+.clients-page .filter-dropdown-trigger.has-selection:hover {
+  border-color: transparent;
+  filter: brightness(0.98);
+}
+
+/* Shared empty / filtered-empty card (frames 137 and 138). */
+.clients-state-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.75rem;
+  width: 100%;
+  margin: 0;
+  padding: 3.5rem 2rem 3rem;
+  border: 1px solid var(--border, var(--line));
+  border-radius: var(--radius, 16px);
+  background: var(--surface, var(--card));
+  box-shadow: var(--shadow);
+  color: var(--ink-900, var(--ink));
+  box-sizing: border-box;
+}
+
+.clients-state-icon {
+  display: grid;
+  place-items: center;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 1rem;
+  margin-bottom: 0.25rem;
+  flex-shrink: 0;
+  background: var(--coach-tint, var(--pale-lavender));
+  color: var(--coach-ink, var(--indigo));
+}
+
+.clients-state-panel h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.3;
+  color: var(--ink-900, var(--deep-navy, var(--ink)));
+}
+
+.clients-state-panel > p {
+  margin: 0;
+  max-width: 22rem;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink-500, var(--mid-grey, var(--ink3)));
+}
+
+.clients-state-panel .button-primary,
+.clients-state-panel .button-secondary,
+.clients-state-panel a.button-primary,
+.clients-state-panel a.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  margin-top: 0.5rem;
+  text-decoration: none;
+}
+
+/* Frame 139: centre the ErrorState card under the toolbar. */
+.clients-page .clients-state-mount {
+  min-height: min(56vh, 28rem);
+  padding: 1.5rem 0 2rem;
+}

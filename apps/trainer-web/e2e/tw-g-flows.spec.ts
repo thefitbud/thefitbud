@@ -63,25 +63,27 @@ test.describe("TW-G history, settings, ended, reminders", () => {
   test("TW-29 notification toggles persist after reload", async ({ page }) => {
     await page.goto("/settings/notifications");
     await expect(page.getByTestId("screen-TW-29")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByText("Client asked you on WhatsApp")).toBeVisible();
-    await expect(page.getByText(/at most one summary per hour/i)).toBeVisible();
-    await expect(page.locator(".quiet-hours-display")).toHaveText("10:00 pm – 7:00 am");
+    await expect(page.getByText("Clients who need you")).toBeVisible();
+    await expect(page.getByText("Push to your phone and this browser.")).toBeVisible();
+    await expect(page.getByTestId("quiet-hours-display")).toContainText(
+      "10:00 pm — 7:00 am",
+    );
 
-    const morning = page.getByRole("checkbox", { name: /Morning summary/i });
-    await expect(morning).toBeVisible();
-    const wasChecked = await morning.isChecked();
-    await morning.click();
-    await expect(morning).toBeChecked({ checked: !wasChecked, timeout: 10_000 });
+    const weekly = page.getByRole("switch", { name: /Weekly summary email/i });
+    await expect(weekly).toBeVisible();
+    const wasChecked = await weekly.isChecked();
+    await weekly.click();
+    await expect(weekly).toBeChecked({ checked: !wasChecked, timeout: 10_000 });
     await expect(page.getByTestId("notification-prefs-saved")).toBeVisible({
       timeout: 15_000,
     });
     await page.reload();
     await expect(page.getByTestId("screen-TW-29")).toBeVisible({ timeout: 20_000 });
-    const morningAgain = page.getByRole("checkbox", { name: /Morning summary/i });
-    await expect(morningAgain).toBeChecked({ checked: !wasChecked, timeout: 15_000 });
+    const weeklyAgain = page.getByRole("switch", { name: /Weekly summary email/i });
+    await expect(weeklyAgain).toBeChecked({ checked: !wasChecked, timeout: 15_000 });
     // restore
-    await morningAgain.click();
-    await expect(morningAgain).toBeChecked({ checked: wasChecked, timeout: 10_000 });
+    await weeklyAgain.click();
+    await expect(weeklyAgain).toBeChecked({ checked: wasChecked, timeout: 10_000 });
     await expect(page.getByTestId("notification-prefs-saved")).toBeVisible({
       timeout: 15_000,
     });
