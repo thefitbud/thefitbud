@@ -3,11 +3,13 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import { NUTRIENT_SCALE, type MealAssignment, type MealFoodItem } from "@fitbud/contracts";
 import { formatKcal } from "@fitbud/core";
 import { MealPanel } from "./MealPanel";
 
 const PLAN_KCAL = 520;
+const REL_ID = "11111111-1111-4111-8111-111111111111";
 
 function scaledItem(name: string, kcal: number): MealFoodItem {
   return {
@@ -39,13 +41,18 @@ function scaledItem(name: string, kcal: number): MealFoodItem {
 
 function assignment(items: MealFoodItem[]): MealAssignment {
   return {
+    id: "22222222-2222-4222-8222-222222222222",
+    coachingRelationshipId: REL_ID,
     mealName: "Lunch",
     localDate: "2026-10-17",
     windowEndsAt: "2026-10-17T08:30:00.000Z",
+    status: "modified",
+    scheduleStatus: "scheduled",
     prescription: { items },
     compliance: {
-      notes: null,
+      notes: "Ate out, office canteen.",
       mediaAssetId: null,
+      loggedAt: "2026-10-17T08:35:00.000Z",
       loggedItems: [
         {
           name: "Rajma",
@@ -67,31 +74,44 @@ function assignment(items: MealFoodItem[]): MealAssignment {
   } as MealAssignment;
 }
 
-describe("MealPanel plan kcal", () => {
+function renderPanel(row: MealAssignment) {
+  const outlet = {
+    workspace: {
+      header: {
+        traineeDisplayName: "Rohan Mehta",
+        clientWhatsappE164: "+919876543210",
+      },
+    },
+    ended: false,
+  };
+  return render(
+    <MemoryRouter initialEntries={[`/clients/${REL_ID}/activity`]}>
+      <Routes>
+        <Route path="/clients/:relationshipId" element={<Outlet context={outlet} />}>
+          <Route path="activity" element={<MealPanel assignment={row} clientTimezone="Asia/Kolkata" />} />
+        </Route>
+      </Routes>
+    </MemoryRouter>,
+  );
+}
+
+describe("MealPanel planned vs logged (Z12-8 / 159)", () => {
   afterEach(() => {
     cleanup();
   });
 
-  it("shows the plan total in kcal, not the raw energyKcalScaled sum", () => {
-    render(
-      <MealPanel
-        assignment={assignment([
-          scaledItem("Roti", 200),
-          scaledItem("Dal", 320),
-        ])}
-        clientTimezone="Asia/Kolkata"
-      />,
+  it("shows planned and logged kcal side by side with the difference", () => {
+    renderPanel(
+      assignment([scaledItem("Roti", 200), scaledItem("Dal", 320)]),
     );
 
-    const plan = screen.getByText(/Plan ≥/);
-    const planText = (plan.textContent ?? "").replace(/\s+/g, " ").trim();
-    expect(planText).toBe(`Plan ≥ ${formatKcal(PLAN_KCAL)}`);
-    expect(planText).not.toContain(String(PLAN_KCAL * NUTRIENT_SCALE));
-
-    const logged = screen.getByText(/Totals ≥/);
-    const loggedText = (logged.textContent ?? "").replace(/\s+/g, " ").trim();
-    expect(loggedText).toContain("610 kcal");
-    expect(loggedText).toContain("+90 kcal");
-    expect(loggedText).not.toContain(String(PLAN_KCAL * NUTRIENT_SCALE));
+    expect(screen.getByRole("heading", { name: "Planned" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Logged" })).toBeTruthy();
+    expect(screen.getByText(formatKcal(PLAN_KCAL))).toBeTruthy();
+    expect(screen.getByText(formatKcal(610))).toBeTruthy();
+    expect(screen.getByText(/\+90 kcal/)).toBeTruthy();
+    expect(screen.getByText("Ate out, office canteen.")).toBeTruthy();
+    expect(screen.getByText("Changed")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Message on WhatsApp/i })).toBeTruthy();
   });
 });

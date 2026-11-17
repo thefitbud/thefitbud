@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { NUTRIENT_SCALE, type MealAssignment, type MealFoodItem } from "@fitbud/contracts";
-import { mealDetailLine, planEnergyKcal } from "./activityUtils";
+import {
+  activityMealChipLabel,
+  feedCardTitle,
+  mealDetailLine,
+  planEnergyKcal,
+} from "./activityUtils";
 
 function scaledItem(kcal: number): MealFoodItem {
   return {
@@ -39,5 +44,19 @@ describe("mealDetailLine", () => {
     } as MealAssignment;
 
     expect(mealDetailLine(assignment)).toBe("Ate: Rajma · 610 kcal (plan 520)");
+  });
+});
+
+describe("activityMealChipLabel / feedCardTitle (Z12-8)", () => {
+  it("uses frame 158 meal chip copy", () => {
+    expect(activityMealChipLabel("confirmed")).toBe("As planned");
+    expect(activityMealChipLabel("modified")).toBe("Changed");
+    expect(activityMealChipLabel("pending")).toBe("Not logged yet");
+    expect(activityMealChipLabel("overdue")).toBe("Not logged");
+  });
+
+  it("titles the feed card by type and range", () => {
+    expect(feedCardTitle("meal", "this_week")).toBe("Meals · this week");
+    expect(feedCardTitle("workout", "last_week")).toBe("Workouts · last week");
   });
 });

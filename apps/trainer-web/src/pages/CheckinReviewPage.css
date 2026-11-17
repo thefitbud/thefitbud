@@ -1,0 +1,362 @@
+/**
+ * Z12-8 Check-in review (D-W12b-2). Colocated — do not edit styles/workspace.css.
+ * Ink primary; coral never a button. Existing CSS variables only.
+ */
+
+.checkin-review-page {
+  gap: 1rem;
+  padding-bottom: 1.5rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.checkin-review-page .workspace-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+}
+
+.checkin-review-page .workspace-card-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--deep-navy, var(--ink));
+}
+
+.checkin-review-page .lede {
+  margin: 0.25rem 0 0;
+  color: var(--ink-500, var(--mid-grey));
+  font-size: 0.875rem;
+}
+
+.checkin-review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(17rem, 0.85fr);
+  gap: 1rem 1.25rem;
+  align-items: start;
+}
+
+/* Frame 198: stack at iPad landscape 1024×768 (not only ≤1023). */
+@media (max-width: 1024px) {
+  .checkin-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .checkin-review-card {
+    position: static;
+    max-height: none;
+  }
+}
+
+.checkin-review-main,
+.checkin-review-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.checkin-review-page .workspace-card {
+  background: var(--card, var(--white));
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 16px;
+  box-shadow: var(--shadow, 0 1px 2px rgb(26 18 72 / 6%));
+  padding: 1.1rem 1.2rem;
+}
+
+.checkin-answers-head {
+  margin-bottom: 0.85rem;
+}
+
+.checkin-answers-head h2 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--deep-navy, var(--ink));
+}
+
+.checkin-answers-head p {
+  margin: 0.25rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--mid-grey));
+}
+
+.checkin-answer-list {
+  margin: 0;
+  padding: 0;
+}
+
+.checkin-answer-list > div {
+  padding: 0.75rem 0;
+  border-top: 1px solid var(--border, #e7e9f2);
+}
+
+.checkin-answer-list > div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.checkin-answer-list dt {
+  margin: 0 0 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-500, var(--mid-grey));
+}
+
+.checkin-answer-list dd {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.5rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--deep-navy, var(--ink));
+  line-height: 1.4;
+}
+
+.checkin-answer-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgb(180 83 9 / 28%);
+  background: var(--warn-tint, #fffbeb);
+  color: var(--warn, #b45309);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.checkin-context-list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.checkin-context-list > div {
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: baseline;
+  font-size: 0.875rem;
+}
+
+.checkin-context-list dt {
+  margin: 0;
+  color: var(--ink-500, var(--mid-grey));
+  font-weight: 500;
+}
+
+.checkin-context-list dd {
+  margin: 0;
+  color: var(--deep-navy, var(--ink));
+  font-weight: 600;
+}
+
+/* Sticky in the first viewport so Save / Reviewed stay visible (163/164). */
+.checkin-review-card {
+  position: sticky;
+  top: 0.75rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  max-height: min(34rem, calc(100vh - 5.5rem));
+  overflow: hidden;
+}
+
+.checkin-review-card-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.checkin-review-card h2,
+.checkin-side-card h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--deep-navy, var(--ink));
+}
+
+.checkin-review-card .segment {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--fill, #f3f4f6);
+  margin-bottom: 0.85rem;
+  width: 100%;
+}
+
+.checkin-review-card .segment-btn {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0.3rem 0.55rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-500, var(--mid-grey));
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkin-review-card .segment-btn.is-on {
+  background: var(--card, var(--white));
+  color: var(--deep-navy, var(--ink));
+  box-shadow: 0 1px 2px rgb(26 18 72 / 8%);
+}
+
+.checkin-review-card .segment-btn:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+.checkin-review-note label > span {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--deep-navy, var(--ink));
+}
+
+.checkin-review-note textarea {
+  width: 100%;
+  min-height: 4.5rem;
+  resize: vertical;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #e7e9f2);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--deep-navy, var(--ink));
+  background: var(--card, var(--white));
+}
+
+.checkin-review-note textarea:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 1px;
+}
+
+.checkin-review-helper {
+  margin: 0.45rem 0 0;
+  font-size: 0.75rem;
+  color: var(--ink-500, var(--mid-grey));
+}
+
+.checkin-review-visible {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0 0;
+  min-height: 44px;
+  font-size: 0.8125rem;
+  color: var(--ink-700, var(--ink));
+}
+
+.checkin-review-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.9rem;
+  flex-shrink: 0;
+  background: var(--card, var(--white));
+}
+
+.checkin-review-actions .button-primary,
+.checkin-review-actions .button-secondary,
+.checkin-review-actions .button-whatsapp,
+.checkin-review-actions a.button-secondary {
+  width: 100%;
+  justify-content: center;
+  min-height: 44px;
+}
+
+.checkin-review-footer-note {
+  margin: 0.65rem 0 0;
+  font-size: 0.75rem;
+  color: var(--ink-500, var(--mid-grey));
+}
+
+.checkin-reviewed-meta {
+  margin: 0 0 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--ink-500, var(--mid-grey));
+}
+
+.checkin-reviewed-body {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--deep-navy, var(--ink));
+  white-space: pre-wrap;
+}
+
+.checkin-reviewed-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-shrink: 0;
+}
+
+.checkin-reviewed-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: var(--done-tint, #ecfdf5);
+  color: var(--done, #047857);
+  border: 1px solid rgb(4 120 87 / 18%);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.checkin-open-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.checkin-open-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--border, #e7e9f2);
+}
+
+.checkin-open-list li:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.checkin-open-list .workspace-row-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.checkin-photos {
+  margin-top: 0;
+}
+
+.checkin-review-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}

@@ -1,16 +1,26 @@
 import type { MealAssignment } from "@fitbud/contracts";
 import type { WorkspaceActivityItem } from "@fitbud/contracts";
-import { labelFor } from "@fitbud/core";
+import { formatKcal, labelFor } from "@fitbud/core";
+import {
+  AlertOctagon,
+  AlertTriangle,
+  CheckCircle2,
+  CircleDashed,
+  Info,
+  type LucideIcon,
+} from "lucide-react";
 import { LinkedMedia } from "../LinkedMedia";
 import { Button } from "../Button";
-import { StatusChip } from "../StatusChip";
 import {
+  activityChipTone,
   canNudgeItem,
   chipValueForActivity,
   formatActivityTime,
-  mealChipLabel,
+  activityMealChipLabel,
   mealDetailLine,
+  planEnergyKcal,
   workoutChipLabel,
+  type ActivityChipTone,
 } from "./activityUtils";
 
 export type NudgeUiState =
@@ -32,6 +42,45 @@ type Props = {
   onView: () => void;
 };
 
+const TONE_ICON: Record<ActivityChipTone, LucideIcon> = {
+  positive: CheckCircle2,
+  info: Info,
+  attention: AlertTriangle,
+  critical: AlertOctagon,
+  neutral: CircleDashed,
+};
+
+function mealTitleLine(
+  item: WorkspaceActivityItem,
+  assignment: MealAssignment | undefined,
+): string {
+  if (!assignment) return item.title;
+  const compliance = assignment.compliance;
+  const logged = compliance?.loggedItems ?? [];
+  const planKcal = planEnergyKcal(assignment.prescription.items);
+  if (logged.length > 0) {
+    const names = logged
+      .slice(0, 2)
+      .map((row) =>
+        row.servingLabel ? `${row.name}, ${row.servingLabel}` : row.name,
+      )
+      .join(", ");
+    const kcal =
+      compliance?.loggedTotals?.energyKcal != null
+        ? compliance.loggedTotals.energyKcal
+        : planKcal;
+    return `${item.title} · ${names} · ${formatKcal(kcal)}`;
+  }
+  if (planKcal > 0) {
+    const pending =
+      item.state === "pending" || item.state === "overdue"
+        ? ` · ${formatKcal(planKcal)} planned`
+        : ` · ${formatKcal(planKcal)}`;
+    return `${item.title}${pending}`;
+  }
+  return item.title;
+}
+
 export function ActivityRow({
   item,
   clientTimezone,
@@ -49,18 +98,21 @@ export function ActivityRow({
     clientTimezone,
     trainerTimezone,
   );
-  const chipKind =
-    item.type === "meal"
-      ? "meal"
-      : item.type === "workout"
-        ? "workout"
-        : "checkin";
   const chipLabel =
     item.type === "meal"
-      ? mealChipLabel(item.state)
+      ? activityMealChipLabel(item.state)
       : item.type === "workout"
         ? workoutChipLabel(item.state)
         : undefined;
+  const chipText =
+    chipLabel ??
+    (item.type === "meal"
+      ? labelFor("meal_assignment_status", item.state)
+      : item.type === "workout"
+        ? labelFor("workout_assignment_status", item.state)
+        : labelFor("checkin_status", item.state));
+  const tone = activityChipTone(item);
+  const Icon = TONE_ICON[tone];
 
   const rawDetail = item.type === "meal" ? mealDetailLine(mealAssignment) : "";
   // mealDetailLine falls back to the deviation kind with underscores swapped
@@ -70,11 +122,20 @@ export function ActivityRow({
     deviationKind && rawDetail === deviationKind.replaceAll("_", " ")
       ? labelFor("meal_deviation_kind", deviationKind)
       : rawDetail;
+  // When the title already carries food · kcal, keep detail for notes / skip only.
+  const showDetail =
+    item.type !== "meal" ||
+    (Boolean(detail) &&
+      !detail.startsWith("Ate:") &&
+      detail !== "Awaiting log" &&
+      detail !== "Not logged yet");
 
   const photoId =
     item.type === "meal" ? mealAssignment?.compliance?.mediaAssetId : null;
 
   const showNudge = !readOnly && canNudgeItem(item);
+  const title =
+    item.type === "meal" ? mealTitleLine(item, mealAssignment) : item.title;
 
   return (
     <li className="activity-feed-row" data-testid="activity-row">
@@ -82,19 +143,24 @@ export function ActivityRow({
         {time.label}
       </time>
       <div className="activity-feed-main">
-        <p className="activity-feed-title">{item.title}</p>
-        {detail ? <p className="activity-feed-detail">{detail}</p> : null}
+        <p className="activity-feed-title">{title}</p>
+        {showDetail && detail ? (
+          <p className="activity-feed-detail">{detail}</p>
+        ) : null}
         {photoId ? (
           <div className="activity-feed-thumb">
             <LinkedMedia mediaAssetId={photoId} label={`${item.title} photo`} />
           </div>
         ) : null}
       </div>
-      <StatusChip
-        kind={chipKind}
-        value={chipValueForActivity(item)}
-        label={chipLabel}
-      />
+      <span
+        className={`activity-status activity-status-${tone}`}
+        data-kind={item.type}
+        data-value={chipValueForActivity(item)}
+      >
+        <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+        <span>{chipText}</span>
+      </span>
       <div className="activity-feed-actions">
         {showNudge ? (
           nudge?.kind === "sent" ? (

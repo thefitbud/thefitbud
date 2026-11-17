@@ -181,7 +181,7 @@ describe("CheckinReviewPage on a workspace refresh", () => {
   });
 });
 
-describe("CheckinReviewPage answers (Z6-2c)", () => {
+describe("CheckinReviewPage answers (Z6-2c / Z12-8)", () => {
   const v2Fields = [
     { id: "q-weight", key: "weight", label: "Weight", type: "measurement", measurementType: "body_weight_kg", required: false },
     { id: "q-waist", key: "waist", label: "Waist", type: "measurement", measurementType: "waist_cm", required: false },
@@ -205,11 +205,11 @@ describe("CheckinReviewPage answers (Z6-2c)", () => {
   }
 
   function answerList() {
-    const heading = screen.getByRole("heading", { name: "Answers" });
+    const heading = screen.getByRole("heading", { name: /Check-in ·/ });
     const dl = heading.closest("section")!.querySelector("dl");
     return Array.from(dl?.querySelectorAll("div") ?? []).map((row) => [
       row.querySelector("dt")!.textContent,
-      row.querySelector("dd")!.textContent,
+      row.querySelector("dd")!.textContent?.replace(/\s+/g, " ").trim(),
     ]);
   }
 
@@ -227,14 +227,14 @@ describe("CheckinReviewPage answers (Z6-2c)", () => {
       }),
     );
     render(pageTree(0));
-    await screen.findByRole("heading", { name: "Answers" });
+    await screen.findByRole("heading", { name: /Check-in ·/ });
     expect(answerList()).toEqual([
       ["Waist", "82 cm"],
       ["Arm", "31.5 cm"],
       ["Front", "Photo noted"],
       ["Energy", "4"],
       ["Sleep quality", "3"],
-      ["Any aches or pains?", "Left knee, mild"],
+      ["Any aches or pains?", "Left knee, mildReview"],
     ]);
   });
 
@@ -243,7 +243,7 @@ describe("CheckinReviewPage answers (Z6-2c)", () => {
       v2Context({ bodyWeightKg: 86.4, fieldAnswers: { "q-energy": 2 } }),
     );
     render(pageTree(0));
-    await screen.findByRole("heading", { name: "Answers" });
+    await screen.findByRole("heading", { name: /Check-in ·/ });
     const rows = answerList();
     expect(rows).toEqual([
       ["Weight", "86.4 kg"],
@@ -264,7 +264,40 @@ describe("CheckinReviewPage answers (Z6-2c)", () => {
     context.checkin.answers = { wellbeing: "Slept badly", notes: null };
     api.getCheckinReviewContext.mockResolvedValue(context);
     render(pageTree(0));
-    await screen.findByRole("heading", { name: "Answers" });
+    await screen.findByRole("heading", { name: /Check-in ·/ });
     expect(answerList()).toEqual([["Wellbeing", "Slept badly"]]);
+  });
+
+  it("puts Your review in the right card, not a footer strip", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    render(pageTree(0));
+    expect(await screen.findByRole("heading", { name: "Your review" })).toBeTruthy();
+    expect(screen.getByTestId("review-action-bar").className).toContain(
+      "checkin-review-card",
+    );
+    expect(screen.queryByText(/Form v\d+ \(pinned\)/i)).toBeNull();
+    expect(screen.getByRole("heading", { name: /Context · last 7 days/ })).toBeTruthy();
+  });
+
+  it("places Your review above Context so actions stay in the first viewport", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    const { container } = render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    const side = container.querySelector(".checkin-review-side");
+    expect(side).toBeTruthy();
+    const headings = Array.from(
+      side!.querySelectorAll("h2"),
+    ).map((node) => node.textContent?.trim());
+    expect(headings[0]).toBe("Your review");
+    expect(headings[1]).toMatch(/Context · last 7 days/);
+    expect(screen.getByRole("button", { name: "Save review" })).toBeTruthy();
+  });
+
+  it("reviewed state shows a Reviewed pill on the right card", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(true));
+    render(pageTree(0));
+    expect(await screen.findByText("Reviewed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Edit review" })).toBeTruthy();
+    expect(screen.getByTestId("review-action-bar").textContent).toMatch(/Reviewed by you/);
   });
 });
