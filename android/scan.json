@@ -1,0 +1,12 @@
+{
+  "platform": "android",
+  "files": [
+    "android-device.log"
+  ],
+  "sentinel": true,
+  "status": "pass",
+  "counts": {},
+  "findings": [],
+  "truncated": 0,
+  "allowed": []
+}

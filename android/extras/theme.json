@@ -1,0 +1,61 @@
+{
+  "result": "mean screenshot luminance: light 0.882 (5), dark 0.455 (5)",
+  "light": 0.882,
+  "dark": 0.455,
+  "count": {
+    "light": 5,
+    "dark": 5
+  },
+  "shots": [
+    {
+      "file": "TR-07a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.194
+    },
+    {
+      "file": "TR-07a-light-android.png",
+      "theme": "light",
+      "luma": 0.905
+    },
+    {
+      "file": "TR-07f-dark-android.png",
+      "theme": "dark",
+      "luma": 0.193
+    },
+    {
+      "file": "TR-07f-light-android.png",
+      "theme": "light",
+      "luma": 0.906
+    },
+    {
+      "file": "f09-diet-yesterday-dark-android.png",
+      "theme": "dark",
+      "luma": 0.193
+    },
+    {
+      "file": "f09-diet-yesterday-light-android.png",
+      "theme": "light",
+      "luma": 0.906
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.769
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.769
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    }
+  ]
+}
