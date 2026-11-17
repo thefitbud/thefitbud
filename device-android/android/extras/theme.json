@@ -1,0 +1,71 @@
+{
+  "result": "mean screenshot luminance: light 0.825 (6), dark 0.716 (6)",
+  "light": 0.825,
+  "dark": 0.716,
+  "count": {
+    "light": 6,
+    "dark": 6
+  },
+  "shots": [
+    {
+      "file": "TR-06h-dark-android.png",
+      "theme": "dark",
+      "luma": 0.769
+    },
+    {
+      "file": "TR-06h-light-android.png",
+      "theme": "light",
+      "luma": 0.767
+    },
+    {
+      "file": "W-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.883
+    },
+    {
+      "file": "W-03-light-android.png",
+      "theme": "light",
+      "luma": 0.883
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.768
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.77
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-047-tapOnElement-Open-dark-android.png",
+      "theme": "dark",
+      "luma": 0.177
+    },
+    {
+      "file": "step-047-tapOnElement-Open-light-android.png",
+      "theme": "light",
+      "luma": 0.834
+    },
+    {
+      "file": "z12-38-after-swipe-dark-android.png",
+      "theme": "dark",
+      "luma": 0.768
+    },
+    {
+      "file": "z12-38-after-swipe-light-android.png",
+      "theme": "light",
+      "luma": 0.768
+    }
+  ]
+}
