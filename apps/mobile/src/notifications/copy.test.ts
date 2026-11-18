@@ -251,3 +251,19 @@ describe("every push type reads well on the lock screen (Z12-47, TR-15c, TM-13a)
     expect(pushGroupFor("activity_nudge").id).toBe("coach");
   });
 });
+
+describe("activity_nudge copy (Z12-50, D-W12-9)", () => {
+  const nudge: Notification = { ...base, type: "activity_nudge", notificationType: "activity_nudge" };
+
+  it("shows the server title and body, as the push carried them", () => {
+    const row = { ...nudge, title: "Rahul nudged you", body: "Lower body A is waiting. Can you fit it in soon?" };
+    expect(notificationRowTitle(row, { coachName: "Rahul Verma" })).toBe("Rahul nudged you");
+    expect(notificationRowBody(row)).toBe("Lower body A is waiting. Can you fit it in soon?");
+  });
+
+  it("an older row without them still reads '{Coach} nudged you'", () => {
+    expect(notificationRowTitle(nudge, { coachName: "Rahul Verma" })).toBe("Rahul nudged you");
+    expect(notificationRowTitle(nudge)).toBe("Your coach nudged you");
+    expect(notificationRowBody(nudge)).toBe("Log it when you can.");
+  });
+});

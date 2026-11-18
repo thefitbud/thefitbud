@@ -17,10 +17,17 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { Snackbar } from "../components/Snackbar";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { labelFor } from "./labels";
-import { firstNameOf } from "./sheets/exceptionSheetContent";
+import { firstNameOf, nudgeDraftText } from "./sheets/exceptionSheetContent";
+import {
+  isNudgeableExceptionType,
+  nudgeTargetFromException,
+} from "./sheets/nudgeContent";
+import { clientStatusApi } from "./clientStatus/api";
+import { openContextualWhatsApp } from "./whatsapp";
 import { MoreSheet } from "./sheets/MoreSheet";
 import { NoteSheet } from "./sheets/NoteSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
@@ -55,6 +62,8 @@ export function ExceptionReviewScreen({
     null,
   );
   const [traineeName, setTraineeName] = useState("");
+  const [traineeZone, setTraineeZone] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
   // "unknown" until the client workspace answers: live actions stay hidden
   // so an ended client is never offered Acknowledge, Note or Nudge.
   const [coaching, setCoaching] = useState<"unknown" | "active" | "ended">(
@@ -91,6 +100,7 @@ export function ExceptionReviewScreen({
         );
         setClientWhatsappE164(workspace.header.clientWhatsappE164 ?? null);
         setTraineeName(workspace.header.traineeDisplayName);
+        setTraineeZone(workspace.header.traineeTimezone ?? null);
         setEndedAt(workspace.header.endedAt ?? null);
         setCoaching(workspace.header.endedAt ? "ended" : "active");
       } catch (err) {
@@ -384,9 +394,11 @@ export function ExceptionReviewScreen({
             </Text>
           </View>
 
-          {!resolved && coaching === "active" ? (
+          {!resolved &&
+          coaching === "active" &&
+          isNudgeableExceptionType(detail.type) ? (
             <PrimaryButton
-              label="Nudge on WhatsApp"
+              label="Nudge"
               variant="ghost"
               disabled={!canAct}
               onPress={() => setNudgeOpen(true)}
@@ -429,7 +441,10 @@ export function ExceptionReviewScreen({
             }}
             onMessageOnWhatsApp={() => {
               setMoreOpen(false);
-              setNudgeOpen(true);
+              void openContextualWhatsApp({
+                phoneE164: clientWhatsappE164,
+                draftText: nudgeDraftText(detail, traineeName),
+              });
             }}
           />
           <NoteSheet
@@ -445,13 +460,20 @@ export function ExceptionReviewScreen({
           />
           <NudgeSheet
             visible={nudgeOpen}
-            detail={detail}
+            target={nudgeTargetFromException(detail)}
             traineeDisplayName={traineeName}
-            clientWhatsappE164={clientWhatsappE164}
+            clientTimeZone={traineeZone}
+            trainerDisplayName={me?.trainerProfile?.displayName ?? null}
+            api={clientStatusApi(api)}
             onDismiss={() => setNudgeOpen(false)}
+            onSent={(line) => {
+              setNudgeOpen(false);
+              setToast(line);
+            }}
           />
         </>
       ) : null}
+      {toast ? <Snackbar message={toast} leadingCheck onDismiss={() => setToast(null)} /> : null}
     </Screen>
   );
 }
