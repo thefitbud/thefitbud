@@ -10,7 +10,8 @@ tags:
 #
 # Account: Meera (`meera.ack`, local demo seed, password from QA_PASSWORD). Her
 # check-in dated today is a draft the trainee can start (the seed makes one per
-# demo day), and her 8 Nov check-in is reviewed. ASSERTED, not skipped: a seed
+# demo day; her form requires the "Wellbeing" line, filled where it shows), and her
+# 8 Nov check-in is reviewed. ASSERTED, not skipped: a seed
 # without them fails here. Writes one submitted check-in to the local DB.
 #
 # Screens and screenshots (named by v3 screen ID):
@@ -43,17 +44,38 @@ tags:
 - assertVisible: ".*step 1 of 3.*"
 - takeScreenshot: TR-14a-checkin-questions
 - runFlow: ../../common/assert-no-crash.yaml
+- evalScript: ${output.filled = 'no'}
+- runFlow:
+    when:
+      true: ${output.filled == 'no'}
+      visible: "Wellbeing"
+    commands:
+      - tapOn: "Wellbeing"
+      - inputText: "Good week, one session missed."
+      - tapOn: "Weekly check-in"
+      - evalScript: ${output.filled = 'yes'}
 - tapOn: "Continue"
 - assertVisible: ".*step 2 of 3.*"
+- runFlow:
+    when:
+      true: ${output.filled == 'no'}
+      visible: "Wellbeing"
+    commands:
+      - tapOn: "Wellbeing"
+      - inputText: "Good week, one session missed."
+      - tapOn: "Weekly check-in"
+      - evalScript: ${output.filled = 'yes'}
 - tapOn: "Continue"
 - assertVisible: ".*step 3 of 3.*"
 - runFlow:
     when:
-      visible: "One line: how was the week\\?"
+      true: ${output.filled == 'no'}
+      visible: "Wellbeing"
     commands:
-      - tapOn: "One line: how was the week\\?"
-      - inputText: "Solid week, one session missed."
+      - tapOn: "Wellbeing"
+      - inputText: "Good week, one session missed."
       - tapOn: "Weekly check-in"
+      - evalScript: ${output.filled = 'yes'}
 - tapOn: "Continue"
 - extendedWaitUntil:
     visible: "Send to .*"

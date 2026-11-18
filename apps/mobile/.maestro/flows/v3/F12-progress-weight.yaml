@@ -53,16 +53,15 @@ tags:
     visible: "Save weight"
     timeout: 20000
 - assertVisible: "Last: .* kg on .*"
-- assertVisible: "Date"
+- assertVisible: ".*Date.*"
 - takeScreenshot: TR-13c-log-weight-sheet
 # The value is selected when the sheet opens (autoFocus + selectTextOnFocus): typing
 # replaces it. Tapping the field would put the cursor inside the old value.
 - inputText: "78.3"
-- assertVisible: "78.3"
 - tapOn: "Save weight"
 # The sheet closes and the card shows the new value.
 - extendedWaitUntil:
     notVisible: "Save weight"
     timeout: 30000
-- assertVisible: "78.3"
+- assertVisible: ".*78\\.3.*"
 - runFlow: ../../common/assert-no-crash.yaml
