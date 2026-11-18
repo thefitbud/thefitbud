@@ -120,6 +120,7 @@ function KcalRing({ datum }: { datum: RingDatum | undefined }) {
           variant="numberMd"
           style={{
             fontSize: ringValueSize(`${prefix}${formatNumber(logged)}`),
+            lineHeight: ringValueSize(`${prefix}${formatNumber(logged)}`) + 6,
             maxWidth: RING_SIZE - 2 * RING_STROKE - 8,
             textAlign: "center",
           }}

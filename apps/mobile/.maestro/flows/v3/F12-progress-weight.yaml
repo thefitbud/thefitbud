@@ -32,10 +32,12 @@ tags:
     visible: "Today's workout.*"
     timeout: 60000
 # The summary card: ring, "kcal left" and Goal, the three chips (TR-06a).
-- assertVisible: ".*kcal eaten.*"
-- assertVisible: "Workout"
-- assertVisible: "Meals"
-- assertVisible: "Steps"
+# iOS merges the ring into one label ("0 of 1,745 kcal"), so match the "kcal left" line
+# and the chips by their labels ("Workout: rest day", "Meals 0 of 4", "Steps: ...").
+- assertVisible: ".*kcal (left|over).*"
+- assertVisible: ".*Workout.*"
+- assertVisible: ".*Meals.*"
+- assertVisible: ".*Steps.*"
 - takeScreenshot: TR-06a-today-default
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -53,9 +55,10 @@ tags:
 - assertVisible: "Last: .* kg on .*"
 - assertVisible: "Date"
 - takeScreenshot: TR-13c-log-weight-sheet
-- tapOn: "Log weight, kg"
-- eraseText: 8
+# The value is selected when the sheet opens (autoFocus + selectTextOnFocus): typing
+# replaces it. Tapping the field would put the cursor inside the old value.
 - inputText: "78.3"
+- assertVisible: "78.3"
 - tapOn: "Save weight"
 # The sheet closes and the card shows the new value.
 - extendedWaitUntil:

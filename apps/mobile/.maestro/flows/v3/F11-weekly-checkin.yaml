@@ -59,7 +59,10 @@ tags:
     visible: "Send to .*"
     timeout: 10000
 - takeScreenshot: TR-14c-checkin-review
-- tapOn: "Send to .*"
+# "Send to Rahul" is also the Review subtitle: the button is the second match.
+- tapOn:
+    text: "Send to .*"
+    index: 1
 # TR-14d: Sent, with Done.
 - extendedWaitUntil:
     visible: "Sent to .*"
