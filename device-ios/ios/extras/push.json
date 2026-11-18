@@ -1,0 +1,6 @@
+{
+  "platform": "ios",
+  "notificationType": "daily_summary",
+  "method": "simctl-push",
+  "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+}

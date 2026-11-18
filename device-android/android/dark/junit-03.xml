@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="354.071" timestamp="2026-11-18T22:05:45">
+    <testcase id="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" name="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" classname="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F03-first-workout.yaml" time="354.007" timestamp="2026-11-18T22:05:45" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="45.195" timestamp="2026-11-18T22:02:47">
+    <testcase id="F06 Interruptions, part 3 (back online; light finishes early, dark discards)" name="F06 Interruptions, part 3 (back online; light finishes early, dark discards)" classname="F06 Interruptions, part 3 (back online; light finishes early, dark discards)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F06c-interruptions-end.yaml" time="45.161" timestamp="2026-11-18T22:02:47" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

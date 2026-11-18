@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="273.089" timestamp="2026-11-18T21:53:38">
+    <testcase id="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" name="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" classname="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F05-exercise-detail-rest.yaml" time="273.025" timestamp="2026-11-18T21:53:38" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="180.884" timestamp="2026-11-18T21:58:22">
+    <testcase id="F06 Interruptions, part 1 (minimise, kill and resume, pause, discard confirm)" name="F06 Interruptions, part 1 (minimise, kill and resume, pause, discard confirm)" classname="F06 Interruptions, part 1 (minimise, kill and resume, pause, discard confirm)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F06-interruptions.yaml" time="180.779" timestamp="2026-11-18T21:58:22" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="60.788" timestamp="2026-11-18T22:01:34">
+    <testcase id="F06 Interruptions, part 2 (offline mid-workout, W-20)" name="F06 Interruptions, part 2 (offline mid-workout, W-20)" classname="F06 Interruptions, part 2 (offline mid-workout, W-20)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F06b-interruptions-offline.yaml" time="60.763" timestamp="2026-11-18T22:01:34" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45, device-offline"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
