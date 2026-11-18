@@ -1,0 +1,196 @@
+appId: com.thefitbud.mobile.staging
+name: F21 Trainer marks reviewed, resolves and adds a note (Z12-51)
+tags:
+  - device
+  - trainer
+  - z12-51
+env:
+  CLIENT: Rohan Mehta
+---
+# F21 (Z12-51). Account: the demo trainer rahul.coach on the local seed. Env from the
+# device harness: QA_TRAINER_EMAIL, QA_PASSWORD, DEVICE_THEME.
+#
+# Writes on the job's own local DB: one note, and one or two of Rohan Mehta's open
+# items marked reviewed and resolved per theme (he has six open items in the seed, so
+# the second theme of a job finds the next one). Only the trainer resolves, and this is
+# the trainer doing it by hand (AGENTS.md).
+#
+# Screens and screenshots (named by v3 screen ID, see scripts/qa/device/collect-shots.mjs):
+#   TM-04a  exception review, open item: Mark reviewed + Nudge, ⋯
+#   TM-04j  the ⋯ menu: Add note, Message on WhatsApp, Open profile
+#   TM-04k  the note composer (Cancel · Note for Rohan · Save, Today toggle)
+#   TM-04e  reviewed, still open: banner, Nudge + Resolve
+#   TM-04d  the resolve sheet: outcome chips, private note, lock helper
+#   TM-04f  resolved, read only: green banner with the outcome, no actions
+# Then the Needs you review sheet: Nudge… opens the FitBud nudge sheet (never WhatsApp),
+# Resolve… resolves through the same sheet and the item stays on as resolved.
+#
+# Not here: TM-04g (404), TM-04h (offline) and TM-04i (ended) need a stubbed API or a
+# cut network; they are covered by the render tests and the Expo-web check
+# (docs/qa/Z12-51/web/). WhatsApp is never opened.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- extendedWaitUntil:
+    visible: "Needs you [0-9]+"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
+
+# ---- Clients -> Rohan -> Review: the exception review ------------------------------------
+- tapOn: "Clients"
+- scrollUntilVisible:
+    element: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
+    timeout: 30000
+- tapOn: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
+# A row tap can land on the row's own Review button and open the review straight away
+# (run 44127718482): wait for either screen, then press Review only on the client screen.
+- extendedWaitUntil:
+    visible: "Review|Mark reviewed|Resolve"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Review"
+    commands:
+      - tapOn: "Review"
+- extendedWaitUntil:
+    visible:
+      id: "exception-more"
+    timeout: 30000
+- assertVisible: "${CLIENT}"
+- runFlow: ../../common/assert-no-crash.yaml
+# Seeded items are open; one already marked reviewed (an earlier theme) opens on TM-04e.
+- runFlow:
+    when:
+      visible:
+        id: "exception-markReviewed"
+    commands:
+      - takeScreenshot: TM-04a
+
+# ---- ⋯ -> Add note -> Save ----------------------------------------------------------------
+- tapOn:
+    id: "exception-more"
+- extendedWaitUntil:
+    visible: "Open .*profile"
+    timeout: 10000
+- assertVisible: "Message on WhatsApp"
+- takeScreenshot: TM-04j
+- tapOn:
+    id: "more-add-note"
+- extendedWaitUntil:
+    visible: "Note for .*"
+    timeout: 10000
+- inputText: "Two shorter sessions this week."
+- assertVisible: "Show on .*Today"
+- takeScreenshot: TM-04k
+- tapOn:
+    id: "note-save"
+- extendedWaitUntil:
+    notVisible: "Note for .*"
+    timeout: 15000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Mark reviewed -> TM-04e ----------------------------------------------------------------
+- runFlow:
+    when:
+      visible:
+        id: "exception-markReviewed"
+    commands:
+      - tapOn:
+          id: "exception-markReviewed"
+- extendedWaitUntil:
+    visible: "Reviewed by you.*It stays in Needs you until it.s resolved\\."
+    timeout: 20000
+- assertVisible:
+    id: "exception-resolve"
+- assertNotVisible:
+    id: "exception-markReviewed"
+- takeScreenshot: TM-04e
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Resolve -> TM-04d -> TM-04f ------------------------------------------------------------
+- tapOn:
+    id: "exception-resolve"
+- extendedWaitUntil:
+    visible: "Note \\(only you\\)"
+    timeout: 10000
+- tapOn: "Talked to .*"
+- assertVisible: "Resolving locks this item.*"
+- takeScreenshot: TM-04d
+- tapOn:
+    id: "resolve-confirm"
+- extendedWaitUntil:
+    visible: "Resolved by you.*Talked to .*"
+    timeout: 20000
+- assertNotVisible:
+    id: "exception-resolve"
+- assertNotVisible:
+    id: "exception-more"
+- takeScreenshot: TM-04f
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Needs you review sheet: Nudge… and Resolve… ---------------------------------------------
+# Back goes to the client screen the review was opened from, then to Clients.
+- tapOn:
+    id: "exception-back"
+- extendedWaitUntil:
+    visible: "‹ Clients|Attention"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "‹ Clients"
+    commands:
+      - tapOn: "‹ Clients"
+- extendedWaitUntil:
+    visible: "Attention"
+    timeout: 20000
+- tapOn: "Attention"
+- extendedWaitUntil:
+    visible: "Needs you [0-9]+"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "${CLIENT}.*"
+    timeout: 30000
+- tapOn: "${CLIENT}.*"
+- extendedWaitUntil:
+    visible:
+      id: "review-sheet-resolve"
+    timeout: 20000
+- assertVisible:
+    id: "review-sheet-more"
+- takeScreenshot: review-sheet
+- runFlow: ../../common/assert-no-crash.yaml
+- runFlow:
+    when:
+      visible:
+        id: "review-sheet-nudge"
+    commands:
+      - tapOn:
+          id: "review-sheet-nudge"
+      - extendedWaitUntil:
+          visible: "PREVIEW · TAP TO EDIT"
+          timeout: 20000
+      - takeScreenshot: review-sheet-nudge
+      - tapOn: "Close"
+      - extendedWaitUntil:
+          notVisible: "PREVIEW · TAP TO EDIT"
+          timeout: 10000
+- tapOn:
+    id: "review-sheet-resolve"
+- extendedWaitUntil:
+    visible: "Note \\(only you\\)"
+    timeout: 10000
+- tapOn:
+    id: "resolve-confirm"
+- extendedWaitUntil:
+    visible: "Resolved by you · just now.*"
+    timeout: 20000
+- takeScreenshot: review-sheet-resolved
+- runFlow: ../../common/assert-no-crash.yaml
