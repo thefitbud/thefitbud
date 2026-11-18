@@ -164,6 +164,28 @@ describe("check-in card without a plan", () => {
     expect(ensureDue).not.toHaveBeenCalled();
   });
 
+  it("NO_ACTIVE_CONFIGURATION is a calm 'not open yet' card, never the server's sentence", async () => {
+    ensureDue = vi.fn(async () => {
+      throw new ApiClientError({
+        code: "NO_ACTIVE_CONFIGURATION",
+        message: "Server wording that must not be shown.",
+        requestId: "r2",
+        status: 422,
+      });
+    });
+    render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} />);
+    await screen.findByText(/Your first check-in opens once Rahul has set up your plan\./);
+    expect(screen.queryByText(/Server wording/)).toBeNull();
+    expect(screen.queryByText("Try again")).toBeNull();
+  });
+
+  it("does not ask the server while the plan is still loading", async () => {
+    ensureDue = vi.fn(async () => undefined);
+    render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} planLoading />);
+    await screen.findByText("Checking for a due check-in…");
+    expect(ensureDue).not.toHaveBeenCalled();
+  });
+
   it("shows a short code, not the text of a non-API error", async () => {
     ensureDue = vi.fn(async () => {
       throw new Error("SQLITE_ERROR: no such column secret_internal_name");
@@ -185,6 +207,33 @@ describe("check-in card without a plan", () => {
     });
     render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} />);
     await screen.findByText("That check-in isn't open yet.");
+  });
+});
+
+describe("TR-14 submit while the push did not land", () => {
+  it("reads 'Saved for', not 'Sent to', when no result for the mutation comes back", async () => {
+    const dueCheckin = checkinSchema.parse({
+      ...reviewedCheckin,
+      recordStatus: "draft",
+      status: "due",
+      review: null,
+      submittedAt: null,
+      answers: { fieldAnswers: {} },
+    });
+    api.getCheckin = vi.fn(async () => dueCheckin) as never;
+    render(<CheckinScreen relationship={relationship} checkin={dueCheckin} onDone={() => {}} />);
+    for (let i = 0; i < 6; i += 1) {
+      const send = screen.queryByRole("button", { name: "Send to Rahul" });
+      if (send) {
+        fireEvent.click(send);
+        break;
+      }
+      const energy = screen.queryByRole("button", { name: "Energy 4" });
+      if (energy) fireEvent.click(energy);
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    }
+    await screen.findByText("Saved for Rahul");
+    expect(screen.queryByText("Sent to Rahul")).toBeNull();
   });
 });
 
@@ -257,8 +306,11 @@ describe("deep-link failures", () => {
   it("never blames a missing meal for a network or parse failure", () => {
     expect(deepLinkFailureReason("t", new TypeError("Network request failed"), "meal")).toContain("MEAL-NET");
     const reason = deepLinkFailureReason("t", new Error("boom: internal detail"), "check-in");
-    expect(reason).toContain("CHECKIN-NET");
-    expect(reason).not.toMatch(/isn't available|internal detail/);
+    expect(reason).toContain("CHECKIN-PARSE");
+    expect(reason).not.toMatch(/isn't available|internal detail|connection|NET/);
+    const zod = deepLinkFailureReason("t", checkinSchema.safeParse({}).error, "meal");
+    expect(zod).toContain("MEAL-PARSE");
+    expect(zod).not.toContain("connection");
   });
   it("shows a 5xx ApiClientError's own message with its status", () => {
     const err = new ApiClientError({
@@ -283,5 +335,7 @@ describe("Today helpers", () => {
     expect(kcalLeftText(1072, 1850)).toEqual({ value: "778", unit: "kcal left", goal: "Goal 1,850" });
     expect(kcalLeftText(2000, 1850)?.unit).toBe("kcal over");
     expect(kcalLeftText(100, 0)).toBeNull();
+    // Unknown intake: no made-up "left" number (the ring reads "≥").
+    expect(kcalLeftText(1072, 1850, true)).toBeNull();
   });
 });

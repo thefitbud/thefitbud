@@ -40,66 +40,31 @@ tags:
 - scrollUntilVisible:
     element: "Start|Next check-in.*"
     timeout: 30000
+# First theme (light): the seed has a due check-in, so "Start" MUST be there and the
+# send path runs. A missing check-in fails here instead of skipping (D-W12-37).
 - runFlow:
     when:
+      true: ${DEVICE_THEME != 'dark'}
+    commands:
+      - assertVisible: "Start"
+      - runFlow: ../../common/z12-46-send-checkin.yaml
+# Second theme (dark): the first theme already sent the one check-in the seed has, so
+# the card reads "Next check-in <day>". That is the only state allowed to skip the
+# send path, and only here. A dark-only run still sees "Start" and sends.
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
       visible: "Start"
     commands:
-      - tapOn: "Start"
-      - extendedWaitUntil:
-          visible: "Weekly check-in"
-          timeout: 20000
-      - assertVisible: ".*step 1 of 3.*"
-      - takeScreenshot: TR-14a-checkin-questions
-      - runFlow: ../../common/assert-no-crash.yaml
-      - evalScript: ${output.filled = 'no'}
-      - runFlow:
-          when:
-            true: ${output.filled == 'no'}
-            visible: "Wellbeing"
-          commands:
-            - tapOn: "Wellbeing"
-            - inputText: "Good week, one session missed."
-            - tapOn: "Weekly check-in"
-            - evalScript: ${output.filled = 'yes'}
-      - tapOn: "Continue"
-      - assertVisible: ".*step 2 of 3.*"
-      - runFlow:
-          when:
-            true: ${output.filled == 'no'}
-            visible: "Wellbeing"
-          commands:
-            - tapOn: "Wellbeing"
-            - inputText: "Good week, one session missed."
-            - tapOn: "Weekly check-in"
-            - evalScript: ${output.filled = 'yes'}
-      - tapOn: "Continue"
-      - assertVisible: ".*step 3 of 3.*"
-      - runFlow:
-          when:
-            true: ${output.filled == 'no'}
-            visible: "Wellbeing"
-          commands:
-            - tapOn: "Wellbeing"
-            - inputText: "Good week, one session missed."
-            - tapOn: "Weekly check-in"
-            - evalScript: ${output.filled = 'yes'}
-      - tapOn: "Continue"
-      - extendedWaitUntil:
-          visible: "Send to .*"
-          timeout: 10000
-      - takeScreenshot: TR-14c-checkin-review
-      # "Send to Rahul" is also the Review subtitle: the button is the second match.
-      - tapOn:
-          text: "Send to .*"
-          index: 1
-      # TR-14d: Sent, with Done. A cold iOS simulator can take over a minute to send.
-      - extendedWaitUntil:
-          visible: "Sent to .*"
-          timeout: 120000
-      - assertVisible: "Done"
-      - takeScreenshot: TR-14d-checkin-sent
-      - runFlow: ../../common/assert-no-crash.yaml
-      - tapOn: "Done"
+      - runFlow: ../../common/z12-46-send-checkin.yaml
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
+      visible: "Next check-in.*"
+    commands:
+      # Reason: the light run in this job already sent this seed's check-in (one local DB
+      # per job), so the send path (TR-14a/c/d) is not repeated in dark.
+      - assertNotVisible: "Start"
 - runFlow:
     when:
       visible: "Next check-in.*"

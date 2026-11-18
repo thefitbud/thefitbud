@@ -63,6 +63,7 @@ import type { NotificationDeepLink } from "../notifications/routing";
 import { ForegroundBanner } from "./notifications/ForegroundBanner";
 import { useNoticeScreen } from "../components/notice/NoticeContext";
 import { reportError } from "../lib/reportError";
+import { isNetworkFailure } from "../trainer/attention/offline";
 import {
   ThemeScope,
   createThemedStyles,
@@ -88,7 +89,11 @@ export function deepLinkFailureReason(
     if (err.status === 404) return `This ${noun} isn't available anymore.`;
     return `${err.message} (${prefix}-${err.status})`;
   }
-  return `Couldn't open this ${noun}. Check your connection and try again. (${prefix}-NET)`;
+  if (isNetworkFailure(err)) {
+    return `Couldn't open this ${noun}. Check your connection and try again. (${prefix}-NET)`;
+  }
+  // A ZodError or any other non-network failure: never blame the connection.
+  return `Couldn't open this ${noun}. (${prefix}-PARSE)`;
 }
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";

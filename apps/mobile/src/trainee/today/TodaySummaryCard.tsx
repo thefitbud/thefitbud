@@ -62,8 +62,11 @@ function ringValueSize(text: string): number {
 export function kcalLeftText(
   logged: number,
   assigned: number,
+  unknown = false,
 ): { value: string; unit: string; goal: string | null } | null {
-  if (assigned <= 0) return null;
+  // Some of what was eaten has no kcal figure: "left" would be a made-up
+  // number (the ring says "≥" for the same reason), so show none.
+  if (assigned <= 0 || unknown) return null;
   const over = logged > assigned;
   return {
     value: formatNumber(Math.abs(assigned - logged)),
@@ -300,6 +303,7 @@ export function TodaySummaryCard(props: TodaySummaryProps) {
   const left = kcalLeftText(
     Math.round(kcal?.logged ?? 0),
     Math.round(kcal?.assigned ?? 0),
+    kcal?.unknown === true,
   );
   return (
     <View style={styles.card} testID="today-summary">

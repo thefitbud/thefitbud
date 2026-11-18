@@ -1315,6 +1315,7 @@ function TodayTabInner({
           relationship={relationship}
           onOpen={onOpenCheckin}
           noPlan={planState.status === "none"}
+          planLoading={planState.status === "loading"}
         />
 
         {planState.status === "loaded" ? (
@@ -1352,7 +1353,7 @@ const useStyles = createThemedStyles((t) => ({
     fontWeight: "600",
   },
   hero: {
-    backgroundColor: t.colors.ink,
+    backgroundColor: t.colors.heroB,
     borderRadius: 22,
     gap: spacing.sm,
     padding: spacing.xl,

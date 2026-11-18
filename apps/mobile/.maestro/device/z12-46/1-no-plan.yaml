@@ -37,12 +37,40 @@ tags:
     visible: "Your coach is preparing your plan"
     timeout: 30000
 - assertNotVisible: "Couldn't load your plan"
-- assertNotVisible: ".*CHK-.*"
 - takeScreenshot: Today-no-plan
 - runFlow: ../../common/assert-no-crash.yaml
+# The check-in card sits below the plan card. It says the first check-in follows the
+# plan, never the server's refusal and never a "CHK-" error code.
+- scrollUntilVisible:
+    element: "Your first check-in opens once.*"
+    timeout: 30000
+- assertVisible: "Your first check-in opens once.*has set up your plan\\."
+- assertNotVisible: ".*CHK-.*"
+- takeScreenshot: Today-no-plan-checkin
+- runFlow: ../../common/assert-no-crash.yaml
+# TR-13b: Progress empty state (its own text, not just the tab label).
 - tapOn: "Progress"
 - extendedWaitUntil:
-    visible: "Progress"
+    visible: "Your progress will show here.*"
     timeout: 20000
+- assertVisible: "Log weight"
 - takeScreenshot: TR-13b-progress-empty
+- runFlow: ../../common/assert-no-crash.yaml
+# TR-10b: Workout empty state (owned by Z12-44; asserted here so this account is
+# checked on every tab).
+- tapOn: "Workout"
+- extendedWaitUntil:
+    visible: "No workouts planned yet"
+    timeout: 30000
+- assertNotVisible: "Couldn't load your plan"
+- assertNotVisible: "Start workout"
+- takeScreenshot: TR-10b-workout-no-plan
+- runFlow: ../../common/assert-no-crash.yaml
+# TR-07c: Diet empty state.
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "No meals planned today"
+    timeout: 30000
+- assertNotVisible: "Couldn't load your plan"
+- takeScreenshot: TR-07c-diet-no-meals-planned
 - runFlow: ../../common/assert-no-crash.yaml

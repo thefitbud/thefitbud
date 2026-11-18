@@ -900,8 +900,15 @@ function CheckinScreenInner({
         setError(syncMsg);
         return;
       }
-      const result =
-        results.find((item) => item.recordId === checkin.id) ?? results[0];
+      // enqueueAndPush swallows a failed push and returns only this
+      // mutation's results: none means the check-in is in the outbox, not
+      // accepted. Never say "Sent" for that (TR-14e).
+      if (!results.some((item) => item.recordId === checkin.id)) {
+        setStep("done");
+        setOffline(true);
+        return;
+      }
+      const result = results.find((item) => item.recordId === checkin.id);
       if (result?.serverVersion != null) {
         recordVersionRef.current = result.serverVersion;
         setRecordVersion(result.serverVersion);
@@ -1301,9 +1308,16 @@ export function TodayCheckinCard({
   relationship,
   onOpen,
   noPlan = false,
+  planLoading = false,
 }: {
   relationship: CoachingRelationship;
   onOpen: (checkin: Checkin) => void;
+  /**
+   * The effective plan is still loading: don't ask the server for a due
+   * check-in yet (it refuses with NO_ACTIVE_CONFIGURATION until a plan is
+   * published, and we don't know yet).
+   */
+  planLoading?: boolean;
   /**
    * The trainee has no published plan yet. The server has no check-in to
    * make due for them, so the card does not ask: it says the first one comes
@@ -1319,8 +1333,12 @@ export function TodayCheckinCard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  // The server said the relationship has no active configuration yet.
+  const [notOpenYet, setNotOpenYet] = useState(false);
 
   const load = useCallback(async () => {
+    if (planLoading) return;
+    setNotOpenYet(false);
     if (noPlan) {
       setCheckin(null);
       setNextScheduled(null);
@@ -1337,6 +1355,13 @@ export function TodayCheckinCard({
       setNextScheduled(pickNextScheduledCheckin(listed.items));
     } catch (err) {
       reportError("TodayCheckinCard.load", err);
+      if (err instanceof ApiClientError && err.code === "NO_ACTIVE_CONFIGURATION") {
+        // Not a failure: the first check-in simply isn't open yet.
+        setCheckin(null);
+        setNextScheduled(null);
+        setNotOpenYet(true);
+        return;
+      }
       // Only the API's own curated message is shown as it is; anything else
       // (a client/server disagreement, no connection) is a short code.
       setError(
@@ -1349,7 +1374,7 @@ export function TodayCheckinCard({
     } finally {
       setLoading(false);
     }
-  }, [api, noPlan, relationship.id]);
+  }, [api, noPlan, planLoading, relationship.id]);
 
   useEffect(() => {
     void load();
@@ -1361,7 +1386,7 @@ export function TodayCheckinCard({
     });
   }, []);
 
-  if (loading) {
+  if (loading || planLoading) {
     return (
       <View style={styles.banner}>
         <Text style={styles.bannerBody}>Checking for a due check-in…</Text>
@@ -1369,7 +1394,7 @@ export function TodayCheckinCard({
     );
   }
 
-  if (noPlan) {
+  if (noPlan || notOpenYet) {
     const given =
       relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "Your coach";
     return (

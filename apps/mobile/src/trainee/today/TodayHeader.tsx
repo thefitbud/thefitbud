@@ -9,7 +9,7 @@ import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { pillFromStatus, type IndicatorKind } from "../../sync/outboxCopy";
-import { useSyncView } from "../../sync/useSyncStatus";
+import { useApiReachable, useSyncView } from "../../sync/useSyncStatus";
 
 /**
  * The sync button's state, from the same outbox view as `SyncIndicator`
@@ -20,8 +20,14 @@ import { useSyncView } from "../../sync/useSyncStatus";
  */
 export function useSyncButtonState(): { kind: IndicatorKind; label: string } {
   const view = useSyncView();
+  const reachable = useApiReachable();
   if (!view) return { kind: "problem", label: "Couldn't check" };
-  return pillFromStatus(view.status) ?? { kind: "synced", label: "Synced" };
+  const pill = pillFromStatus(view.status);
+  if (pill) return pill;
+  // Nothing waiting but the API was last seen unreachable (TR-06e): the
+  // button must not say "Synced" about a phone that can't reach FitBud.
+  if (reachable === false) return { kind: "waiting", label: "Offline" };
+  return { kind: "synced", label: "Synced" };
 }
 
 /**
