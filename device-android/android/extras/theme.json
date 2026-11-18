@@ -1,0 +1,116 @@
+{
+  "result": "mean screenshot luminance: light 0.811 (11), dark 0.31 (10)",
+  "light": 0.811,
+  "dark": 0.31,
+  "count": {
+    "light": 11,
+    "dark": 10
+  },
+  "shots": [
+    {
+      "file": "TM-04a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "TM-04a-light-android.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "TM-04d-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "TM-04d-light-android.png",
+      "theme": "light",
+      "luma": 0.721
+    },
+    {
+      "file": "TM-04e-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "TM-04e-light-android.png",
+      "theme": "light",
+      "luma": 0.903
+    },
+    {
+      "file": "TM-04f-dark-android.png",
+      "theme": "dark",
+      "luma": 0.092
+    },
+    {
+      "file": "TM-04f-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "TM-04j-dark-android.png",
+      "theme": "dark",
+      "luma": 0.099
+    },
+    {
+      "file": "TM-04j-light-android.png",
+      "theme": "light",
+      "luma": 0.691
+    },
+    {
+      "file": "TM-04k-dark-android.png",
+      "theme": "dark",
+      "luma": 0.13
+    },
+    {
+      "file": "TM-04k-light-android.png",
+      "theme": "light",
+      "luma": 0.833
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.925
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "review-sheet-dark-android.png",
+      "theme": "dark",
+      "luma": 0.259
+    },
+    {
+      "file": "review-sheet-light-android.png",
+      "theme": "light",
+      "luma": 0.756
+    },
+    {
+      "file": "review-sheet-nudge-light-android.png",
+      "theme": "light",
+      "luma": 0.598
+    },
+    {
+      "file": "review-sheet-resolved-dark-android.png",
+      "theme": "dark",
+      "luma": 0.275
+    },
+    {
+      "file": "review-sheet-resolved-light-android.png",
+      "theme": "light",
+      "luma": 0.735
+    }
+  ]
+}
