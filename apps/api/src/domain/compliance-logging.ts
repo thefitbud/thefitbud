@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { LoggedFoodItem } from "@fitbud/contracts";
-import { canLog, scaleMacro, sumMacros } from "@fitbud/core";
+import { canLog, sumMacros } from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
   coachingRelationships,
@@ -153,12 +153,32 @@ export async function assertMealLogAllowed(
   };
 }
 
+function toScaled(value: number): number {
+  return Math.round(value * 1_000_000);
+}
+
+/** Whole kcal from a scaled value, for the stored line (display only). */
+function wholeKcal(scaled: number): number {
+  return Math.round(scaled / 1_000_000);
+}
+
+/** Grams from a scaled value, one decimal, for the stored line (display only). */
+function displayGrams(scaled: number): number {
+  return Math.round(scaled / 100_000) / 10;
+}
+
 export async function buildLoggedFoodsCompliance(
   db: Db,
   input: {
     traineeUserId: string;
     relationshipId: string;
     items: LoggedFoodItem[];
+    /**
+     * D-W12-24: only a logged-foods log saves its custom foods to the
+     * trainee's own foods (and then only when `saveToMyFoods` is not false).
+     * Portion and ate-out lines stay on the log.
+     */
+    allowSaveToMyFoods: boolean;
   },
 ): Promise<{
   itemsJson: string;
@@ -173,26 +193,36 @@ export async function buildLoggedFoodsCompliance(
 
   for (const item of input.items) {
     if (item.customFood) {
-      const customId = createId();
-      await db.insert(traineeCustomFoods).values({
-        id: customId,
-        traineeUserId: input.traineeUserId,
-        relationshipId: input.relationshipId,
-        name: item.customFood.name,
-        kcalScaled: item.customFood.kcal * 1_000_000,
-        proteinScaled: scaleMacro(item.customFood.protein ?? 0, 1),
-        carbsScaled: scaleMacro(item.customFood.carbs ?? 0, 1),
-        fatScaled: scaleMacro(item.customFood.fat ?? 0, 1),
-        servingLabel: item.customFood.servingLabel ?? "serving",
-        createdAt: now,
+      // The library's nutrient scale (×1,000,000), so a custom line adds up
+      // with library lines in the log's totals.
+      const line = {
+        kcalScaled: toScaled(item.customFood.kcal),
+        proteinScaled: toScaled(item.customFood.protein ?? 0),
+        carbsScaled: toScaled(item.customFood.carbs ?? 0),
+        fatScaled: toScaled(item.customFood.fat ?? 0),
+      };
+      const saved =
+        input.allowSaveToMyFoods && item.saveToMyFoods !== false;
+      const customId = saved ? createId() : null;
+      if (customId) {
+        await db.insert(traineeCustomFoods).values({
+          id: customId,
+          traineeUserId: input.traineeUserId,
+          relationshipId: input.relationshipId,
+          name: item.customFood.name,
+          servingLabel: item.customFood.servingLabel ?? "serving",
+          createdAt: now,
+          ...line,
+        });
+      }
+      // `custom: true` marks it added by the client on the log itself, so the
+      // coach sees that even when it was not saved to the trainee's foods.
+      stored.push({
+        ...(customId ? { customFoodId: customId } : {}),
+        ...item.customFood,
+        custom: true,
       });
-      stored.push({ customFoodId: customId, ...item.customFood });
-      macroLines.push({
-        kcalScaled: item.customFood.kcal * 1_000_000,
-        proteinScaled: scaleMacro(item.customFood.protein ?? 0, 1),
-        carbsScaled: scaleMacro(item.customFood.carbs ?? 0, 1),
-        fatScaled: scaleMacro(item.customFood.fat ?? 0, 1),
-      });
+      macroLines.push(line);
       continue;
     }
     if (item.foodId) {
@@ -213,42 +243,40 @@ export async function buildLoggedFoodsCompliance(
             .limit(1)
         : [];
       const qty = item.quantity ?? 1;
-      const kcal = food
-        ? Math.round(
-            ((food.energyKcalScaled ?? 0) *
-              qty *
-              (serving?.conversionScaled ?? 100_000_000)) /
-              100_000_000,
-          )
-        : 0;
-      stored.push({ foodId, servingId, quantity: qty });
-      macroLines.push({
-        kcalScaled: kcal,
-        proteinScaled: food
+      const portion = (scaled: number | null | undefined) =>
+        food
           ? Math.round(
-              ((food.proteinScaled ?? 0) *
+              ((scaled ?? 0) *
                 qty *
                 (serving?.conversionScaled ?? 100_000_000)) /
                 100_000_000,
             )
-          : 0,
-        carbsScaled: food
-          ? Math.round(
-              ((food.carbsScaled ?? 0) *
-                qty *
-                (serving?.conversionScaled ?? 100_000_000)) /
-                100_000_000,
-            )
-          : 0,
-        fatScaled: food
-          ? Math.round(
-              ((food.fatScaled ?? 0) *
-                qty *
-                (serving?.conversionScaled ?? 100_000_000)) /
-                100_000_000,
-            )
-          : 0,
+          : 0;
+      const line = {
+        kcalScaled: portion(food?.energyKcalScaled),
+        proteinScaled: portion(food?.proteinScaled),
+        carbsScaled: portion(food?.carbsScaled),
+        fatScaled: portion(food?.fatScaled),
+      };
+      // Name, serving and the line's nutrients are stored with the ids so the
+      // log reads back as "Roti × 2" (TR-26f) even if the library food is
+      // later renamed; totals still come from the scaled sums below.
+      stored.push({
+        foodId,
+        servingId,
+        quantity: qty,
+        ...(food
+          ? {
+              name: food.name,
+              servingLabel: serving?.label ?? null,
+              kcal: wholeKcal(line.kcalScaled),
+              protein: displayGrams(line.proteinScaled),
+              carbs: displayGrams(line.carbsScaled),
+              fat: displayGrams(line.fatScaled),
+            }
+          : {}),
       });
+      macroLines.push(line);
     }
   }
 
