@@ -1,0 +1,116 @@
+{
+  "result": "mean screenshot luminance: light 0.831 (11), dark 0.323 (10)",
+  "light": 0.831,
+  "dark": 0.323,
+  "count": {
+    "light": 11,
+    "dark": 10
+  },
+  "shots": [
+    {
+      "file": "TM-04a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.126
+    },
+    {
+      "file": "TM-04a-light-ios.png",
+      "theme": "light",
+      "luma": 0.926
+    },
+    {
+      "file": "TM-04d-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.146
+    },
+    {
+      "file": "TM-04d-light-ios.png",
+      "theme": "light",
+      "luma": 0.744
+    },
+    {
+      "file": "TM-04e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.118
+    },
+    {
+      "file": "TM-04e-light-ios.png",
+      "theme": "light",
+      "luma": 0.919
+    },
+    {
+      "file": "TM-04f-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.097
+    },
+    {
+      "file": "TM-04f-light-ios.png",
+      "theme": "light",
+      "luma": 0.945
+    },
+    {
+      "file": "TM-04j-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.1
+    },
+    {
+      "file": "TM-04j-light-ios.png",
+      "theme": "light",
+      "luma": 0.699
+    },
+    {
+      "file": "TM-04k-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.182
+    },
+    {
+      "file": "TM-04k-light-ios.png",
+      "theme": "light",
+      "luma": 0.877
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.944
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.944
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.949
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "review-sheet-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.301
+    },
+    {
+      "file": "review-sheet-light-ios.png",
+      "theme": "light",
+      "luma": 0.723
+    },
+    {
+      "file": "review-sheet-nudge-light-ios.png",
+      "theme": "light",
+      "luma": 0.636
+    },
+    {
+      "file": "review-sheet-resolved-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.266
+    },
+    {
+      "file": "review-sheet-resolved-light-ios.png",
+      "theme": "light",
+      "luma": 0.783
+    }
+  ]
+}

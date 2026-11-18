@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="0" time="215.56" timestamp="2026-11-18T06:45:30">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="38.801" timestamp="2026-11-18T06:45:30" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="35.473" timestamp="2026-11-18T06:46:09" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" name="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" classname="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F21-review-resolve-notes.yaml" time="141.243" timestamp="2026-11-18T06:46:44" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-51"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
