@@ -137,24 +137,25 @@ env:
 - runFlow: ../../common/assert-no-crash.yaml
 
 # ---- Needs you review sheet: Nudge… and Resolve… ---------------------------------------------
-# Back goes to the client screen the review was opened from, then to Clients.
+# Back leaves the review; then a relaunch (signed in) lands on Needs you. A tap on the
+# "Attention" tab label is ambiguous: client rows carry an "Attention" severity chip
+# (run 44223024287, Android dark, opened Deepak Nair).
 - tapOn:
     id: "exception-back"
 - extendedWaitUntil:
-    visible: "‹ Clients|Attention"
-    timeout: 30000
-- runFlow:
-    when:
-      visible: "‹ Clients"
-    commands:
-      - tapOn: "‹ Clients"
-- extendedWaitUntil:
-    visible: "Attention"
+    notVisible:
+      id: "exception-back"
     timeout: 20000
-- tapOn: "Attention"
+- launchApp:
+    stopApp: true
+    permissions:
+      all: allow
 - extendedWaitUntil:
     visible: "Needs you [0-9]+"
-    timeout: 30000
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
 - scrollUntilVisible:
     element: "${CLIENT}.*"
     timeout: 30000
