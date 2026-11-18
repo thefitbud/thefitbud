@@ -1,0 +1,70 @@
+appId: com.thefitbud.mobile.staging
+name: F09 Diet edit and late log (Z12-42)
+tags:
+  - device
+  - trainee
+  - z12-42
+---
+# F09 (Z12-42): changing and late-logging a meal on Diet. A due meal opens the
+# "Something different" sheet and closing it logs nothing; a closed meal on a
+# past day offers no Change. Deleting a log (TR-07h) is not built: the app and
+# the API have no delete-log action (the spec carries no task for it), so this
+# flow does not walk it. It is listed in the PR as not built.
+#
+# Account: the on-track trainee, aarav.ontrack (Asia/Kolkata). Env from the
+# device harness: QA_ONTRACK_EMAIL, QA_PASSWORD. Nothing is saved.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: ".*kcal eaten.*"
+    timeout: 30000
+# The meal's window is clock-relative, so the sheet is opened only when the
+# screen offers it.
+- runFlow:
+    when:
+      visible: "Something different"
+    commands:
+      - tapOn: "Something different"
+      - extendedWaitUntil:
+          visible: "Log it myself"
+          timeout: 30000
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Back"
+      - extendedWaitUntil:
+          visible: ".*kcal eaten.*"
+          timeout: 10000
+- assertNotVisible: ".*Waiting to send.*"
+
+# ---- A closed meal on a past day has no Change ---------------------------------
+- evalScript: ${output.yesterday = (function () { var d = new Date(Date.now() + (5.5 * 3600 - 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
+- runFlow:
+    when:
+      notVisible: "${output.yesterday}, .*"
+    commands:
+      - tapOn: "Previous week"
+- tapOn: "${output.yesterday}, .*"
+- extendedWaitUntil:
+    visible: ".*kcal eaten.*"
+    timeout: 30000
+# A closed row reads "Closed · can't be changed now" and carries no Change button.
+- runFlow:
+    when:
+      visible: "Closed · .*"
+    commands:
+      - assertNotVisible: "Change"
+- takeScreenshot: f09-diet-yesterday
+- runFlow: ../../common/assert-no-crash.yaml

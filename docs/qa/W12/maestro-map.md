@@ -20,9 +20,9 @@ Created by Z12-32 (planning, 14 Nov 2026). Source of the flows: `docs/design/v3/
 | F04 | Trainee | `flows/v3/F04-plan-deviation.yaml` | `trainee/workout-log.yaml` (set logging) | written (Z12-45): swipe to skip, Undo, edit a logged set, mark not done, ⋯ menu, skip exercise. Not built (no server model): add set, add or replace exercise, note (W-10, W-21a/b, W-22) |
 | F05 | Trainee | `flows/v3/F05-exercise-detail-rest.yaml` | `trainee/workout-log.yaml` (rest timer) | written (Z12-45) |
 | F06 | Trainee | `flows/v3/F06-interruptions.yaml`, `F06b-interruptions-offline.yaml` (tagged `device-offline`), `F06c-interruptions-end.yaml` | `session-persists.yaml` (kill and relaunch pattern) | written (Z12-45): minimise, kill and resume, pause, discard confirm; offline (W-20); light finishes early, dark discards. TR-19a is F10's |
-| F07 | Trainee | `flows/v3/F07-diet-day.yaml` | `trainee/meal-log.yaml` (eaten as planned, Something different) | planned |
-| F08 | Trainee | `flows/v3/F08-log-it-myself.yaml` | `trainee/meal-log.yaml` (food library search) | planned |
-| F09 | Trainee | `flows/v3/F09-diet-edit-delete-late.yaml` | none (new) | planned |
+| F07 | Trainee | `flows/v3/F07-diet-day.yaml` | `trainee/meal-log.yaml` (eaten as planned, Something different) | written (Z12-42, tag z12-42) |
+| F08 | Trainee | `flows/v3/F08-log-it-myself.yaml` | `trainee/meal-log.yaml` (food library search) | written (Z12-43, tag z12-43; writes one meal log, run on a fresh seed; not yet run on a device) |
+| F09 | Trainee | `flows/v3/F09-diet-edit-delete-late.yaml` | none (new) | written (Z12-42, tag z12-42; no delete-log step, not built) |
 | F10 | Trainee | `flows/v3/F10-offline-sync.yaml` | none (new; Android airplane mode, iOS API stop per Z12-35) | planned |
 | F11 | Trainee | `flows/v3/F11-weekly-checkin.yaml` | `trainee/checkin.yaml` | planned |
 | F12 | Trainee | `flows/v3/F12-progress-weight.yaml` | `trainee/progress.yaml` | planned |
