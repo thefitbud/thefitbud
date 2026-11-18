@@ -1,0 +1,131 @@
+appId: com.thefitbud.mobile.staging
+name: F08 Log it myself (Z12-43)
+tags:
+  - device
+  - trainee
+  - z12-43
+---
+# F08 (Z12-43): log a meal yourself. Something different → Log it myself
+# opens the food search on the meal's plan foods (TR-26a); + adds a food at
+# once with a tick and a count, and the log tray shows it (TR-26b); a row
+# opens the amount picker (TR-26c); a search with no match offers Create and
+# Ate out (TR-26d); Create opens the form (TR-26e); saving returns to Diet
+# with the meal logged and the "{Meal} saved · {kcal} kcal" toast (TR-26f).
+#
+# Account: the on-track trainee, aarav.ontrack on the local demo seed
+# (Asia/Kolkata). Env from the device harness: QA_ONTRACK_EMAIL, QA_PASSWORD.
+# This flow WRITES one meal log; run it on a freshly reset seed. Meal windows
+# are clock-relative and the on-track seed logs a meal 10–120 min after its
+# window opens, so Diet may already show "4 of 4 logged" with no due-meal
+# action (run 44328495622). Soft-skip then, same pattern as F09. When the
+# control is present, center it before tapping — a bare tap near the tab bar
+# hit Progress on iOS (run 44321195222).
+#
+# Screens (named by v3 screen ID, see scripts/qa/device/collect-shots.mjs):
+#   TR-08a  Something different
+#   TR-26a  Food search before typing
+#   TR-26b  Results with instant add and the tray
+#   TR-26c  Amount picker
+#   TR-26d  No match
+#   TR-26e  Create a food
+#   TR-26f  Saved on Diet
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: ".*kcal eaten.*"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Something different"
+    commands:
+      - scrollUntilVisible:
+          element: "Something different"
+          centerElement: true
+          timeout: 30000
+      - tapOn:
+          id: "diet-something-different"
+      - extendedWaitUntil:
+          visible: "Log it myself"
+          timeout: 30000
+      - assertVisible: "Changed the portion"
+      - assertVisible: "Ate out"
+      - takeScreenshot: TR-08a-something-different
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Log it myself"
+      # TR-26a: plan foods first, Save disabled until something is added.
+      - extendedWaitUntil:
+          visible: "Search Indian foods, brands"
+          timeout: 30000
+      - assertVisible: "Tap a food to set katori, piece, cup or grams."
+      - takeScreenshot: TR-26a-food-search-default
+      - runFlow: ../../common/assert-no-crash.yaml
+      # TR-26d: no match offers Create and Ate out; Create opens TR-26e.
+      - tapOn: "Search foods"
+      - inputText: "zzqx dosa"
+      - extendedWaitUntil:
+          visible: "No foods match .*"
+          timeout: 30000
+      - assertVisible: "Log as Ate out"
+      - takeScreenshot: TR-26d-food-search-empty-offline
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Create .*"
+      - extendedWaitUntil:
+          visible: "Create a food"
+          timeout: 10000
+      - assertVisible: "Save to my foods"
+      - takeScreenshot: TR-26e-custom-food
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Cancel"
+      # TR-26b: instant add, tick and count, the tray.
+      - tapOn: "Clear search"
+      - tapOn: "Search foods"
+      - inputText: "roti"
+      - extendedWaitUntil:
+          visible: "Results"
+          timeout: 30000
+      - tapOn:
+          id: "food-add-food:.*"
+          index: 0
+      - extendedWaitUntil:
+          visible: "In this log · 1"
+          timeout: 5000
+      - assertVisible: "1 added"
+      - takeScreenshot: TR-26b-food-search-results-added
+      - runFlow: ../../common/assert-no-crash.yaml
+      # TR-26c: a row opens the amount picker; Add returns to the results.
+      - tapOn:
+          id: "food-row-food:.*"
+          index: 0
+      - extendedWaitUntil:
+          visible: "Unit"
+          timeout: 10000
+      - assertVisible: "Add to .*"
+      - takeScreenshot: TR-26c-food-detail-katori
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Add to .*"
+      - extendedWaitUntil:
+          visible: "In this log · .*"
+          timeout: 5000
+      # TR-26f: Save returns to Diet with the toast and the logged row.
+      - tapOn: "Save .*"
+      - extendedWaitUntil:
+          visible: ".* saved · [0-9,]+ kcal"
+          timeout: 30000
+      - assertVisible: "View"
+      - assertVisible: "Logged myself"
+      - takeScreenshot: TR-26f-manual-log-saved
+      - runFlow: ../../common/assert-no-crash.yaml

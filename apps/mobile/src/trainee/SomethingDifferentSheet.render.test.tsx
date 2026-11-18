@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent } from "@testing-library/react";
 import { mealAssignmentSchema, type MealAssignment } from "@fitbud/contracts";
-import { render, screen, waitFor } from "../test/render";
+import { mockAuth, render, screen, waitFor } from "../test/render";
 
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 vi.mock("expo-modules-core", () => ({
@@ -11,6 +11,8 @@ vi.mock("expo-modules-core", () => ({
   EventEmitter: class {},
 }));
 vi.mock("../sync/SyncProvider", () => ({ useSyncEngine: () => ({}) }));
+const auth = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth.current }));
 
 const deviate = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("./mealActions", async () => {
@@ -19,6 +21,7 @@ vi.mock("./mealActions", async () => {
 });
 
 import { SomethingDifferentSheet } from "./SomethingDifferentSheet";
+import { peekMealSaved, resetMealSavedNotice } from "./food/mealSavedNotice";
 
 const REL = "1b65e3ad-84cf-4fe1-a546-0d62656c2c79";
 const DATE = "2026-11-13";
@@ -75,29 +78,70 @@ function expectRealHeight() {
 }
 
 describe("SomethingDifferentSheet sheet variant sub-screens", () => {
-  beforeEach(() => deviate.mockClear());
-
-  it("Ate out opens with a real height, its input and a working Save", async () => {
-    const onDone = renderSheet();
-    fireEvent.click(screen.getByText("Ate out"));
-    expect(screen.getByText(/what did you have, and where/)).toBeTruthy();
-    expect(screen.getByPlaceholderText("What did you eat?")).toBeTruthy();
-    expectRealHeight();
-    fireEvent.change(screen.getByPlaceholderText("What did you eat?"), {
-      target: { value: "Thali at the canteen" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(deviate).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(onDone).toHaveBeenCalled());
+  beforeEach(() => {
+    deviate.mockClear();
+    resetMealSavedNotice();
+    auth.current = mockAuth();
   });
 
-  it("Changed the portion opens with a real height and a working Save", async () => {
+  it("lists the three ways in the v3 order (TR-08a)", () => {
+    renderSheet();
+    const titles = screen
+      .getAllByRole("button")
+      .map((b) => b.getAttribute("aria-label"))
+      .filter((label) =>
+        ["Changed the portion", "Log it myself", "Ate out"].includes(label ?? ""),
+      );
+    expect(titles).toEqual(["Changed the portion", "Log it myself", "Ate out"]);
+    expect(screen.getByText("Enter the kcal from the menu or label")).toBeTruthy();
+  });
+
+  it("Ate out takes the exact kcal, counts it and announces the save (TR-08c)", async () => {
     const onDone = renderSheet();
-    fireEvent.click(screen.getByText("Changed the portion"));
-    expect(screen.getByText(/set how much you had of each/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+    expect(screen.getByText(/How many kcal\? Check the menu, the bill or the label\./)).toBeTruthy();
     expectRealHeight();
+    fireEvent.change(screen.getByLabelText("Kcal"), { target: { value: "1120" } });
+    expect((screen.getByLabelText("Kcal") as HTMLInputElement).value).toBe("1,120");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(deviate).toHaveBeenCalledTimes(1));
+    const body = (deviate.mock.calls[0] as unknown[])[2];
+    expect(body).toEqual({
+      deviationKind: "restaurant",
+      notes: null,
+      photoIntent: null,
+      items: [{ customFood: { name: "Ate out", kcal: 1120 } }],
+    });
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(peekMealSaved(REL)).toMatchObject({ mealName: "Lunch", kcal: 1120, kind: "restaurant" });
+  });
+
+  it("Ate out needs the kcal or a note", async () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Enter the kcal, or a short note about what you had.")).toBeTruthy();
+    expect(deviate).not.toHaveBeenCalled();
+  });
+
+  it("Changed the portion steps by ½, shows the difference and saves (TR-08b)", async () => {
+    const onDone = renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Changed the portion" }));
+    expect(screen.getByText("Change how much you had. Steps are ½.")).toBeTruthy();
+    expectRealHeight();
+    fireEvent.click(screen.getByRole("button", { name: "More Vegetable poha" }));
+    expect(screen.getByLabelText("Vegetable poha: 1½ bowl")).toBeTruthy();
+    expect(screen.getByText("+200 vs plan")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save portion" }));
+    await waitFor(() => expect(deviate).toHaveBeenCalledTimes(1));
+    const body = (deviate.mock.calls[0] as unknown[])[2] as { deviationKind: string; items: unknown[] };
+    expect(body.deviationKind).toBe("portion_adjustment");
+    expect(body.items).toEqual([
+      {
+        customFood: { name: "Vegetable poha", kcal: 600, servingLabel: "1½ bowl" },
+        saveToMyFoods: false,
+      },
+    ]);
     await waitFor(() => expect(onDone).toHaveBeenCalled());
   });
 });

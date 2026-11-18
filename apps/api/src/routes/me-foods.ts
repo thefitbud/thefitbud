@@ -1,14 +1,16 @@
-import { and, desc, eq, gt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNotNull, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   traineeFoodDetailSchema,
   traineeFoodIndexResponseSchema,
   traineeFoodSearchResponseSchema,
+  type TraineeFoodSearchResponse,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client.js";
 import {
   coachingRelationships,
   foodLibraryItems,
+  foodLibraryServings,
   mealCompliance,
   traineeCustomFoods,
 } from "../db/schema.js";
@@ -26,6 +28,100 @@ import {
 import type { Env, Variables } from "../types.js";
 
 export const meFoodRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
+
+type LibraryRow = typeof foodLibraryItems.$inferSelect;
+type ServingRow = typeof foodLibraryServings.$inferSelect;
+type CustomRow = typeof traineeCustomFoods.$inferSelect;
+type SearchItem = TraineeFoodSearchResponse["items"][number];
+
+/** How many of the trainee's own foods lead a search, and Recent's length. */
+const MAX_OWN_IN_SEARCH = 5;
+const RECENT_LIMIT = 20;
+
+/** Nutrients for one serving of a per-100 g (or ml) food, scaled ×1,000,000. */
+function perServing(
+  scaled: number | null,
+  conversionScaled: number | null | undefined,
+): number | null {
+  if (scaled == null) return null;
+  return Math.round((scaled * (conversionScaled ?? 100_000_000)) / 100_000_000);
+}
+
+function librarySearchItem(row: LibraryRow, servings: ServingRow[]): SearchItem {
+  const mapped = mapFoodLibraryItem(row, servings);
+  const defaultId =
+    row.defaultServingId ??
+    servings.find((s) => s.isDefault)?.id ??
+    servings[0]?.id ??
+    null;
+  const serving = servings.find((s) => s.id === defaultId) ?? null;
+  return {
+    id: mapped.id,
+    name: mapped.name,
+    energyKcalScaled: mapped.energyKcalScaled ?? null,
+    defaultServingId: defaultId,
+    source: "library",
+    serving: serving
+      ? {
+          label: serving.label,
+          kcalScaled: perServing(row.energyKcalScaled, serving.conversionScaled),
+          proteinScaled: perServing(row.proteinScaled, serving.conversionScaled),
+          carbsScaled: perServing(row.carbsScaled, serving.conversionScaled),
+          fatScaled: perServing(row.fatScaled, serving.conversionScaled),
+        }
+      : null,
+  };
+}
+
+function customSearchItem(row: CustomRow): SearchItem {
+  return {
+    id: row.id,
+    name: row.name,
+    energyKcalScaled: row.kcalScaled,
+    defaultServingId: null,
+    source: "custom",
+    serving: {
+      label: row.servingLabel,
+      kcalScaled: row.kcalScaled,
+      proteinScaled: row.proteinScaled ?? null,
+      carbsScaled: row.carbsScaled ?? null,
+      fatScaled: row.fatScaled ?? null,
+    },
+  };
+}
+
+/**
+ * The trainee's own foods, newest first, one per name (D-W12-24): saving
+ * "Ragi dosa" twice shows it once. Scoped to the signed-in trainee only.
+ */
+async function ownCustomFoods(
+  db: ReturnType<typeof createDb>,
+  traineeUserId: string,
+  q: string | null,
+  limit: number,
+): Promise<CustomRow[]> {
+  const rows = await db
+    .select()
+    .from(traineeCustomFoods)
+    .where(
+      and(
+        eq(traineeCustomFoods.traineeUserId, traineeUserId),
+        q ? sql`lower(${traineeCustomFoods.name}) like ${`%${q.toLowerCase()}%`}` : undefined,
+      ),
+    )
+    .orderBy(desc(traineeCustomFoods.createdAt))
+    .limit(limit * 4);
+  const seen = new Set<string>();
+  const out: CustomRow[] = [];
+  for (const row of rows) {
+    const key = row.name.trim().toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
 
 async function activeTrainerId(
   db: ReturnType<typeof createDb>,
@@ -45,12 +141,26 @@ async function activeTrainerId(
   return rel?.trainerUserId ?? null;
 }
 
+/** Global foods, plus the active coach's own when there is one. */
+function visibleFoodsFilter(trainerId: string | null) {
+  return trainerId
+    ? or(
+        eq(foodLibraryItems.ownership, "global"),
+        and(
+          eq(foodLibraryItems.ownership, "trainer"),
+          eq(foodLibraryItems.trainerUserId, trainerId),
+        ),
+      )
+    : eq(foodLibraryItems.ownership, "global");
+}
+
 meFoodRoutes.get(
   "/search",
   operation({
     tag: "TraineeFoods",
     summary: "Search foods visible to trainee",
-    description: "Global foods plus active trainer-owned foods.",
+    description:
+      "Global foods plus active trainer-owned foods, led by the trainee's own saved foods that match.",
     roles: ["trainee"],
     response: traineeFoodSearchResponseSchema,
   }),
@@ -118,25 +228,25 @@ meFoodRoutes.get(
       rows.slice(0, limit).map((row) => row.id),
     );
     const page = buildPage(
-      rows.map((row) => {
-        const servings = servingsMap.get(row.id) ?? [];
-        const mapped = mapFoodLibraryItem(row, servings);
-        const defaultId =
-          row.defaultServingId ??
-          servings.find((s) => s.isDefault)?.id ??
-          servings[0]?.id ??
-          null;
-        return {
-          id: mapped.id,
-          name: mapped.name,
-          energyKcalScaled: mapped.energyKcalScaled ?? null,
-          defaultServingId: defaultId,
-        };
-      }),
+      rows.map((row) => librarySearchItem(row, servingsMap.get(row.id) ?? [])),
       limit,
       (item) => item.name,
     );
-    return ok(c, traineeFoodSearchResponseSchema.parse(page));
+    // The trainee's own foods lead the results (D-W12-24); `nextCursor`
+    // still describes the library rows alone.
+    const own =
+      q.length >= 2
+        ? (await ownCustomFoods(db, actor.userId, q, MAX_OWN_IN_SEARCH)).map(
+            customSearchItem,
+          )
+        : [];
+    return ok(
+      c,
+      traineeFoodSearchResponseSchema.parse({
+        ...page,
+        items: [...own, ...page.items],
+      }),
+    );
   },
 );
 
@@ -145,7 +255,8 @@ meFoodRoutes.get(
   operation({
     tag: "TraineeFoods",
     summary: "Recent foods for trainee",
-    description: "Recently logged foods for the trainee.",
+    description:
+      "The trainee's own saved foods and library foods from their recent logs, newest first, each with its default serving.",
     roles: ["trainee"],
     response: traineeFoodSearchResponseSchema,
   }),
@@ -158,44 +269,73 @@ meFoodRoutes.get(
       return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
     }
     const db = createDb(c.env.DB);
-    const custom = await db
-      .select()
-      .from(traineeCustomFoods)
-      .where(eq(traineeCustomFoods.traineeUserId, actor.userId))
-      .orderBy(desc(traineeCustomFoods.createdAt))
-      .limit(20);
+    const custom = await ownCustomFoods(db, actor.userId, null, RECENT_LIMIT);
     const compliance = await db
-      .select()
+      .select({
+        itemsJson: mealCompliance.itemsJson,
+        loggedAt: mealCompliance.loggedAt,
+      })
       .from(mealCompliance)
-      .where(eq(mealCompliance.traineeUserId, actor.userId))
+      .where(
+        and(
+          eq(mealCompliance.traineeUserId, actor.userId),
+          isNotNull(mealCompliance.itemsJson),
+        ),
+      )
       .orderBy(desc(mealCompliance.loggedAt))
-      .limit(20);
-    const names = new Map<string, { id: string; name: string }>();
-    for (const row of custom) {
-      names.set(row.id, { id: row.id, name: row.name });
-    }
+      .limit(RECENT_LIMIT);
+    // Library foods from the trainee's own recent logs, newest first.
+    const loggedFoods: Array<{ foodId: string; at: string }> = [];
+    const seenFoods = new Set<string>();
     for (const row of compliance) {
-      if (!row.itemsJson) continue;
+      let lines: unknown;
       try {
-        const items = JSON.parse(row.itemsJson) as Array<{ foodId?: string; name?: string }>;
-        for (const item of items) {
-          if (item.foodId && item.name) {
-            names.set(item.foodId, { id: item.foodId, name: item.name });
-          }
-        }
+        lines = JSON.parse(row.itemsJson ?? "[]");
       } catch {
-        /* ignore */
+        continue;
+      }
+      if (!Array.isArray(lines)) continue;
+      for (const line of lines as Array<{ foodId?: unknown }>) {
+        if (typeof line?.foodId !== "string" || seenFoods.has(line.foodId)) continue;
+        seenFoods.add(line.foodId);
+        loggedFoods.push({ foodId: line.foodId, at: row.loggedAt });
       }
     }
-    const items = [...names.values()].slice(0, 20).map((item) => ({
-      id: item.id,
-      name: item.name,
-      energyKcalScaled: null,
-      defaultServingId: null,
-    }));
+    // A food must still be visible to this trainee (global or their active
+    // coach's) and active to come back in Recent.
+    const trainerId = await activeTrainerId(db, actor.userId);
+    const foodIds = loggedFoods.slice(0, RECENT_LIMIT).map((row) => row.foodId);
+    const libraryRows =
+      foodIds.length > 0
+        ? await db
+            .select()
+            .from(foodLibraryItems)
+            .where(
+              and(
+                inArray(foodLibraryItems.id, foodIds),
+                visibleFoodsFilter(trainerId),
+                eq(foodLibraryItems.status, "active"),
+              ),
+            )
+        : [];
+    const libraryById = new Map(libraryRows.map((row) => [row.id, row]));
+    const servingsMap = await servingsByFoodId(db, [...libraryById.keys()]);
+    const dated: Array<{ at: string; item: SearchItem }> = [
+      ...custom.map((row) => ({ at: row.createdAt, item: customSearchItem(row) })),
+      ...loggedFoods.flatMap(({ foodId, at }) => {
+        const row = libraryById.get(foodId);
+        return row
+          ? [{ at, item: librarySearchItem(row, servingsMap.get(row.id) ?? []) }]
+          : [];
+      }),
+    ];
+    dated.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
     return ok(
       c,
-      traineeFoodSearchResponseSchema.parse({ items, nextCursor: null }),
+      traineeFoodSearchResponseSchema.parse({
+        items: dated.slice(0, RECENT_LIMIT).map((row) => row.item),
+        nextCursor: null,
+      }),
     );
   },
 );
