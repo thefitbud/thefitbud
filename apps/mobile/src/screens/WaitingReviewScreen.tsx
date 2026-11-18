@@ -9,6 +9,7 @@ import {
   Hourglass,
   MessageCircle,
 } from "lucide-react-native";
+import { ApiClientError, type FitBudApiClient } from "@fitbud/api-client";
 import type { CoachingRelationship } from "@fitbud/contracts";
 import { formatCivilDate, formatLocalDate, whatsappHref, zonedDateTimeFormat } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
@@ -55,6 +56,28 @@ export function sentAtLabel(iso: string | null, zone: string): string | null {
 }
 
 type Detail = "reminders" | "quiet_hours" | "steps" | null;
+
+export const WAITING_POLL_MS = 20_000;
+
+/**
+ * One background check while TR-04 is open. True when the session should be
+ * reloaded: the relationship is no longer `onboarding_submitted` (or gone),
+ * or the server refused the session (401), which `refreshSession` turns into
+ * a sign-out. Any other failure throws for the caller to report quietly.
+ */
+export async function waitingPollStep(
+  api: Pick<FitBudApiClient, "listRelationships">,
+  relationshipId: string,
+): Promise<boolean> {
+  try {
+    const page = await api.listRelationships({ limit: 50 });
+    const current = page.items.find((item) => item.id === relationshipId);
+    return current?.onboardingStatus !== "onboarding_submitted";
+  } catch (err) {
+    if (err instanceof ApiClientError && err.status === 401) return true;
+    throw err;
+  }
+}
 
 /**
  * TR-04: intake sent, the coach builds the plan. Reminders and Steps can be
@@ -110,12 +133,20 @@ function WaitingReviewScreenBody({ relationship }: { relationship: CoachingRelat
     }
   }, [refreshSession]);
 
+  // The 20 s check reads the relationships quietly and reloads the session
+  // only when this one has moved on from "submitted" (plan ready, ended).
+  // `refreshSession` puts the router through "loading", which remounts this
+  // screen: polling with it closed the account sheet and dropped an open
+  // Reminders page every 20 s (Z12-49 device runs 44191354664, 44200084620
+  // and 44218640571, F01: the sheet shut before Sign out was tapped).
   useEffect(() => {
     const timer = setInterval(() => {
-      void refreshSession().catch((err: unknown) => reportError("WaitingReview.poll", err));
-    }, 20_000);
+      void waitingPollStep(api, relationship.id)
+        .then((moved) => (moved ? refreshSession() : undefined))
+        .catch((err: unknown) => reportError("WaitingReview.poll", err));
+    }, WAITING_POLL_MS);
     return () => clearInterval(timer);
-  }, [refreshSession]);
+  }, [api, refreshSession, relationship.id]);
 
   if (detail === "reminders") {
     return (
