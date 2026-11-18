@@ -267,6 +267,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error.status === 403 &&
         error.code === "RECENT_SIGN_IN_REQUIRED"
       ) {
+        // Stale pre-archive session: end it and land on sign-in with the API's
+        // own message (mobile Z12-29 parity). SignInPage reads sessionError;
+        // RequireAuth navigates there when no token remains.
         reactivateRunningRef.current = false;
         await signOut();
         setSessionError(error.message);

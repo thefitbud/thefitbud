@@ -19,7 +19,14 @@ function looksLikeMobile(value: string): boolean {
 }
 
 export function SignInPage() {
-  const { me, loading, signInWithPassword, signInDevTest } = useAuth();
+  const {
+    me,
+    loading,
+    sessionError,
+    clearSessionError,
+    signInWithPassword,
+    signInDevTest,
+  } = useAuth();
   const location = useLocation();
   const [params] = useSearchParams();
   const { config } = useConfig();
@@ -32,6 +39,9 @@ export function SignInPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [roleGate, setRoleGate] = useState(false);
+
+  // Z12-30: RECENT_SIGN_IN_REQUIRED after reactivate lands here with the API text.
+  const shownError = error ?? sessionError;
 
   const nextRaw =
     params.get("next") ??
@@ -81,6 +91,7 @@ export function SignInPage() {
     if (!online) return;
     setSubmitting(true);
     setError(null);
+    clearSessionError();
     setRoleGate(false);
     try {
       await signInWithPassword(identifier.trim(), password);
@@ -207,9 +218,9 @@ export function SignInPage() {
             </button>
           </span>
         </label>
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
+        {shownError ? (
+          <p className="form-error" role="alert" data-testid="sign-in-session-error">
+            {shownError}
           </p>
         ) : null}
         <Button

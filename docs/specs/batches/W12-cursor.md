@@ -61,6 +61,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | D-W12C-18 | Z12-30: `auth-flow.ts` + `archivedAccount.ts` outside `files_owned` — keep the web session on `ACCOUNT_ARCHIVED` and throw `ArchivedAccountError` so Reactivate can call the API (clearing the session broke the AC). | Decide-and-note | Z12-30 |
 | D-W12C-19 | Z12-30: delete fresh proof uses a one-off `FitBudApiClient` with the password-login bearer and `credentials: "omit"` so the cookie cannot override `auth_time` (middleware prefers cookie `created_at`). Cookie-session Firebase `auth_time` on `createWebSession` stays a W6 API follow-up. | Spec gap + D-W6-31 | Z12-30 |
 | D-W12C-20 | Z12-30: reactivate footer shows "Signed in as {email}" from the frame; omit "archived Tue 3 Nov" (not in `accountReactivationCopy`). Colocated CSS files for the modal and reactivate shell. | Frame vs D-W12-6 copy | Z12-30 |
+| D-W12C-21 | Z12-30 review fix: `SignInPage` shows `sessionError`; `RequireAuth` sends token-less session errors to `/sign-in` (not the "Can't reach FitBud" retry panel) so `RECENT_SIGN_IN_REQUIRED` after reactivate matches mobile. | Fresh review #492 | Z12-30 |
 
 *(Add implementer decide-and-note choices here as they arise.)*
 
