@@ -10,7 +10,10 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Text } from "../components/Text";
 import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
-/** The phone's time zone: an archived account cannot read its own `/me`. */
+/**
+ * The phone's time zone, for when the account's own (`me.timezone`) was not
+ * known before it was archived: an archived account cannot read its `/me`.
+ */
 export function deviceTimeZone(): string {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Kolkata";
@@ -27,7 +30,7 @@ type Props = {
   error: string | null;
   onReactivate: () => void;
   onSignOut: () => void;
-  /** Tests pass a fixed zone; the app uses the phone's. */
+  /** The account's time zone when known (`me.timezone`); else the phone's. */
   timeZone?: string;
 };
 
@@ -148,16 +151,17 @@ function ArchivedNoticeBody({
 }
 
 export type ArchivedView =
-  | ({ kind: "reactivate" } & Omit<Props, "timeZone">)
-  | { kind: "notice"; purgeAfter: string; onDone: () => void };
+  | ({ kind: "reactivate" } & Props)
+  | { kind: "notice"; purgeAfter: string; timeZone?: string; onDone: () => void };
 
 /**
  * What AuthProvider shows over the app (Z12-29): the reactivate screen for a
  * signed-in archived account, or the notice after this phone deleted it.
  */
 export function ArchivedAccountOverlay({ view }: { view: ArchivedView }) {
+  // Modal for screen readers: AuthProvider hides the app underneath too.
   return (
-    <View style={StyleSheet.absoluteFill}>
+    <View style={StyleSheet.absoluteFill} accessibilityViewIsModal aria-modal testID="archived-overlay">
       {view.kind === "reactivate" ? (
         <ReactivateAccountScreen
           purgeAfter={view.purgeAfter}
@@ -166,9 +170,14 @@ export function ArchivedAccountOverlay({ view }: { view: ArchivedView }) {
           error={view.error}
           onReactivate={view.onReactivate}
           onSignOut={view.onSignOut}
+          timeZone={view.timeZone}
         />
       ) : (
-        <AccountArchivedNotice purgeAfter={view.purgeAfter} onDone={view.onDone} />
+        <AccountArchivedNotice
+          purgeAfter={view.purgeAfter}
+          onDone={view.onDone}
+          timeZone={view.timeZone}
+        />
       )}
     </View>
   );

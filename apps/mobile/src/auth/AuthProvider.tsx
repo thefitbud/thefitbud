@@ -21,7 +21,7 @@ import {
   type NotificationType,
   type Role,
 } from "@fitbud/contracts";
-import { AppState, Platform } from "react-native";
+import { AppState, Platform, View } from "react-native";
 import { isTestIdToken } from "../lib/testToken";
 import { authErrorCopy } from "../lib/authErrors";
 import {
@@ -218,6 +218,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persisted.selectedRole,
   );
   const [me, setMe] = useState<MeResponse | null>(null);
+  // The account's own time zone for the archived screens' purge date, read
+  // just before the account is archived or found archived (Z12-29).
+  const meRef = useRef<MeResponse | null>(null);
+  meRef.current = me;
   const [relationships, setRelationships] = useState<CoachingRelationship[]>(
     [],
   );
@@ -247,11 +251,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const snapshotModeRef = useRef(false);
   // Z12-29: signed in to an archived account (reactivate screen), and the
   // notice after this phone deleted the account (no session any more).
+  // `timeZone` is the account's own (`me.timezone`) when it was known just
+  // before; null falls back to the phone's.
   const [archivedAccount, setArchivedAccount] = useState<{
     purgeAfter: string;
+    timeZone: string | null;
   } | null>(null);
   const [archivedNotice, setArchivedNotice] = useState<{
     purgeAfter: string;
+    timeZone: string | null;
   } | null>(null);
   const [reactivating, setReactivating] = useState(false);
   const [reactivateError, setReactivateError] = useState<string | null>(null);
@@ -400,11 +408,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   /**
-   * The account is archived (Z12-29): keep the token (it is the sign-in that
-   * reactivation needs, D-W6-31) and show the reactivate screen instead of
+   * The account is archived (Z12-29): show the reactivate screen instead of
    * the app. Nothing else loads while archived.
+   *
+   * The token is kept for "Reactivate my account". Reactivation needs a
+   * sign-in made after the archive (D-W6-31). A fresh sign-in is one, but a
+   * session restored, refreshed or reloaded after the account was archived on
+   * another device holds a token from before, which the API refuses with
+   * RECENT_SIGN_IN_REQUIRED; `reactivate` then ends the session so the user
+   * signs in again first.
+   *
+   * The `/me` snapshot, the trainer cache and the day views are dropped too,
+   * so an offline cold start never opens on the archived account's data.
    */
   const enterArchived = useCallback((purgeAfter: string) => {
+    const timeZone = meRef.current?.timezone ?? null;
     snapshotModeRef.current = false;
     setOfflineSnapshot(null);
     setMe(null);
@@ -413,7 +431,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsAccountLink(false);
     setErrorMessage(null);
     setReactivateError(null);
-    setArchivedAccount({ purgeAfter });
+    endTrainerCacheSession();
+    setArchivedAccount({ purgeAfter, timeZone });
   }, []);
 
   const restorePhaseRef = useRef(restorePhase);
@@ -861,6 +880,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     tokens.clear();
     selectedRoleRef.current = null;
+    // The next person on this phone gets their own reactivate note (Z12-29).
+    lastRoleRef.current = null;
     setAccessToken(null);
     setSelectedRole(null);
     setMe(null);
@@ -895,16 +916,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    */
   const finishAccountDeletion = useCallback(
     (purgeAfter: string) => {
+      // Read before the session ends: the date reads in the account's zone.
+      const timeZone = meRef.current?.timezone ?? null;
       endSession("drop");
-      setArchivedNotice({ purgeAfter });
+      setArchivedNotice({ purgeAfter, timeZone });
     },
     [endSession],
   );
 
   /**
-   * "Reactivate my account": `POST /account/reactivation` with this sign-in's
+   * "Reactivate my account": `POST /account/reactivation` with the session's
    * token, then load the account as a sign-in does. Coaching stays ended
-   * (D-W6-8). A refusal shows the API's own message or a short code.
+   * (D-W6-8). The API needs a sign-in made after the archive (D-W6-31): a
+   * token from before (a session restored, refreshed or reloaded after the
+   * account was archived on another device) gets 403
+   * RECENT_SIGN_IN_REQUIRED, which ends the session and lands on sign-in with
+   * the API's message, so the user signs in fresh and reactivates then. Any
+   * other refusal shows the API's own message or a short code.
    */
   const reactivateRunningRef = useRef(false);
   const reactivate = useCallback(async () => {
@@ -915,6 +943,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api.reactivateAccount();
     } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        error.status === 403 &&
+        error.code === "RECENT_SIGN_IN_REQUIRED"
+      ) {
+        reactivateRunningRef.current = false;
+        endSession("keep");
+        setErrorMessage(error.message);
+        return;
+      }
       setReactivateError(authErrorCopy(error, "general", "reactivateAccount"));
       reactivateRunningRef.current = false;
       setReactivating(false);
@@ -937,7 +975,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       reactivateRunningRef.current = false;
       setReactivating(false);
     }
-  }, [api, applyMe, tokens]);
+  }, [api, applyMe, endSession, tokens]);
 
   const setActiveRelationship = useCallback(
     (relationship: CoachingRelationship) => {
@@ -1130,6 +1168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     ? ({
         kind: "reactivate",
         purgeAfter: archivedAccount.purgeAfter,
+        timeZone: archivedAccount.timeZone ?? undefined,
         role: lastRoleRef.current === "trainer" ? "trainer" : "trainee",
         busy: reactivating,
         error: reactivateError,
@@ -1142,13 +1181,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ? ({
           kind: "notice",
           purgeAfter: archivedNotice.purgeAfter,
+          timeZone: archivedNotice.timeZone ?? undefined,
           onDone: () => setArchivedNotice(null),
         } as const)
       : null;
 
+  // The app stays mounted under the archived screens, hidden from screen
+  // readers while they show (iOS VoiceOver and Android TalkBack). The wrapper
+  // is always there, so showing a screen never remounts the app.
+  const coveredByArchived = archivedView !== null;
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      <View
+        style={APP_STYLE}
+        testID="auth-app-content"
+        aria-hidden={coveredByArchived || undefined}
+        accessibilityElementsHidden={coveredByArchived}
+        importantForAccessibility={coveredByArchived ? "no-hide-descendants" : "auto"}
+      >
+        {children}
+      </View>
       {archivedView ? (
         <Suspense fallback={null}>
           <ArchivedAccountOverlay view={archivedView} />
@@ -1157,6 +1209,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     </AuthContext.Provider>
   );
 }
+
+const APP_STYLE = { flex: 1 } as const;
 
 export function useAuth(): AuthContextValue {
   const value = useContext(AuthContext);
