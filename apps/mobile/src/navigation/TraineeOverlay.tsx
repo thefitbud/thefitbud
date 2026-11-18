@@ -33,6 +33,8 @@ import { ReminderSettingsScreen } from "../trainee/settings/ReminderSettingsScre
 import { StepsSetupScreen } from "../trainee/steps/StepsSetupScreen";
 import { LanguageScreen } from "../trainee/settings/LanguageScreen";
 import { SyncStatusScreen } from "../trainee/settings/SyncStatusScreen";
+import { AccountScreen } from "../trainee/settings/AccountScreen";
+import { HelpScreen } from "../trainee/settings/HelpScreen";
 
 export type TraineeOverlay =
   | { screen: "notifications" }
@@ -78,7 +80,9 @@ export type TraineeOverlay =
   | { screen: "widget_tips" }
   | { screen: "privacy" }
   | { screen: "password" }
-  | { screen: "language" };
+  | { screen: "language" }
+  | { screen: "account" }
+  | { screen: "help" };
 
 export type TraineeOverlayOpener = (overlay: TraineeOverlay) => void;
 
@@ -186,6 +190,7 @@ export function TraineeOverlayHost({
           onOpenQuietHours={() => onOpen({ screen: "quiet_hours" })}
           onOpenMealTimes={() => onOpen({ screen: "meal_times" })}
           onOpenBatteryHelp={() => onOpen({ screen: "reminder_setup" })}
+          coachName={coachName}
         />
       );
     case "quiet_hours":
@@ -370,7 +375,7 @@ export function TraineeOverlayHost({
       return (
         <ProfileScreen
           onBack={onClose}
-          onChangePassword={() => onOpen({ screen: "password" })}
+          coachName={coachName}
         />
       );
     case "past_coaching":
@@ -398,6 +403,25 @@ export function TraineeOverlayHost({
       return <PrivacyScreen onBack={onClose} />;
     case "password":
       return <PasswordScreen onBack={onClose} />;
+    case "account":
+      return (
+        <AccountScreen
+          onBack={onClose}
+          onOpenPassword={() => onOpen({ screen: "password" })}
+          onOpenPrivacy={() => onOpen({ screen: "privacy" })}
+          onOpenLanguage={() => onOpen({ screen: "language" })}
+          onOpenPastCoaching={() => onOpen({ screen: "past_coaching" })}
+        />
+      );
+    case "help":
+      return (
+        <HelpScreen
+          onBack={onClose}
+          coachName={coachName}
+          coachWhatsappE164={relationship.trainerWhatsappE164}
+          coachingActive={relationship.status !== "ended"}
+        />
+      );
     default: {
       const _exhaustive: never = overlay;
       return _exhaustive;

@@ -2,8 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { useAuth } from "../auth/AuthProvider";
 import { pickSessionRefresh } from "../lib/api";
-import { authErrorCopy, mismatchedResponseCopy } from "../lib/authErrors";
+import {
+  authErrorCopy,
+  authFailure,
+  mismatchedResponseCopy,
+  type AuthErrorKind,
+} from "../lib/authErrors";
+import { LockKeyhole } from "lucide-react-native";
+import { SIGNED_OUT_MESSAGE } from "../auth/sessionRestore";
 import { BundleCommitBadge } from "../dev/BundleCommitBadge";
+import { CenteredState } from "./auth/authParts";
 import { stage1Api } from "../lib/stage1Api";
 import { AcceptInviteScreen } from "./AcceptInviteScreen";
 import { CodeSignInScreen } from "./auth/CodeSignInScreen";
@@ -25,7 +33,15 @@ export function AuthScreen() {
     hasInviteQuery() ? "invite" : "password",
   );
   const [loading, setLoading] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [localError, setLocalErrorState] = useState<string | null>(null);
+  // Inline state for the error above (TR-01e, TR-01f, TR-01g); cleared with it.
+  const [errorKind, setErrorKind] = useState<AuthErrorKind | null>(null);
+  const [codeExpired, setCodeExpired] = useState(false);
+  const setLocalError = useCallback((message: string | null) => {
+    setLocalErrorState(message);
+    setErrorKind(null);
+    setCodeExpired(false);
+  }, []);
   const [identifier, setIdentifier] = useState("");
   const [codeSent, setCodeSent] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(0);
@@ -48,7 +64,7 @@ export function AuthScreen() {
       setLocalError(null);
       await signInWithToken(result.token, pickSessionRefresh(result));
     },
-    [clearError, signInWithToken],
+    [clearError, setLocalError, signInWithToken],
   );
 
   // The controller outlives renders; it reads the latest closures through this ref.
@@ -83,7 +99,9 @@ export function AuthScreen() {
         setLocalError(authErrorCopy(err, "session", "signInPassword.finish"));
       }
     } catch (err) {
-      setLocalError(authErrorCopy(err, "password-login", "signInPassword"));
+      const failure = authFailure(err, "password-login", "signInPassword");
+      setLocalError(failure.copy);
+      setErrorKind(failure.kind ?? null);
     } finally {
       setLoading(false);
     }
@@ -118,7 +136,10 @@ export function AuthScreen() {
     setLocalError(null);
     try {
       const outcome = await verifier.current.submit(code, identifier.trim());
-      if (outcome.kind === "error") setLocalError(outcome.message);
+      if (outcome.kind === "error") {
+        setLocalError(outcome.message);
+        setCodeExpired(Boolean(outcome.expired));
+      }
     } finally {
       setLoading(false);
     }
@@ -184,6 +205,20 @@ export function AuthScreen() {
     }
   }
 
+  // TR-24: the server ended the session (refresh refused). Its unsent logs
+  // stay on this phone and send after the same user signs in (Z12-41).
+  if (mode === "password" && errorMessage === SIGNED_OUT_MESSAGE) {
+    return (
+      <CenteredState
+        testID="session-expired"
+        icon={(color) => <LockKeyhole color={color} size={30} strokeWidth={1.9} />}
+        title="Please sign in again"
+        body="For your security you were signed out. Anything you logged is still on this phone and sends after you sign in."
+        action={{ label: "Sign in", onPress: clearError }}
+      />
+    );
+  }
+
   if (mode === "invite") {
     return (
       <AcceptInviteScreen
@@ -202,8 +237,14 @@ export function AuthScreen() {
         identifier={identifier}
         loading={loading}
         error={displayError}
+        expired={codeExpired}
         onChangeIdentifier={setIdentifier}
         onSendCode={sendCode}
+        onChangeAddress={() => {
+          setCodeSent(false);
+          clearError();
+          setLocalError(null);
+        }}
         onVerify={verifyCode}
         onUsePassword={() => {
           setMode("password");
@@ -243,16 +284,17 @@ export function AuthScreen() {
       <SignInScreen
         loading={loading}
         error={displayError}
+        errorKind={localError ? errorKind : null}
         initialIdentifier={identifier}
         onIdentifierChange={setIdentifier}
+        onEdit={() => {
+          // An edit ends the shown failure: Sign in comes back after a 429
+          // and the inline wrong-password text goes (TR-01e, TR-01f).
+          if (localError) setLocalError(null);
+        }}
         onSignIn={signInPassword}
         onUseCode={() => {
           setMode("code");
-          clearError();
-          setLocalError(null);
-        }}
-        onHaveInviteCode={() => {
-          setMode("invite");
           clearError();
           setLocalError(null);
         }}

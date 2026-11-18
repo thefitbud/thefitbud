@@ -4,6 +4,13 @@ import { isZodError, reportError } from "../../lib/reportError";
 
 export const OTP_INVALID_COPY =
   "That code didn't work. Check the latest message or tap Resend.";
+/**
+ * TR-01g. Only behind the API's `OTP_EXPIRED` code. Today's API answers an
+ * expired code with `OTP_INVALID` (it does not tell the two apart), so this
+ * shows once the API sends the code; until then an expired code reads as
+ * `OTP_INVALID_COPY`, which also says to tap Resend.
+ */
+export const OTP_EXPIRED_COPY = "This code has expired. Send a new one.";
 export const OTP_RATE_LIMITED_COPY = "Too many tries. Wait a minute, then tap Resend.";
 export const OTP_NETWORK_COPY =
   "Couldn't reach FitBud. Check your connection and try again.";
@@ -24,6 +31,7 @@ export function verifyCodeError(err: unknown): string {
   }
   if (err instanceof ApiClientError) {
     if (err.status === 401 && err.code === "OTP_INVALID") return OTP_INVALID_COPY;
+    if (err.status === 401 && err.code === "OTP_EXPIRED") return OTP_EXPIRED_COPY;
     if (err.status === 429) return OTP_RATE_LIMITED_COPY;
     return `Something went wrong (code ${err.status}). Try again.`;
   }

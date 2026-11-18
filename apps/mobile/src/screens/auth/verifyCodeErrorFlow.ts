@@ -1,3 +1,4 @@
+import { ApiClientError } from "@fitbud/api-client";
 import { reportError } from "../../lib/reportError";
 import { OTP_FINISH_FAILED_COPY, OTP_INVALID_COPY, verifyCodeError } from "./verifyCodeError";
 
@@ -6,7 +7,8 @@ type VerifyResult = { purpose: string };
 export type CodeVerifyOutcome =
   | { kind: "ignored" }
   | { kind: "signed-in" }
-  | { kind: "error"; message: string };
+  /** `expired`: the API said `OTP_EXPIRED` (TR-01g offers a new code). */
+  | { kind: "error"; message: string; expired?: boolean };
 
 /**
  * Verify-code controller. The in-flight flag is a plain boolean set
@@ -38,7 +40,15 @@ export function createCodeVerifier<R extends VerifyResult>(deps: {
           try {
             result = await deps.verify(code);
           } catch (err) {
-            return { kind: "error", message: verifyCodeError(err) };
+            const expired =
+              err instanceof ApiClientError &&
+              err.status === 401 &&
+              err.code === "OTP_EXPIRED";
+            return {
+              kind: "error",
+              message: verifyCodeError(err),
+              ...(expired ? { expired: true } : {}),
+            };
           }
           if (result.purpose !== "login") {
             return { kind: "error", message: OTP_INVALID_COPY };

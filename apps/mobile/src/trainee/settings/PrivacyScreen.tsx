@@ -1,6 +1,7 @@
-import { StyleSheet, View } from "react-native";
+import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
+import { View } from "react-native";
 import { Text } from "../../components/Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 
@@ -8,9 +9,10 @@ type Props = {
   onBack: () => void;
 };
 
-export function PrivacyScreen({ onBack }: Props) {
+function PrivacyScreenBody({ onBack }: Props) {
+  const styles = useStyles();
   return (
-    <Screen title="Privacy" subtitle="How FitBud handles your data.">
+    <Screen v3 title="Privacy" subtitle="How FitBud handles your data.">
       <View style={styles.stack}>
         <Text style={styles.body}>
           FitBud stores your logs, check-ins and photos to share them with your
@@ -27,13 +29,22 @@ export function PrivacyScreen({ onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   stack: {
     gap: spacing.lg,
   },
   body: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 15,
     lineHeight: 22,
   },
-});
+}));
+
+/** PrivacyScreen in the system theme (Z12-49): its own styles read the scope. */
+export function PrivacyScreen(props: Parameters<typeof PrivacyScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <PrivacyScreenBody {...props} />
+    </ThemeScope>
+  );
+}

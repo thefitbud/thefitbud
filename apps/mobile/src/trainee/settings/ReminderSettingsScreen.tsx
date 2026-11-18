@@ -1,30 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
-import { Bell, ClipboardCheck, Dumbbell, Moon, SunMedium, UserCheck, Utensils } from "lucide-react-native";
+import { Linking, Platform, Pressable, View } from "react-native";
+import { BellOff, PauseCircle } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import type { NotificationPreferences, ReminderStatus } from "@fitbud/contracts";
 import { formatCivilDate, formatHhMmTime, formatLocalDate } from "@fitbud/core";
-import { brand, ink } from "@fitbud/tokens";
-import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { BottomSheet } from "../../components/BottomSheet";
+import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { useAuth } from "../../auth/AuthProvider";
-import { useConfig } from "../../providers/ConfigProvider";
-import { isWhatsAppAutomationEnabled } from "../../lib/config";
+import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
 import { ensureAndroidNotificationChannels } from "../../notifications/androidChannels";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { clockLabel, shiftQuarterHour } from "./clock";
-import {
-  M2Button,
-  M2Group,
-  M2Note,
-  M2Page,
-  M2Row,
-  M2Stepper,
-  M2SubRow,
-  M2SwitchRow,
-} from "./m2";
+import { zoneName } from "./AccountScreen";
+import { M2Group, M2Page, M2Section, M2Stepper, M2SwitchRow } from "./m2";
 
 type CategoryKey = "workoutReminder" | "mealReminder" | "checkinReminder" | "dailySummaryReminder";
 
@@ -33,6 +24,8 @@ type Props = {
   onOpenQuietHours: () => void;
   onOpenMealTimes?: () => void;
   onOpenBatteryHelp?: () => void;
+  /** The coach's name for "Updates from …". */
+  coachName?: string;
 };
 
 const PENDING_KEY = "fitbud.reminder-prefs.pending";
@@ -42,28 +35,45 @@ function browserOffline(): boolean {
 }
 
 function rememberLocal(body: unknown) {
-  if (typeof localStorage === "undefined") return;
-  localStorage.setItem(PENDING_KEY, JSON.stringify(body));
+  try {
+    if (typeof localStorage === "undefined") return;
+    localStorage.setItem(PENDING_KEY, JSON.stringify(body));
+  } catch (err) {
+    reportError("ReminderSettings.rememberLocal", err);
+  }
 }
 
-export function ReminderSettingsScreen({
+/** "10 pm – 7 am" (TR-16a): whole hours drop ":00". */
+export function quietRangeLabel(start: string, end: string): string {
+  const short = (value: string) => clockLabel(value).replace(":00", "");
+  return `${short(start)} – ${short(end)}`;
+}
+
+/**
+ * TR-16a reminders, TR-16b with notifications off in the phone's settings.
+ * One switch per kind of reminder; the label of a row opens its detail
+ * (workout time, meal times). The quiet hours card opens quiet hours. The old
+ * master switch, "Learn from my workouts" row, the coach-nudge note and the
+ * WhatsApp card are gone (Z12-25 → Z12-49).
+ */
+function ReminderSettingsScreenBody({
   onBack,
   onOpenQuietHours,
   onOpenMealTimes,
   onOpenBatteryHelp,
+  coachName,
 }: Props) {
   const { api, me } = useAuth();
-  const { config } = useConfig();
+  const theme = useTheme();
+  const styles = useStyles();
   const s1 = stage1Api(api);
-  const waOn = isWhatsAppAutomationEnabled(config);
   const zone = me?.timezone || "Asia/Kolkata";
+  const coachFirst = coachName?.trim().split(/\s+/)[0] || "your coach";
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [status, setStatus] = useState<ReminderStatus | null>(null);
-  const [changedMeals, setChangedMeals] = useState(0);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [offline, setOffline] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [osDenied, setOsDenied] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
@@ -71,25 +81,25 @@ export function ReminderSettingsScreen({
 
   const load = useCallback(async () => {
     setError(null);
-    setOffline(browserOffline());
     try {
-      const [nextPrefs, nextStatus, meals] = await Promise.all([
+      const [nextPrefs, nextStatus] = await Promise.all([
         api.getNotificationPreferences(),
-        s1.getReminderStatus().catch(() => null),
-        s1.getMealTimes().catch(() => null),
+        s1.getReminderStatus().catch((err: unknown) => {
+          // The status only adds the paused notice and coach-off hints.
+          reportError("ReminderSettings.status", err);
+          return null;
+        }),
       ]);
       setPrefs(nextPrefs);
       setStatus(nextStatus);
-      setChangedMeals(
-        meals?.slots.filter((slot) => slot.overrideTime).length ?? 0,
-      );
     } catch (err) {
+      reportError("ReminderSettings.load", err);
       setError(
         err instanceof ApiClientError
           ? err.message
           : browserOffline()
             ? "You're offline. Pull to try again."
-            : "Could not load reminder settings.",
+            : "Couldn't load reminder settings (REM-LOAD). Pull to try again.",
       );
     } finally {
       setLoading(false);
@@ -107,10 +117,12 @@ export function ReminderSettingsScreen({
       setOsDenied(false);
       return;
     }
-    void import("expo-notifications").then(async (Notifications) => {
-      const settings = await Notifications.getPermissionsAsync();
-      setOsDenied(settings.status === "denied");
-    });
+    void import("expo-notifications")
+      .then(async (Notifications) => {
+        const settings = await Notifications.getPermissionsAsync();
+        setOsDenied(settings.status === "denied");
+      })
+      .catch((err: unknown) => reportError("ReminderSettings.permission", err));
   }, []);
 
   useEffect(() => {
@@ -134,32 +146,29 @@ export function ReminderSettingsScreen({
     } catch (err) {
       if (browserOffline()) {
         rememberLocal(patch);
-        setOffline(true);
         setToast("Saved on this phone. We'll sync it when you're back online.");
         return;
       }
+      reportError("ReminderSettings.save", err);
       setPrefs(previous);
       setError(
-        err instanceof ApiClientError ? err.message : "Could not save setting.",
+        err instanceof ApiClientError
+          ? err.message
+          : "Couldn't save that (REM-SAVE). Try again.",
       );
     }
   }
 
-  const permissionOff =
-    osDenied || (status != null && status.pushDeliverable === false);
+  const permissionOff = osDenied || (status != null && status.pushDeliverable === false);
+  const appOff = prefs != null && !prefs.pushEnabled;
   const paused =
     status?.mode === "paused"
       ? status.pausedUntil
         ? `Meal reminders are paused until ${formatCivilDate(formatLocalDate(new Date(status.pausedUntil), zone))} because they weren't helping.`
         : "Meal reminders are paused because they weren't helping."
       : null;
-  const workoutTime = prefs?.preferredWorkoutTime ?? "18:00";
-  const learned = !prefs?.preferredWorkoutTime;
-  const switchesDisabled = permissionOff || !prefs?.pushEnabled;
-  const mealLabel =
-    changedMeals > 0 ? "Using your meal times" : "Using your plan's meal times";
-  const mealHint =
-    changedMeals > 0 ? `(${changedMeals} changed)` : undefined;
+  const workoutTime = prefs?.preferredWorkoutTime ?? null;
+  const switchesDisabled = permissionOff || appOff || !prefs;
 
   function categoryOff(key: CategoryKey): boolean {
     if (!status) return false;
@@ -169,174 +178,163 @@ export function ReminderSettingsScreen({
     return false;
   }
 
+  function on(key: CategoryKey): boolean {
+    if (permissionOff || appOff) return false;
+    return Boolean(prefs?.categories[key]) && !categoryOff(key);
+  }
+
+  function setCategory(key: CategoryKey, enabled: boolean) {
+    void save({ categories: { [key]: enabled } }, (current) => ({
+      ...current,
+      categories: { ...current.categories, [key]: enabled },
+    }));
+  }
+
   return (
     <M2Page
       title="Reminders"
-      subtitle="You choose when FitBud reminds you."
       onBack={onBack}
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
         void load();
       }}
+      testID="reminders"
     >
       {error ? <ErrorBanner message={error} /> : null}
-      {offline && !error ? (
-        <Text style={styles.muted}>You're offline. Showing what we have.</Text>
-      ) : null}
       {loading ? (
-        <Text accessibilityLabel="Loading reminders" style={styles.muted}>
+        <Text accessibilityLabel="Loading reminders" tone="ink3">
           Loading…
         </Text>
       ) : null}
       {toast ? (
-        <Text accessibilityLiveRegion="polite" style={styles.toast}>
+        <Text accessibilityLiveRegion="polite" tone="done" style={styles.toast}>
           {toast}
         </Text>
       ) : null}
 
       {permissionOff ? (
-        <View style={styles.statusCard}>
-          <Text style={styles.status}>Off in phone settings</Text>
+        <View style={styles.warn} accessibilityRole="alert" testID="reminders-permission-off">
+          <BellOff color={theme.colors.warnInk} size={22} strokeWidth={1.9} />
+          <Text style={styles.warnText}>
+            Notifications are off for FitBud, so reminders can&apos;t reach you.
+          </Text>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Turn on in Settings"
+            accessibilityLabel="Open Settings"
             onPress={() => {
-              void Linking.openSettings();
+              void Linking.openSettings().catch((err: unknown) =>
+                reportError("ReminderSettings.openSettings", err),
+              );
             }}
-            style={styles.linkHit}
+            style={styles.warnAction}
           >
-            <Text style={styles.link}>Turn on in Settings</Text>
+            <Text style={styles.warnActionText}>Open Settings</Text>
           </Pressable>
         </View>
-      ) : (
-        <M2Group>
-          <M2SwitchRow
-            icon={<Bell color={brand.indigo} size={18} strokeWidth={1.75} />}
-            label="Notifications"
-            value={prefs?.pushEnabled ?? false}
-            disabled={!prefs}
-            onValueChange={(enabled) => {
-              void save({ pushEnabled: enabled }, (current) => ({
-                ...current,
-                pushEnabled: enabled,
-              }));
-            }}
-          />
-        </M2Group>
-      )}
-
-      {paused ? (
-        <View style={styles.pause}>
-          <Text style={styles.pauseText}>{paused}</Text>
-          <M2Button
-            label="Turn back on"
+      ) : appOff ? (
+        <View style={styles.warn} accessibilityRole="alert">
+          <BellOff color={theme.colors.warnInk} size={22} strokeWidth={1.9} />
+          <Text style={styles.warnText}>Reminders are off in FitBud.</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Turn on"
             onPress={() => {
-              void s1.resumeReminders().then((next) => {
-                setStatus(next);
-                setToast("Saved");
-              });
+              void save({ pushEnabled: true }, (current) => ({ ...current, pushEnabled: true }));
             }}
-          />
+            style={styles.warnAction}
+          >
+            <Text style={styles.warnActionText}>Turn on</Text>
+          </Pressable>
         </View>
       ) : null}
 
+      {paused ? (
+        <View style={styles.warn}>
+          <PauseCircle color={theme.colors.warnInk} size={22} strokeWidth={1.9} />
+          <Text style={styles.warnText}>{paused}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Turn back on"
+            onPress={() => {
+              void s1
+                .resumeReminders()
+                .then((next) => {
+                  setStatus(next);
+                  setToast("Saved");
+                })
+                .catch((err: unknown) => {
+                  reportError("ReminderSettings.resume", err);
+                  setError(
+                    err instanceof ApiClientError
+                      ? err.message
+                      : "Couldn't turn them back on (REM-RESUME). Try again.",
+                  );
+                });
+            }}
+            style={styles.warnAction}
+          >
+            <Text style={styles.warnActionText}>Turn back on</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <M2Section label="Remind me about" />
       <M2Group>
         <M2SwitchRow
-          icon={<Dumbbell color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label="Workout reminder"
+          label="Workout"
           hint={
             categoryOff("workoutReminder")
-              ? "Your coach has turned off workout reminders."
-              : learned
-                ? `If your workout isn't logged about an hour after ${formatHhMmTime("18:00")}. We'll learn a better time from your workouts.`
-                : `If your workout isn't logged about an hour after ${formatHhMmTime(workoutTime)}.`
+              ? "Your coach has turned these off."
+              : workoutTime
+                ? `At ${formatHhMmTime(workoutTime)} on workout days`
+                : "At your usual workout time"
           }
-          value={Boolean(prefs?.categories.workoutReminder) && !categoryOff("workoutReminder")}
-          disabled={switchesDisabled || categoryOff("workoutReminder") || !prefs}
-          onValueChange={(enabled) => {
-            void save(
-              { categories: { workoutReminder: enabled } },
-              (current) => ({
-                ...current,
-                categories: { ...current.categories, workoutReminder: enabled },
-              }),
-            );
-          }}
-        />
-        <M2SubRow
-          label="Learn from my workouts"
-          value={learned ? "On" : clockLabel(workoutTime)}
-          onPress={() => {
-            setDraftTime(workoutTime);
+          textAccessibilityLabel="Workout reminder time"
+          onPressText={() => {
+            setDraftTime(workoutTime ?? "18:00");
             setTimeOpen(true);
           }}
+          value={on("workoutReminder")}
+          disabled={switchesDisabled || categoryOff("workoutReminder")}
+          onValueChange={(enabled) => setCategory("workoutReminder", enabled)}
         />
         <M2SwitchRow
-          icon={<Utensils color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label="Meal reminders"
-          hint="About 40 min after each meal time, if it isn't logged."
-          value={Boolean(prefs?.categories.mealReminder) && !categoryOff("mealReminder")}
-          disabled={switchesDisabled || categoryOff("mealReminder") || !prefs}
-          onValueChange={(enabled) => {
-            void save({ categories: { mealReminder: enabled } }, (current) => ({
-              ...current,
-              categories: { ...current.categories, mealReminder: enabled },
-            }));
-          }}
-        />
-        <M2Row
-          icon={<Utensils color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label={mealLabel}
-          hint={mealHint}
-          value="Change"
-          onPress={onOpenMealTimes}
+          label="Meals"
+          hint={
+            categoryOff("mealReminder")
+              ? "Your coach has turned these off."
+              : "When each meal is due"
+          }
+          textAccessibilityLabel="Meal times"
+          onPressText={onOpenMealTimes}
+          value={on("mealReminder")}
+          disabled={switchesDisabled || categoryOff("mealReminder")}
+          onValueChange={(enabled) => setCategory("mealReminder", enabled)}
         />
         <M2SwitchRow
-          icon={<ClipboardCheck color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label="Check-in reminders"
+          label="Check-in"
           hint={
             categoryOff("checkinReminder")
-              ? "Your coach has turned off check-in reminders."
-              : "The day your check-in is due."
+              ? "Your coach has turned these off."
+              : "The day your check-in is due"
           }
-          value={Boolean(prefs?.categories.checkinReminder) && !categoryOff("checkinReminder")}
-          disabled={switchesDisabled || categoryOff("checkinReminder") || !prefs}
-          onValueChange={(enabled) => {
-            void save(
-              { categories: { checkinReminder: enabled } },
-              (current) => ({
-                ...current,
-                categories: { ...current.categories, checkinReminder: enabled },
-              }),
-            );
-          }}
+          value={on("checkinReminder")}
+          disabled={switchesDisabled || categoryOff("checkinReminder")}
+          onValueChange={(enabled) => setCategory("checkinReminder", enabled)}
         />
         <M2SwitchRow
-          icon={<SunMedium color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label="Daily summary"
-          hint="One evening note if anything's left, by 9:30 pm."
-          value={Boolean(prefs?.categories.dailySummaryReminder)}
-          disabled={switchesDisabled || !prefs}
-          onValueChange={(enabled) => {
-            void save(
-              { categories: { dailySummaryReminder: enabled } },
-              (current) => ({
-                ...current,
-                categories: {
-                  ...current.categories,
-                  dailySummaryReminder: enabled,
-                },
-              }),
-            );
-          }}
+          label="Evening summary"
+          hint="One note by 9:30 pm if anything's left"
+          value={on("dailySummaryReminder")}
+          disabled={switchesDisabled}
+          onValueChange={(enabled) => setCategory("dailySummaryReminder", enabled)}
         />
         <M2SwitchRow
-          icon={<UserCheck color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label="Coach updates to my logs"
-          hint="When your coach logs or edits a meal, workout or measurement for you."
-          value={prefs?.coachLogUpdates ?? true}
-          disabled={switchesDisabled || !prefs}
+          label={`Updates from ${coachFirst}`}
+          hint={`When ${coachFirst} logs or edits something for you`}
+          value={!permissionOff && !appOff && (prefs?.coachLogUpdates ?? true)}
+          disabled={switchesDisabled}
           onValueChange={(enabled) => {
             void save({ coachLogUpdates: enabled }, (current) => ({
               ...current,
@@ -346,44 +344,40 @@ export function ReminderSettingsScreen({
         />
       </M2Group>
 
-      <M2Note>
-        Your coach can send a reminder about a specific item. It follows your
-        quiet hours.
-      </M2Note>
-
-      <M2Group>
-        <M2Row
-          icon={<Moon color={brand.indigo} size={18} strokeWidth={1.75} />}
-          label="Quiet hours"
-          value={
-            prefs?.quietHoursStart && prefs.quietHoursEnd
-              ? `${clockLabel(prefs.quietHoursStart)} – ${clockLabel(prefs.quietHoursEnd)}`
-              : "10:00 pm – 7:00 am"
-          }
+      {permissionOff ? null : (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Quiet hours"
           onPress={onOpenQuietHours}
-        />
-      </M2Group>
+          style={styles.quiet}
+          testID="reminders-quiet-hours"
+        >
+          <View style={styles.quietTop}>
+            <Text style={styles.quietLabel}>Quiet hours</Text>
+            <Text style={styles.quietValue}>
+              {prefs?.quietHoursStart && prefs.quietHoursEnd
+                ? quietRangeLabel(prefs.quietHoursStart, prefs.quietHoursEnd)
+                : "10 pm – 7 am"}
+            </Text>
+          </View>
+          <Text tone="ink2" style={styles.quietHint}>
+            No reminders at night. Times use {zoneName(prefs?.traineeTimezone ?? zone)}.
+          </Text>
+        </Pressable>
+      )}
 
-      <View style={[styles.wa, styles.dim]}>
-        <View style={styles.waTop}>
-          <Text style={styles.waTitle}>WhatsApp reminders</Text>
-          <Text style={styles.chip}>Coming soon</Text>
-        </View>
-        <Text style={styles.hint}>
-          {waOn
-            ? "Used only when app notifications don't reach you, or when a few logs slip. At most one a day. Reply STOP to stop."
-            : "WhatsApp reminders are coming soon. For now we'll remind you in the app."}
-        </Text>
-      </View>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Reminders not arriving?"
-        onPress={onOpenBatteryHelp}
-        style={styles.linkHit}
-      >
-        <Text style={styles.link}>Reminders not arriving?</Text>
-      </Pressable>
+      {onOpenBatteryHelp && Platform.OS === "android" ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Reminders not arriving?"
+          onPress={onOpenBatteryHelp}
+          style={styles.linkHit}
+        >
+          <Text tone="brand" style={styles.link}>
+            Reminders not arriving?
+          </Text>
+        </Pressable>
+      ) : null}
 
       <BottomSheet
         visible={timeOpen}
@@ -398,124 +392,71 @@ export function ReminderSettingsScreen({
           onDecrement={() => setDraftTime((value) => shiftQuarterHour(value, -15))}
           onIncrement={() => setDraftTime((value) => shiftQuarterHour(value, 15))}
         />
-        <M2Button
-          label="Save this time"
-          onPress={() => {
-            setTimeOpen(false);
-            void save({ preferredWorkoutTime: draftTime }, (current) => ({
-              ...current,
-              preferredWorkoutTime: draftTime,
-            }));
-          }}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Learn from my workouts"
-          onPress={() => {
-            setTimeOpen(false);
-            void save({ preferredWorkoutTime: null }, (current) => ({
-              ...current,
-              preferredWorkoutTime: null,
-            }));
-          }}
-          style={styles.linkHit}
-        >
-          <Text style={styles.link}>Learn from my workouts</Text>
-        </Pressable>
+        <View style={styles.sheetActions}>
+          <Button
+            label="Save this time"
+            onPress={() => {
+              setTimeOpen(false);
+              void save({ preferredWorkoutTime: draftTime }, (current) => ({
+                ...current,
+                preferredWorkoutTime: draftTime,
+              }));
+            }}
+          />
+          <Button
+            label="Learn from my workouts"
+            variant="text"
+            onPress={() => {
+              setTimeOpen(false);
+              void save({ preferredWorkoutTime: null }, (current) => ({
+                ...current,
+                preferredWorkoutTime: null,
+              }));
+            }}
+          />
+        </View>
       </BottomSheet>
     </M2Page>
   );
 }
 
-const styles = StyleSheet.create({
-  muted: {
-    color: ink[500],
-    fontSize: 15,
-  },
-  toast: {
-    color: brand.indigo,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 14,
-  },
-  statusCard: {
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-  },
-  status: {
-    color: brand.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-    paddingHorizontal: 2,
-    paddingTop: 8,
-  },
-  pause: {
-    gap: 10,
-  },
-  pauseText: {
-    color: ink[700],
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  wa: {
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 6,
-    padding: 14,
-  },
-  waTop: {
+const useStyles = createThemedStyles((t) => ({
+  toast: { fontSize: 14, fontWeight: "600" },
+  warn: {
     alignItems: "center",
+    backgroundColor: t.colors.warnTint,
+    borderRadius: 20,
     flexDirection: "row",
-    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  waTitle: {
-    color: ink[900],
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
+  warnText: { color: t.colors.warnInk, flex: 1, fontSize: 16, lineHeight: 22 },
+  warnAction: { justifyContent: "center", minHeight: 44 },
+  warnActionText: { color: t.colors.ink, fontSize: 16, fontWeight: "600" },
+  quiet: {
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.edge,
+    borderRadius: 20,
+    borderWidth: t.scheme === "dark" ? 1 : 0.5,
+    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
   },
-  chip: {
-    backgroundColor: brand.paleLavender,
-    borderRadius: 999,
-    color: brand.indigo,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 12,
-    overflow: "hidden",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  hint: {
-    color: ink[500],
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  dim: {
-    opacity: 0.55,
-  },
-  linkHit: {
-    alignSelf: "flex-start",
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  link: {
-    color: brand.indigo,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-  },
-  clock: {
-    color: brand.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 28,
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  stepRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 8,
-  },
-});
+  quietTop: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
+  quietLabel: { color: t.colors.ink, fontSize: 17 },
+  quietValue: { color: t.colors.ink, fontSize: 18, fontWeight: "700" },
+  quietHint: { fontSize: 14, lineHeight: 19 },
+  linkHit: { alignSelf: "flex-start", justifyContent: "center", minHeight: 44 },
+  link: { fontSize: 16, fontWeight: "600" },
+  sheetActions: { gap: 8, marginTop: 16 },
+}));
+
+/** ReminderSettingsScreen in the system theme (Z12-49): its own styles read the scope. */
+export function ReminderSettingsScreen(props: Parameters<typeof ReminderSettingsScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <ReminderSettingsScreenBody {...props} />
+    </ThemeScope>
+  );
+}

@@ -1,10 +1,11 @@
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { useMemo, useState } from "react";
-import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Linking, Platform, Pressable, View } from "react-native";
 import { Text } from "../../components/Text";
 import * as Notifications from "expo-notifications";
 import { ChevronRight, Clock, Info } from "lucide-react-native";
 import { zonedDateTimeFormat } from "@fitbud/core";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
 import { useConfig } from "../../providers/ConfigProvider";
 import { isWhatsAppAutomationEnabled } from "../../lib/config";
@@ -31,7 +32,9 @@ const WORKOUT_SLOTS = [
   { id: "varies", title: "It varies" },
 ] as const;
 
-export function ReminderSetupScreen({ onDone, onOpenQuietHours }: Props) {
+function ReminderSetupScreenBody({ onDone, onOpenQuietHours }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const { config } = useConfig();
   const { me } = useAuth();
   const waOn = isWhatsAppAutomationEnabled(config);
@@ -130,16 +133,16 @@ export function ReminderSetupScreen({ onDone, onOpenQuietHours }: Props) {
           ))}
           <Pressable accessibilityRole="button" style={styles.exactRow}>
             <View style={styles.tile}>
-              <Clock size={19} color={colors.indigo} strokeWidth={1.75} />
+              <Clock size={19} color={theme.colors.brand} strokeWidth={1.75} />
             </View>
             <View style={styles.exactText}>
               <Text style={styles.exactTitle}>Set exact time</Text>
               <Text style={styles.exactSub}>Optional</Text>
             </View>
             <Text style={styles.exactVal}>{exactTimeLabel}</Text>
-            <ChevronRight size={18} color={colors.midGrey} />
+            <ChevronRight size={18} color={theme.colors.ink3} />
           </Pressable>
-          <NoteCallout icon={<Info size={18} color={colors.indigo} />}>
+          <NoteCallout icon={<Info size={18} color={theme.colors.brand} />}>
             We&apos;ll only remind you if your workout isn&apos;t logged about an
             hour after this. You can change it anytime.
           </NoteCallout>
@@ -232,14 +235,14 @@ export function ReminderSetupScreen({ onDone, onOpenQuietHours }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   skipHit: {
     minHeight: 44,
     justifyContent: "center",
     paddingHorizontal: 10,
   },
   skip: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 16,
     fontWeight: "600",
   },
@@ -248,13 +251,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   eb: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     fontWeight: "600",
     lineHeight: 18,
   },
   h1: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 30,
     fontWeight: "700",
     letterSpacing: -0.4,
@@ -263,8 +266,8 @@ const styles = StyleSheet.create({
   },
   exactRow: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
@@ -275,7 +278,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 11,
     height: 36,
     justifyContent: "center",
@@ -285,20 +288,20 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   exactTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   exactSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
   },
   exactVal: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
   },
   infoCard: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 16,
     gap: spacing.xs,
     marginTop: spacing.sm,
@@ -308,44 +311,53 @@ const styles = StyleSheet.create({
     opacity: 0.88,
   },
   cardTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
   },
   body: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
     marginTop: spacing.sm,
   },
   comingSoon: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontWeight: "600",
   },
   link: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontWeight: "600",
   },
   helper: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
     marginTop: spacing.sm,
   },
   sample: {
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 12,
     gap: spacing.xs,
     marginBottom: spacing.md,
     padding: spacing.lg,
   },
   sampleTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
   },
   sampleBody: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
   },
-});
+}));
+
+/** ReminderSetupScreen in the system theme (Z12-49): its own styles read the scope. */
+export function ReminderSetupScreen(props: Parameters<typeof ReminderSetupScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <ReminderSetupScreenBody {...props} />
+    </ThemeScope>
+  );
+}

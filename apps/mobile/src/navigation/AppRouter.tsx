@@ -1,21 +1,24 @@
-import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
-import { colors } from "@fitbud/ui-mobile";
+import { ActivityIndicator, Platform, View } from "react-native";
+import { CircleAlert, RefreshCw } from "lucide-react-native";
 import { useAuth } from "../auth/AuthProvider";
-import { ErrorBanner } from "../components/ErrorBanner";
 import { ForegroundPushNotices } from "../components/notice/ForegroundPushNotices";
 import { NoticeHost } from "../components/notice/NoticeHost";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
 import { SpecimensScreen } from "../dev/SpecimensScreen";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 import { AcceptInviteScreen } from "../screens/AcceptInviteScreen";
 import { AuthScreen } from "../screens/AuthScreen";
+import { CenteredState } from "../screens/auth/authParts";
 import { IntakeScreen } from "../screens/IntakeScreen";
 import { RoleSelectScreen, SwitchRoleSheet } from "../screens/RoleSelectScreen";
 import { UnsupportedRoleScreen } from "../screens/UnsupportedRoleScreen";
 import { WaitingReviewScreen } from "../screens/WaitingReviewScreen";
 import { TrainerShell } from "../trainer/TrainerShell";
 import { TraineeShell } from "../trainee/TraineeShell";
-import { coachLinkSubject, type AppRoute } from "./resolveRoute";
+import { coachLinkSubject, coachPushSubject, type AppRoute } from "./resolveRoute";
 import { routerView } from "./routerView";
 
 function isSpecimensPath(): boolean {
@@ -43,28 +46,32 @@ export function AppRouter() {
 
   if (view.view === "loading") {
     return (
-      <View style={styles.loading} accessibilityLabel="Loading">
-        <ActivityIndicator size="large" color={colors.indigo} />
-      </View>
+      <ThemeScope scheme="system">
+        <LoadingView />
+      </ThemeScope>
     );
   }
 
   if (view.view === "error") {
+    // TR-21 pattern: the account could not load. The message is curated
+    // (an `ApiClientError` body or a short code), never a raw error.
     return (
-      <Screen
+      <CenteredState
+        testID="app-error"
+        icon={(color) => <CircleAlert color={color} size={30} strokeWidth={1.9} />}
         title="Something went wrong"
-        subtitle="We could not load your coaching account."
-      >
-        <ErrorBanner message={view.message} />
-        <PrimaryButton
-          label="Retry"
-          onPress={() => {
+        body={`We could not load your coaching account. ${view.message}`}
+        actionTint
+        action={{
+          label: "Try again",
+          icon: (color) => <RefreshCw color={color} size={20} strokeWidth={2.25} />,
+          onPress: () => {
             clearError();
             void refreshSession();
-          }}
-        />
-        <PrimaryButton label="Sign out" variant="ghost" onPress={signOut} />
-      </Screen>
+          },
+        }}
+        link={{ label: "Sign out", onPress: signOut }}
+      />
     );
   }
 
@@ -75,11 +82,16 @@ export function AppRouter() {
       <ForegroundPushNotices />
       {screen}
       {pendingRoleSwitch ? (
-        // Frame 61 (Z11-14): over the trainee screen, a coach link asks first.
+        // Frame 61 (Z11-14) and a coach push (Z12-49): over the trainee
+        // screen, a coach link or push asks first (TM-08c sheet).
         <SwitchRoleSheet
           visible
           targetRole={pendingRoleSwitch.targetRole}
-          subject={coachLinkSubject(pendingRoleSwitch.linkKind)}
+          subject={
+            pendingRoleSwitch.pushType
+              ? coachPushSubject(pendingRoleSwitch.pushType)
+              : coachLinkSubject(pendingRoleSwitch.linkKind)
+          }
           onCancel={cancelRoleSwitch}
           onSwitch={() => {
             void confirmRoleSwitch();
@@ -87,6 +99,16 @@ export function AppRouter() {
         />
       ) : null}
     </NoticeHost>
+  );
+}
+
+function LoadingView() {
+  const theme = useTheme();
+  const styles = useStyles();
+  return (
+    <View style={styles.loading} accessibilityLabel="Loading">
+      <ActivityIndicator size="large" color={theme.colors.brand} />
+    </View>
   );
 }
 
@@ -115,11 +137,11 @@ function routeScreen(current: Exclude<AppRoute, { name: "loading" }>) {
   }
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   loading: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.background,
+    backgroundColor: t.colors.bg,
   },
-});
+}));
