@@ -1,0 +1,66 @@
+{
+  "result": "mean screenshot luminance: light 0.822 (11), dark — (0)",
+  "light": 0.822,
+  "dark": null,
+  "count": {
+    "light": 11,
+    "dark": 0
+  },
+  "shots": [
+    {
+      "file": "TM-04a-light-ios.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "TM-04d-light-ios.png",
+      "theme": "light",
+      "luma": 0.744
+    },
+    {
+      "file": "TM-04e-light-ios.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "TM-04f-light-ios.png",
+      "theme": "light",
+      "luma": 0.945
+    },
+    {
+      "file": "TM-04j-light-ios.png",
+      "theme": "light",
+      "luma": 0.699
+    },
+    {
+      "file": "TM-04k-light-ios.png",
+      "theme": "light",
+      "luma": 0.877
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.803
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "review-sheet-light-ios.png",
+      "theme": "light",
+      "luma": 0.723
+    },
+    {
+      "file": "review-sheet-nudge-light-ios.png",
+      "theme": "light",
+      "luma": 0.663
+    },
+    {
+      "file": "review-sheet-resolved-light-ios.png",
+      "theme": "light",
+      "luma": 0.778
+    }
+  ]
+}
