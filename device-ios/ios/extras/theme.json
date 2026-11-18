@@ -1,0 +1,181 @@
+{
+  "result": "mean screenshot luminance: light 0.915 (17), dark 0.237 (17)",
+  "light": 0.915,
+  "dark": 0.237,
+  "count": {
+    "light": 17,
+    "dark": 17
+  },
+  "shots": [
+    {
+      "file": "W-02-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "W-02-light-ios.png",
+      "theme": "light",
+      "luma": 0.961
+    },
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.143
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    },
+    {
+      "file": "W-03b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.135
+    },
+    {
+      "file": "W-03b-light-ios.png",
+      "theme": "light",
+      "luma": 0.958
+    },
+    {
+      "file": "W-04-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.15
+    },
+    {
+      "file": "W-04-light-ios.png",
+      "theme": "light",
+      "luma": 0.935
+    },
+    {
+      "file": "W-05a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.154
+    },
+    {
+      "file": "W-05a-light-ios.png",
+      "theme": "light",
+      "luma": 0.907
+    },
+    {
+      "file": "W-05b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.172
+    },
+    {
+      "file": "W-05b-light-ios.png",
+      "theme": "light",
+      "luma": 0.912
+    },
+    {
+      "file": "W-08-light-ios.png",
+      "theme": "light",
+      "luma": 0.95
+    },
+    {
+      "file": "W-12-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "W-13-light-ios.png",
+      "theme": "light",
+      "luma": 0.704
+    },
+    {
+      "file": "W-16-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.137
+    },
+    {
+      "file": "W-16-light-ios.png",
+      "theme": "light",
+      "luma": 0.759
+    },
+    {
+      "file": "W-20-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.14
+    },
+    {
+      "file": "W-26-light-ios.png",
+      "theme": "light",
+      "luma": 0.95
+    },
+    {
+      "file": "W-27-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.935
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-assertCondition-Minimise_workout-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "step-015-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "step-017-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.134
+    },
+    {
+      "file": "step-019-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.135
+    },
+    {
+      "file": "step-042-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.134
+    },
+    {
+      "file": "step-043-scrollUntilVisible-Log_workoutStart_work-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.134
+    },
+    {
+      "file": "step-044-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.135
+    },
+    {
+      "file": "step-045-scrollUntilVisible-Log_workoutStart_work-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.135
+    },
+    {
+      "file": "step-098-tapOnElement-Set__0-9__skipped-light-ios.png",
+      "theme": "light",
+      "luma": 0.949
+    },
+    {
+      "file": "z12-45-discarded-day-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.177
+    }
+  ]
+}

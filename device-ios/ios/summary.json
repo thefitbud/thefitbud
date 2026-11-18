@@ -1,0 +1,310 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 5 of 8 flows failed",
+    "dark: 3 of 8 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F03-first-workout.yaml",
+    "flows/v3/F04-plan-deviation.yaml",
+    "flows/v3/F05-exercise-detail-rest.yaml",
+    "flows/v3/F06-interruptions.yaml",
+    "flows/v3/F06b-interruptions-offline.yaml",
+    "flows/v3/F06c-interruptions-end.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 3,
+      "failed": 5,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible"
+        },
+        {
+          "flow": "F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)",
+          "message": "Element not found: Text matching regex: Set [0-9]+, skipped.*, Index: 0"
+        },
+        {
+          "flow": "F06 Interruptions, part 1 (minimise, kill and resume, pause, discard confirm)",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible"
+        },
+        {
+          "flow": "F06 Interruptions, part 2 (offline mid-workout, W-20)",
+          "message": "Assertion is false: \"Minimise workout\" is visible"
+        },
+        {
+          "flow": "F06 Interruptions, part 3 (back online; light finishes early, dark discards)",
+          "message": "Assertion is false: \"Minimise workout\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 5,
+      "failed": 3,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)",
+          "message": "No visible element found: \"Log workout|Start workout\""
+        },
+        {
+          "flow": "F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)",
+          "message": "No visible element found: \"Log workout|Start workout\""
+        },
+        {
+          "flow": "F06 Interruptions, part 1 (minimise, kill and resume, pause, discard confirm)",
+          "message": "No visible element found: \"Log workout|Start workout\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 117 s",
+      "mode": "cache-hit",
+      "seconds": 117,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.915 (17), dark 0.237 (17)",
+      "light": 0.915,
+      "dark": 0.237,
+      "count": {
+        "light": 17,
+        "dark": 17
+      },
+      "shots": [
+        {
+          "file": "W-02-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.139
+        },
+        {
+          "file": "W-02-light-ios.png",
+          "theme": "light",
+          "luma": 0.961
+        },
+        {
+          "file": "W-03-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.143
+        },
+        {
+          "file": "W-03-light-ios.png",
+          "theme": "light",
+          "luma": 0.955
+        },
+        {
+          "file": "W-03b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "W-03b-light-ios.png",
+          "theme": "light",
+          "luma": 0.958
+        },
+        {
+          "file": "W-04-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.15
+        },
+        {
+          "file": "W-04-light-ios.png",
+          "theme": "light",
+          "luma": 0.935
+        },
+        {
+          "file": "W-05a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.154
+        },
+        {
+          "file": "W-05a-light-ios.png",
+          "theme": "light",
+          "luma": 0.907
+        },
+        {
+          "file": "W-05b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.172
+        },
+        {
+          "file": "W-05b-light-ios.png",
+          "theme": "light",
+          "luma": 0.912
+        },
+        {
+          "file": "W-08-light-ios.png",
+          "theme": "light",
+          "luma": 0.95
+        },
+        {
+          "file": "W-12-light-ios.png",
+          "theme": "light",
+          "luma": 0.901
+        },
+        {
+          "file": "W-13-light-ios.png",
+          "theme": "light",
+          "luma": 0.704
+        },
+        {
+          "file": "W-16-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.137
+        },
+        {
+          "file": "W-16-light-ios.png",
+          "theme": "light",
+          "luma": 0.759
+        },
+        {
+          "file": "W-20-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.14
+        },
+        {
+          "file": "W-26-light-ios.png",
+          "theme": "light",
+          "luma": 0.95
+        },
+        {
+          "file": "W-27-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.935
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.947
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-004-assertCondition-Minimise_workout-light-ios.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "step-004-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.941
+        },
+        {
+          "file": "step-015-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+          "theme": "light",
+          "luma": 0.941
+        },
+        {
+          "file": "step-017-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.134
+        },
+        {
+          "file": "step-019-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "step-042-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.134
+        },
+        {
+          "file": "step-043-scrollUntilVisible-Log_workoutStart_work-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.134
+        },
+        {
+          "file": "step-044-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "step-045-scrollUntilVisible-Log_workoutStart_work-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "step-098-tapOnElement-Set__0-9__skipped-light-ios.png",
+          "theme": "light",
+          "luma": 0.949
+        },
+        {
+          "file": "z12-45-discarded-day-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.177
+        }
+      ]
+    }
+  ]
+}

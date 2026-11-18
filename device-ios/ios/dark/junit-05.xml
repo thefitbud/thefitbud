@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - BAC2CF7B-1016-4373-9C9A-E1D23B777835" tests="1" failures="1" time="163.175" timestamp="2026-11-18T23:18:44">
+    <testcase id="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" name="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" classname="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F05-exercise-detail-rest.yaml" time="162.922" timestamp="2026-11-18T23:18:44" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+      <failure>No visible element found: "Log workout|Start workout"</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

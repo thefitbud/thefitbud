@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="211.126" timestamp="2026-11-18T17:09:26">
+    <testcase id="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" name="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" classname="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F04-plan-deviation.yaml" time="211.065" timestamp="2026-11-18T17:09:26" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
