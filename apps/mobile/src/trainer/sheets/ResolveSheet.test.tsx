@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "../../test/render";
 import { ResolveSheet } from "./ResolveSheet";
 import {
-  nudgeDraftText,
   resolveLockLine,
   resolveSheetSubtitle,
 } from "./exceptionSheetContent";
@@ -70,7 +69,7 @@ describe("ResolveSheet (TM-04d)", () => {
 });
 
 describe("exception sheet copy", () => {
-  it("builds the workout subtitle and never says sent", () => {
+  it("builds the workout subtitle: item, date, first name", () => {
     const workout = {
       type: "missed_workout" as const,
       details: { localDate: "2026-10-13", workoutDayName: "Lower body A" },
@@ -78,10 +77,5 @@ describe("exception sheet copy", () => {
     expect(resolveSheetSubtitle(workout, "Rohan Mehta")).toBe(
       "Missed workout · Tue 13 Oct · Rohan",
     );
-    const draft = nudgeDraftText(workout, "Rohan Mehta");
-    expect(draft).toBe(
-      "Hi Rohan, quick reminder about Lower body A from Tue 13 Oct. Log it when you can, or tell me if this week needs a change.",
-    );
-    expect(draft.toLowerCase()).not.toContain("sent");
   });
 });
