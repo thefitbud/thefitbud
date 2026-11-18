@@ -16,7 +16,13 @@ vi.mock("./stage1-api", () => ({
   stage1Api: { login },
 }));
 
-const { AuthFlowError, signInWithOtpToken, signInWithPassword } = await import("./auth-flow");
+const {
+  ArchivedAccountError,
+  AuthFlowError,
+  signInWithOtpToken,
+  signInWithPassword,
+} = await import("./auth-flow");
+import { ApiClientError } from "@fitbud/api-client";
 
 function memoryStorage(): Storage {
   const map = new Map<string, string>();
@@ -123,5 +129,27 @@ describe("trainer sign-in passes the refresh token through (AU1c)", () => {
 
     expect(storage.length).toBe(0);
     expect(cancelTokenRefresh).toHaveBeenCalled();
+  });
+
+  it("keeps the session and throws ArchivedAccountError when /me is archived (Z12-30)", async () => {
+    me.mockRejectedValue(
+      new ApiClientError({
+        code: "ACCOUNT_ARCHIVED",
+        message: "This account is deleted. Sign in again and bring it back to continue.",
+        requestId: "r",
+        status: 403,
+        details: {
+          accountState: "archived",
+          purgeAfter: "2027-05-03T04:12:09.000Z",
+        },
+      }),
+    );
+
+    await expect(
+      signInWithOtpToken("id-token-archived", "rahul.coach@demo.fitbud.test"),
+    ).rejects.toBeInstanceOf(ArchivedAccountError);
+
+    expect(storage.getItem("fitbud.trainer.accessToken")).toBe("id-token-archived");
+    expect(cancelTokenRefresh).not.toHaveBeenCalled();
   });
 });

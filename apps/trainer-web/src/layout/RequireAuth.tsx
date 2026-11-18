@@ -2,6 +2,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorState } from "../components/StatePanels";
 import { OfflineBanner } from "../components/OfflineBanner";
+import { getStoredAccessToken } from "../lib/session";
 import { AppShell } from "./AppShell";
 
 export function RequireAuth() {
@@ -13,6 +14,20 @@ export function RequireAuth() {
       <main className="centered-status" aria-busy="true">
         <p>Loading session…</p>
       </main>
+    );
+  }
+
+  // No token left (e.g. RECENT_SIGN_IN_REQUIRED after reactivate): send to
+  // sign-in so the API message can show there. A token with a reachability
+  // error still gets the retry panel.
+  if (sessionError && !me && !getStoredAccessToken()) {
+    const next = `${location.pathname}${location.search}`;
+    return (
+      <Navigate
+        to={`/sign-in?next=${encodeURIComponent(next)}`}
+        replace
+        state={{ from: next }}
+      />
     );
   }
 
