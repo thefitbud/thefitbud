@@ -1,0 +1,111 @@
+{
+  "result": "mean screenshot luminance: light 0.862 (12), dark 0.219 (8)",
+  "light": 0.862,
+  "dark": 0.219,
+  "count": {
+    "light": 12,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "TR-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.922
+    },
+    {
+      "file": "TR-13a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13a-light-android.png",
+      "theme": "light",
+      "luma": 0.926
+    },
+    {
+      "file": "TR-13b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13b-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "TR-13c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-13c-light-android.png",
+      "theme": "light",
+      "luma": 0.702
+    },
+    {
+      "file": "TR-14a-light-android.png",
+      "theme": "light",
+      "luma": 0.896
+    },
+    {
+      "file": "TR-14c-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "TR-14d-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "TR-14g-light-android.png",
+      "theme": "light",
+      "luma": 0.89
+    },
+    {
+      "file": "Today-no-plan-dark-android.png",
+      "theme": "dark",
+      "luma": 0.104
+    },
+    {
+      "file": "Today-no-plan-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-004-runFlow-light-android.png",
+      "theme": "light",
+      "luma": 0.732
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workout.Needs_yo-light-android.png",
+      "theme": "light",
+      "luma": 0.732
+    },
+    {
+      "file": "step-018-scrollUntilVisible-StartCheck-in_sent-dark-android.png",
+      "theme": "dark",
+      "luma": 0.11
+    }
+  ]
+}

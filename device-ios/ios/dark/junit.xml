@@ -1,0 +1,32 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 90E28732-0E89-424D-89ED-D23C2EBD77D0" tests="5" failures="2" time="420.389" timestamp="2026-11-18T12:35:28">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="110.11" timestamp="2026-11-18T12:35:28" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="60.369" timestamp="2026-11-18T12:37:18" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" name="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" classname="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-46/1-no-plan.yaml" time="84.837" timestamp="2026-11-18T12:38:18" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+    <testcase id="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" name="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" classname="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F11-weekly-checkin.yaml" time="129.222" timestamp="2026-11-18T12:39:43" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+      <failure>No visible element found: "Start|Check-in sent"</failure>
+    </testcase>
+    <testcase id="F12 Progress and log weight (Z12-46)" name="F12 Progress and log weight (Z12-46)" classname="F12 Progress and log weight (Z12-46)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F12-progress-weight.yaml" time="35.468" timestamp="2026-11-18T12:41:53" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+      <failure>Unknown error</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

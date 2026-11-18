@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 90E28732-0E89-424D-89ED-D23C2EBD77D0" tests="5" failures="0" time="699.261" timestamp="2026-11-18T12:22:26">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="143.102" timestamp="2026-11-18T12:22:26" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="116.936" timestamp="2026-11-18T12:24:49" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" name="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" classname="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-46/1-no-plan.yaml" time="102.049" timestamp="2026-11-18T12:26:46" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+    <testcase id="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" name="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" classname="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F11-weekly-checkin.yaml" time="183.622" timestamp="2026-11-18T12:28:28" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+    <testcase id="F12 Progress and log weight (Z12-46)" name="F12 Progress and log weight (Z12-46)" classname="F12 Progress and log weight (Z12-46)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F12-progress-weight.yaml" time="153.346" timestamp="2026-11-18T12:31:31" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

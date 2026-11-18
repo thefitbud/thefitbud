@@ -1,0 +1,96 @@
+{
+  "result": "mean screenshot luminance: light 0.917 (11), dark 0.323 (6)",
+  "light": 0.917,
+  "dark": 0.323,
+  "count": {
+    "light": 11,
+    "dark": 6
+  },
+  "shots": [
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "TR-13a-light-ios.png",
+      "theme": "light",
+      "luma": 0.944
+    },
+    {
+      "file": "TR-13b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-13b-light-ios.png",
+      "theme": "light",
+      "luma": 0.907
+    },
+    {
+      "file": "TR-13c-light-ios.png",
+      "theme": "light",
+      "luma": 0.825
+    },
+    {
+      "file": "TR-14a-light-ios.png",
+      "theme": "light",
+      "luma": 0.911
+    },
+    {
+      "file": "TR-14c-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "TR-14d-light-ios.png",
+      "theme": "light",
+      "luma": 0.908
+    },
+    {
+      "file": "TR-14g-light-ios.png",
+      "theme": "light",
+      "luma": 0.905
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.947
+    },
+    {
+      "file": "step-003-launchApp-com.thefitbud.mobile.staging-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.522
+    },
+    {
+      "file": "step-018-scrollUntilVisible-StartCheck-in_sent-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    },
+    {
+      "file": "Today-no-plan-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "Today-no-plan-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    }
+  ]
+}
