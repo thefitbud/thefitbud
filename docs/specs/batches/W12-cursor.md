@@ -72,7 +72,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 
 | Source | Finding | Owner | Notes |
 |---|---|---|---|
-| Z12-43 | Device dispatch: use `GH_TOKEN=$GH_DISPATCH_TOKEN gh workflow run "Device gate"` only (never print/echo/commit the token). As of 18 Nov ~18:36 IST the secret is **not injected** into this VM (`GH_DISPATCH_TOKEN` unset); requested via environment setup. Retry dispatch for #490 once present. | this run | `-f flows='launch,z12-43' -f platforms=both -f themes=both -f extras=none` |
+| Z12-43 | Device gate [44310742712](https://github.com/thefitbud/thefitbud/actions/runs/44310742712) failed harness (`Results` + `<Screen`); fix on branch, re-dispatch with `GH_DISPATCH_TOKEN` | this run | `-f flows='launch,z12-43' -f platforms=both -f themes=both -f extras=none` |
 | Z12-43 | A meal logged from Today (Something different → Log it myself) returns to Today, which shows no TR-26f toast | Cursor (Today owner) | `TodayTab.tsx` is outside Z12-43's files; it can read `useMealSavedNotice` the way Diet does |
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
 | Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |

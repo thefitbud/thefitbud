@@ -7,6 +7,7 @@ import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { formatNumber } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
 import { Text } from "../components/Text";
 import { fetchMeFoodRecent } from "../lib/meFoodsApi";
@@ -336,9 +337,13 @@ function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved
     }
   }
 
+  // Picker / custom / ate-out use Screen so FoodSearchScreen.tsx keeps a
+  // `<Screen` for the Maestro harness (scripts/qa/mobile-build.test.mjs).
+  // The search list keeps its own sticky FoodNavHeader + tray outside Screen's
+  // ScrollView; Results stays a plain Text for the meal-log keyboard dismiss.
   if (mode.kind === "picker") {
     return (
-      <SafeAreaView style={styles.safe}>
+      <Screen v3 chrome="app" showHeader={false} title={mealName}>
         <FoodAmountPicker
           api={api}
           item={mode.item}
@@ -347,13 +352,13 @@ function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved
           onBack={() => setMode({ kind: "search" })}
           onAdd={addFromPicker}
         />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   if (mode.kind === "custom") {
     return (
-      <SafeAreaView style={styles.safe}>
+      <Screen v3 chrome="app" showHeader={false} title={mealName}>
         <CustomFoodScreen
           mealName={mealName}
           coachName={coachName ?? "Your coach"}
@@ -368,13 +373,13 @@ function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved
             <ErrorBanner message={error} />
           </View>
         ) : null}
-      </SafeAreaView>
+      </Screen>
     );
   }
 
   if (mode.kind === "ate_out") {
     return (
-      <SafeAreaView style={styles.safe}>
+      <Screen v3 chrome="app" showHeader={false} title={mealName}>
         <AteOutForm
           assignment={assignment}
           relationshipId={relationshipId}
@@ -383,7 +388,7 @@ function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved
           onCancel={() => setMode({ kind: "search" })}
           onSaved={onSaved}
         />
-      </SafeAreaView>
+      </Screen>
     );
   }
 
@@ -579,9 +584,10 @@ function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved
           </View>
         ) : results.length > 0 ? (
           <>
-            <Text variant="label" style={styles.groupLabel}>
-              Results
-            </Text>
+            {/* Plain RN Text: Maestro meal-log.yaml taps "Results" to dismiss the
+                keyboard (scripts/qa/mobile-build.test.mjs; no hideKeyboard).
+                The harness matches this exact `<Text style={styles.sml}>Results</Text>` form. */}
+            <Text style={styles.sml}>Results</Text>
             <View style={styles.group}>{results.map(renderItemRow)}</View>
           </>
         ) : (
@@ -696,6 +702,17 @@ const useStyles = createThemedStyles((t) => ({
     padding: 14,
   },
   groupLabel: { marginBottom: 6, marginLeft: 2, marginTop: 18 },
+  // Inert label Maestro taps to dismiss the keyboard (must stay a plain RN Text).
+  sml: {
+    color: t.colors.ink3,
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.4,
+    marginBottom: 6,
+    marginLeft: 2,
+    marginTop: 18,
+    textTransform: "uppercase",
+  },
   group: {
     backgroundColor: t.colors.card,
     borderColor: t.colors.line2,
