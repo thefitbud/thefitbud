@@ -34,11 +34,11 @@ tags:
     timeout: 30000
 # The check-in card sits low on Today. Its error state would say "CHK-"; it must not.
 # The device run seeds once and runs both themes, so the second theme finds the
-# check-in the first one sent: that state is asserted ("Check-in sent"), and TR-14a,
-# 14c and 14d come from the first theme only.
+# check-in the first one sent: that state is asserted (the card now reads "Next
+# check-in <day>"), and TR-14a, 14c and 14d come from the first theme only.
 - assertNotVisible: ".*CHK-.*"
 - scrollUntilVisible:
-    element: "Start|Check-in sent"
+    element: "Start|Next check-in.*"
     timeout: 30000
 - runFlow:
     when:
@@ -102,9 +102,9 @@ tags:
       - tapOn: "Done"
 - runFlow:
     when:
-      visible: "Check-in sent"
+      visible: "Next check-in.*"
     commands:
-      - takeScreenshot: TR-14d-card-already-sent
+      - takeScreenshot: TR-14-card-next-checkin
 
 # TR-14g: a reviewed check-in opens read-only, with the coach's reply.
 - tapOn: "Progress"
