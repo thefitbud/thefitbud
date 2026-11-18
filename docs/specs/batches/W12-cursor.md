@@ -17,7 +17,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 |---|---|---|---|---|---|---|
 | Z12-W12C-0 Ledger | — | merged | #488 | `893691c3` | this file | Cursor Auto |
 | Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | **merged** | #490 | `4aa28299` | Expo web CLOSE; device gate [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS (F08 soft-skips when seed already logged); harness Screen/Results + iOS center tap fixes | Cursor Auto |
-| Z12-30 Delete account (web) | #487 (Z12-29) | blocked | — | — | fresh proof = Firebase `auth_time` (W6 follow-up) | Cursor Auto (planned) |
+| Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **merged** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | `21792a2e` | fresh proof = password re-login bearer + `credentials:omit`; review fix D-W12C-21; cookie Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
 | Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 (Z12-45) | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
 | Z12-52 Coach logs a meal | Z12-43 ✅ + #486 (Z12-51) | blocked on #486 | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
@@ -34,6 +34,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | 18 Nov 2026 | `893691c3` | #488 (Z12-W12C-0) | Cursor ledger on main |
 | 18 Nov 2026 | `9e8c5ef9` | #489 (Claude W12-d36) | main moved while Z12-43 built; merged into #490 |
 | 18 Nov 2026 ~21:30 IST | `4aa28299` | #490 (Z12-43) | unblocks Z12-52 (still waits #486); device [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) |
+| 19 Nov 2026 ~00:00 IST | `21792a2e` | #492 (Z12-30) | delete/reactivate web; CI green; fresh review PASS after D-W12C-21 |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
@@ -58,6 +59,10 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | D-W12C-15 | Z12-43: Something different sheet wraps itself in `ThemeScope scheme="system"` and uses `flexGrow/flexShrink: 0` (not `flex: 0`) for sheet sub-screens | Expo-web capture: dark sheet stayed light; `flex: 0` collapsed TR-08b/c on web | Z12-43 capture follow-up |
 | D-W12C-16 | **Z12-53 handed to Cursor** (Firoz, D-W12-39). Start only after Cursor’s Z12-52 and Claude’s #486 (Z12-51) are on `main`. JS + server only; native → Z12-57 list. WorkspaceHeader D-W12-26; expo-push title/body for D-W12-38; F22–F28 self-setup state (D-W12-37). Post merge SHA promptly (Claude’s Z12-57 waits). Addendum labelled this **D-W12C-4**; that ID was already used by Z12-43, so recorded here. | Firoz addendum, 18 Nov 2026 (IST) | 18 Nov 2026 |
 | D-W12C-17 | **Model rule (replaces D-W12C-3):** only subscription-included models; default Cursor Auto for implement and review; cheapest included for docs/ledger/small follow-ups/Z12-59 prep; switch included model only after the default fails the same task twice; Model column = model actually used. Never Max / usage-billed / pay-per-request. Keep lean (no re-run without a code change; no one-commit CI churn; reviews scoped to the diff). Addendum labelled this **D-W12C-5**; that ID was already used by Z12-43, so recorded here. | Cursor usage high; Firoz, 18 Nov 2026 (IST) | 18 Nov 2026 |
+| D-W12C-18 | Z12-30: `auth-flow.ts` + `archivedAccount.ts` outside `files_owned` — keep the web session on `ACCOUNT_ARCHIVED` and throw `ArchivedAccountError` so Reactivate can call the API (clearing the session broke the AC). | Decide-and-note | Z12-30 |
+| D-W12C-19 | Z12-30: delete fresh proof uses a one-off `FitBudApiClient` with the password-login bearer and `credentials: "omit"` so the cookie cannot override `auth_time` (middleware prefers cookie `created_at`). Cookie-session Firebase `auth_time` on `createWebSession` stays a W6 API follow-up. | Spec gap + D-W6-31 | Z12-30 |
+| D-W12C-20 | Z12-30: reactivate footer shows "Signed in as {email}" from the frame; omit "archived Tue 3 Nov" (not in `accountReactivationCopy`). Colocated CSS files for the modal and reactivate shell. | Frame vs D-W12-6 copy | Z12-30 |
+| D-W12C-21 | Z12-30 review fix: `SignInPage` shows `sessionError`; `RequireAuth` sends token-less session errors to `/sign-in` (not the "Can't reach FitBud" retry panel) so `RECENT_SIGN_IN_REQUIRED` after reactivate matches mobile. | Fresh review #492 | Z12-30 |
 
 *(Add implementer decide-and-note choices here as they arise.)*
 
@@ -77,6 +82,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | Z12-43 | A meal logged from Today (Something different → Log it myself) returns to Today, which shows no TR-26f toast | Cursor (Today owner) | `TodayTab.tsx` is outside Z12-43's files; it can read `useMealSavedNotice` the way Diet does |
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
 | Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |
+| Z12-30 | Cookie session still uses `web_sessions.created_at` as authTime (API); UI avoids it for delete by bearer+omit. True Firebase `auth_time` on cookie sessions needs an API change outside `files_owned`. | W6 / API | do not weaken UI proof |
 
 *(Z12-58: Claude-owned-area findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
 

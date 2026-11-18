@@ -1,5 +1,6 @@
 import { ApiClientError } from "@fitbud/api-client";
 import type { MeResponse } from "@fitbud/contracts";
+import { archivedPurgeAfter } from "../auth/archivedAccount";
 import { apiClient, cancelTokenRefresh, scheduleTokenRefresh } from "./api";
 import {
   clearSession,
@@ -23,6 +24,19 @@ export class AuthFlowError extends Error {
   ) {
     super(message);
     this.code = code;
+  }
+}
+
+/**
+ * Z12-30: sign-in succeeded but `/me` is blocked because the account is
+ * archived. The web session must stay so Reactivate can call the API.
+ */
+export class ArchivedAccountError extends Error {
+  readonly purgeAfter: string;
+
+  constructor(purgeAfter: string) {
+    super("ACCOUNT_ARCHIVED");
+    this.purgeAfter = purgeAfter;
   }
 }
 
@@ -96,6 +110,11 @@ export async function establishTrainerSession(
   try {
     return await apiClient.me();
   } catch (err) {
+    const purgeAfter = archivedPurgeAfter(err);
+    if (purgeAfter) {
+      // Keep the cookie / bearer: reactivation needs this sign-in (D-W6-31).
+      throw new ArchivedAccountError(purgeAfter);
+    }
     cancelTokenRefresh();
     clearSession();
     throw mapLoginError(err);
@@ -117,7 +136,9 @@ export async function signInWithPassword(
       pickSessionRefresh(result),
     );
   } catch (err) {
-    if (err instanceof AuthFlowError) throw err;
+    if (err instanceof AuthFlowError || err instanceof ArchivedAccountError) {
+      throw err;
+    }
     throw mapLoginError(err);
   }
 }
@@ -130,7 +151,9 @@ export async function signInWithOtpToken(
   try {
     return await establishTrainerSession(token, identifier, refresh);
   } catch (err) {
-    if (err instanceof AuthFlowError) throw err;
+    if (err instanceof AuthFlowError || err instanceof ArchivedAccountError) {
+      throw err;
+    }
     throw mapLoginError(err);
   }
 }
