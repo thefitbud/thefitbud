@@ -12,7 +12,7 @@
 
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
-| Z12-W12C-0 Ledger | — | in progress | — | — | this file | lighter (docs) |
+| Z12-W12C-0 Ledger | — | in review (#488) | #488 | — | this file | lighter (docs) |
 | Z12-43 Manual food logging | #460 (Z12-42) | blocked | — | — | mocks TR-26a–f; finding 7 toast | strongest |
 | Z12-30 Delete account (web) | #487 (Z12-29) | blocked | — | — | fresh proof = Firebase `auth_time` (W6 follow-up) | lighter / sonnet |
 | Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | strongest |
@@ -25,7 +25,7 @@
 
 | When (IST) | SHA | Via | Notes |
 |---|---|---|---|
-| 18 Nov 2026 ~16:07 | `58ac1b11` | #470 (already on main at launch) | Cursor run base |
+| 18 Nov 2026 (launch ~16:07 IST; #470 merge was earlier that day) | `58ac1b11` | #470 (already on main at launch) | Cursor run base |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
@@ -65,4 +65,4 @@
 1. Every row in the task table is merged (or blocked only on Claude work still open), with PR + merge SHA filled.
 2. Z12-59 prep is in `docs/tasks/manual-steps.md` and this ledger is marked **ready for Z12-60**.
 3. Claude’s Z12-60 writes the W12 report; Cursor stops after the ready mark.
-)
+
