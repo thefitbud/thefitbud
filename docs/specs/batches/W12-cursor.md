@@ -16,11 +16,11 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
 | Z12-W12C-0 Ledger | — | merged | #488 | `893691c3` | this file | Cursor Auto |
-| Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | CI green; review PASS; waiting device | #490 | — | Expo web: TR-26a–f CLOSE both themes; TR-08a–c light CLOSE; dark GAP until re-capture after ThemeScope/flex fix (D-W12C-15). Device pending (Cursor token 403) | implement: Claude Opus 5.5; review: Claude Opus 5.5; captures: Claude Sonnet 5.5 |
+| Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | **merged** | #490 | `4aa28299` | Expo web CLOSE; device gate [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS (F08 soft-skips when seed already logged); harness Screen/Results + iOS center tap fixes | Cursor Auto |
 | Z12-30 Delete account (web) | #487 (Z12-29) | blocked | — | — | fresh proof = Firebase `auth_time` (W6 follow-up) | Cursor Auto (planned) |
 | Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 (Z12-45) | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
-| Z12-52 Coach logs a meal | Z12-43 + #486 (Z12-51) | blocked | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
+| Z12-52 Coach logs a meal | Z12-43 ✅ + #486 (Z12-51) | blocked on #486 | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
 | Z12-53 Trainer mobile v3 | Z12-52 + #486 (Z12-51); Z12-56/38/47 already on main | blocked | — | — | TM-01a–TM-10b; WorkspaceHeader (D-W12-26); F22–F28; expo-push title/body (D-W12-38); grade TM-13a/b | Cursor Auto (planned); review Auto |
 | Z12-58 Full device pass | Z12-57 (Claude) | blocked | — | — | F01–F29 + parity matrix + device checklist | Cursor Auto (planned) |
 | Z12-59 prep | after Z12-58 | blocked | — | — | SHA, migrations, commands, smoke in `docs/tasks/manual-steps.md`; then mark ready for Z12-60 and stop | Cursor Auto (planned) |
@@ -33,6 +33,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | 18 Nov 2026 | `4982d567` | #460 (Z12-42, Claude) | unblocks Z12-43; its branch starts here |
 | 18 Nov 2026 | `893691c3` | #488 (Z12-W12C-0) | Cursor ledger on main |
 | 18 Nov 2026 | `9e8c5ef9` | #489 (Claude W12-d36) | main moved while Z12-43 built; merged into #490 |
+| 18 Nov 2026 ~21:30 IST | `4aa28299` | #490 (Z12-43) | unblocks Z12-52 (still waits #486); device [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
@@ -72,7 +73,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 
 | Source | Finding | Owner | Notes |
 |---|---|---|---|
-| Z12-43 | Device re-dispatch [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) on soft-skip+center F08 (`e7fc5151`). Prior [44328495622](https://github.com/thefitbud/thefitbud/actions/runs/44328495622) FAIL both (`4 of 4 logged`) | this run | watching |
+| Z12-43 | Device [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS after soft-skip+center F08; prior fails were Progress mis-tap / `4 of 4 logged` | done | merged `4aa28299` |
 | Z12-43 | A meal logged from Today (Something different → Log it myself) returns to Today, which shows no TR-26f toast | Cursor (Today owner) | `TodayTab.tsx` is outside Z12-43's files; it can read `useMealSavedNotice` the way Diet does |
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
 | Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |
