@@ -15,7 +15,7 @@ tags:
 # theme uses its own persona and the second theme starts from an active
 # account: siddharth.yearly (light), divya.wedding (dark). Neither is used by
 # the launch smoke flows. Env: DEVICE_THEME, QA_PASSWORD.
-- evalScript: ${output.deleteEmail = DEVICE_THEME === 'dark' ? 'divya.wedding@demo.fitbud.test' : 'siddharth.yearly@demo.fitbud.test'}
+- evalScript: "${output.deleteEmail = DEVICE_THEME === 'dark' ? 'divya.wedding@demo.fitbud.test' : 'siddharth.yearly@demo.fitbud.test'}"
 - launchApp:
     clearState: true
     clearKeychain: true
