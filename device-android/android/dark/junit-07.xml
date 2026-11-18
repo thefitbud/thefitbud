@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="1" time="46.095" timestamp="2026-11-18T02:42:37">
+    <testcase id="F06 Interruptions, part 2 (offline mid-workout, W-20)" name="F06 Interruptions, part 2 (offline mid-workout, W-20)" classname="F06 Interruptions, part 2 (offline mid-workout, W-20)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F06b-interruptions-offline.yaml" time="46.076" timestamp="2026-11-18T02:42:37" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45, device-offline"/>
+      </properties>
+      <failure>Assertion is false: "Set [0-9]+, .* logged.*" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

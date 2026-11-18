@@ -1,0 +1,270 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 2 of 8 flows failed",
+    "dark: 6 of 8 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F03-first-workout.yaml",
+    "flows/v3/F04-plan-deviation.yaml",
+    "flows/v3/F05-exercise-detail-rest.yaml",
+    "flows/v3/F06-interruptions.yaml",
+    "flows/v3/F06b-interruptions-offline.yaml",
+    "flows/v3/F06c-interruptions-end.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 6,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)",
+          "message": "Assertion is false: \"Set [0-9]+, skipped.*\" is visible"
+        },
+        {
+          "flow": "F06 Interruptions, part 2 (offline mid-workout, W-20)",
+          "message": "Assertion is false: \"Rest, [0-9]+:[0-9]{2} left\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 2,
+      "failed": 6,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)",
+          "message": "Assertion is false: \"[0-9]+ of [0-9]+ sets|Log workout|Start workout|Pick up where you left off\\?\" is visible"
+        },
+        {
+          "flow": "F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)",
+          "message": "Assertion is false: \"[0-9]+ of [0-9]+ sets|Log workout|Start workout|Pick up where you left off\\?\" is visible"
+        },
+        {
+          "flow": "F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)",
+          "message": "Assertion is false: \"[0-9]+ of [0-9]+ sets|Log workout|Start workout|Pick up where you left off\\?\" is visible"
+        },
+        {
+          "flow": "F06 Interruptions, part 1 (minimise, kill and resume, pause, discard confirm)",
+          "message": "Assertion is false: \"[0-9]+ of [0-9]+ sets|Log workout|Start workout|Pick up where you left off\\?\" is visible"
+        },
+        {
+          "flow": "F06 Interruptions, part 2 (offline mid-workout, W-20)",
+          "message": "Assertion is false: \"Minimise workout\" is visible"
+        },
+        {
+          "flow": "F06 Interruptions, part 3 (back online; light finishes early, dark discards)",
+          "message": "Assertion is false: \"Minimise workout\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 112 s",
+      "mode": "cache-hit",
+      "seconds": 112,
+      "cacheKey": "device-native-ios-258724d35943cb701a21c966ec4ea9408696ee97"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.901 (20), dark 0.434 (6)",
+      "light": 0.901,
+      "dark": 0.434,
+      "count": {
+        "light": 20,
+        "dark": 6
+      },
+      "shots": [
+        {
+          "file": "W-02-light-ios.png",
+          "theme": "light",
+          "luma": 0.961
+        },
+        {
+          "file": "W-03-light-ios.png",
+          "theme": "light",
+          "luma": 0.955
+        },
+        {
+          "file": "W-03b-light-ios.png",
+          "theme": "light",
+          "luma": 0.958
+        },
+        {
+          "file": "W-04-light-ios.png",
+          "theme": "light",
+          "luma": 0.935
+        },
+        {
+          "file": "W-05a-light-ios.png",
+          "theme": "light",
+          "luma": 0.907
+        },
+        {
+          "file": "W-05b-light-ios.png",
+          "theme": "light",
+          "luma": 0.919
+        },
+        {
+          "file": "W-08-light-ios.png",
+          "theme": "light",
+          "luma": 0.95
+        },
+        {
+          "file": "W-12-light-ios.png",
+          "theme": "light",
+          "luma": 0.901
+        },
+        {
+          "file": "W-14-light-ios.png",
+          "theme": "light",
+          "luma": 0.907
+        },
+        {
+          "file": "W-15-light-ios.png",
+          "theme": "light",
+          "luma": 0.659
+        },
+        {
+          "file": "W-16-light-ios.png",
+          "theme": "light",
+          "luma": 0.759
+        },
+        {
+          "file": "W-18-light-ios.png",
+          "theme": "light",
+          "luma": 0.655
+        },
+        {
+          "file": "W-19-light-ios.png",
+          "theme": "light",
+          "luma": 0.95
+        },
+        {
+          "file": "W-26-light-ios.png",
+          "theme": "light",
+          "luma": 0.951
+        },
+        {
+          "file": "W-27-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.947
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.947
+        },
+        {
+          "file": "step-004-assertCondition-Minimise_workout-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.177
+        },
+        {
+          "file": "step-007-assertCondition-Rest___0-9_0-9_2__lef-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "step-016-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.178
+        },
+        {
+          "file": "step-037-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.178
+        },
+        {
+          "file": "step-038-assertCondition-_0-9__of__0-9__setsLog-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.177
+        },
+        {
+          "file": "step-050-assertCondition-Set__0-9__skipped-light-ios.png",
+          "theme": "light",
+          "luma": 0.957
+        },
+        {
+          "file": "z12-45-finished-early-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.9
+        }
+      ]
+    }
+  ]
+}

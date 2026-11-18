@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 7DD922DB-5A91-4DEB-9277-A0162612EADC" tests="1" failures="0" time="181.624" timestamp="2026-11-18T08:02:27">
+    <testcase id="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" name="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" classname="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F03-first-workout.yaml" time="181.393" timestamp="2026-11-18T08:02:27" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

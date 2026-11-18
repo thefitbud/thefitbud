@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="1" time="248.613" timestamp="2026-11-18T02:12:04">
+    <testcase id="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" name="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" classname="F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F03-first-workout.yaml" time="248.575" timestamp="2026-11-18T02:12:04" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+      <failure>Assertion is false: "Rest done" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,196 @@
+{
+  "result": "mean screenshot luminance: light 0.863 (18), dark 0.223 (19)",
+  "light": 0.863,
+  "dark": 0.223,
+  "count": {
+    "light": 18,
+    "dark": 19
+  },
+  "shots": [
+    {
+      "file": "W-02-dark-android.png",
+      "theme": "dark",
+      "luma": 0.135
+    },
+    {
+      "file": "W-02-light-android.png",
+      "theme": "light",
+      "luma": 0.939
+    },
+    {
+      "file": "W-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "W-03b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "W-04-dark-android.png",
+      "theme": "dark",
+      "luma": 0.149
+    },
+    {
+      "file": "W-04-light-android.png",
+      "theme": "light",
+      "luma": 0.915
+    },
+    {
+      "file": "W-05a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.152
+    },
+    {
+      "file": "W-05a-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "W-05b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.17
+    },
+    {
+      "file": "W-08-dark-android.png",
+      "theme": "dark",
+      "luma": 0.142
+    },
+    {
+      "file": "W-08-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "W-09-light-android.png",
+      "theme": "light",
+      "luma": 0.727
+    },
+    {
+      "file": "W-13-light-android.png",
+      "theme": "light",
+      "luma": 0.693
+    },
+    {
+      "file": "W-14-dark-android.png",
+      "theme": "dark",
+      "luma": 0.212
+    },
+    {
+      "file": "W-14-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "W-15-dark-android.png",
+      "theme": "dark",
+      "luma": 0.094
+    },
+    {
+      "file": "W-16-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "W-18-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "W-18-light-android.png",
+      "theme": "light",
+      "luma": 0.658
+    },
+    {
+      "file": "W-19-dark-android.png",
+      "theme": "dark",
+      "luma": 0.144
+    },
+    {
+      "file": "W-20-light-android.png",
+      "theme": "light",
+      "luma": 0.932
+    },
+    {
+      "file": "W-26-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "W-27-dark-android.png",
+      "theme": "dark",
+      "luma": 0.068
+    },
+    {
+      "file": "W-27-light-android.png",
+      "theme": "light",
+      "luma": 0.932
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "step-010-assertCondition-Set__0-9__._logged-dark-android.png",
+      "theme": "dark",
+      "luma": 0.133
+    },
+    {
+      "file": "step-052-assertCondition-Set__0-9__skipped-dark-android.png",
+      "theme": "dark",
+      "luma": 0.138
+    },
+    {
+      "file": "step-063-assertCondition-_kg____0-9_0-9__reps-light-android.png",
+      "theme": "light",
+      "luma": 0.932
+    },
+    {
+      "file": "step-090-assertCondition-Set__0-9__._logged-light-android.png",
+      "theme": "light",
+      "luma": 0.935
+    },
+    {
+      "file": "step-100-assertCondition-Rest_done-light-android.png",
+      "theme": "light",
+      "luma": 0.936
+    },
+    {
+      "file": "step-122-assertCondition-Message_preview-light-android.png",
+      "theme": "light",
+      "luma": 0.738
+    },
+    {
+      "file": "z12-45-ask-coach-light-android.png",
+      "theme": "light",
+      "luma": 0.738
+    },
+    {
+      "file": "z12-45-discarded-day-dark-android.png",
+      "theme": "dark",
+      "luma": 0.176
+    },
+    {
+      "file": "z12-45-finished-early-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.884
+    }
+  ]
+}

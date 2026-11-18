@@ -1,0 +1,141 @@
+{
+  "result": "mean screenshot luminance: light 0.901 (20), dark 0.434 (6)",
+  "light": 0.901,
+  "dark": 0.434,
+  "count": {
+    "light": 20,
+    "dark": 6
+  },
+  "shots": [
+    {
+      "file": "W-02-light-ios.png",
+      "theme": "light",
+      "luma": 0.961
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    },
+    {
+      "file": "W-03b-light-ios.png",
+      "theme": "light",
+      "luma": 0.958
+    },
+    {
+      "file": "W-04-light-ios.png",
+      "theme": "light",
+      "luma": 0.935
+    },
+    {
+      "file": "W-05a-light-ios.png",
+      "theme": "light",
+      "luma": 0.907
+    },
+    {
+      "file": "W-05b-light-ios.png",
+      "theme": "light",
+      "luma": 0.919
+    },
+    {
+      "file": "W-08-light-ios.png",
+      "theme": "light",
+      "luma": 0.95
+    },
+    {
+      "file": "W-12-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "W-14-light-ios.png",
+      "theme": "light",
+      "luma": 0.907
+    },
+    {
+      "file": "W-15-light-ios.png",
+      "theme": "light",
+      "luma": 0.659
+    },
+    {
+      "file": "W-16-light-ios.png",
+      "theme": "light",
+      "luma": 0.759
+    },
+    {
+      "file": "W-18-light-ios.png",
+      "theme": "light",
+      "luma": 0.655
+    },
+    {
+      "file": "W-19-light-ios.png",
+      "theme": "light",
+      "luma": 0.95
+    },
+    {
+      "file": "W-26-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "W-27-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.947
+    },
+    {
+      "file": "step-004-assertCondition-Minimise_workout-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.177
+    },
+    {
+      "file": "step-007-assertCondition-Rest___0-9_0-9_2__lef-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "step-016-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.178
+    },
+    {
+      "file": "step-037-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.178
+    },
+    {
+      "file": "step-038-assertCondition-_0-9__of__0-9__setsLog-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.177
+    },
+    {
+      "file": "step-050-assertCondition-Set__0-9__skipped-light-ios.png",
+      "theme": "light",
+      "luma": 0.957
+    },
+    {
+      "file": "z12-45-finished-early-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    }
+  ]
+}
