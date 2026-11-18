@@ -1,0 +1,199 @@
+{
+  "platform": "android",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 9s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 9s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 45 s",
+      "mode": "cache-hit",
+      "seconds": 45,
+      "cacheKey": "device-native-android-fd74f15532d71bc3af990090855e03fb1c84555b"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.794 (9), dark 0.426 (9)",
+      "light": 0.794,
+      "dark": 0.426,
+      "count": {
+        "light": 9,
+        "dark": 9
+      },
+      "shots": [
+        {
+          "file": "TM-03j-dark-android.png",
+          "theme": "dark",
+          "luma": 0.299
+        },
+        {
+          "file": "TM-03j-light-android.png",
+          "theme": "light",
+          "luma": 0.663
+        },
+        {
+          "file": "TM-04b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.302
+        },
+        {
+          "file": "TM-04b-light-android.png",
+          "theme": "light",
+          "luma": 0.701
+        },
+        {
+          "file": "TM-04c-dark-android.png",
+          "theme": "dark",
+          "luma": 0.302
+        },
+        {
+          "file": "TM-04c-light-android.png",
+          "theme": "light",
+          "luma": 0.701
+        },
+        {
+          "file": "TM-04n-dark-android.png",
+          "theme": "dark",
+          "luma": 0.264
+        },
+        {
+          "file": "TM-04n-light-android.png",
+          "theme": "light",
+          "luma": 0.739
+        },
+        {
+          "file": "TM-04o-dark-android.png",
+          "theme": "dark",
+          "luma": 0.296
+        },
+        {
+          "file": "TM-04o-light-android.png",
+          "theme": "light",
+          "luma": 0.708
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.917
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.917
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        },
+        {
+          "file": "step-057-assertCondition-Nudge_sent-dark-android.png",
+          "theme": "dark",
+          "luma": 0.264
+        },
+        {
+          "file": "step-057-assertCondition-Nudge_sent-light-android.png",
+          "theme": "light",
+          "luma": 0.895
+        },
+        {
+          "file": "step-059-assertCondition-You_nudged_._again_tomor-light-android.png",
+          "theme": "light",
+          "luma": 0.895
+        },
+        {
+          "file": "step-144-assertCondition-PREVIEW___TAP_TO_EDIT-dark-android.png",
+          "theme": "dark",
+          "luma": 0.262
+        }
+      ]
+    }
+  ]
+}

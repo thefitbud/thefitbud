@@ -1,0 +1,7 @@
+{
+  "platform": "ios",
+  "target": "notification",
+  "match": "FitBud",
+  "outcome": "not-found",
+  "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+}

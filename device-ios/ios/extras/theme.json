@@ -1,0 +1,101 @@
+{
+  "result": "mean screenshot luminance: light 0.845 (10), dark 0.453 (8)",
+  "light": 0.845,
+  "dark": 0.453,
+  "count": {
+    "light": 10,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "TM-03j-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.318
+    },
+    {
+      "file": "TM-03j-light-ios.png",
+      "theme": "light",
+      "luma": 0.696
+    },
+    {
+      "file": "TM-04b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.302
+    },
+    {
+      "file": "TM-04b-light-ios.png",
+      "theme": "light",
+      "luma": 0.722
+    },
+    {
+      "file": "TM-04c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.302
+    },
+    {
+      "file": "TM-04c-light-ios.png",
+      "theme": "light",
+      "luma": 0.723
+    },
+    {
+      "file": "TM-04n-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.263
+    },
+    {
+      "file": "TM-04n-light-ios.png",
+      "theme": "light",
+      "luma": 0.763
+    },
+    {
+      "file": "TM-04o-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.297
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.935
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.935
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "step-018-assertCondition-Loading-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "step-057-assertCondition-Nudge_sent-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.263
+    },
+    {
+      "file": "step-057-assertCondition-Nudge_sent-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "step-059-assertCondition-You_nudged_._again_tomor-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "step-121-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-124-assertCondition-PREVIEW___TAP_TO_EDIT-light-ios.png",
+      "theme": "light",
+      "luma": 0.928
+    }
+  ]
+}

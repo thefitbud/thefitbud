@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="0" time="259.878" timestamp="2026-11-18T16:38:37">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="51.624" timestamp="2026-11-18T16:38:37" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="40.833" timestamp="2026-11-18T16:39:29" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F20 Trainer nudges a client as a FitBud push (Z12-50)" name="F20 Trainer nudges a client as a FitBud push (Z12-50)" classname="F20 Trainer nudges a client as a FitBud push (Z12-50)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F20-triage-nudge.yaml" time="167.383" timestamp="2026-11-18T16:40:10" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-50"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
