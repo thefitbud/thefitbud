@@ -54,6 +54,7 @@ import { MoreSheet } from "./sheets/MoreSheet";
 import { NoteSheet, type NoteSaveInput } from "./sheets/NoteSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
+import { isAlreadyResolved, isResolveConflict } from "./sheets/resolveRecovery";
 import { firstNameOf } from "./sheets/exceptionSheetContent";
 import {
   BACK_TO_NEEDS_YOU,
@@ -320,6 +321,15 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
       if (isNetworkFailure(err)) {
         setResolveOpen(false);
         setOffline(true);
+      } else if (
+        isResolveConflict(err) &&
+        (await isAlreadyResolved((id) => api.getException(id), exceptionId))
+      ) {
+        // A lost success: the item is resolved, so this is success, not an error.
+        resolveKey.current = null;
+        setResolvedOutcome(input.outcome);
+        setResolveOpen(false);
+        await load();
       } else {
         if (!(err instanceof ApiClientError)) {
           reportError("trainer.exception.resolve", err);

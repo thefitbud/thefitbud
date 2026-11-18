@@ -10,6 +10,7 @@ import {
   attentionGroupsResponseSchema,
   type AttentionGroupsResponse,
 } from "@fitbud/contracts";
+import { ApiClientError } from "@fitbud/api-client";
 import { act, fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
 import { NoticeHost } from "../../components/notice/NoticeHost";
 import { createNoticeQueue, type NoticeQueue } from "../../components/notice/noticeQueue";
@@ -219,6 +220,108 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     await screen.findByText("Resolved by you · just now · Talked to client");
     expect(screen.queryByTestId("review-sheet-undo")).toBeNull();
     expect(screen.queryByTestId("review-sheet-resolve")).toBeNull();
+  });
+
+  it("keeps the same resolve key on a retry after a failed resolve, and never re-marks reviewed", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    fireEvent.click(screen.getByTestId("review-sheet-resolve"));
+    fireEvent.click(await screen.findByText("Talked to Rohan"));
+    api.acknowledgeException.mockResolvedValue({});
+    api.resolveException.mockRejectedValueOnce(
+      new ApiClientError({
+        code: "INTERNAL_ERROR",
+        message: "An unexpected server error occurred.",
+        requestId: "r",
+        status: 500,
+      }),
+    );
+    api.resolveException.mockResolvedValueOnce({});
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    await screen.findByText("An unexpected server error occurred.");
+    expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
+    expect(api.resolveException).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    await screen.findByText("All 1 resolved for Rohan");
+    // Mark reviewed already succeeded: not sent again. Resolve retries on its key.
+    expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
+    expect(api.resolveException).toHaveBeenCalledTimes(2);
+    const resolveKeys = api.resolveException.mock.calls.map((call) => call[2]);
+    expect(resolveKeys[0]).toEqual(expect.any(String));
+    expect(resolveKeys[1]).toBe(resolveKeys[0]);
+    expect(resolveKeys[0]).not.toBe(api.acknowledgeException.mock.calls[0]![2]);
+    const [ackOrder] = api.acknowledgeException.mock.invocationCallOrder;
+    const [firstResolve, secondResolve] = api.resolveException.mock.invocationCallOrder;
+    expect(ackOrder!).toBeLessThan(firstResolve!);
+    expect(firstResolve!).toBeLessThan(secondResolve!);
+  });
+
+  it("a lost success is success: 409 on retry and the exception re-fetches as resolved", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    fireEvent.click(screen.getByTestId("review-sheet-resolve"));
+    fireEvent.click(await screen.findByText("Talked to Rohan"));
+    api.acknowledgeException.mockResolvedValue({});
+    api.resolveException.mockRejectedValue(
+      new ApiClientError({
+        code: "INVALID_TRANSITION",
+        message: "Exception must be acknowledged before it can be resolved.",
+        requestId: "r",
+        status: 409,
+      }),
+    );
+    api.getException.mockResolvedValue({
+      ...exceptionDetail("missed_workout", "workout_assignment", "resolved"),
+      resolvedAt: "2026-11-11T01:00:00.000Z",
+      closedReason: "trainer",
+    });
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    await screen.findByText("All 1 resolved for Rohan");
+    expect(
+      screen.queryByText("Exception must be acknowledged before it can be resolved."),
+    ).toBeNull();
+  });
+
+  it("a 409 for an item that is not resolved keeps the API's error", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    fireEvent.click(screen.getByTestId("review-sheet-resolve"));
+    fireEvent.click(await screen.findByText("Talked to Rohan"));
+    api.acknowledgeException.mockResolvedValue({});
+    api.resolveException.mockRejectedValue(
+      new ApiClientError({
+        code: "IDEMPOTENCY_KEY_REUSE",
+        message: "Idempotency key was reused with a different request.",
+        requestId: "r",
+        status: 409,
+      }),
+    );
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    await screen.findByText("Idempotency key was reused with a different request.");
+    expect(screen.queryByText("All 1 resolved for Rohan")).toBeNull();
+  });
+
+  it("a repeated in-sheet toast line is a new toast request, not a no-op", async () => {
+    loadOk();
+    const showToast = vi.spyOn(queue, "showToast");
+    api.createTrainerNote.mockResolvedValue({});
+    mount();
+    await openSheet();
+    for (let n = 0; n < 2; n += 1) {
+      fireEvent.click(screen.getByTestId("review-sheet-more"));
+      fireEvent.click(await screen.findByTestId("more-add-note"));
+      fireEvent.change(await screen.findByLabelText("Note"), {
+        target: { value: `Note ${n}` },
+      });
+      fireEvent.click(screen.getByTestId("note-save"));
+      await waitFor(() => expect(api.createTrainerNote).toHaveBeenCalledTimes(n + 1));
+    }
+    const shown = () =>
+      showToast.mock.calls.filter((call) => call[0].message === "Shown on Rohan's Today");
+    await waitFor(() => expect(shown()).toHaveLength(2));
   });
 });
 

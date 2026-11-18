@@ -203,6 +203,37 @@ describe("ExceptionReviewScreen states", () => {
     await screen.findByText("Exception must be acknowledged before it can be resolved.");
   });
 
+  it("a lost success is success: 409 INVALID_TRANSITION and a re-fetch showing resolved", async () => {
+    api.getException.mockResolvedValueOnce(exception({ status: "acknowledged" }));
+    api.getClientWorkspace.mockResolvedValue(workspace(null));
+    renderScreen();
+    await screen.findByText("Kavya Nair");
+    fireEvent.click(button("Resolve"));
+    await screen.findByText("Note (only you)");
+    fireEvent.click(screen.getByText("Talked to Kavya"));
+    api.resolveException.mockRejectedValue(
+      new ApiClientError({
+        code: "INVALID_TRANSITION",
+        message: "Exception must be acknowledged before it can be resolved.",
+        requestId: "r",
+        status: 409,
+      }),
+    );
+    api.getException.mockResolvedValue(
+      exception({
+        status: "resolved",
+        resolvedAt: "2026-10-17T04:35:00.000Z",
+        closedReason: "trainer",
+      }),
+    );
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    await screen.findByText(/^Resolved by you · .* · Talked to Kavya\.$/);
+    expect(
+      screen.queryByText("Exception must be acknowledged before it can be resolved."),
+    ).toBeNull();
+    expect(screen.queryByTestId("exception-resolve")).toBeNull();
+  });
+
   it("TM-04i: an ended client is read only: banner, Ended chip, no actions or ⋯", async () => {
     api.getException.mockResolvedValue(exception({ status: "acknowledged" }));
     api.getClientWorkspace.mockResolvedValue(workspace("2026-10-03T12:30:00.000Z"));

@@ -37,6 +37,7 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { StatusChip } from "../components/StatusChip";
 import { SwipeActionRow } from "../components/SwipeActionRow";
 import { Snackbar } from "../components/Snackbar";
+import { isAlreadyResolved, isResolveConflict } from "./sheets/resolveRecovery";
 import { initialsFromName } from "../components/m2";
 import {
   acknowledgeAttentionItem,
@@ -203,7 +204,13 @@ export function AttentionTab({
   const [subSheetError, setSubSheetError] = useState<string | null>(null);
   // A toast raised while the review sheet is up draws inside the sheet: the
   // screen's footer is under the sheet's modal there.
-  const [sheetToast, setSheetToast] = useState<string | null>(null);
+  const [sheetToast, setSheetToastText] = useState<string | null>(null);
+  // Same per-request key as the main toast, so a repeated line shows again.
+  const [sheetToastSeq, setSheetToastSeq] = useState(0);
+  const setSheetToast = useCallback((next: string | null) => {
+    setSheetToastText(next);
+    if (next != null) setSheetToastSeq((seq) => seq + 1);
+  }, []);
   // One idempotency key per resolve or note composer session, reused on retry.
   const resolveKeys = useRef<{ ack: string; resolve: string } | null>(null);
   const noteKey = useRef<string | null>(null);
@@ -538,6 +545,34 @@ export function AttentionTab({
     setSubSheet(next);
   }
 
+  function finishResolved(item: AttentionGroupItem, outcome: ResolveOutcome | null) {
+    resolveKeys.current = null;
+    const resolved: AttentionGroupItem = {
+      ...item,
+      status: "resolved",
+      details: { ...(item.details ?? {}), outcome: outcome ?? undefined },
+    };
+    setLists((current) =>
+      partitionAttentionGroups(
+        current.groups.map((group) => ({
+          ...group,
+          items: group.items.map((entry) =>
+            entry.id === item.id ? { ...entry, status: "resolved" as const } : entry,
+          ),
+        })),
+      ),
+    );
+    setSheetResolved((current) => [
+      ...current.filter((entry) => entry.id !== item.id),
+      resolved,
+    ]);
+    setJustResolvedIds((current) =>
+      current.includes(item.id) ? current : [...current, item.id],
+    );
+    setReviewBrowsing(false);
+    setSubSheet(null);
+  }
+
   /**
    * Resolve from the sheet (TM-04d). Only the trainer resolves, by this
    * press. The API resolves an acknowledged item only, so an item that is
@@ -575,34 +610,16 @@ export function AttentionTab({
         },
         keys.resolve,
       );
-      resolveKeys.current = null;
-      const resolved: AttentionGroupItem = {
-        ...item,
-        status: "resolved",
-        details: { ...(item.details ?? {}), outcome: input.outcome ?? undefined },
-      };
-      setLists((current) =>
-        partitionAttentionGroups(
-          current.groups.map((group) => ({
-            ...group,
-            items: group.items.map((entry) =>
-              entry.id === item.id ? { ...entry, status: "resolved" as const } : entry,
-            ),
-          })),
-        ),
-      );
-      setSheetResolved((current) => [
-        ...current.filter((entry) => entry.id !== item.id),
-        resolved,
-      ]);
-      setJustResolvedIds((current) =>
-        current.includes(item.id) ? current : [...current, item.id],
-      );
-      setReviewBrowsing(false);
-      setSubSheet(null);
+      finishResolved(item, input.outcome);
     } catch (err) {
       if (isNetworkFailure(err)) {
         setSubSheetError(offlineBannerText(true));
+      } else if (
+        isResolveConflict(err) &&
+        (await isAlreadyResolved((id) => api.getException(id), item.id))
+      ) {
+        // A lost success: the item is resolved, so this is success, not an error.
+        finishResolved(item, input.outcome);
       } else {
         if (!(err instanceof ApiClientError)) reportError("attention.resolve", err);
         setSubSheetError(
@@ -1040,6 +1057,7 @@ export function AttentionTab({
             />
             {sheetToast ? (
               <Snackbar
+                key={sheetToastSeq}
                 message={sheetToast}
                 leadingCheck
                 onDismiss={() => setSheetToast(null)}
