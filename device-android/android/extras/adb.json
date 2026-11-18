@@ -1,0 +1,11 @@
+{
+  "outcome": "steady",
+  "logcatReconnects": 0,
+  "waits": [
+    "boot: steady for 8 checks after 11s (0 drop(s) seen)",
+    "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+    "theme dark: steady for 8 checks after 7s (0 drop(s) seen)",
+    "retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+  ],
+  "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 11s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen); retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+}

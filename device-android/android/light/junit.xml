@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="4" failures="0" time="473.541" timestamp="2026-11-18T11:45:00">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="77.577" timestamp="2026-11-18T11:45:00" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="47.221" timestamp="2026-11-18T11:46:18" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F20 Trainer nudges a client as a FitBud push (Z12-50)" name="F20 Trainer nudges a client as a FitBud push (Z12-50)" classname="F20 Trainer nudges a client as a FitBud push (Z12-50)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F20-triage-nudge.yaml" time="188.283" timestamp="2026-11-18T11:47:05" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-50"/>
+      </properties>
+    </testcase>
+    <testcase id="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" name="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" classname="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F21-review-resolve-notes.yaml" time="160.387" timestamp="2026-11-18T11:50:13" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-51"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
