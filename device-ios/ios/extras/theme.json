@@ -1,0 +1,111 @@
+{
+  "result": "mean screenshot luminance: light 0.925 (11), dark 0.221 (9)",
+  "light": 0.925,
+  "dark": 0.221,
+  "count": {
+    "light": 11,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "TR-13a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13a-light-ios.png",
+      "theme": "light",
+      "luma": 0.943
+    },
+    {
+      "file": "TR-13b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.123
+    },
+    {
+      "file": "TR-13b-light-ios.png",
+      "theme": "light",
+      "luma": 0.907
+    },
+    {
+      "file": "TR-13c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.216
+    },
+    {
+      "file": "TR-13c-light-ios.png",
+      "theme": "light",
+      "luma": 0.825
+    },
+    {
+      "file": "TR-14a-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "TR-14c-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.941
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-017-scrollUntilVisible-Start-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    },
+    {
+      "file": "step-053-assertCondition-Sent_to-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "step-061-assertCondition-78_.3-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "step-061-assertCondition-78_.3-light-ios.png",
+      "theme": "light",
+      "luma": 0.945
+    },
+    {
+      "file": "Today-no-plan-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "Today-no-plan-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    }
+  ]
+}

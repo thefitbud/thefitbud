@@ -1,0 +1,240 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 5 flows failed",
+    "dark: 1 of 5 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-46/1-no-plan.yaml",
+    "flows/v3/F11-weekly-checkin.yaml",
+    "flows/v3/F12-progress-weight.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 5,
+      "passed": 4,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 5,
+      "passed": 4,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F11 Weekly check-in, sent, and a reviewed one (Z12-46)",
+          "message": "No visible element found: \"Start\"",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "F11 Weekly check-in, sent, and a reviewed one (Z12-46)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 10s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 9s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (dark): steady for 8 checks after 7s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 10s (0 drop(s) seen); theme light: steady for 8 checks after 9s (0 drop(s) seen); retry (light): steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 8s (0 drop(s) seen); retry (dark): steady for 8 checks after 7s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 73 s",
+      "mode": "cache-hit",
+      "seconds": 73,
+      "cacheKey": "device-native-android-fd74f15532d71bc3af990090855e03fb1c84555b"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.861 (12), dark 0.219 (8)",
+      "light": 0.861,
+      "dark": 0.219,
+      "count": {
+        "light": 12,
+        "dark": 8
+      },
+      "shots": [
+        {
+          "file": "TR-06a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "TR-06a-light-android.png",
+          "theme": "light",
+          "luma": 0.922
+        },
+        {
+          "file": "TR-13a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.118
+        },
+        {
+          "file": "TR-13a-light-android.png",
+          "theme": "light",
+          "luma": 0.923
+        },
+        {
+          "file": "TR-13b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.122
+        },
+        {
+          "file": "TR-13b-light-android.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "TR-13c-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "TR-13c-light-android.png",
+          "theme": "light",
+          "luma": 0.702
+        },
+        {
+          "file": "TR-14a-light-android.png",
+          "theme": "light",
+          "luma": 0.896
+        },
+        {
+          "file": "TR-14c-light-android.png",
+          "theme": "light",
+          "luma": 0.892
+        },
+        {
+          "file": "TR-14d-light-android.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "TR-14g-light-android.png",
+          "theme": "light",
+          "luma": 0.89
+        },
+        {
+          "file": "Today-no-plan-dark-android.png",
+          "theme": "dark",
+          "luma": 0.103
+        },
+        {
+          "file": "Today-no-plan-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        },
+        {
+          "file": "step-004-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.732
+        },
+        {
+          "file": "step-014-assertCondition-Today_s_workout.Needs_yo-light-android.png",
+          "theme": "light",
+          "luma": 0.732
+        },
+        {
+          "file": "step-017-scrollUntilVisible-Start-dark-android.png",
+          "theme": "dark",
+          "luma": 0.11
+        }
+      ]
+    }
+  ]
+}
