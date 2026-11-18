@@ -1,5 +1,7 @@
 import {
+  Suspense,
   createContext,
+  lazy,
   useCallback,
   useContext,
   useEffect,
@@ -12,13 +14,14 @@ import {
   ApiClientError,
   type FitBudApiClient,
 } from "@fitbud/api-client";
-import type {
-  CoachingRelationship,
-  MeResponse,
-  NotificationType,
-  Role,
+import {
+  accountArchivedErrorDetailsSchema,
+  type CoachingRelationship,
+  type MeResponse,
+  type NotificationType,
+  type Role,
 } from "@fitbud/contracts";
-import { AppState, Platform } from "react-native";
+import { AppState, Platform, View } from "react-native";
 import { isTestIdToken } from "../lib/testToken";
 import { authErrorCopy } from "../lib/authErrors";
 import {
@@ -71,6 +74,13 @@ import { deepLinkFromNotificationPayload } from "../notifications/routing";
 import { clearTrainerCache, setTrainerCacheOwner } from "../trainer/cache";
 import { clearDayViews } from "../trainee/dataCache";
 import { isNetworkFailure } from "../trainer/attention/offline";
+
+// Z12-29: loaded only when an archived account or the archived notice shows.
+const ArchivedAccountOverlay = lazy(() =>
+  import("./ReactivateAccountScreen").then((module) => ({
+    default: module.ArchivedAccountOverlay,
+  })),
+);
 
 type AuthContextValue = {
   accessToken: string | null;
@@ -135,6 +145,11 @@ type AuthContextValue = {
   handleNotificationOpen: (rawPayload: unknown) => NotificationDeepLink | null;
   clearPendingNotificationLink: () => void;
   clearPendingDeepLink: () => void;
+  /**
+   * Z12-29: `POST /account/deletion` answered (archived until `purgeAfter`).
+   * Ends the session and shows the archived notice.
+   */
+  finishAccountDeletion: (purgeAfter: string) => void;
 };
 
 export type PendingRoleSwitch = {
@@ -169,6 +184,22 @@ function endTrainerCacheSession(): void {
   clearDayViews();
 }
 
+/**
+ * `purgeAfter` when the API refused the call because the account is archived
+ * (Z6-14: 403 ACCOUNT_ARCHIVED with the caller's own purge date), else null.
+ */
+export function archivedPurgeAfter(error: unknown): string | null {
+  if (
+    !(error instanceof ApiClientError) ||
+    error.status !== 403 ||
+    error.code !== "ACCOUNT_ARCHIVED"
+  ) {
+    return null;
+  }
+  const details = accountArchivedErrorDetailsSchema.safeParse(error.details);
+  return details.success ? details.data.purgeAfter : null;
+}
+
 /** How often an app opened on the snapshot asks the server again. */
 const SNAPSHOT_RETRY_MS = 30_000;
 /**
@@ -187,6 +218,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     persisted.selectedRole,
   );
   const [me, setMe] = useState<MeResponse | null>(null);
+  // The account's own time zone for the archived screens' purge date, read
+  // just before the account is archived or found archived (Z12-29).
+  const meRef = useRef<MeResponse | null>(null);
+  meRef.current = me;
   const [relationships, setRelationships] = useState<CoachingRelationship[]>(
     [],
   );
@@ -214,6 +249,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     savedAt: string;
   } | null>(null);
   const snapshotModeRef = useRef(false);
+  // Z12-29: signed in to an archived account (reactivate screen), and the
+  // notice after this phone deleted the account (no session any more).
+  // `timeZone` is the account's own (`me.timezone`) when it was known just
+  // before; null falls back to the phone's.
+  const [archivedAccount, setArchivedAccount] = useState<{
+    purgeAfter: string;
+    timeZone: string | null;
+  } | null>(null);
+  const [archivedNotice, setArchivedNotice] = useState<{
+    purgeAfter: string;
+    timeZone: string | null;
+  } | null>(null);
+  const [reactivating, setReactivating] = useState(false);
+  const [reactivateError, setReactivateError] = useState<string | null>(null);
+  // Which reactivate note to show: the role this phone last used.
+  const lastRoleRef = useRef<Role | null>(persisted.selectedRole);
   const leaveSnapshotMode = useCallback(() => {
     snapshotModeRef.current = false;
     setOfflineSnapshot(null);
@@ -338,7 +389,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setMe(meResponse);
       setSelectedRole(role);
       selectedRoleRef.current = role;
+      if (role) lastRoleRef.current = role;
       setNeedsAccountLink(false);
+      setArchivedAccount(null);
 
       if (role === "trainee" || role === "trainer") {
         await loadRelationships(client);
@@ -353,6 +406,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     [leaveSnapshotMode, loadRelationships, registerPushToken],
   );
+
+  /**
+   * The account is archived (Z12-29): show the reactivate screen instead of
+   * the app. Nothing else loads while archived.
+   *
+   * The token is kept for "Reactivate my account". Reactivation needs a
+   * sign-in made after the archive (D-W6-31). A fresh sign-in is one, but a
+   * session restored, refreshed or reloaded after the account was archived on
+   * another device holds a token from before, which the API refuses with
+   * RECENT_SIGN_IN_REQUIRED; `reactivate` then ends the session so the user
+   * signs in again first.
+   *
+   * The `/me` snapshot, the trainer cache and the day views are dropped too,
+   * so an offline cold start never opens on the archived account's data.
+   */
+  const enterArchived = useCallback((purgeAfter: string) => {
+    const timeZone = meRef.current?.timezone ?? null;
+    snapshotModeRef.current = false;
+    setOfflineSnapshot(null);
+    setMe(null);
+    setRelationships([]);
+    setRelationshipsLoaded(true);
+    setNeedsAccountLink(false);
+    setErrorMessage(null);
+    setReactivateError(null);
+    endTrainerCacheSession();
+    setArchivedAccount({ purgeAfter, timeZone });
+  }, []);
 
   const restorePhaseRef = useRef(restorePhase);
   restorePhaseRef.current = restorePhase;
@@ -404,17 +485,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBootstrapping(false);
       setSessionHydrated(true);
     };
+    // An archived account answers `/me` with 403 ACCOUNT_ARCHIVED, which the
+    // restore would read as offline: catch it here and route to reactivate.
+    let archivedUntil: string | null = null;
     const result = await restoreSession({
       load: loadNativeSession,
       refreshAuth: (refreshToken) => api.refreshAuth(refreshToken),
       adoptTokens: (token, refresh) => tokens.signIn(token, refresh),
-      fetchMe: () => api.me(),
+      fetchMe: async () => {
+        try {
+          return await api.me();
+        } catch (error) {
+          archivedUntil = archivedPurgeAfter(error);
+          throw error;
+        }
+      },
       clearSession,
       loadSnapshot: loadMeSnapshot,
       holdRefreshToken: (refreshToken) => tokens.hold(refreshToken),
     });
     // Native knows the stored "Remember my choice" only once it has loaded.
     setRememberRole(loadRememberRole());
+
+    if (archivedUntil) {
+      enterArchived(archivedUntil);
+      restorePhaseRef.current = "done";
+      setRestorePhase("done");
+      setBootstrapping(false);
+      setSessionHydrated(true);
+      return;
+    }
 
     if (result.status === "signed_in") {
       try {
@@ -472,7 +572,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRestorePhase("done");
     setBootstrapping(false);
     setSessionHydrated(true);
-  }, [api, applyMe, tokens]);
+  }, [api, applyMe, enterArchived, tokens]);
 
   /** `/me` answered 401 after the client's own refresh: the session is gone. */
   const dropRefusedSession = useCallback(() => {
@@ -515,7 +615,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userId: meResponse.userId,
       });
     } catch (error) {
-      if (error instanceof ApiClientError && error.status === 401) {
+      const purgeAfter = archivedPurgeAfter(error);
+      if (purgeAfter) {
+        enterArchived(purgeAfter);
+      } else if (error instanceof ApiClientError && error.status === 401) {
         dropRefusedSession();
       } else if (!isNetworkFailure(error)) {
         reportError("auth-snapshot-restore", error);
@@ -523,7 +626,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } finally {
       snapshotRestoreRunningRef.current = false;
     }
-  }, [api, applyMe, dropRefusedSession, tokens]);
+  }, [api, applyMe, dropRefusedSession, enterArchived, tokens]);
 
   useEffect(() => {
     if (!offlineSnapshot) return;
@@ -583,8 +686,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userId: meResponse.userId,
       });
     } catch (error) {
+      const purgeAfter = archivedPurgeAfter(error);
       // The client already tried one refresh before this 401 reached us.
-      if (error instanceof ApiClientError && error.status === 401) {
+      if (purgeAfter) {
+        enterArchived(purgeAfter);
+      } else if (error instanceof ApiClientError && error.status === 401) {
         dropRefusedSession();
       } else if (accountLoaded && isNetworkFailure(error)) {
         // Offline mid-session (pull to refresh, a notification tap, coaching
@@ -599,7 +705,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setBootstrapping(false);
       setSessionHydrated(true);
     }
-  }, [api, applyMe, dropRefusedSession, runRestore, tokens]);
+  }, [api, applyMe, dropRefusedSession, enterArchived, runRestore, tokens]);
 
   const reloadMe = useCallback(async () => {
     if (!tokens.getAccessToken() || restorePhaseRef.current !== "done") {
@@ -622,6 +728,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userId: meResponse.userId,
       });
     } catch (error) {
+      const purgeAfter = archivedPurgeAfter(error);
+      if (purgeAfter) {
+        enterArchived(purgeAfter);
+        return;
+      }
       if (error instanceof ApiClientError && error.status === 401) {
         dropRefusedSession();
         return;
@@ -629,7 +740,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Quiet: the screen keeps the `me` it has; nothing blames the user.
       reportError("auth-reload-me", error);
     }
-  }, [api, applyMe, dropRefusedSession, tokens]);
+  }, [api, applyMe, dropRefusedSession, enterArchived, tokens]);
 
   useEffect(() => {
     if (Platform.OS !== "web") {
@@ -703,6 +814,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setRelationshipsLoaded(false);
       setRoleSelectRequested(false);
       setRememberRole(loadRememberRole());
+      setArchivedAccount(null);
+      setArchivedNotice(null);
 
       try {
         // Probe without a role first so single-role users resolve selectedRole.
@@ -715,7 +828,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           userId: meResponse.userId,
         });
       } catch (error) {
-        if (error instanceof ApiClientError && error.status === 401) {
+        const purgeAfter = archivedPurgeAfter(error);
+        if (purgeAfter) {
+          // Z12-29: this sign-in is the fresh proof reactivation needs.
+          enterArchived(purgeAfter);
+        } else if (error instanceof ApiClientError && error.status === 401) {
           // No FitBud user yet — accept invite will create/link the account.
           setNeedsAccountLink(true);
           setRelationshipsLoaded(true);
@@ -730,7 +847,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSessionHydrated(true);
       }
     },
-    [api, applyMe, leaveSnapshotMode, tokens],
+    [api, applyMe, enterArchived, leaveSnapshotMode, tokens],
   );
 
   /**
@@ -763,6 +880,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     tokens.clear();
     selectedRoleRef.current = null;
+    // The next person on this phone gets their own reactivate note (Z12-29).
+    lastRoleRef.current = null;
     setAccessToken(null);
     setSelectedRole(null);
     setMe(null);
@@ -777,6 +896,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPendingNotificationLink(null);
     setPendingDeepLink(null);
     setRoleSelectRequested(false);
+    setArchivedAccount(null);
+    setReactivateError(null);
+    setReactivating(false);
     clearPersistedSession();
     // Cleared with the session: the next sign-in starts ticked.
     setRememberRole(true);
@@ -786,6 +908,74 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [leaveSnapshotMode, tokens]);
   const signOut = useCallback(() => endSession("drop"), [endSession]);
   onExpiredRef.current = () => endSession("keep");
+
+  /**
+   * Z12-29: the account was archived from this phone. The server has already
+   * revoked its device tokens and sessions; end this one too, dropping unsent
+   * logs (they can no longer sync), then show the archived notice.
+   */
+  const finishAccountDeletion = useCallback(
+    (purgeAfter: string) => {
+      // Read before the session ends: the date reads in the account's zone.
+      const timeZone = meRef.current?.timezone ?? null;
+      endSession("drop");
+      setArchivedNotice({ purgeAfter, timeZone });
+    },
+    [endSession],
+  );
+
+  /**
+   * "Reactivate my account": `POST /account/reactivation` with the session's
+   * token, then load the account as a sign-in does. Coaching stays ended
+   * (D-W6-8). The API needs a sign-in made after the archive (D-W6-31): a
+   * token from before (a session restored, refreshed or reloaded after the
+   * account was archived on another device) gets 403
+   * RECENT_SIGN_IN_REQUIRED, which ends the session and lands on sign-in with
+   * the API's message, so the user signs in fresh and reactivates then. Any
+   * other refusal shows the API's own message or a short code.
+   */
+  const reactivateRunningRef = useRef(false);
+  const reactivate = useCallback(async () => {
+    if (reactivateRunningRef.current) return;
+    reactivateRunningRef.current = true;
+    setReactivating(true);
+    setReactivateError(null);
+    try {
+      await api.reactivateAccount();
+    } catch (error) {
+      if (
+        error instanceof ApiClientError &&
+        error.status === 403 &&
+        error.code === "RECENT_SIGN_IN_REQUIRED"
+      ) {
+        reactivateRunningRef.current = false;
+        endSession("keep");
+        setErrorMessage(error.message);
+        return;
+      }
+      setReactivateError(authErrorCopy(error, "general", "reactivateAccount"));
+      reactivateRunningRef.current = false;
+      setReactivating(false);
+      return;
+    }
+    try {
+      const meResponse = await api.me();
+      await applyMe(meResponse, null, api);
+      persistSession({
+        accessToken: tokens.getAccessToken(),
+        selectedRole: selectedRoleRef.current,
+        userId: meResponse.userId,
+      });
+    } catch (error) {
+      // Reactivated, but the account did not load: leave the reactivate
+      // screen; the app's own error screen offers Retry.
+      setArchivedAccount(null);
+      setErrorMessage(messageFromError(error));
+    } finally {
+      reactivateRunningRef.current = false;
+      setReactivating(false);
+    }
+  }, [api, applyMe, endSession, tokens]);
 
   const setActiveRelationship = useCallback(
     (relationship: CoachingRelationship) => {
@@ -900,7 +1090,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // and "loading" makes AppRouter show its error screen (message + Retry +
   // Sign out), so the stored session is kept and never replaced by sign-in.
   const route: AppRoute =
-    restorePhase === "restoring"
+    restorePhase === "restoring" || archivedAccount
       ? { name: "loading" }
       : restorePhase === "offline"
         ? errorMessage
@@ -938,6 +1128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       handleNotificationOpen,
       clearPendingNotificationLink,
       clearPendingDeepLink,
+      finishAccountDeletion,
     }),
     [
       accessToken,
@@ -967,11 +1158,59 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       handleNotificationOpen,
       clearPendingNotificationLink,
       clearPendingDeepLink,
+      finishAccountDeletion,
     ],
   );
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  // Z12-29: the archived screens cover the app; underneath it shows the
+  // splash (archived) or sign-in (after the deletion).
+  const archivedView = archivedAccount
+    ? ({
+        kind: "reactivate",
+        purgeAfter: archivedAccount.purgeAfter,
+        timeZone: archivedAccount.timeZone ?? undefined,
+        role: lastRoleRef.current === "trainer" ? "trainer" : "trainee",
+        busy: reactivating,
+        error: reactivateError,
+        onReactivate: () => {
+          void reactivate();
+        },
+        onSignOut: signOut,
+      } as const)
+    : archivedNotice
+      ? ({
+          kind: "notice",
+          purgeAfter: archivedNotice.purgeAfter,
+          timeZone: archivedNotice.timeZone ?? undefined,
+          onDone: () => setArchivedNotice(null),
+        } as const)
+      : null;
+
+  // The app stays mounted under the archived screens, hidden from screen
+  // readers while they show (iOS VoiceOver and Android TalkBack). The wrapper
+  // is always there, so showing a screen never remounts the app.
+  const coveredByArchived = archivedView !== null;
+  return (
+    <AuthContext.Provider value={value}>
+      <View
+        style={APP_STYLE}
+        testID="auth-app-content"
+        aria-hidden={coveredByArchived || undefined}
+        accessibilityElementsHidden={coveredByArchived}
+        importantForAccessibility={coveredByArchived ? "no-hide-descendants" : "auto"}
+      >
+        {children}
+      </View>
+      {archivedView ? (
+        <Suspense fallback={null}>
+          <ArchivedAccountOverlay view={archivedView} />
+        </Suspense>
+      ) : null}
+    </AuthContext.Provider>
+  );
 }
+
+const APP_STYLE = { flex: 1 } as const;
 
 export function useAuth(): AuthContextValue {
   const value = useContext(AuthContext);

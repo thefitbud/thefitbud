@@ -27,6 +27,7 @@ import { MealTimesScreen } from "../trainee/settings/MealTimesScreen";
 import { PasswordScreen } from "../trainee/settings/PasswordScreen";
 import { PastCoachingScreen } from "../trainee/settings/PastCoachingScreen";
 import { PrivacyScreen } from "../trainee/settings/PrivacyScreen";
+import { DeleteAccountScreen } from "../trainee/settings/DeleteAccountScreen";
 import { ProfileScreen } from "../trainee/settings/ProfileScreen";
 import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
 import { ReminderSettingsScreen } from "../trainee/settings/ReminderSettingsScreen";
@@ -79,6 +80,8 @@ export type TraineeOverlay =
   | { screen: "past_coaching" }
   | { screen: "widget_tips" }
   | { screen: "privacy" }
+  /** Z12-29: Privacy → Delete account. */
+  | { screen: "delete_account" }
   | { screen: "password" }
   | { screen: "language" }
   | { screen: "account" }
@@ -400,7 +403,14 @@ export function TraineeOverlayHost({
         />
       );
     case "privacy":
-      return <PrivacyScreen onBack={onClose} />;
+      return (
+        <PrivacyScreen
+          onBack={onClose}
+          onDeleteAccount={() => onOpen({ screen: "delete_account" })}
+        />
+      );
+    case "delete_account":
+      return <DeleteAccountScreen onBack={() => onOpen({ screen: "privacy" })} />;
     case "password":
       return <PasswordScreen onBack={onClose} />;
     case "account":
