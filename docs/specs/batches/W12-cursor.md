@@ -72,7 +72,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 
 | Source | Finding | Owner | Notes |
 |---|---|---|---|
-| Z12-43 | Device [44321195222](https://github.com/thefitbud/thefitbud/actions/runs/44321195222): android PASS (F08 soft-skipped — no due meal pre-20:00 IST); iOS FAIL — tap "Something different" hit Progress (tab-bar overlap). Fix: `testID` + `scrollUntilVisible` `centerElement` + require due meal (no soft skip) | this run | re-dispatch after push |
+| Z12-43 | Device re-dispatch [44328495622](https://github.com/thefitbud/thefitbud/actions/runs/44328495622) after F08 iOS Progress mis-tap fix (`centerElement` + `diet-something-different`). Prior [44321195222](https://github.com/thefitbud/thefitbud/actions/runs/44321195222): android vacuous PASS / iOS FAIL | this run | watching |
 | Z12-43 | A meal logged from Today (Something different → Log it myself) returns to Today, which shows no TR-26f toast | Cursor (Today owner) | `TodayTab.tsx` is outside Z12-43's files; it can read `useMealSavedNotice` the way Diet does |
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
 | Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |
