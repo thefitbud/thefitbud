@@ -215,3 +215,109 @@ export function restSecondsBySetTargetId(
   }
   return map;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Session figures for the Workout tab and the summary (Z12-44)                */
+/* -------------------------------------------------------------------------- */
+
+/** A set the trainee logged (as planned or changed). */
+function isLoggedSet(set: { status: string }): boolean {
+  return set.status === "completed" || set.status === "modified";
+}
+
+/**
+ * "7 of 18 sets" (W-01b), "Sets 17 / 18" (W-01c, W-17a): logged sets out of
+ * every set in the session. Skipped sets count in the total, not as done.
+ */
+export function sessionSetCounts(
+  execution: Pick<WorkoutExecution, "exercises">,
+): { done: number; skipped: number; total: number } {
+  let done = 0;
+  let skipped = 0;
+  let total = 0;
+  for (const exercise of execution.exercises) {
+    for (const set of exercise.sets) {
+      total += 1;
+      if (isLoggedSet(set)) done += 1;
+      else if (set.status === "skipped") skipped += 1;
+    }
+  }
+  return { done, skipped, total };
+}
+
+/** "40 kg", "42.5kg": a load label that is a weight in kg, else null. */
+export function kgFromLoadLabel(
+  label: string | null | undefined,
+): number | null {
+  const match = label?.trim().match(/^(\d+(?:\.\d+)?)\s*kg$/i);
+  if (!match) return null;
+  const kg = Number(match[1]);
+  return Number.isFinite(kg) ? kg : null;
+}
+
+/**
+ * Volume (W-01c, W-17a): kg × reps over the logged sets whose load is a
+ * weight in kg, from what was logged (falling back to the plan for a set
+ * logged as planned). Bodyweight and other loads add nothing. Null when no
+ * logged set carries a kg load, so the screen shows a dash, never "0 kg".
+ */
+export function sessionVolumeKg(
+  execution: Pick<WorkoutExecution, "exercises">,
+): number | null {
+  let volume = 0;
+  let counted = false;
+  for (const exercise of execution.exercises) {
+    for (const set of exercise.sets) {
+      if (!isLoggedSet(set)) continue;
+      const kg = kgFromLoadLabel(
+        set.actualLoadLabel ?? set.prescribedLoadLabel,
+      );
+      const reps = set.actualReps ?? set.prescribedReps;
+      if (kg == null || reps == null) continue;
+      volume += kg * reps;
+      counted = true;
+    }
+  }
+  return counted ? Math.round(volume * 10) / 10 : null;
+}
+
+export type NextUpSet = {
+  /** Index of the exercise in `execution.exercises`. */
+  exerciseIndex: number;
+  exerciseName: string;
+  /** 1-based set number within the exercise. */
+  setNumber: number;
+  /** "40 × 10", or "12 reps" when the plan has no kg load. */
+  target: string;
+};
+
+/**
+ * The first pending set, in exercise and set order (W-01b "Up next"), or
+ * null when nothing is left to log.
+ */
+export function nextUpSet(
+  execution: Pick<WorkoutExecution, "exercises">,
+): NextUpSet | null {
+  const exercises = [...execution.exercises].sort((a, b) => a.order - b.order);
+  for (const exercise of exercises) {
+    const sets = [...exercise.sets].sort((a, b) => a.order - b.order);
+    const index = sets.findIndex((set) => set.status === "pending");
+    if (index < 0) continue;
+    const set = sets[index]!;
+    const kg = kgFromLoadLabel(set.prescribedLoadLabel);
+    const reps = set.prescribedReps;
+    const target =
+      kg != null && reps != null
+        ? `${kg} × ${reps}`
+        : reps != null
+          ? `${reps} reps`
+          : (set.prescribedLoadLabel?.trim() ?? "");
+    return {
+      exerciseIndex: execution.exercises.indexOf(exercise),
+      exerciseName: exercise.name,
+      setNumber: index + 1,
+      target,
+    };
+  }
+  return null;
+}

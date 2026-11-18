@@ -1,5 +1,5 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
   Check,
@@ -49,6 +49,7 @@ import {
   loadPreviousSetHistory,
   previousSetLabel,
 } from "./workoutDisplay";
+import { elapsedSeconds } from "./workoutDuration";
 
 const DEFAULT_REST_SECONDS = 90;
 const TARGET = 44;
@@ -257,9 +258,6 @@ export function ActiveWorkoutScreen({
   const [restWindow, setRestWindow] = useState<RestWindow | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [previousByKey, setPreviousByKey] = useState<Record<string, string>>({});
-  const pausedAccumRef = useRef(0);
-  const pauseStartedRef = useRef<number | null>(null);
-  const tickBaseRef = useRef(Date.parse(execution.startedAt));
 
   const emptyOrDone =
     execution.exercises.length === 0 ||
@@ -344,25 +342,22 @@ export function ActiveWorkoutScreen({
     return () => clearTimeout(timer);
   }, [restRemaining]);
 
+  // The session clock reads the execution's own timestamps (Z12-44,
+  // `elapsedSeconds`): it stands still while paused and survives a resume,
+  // a kill and a relaunch, and it is the same rule as the summary's Duration
+  // and the Workout tab's "In progress" clock. It used to keep the paused
+  // time in memory, so a relaunch made it jump.
+  const { startedAt, pausedAt, completedAt } = execution;
   useEffect(() => {
-    if (execution.status === "paused") {
-      if (pauseStartedRef.current == null) {
-        pauseStartedRef.current = Date.now();
-      }
-      return;
-    }
-    if (pauseStartedRef.current != null) {
-      pausedAccumRef.current += Date.now() - pauseStartedRef.current;
-      pauseStartedRef.current = null;
-    }
-    const timer = setInterval(() => {
-      const raw = Math.floor(
-        (Date.now() - tickBaseRef.current - pausedAccumRef.current) / 1000,
+    const tick = () =>
+      setElapsedSec(
+        elapsedSeconds({ startedAt, pausedAt, completedAt }, Date.now()),
       );
-      setElapsedSec(Math.max(0, raw));
-    }, 1000);
+    tick();
+    if (execution.status === "paused") return undefined;
+    const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [execution.status]);
+  }, [execution.status, startedAt, pausedAt, completedAt]);
 
   function startRestForSet(setTargetId: string) {
     const prescribed = restSecondsBySetTargetId[setTargetId];

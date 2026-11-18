@@ -5,13 +5,16 @@ tags:
   - trainee
   - z12-36
 ---
-# Rohan Mehta (slipping, local demo seed). The seed keeps this week's Saturday
-# "Lower body B" startable (apps/api/src/seed/demo/history.ts), so the flow opens it
-# from the Workout tab's week strip ("Sat Lower B") whatever the runner's day is: the
-# light run starts it, the dark run continues the same session. (Run 43645505100: the
-# day's own hero was a rest day, and the light run used up the only "Log it".) It logs
-# one set, skips the rest and captures the active workout mid-session. Same opt-in
-# note as 2-trainee-today-diet.
+# Rohan Mehta (slipping, local demo seed). The seed leaves the most recent Saturday's
+# "Lower body B" unlogged (apps/api/src/seed/demo/history.ts: the last six days'
+# Saturday). Z12-44 (v3 Workout tab): the strip no longer names workouts ("Sat Lower
+# B"), so the flow selects last Saturday on the strip (its label comes from the
+# device clock, z12-44/ist-days.yaml) and opens it: the light run starts it ("Log
+# workout", a late log), the dark run continues the same session. It leaves today's
+# workout and this week's missed one to z12-44/2 (W-01a and TR-10c in both themes,
+# Z12-44 review). On a Saturday, when last Saturday was logged, it falls back to
+# z12-44/open-session.yaml. It logs one set, skips the rest and captures the active
+# workout mid-session. Same opt-in note as 2-trainee-today-diet.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -36,13 +39,39 @@ tags:
           text: "Workout"
           index: 1
 - extendedWaitUntil:
-    visible: "Sat Lower B"
+    notVisible: "Loading workouts…"
     timeout: 30000
-- tapOn: "Sat Lower B"
+- runFlow: ../z12-44/ist-days.yaml
+# Last Saturday is in the previous week of the strip except on a Sunday.
+- runFlow:
+    when:
+      notVisible: "${output.lastSat}, .*"
+    commands:
+      - tapOn: "Previous week"
+      - extendedWaitUntil:
+          notVisible: "Loading workouts…"
+          timeout: 30000
+- tapOn: "${output.lastSat}, .*"
 - extendedWaitUntil:
-    visible: "Start workout|Continue workout"
+    notVisible: "Loading workouts…"
     timeout: 30000
-- tapOn: "Start workout|Continue workout"
+- runFlow:
+    when:
+      visible: "Log workout|Continue workout"
+    commands:
+      - tapOn: "Log workout|Continue workout"
+      - extendedWaitUntil:
+          visible: "Log set [0-9]+ ·.*"
+          timeout: 30000
+- runFlow:
+    when:
+      notVisible: "Log set [0-9]+ ·.*"
+    commands:
+      - tapOn: "Go to today"
+      - extendedWaitUntil:
+          notVisible: "Loading workouts…"
+          timeout: 30000
+      - runFlow: ../z12-44/open-session.yaml
 - extendedWaitUntil:
     visible: "Log set [0-9]+ ·.*"
     timeout: 30000
