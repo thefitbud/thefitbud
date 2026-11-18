@@ -66,8 +66,17 @@ appId: com.thefitbud.mobile.staging
 # An open session's card carries the "In progress · 12:34" chip, and "Pick up
 # where you left off?" follows once the session is read (the app was just
 # started, so nothing is in memory): wait for the dialog, never race it.
-- waitForAnimationToEnd:
-    timeout: 1500
+# The day's card paints a moment after the day is picked (iOS run 44348878419
+# looked before it had): give an open session up to 15 s to show itself. An
+# unlogged day never does, and carries on after the wait.
+- runFlow:
+    when:
+      notVisible: "Minimise workout"
+    commands:
+      - extendedWaitUntil:
+          visible: "(In progress|Paused) · [0-9:]+|Pick up where you left off\\?"
+          timeout: 15000
+          optional: true
 - runFlow:
     when:
       notVisible: "Minimise workout"
