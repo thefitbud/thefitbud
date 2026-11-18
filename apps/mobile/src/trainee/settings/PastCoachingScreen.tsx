@@ -1,8 +1,7 @@
+import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
 import type { MealAssignment, WorkoutAssignment } from "@fitbud/contracts";
 import { formatCivilDate, formatLocalDate, formatPersonName, labelFor } from "@fitbud/core";
-import { ink } from "@fitbud/tokens";
 import { Text } from "../../components/Text";
 import { useAuth } from "../../auth/AuthProvider";
 import { addDays } from "../../lib/dates";
@@ -41,12 +40,13 @@ function workoutStatus(status: WorkoutAssignment["status"]): string {
   return labelFor("workout_assignment_status", status);
 }
 
-export function PastCoachingScreen({
+function PastCoachingScreenBody({
   onBack,
   relationshipId,
   coachName = "Your coach",
   endedAt,
 }: Props) {
+  const styles = useStyles();
   const { api } = useAuth();
   const [rows, setRows] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,6 +144,15 @@ export function PastCoachingScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  muted: { color: ink[500], fontSize: 15, lineHeight: 21 },
-});
+const useStyles = createThemedStyles((t) => ({
+  muted: { color: t.colors.ink3, fontSize: 15, lineHeight: 21 },
+}));
+
+/** PastCoachingScreen in the system theme (Z12-49): its own styles read the scope. */
+export function PastCoachingScreen(props: Parameters<typeof PastCoachingScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <PastCoachingScreenBody {...props} />
+    </ThemeScope>
+  );
+}

@@ -1,5 +1,4 @@
-import { StyleSheet } from "react-native";
-import { ink } from "@fitbud/tokens";
+import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { M2Group, M2Page, M2Row } from "./m2";
@@ -8,7 +7,8 @@ type Props = {
   onBack: () => void;
 };
 
-export function LanguageScreen({ onBack }: Props) {
+function LanguageScreenBody({ onBack }: Props) {
+  const styles = useStyles();
   return (
     <M2Page
       title="Language"
@@ -23,10 +23,19 @@ export function LanguageScreen({ onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   soon: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 14,
   },
-});
+}));
+
+/** LanguageScreen in the system theme (Z12-49): its own styles read the scope. */
+export function LanguageScreen(props: Parameters<typeof LanguageScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <LanguageScreenBody {...props} />
+    </ThemeScope>
+  );
+}

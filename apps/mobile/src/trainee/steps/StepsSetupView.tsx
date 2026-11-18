@@ -1,6 +1,6 @@
-import { ActivityIndicator, Pressable, SafeAreaView, StyleSheet, View } from "react-native";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { ActivityIndicator, Pressable, SafeAreaView, View } from "react-native";
 import { ChevronLeft, CircleCheck, CircleDashed, Footprints } from "lucide-react-native";
-import { brand, ink, semantic, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Button } from "../../components/Button";
 import { Text } from "../../components/Text";
@@ -20,7 +20,7 @@ type Props = {
 };
 
 /** Frames 93 (Apple Health) and 95 (install Health Connect). */
-export function StepsSetupView({
+function StepsSetupViewBody({
   platform,
   state,
   coachName,
@@ -31,6 +31,8 @@ export function StepsSetupView({
   onInstall,
   onConnect,
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const store = platform === "ios" ? "Apple Health" : "Health Connect";
   // The frames name the coach by first name.
   const coachFirst = coachName.trim().split(/\s+/)[0] || "your coach";
@@ -77,7 +79,7 @@ export function StepsSetupView({
           onPress={onBack}
           style={styles.back}
         >
-          <ChevronLeft color={brand.indigo} size={22} strokeWidth={2} />
+          <ChevronLeft color={theme.colors.brand} size={22} strokeWidth={2} />
           <Text style={styles.backText}>{backLabel}</Text>
         </Pressable>
         <Text style={styles.headerTitle} accessibilityRole="header">
@@ -88,11 +90,11 @@ export function StepsSetupView({
 
       <View style={styles.content}>
         <View style={styles.tile}>
-          <Footprints color={brand.indigo} size={36} strokeWidth={1.75} />
+          <Footprints color={theme.colors.brand} size={36} strokeWidth={1.75} />
         </View>
         {checking ? (
           <View style={styles.checking} accessibilityLabel="Checking steps setup" accessibilityRole="progressbar">
-            <ActivityIndicator color={brand.indigo} />
+            <ActivityIndicator color={theme.colors.brand} />
           </View>
         ) : (
           <>
@@ -112,9 +114,9 @@ export function StepsSetupView({
               accessibilityLabel={statusText}
             >
               {connected ? (
-                <CircleCheck color={semantic.positive.text} size={16} strokeWidth={2} />
+                <CircleCheck color={theme.colors.done} size={16} strokeWidth={2} />
               ) : (
-                <CircleDashed color={ink[700]} size={16} strokeWidth={2} />
+                <CircleDashed color={theme.colors.ink2} size={16} strokeWidth={2} />
               )}
               <Text style={[styles.pillText, connected ? styles.pillTextOn : null]}>{statusText}</Text>
             </View>
@@ -143,8 +145,8 @@ export function StepsSetupView({
   );
 }
 
-const styles = StyleSheet.create({
-  page: { backgroundColor: surface.pageMobile, flex: 1 },
+const useStyles = createThemedStyles((t) => ({
+  page: { backgroundColor: t.colors.bg, flex: 1 },
   header: {
     alignItems: "center",
     flexDirection: "row",
@@ -153,20 +155,20 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   back: { alignItems: "center", flexDirection: "row", minHeight: 44, minWidth: 80 },
-  backText: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 17 },
-  headerTitle: { color: brand.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 17 },
+  backText: { color: t.colors.brand, fontFamily: fontFamilySemiBold, fontSize: 17 },
+  headerTitle: { color: t.colors.ink, fontFamily: fontFamilySemiBold, fontSize: 17 },
   content: { flex: 1, paddingHorizontal: 16, paddingTop: 48 },
   tile: {
     alignItems: "center",
     alignSelf: "center",
-    backgroundColor: brand.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 28,
     height: 88,
     justifyContent: "center",
     width: 88,
   },
   title: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilyBold,
     fontSize: 28,
     letterSpacing: -0.5,
@@ -175,7 +177,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   body: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontSize: 16,
     lineHeight: 24,
     marginTop: 12,
@@ -184,8 +186,8 @@ const styles = StyleSheet.create({
   },
   card: {
     alignItems: "center",
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     flexDirection: "row",
@@ -196,12 +198,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   cardText: { flex: 1 },
-  cardTitle: { color: brand.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
-  cardSub: { color: ink[500], fontSize: 16, marginTop: 2 },
+  cardTitle: { color: t.colors.ink, fontFamily: fontFamilySemiBold, fontSize: 18 },
+  cardSub: { color: t.colors.ink3, fontSize: 16, marginTop: 2 },
   pill: {
     alignItems: "center",
-    backgroundColor: "#F1F2F6",
-    borderColor: "#E1E3EA",
+    backgroundColor: t.colors.fill,
+    borderColor: t.colors.line2,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -209,18 +211,27 @@ const styles = StyleSheet.create({
     minHeight: 32,
     paddingHorizontal: 12,
   },
-  pillOn: { backgroundColor: semantic.positive.fill, borderColor: semantic.positive.fill },
-  pillText: { color: ink[900], fontSize: 14 },
-  pillTextOn: { color: semantic.positive.text },
+  pillOn: { backgroundColor: t.colors.doneTint, borderColor: t.colors.doneTint },
+  pillText: { color: t.colors.ink, fontSize: 14 },
+  pillTextOn: { color: t.colors.done },
   checking: { alignItems: "center", marginTop: 40 },
-  notice: { color: ink[700], fontSize: 14, lineHeight: 20, marginTop: 16, textAlign: "center" },
+  notice: { color: t.colors.ink2, fontSize: 14, lineHeight: 20, marginTop: 16, textAlign: "center" },
   footer: {
-    backgroundColor: "#fff",
-    borderTopColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderTopColor: t.colors.line,
     borderTopWidth: 1,
     paddingBottom: 12,
     paddingHorizontal: 16,
     paddingTop: 16,
   },
-  footnote: { color: ink[500], fontSize: 14, lineHeight: 20, marginTop: 12, textAlign: "center" },
-});
+  footnote: { color: t.colors.ink3, fontSize: 14, lineHeight: 20, marginTop: 12, textAlign: "center" },
+}));
+
+/** StepsSetupView in the system theme (Z12-49): its own styles read the scope. */
+export function StepsSetupView(props: Parameters<typeof StepsSetupViewBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <StepsSetupViewBody {...props} />
+    </ThemeScope>
+  );
+}

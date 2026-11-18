@@ -67,7 +67,7 @@ describe("code sign-in after typing on the password screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sign in with a code instead" }));
 
     expect(screen.getByLabelText("Mobile number or email")).toHaveProperty("value", QA_EMAIL);
-    expect(screen.queryByText("6-digit code")).toBeNull();
+    expect(screen.queryByLabelText("6-digit code")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Send code" }));
 
@@ -76,7 +76,7 @@ describe("code sign-in after typing on the password screen", () => {
       purpose: "login",
     });
     await waitFor(() => {
-      expect(screen.getByText("6-digit code")).toBeTruthy();
+      expect(screen.getByLabelText("6-digit code")).toBeTruthy();
     });
     expect(screen.queryByText("Enter your mobile number or email.")).toBeNull();
   });
@@ -89,6 +89,6 @@ describe("code sign-in after typing on the password screen", () => {
 
     expect(startOtp).not.toHaveBeenCalled();
     expect(screen.getByText("Enter your mobile number or email.")).toBeTruthy();
-    expect(screen.queryByText("6-digit code")).toBeNull();
+    expect(screen.queryByLabelText("6-digit code")).toBeNull();
   });
 });

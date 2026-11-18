@@ -31,7 +31,18 @@ export type AuthErrorContext =
   | "general"
   | "session";
 
-export type AuthFailure = { code: AuthErrorCode | null; copy: string };
+/**
+ * Which inline state a screen shows for a failure (TR-01e, TR-01f). Set only
+ * when the API status or code proves it; everything else has no kind and
+ * shows its copy in the generic banner.
+ */
+export type AuthErrorKind = "wrong-credentials" | "rate-limited";
+
+export type AuthFailure = {
+  code: AuthErrorCode | null;
+  copy: string;
+  kind?: AuthErrorKind;
+};
 
 export const PARSE_COPY = "Couldn't finish signing in (AUTH-PARSE). Try again.";
 export const SESSION_COPY = "Couldn't finish signing in (AUTH-SESSION). Try again.";
@@ -43,6 +54,16 @@ export const UNK_COPY = "Something went wrong (AUTH-UNK). Try again.";
 export const RATE_COPY = "Too many tries (AUTH-RATE). Wait a minute, then try again.";
 export const WRONG_CREDENTIALS_COPY =
   "That mobile number or email and password don't match.";
+/** TR-01e, inline under the password, for a mobile-number identifier. */
+export const WRONG_NUMBER_PASSWORD_COPY = "That number and password don't match.";
+/** TR-01e for an email identifier. */
+export const WRONG_EMAIL_PASSWORD_COPY = "That email and password don't match.";
+/**
+ * TR-01f. The API's 429 carries no retry window, so there is no countdown
+ * (the mock's "Wait 4:59" has no backend source).
+ */
+export const LOGIN_RATE_COPY =
+  "Too many tries. Wait a few minutes or sign in with a code.";
 export const CODE_SEND_RATE_COPY =
   "Too many codes requested. Try again in 1 hour or use your password. (AUTH-RATE)";
 export const RESET_CODE_COPY = "That code didn't work. Request a new code.";
@@ -74,7 +95,10 @@ function known(err: unknown, context: AuthErrorContext): AuthFailure | null {
   switch (context) {
     case "password-login":
       if (err.status === 401 && err.code === "INVALID_CREDENTIALS") {
-        return { code: null, copy: WRONG_CREDENTIALS_COPY };
+        return { code: null, copy: WRONG_CREDENTIALS_COPY, kind: "wrong-credentials" };
+      }
+      if (err.status === 429) {
+        return { code: "AUTH-RATE", copy: LOGIN_RATE_COPY, kind: "rate-limited" };
       }
       return null;
     case "code-send":
@@ -150,12 +174,31 @@ export function mismatchedResponseCopy(where: string): string {
   return PARSE_COPY;
 }
 
+/**
+ * TR-01e copy for the identifier the user typed: an email says "email",
+ * anything else (a mobile number) says "number".
+ */
+export function wrongPasswordCopy(identifier: string): string {
+  return identifier.includes("@")
+    ? WRONG_EMAIL_PASSWORD_COPY
+    : WRONG_NUMBER_PASSWORD_COPY;
+}
+
 /** Maps a failure to its copy and writes the dev log line. */
 export function authErrorCopy(
   err: unknown,
   context: AuthErrorContext,
   where: string = context,
 ): string {
+  return authFailure(err, context, where).copy;
+}
+
+/** Like `authErrorCopy`, keeping the inline kind for the screen. */
+export function authFailure(
+  err: unknown,
+  context: AuthErrorContext,
+  where: string = context,
+): AuthFailure {
   reportError(where, err);
-  return classifyAuthError(err, context).copy;
+  return classifyAuthError(err, context);
 }

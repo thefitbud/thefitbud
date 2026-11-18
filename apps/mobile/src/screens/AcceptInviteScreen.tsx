@@ -1,10 +1,11 @@
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { useCallback, useEffect, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import * as Linking from "expo-linking";
 import { Lock } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { authErrorCopy, mismatchedResponseCopy } from "../lib/authErrors";
 import { reportError } from "../lib/reportError";
@@ -69,10 +70,12 @@ type Props = {
   initialToken?: string;
 };
 
-export function AcceptInviteScreen({
+function AcceptInviteScreenBody({
   onBackToSignIn,
   initialToken,
 }: Props = {}) {
+  const theme = useTheme();
+  const styles = useStyles();
   const {
     api,
     refreshSession,
@@ -377,7 +380,7 @@ export function AcceptInviteScreen({
               readOnly={emailLocked}
               suffix={
                 emailLocked ? (
-                  <Lock size={18} color={colors.midGrey} strokeWidth={1.75} />
+                  <Lock size={18} color={theme.colors.ink3} strokeWidth={1.75} />
                 ) : null
               }
               inputProps={{
@@ -473,18 +476,18 @@ export function AcceptInviteScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   prefix: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 16,
   },
   showPwd: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 15,
     fontWeight: "600",
   },
   verified: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 14,
     fontWeight: "600",
     marginTop: spacing.sm,
@@ -493,7 +496,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   codeNote: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     textAlign: "center",
   },
@@ -503,8 +506,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   codeLink: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 15,
     fontWeight: "600",
   },
-});
+}));
+
+/** AcceptInviteScreen in the system theme (Z12-49): its own styles read the scope. */
+export function AcceptInviteScreen(props: Parameters<typeof AcceptInviteScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <AcceptInviteScreenBody {...props} />
+    </ThemeScope>
+  );
+}

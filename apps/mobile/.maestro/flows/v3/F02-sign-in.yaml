@@ -1,0 +1,94 @@
+appId: com.thefitbud.mobile.staging
+name: F02 Sign in, wrong password, code request and code entry (Z12-49)
+tags:
+  - device
+  - trainee
+  - z12-49
+---
+# F02 (Z12-49): TR-01a sign in, TR-01e wrong password inline under the field
+# (shown only behind the API's 401 INVALID_CREDENTIALS), TR-01b ask for a code,
+# TR-01c enter it (screenshot taken before any code is typed, D-QA1-14), then a
+# password sign-in that lands on Today. Env from the device harness:
+# QA_ONTRACK_EMAIL, QA_PASSWORD. One wrong password only: the API allows 15
+# tries per IP per window, so this never trips TR-01f for the other flows.
+#
+# Screenshots are named by v3 screen ID (scripts/qa/device/collect-shots.mjs).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- assertVisible: "Use the mobile number or email your coach invited\\."
+- assertNotVisible: ".*Coming soon.*"
+- assertNotVisible: "Have a code\\?"
+- takeScreenshot: TR-01a
+- runFlow: ../../common/assert-no-crash.yaml
+
+# TR-01e: a wrong password is inline, in the field's own words.
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${QA_ONTRACK_EMAIL}
+# Retype when the field lost keystrokes. On a cold first launch the Android
+# emulator dropped the first letter ("aarav.ontrack@..." arrived as
+# "arav.ontrack@...", device runs 44191354664 and 44200084620, light launch
+# smoke), so the API answered INVALID_CREDENTIALS and TR-01e showed. The
+# field keeps focus: erase and type again (as z12-36/sign-in-password.yaml).
+- runFlow:
+    when:
+      notVisible: "${QA_ONTRACK_EMAIL}.*"
+    commands:
+      - eraseText: 60
+      - inputText: ${QA_ONTRACK_EMAIL}
+- tapOn: "Your password"
+- inputText: "not-the-password-1"
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "That email and password don't match\\."
+    timeout: 30000
+- takeScreenshot: TR-01e
+- runFlow: ../../common/assert-no-crash.yaml
+
+# TR-01b: the code request carries the typed email over; no WhatsApp chips.
+- tapOn: "Sign in with a code instead"
+- extendedWaitUntil:
+    visible: "Send code"
+    timeout: 10000
+- assertVisible: "We'll email you a 6-digit code\\. It works for 10 minutes\\."
+- assertNotVisible: "WhatsApp"
+- takeScreenshot: TR-01b
+- tapOn: "Send code"
+# TR-01c: six boxes, the address, and the resend countdown. No code typed yet.
+- extendedWaitUntil:
+    visible: "Enter your code"
+    timeout: 20000
+- assertVisible: "Sent to .*"
+- assertVisible: "Resend in .*"
+- takeScreenshot: TR-01c
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Back to the address, back to sign in, then sign in with the password.
+- tapOn:
+    id: "auth-back"
+- extendedWaitUntil:
+    visible: "Send code"
+    timeout: 10000
+- tapOn:
+    id: "auth-back"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 10000
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+- runFlow: ../../common/assert-no-crash.yaml
