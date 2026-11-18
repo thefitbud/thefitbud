@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="4" failures="1" time="266.37" timestamp="2026-11-18T06:38:13">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="103.312" timestamp="2026-11-18T06:38:13" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="38.512" timestamp="2026-11-18T06:39:56" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F07 Diet day (Z12-42)" name="F07 Diet day (Z12-42)" classname="F07 Diet day (Z12-42)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F07-diet-day.yaml" time="63.612" timestamp="2026-11-18T06:40:35" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+    </testcase>
+    <testcase id="F09 Diet edit and late log (Z12-42)" name="F09 Diet edit and late log (Z12-42)" classname="F09 Diet edit and late log (Z12-42)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F09-diet-edit-delete-late.yaml" time="60.882" timestamp="2026-11-18T06:41:38" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

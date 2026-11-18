@@ -1,0 +1,25 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - F975FFF0-EC6A-4390-80CA-D76EFDD7E394" tests="4" failures="0" time="327.805" timestamp="2026-11-18T08:40:19">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="71.373" timestamp="2026-11-18T08:40:19" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="85.764" timestamp="2026-11-18T08:41:31" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F07 Diet day (Z12-42)" name="F07 Diet day (Z12-42)" classname="F07 Diet day (Z12-42)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F07-diet-day.yaml" time="86.836" timestamp="2026-11-18T08:42:57" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+    </testcase>
+    <testcase id="F09 Diet edit and late log (Z12-42)" name="F09 Diet edit and late log (Z12-42)" classname="F09 Diet edit and late log (Z12-42)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F09-diet-edit-delete-late.yaml" time="83.665" timestamp="2026-11-18T08:44:23" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-42"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
