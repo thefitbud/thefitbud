@@ -178,17 +178,26 @@ export function reviewSheetItemDate(
 }
 
 /**
- * Green banner after Mark reviewed.
- * Frame: "Resolved by you · just now · Talked to client".
+ * Banner on a done item. Resolved: "Resolved by you · just now · Talked to
+ * client" (frame 31-resolved). Mark reviewed only acknowledges, so it never
+ * says resolved (Z12-51): "Reviewed by you · just now".
  */
 export function reviewSheetResolvedBanner(
   outcome: string | null,
   justNow: boolean,
+  status: string = "resolved",
 ): string {
-  const parts = ["Resolved by you"];
+  const parts = [status === "resolved" ? "Resolved by you" : "Reviewed by you"];
   if (justNow) parts.push("just now");
-  if (outcome) parts.push(outcome);
+  if (outcome && status === "resolved") parts.push(outcome);
   return parts.join(" · ");
+}
+
+/** Every item on the sheet is resolved, not only reviewed. */
+export function reviewSheetAllResolved(
+  items: ReadonlyArray<{ status: string }>,
+): boolean {
+  return items.length > 0 && items.every((item) => item.status === "resolved");
 }
 
 /** Primary button under a resolved item that still has a following item. */
@@ -200,20 +209,58 @@ export function reviewSheetNextItemLabel(
   return `Next item · ${index + 2} of ${total}`;
 }
 
+/**
+ * Summary title. "All 3 resolved for Rohan" only when every item is resolved;
+ * when some were only marked reviewed it says reviewed (Z12-51).
+ */
 export function reviewSheetAllResolvedTitle(
   count: number,
   firstName: string,
+  allResolved: boolean = true,
 ): string {
-  return `All ${count} resolved for ${firstName}`;
+  return `All ${count} ${allResolved ? "resolved" : "reviewed"} for ${firstName}`;
 }
 
-/** Locked frame sentence. The mock uses "his" for this client. */
-export function reviewSheetAllResolvedLeaveLine(firstName: string): string {
-  return `${firstName} leaves Needs you. You'll find this in his History.`;
+/**
+ * Summary line. Frame 31's "his History" assumed a gender; this one does
+ * not. A client with reviewed-but-open items moves to Reviewed, not out.
+ */
+export function reviewSheetAllResolvedLeaveLine(
+  firstName: string,
+  allResolved: boolean = true,
+): string {
+  return allResolved
+    ? `${firstName} leaves Needs you. You'll find these in History.`
+    : `${firstName} moves to Reviewed until every item is resolved.`;
 }
 
-export function reviewSheetResolvedRowLabel(outcome: string | null): string {
+export function reviewSheetResolvedRowLabel(
+  outcome: string | null,
+  status: string = "resolved",
+): string {
+  if (status !== "resolved") return "Reviewed";
   return outcome ? `Resolved · ${outcome}` : "Resolved";
+}
+
+/**
+ * The sheet's items with this session's resolved ones put back in: the API
+ * drops a resolved item from Attention, but the sheet keeps it (read only)
+ * so the resolved and all-resolved states stay on screen (Z12-51). Same
+ * order as `reviewSheetItemsForRelationship`.
+ */
+export function withSessionResolved<
+  T extends { id: string; severity: string; ageMinutes: number },
+>(items: ReadonlyArray<T>, resolved: ReadonlyArray<T>): T[] {
+  const byId = new Map<string, T>();
+  for (const item of items) byId.set(item.id, item);
+  for (const item of resolved) byId.set(item.id, item);
+  return [...byId.values()].sort((a, b) => {
+    const sev =
+      (SEVERITY_RANK[a.severity as AttentionGroupItem["severity"]] ?? 9) -
+      (SEVERITY_RANK[b.severity as AttentionGroupItem["severity"]] ?? 9);
+    if (sev !== 0) return sev;
+    return b.ageMinutes - a.ageMinutes;
+  });
 }
 
 export function reviewSheetNextClientLabel(displayName: string): string {

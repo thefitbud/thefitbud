@@ -12,40 +12,42 @@ const detail = {
   details: { localDate: "2026-10-15", mealName: "Lunch" },
 };
 
-describe("ResolveSheet", () => {
-  it("shows the frame 33 title, subtitle and lock line", () => {
-    render(
-      <ResolveSheet
-        visible
-        detail={detail}
-        traineeDisplayName="Meera Iyer"
-        onDismiss={() => {}}
-        onConfirm={() => {}}
-      />,
-    );
-    expect(screen.getByText("Resolve this item?")).toBeTruthy();
-    expect(
-      screen.getByText(/Lunch not logged · Thu 15 Oct · Meera Iyer/),
-    ).toBeTruthy();
+function mount(onConfirm = vi.fn()) {
+  render(
+    <ResolveSheet
+      visible
+      detail={detail}
+      traineeDisplayName="Meera Iyer"
+      onDismiss={() => {}}
+      onConfirm={onConfirm}
+    />,
+  );
+  return onConfirm;
+}
+
+describe("ResolveSheet (TM-04d)", () => {
+  it("shows the title, subtitle, outcome chips, private note and lock helper", () => {
+    mount();
+    expect(screen.getByRole("heading", { name: "Resolve" })).toBeTruthy();
+    expect(screen.getByText("Lunch not logged · Thu 15 Oct · Meera")).toBeTruthy();
+    expect(screen.getByText("Outcome")).toBeTruthy();
+    expect(screen.getByText("Talked to Meera")).toBeTruthy();
+    expect(screen.getByText("Plan adjusted")).toBeTruthy();
+    expect(screen.getByText("No action needed")).toBeTruthy();
+    expect(screen.getByText("Note (only you)")).toBeTruthy();
     expect(screen.getByText(resolveLockLine("Meera Iyer"))).toBeTruthy();
+    expect(resolveLockLine("Meera Iyer")).toBe(
+      "Resolving locks this item, so Meera can't log it late any more.",
+    );
   });
 
-  it("confirms with the chosen outcome and trimmed note", () => {
-    const onConfirm = vi.fn();
-    render(
-      <ResolveSheet
-        visible
-        detail={detail}
-        traineeDisplayName="Meera Iyer"
-        onDismiss={() => {}}
-        onConfirm={onConfirm}
-      />,
-    );
-    fireEvent.click(screen.getByText("Talked to client"));
-    fireEvent.change(screen.getByLabelText("Note"), {
+  it("sends the trainer's chosen outcome and trimmed note", () => {
+    const onConfirm = mount();
+    fireEvent.click(screen.getByText("Talked to Meera"));
+    fireEvent.change(screen.getByLabelText("Note (only you)"), {
       target: { value: "  Office lunch  " },
     });
-    fireEvent.click(screen.getByText("Resolve"));
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
     expect(onConfirm).toHaveBeenCalledWith({
       outcome: "talked",
       note: "Office lunch",
@@ -53,34 +55,16 @@ describe("ResolveSheet", () => {
   });
 
   it("confirms with no outcome and no note when nothing is entered", () => {
-    const onConfirm = vi.fn();
-    render(
-      <ResolveSheet
-        visible
-        detail={detail}
-        traineeDisplayName="Meera Iyer"
-        onDismiss={() => {}}
-        onConfirm={onConfirm}
-      />,
-    );
-    fireEvent.click(screen.getByText("Resolve"));
+    const onConfirm = mount();
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
     expect(onConfirm).toHaveBeenCalledWith({ outcome: null, note: null });
   });
 
   it("deselects an outcome chip on a second press", () => {
-    const onConfirm = vi.fn();
-    render(
-      <ResolveSheet
-        visible
-        detail={detail}
-        traineeDisplayName="Meera Iyer"
-        onDismiss={() => {}}
-        onConfirm={onConfirm}
-      />,
-    );
+    const onConfirm = mount();
     fireEvent.click(screen.getByText("Plan adjusted"));
     fireEvent.click(screen.getByText("Plan adjusted"));
-    fireEvent.click(screen.getByText("Resolve"));
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
     expect(onConfirm).toHaveBeenCalledWith({ outcome: null, note: null });
   });
 });
@@ -92,7 +76,7 @@ describe("exception sheet copy", () => {
       details: { localDate: "2026-10-13", workoutDayName: "Lower body A" },
     };
     expect(resolveSheetSubtitle(workout, "Rohan Mehta")).toBe(
-      "Missed workout · Tue 13 Oct · Rohan Mehta",
+      "Missed workout · Tue 13 Oct · Rohan",
     );
     const draft = nudgeDraftText(workout, "Rohan Mehta");
     expect(draft).toBe(

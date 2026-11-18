@@ -44,7 +44,7 @@ export function exceptionDateLabel(
   return localDate ? formatCivilDate(localDate, { now }) : null;
 }
 
-/** "Lunch not logged · Thu 15 Oct · Meera Iyer" (frame 33 subtitle). */
+/** "Lunch not logged · Thu 15 Oct · Meera" (TM-04d subtitle: item, then first name). */
 export function resolveSheetSubtitle(
   detail: Pick<ExceptionDetail, "type" | "details">,
   traineeDisplayName: string,
@@ -57,7 +57,7 @@ export function resolveSheetSubtitle(
     (detail.type === "overdue_meal" || detail.type === "skipped_meal")
       ? `${source} not logged`
       : kind;
-  return [head, exceptionDateLabel(detail, now), formatPersonName(traineeDisplayName)]
+  return [head, exceptionDateLabel(detail, now), firstNameOf(traineeDisplayName)]
     .filter(Boolean)
     .join(" · ");
 }
@@ -78,7 +78,7 @@ export function nudgeSheetSubtitle(
 
 export function resolveLockLine(traineeDisplayName: string): string {
   const name = firstNameOf(traineeDisplayName) || "your client";
-  return `Resolving locks this item, so ${name} can't log it late anymore. The original log isn't changed.`;
+  return `Resolving locks this item, so ${name} can't log it late any more.`;
 }
 
 /**
@@ -120,9 +120,9 @@ export function noteVisibleLine(traineeDisplayName: string): string {
   return `${name} will see this on their Today screen and get a notification`;
 }
 
-/** Shown when the toggle is off: the frames' existing private hint. */
+/** TM-04k: the line under the toggle says what Off means. */
 export function notePrivateLine(): string {
-  return "Only you see this.";
+  return "Off: only you can see it";
 }
 
 /** "From Rahul · just now" (frame 36 preview chip). */

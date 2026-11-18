@@ -306,6 +306,9 @@ export function TrainerShell() {
             }
             onReviewCheckin={openCheckin}
             onOpenClients={() => setTab("clients")}
+            onOpenClient={(relationshipId) => {
+              void openClientById(relationshipId, undefined, "start");
+            }}
           />
         ) : null}
 

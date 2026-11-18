@@ -1,12 +1,6 @@
-import { useEffect, useState } from "react";
-import {
-  Pressable,
-  StyleSheet,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
-import { Check, ChevronLeft, ChevronRight } from "lucide-react-native";
+import { useEffect, useState, type ReactNode } from "react";
+import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
+import { Check, ChevronLeft, ChevronRight, Ellipsis } from "lucide-react-native";
 import type {
   AttentionGroupsResponse,
   ExceptionDetail,
@@ -14,15 +8,6 @@ import type {
   WorkoutAssignment,
 } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
-import {
-  colors,
-  fontFamilyMedium,
-  fontFamilySemiBold,
-  radii,
-  semanticColors,
-  spacing,
-  touchTargetMin,
-} from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { BottomSheet } from "../components/BottomSheet";
 import { Button } from "../components/Button";
@@ -30,6 +15,11 @@ import { StatusChip } from "../components/StatusChip";
 import { Text } from "../components/Text";
 import { initialsFromName } from "../components/m2";
 import { plannedRowsFromAssignment } from "../lib/plannedMealItems";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 import { formatAttentionAge } from "./attentionCards";
 import {
   buildReviewSheetCardModel,
@@ -42,6 +32,7 @@ import {
   REVIEW_SHEET_BACK_LABEL,
   canGoNextReviewSheet,
   canGoPrevReviewSheet,
+  reviewSheetAllResolved,
   reviewSheetAllResolvedLeaveLine,
   reviewSheetAllResolvedTitle,
   reviewSheetAllReviewed,
@@ -57,6 +48,7 @@ import {
   reviewSheetStepLabel,
   type ReviewSheetDashState,
 } from "./reviewSheetNav";
+import { isNudgeableExceptionType } from "./sheets/nudgeContent";
 
 type AttentionGroupItem =
   AttentionGroupsResponse["groups"][number]["items"][number];
@@ -77,7 +69,7 @@ type Props = {
   acting?: boolean;
   /** Step back from the all-resolved summary onto an item (Undo). */
   browsingItem?: boolean;
-  /** Mark reviewed in this session — banner reads "just now". */
+  /** Marked reviewed or resolved in this session — banner reads "just now". */
   justResolvedIds?: ReadonlyArray<string>;
   /** Next Needs you client, when one remains. */
   nextClientName?: string | null;
@@ -88,12 +80,31 @@ type Props = {
   onMarkReviewed: (exceptionId: string) => void;
   onUndo: (exceptionId: string) => void;
   onNextClient: () => void;
-  onNudge: () => void;
-  /** Resolve opens a later F1f sub-sheet; for F1d this is a no-op hook. */
-  onResolve?: (exceptionId: string) => void;
+  /** The FitBud nudge sheet for this item (never WhatsApp; that is in ⋯). */
+  onNudge: (detail: ExceptionDetail, clientTimeZone: string | null) => void;
+  /** The TM-04d resolve sheet for this item. */
+  onResolve: (item: AttentionGroupItem) => void;
+  /** The TM-04j ⋯ menu for this client. */
+  onMore: () => void;
+  /** Sheets opened from this one (nudge, resolve, ⋯, note), stacked over it. */
+  children?: ReactNode;
 };
 
-export function ReviewSheet({
+/**
+ * Needs you review sheet (frame 31, wired by Z12-51): one client's open items
+ * with Mark reviewed, Nudge…, Resolve… and ⋯. Resolved items stay on the
+ * sheet (read only) for this session, then the all-resolved summary shows.
+ * The sheet follows the system theme itself.
+ */
+export function ReviewSheet(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <ReviewSheetBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function ReviewSheetBody({
   visible,
   relationshipId,
   traineeDisplayName,
@@ -113,8 +124,13 @@ export function ReviewSheet({
   onNextClient,
   onNudge,
   onResolve,
+  onMore,
+  children,
 }: Props) {
   const { api } = useAuth();
+  const theme = useTheme();
+  const styles = useStyles();
+  const c = theme.colors;
   const total = items.length;
   const item = items[index] ?? null;
   const name = formatPersonName(traineeDisplayName);
@@ -124,6 +140,7 @@ export function ReviewSheet({
     reviewSheetItemReviewed(entry.status),
   );
   const allReviewed = reviewSheetAllReviewed(items);
+  const allResolved = reviewSheetAllResolved(items);
   const returnToSummary =
     allReviewed && browsingItem && !canGoNextReviewSheet(index, total);
   const canPrev = showSummary ? total > 0 : canGoPrevReviewSheet(index);
@@ -143,6 +160,9 @@ export function ReviewSheet({
     : returnToSummary
       ? "Done"
       : "Next item";
+  const itemResolved = item?.status === "resolved";
+  const itemReviewed = item?.status === "acknowledged";
+  const nudgeable = item ? isNudgeableExceptionType(item.type) : false;
 
   const [clientMeta, setClientMeta] = useState<ClientMeta>({
     goalShort: null,
@@ -150,6 +170,7 @@ export function ReviewSheet({
     timeZone: null,
   });
   const [card, setCard] = useState<ReviewSheetCardModel | null>(null);
+  const [detail, setDetail] = useState<ExceptionDetail | null>(null);
   const [cardLoading, setCardLoading] = useState(false);
 
   useEffect(() => {
@@ -165,6 +186,8 @@ export function ReviewSheet({
           timeZone: workspace.header.traineeTimezone ?? null,
         });
       } catch {
+        // The subtitle and clock times are context: without them the sheet
+        // shows the item and its actions, and nothing claims a cause.
         if (!cancelled) {
           setClientMeta({ goalShort: null, weekNumber: null, timeZone: null });
         }
@@ -175,37 +198,43 @@ export function ReviewSheet({
     };
   }, [api, relationshipId, visible]);
 
+  const itemId = item?.id ?? null;
   useEffect(() => {
     if (!visible || !item) {
       setCard(null);
+      setDetail(null);
       return;
     }
     let cancelled = false;
     setCardLoading(true);
+    setDetail((current) => (current?.id === item.id ? current : null));
     void (async () => {
-      let detail: ExceptionDetail | null = null;
+      let loaded: ExceptionDetail | null = null;
       let workout: WorkoutAssignment | null = null;
       let meal: MealAssignment | null = null;
       try {
-        detail = await api.getException(item.id);
+        loaded = await api.getException(item.id);
       } catch {
-        detail = null;
+        // A resolved item may already be gone for this trainer; the card
+        // falls back to the item's own summary below.
+        loaded = null;
       }
-      if (detail?.sourceEntityType === "workout_assignment") {
+      if (loaded?.sourceEntityType === "workout_assignment") {
         try {
-          workout = await api.getWorkoutAssignment(detail.sourceEntityId);
+          workout = await api.getWorkoutAssignment(loaded.sourceEntityId);
         } catch {
           workout = null;
         }
-      } else if (detail?.sourceEntityType === "meal_assignment") {
+      } else if (loaded?.sourceEntityType === "meal_assignment") {
         try {
-          meal = await api.getMealAssignment(detail.sourceEntityId);
+          meal = await api.getMealAssignment(loaded.sourceEntityId);
         } catch {
           meal = null;
         }
       }
       if (cancelled) return;
-      if (!detail) {
+      setDetail(loaded);
+      if (!loaded) {
         const localDate =
           typeof item.details?.localDate === "string"
             ? item.details.localDate
@@ -236,7 +265,7 @@ export function ReviewSheet({
       const mealKcal = mealKcalSum > 0 ? mealKcalSum : null;
       setCard(
         buildReviewSheetCardModel({
-          detail,
+          detail: loaded,
           ageMinutes: item.ageMinutes,
           workout,
           meal,
@@ -249,13 +278,16 @@ export function ReviewSheet({
     return () => {
       cancelled = true;
     };
-  }, [api, clientMeta.timeZone, item, relationshipId, visible]);
+    // `item` changes identity on every list update; the fetch follows its id.
+  }, [api, clientMeta.timeZone, itemId, relationshipId, visible]);
 
   const subtitle = reviewSheetClientSubtitle({
     goalShort: clientMeta.goalShort,
     weekNumber: clientMeta.weekNumber,
-    openCount: total,
+    openCount: items.filter((entry) => entry.status !== "resolved").length,
   });
+  const actionsDisabled = offline || acting;
+  const canNudgeNow = Boolean(detail && detail.id === item?.id) && !actionsDisabled;
 
   return (
     <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
@@ -265,10 +297,21 @@ export function ReviewSheet({
             <Text style={styles.avatarText}>{initialsFromName(name)}</Text>
           </View>
           <View style={styles.identityText}>
-            <Text style={styles.name}>{name}</Text>
-            <Text style={styles.subtitle}>{subtitle}</Text>
+            <Text variant="headline">{name}</Text>
+            <Text variant="caption">{subtitle}</Text>
           </View>
         </View>
+        {!showSummary && item && !offline ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More actions"
+            onPress={onMore}
+            style={styles.moreBtn}
+            testID="review-sheet-more"
+          >
+            <Ellipsis size={20} color={c.ink} strokeWidth={2} />
+          </Pressable>
+        ) : null}
         <View style={styles.stepper} accessibilityLabel={`Item ${label}`}>
           <Pressable
             accessibilityRole="button"
@@ -279,15 +322,17 @@ export function ReviewSheet({
               if (showSummary) onBrowseItem(index);
               else onChangeIndex(index - 1);
             }}
-            style={[styles.stepBtn, !canPrev ? styles.stepBtnDisabled : null]}
+            style={styles.stepBtn}
           >
             <ChevronLeft
-              color={canPrev ? colors.deepNavy : colors.lightGrey}
+              color={canPrev ? c.ink : c.ink4}
               size={18}
               strokeWidth={1.75}
             />
           </Pressable>
-          <Text style={styles.stepLabel}>{label}</Text>
+          <Text variant="bodyStrong" tone="ink2" style={styles.stepLabel}>
+            {label}
+          </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={nextStepLabel}
@@ -298,10 +343,10 @@ export function ReviewSheet({
               else if (returnToSummary) onShowSummary();
               else onChangeIndex(index + 1);
             }}
-            style={[styles.stepBtn, !canNext ? styles.stepBtnDisabled : null]}
+            style={styles.stepBtn}
           >
             <ChevronRight
-              color={canNext ? colors.deepNavy : colors.lightGrey}
+              color={canNext ? c.ink : c.ink4}
               size={18}
               strokeWidth={1.75}
             />
@@ -324,7 +369,7 @@ export function ReviewSheet({
         {dashes.map((state, i) => (
           <View
             key={`dash-${i}`}
-            style={[styles.dash, dashStyle(state)]}
+            style={[styles.dash, dashStyle(styles, state)]}
             testID={`review-sheet-dash-${i}-${state}`}
           />
         ))}
@@ -334,12 +379,14 @@ export function ReviewSheet({
         <View style={styles.card}>
           <View style={styles.cardMeta}>
             <StatusChip kind="severity" value={card.severity} />
-            <Text style={styles.age}>
-              {formatAttentionAge(card.ageMinutes)}
-            </Text>
+            <Text variant="caption">{formatAttentionAge(card.ageMinutes)}</Text>
           </View>
-          <Text style={styles.summary}>{card.title}</Text>
-          {card.body ? <Text style={styles.body}>{card.body}</Text> : null}
+          <Text variant="headline">{card.title}</Text>
+          {card.body ? (
+            <Text variant="subhead" tone="ink2">
+              {card.body}
+            </Text>
+          ) : null}
           <View style={styles.kv}>
             <KvRow label="Planned" value={card.planned ?? "—"} />
             <KvRow label="Logged" value={card.logged} />
@@ -347,48 +394,74 @@ export function ReviewSheet({
           </View>
         </View>
       ) : item && !showSummary && cardLoading ? (
-        <Text style={styles.empty}>Loading item…</Text>
+        <Text variant="body" tone="ink3" style={styles.empty}>
+          Loading item…
+        </Text>
       ) : null}
 
       {mode === "empty" ? (
-        <Text style={styles.empty}>No open items to review.</Text>
+        <Text variant="body" tone="ink3" style={styles.empty}>
+          No open items to review.
+        </Text>
       ) : null}
 
       {item && mode === "actions" ? (
         <View style={styles.actionsRow}>
-          <Button
-            label="Nudge…"
-            variant="secondary"
-            disabled={offline || acting}
-            onPress={onNudge}
-            style={styles.half}
-          />
+          {nudgeable ? (
+            <Button
+              label="Nudge…"
+              variant="secondary"
+              disabled={!canNudgeNow}
+              onPress={() => {
+                if (detail) onNudge(detail, clientMeta.timeZone);
+              }}
+              style={styles.half}
+              testID="review-sheet-nudge"
+            />
+          ) : null}
           <Button
             label="Mark reviewed"
-            variant="tinted"
-            disabled={offline || acting}
+            variant="tint"
+            disabled={actionsDisabled}
             loading={acting}
             onPress={() => onMarkReviewed(item.id)}
             style={styles.half}
+            testID="review-sheet-mark-reviewed"
           />
         </View>
       ) : null}
 
-      {item && mode === "actions" ? (
+      {item && (mode === "actions" || (mode === "resolved" && itemReviewed)) ? (
         <Button
           label="Resolve…"
           variant="primary"
-          disabled={offline || acting}
-          onPress={() => onResolve?.(item.id)}
+          disabled={actionsDisabled}
+          onPress={() => onResolve(item)}
+          style={styles.resolveBtn}
+          testID="review-sheet-resolve"
         />
       ) : null}
 
       {item && mode === "resolved" ? (
-        <ResolvedBanner
+        <DoneBanner
+          status={item.status}
           outcome={reviewSheetItemOutcome(item.details)}
           justNow={justResolvedIds.includes(item.id)}
-          disabled={offline || acting}
-          onUndo={() => onUndo(item.id)}
+          disabled={actionsDisabled}
+          onUndo={itemReviewed ? () => onUndo(item.id) : undefined}
+        />
+      ) : null}
+
+      {item && mode === "resolved" && itemReviewed && nudgeable ? (
+        <Button
+          label="Nudge…"
+          variant="secondary"
+          disabled={!canNudgeNow}
+          onPress={() => {
+            if (detail) onNudge(detail, clientMeta.timeZone);
+          }}
+          style={styles.resolveBtn}
+          testID="review-sheet-nudge"
         />
       ) : null}
 
@@ -402,8 +475,8 @@ export function ReviewSheet({
         />
       ) : null}
 
-      {mode === "actions" || mode === "resolved" ? (
-        <Text style={styles.helper}>
+      {(mode === "actions" || mode === "resolved") && !itemResolved ? (
+        <Text variant="caption" style={styles.helper}>
           Mark reviewed keeps {firstName} in Reviewed until every item is
           resolved.
         </Text>
@@ -412,29 +485,26 @@ export function ReviewSheet({
       {showSummary ? (
         <View testID="review-sheet-all-resolved">
           <View style={styles.doneMark}>
-            <Check
-              color={semanticColors.positive.text}
-              size={28}
-              strokeWidth={2.5}
-            />
+            <Check color={c.done} size={28} strokeWidth={2.5} />
           </View>
-          <Text style={styles.doneTitle}>
-            {reviewSheetAllResolvedTitle(total, firstName)}
+          <Text variant="title" style={styles.center}>
+            {reviewSheetAllResolvedTitle(total, firstName, allResolved)}
           </Text>
-          <Text style={styles.doneLeave}>
-            {reviewSheetAllResolvedLeaveLine(firstName)}
+          <Text variant="body" tone="ink3" style={[styles.center, styles.doneLeave]}>
+            {reviewSheetAllResolvedLeaveLine(firstName, allResolved)}
           </Text>
           <View style={styles.doneList}>
             {items.map((entry) => {
               const when = reviewSheetItemDate(entry.details);
               return (
                 <View key={entry.id} style={styles.doneRow}>
-                  <Text style={styles.doneWhen} numberOfLines={1}>
+                  <Text variant="body" tone="ink3" style={styles.doneWhen} numberOfLines={1}>
                     {when ?? entry.summary}
                   </Text>
-                  <Text style={styles.doneOutcome}>
+                  <Text variant="bodyStrong" style={styles.doneOutcome}>
                     {reviewSheetResolvedRowLabel(
                       reviewSheetItemOutcome(entry.details),
+                      entry.status,
                     )}
                   </Text>
                 </View>
@@ -458,55 +528,74 @@ export function ReviewSheet({
           </View>
         </View>
       ) : null}
+      {children}
     </BottomSheet>
   );
 }
 
 function KvRow({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
   return (
     <View style={styles.kvRow}>
-      <Text style={styles.kvLabel}>{label}</Text>
-      <Text style={styles.kvValue}>{value}</Text>
+      <Text variant="subhead" tone="ink3" style={styles.kvLabel}>
+        {label}
+      </Text>
+      <Text variant="subhead" tone="ink" style={styles.kvValue}>
+        {value}
+      </Text>
     </View>
   );
 }
 
-function ResolvedBanner({
+function DoneBanner({
+  status,
   outcome,
   justNow,
   disabled,
   onUndo,
 }: {
+  status: string;
   outcome: string | null;
   justNow: boolean;
   disabled: boolean;
-  onUndo: () => void;
+  onUndo?: () => void;
 }) {
-  const banner = reviewSheetResolvedBanner(outcome, justNow);
+  const theme = useTheme();
+  const styles = useStyles();
+  const resolved = status === "resolved";
+  const banner = reviewSheetResolvedBanner(outcome, justNow, status);
+  const ink = resolved ? theme.colors.done : theme.colors.ink2;
   return (
     <View
-      style={styles.resolvedBanner}
+      style={[
+        styles.resolvedBanner,
+        { backgroundColor: resolved ? theme.colors.doneTint : theme.colors.fill },
+      ]}
       accessibilityLabel={banner}
       testID="review-sheet-resolved-banner"
     >
-      <Check
-        color={semanticColors.positive.text}
-        size={16}
-        strokeWidth={2.5}
-      />
-      <Text style={styles.resolvedBannerText}>{banner}</Text>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Undo"
-        accessibilityState={{ disabled }}
-        disabled={disabled}
-        onPress={onUndo}
-        testID="review-sheet-undo"
-      >
-        <Text style={[styles.undo, disabled ? styles.undoDisabled : null]}>
-          Undo
-        </Text>
-      </Pressable>
+      <Check color={ink} size={16} strokeWidth={2.5} />
+      <Text variant="body" style={[styles.resolvedBannerText, { color: ink }]}>
+        {banner}
+      </Text>
+      {onUndo ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Undo"
+          accessibilityState={{ disabled }}
+          disabled={disabled}
+          onPress={onUndo}
+          style={styles.undoHit}
+          testID="review-sheet-undo"
+        >
+          <Text
+            variant="bodyStrong"
+            style={[{ color: ink }, disabled ? styles.undoDisabled : null]}
+          >
+            Undo
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -524,6 +613,8 @@ function ChevronPrimaryButton({
   testID?: string;
   style?: StyleProp<ViewStyle>;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -538,59 +629,58 @@ function ChevronPrimaryButton({
         style,
       ]}
     >
-      <Text style={styles.primaryBtnText}>{label}</Text>
-      <ChevronRight color={colors.white} size={18} strokeWidth={2.25} />
+      <Text variant="bodyStrong" style={{ color: theme.colors.onBrand }}>
+        {label}
+      </Text>
+      <ChevronRight color={theme.colors.onBrand} size={18} strokeWidth={2.25} />
     </Pressable>
   );
 }
 
-function dashStyle(state: ReviewSheetDashState) {
+function dashStyle(
+  styles: ReturnType<typeof useStyles>,
+  state: ReviewSheetDashState,
+) {
   if (state === "on") return styles.dashOn;
   if (state === "ok") return styles.dashOk;
   return null;
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   header: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
+    gap: t.spacing.sm,
+    marginBottom: t.spacing.xs,
   },
   identity: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
+    gap: t.spacing.md,
     minWidth: 0,
   },
   avatar: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
-    color: colors.indigo,
-    fontFamily: fontFamilySemiBold,
+    color: t.colors.brandInk,
     fontSize: 13,
+    fontWeight: "600",
   },
-  identityText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  name: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-  },
-  subtitle: {
-    color: colors.midGrey,
-    fontFamily: fontFamilyMedium,
-    fontSize: 12,
+  identityText: { flex: 1, minWidth: 0, gap: 2 },
+  moreBtn: {
+    width: t.touchTarget,
+    height: t.touchTarget,
+    borderRadius: 999,
+    backgroundColor: t.colors.fill,
+    alignItems: "center",
+    justifyContent: "center",
   },
   stepper: {
     flexDirection: "row",
@@ -599,205 +689,95 @@ const styles = StyleSheet.create({
     flexShrink: 0,
   },
   stepBtn: {
-    width: 44,
-    height: 44,
+    width: t.touchTarget,
+    height: t.touchTarget,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.lightGrey,
+    borderColor: t.colors.line2,
     alignItems: "center",
     justifyContent: "center",
   },
-  stepBtnDisabled: {
-    opacity: 1,
-  },
-  stepLabel: {
-    minWidth: 48,
-    textAlign: "center",
-    color: colors.darkGrey,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 13,
-  },
+  stepLabel: { minWidth: 48, textAlign: "center", fontSize: 13 },
   dashes: {
     flexDirection: "row",
     justifyContent: "center",
     gap: 6,
-    marginBottom: spacing.md,
-    marginTop: spacing.xs,
+    marginBottom: t.spacing.md,
+    marginTop: t.spacing.xs,
   },
   dash: {
     width: 24,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.lightGrey,
+    backgroundColor: t.colors.fill2,
   },
-  dashOn: {
-    backgroundColor: colors.indigo,
-  },
-  dashOk: {
-    backgroundColor: semanticColors.positive.text,
-  },
+  dashOn: { backgroundColor: t.colors.brand },
+  dashOk: { backgroundColor: t.colors.done },
   card: {
+    backgroundColor: t.colors.card,
     borderWidth: 1,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
-    marginBottom: spacing.sm,
+    borderColor: t.colors.line2,
+    borderRadius: t.radii.card,
+    padding: t.spacing.md,
+    gap: t.spacing.sm,
+    marginBottom: t.spacing.sm,
   },
-  cardMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  age: {
-    color: colors.midGrey,
-    fontSize: 12,
-  },
-  summary: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  body: {
-    color: colors.darkGrey,
-    fontFamily: fontFamilyMedium,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  kv: {
-    marginTop: spacing.xs,
-    gap: 6,
-  },
-  kvRow: {
-    flexDirection: "row",
-    gap: spacing.md,
-  },
-  kvLabel: {
-    width: 96,
-    color: colors.midGrey,
-    fontSize: 13,
-  },
-  kvValue: {
-    flex: 1,
-    color: colors.nearBlack,
-    fontSize: 13,
-  },
-  empty: {
-    color: colors.midGrey,
-    fontSize: 14,
-    marginBottom: spacing.md,
-  },
-  actionsRow: {
-    flexDirection: "row",
-    gap: spacing.sm,
-    marginTop: spacing.xs,
-  },
-  half: {
-    flex: 1,
-  },
-  helper: {
-    color: colors.midGrey,
-    fontSize: 12,
-    textAlign: "center",
-    marginTop: spacing.sm,
-    lineHeight: 16,
-  },
+  cardMeta: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm },
+  kv: { marginTop: t.spacing.xs, gap: 6 },
+  kvRow: { flexDirection: "row", gap: t.spacing.md },
+  kvLabel: { width: 96 },
+  kvValue: { flex: 1 },
+  empty: { marginBottom: t.spacing.md },
+  actionsRow: { flexDirection: "row", gap: t.spacing.sm, marginTop: t.spacing.xs },
+  half: { flex: 1 },
+  resolveBtn: { marginTop: t.spacing.sm },
+  helper: { textAlign: "center", marginTop: t.spacing.sm },
   resolvedBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    backgroundColor: semanticColors.positive.fill,
+    gap: t.spacing.sm,
     borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    marginTop: spacing.xs,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+    marginTop: t.spacing.xs,
   },
-  resolvedBannerText: {
-    flex: 1,
-    color: semanticColors.positive.text,
-    fontFamily: fontFamilyMedium,
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  undo: {
-    color: semanticColors.positive.text,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 14,
-  },
-  undoDisabled: {
-    opacity: 0.4,
-  },
+  resolvedBannerText: { flex: 1 },
+  undoHit: { minHeight: t.touchTarget, justifyContent: "center", paddingLeft: t.spacing.sm },
+  undoDisabled: { opacity: 0.4 },
   primaryBtn: {
-    minHeight: touchTargetMin,
-    borderRadius: radii.control,
-    backgroundColor: colors.indigo,
+    minHeight: t.touchTarget,
+    borderRadius: t.radii.button,
+    backgroundColor: t.colors.brand,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 6,
-    paddingHorizontal: spacing.lg,
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: t.spacing.md,
   },
-  primaryBtnDisabled: {
-    opacity: 0.5,
-  },
-  primaryBtnText: {
-    color: colors.white,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-  },
-  nextItemBtn: {
-    marginTop: spacing.sm,
-  },
+  primaryBtnDisabled: { opacity: 0.5 },
+  nextItemBtn: { marginTop: t.spacing.sm },
+  center: { textAlign: "center" },
   doneMark: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: semanticColors.positive.fill,
+    backgroundColor: t.colors.doneTint,
     alignItems: "center",
     justifyContent: "center",
     alignSelf: "center",
-    marginTop: spacing.sm,
-    marginBottom: spacing.md,
+    marginTop: t.spacing.sm,
+    marginBottom: t.spacing.md,
   },
-  doneTitle: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 20,
-    lineHeight: 26,
-    textAlign: "center",
-  },
-  doneLeave: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-    textAlign: "center",
-    marginTop: spacing.xs,
-  },
-  doneList: {
-    marginTop: spacing.lg,
-    gap: spacing.md,
-  },
+  doneLeave: { marginTop: t.spacing.xs },
+  doneList: { marginTop: t.spacing.lg, gap: t.spacing.md },
   doneRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: spacing.md,
+    gap: t.spacing.md,
   },
-  doneWhen: {
-    flexShrink: 1,
-    color: colors.midGrey,
-    fontSize: 14,
-  },
-  doneOutcome: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilyMedium,
-    fontSize: 14,
-    textAlign: "right",
-  },
-  doneActions: {
-    gap: spacing.sm,
-    marginTop: spacing.lg,
-  },
-});
+  doneWhen: { flexShrink: 1 },
+  doneOutcome: { textAlign: "right" },
+  doneActions: { gap: t.spacing.sm, marginTop: t.spacing.lg },
+}));
