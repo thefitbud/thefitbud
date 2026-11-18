@@ -33,66 +33,78 @@ tags:
     notVisible: ".*Checking for a due check-in.*"
     timeout: 30000
 # The check-in card sits low on Today. Its error state would say "CHK-"; it must not.
-- scrollUntilVisible:
-    element: "Start"
-    timeout: 30000
+# The device run seeds once and runs both themes, so the second theme finds the
+# check-in the first one sent: that state is asserted ("Check-in sent"), and TR-14a,
+# 14c and 14d come from the first theme only.
 - assertNotVisible: ".*CHK-.*"
-- tapOn: "Start"
-- extendedWaitUntil:
-    visible: "Weekly check-in"
-    timeout: 20000
-- assertVisible: ".*step 1 of 3.*"
-- takeScreenshot: TR-14a-checkin-questions
-- runFlow: ../../common/assert-no-crash.yaml
-- evalScript: ${output.filled = 'no'}
-- runFlow:
-    when:
-      true: ${output.filled == 'no'}
-      visible: "Wellbeing"
-    commands:
-      - tapOn: "Wellbeing"
-      - inputText: "Good week, one session missed."
-      - tapOn: "Weekly check-in"
-      - evalScript: ${output.filled = 'yes'}
-- tapOn: "Continue"
-- assertVisible: ".*step 2 of 3.*"
-- runFlow:
-    when:
-      true: ${output.filled == 'no'}
-      visible: "Wellbeing"
-    commands:
-      - tapOn: "Wellbeing"
-      - inputText: "Good week, one session missed."
-      - tapOn: "Weekly check-in"
-      - evalScript: ${output.filled = 'yes'}
-- tapOn: "Continue"
-- assertVisible: ".*step 3 of 3.*"
-- runFlow:
-    when:
-      true: ${output.filled == 'no'}
-      visible: "Wellbeing"
-    commands:
-      - tapOn: "Wellbeing"
-      - inputText: "Good week, one session missed."
-      - tapOn: "Weekly check-in"
-      - evalScript: ${output.filled = 'yes'}
-- tapOn: "Continue"
-- extendedWaitUntil:
-    visible: "Send to .*"
-    timeout: 10000
-- takeScreenshot: TR-14c-checkin-review
-# "Send to Rahul" is also the Review subtitle: the button is the second match.
-- tapOn:
-    text: "Send to .*"
-    index: 1
-# TR-14d: Sent, with Done.
-- extendedWaitUntil:
-    visible: "Sent to .*"
+- scrollUntilVisible:
+    element: "Start|Check-in sent"
     timeout: 30000
-- assertVisible: "Done"
-- takeScreenshot: TR-14d-checkin-sent
-- runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Done"
+- runFlow:
+    when:
+      visible: "Start"
+    commands:
+      - tapOn: "Start"
+      - extendedWaitUntil:
+          visible: "Weekly check-in"
+          timeout: 20000
+      - assertVisible: ".*step 1 of 3.*"
+      - takeScreenshot: TR-14a-checkin-questions
+      - runFlow: ../../common/assert-no-crash.yaml
+      - evalScript: ${output.filled = 'no'}
+      - runFlow:
+          when:
+            true: ${output.filled == 'no'}
+            visible: "Wellbeing"
+          commands:
+            - tapOn: "Wellbeing"
+            - inputText: "Good week, one session missed."
+            - tapOn: "Weekly check-in"
+            - evalScript: ${output.filled = 'yes'}
+      - tapOn: "Continue"
+      - assertVisible: ".*step 2 of 3.*"
+      - runFlow:
+          when:
+            true: ${output.filled == 'no'}
+            visible: "Wellbeing"
+          commands:
+            - tapOn: "Wellbeing"
+            - inputText: "Good week, one session missed."
+            - tapOn: "Weekly check-in"
+            - evalScript: ${output.filled = 'yes'}
+      - tapOn: "Continue"
+      - assertVisible: ".*step 3 of 3.*"
+      - runFlow:
+          when:
+            true: ${output.filled == 'no'}
+            visible: "Wellbeing"
+          commands:
+            - tapOn: "Wellbeing"
+            - inputText: "Good week, one session missed."
+            - tapOn: "Weekly check-in"
+            - evalScript: ${output.filled = 'yes'}
+      - tapOn: "Continue"
+      - extendedWaitUntil:
+          visible: "Send to .*"
+          timeout: 10000
+      - takeScreenshot: TR-14c-checkin-review
+      # "Send to Rahul" is also the Review subtitle: the button is the second match.
+      - tapOn:
+          text: "Send to .*"
+          index: 1
+      # TR-14d: Sent, with Done. A cold iOS simulator can take over a minute to send.
+      - extendedWaitUntil:
+          visible: "Sent to .*"
+          timeout: 120000
+      - assertVisible: "Done"
+      - takeScreenshot: TR-14d-checkin-sent
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Done"
+- runFlow:
+    when:
+      visible: "Check-in sent"
+    commands:
+      - takeScreenshot: TR-14d-card-already-sent
 
 # TR-14g: a reviewed check-in opens read-only, with the coach's reply.
 - tapOn: "Progress"

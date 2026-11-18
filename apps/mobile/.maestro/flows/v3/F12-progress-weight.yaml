@@ -55,8 +55,10 @@ tags:
 - assertVisible: "Last: .* kg on .*"
 - assertVisible: ".*Date.*"
 - takeScreenshot: TR-13c-log-weight-sheet
-# The value is selected when the sheet opens (autoFocus + selectTextOnFocus): typing
-# replaces it. Tapping the field would put the cursor inside the old value.
+# The sheet opens focused with the old value selected (autoFocus + selectTextOnFocus).
+# Erasing clears the selection, or the six characters before the cursor if it was lost;
+# tapping the field instead would put the cursor inside the old value.
+- eraseText: 6
 - inputText: "78.3"
 - tapOn: "Save weight"
 # The sheet closes and the card shows the new value.
