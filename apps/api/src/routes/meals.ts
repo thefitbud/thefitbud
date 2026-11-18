@@ -957,8 +957,12 @@ async function recordCompliance(
     carbsScaled: null as number | null,
     fatScaled: null as number | null,
   };
+  // A changed portion (TR-08b) and an ate-out kcal (TR-08c) carry their lines
+  // too, so the day ring counts what was eaten rather than the plan.
   if (
-    input.deviationKind === "logged_foods" &&
+    (input.deviationKind === "logged_foods" ||
+      input.deviationKind === "portion_adjustment" ||
+      input.deviationKind === "restaurant") &&
     input.loggedFoodItems &&
     input.loggedFoodItems.length > 0
   ) {
@@ -966,6 +970,7 @@ async function recordCompliance(
       traineeUserId: actor.userId,
       relationshipId: relationship.id,
       items: input.loggedFoodItems,
+      allowSaveToMyFoods: input.deviationKind === "logged_foods",
     });
   } else if (input.outcome === "confirmed") {
     macroFields = prescriptionMacros(loaded.assignment.mealPrescriptionJson);

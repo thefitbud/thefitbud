@@ -1,5 +1,5 @@
 import { Pressable, View } from "react-native";
-import { X } from "lucide-react-native";
+import { Check, X } from "lucide-react-native";
 import type { MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatKcal } from "@fitbud/core";
 import { BottomSheet } from "../components/BottomSheet";
@@ -22,11 +22,17 @@ export function PlannedMealSheet({
   coachName,
   timeZone,
   onClose,
+  actions,
 }: {
   meal: MealAssignment;
   coachName: string;
   timeZone: string;
   onClose: () => void;
+  /**
+   * TR-07j: a meal that is open to log offers both actions here. Left out on a
+   * future day and for a meal whose window has not opened (read-only).
+   */
+  actions?: { onEaten: () => void; onDifferent: () => void };
 }) {
   const styles = useStyles();
   const theme = useTheme();
@@ -99,6 +105,29 @@ export function PlannedMealSheet({
           ? `P ${macros.protein} g · C ${macros.carbs} g · F ${macros.fat} g · from ${coachName}’s plan`
           : `From ${coachName}’s plan`}
       </Text>
+      {actions ? (
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Eaten as planned"
+            onPress={actions.onEaten}
+            style={styles.primary}
+          >
+            <Check size={20} strokeWidth={2.2} color={theme.colors.onBrand} />
+            <Text variant="bodyStrong" tone="onBrand">
+              Eaten as planned
+            </Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Something different"
+            onPress={actions.onDifferent}
+            style={styles.secondary}
+          >
+            <Text variant="bodyStrong">Something different</Text>
+          </Pressable>
+        </View>
+      ) : null}
     </BottomSheet>
   );
 }
@@ -139,4 +168,21 @@ const useStyles = createThemedStyles((t) => ({
   rowText: { flex: 1, gap: 2 },
   kcal: { fontVariant: ["tabular-nums"] },
   foot: { marginTop: 12, marginHorizontal: 4 },
+  actions: { gap: 10, marginTop: 16 },
+  primary: {
+    alignItems: "center",
+    backgroundColor: t.colors.brand,
+    borderRadius: t.radii.button,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    minHeight: 52,
+  },
+  secondary: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.button,
+    justifyContent: "center",
+    minHeight: 52,
+  },
 }));

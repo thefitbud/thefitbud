@@ -61,7 +61,7 @@ function itemLabel(item: MealPrescription["items"][number]): string {
   return "Item";
 }
 
-function itemPortion(item: MealPrescription["items"][number]): string | null {
+export function itemPortion(item: MealPrescription["items"][number]): string | null {
   if ("portionLabel" in item && typeof item.portionLabel === "string") {
     return item.portionLabel;
   }
@@ -76,7 +76,7 @@ function itemPortion(item: MealPrescription["items"][number]): string | null {
         : Math.abs(qty - Math.round(qty)) < 0.01
           ? String(Math.round(qty))
           : qty.toFixed(2).replace(/\.?0+$/, "");
-    return qty === 1 ? item.serving.label : `${q} ${item.serving.label}`;
+    return qty === 1 ? item.serving.label : `${q} × ${item.serving.label}`;
   }
   if ("servingLabel" in item && typeof item.servingLabel === "string") {
     return item.servingLabel;
