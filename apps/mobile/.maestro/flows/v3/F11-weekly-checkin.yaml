@@ -111,6 +111,8 @@ tags:
 - scrollUntilVisible:
     element: "Sun 8 Nov.*"
     timeout: 30000
+# The row can stop under the floating tab bar (iOS), where a tap lands on Diet: lift it.
+- scroll
 - tapOn: "Sun 8 Nov.*"
 - extendedWaitUntil:
     visible: "Your answers"
