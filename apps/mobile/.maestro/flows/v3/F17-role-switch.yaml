@@ -25,6 +25,17 @@ tags:
     timeout: 60000
 - tapOn: "you@example.com or 9876543210"
 - inputText: ${QA_DUAL_EMAIL}
+# Retype when the field lost keystrokes. On a cold first launch the Android
+# emulator dropped the first letter ("aarav.ontrack@..." arrived as
+# "arav.ontrack@...", device runs 44191354664 and 44200084620, light launch
+# smoke), so the API answered INVALID_CREDENTIALS and TR-01e showed. The
+# field keeps focus: erase and type again (as z12-36/sign-in-password.yaml).
+- runFlow:
+    when:
+      notVisible: "${QA_DUAL_EMAIL}.*"
+    commands:
+      - eraseText: 60
+      - inputText: ${QA_DUAL_EMAIL}
 - tapOn: "Your password"
 - inputText: ${QA_PASSWORD}
 - tapOn: "Use the mobile number or email your coach invited\\."

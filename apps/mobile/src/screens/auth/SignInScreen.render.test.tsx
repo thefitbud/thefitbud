@@ -48,6 +48,18 @@ describe("SignInScreen (TR-01a)", () => {
     openURL.mockRestore();
   });
 
+  it.each([
+    "Terms of use, opens in your browser",
+    "Privacy policy, opens in your browser",
+  ])("%s is at least 44 pt tall", (name) => {
+    // BT3's review found footer links that looked right but were only ~32 px
+    // hittable. Assert the link's own minimum height, not the text size.
+    renderSignIn();
+    const link = screen.getByRole("link", { name });
+    const minHeight = Number.parseFloat(window.getComputedStyle(link).minHeight);
+    expect(minHeight).toBeGreaterThanOrEqual(44);
+  });
+
   it("TR-01e: wrong password shows inline under the field, not as a banner", () => {
     renderSignIn({
       error: WRONG_CREDENTIALS_COPY,

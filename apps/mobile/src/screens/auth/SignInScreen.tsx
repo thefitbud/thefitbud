@@ -41,6 +41,12 @@ type Props = {
    * an OTP (CU21).
    */
   onIdentifierChange?: (value: string) => void;
+  /**
+   * Called when the user edits the identifier or the password, so the owner
+   * clears the shown error: after a 429 (TR-01f) Sign in is disabled only
+   * until the user changes what they typed.
+   */
+  onEdit?: () => void;
 };
 
 /**
@@ -59,6 +65,7 @@ export function SignInScreen({
   inviteTrainerName,
   initialIdentifier = "",
   onIdentifierChange,
+  onEdit,
 }: Props) {
   const [identifier, setIdentifier] = useState(initialIdentifier);
   const [password, setPassword] = useState("");
@@ -86,6 +93,7 @@ export function SignInScreen({
         onChangeText={(value) => {
           setIdentifier(value);
           onIdentifierChange?.(value);
+          onEdit?.();
         }}
         autoCapitalize="none"
         autoCorrect={false}
@@ -96,7 +104,10 @@ export function SignInScreen({
       <PasswordInput
         label="Password"
         value={password}
-        onChangeText={setPassword}
+        onChangeText={(value) => {
+          setPassword(value);
+          onEdit?.();
+        }}
         textContentType="password"
         placeholder="Your password"
         invalid={wrongPassword}

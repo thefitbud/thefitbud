@@ -287,6 +287,11 @@ export function AuthScreen() {
         errorKind={localError ? errorKind : null}
         initialIdentifier={identifier}
         onIdentifierChange={setIdentifier}
+        onEdit={() => {
+          // An edit ends the shown failure: Sign in comes back after a 429
+          // and the inline wrong-password text goes (TR-01e, TR-01f).
+          if (localError) setLocalError(null);
+        }}
         onSignIn={signInPassword}
         onUseCode={() => {
           setMode("code");
