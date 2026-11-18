@@ -90,7 +90,11 @@ appId: com.thefitbud.mobile.staging
                 when:
                   notVisible: "Pick up where you left off\\?"
                 commands:
-                  - tapOn: "Continue workout|Log workout|Start workout"
+                  # Optional: the dialog may cover the card between the check
+                  # and the tap; the step below answers it.
+                  - tapOn:
+                      text: "Continue workout|Log workout|Start workout"
+                      optional: true
       # The dialog can still arrive while the card was being scrolled.
       - runFlow:
           when:

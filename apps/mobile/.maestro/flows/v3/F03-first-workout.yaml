@@ -30,9 +30,10 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+# The first load after a cold start can take over 30 s on the CI iOS simulator.
 - extendedWaitUntil:
     notVisible: ".*Loading your day.*"
-    timeout: 30000
+    timeout: 120000
 - runFlow: ../../device/z12-45/open-log.yaml
 
 # ---- W-02: start of session ----------------------------------------------------
