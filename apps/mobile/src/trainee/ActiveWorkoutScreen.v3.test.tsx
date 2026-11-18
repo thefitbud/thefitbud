@@ -1,17 +1,22 @@
 /**
- * Z9-7: set entry on the active workout (frames 11, 11c, 11b). The kg keypad
- * with ±2.5 steps, the Bodyweight toggle, the numeric `actualLoadKg` that goes
- * into the outbox, and the light rest card. DOM-shaped (react-native-web), so
- * layout is checked in the visual captures, not here.
+ * The active workout log (Z12-45, on Z9-7's set entry): the kg keypad with
+ * ±2.5 steps, Bodyweight, the numeric `actualLoadKg` that goes into the
+ * outbox, the rest bar and its end, the exercise menu, skip with Undo, the
+ * set sheet, finish early, pause, minimise, discard and the record banner.
+ * DOM-shaped (react-native-web), so layout is checked in the visual captures,
+ * not here; swiping a set is native-only and is walked on the device.
  */
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Vibration } from "react-native";
 import {
   workoutExecutionSchema,
   completeSetRequestSchema,
+  workoutAssignmentSchema,
+  type WorkoutAssignment,
   type WorkoutExecution,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, fireEvent } from "../test/render";
+import { act, mockAuth, render, screen, fireEvent } from "../test/render";
 import {
   backspace,
   initialDraft,
@@ -32,6 +37,12 @@ const uuid = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 const enqueued: Array<{ operation: string; payloadJson: string }> = [];
+/** Every API call the screen made, in order. */
+const apiCalls: Array<{ method: string; args: unknown[] }> = [];
+/** Make the next call of a method reject (a request that did not land). */
+const failNext: Record<string, boolean> = {};
+/** What `getStrength` answers; null answers like any other list. */
+let strength: unknown = null;
 
 const auth = mockAuth({
   api: new Proxy(
@@ -39,7 +50,15 @@ const auth = mockAuth({
     {
       get(_t, key: string) {
         if (key === "then") return undefined;
-        return async () => ({ items: [], nextCursor: null });
+        return async (...args: unknown[]) => {
+          apiCalls.push({ method: key, args });
+          if (failNext[key]) {
+            failNext[key] = false;
+            throw new Error("network down");
+          }
+          if (key === "getStrength" && strength) return strength;
+          return { items: [], nextCursor: null };
+        };
       },
     },
   ),
@@ -57,7 +76,10 @@ vi.mock("../sync/SyncProvider", async () => {
     ...actual,
     useSyncEngine: () => ({
       pullAndApply: async () => undefined,
-      pushPending: async () => [],
+      pushPending: async () => {
+        apiCalls.push({ method: "pushPending", args: [] });
+        return [];
+      },
       store: {
         upsertLocal: async () => undefined,
         listLocal: async () => [],
@@ -71,7 +93,7 @@ vi.mock("../sync/SyncProvider", async () => {
   };
 });
 
-const { ActiveWorkoutScreen } = await import("./ActiveWorkoutScreen");
+const { ActiveWorkoutScreen, SKIP_UNDO_MS } = await import("./ActiveWorkoutScreen");
 
 const NOW = "2026-11-11T06:00:00.000Z";
 
@@ -124,21 +146,103 @@ function execution(load: string | null): WorkoutExecution {
   });
 }
 
-function Harness({ initial }: { initial: WorkoutExecution }) {
+/** The same session with a second exercise, "Step-ups" (two sets, 20 kg). */
+function twoExercises(): WorkoutExecution {
+  const ex = execution("20 kg");
+  ex.exercises[0]!.sets[0] = {
+    ...ex.exercises[0]!.sets[0]!,
+    status: "completed",
+    actualReps: 10,
+    actualLoadLabel: "20 kg",
+    completedAt: NOW,
+  };
+  ex.exercises.push({
+    ...ex.exercises[0]!,
+    id: uuid(501),
+    exerciseId: uuid(601),
+    name: "Step-ups",
+    order: 2,
+    sets: [set(20, 1, "20 kg", 10), set(21, 2, "20 kg", 10)].map((x) => ({
+      ...x,
+      exerciseExecutionId: uuid(501),
+    })),
+  });
+  return ex;
+}
+
+/** The assignment of `execution()`, for the screens that read history. */
+function assignment(): WorkoutAssignment {
+  return workoutAssignmentSchema.parse({
+    id: uuid(2),
+    coachingRelationshipId: uuid(3),
+    planId: uuid(5),
+    planVersionId: uuid(4),
+    workoutDayId: uuid(6),
+    workoutDayName: "Lower body B",
+    localDate: "2026-11-11",
+    windowStartsAt: "2026-11-10T18:30:00.000Z",
+    windowEndsAt: "2026-11-11T18:29:59.000Z",
+    status: "in_progress",
+    workoutDay: {
+      id: uuid(6),
+      order: 1,
+      name: "Lower body B",
+      exercises: [
+        {
+          id: uuid(600),
+          order: 1,
+          name: "Romanian deadlift",
+          instructions: "Soft knees, push the hips back.",
+          primaryMuscles: ["Hamstrings"],
+          equipment: ["Barbell"],
+          setTargets: [],
+        },
+      ],
+    },
+    execution: null,
+    createdAt: NOW,
+    updatedAt: NOW,
+  });
+}
+
+type HarnessOptions = {
+  onFinished?: (execution: WorkoutExecution) => void;
+  onExit?: () => void;
+  onMinimise?: () => void;
+  onAskCoach?: (exerciseName?: string) => void;
+  coachName?: string;
+  assignment?: WorkoutAssignment;
+};
+
+function Harness({
+  initial,
+  options,
+}: {
+  initial: WorkoutExecution;
+  options: HarnessOptions;
+}) {
   const [exec, setExec] = useState(initial);
   return (
     <ActiveWorkoutScreen
       execution={exec}
+      assignment={options.assignment ?? null}
       onChange={setExec}
-      onFinished={() => undefined}
-      onExit={() => undefined}
+      onFinished={options.onFinished ?? (() => undefined)}
+      onExit={options.onExit ?? (() => undefined)}
+      onMinimise={options.onMinimise}
+      onAskCoach={options.onAskCoach}
+      coachName={options.coachName}
       sessionName="Lower body B"
     />
   );
 }
 
-function renderScreen(load: string | null, ex: WorkoutExecution = execution(load)) {
-  render(<Harness initial={ex} />);
+function renderScreen(
+  load: string | null,
+  ex: WorkoutExecution = execution(load),
+  options: HarnessOptions = {},
+) {
+  render(<Harness initial={ex} options={options} />);
 }
 
 const tap = (name: string | RegExp) =>
@@ -152,6 +256,9 @@ function lastBody() {
 
 beforeEach(() => {
   enqueued.length = 0;
+  apiCalls.length = 0;
+  for (const key of Object.keys(failNext)) delete failNext[key];
+  strength = null;
 });
 
 describe("set entry maths", () => {
@@ -215,16 +322,15 @@ describe("set entry maths", () => {
   });
 });
 
-describe("ActiveWorkoutScreen set entry", () => {
+describe("ActiveWorkoutScreen set entry (W-04)", () => {
   it("opens the kg keypad, steps +2.5, moves to reps and sends a numeric load", () => {
     renderScreen("20 kg");
     fireEvent.click(screen.getByRole("button", { name: /Set 1 load: 20 kg/ }));
-    expect(screen.getByText("Set 1 · load")).toBeTruthy();
-    expect(screen.getByText("Weight used, in kg")).toBeTruthy();
+    expect(screen.getByText(/Set 1 · Weight \(kg\)/)).toBeTruthy();
     tap("Plus 2.5");
     expect(screen.getByRole("button", { name: /Set 1 load: 22.5 kg/ })).toBeTruthy();
     tap("Next: reps");
-    expect(screen.getByText("Set 1 · reps")).toBeTruthy();
+    expect(screen.getByText(/Set 1 · Reps/)).toBeTruthy();
     tap("Log set 1");
     expect(lastBody()).toEqual({ actualReps: 10, actualLoadKg: 22.5 });
   });
@@ -241,29 +347,26 @@ describe("ActiveWorkoutScreen set entry", () => {
     expect(lastBody().actualLoadKg).toBe(62.5);
   });
 
-  it("Bodyweight toggle sends the Bodyweight label and no kg, and disables the digits", () => {
+  it("Bodyweight sends the Bodyweight label and no kg, and drops the kg cell", () => {
     renderScreen("20 kg");
     fireEvent.click(screen.getByRole("button", { name: /Set 1 load/ }));
-    fireEvent.click(screen.getByRole("tab", { name: "Bodyweight" }));
-    const keypadOne = screen.getByRole("button", { name: "1" }) as HTMLButtonElement;
-    expect(keypadOne.disabled || keypadOne.getAttribute("aria-disabled") === "true").toBe(true);
-    expect(screen.getByRole("button", { name: /Set 1 load: Bodyweight/ })).toBeTruthy();
-    tap("Next: reps");
+    tap("Use bodyweight");
+    expect(screen.queryByRole("button", { name: /Set 1 load/ })).toBeNull();
+    expect(screen.getByText(/Set 1 · Reps/)).toBeTruthy();
     tap("Log set 1");
     const body = lastBody();
     expect(body.actualLoadLabel).toBe("Bodyweight");
     expect(body).not.toHaveProperty("actualLoadKg");
   });
 
-  it("a bodyweight prescription shows Bodyweight, and switching to kg goes to the load keypad", () => {
+  it("a bodyweight prescription has no kg cell, and switching to kg goes to the weight keypad", () => {
     renderScreen(null);
-    expect(screen.getByRole("button", { name: /Set 1 load: Bodyweight/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Set 1 load/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Set 1 reps/ }));
-    expect(screen.getByText("Holding weights? Switch to kg")).toBeTruthy();
     tap("Plus 1");
     expect(screen.getByRole("button", { name: /Set 1 reps: 11/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "kg" }));
-    expect(screen.getByText("Set 1 · load")).toBeTruthy();
+    tap("Use a weight in kg");
+    expect(screen.getByText(/Set 1 · Weight \(kg\)/)).toBeTruthy();
     tap("4");
     tap("0");
     tap("Next: reps");
@@ -277,51 +380,342 @@ describe("ActiveWorkoutScreen set entry", () => {
     expect(lastBody()).toEqual({ actualReps: 10, actualLoadLabel: null });
   });
 
-  it("shows the rest card and names the set that is actually next (set 2)", () => {
-    renderScreen("20 kg");
-    tap(/^Log set 1/);
-    expect(screen.getByText("REST")).toBeTruthy();
-    expect(screen.getByText("−15 s")).toBeTruthy();
-    expect(screen.getByText("+15 s")).toBeTruthy();
-    expect(screen.getByText("Next: Romanian deadlift, set 2 · 20 kg")).toBeTruthy();
-    expect(screen.getByText("Ready early? Logging a set ends the rest.")).toBeTruthy();
-    tap("Skip rest");
-    expect(screen.queryByText("REST")).toBeNull();
-    expect(screen.getByText(/Tap load or reps to change/)).toBeTruthy();
-  });
-
-  it("rolls over to the next exercise after the last set (frame 11b)", () => {
-    const ex = execution("20 kg");
-    ex.exercises[0]!.sets[0]!.status = "completed";
-    const second = {
-      ...ex.exercises[0]!,
-      id: uuid(501),
-      name: "Step-ups",
-      order: 2,
-      sets: [set(20, 1, null, 10), set(21, 2, null, 10)].map((x) => ({
-        ...x,
-        exerciseExecutionId: uuid(501),
-      })),
-    };
-    ex.exercises.push(second);
-    renderScreen("20 kg", ex);
-    tap(/^Log set 2/);
-    expect(screen.getByText("Next: Step-ups, set 1 · bodyweight")).toBeTruthy();
-  });
-
   it("shows the raw prescription for a free-text load and invents no kg", () => {
     expect(prescribedLoadText("RPE 7")).toBe("RPE 7");
     expect(prescribedLoadText("90 lb")).toBe("90 lb");
     expect(prescribedLoadText("BW")).toBe("bodyweight");
     expect(prescribedLoadText("22.5 kg")).toBe("22.5 kg");
     renderScreen("RPE 7");
+    expect(screen.getByRole("button", { name: "Set 1 load: RPE 7" })).toBeTruthy();
     tap(/^Log set 1/);
-    expect(screen.getByText("Next: Romanian deadlift, set 2 · RPE 7")).toBeTruthy();
+    expect(lastBody()).toEqual({ actualReps: 10, actualLoadLabel: null });
+  });
+
+  it("any set can be logged first: the trainee moves freely (W-03)", () => {
+    renderScreen("20 kg", twoExercises());
+    // Set 2 of the second exercise, before anything else.
+    fireEvent.click(screen.getAllByRole("button", { name: "Log set 2" }).at(-1)!);
+    const row = JSON.parse(enqueued.at(-1)!.payloadJson);
+    expect(row.setExecutionId).toBe(uuid(21));
+    // The log carries on in that exercise, not back at the top.
+    expect(screen.getByText("Rest · next set 1")).toBeTruthy();
+    expect(
+      screen.getAllByRole("button", { name: /^Set 2, 20 kg × 10, logged/ }),
+    ).toHaveLength(1);
+  });
+});
+
+describe("rest bar (W-05a, W-05b)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  it("starts after a logged set, names the next set, and Skip ends it", () => {
+    renderScreen("20 kg");
+    tap(/^Log set 1/);
+    expect(screen.getByText("Rest · next set 2")).toBeTruthy();
+    expect(screen.getByRole("timer").textContent).toBe("1:30");
+    expect(screen.getByText("−15")).toBeTruthy();
+    expect(screen.getByText("+15")).toBeTruthy();
+    tap("Skip rest");
+    expect(screen.queryByText("Rest · next set 2")).toBeNull();
+    expect(screen.queryByText("Rest done")).toBeNull();
+  });
+
+  it("counts down from the end instant, moves by 15 s, and buzzes once at the end", () => {
+    vi.useFakeTimers({ now: new Date("2026-11-11T06:10:00.000Z") });
+    const vibrate = vi.spyOn(Vibration, "vibrate").mockImplementation(() => undefined);
+    renderScreen("20 kg");
+    tap(/^Log set 1/);
+    expect(screen.getByRole("timer").textContent).toBe("1:30");
+    act(() => {
+      vi.advanceTimersByTime(32_000);
+    });
+    expect(screen.getByRole("timer").textContent).toBe("0:58");
+    tap("15 seconds more");
+    expect(screen.getByRole("timer").textContent).toBe("1:13");
+    tap("15 seconds less");
+    tap("15 seconds less");
+    expect(screen.getByRole("timer").textContent).toBe("0:43");
+    expect(vibrate).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(43_000);
+    });
+    expect(screen.queryByRole("timer")).toBeNull();
+    expect(screen.getByText("Rest done")).toBeTruthy();
+    expect(screen.getByText("Next: set 2 · 20 kg × 10")).toBeTruthy();
+    expect(vibrate).toHaveBeenCalledTimes(1);
+    tap("OK");
+    expect(screen.queryByText("Rest done")).toBeNull();
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(vibrate).toHaveBeenCalledTimes(1);
+  });
+
+  it("a skipped rest never buzzes", () => {
+    vi.useFakeTimers({ now: new Date("2026-11-11T06:10:00.000Z") });
+    const vibrate = vi.spyOn(Vibration, "vibrate").mockImplementation(() => undefined);
+    renderScreen("20 kg");
+    tap(/^Log set 1/);
+    tap("Skip rest");
+    act(() => {
+      vi.advanceTimersByTime(120_000);
+    });
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+});
+
+describe("exercise menu and set actions (W-08, W-09, W-09b, W-13)", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("the ⋯ menu offers How to, History and Skip exercise, and How to opens the exercise, not the coach message", () => {
+    const onAskCoach = vi.fn();
+    renderScreen("20 kg", execution("20 kg"), { onAskCoach });
+    tap("More for Romanian deadlift");
+    expect(screen.getByRole("button", { name: "How to do it" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "History and records" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Skip exercise/ })).toBeTruthy();
+    tap("How to do it");
+    expect(onAskCoach).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Your coach hasn’t added notes for this exercise."),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "History" }));
+    expect(screen.getByText("No logged sets for this exercise yet.")).toBeTruthy();
+    tap("Back to workout");
+    expect(screen.getByRole("button", { name: "More for Romanian deadlift" })).toBeTruthy();
+  });
+
+  it("Ask the coach passes the exercise it is about", () => {
+    const onAskCoach = vi.fn();
+    renderScreen("20 kg", execution("20 kg"), { onAskCoach, coachName: "Rahul Verma" });
+    tap("More for Romanian deadlift");
+    tap(/^Ask Rahul about this/);
+    expect(onAskCoach).toHaveBeenCalledWith("Romanian deadlift");
+  });
+
+  it("Skip exercise skips what is left, Undo puts it back, and nothing is sent before the Undo has gone", () => {
+    vi.useFakeTimers({ now: new Date("2026-11-11T06:10:00.000Z") });
+    renderScreen("20 kg", twoExercises());
+    tap("More for Step-ups");
+    tap(/^Skip exercise/);
+    expect(screen.getByText("Step-ups skipped")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Step-ups, Skipped/ })).toBeTruthy();
+    expect(apiCalls.filter((call) => call.method === "skipWorkoutSet")).toHaveLength(0);
+    tap("Undo");
+    expect(screen.queryByText("Step-ups skipped")).toBeNull();
+    expect(screen.getByRole("button", { name: "More for Step-ups" })).toBeTruthy();
+    act(() => {
+      vi.advanceTimersByTime(SKIP_UNDO_MS + 1000);
+    });
+    expect(apiCalls.filter((call) => call.method === "skipWorkoutSet")).toHaveLength(0);
+  });
+
+  it("a skip is sent set by set once its Undo has gone", async () => {
+    vi.useFakeTimers({ now: new Date("2026-11-11T06:10:00.000Z") });
+    renderScreen("20 kg", twoExercises());
+    tap("More for Step-ups");
+    tap(/^Skip exercise/);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SKIP_UNDO_MS + 100);
+    });
+    expect(
+      apiCalls.filter((call) => call.method === "skipWorkoutSet").map((call) => call.args),
+    ).toEqual([
+      [uuid(1), uuid(20)],
+      [uuid(1), uuid(21)],
+    ]);
+    expect(screen.queryByText("Step-ups skipped")).toBeNull();
+  });
+
+  it("one set can be skipped from its options, and a skipped set can still be logged", () => {
+    renderScreen("20 kg");
+    tap("Set 2 options");
+    expect(screen.getByText("Set 2 · Romanian deadlift")).toBeTruthy();
+    expect(screen.getByText("Not logged yet")).toBeTruthy();
+    tap("Skip set");
+    expect(screen.getByText("Set 2 skipped")).toBeTruthy();
+    tap(/^Set 2, skipped/);
+    // The row and the sheet both say so.
+    expect(screen.getAllByText("Skipped")).toHaveLength(2);
+    tap("Log set");
+    expect(lastBody()).toEqual({ actualReps: 10, actualLoadLabel: null });
+    expect(JSON.parse(enqueued.at(-1)!.payloadJson).setExecutionId).toBe(uuid(11));
+    expect(screen.getByRole("button", { name: /^Set 2, 20 kg × 10, logged/ })).toBeTruthy();
+  });
+
+  it("a logged set can be corrected: the new values go out as the same set", () => {
+    renderScreen("20 kg");
+    tap(/^Log set 1/);
+    tap(/^Set 1, 20 kg × 10, logged/);
+    expect(screen.getByText("Set 1 · Romanian deadlift")).toBeTruthy();
+    expect(screen.getByText(/^Logged 20 kg × 10 at /)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Weight in kg"), { target: { value: "22.5" } });
+    fireEvent.change(screen.getByLabelText("Reps"), { target: { value: "8" } });
+    tap("Save changes");
+    expect(enqueued.filter((row) => row.operation === "workout.complete_set")).toHaveLength(2);
+    expect(lastBody()).toEqual({ actualReps: 8, actualLoadKg: 22.5 });
+    expect(JSON.parse(enqueued.at(-1)!.payloadJson).setExecutionId).toBe(uuid(10));
+    expect(screen.getByRole("button", { name: /^Set 1, 22.5 kg × 8, logged/ })).toBeTruthy();
+  });
+
+  it("Mark not done sends queued logs first, then the skip, and the set reads skipped", async () => {
+    renderScreen("20 kg");
+    tap(/^Log set 1/);
+    tap(/^Set 1, 20 kg × 10, logged/);
+    await act(async () => {
+      tap("Mark not done");
+    });
+    // Queued logs are sent first, so the skip cannot land before the log it undoes.
+    expect(apiCalls.slice(-2)).toEqual([
+      { method: "pushPending", args: [] },
+      { method: "skipWorkoutSet", args: [uuid(1), uuid(10)] },
+    ]);
+    expect(screen.getByRole("button", { name: /^Set 1, skipped/ })).toBeTruthy();
+  });
+
+  it("Mark not done that does not reach the server leaves the set logged and says so", async () => {
+    failNext.skipWorkoutSet = true;
+    renderScreen("20 kg");
+    tap(/^Log set 1/);
+    tap(/^Set 1, 20 kg × 10, logged/);
+    await act(async () => {
+      tap("Mark not done");
+    });
+    expect(screen.getByRole("button", { name: /^Set 1, 20 kg × 10, logged/ })).toBeTruthy();
+    expect(screen.getByRole("alert").textContent).toContain("WO-UNLOG");
+  });
+});
+
+describe("finish, pause, minimise and discard (W-14, W-15, W-16, W-19)", () => {
+  it("Finish mid-session lists what is not logged; Go to makes that set current; Finish anyway completes", async () => {
+    const onFinished = vi.fn();
+    renderScreen("20 kg", twoExercises(), { onFinished });
+    tap("Finish workout");
+    expect(screen.getByText("Finish early?")).toBeTruthy();
+    expect(screen.getByText(/3 of 4 sets aren’t logged\./)).toBeTruthy();
+    expect(screen.getByText("Set 2")).toBeTruthy();
+    expect(screen.getByText("2 sets")).toBeTruthy();
+    tap("Go to Step-ups");
+    fireEvent.click(screen.getAllByRole("button", { name: /Set 1 reps/ }).at(-1)!);
+    expect(screen.getByText(/Set 1 · Reps/)).toBeTruthy();
+    tap("Close keypad");
+    tap("Finish workout");
+    await act(async () => {
+      tap("Finish anyway");
+    });
+    const row = enqueued.at(-1)!;
+    expect(row.operation).toBe("workout.complete");
+    expect(JSON.parse(row.payloadJson)).toMatchObject({
+      executionId: uuid(1),
+      assignmentId: uuid(2),
+      workoutName: "Lower body B",
+    });
+    expect(onFinished).toHaveBeenCalledTimes(1);
+    expect(onFinished.mock.calls[0]![0].status).toBe("completed");
+  });
+
+  it("Pause is a labelled control away from Minimise, stops logging and shows the banner", () => {
+    renderScreen("20 kg");
+    const buttons = screen.getAllByRole("button");
+    const minimise = screen.getByRole("button", { name: "Minimise workout" });
+    const pause = screen.getByRole("button", { name: "Pause workout" });
+    expect(pause.textContent).toBe("Pause");
+    // Not next to each other: the title sits between them.
+    expect(buttons.indexOf(minimise)).toBe(0);
+    expect(buttons.indexOf(pause)).toBe(1);
+    expect(minimise.parentElement).toBe(pause.parentElement);
+    expect(minimise.nextElementSibling).not.toBe(pause);
+    tap("Pause workout");
+    expect(enqueued.at(-1)!.operation).toBe("workout.pause");
+    expect(screen.getByText(/^Paused\. The timer stopped at /)).toBeTruthy();
+    const count = enqueued.length;
+    tap(/^Log set 1/);
+    expect(enqueued).toHaveLength(count);
+    tap("Resume");
+    expect(enqueued.at(-1)!.operation).toBe("workout.resume");
+    expect(screen.queryByText(/^Paused\./)).toBeNull();
+  });
+
+  it("Minimise keeps the session: it calls onMinimise, not onExit", () => {
+    const onMinimise = vi.fn();
+    const onExit = vi.fn();
+    renderScreen("20 kg", execution("20 kg"), { onMinimise, onExit });
+    tap("Minimise workout");
+    expect(onMinimise).toHaveBeenCalledTimes(1);
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it("Discard asks first, then records the workout as skipped and leaves", async () => {
+    const onExit = vi.fn();
+    renderScreen("20 kg", execution("20 kg"), { onExit });
+    tap(/^Log set 1/);
+    tap("Discard workout");
+    expect(screen.getByText("Discard this workout?")).toBeTruthy();
+    expect(
+      screen.getByText("1 logged set won’t count. Your coach will see this workout as skipped."),
+    ).toBeTruthy();
+    tap("Keep logging");
+    expect(onExit).not.toHaveBeenCalled();
+    // The list's own button opens the dialog again; the dialog's confirms.
+    fireEvent.click(screen.getAllByRole("button", { name: "Discard workout" })[0]!);
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Discard workout" }).at(-1)!);
+    });
+    const row = enqueued.at(-1)!;
+    expect(row.operation).toBe("workout.skip");
+    expect(JSON.parse(row.payloadJson)).toMatchObject({ assignmentId: uuid(2) });
+    expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("personal record (W-12)", () => {
+  it("marks the heaviest set of the session when it beats every earlier load, and says so once", async () => {
+    strength = {
+      exercises: [
+        {
+          name: "romanian  Deadlift",
+          points: [
+            { localDate: "2020-01-04", topLoadKg: 20, reps: 10 },
+            // Only loads from before today are a record to beat.
+            { localDate: "2999-01-01", topLoadKg: 60, reps: 10 },
+          ],
+        },
+      ],
+    };
+    await act(async () => {
+      renderScreen("20 kg", execution("20 kg"), { assignment: assignment() });
+    });
+    tap(/^Log set 1/);
+    expect(screen.queryByText("New personal record")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Set 2 load/ }));
+    tap("Plus 2.5");
+    tap("Log set 2");
+    expect(screen.getByText("New personal record")).toBeTruthy();
+    expect(screen.getByText("Romanian deadlift · 22.5 kg × 10")).toBeTruthy();
+    // Both sets are in, so the exercise folded; its sets still carry the mark.
+    tap(/^Romanian deadlift, 2 sets · best 22.5 kg × 10/);
+    expect(screen.getByRole("button", { name: /^Set 2, 22.5 kg × 10, logged, personal record/ })).toBeTruthy();
+  });
+
+  it("claims no record without an earlier load to beat", async () => {
+    strength = { exercises: [] };
+    await act(async () => {
+      renderScreen("20 kg", execution("20 kg"), { assignment: assignment() });
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Set 1 load/ }));
+    tap("Plus 2.5");
+    tap("Log set 1");
+    expect(screen.queryByText("New personal record")).toBeNull();
   });
 });
 
 describe("offline addressing (Z12-41)", () => {
-  it("sends the plan's own ids with a logged set, so a workout opened offline can be found", () => {
+  it("sends the plan's own ids and the workout's name with a logged set", () => {
     renderScreen("20 kg");
     tap(/^Log set 1/);
     const row = enqueued.at(-1)!;
@@ -331,6 +725,7 @@ describe("offline addressing (Z12-41)", () => {
       setExecutionId: uuid(10),
       assignmentId: uuid(2),
       setTargetId: uuid(110),
+      workoutName: "Lower body B",
     });
   });
 });
