@@ -1,0 +1,189 @@
+{
+  "platform": "android",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-29/1-delete-and-reactivate.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 9s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 9s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 47 s",
+      "mode": "cache-hit",
+      "seconds": 47,
+      "cacheKey": "device-native-android-fd74f15532d71bc3af990090855e03fb1c84555b"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.908 (8), dark 0.312 (8)",
+      "light": 0.908,
+      "dark": 0.312,
+      "count": {
+        "light": 8,
+        "dark": 8
+      },
+      "shots": [
+        {
+          "file": "BP1-delete-account-dark-android.png",
+          "theme": "dark",
+          "luma": 0.129
+        },
+        {
+          "file": "BP1-delete-account-light-android.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "BP1-reactivate-account-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "BP1-reactivate-account-light-android.png",
+          "theme": "light",
+          "luma": 0.879
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.922
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.922
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.929
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.929
+        },
+        {
+          "file": "z12-29-archived-notice-dark-android.png",
+          "theme": "dark",
+          "luma": 0.111
+        },
+        {
+          "file": "z12-29-archived-notice-light-android.png",
+          "theme": "light",
+          "luma": 0.889
+        },
+        {
+          "file": "z12-29-delete-proof-dark-android.png",
+          "theme": "dark",
+          "luma": 0.097
+        },
+        {
+          "file": "z12-29-delete-proof-light-android.png",
+          "theme": "light",
+          "luma": 0.899
+        },
+        {
+          "file": "z12-29-privacy-dark-android.png",
+          "theme": "dark",
+          "luma": 0.078
+        },
+        {
+          "file": "z12-29-privacy-light-android.png",
+          "theme": "light",
+          "luma": 0.924
+        },
+        {
+          "file": "z12-29-reactivated-dark-android.png",
+          "theme": "dark",
+          "luma": 0.104
+        },
+        {
+          "file": "z12-29-reactivated-light-android.png",
+          "theme": "light",
+          "luma": 0.927
+        }
+      ]
+    }
+  ]
+}
