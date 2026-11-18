@@ -1,0 +1,154 @@
+{
+  "platform": "ios",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-38/1-trainee-note-banner.yaml",
+    "device/z12-46/1-no-plan.yaml",
+    "flows/v3/F11-weekly-checkin.yaml",
+    "flows/v3/F12-progress-weight.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 106 s",
+      "mode": "cache-hit",
+      "seconds": 106,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light — (0), dark 0.197 (13)",
+      "light": null,
+      "dark": 0.197,
+      "count": {
+        "light": 0,
+        "dark": 13
+      },
+      "shots": [
+        {
+          "file": "TR-06a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.127
+        },
+        {
+          "file": "TR-06h-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "TR-13a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "TR-13b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "TR-13c-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.217
+        },
+        {
+          "file": "TR-14a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.146
+        },
+        {
+          "file": "TR-14c-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "TR-14d-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.114
+        },
+        {
+          "file": "TR-14g-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.127
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.128
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.947
+        },
+        {
+          "file": "Today-no-plan-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "z12-38-after-swipe-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.135
+        }
+      ]
+    }
+  ]
+}
