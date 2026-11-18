@@ -1,0 +1,122 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 3 flows failed",
+    "dark: 1 of 3 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F08-log-it-myself.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F08 Log it myself (Z12-43)",
+          "message": "Assertion is false: \"Log it myself\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F08 Log it myself (Z12-43)",
+          "message": "Assertion is false: \"Log it myself\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 144 s",
+      "mode": "cache-hit",
+      "seconds": 144,
+      "cacheKey": "device-native-ios-258724d35943cb701a21c966ec4ea9408696ee97"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.939 (4), dark 0.939 (4)",
+      "light": 0.939,
+      "dark": 0.939,
+      "count": {
+        "light": 4,
+        "dark": 4
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.94
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.94
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.947
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-020-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.934
+        },
+        {
+          "file": "step-020-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.934
+        },
+        {
+          "file": "step-022-assertCondition-Log_it_myself-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.934
+        },
+        {
+          "file": "step-022-assertCondition-Log_it_myself-light-ios.png",
+          "theme": "light",
+          "luma": 0.934
+        }
+      ]
+    }
+  ]
+}
