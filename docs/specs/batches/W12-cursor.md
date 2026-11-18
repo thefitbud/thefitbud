@@ -13,7 +13,7 @@
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
 | Z12-W12C-0 Ledger | — | in review (#488) | #488 | — | this file | lighter (docs) |
-| Z12-43 Manual food logging | #460 (Z12-42) | blocked | — | — | mocks TR-26a–f; finding 7 toast | strongest |
+| Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | in progress (branch `cursor/z12-43-manual-food-db78`) | — | — | mocks TR-26a–f, TR-08a–c; finding 7 toast; captures pending (D-W12-34) | strongest (opus) |
 | Z12-30 Delete account (web) | #487 (Z12-29) | blocked | — | — | fresh proof = Firebase `auth_time` (W6 follow-up) | lighter / sonnet |
 | Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | strongest |
 | Z12-49 follow-up Ended-coaching tab bar | #484 (Z12-45) | blocked | — | — | small; tab bar must show on ended screen | lighter |
@@ -26,6 +26,7 @@
 | When (IST) | SHA | Via | Notes |
 |---|---|---|---|
 | 18 Nov 2026 (launch ~16:07 IST; #470 merge was earlier that day) | `58ac1b11` | #470 (already on main at launch) | Cursor run base |
+| 18 Nov 2026 | `4982d567` | #460 (Z12-42, Claude) | unblocks Z12-43; its branch starts here |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
@@ -36,6 +37,17 @@
 | D-W12C-1 | Cursor edits only `W12-cursor.md` as its batch file; never `W12.md` | Handover from FitBud UI, 18 Nov 2026 | launch |
 | D-W12C-2 | At most 2 Cursor implementers at once | Same runners as Claude (up to 3); handover rule | launch |
 | D-W12C-3 | Strongest available model for Z12-43, Z12-48, Z12-58 and every fresh review; lighter for ledger and small follow-ups | Handover model rule | launch |
+
+| D-W12C-4 | Z12-43: `saveToMyFoods` is `z.boolean().optional()`; the server reads "not false" as true (D-W12-24's default) | A Zod `.default(true)` makes the field required in the inferred `LoggedFoodItem` type and breaks every client literal; behaviour is the same | Z12-43 |
+| D-W12C-5 | Z12-43: a custom food's kcal and macros are stored and totalled at the nutrient scale (×1,000,000); before, protein, carbs and fat went through `scaleMacro` (×100) and read back near zero | Bug found while testing D-W12-24. New rows only; older `trainee_custom_foods` rows keep the old macro scale (no migration, no rewrite of history) | Z12-43 |
+| D-W12C-6 | Z12-43: a changed portion (TR-08b) and an ate-out kcal (TR-08c) now carry their lines into the logged totals, so the ring counts them; only `logged_foods` ever saves a food to "my foods" | TR-08c "exact kcal" and TR-07e's "Ate out · 1,120 kcal" need a backend total; no schema change | Z12-43 |
+| D-W12C-7 | Z12-43: library lines in `itemsJson` now also store name, serving label, kcal and macros, so Recent and the coach view read the food without a library lookup | Recent needs the serving and kcal (TR-26a); additive JSON fields, old rows still parse | Z12-43 |
+| D-W12C-8 | Z12-43: TR-26e "Add" logs the meal at once with the created food (tap map: TR-26e Add → TR-26f), not back to the tray | Tap map | Z12-43 |
+| D-W12C-9 | Z12-43: the TR-26f toast travels through a small module store (`trainee/food/mealSavedNotice.ts`) that Diet takes on its next render; no change to `TraineeOverlay.tsx` or `TraineeShell.tsx` (Claude PRs #487, #483 hold them) | The food search is a fullscreen overlay, so Diet remounts after it; the notice expires after 15 s so it never pops up out of context | Z12-43 |
+| D-W12C-10 | Z12-43: the toast's View opens a read-only logged-meal sheet (`trainee/food/LoggedMealSheet.tsx`); TR-07g's Edit foods and Delete stay out | TR-07g edit/delete has no task in this run (F09 notes delete-log as not built) | Z12-43 |
+| D-W12C-11 | Z12-43: TR-26c's Meal row is shown but static | Tap map marks it `LATER: meal picker` | Z12-43 |
+| D-W12C-12 | Z12-43: offline, the food search filters the plan and recent foods already loaded on the phone ("Offline. Showing foods saved on your phone.") | There is no full offline food index on mobile; TR-26d's copy is true for these foods | Z12-43 |
+| D-W12C-13 | Z12-43: "Changed the portion" loses its old note field and uses ½ steps; the unit under each stepper is the serving label without its leading "1 " | TR-08b mock has no note and says "Steps are ½"; the plan carries serving labels, not unit nouns | Z12-43 |
 
 *(Add implementer decide-and-note choices here as they arise.)*
 
@@ -51,7 +63,9 @@
 
 | Source | Finding | Owner | Notes |
 |---|---|---|---|
-| — | — | — | — |
+| Z12-43 | A meal logged from Today (Something different → Log it myself) returns to Today, which shows no TR-26f toast | Cursor (Today owner) | `TodayTab.tsx` is outside Z12-43's files; it can read `useMealSavedNotice` the way Diet does |
+| Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
+| Z12-43 | The Something different sheet takes the overlay host's theme, not Diet's system scope | Z12-52 (sheet theme fix already listed) | `TraineeOverlay.tsx` |
 
 *(Z12-58: Claude-owned-area findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
 
