@@ -99,6 +99,27 @@ describe("ExceptionReviewScreen states", () => {
     expect(screen.queryByLabelText("More actions")).toBeNull();
   });
 
+  it("Nudge is offered for unlogged items only, not for logged meals or skips", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace(null));
+    api.getException.mockResolvedValue(exception());
+    const first = renderScreen();
+    await screen.findByText("Nudge");
+    first.unmount();
+    const cases: Array<[string, string]> = [
+      ["meal_deviation", "meal_assignment"],
+      ["meal_logged_later", "meal_assignment"],
+      ["skipped_meal", "meal_assignment"],
+      ["skipped_workout", "workout_assignment"],
+    ];
+    for (const [type, sourceEntityType] of cases) {
+      api.getException.mockResolvedValue(exception({ type, sourceEntityType }));
+      const view = renderScreen();
+      await screen.findByText("Open client status");
+      expect(screen.queryByText("Nudge")).toBeNull();
+      view.unmount();
+    }
+  });
+
   it("an acknowledged item for an ended client has no Resolve", async () => {
     api.getException.mockResolvedValue(exception({ status: "acknowledged" }));
     api.getClientWorkspace.mockResolvedValue(workspace("2026-10-03T12:30:00.000Z"));

@@ -1,0 +1,124 @@
+appId: com.thefitbud.mobile.staging
+name: F20 Trainer nudges a client as a FitBud push (Z12-50)
+tags:
+  - device
+  - trainer
+  - z12-50
+---
+# F20 (D-W12-9, D-W12-10, D-W12-22, Z12-50 part 2). Account: the demo trainer rahul.coach
+# on the local seed. Env from the device harness: QA_TRAINER_EMAIL, QA_PASSWORD,
+# DEVICE_THEME. One local DB per job and one nudge per item per client day, so only the
+# first theme of a job really sends (TM-04m); the second shows TM-04n at once. A repeat
+# about the same item is then sent again to show the TM-04n state in both.
+#
+# Screens and screenshots (named by v3 screen ID, see scripts/qa/device/collect-shots.mjs):
+#   TM-03j  "Nudge {First} about…" picker (only when the client has several open items)
+#   TM-04b  the nudge sheet (TM-04c instead when the run falls in the client's quiet
+#           hours, 22:00 to 07:00 IST: the sheet is the same with the amber line)
+#   TM-04m  the sent toast over the client screen
+#   TM-04n  the same item again: "You nudged {First} about this at {time}…", Send off
+#   TM-04o  Ishita Banerjee (FitBud pushes off): the amber push-off line; Send still works
+#           (the sheet closes; its toast says it went to her inbox)
+#
+# What this does not do: it does not receive the push (the harness's push extras and
+# Z12-58's phone checklist do) and it does not open WhatsApp.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- extendedWaitUntil:
+    visible: "Needs you [0-9]+"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
+# ---- A push-on client: sheet, send, sent toast ------------------------------------------
+# Rohan Mehta in both themes (his open items are stable; other clients' differ with the
+# clock). One local DB per job and one nudge per item per client day, so the first theme of
+# a job sends it (TM-04m) and the second finds it already sent (TM-04n straight away).
+- runFlow:
+    file: ../../device/z12-50/nudge-client.yaml
+    env:
+      CLIENT: Rohan Mehta
+- runFlow: ../../device/z12-50/open-sheet.yaml
+- takeScreenshot: TM-04b
+- runFlow:
+    when:
+      visible: "It's .* inside their quiet hours.*"
+    commands:
+      - takeScreenshot: TM-04c
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Send nudge"
+- extendedWaitUntil:
+    visible: "Nudge sent.*"
+    timeout: 8000
+    optional: true
+# The toast stays about 4 s and a slow hierarchy dump can miss it (run 44127718482): it is
+# captured when it is there. The sheet closes on a send; it stays on TM-04n when the item
+# was already nudged today.
+- runFlow:
+    when:
+      visible: "Nudge sent.*"
+    commands:
+      - takeScreenshot: TM-04m
+- extendedWaitUntil:
+    visible: "You nudged .* again tomorrow.*"
+    timeout: 6000
+    optional: true
+- runFlow:
+    when:
+      visible: "You nudged .* again tomorrow.*"
+    commands:
+      - takeScreenshot: TM-04n
+      - tapOn: "Close"
+- extendedWaitUntil:
+    notVisible: "PREVIEW · TAP TO EDIT"
+    timeout: 20000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- The same item again: the TM-04n state (no second push) -----------------------------
+- extendedWaitUntil:
+    notVisible: "Nudge sent.*"
+    timeout: 15000
+- runFlow: ../../device/z12-50/to-nudge.yaml
+- runFlow: ../../device/z12-50/open-sheet.yaml
+- tapOn: "Send nudge"
+- extendedWaitUntil:
+    visible: "You nudged .* again tomorrow.*"
+    timeout: 20000
+- takeScreenshot: TM-04n
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Close"
+- extendedWaitUntil:
+    notVisible: "PREVIEW · TAP TO EDIT"
+    timeout: 10000
+
+# ---- Push off: the line before sending, then inbox only ---------------------------------
+- runFlow:
+    file: ../../device/z12-50/nudge-client.yaml
+    env:
+      CLIENT: Ishita Banerjee
+- runFlow: ../../device/z12-50/open-sheet.yaml
+- extendedWaitUntil:
+    visible: ".*has turned off FitBud notifications.*"
+    timeout: 20000
+- takeScreenshot: TM-04o
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Send nudge"
+# The first theme of a job sends it and the sheet closes; the second finds it already
+# sent today (one nudge per item per client day) and the sheet stays on the TM-04n line.
+- extendedWaitUntil:
+    notVisible: "PREVIEW · TAP TO EDIT"
+    timeout: 10000
+    optional: true
+- runFlow:
+    when:
+      visible: "PREVIEW · TAP TO EDIT"
+    commands:
+      - tapOn: "Close"
+- runFlow: ../../common/assert-no-crash.yaml
