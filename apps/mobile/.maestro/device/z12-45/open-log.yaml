@@ -52,7 +52,7 @@ appId: com.thefitbud.mobile.staging
       - repeat:
           times: 7
           while:
-            notVisible: "Continue workout|Pick up where you left off\\?"
+            notVisible: "(In progress|Paused) · [0-9:]+|Pick up where you left off\\?"
           commands:
             - swipe:
                 start: "15%, 70%"
@@ -63,44 +63,31 @@ appId: com.thefitbud.mobile.staging
                 timeout: 20000
 
 # ---- on the day: the card says what is there ---------------------------------
+# An open session's card carries the "In progress · 12:34" chip, and "Pick up
+# where you left off?" follows once the session is read (the app was just
+# started, so nothing is in memory): wait for the dialog, never race it.
+- waitForAnimationToEnd:
+    timeout: 1500
 - runFlow:
     when:
       notVisible: "Minimise workout"
+      visible: "(In progress|Paused) · [0-9:]+|Pick up where you left off\\?"
     commands:
-      # An open session is read a moment after the card paints, and the W-18
-      # dialog comes with it: give it that moment before looking.
-      - waitForAnimationToEnd:
-          timeout: 4000
-      - runFlow:
-          when:
-            visible: "Pick up where you left off\\?"
-          commands:
-            - tapOn: "Resume workout"
-      # No dialog: the day's own button. On a small screen a long card puts
-      # it below the fold (iOS, run 44220623583), so scroll to it.
-      - runFlow:
-          when:
-            notVisible: "Minimise workout|Pick up where you left off\\?"
-          commands:
-            - scrollUntilVisible:
-                element: "Continue workout|Log workout|Start workout"
-                direction: DOWN
-                timeout: 30000
-            - runFlow:
-                when:
-                  notVisible: "Pick up where you left off\\?"
-                commands:
-                  # Optional: the dialog may cover the card between the check
-                  # and the tap; the step below answers it.
-                  - tapOn:
-                      text: "Continue workout|Log workout|Start workout"
-                      optional: true
-      # The dialog can still arrive while the card was being scrolled.
-      - runFlow:
-          when:
-            visible: "Pick up where you left off\\?"
-          commands:
-            - tapOn: "Resume workout"
+      - extendedWaitUntil:
+          visible: "Pick up where you left off\\?"
+          timeout: 30000
+      - tapOn: "Resume workout"
+# An unlogged day: its own button. On a small screen a long card puts it below
+# the fold (iOS, run 44220623583), so scroll to it.
+- runFlow:
+    when:
+      notVisible: "Minimise workout|Pick up where you left off\\?"
+    commands:
+      - scrollUntilVisible:
+          element: "Log workout|Start workout"
+          direction: DOWN
+          timeout: 30000
+      - tapOn: "Log workout|Start workout"
 - extendedWaitUntil:
     visible: "Minimise workout"
     timeout: 30000
