@@ -1,7 +1,8 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { Pressable, View } from "react-native";
 import { CalendarOff, ChevronRight, Moon } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { Button } from "../components/Button";
 import { Card2, M2ScrollBody, M2TopNav } from "../components/m2";
 
@@ -20,7 +21,7 @@ type Props = {
   insetTabBar?: boolean;
 };
 
-export function DeepLinkUnavailableScreen({
+function DeepLinkUnavailableScreenBody({
   reason,
   updatedOnLabel,
   replacement,
@@ -28,6 +29,8 @@ export function DeepLinkUnavailableScreen({
   onBack,
   insetTabBar = false,
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const goToday = onGoToday ?? onBack ?? (() => undefined);
   const body =
     reason ??
@@ -43,7 +46,7 @@ export function DeepLinkUnavailableScreen({
         <M2TopNav onBack={onBack ?? goToday} />
         <View style={styles.hero}>
           <View style={styles.iconTile}>
-            <CalendarOff size={34} color={colors.indigo} strokeWidth={1.75} />
+            <CalendarOff size={34} color={theme.colors.brand} strokeWidth={1.75} />
           </View>
           <Text style={styles.h1} accessibilityRole="header">
             This item isn&apos;t available anymore
@@ -65,13 +68,13 @@ export function DeepLinkUnavailableScreen({
                 style={styles.lrow}
               >
                 <View style={styles.tile}>
-                  <Moon size={19} color={colors.indigo} strokeWidth={1.75} />
+                  <Moon size={19} color={theme.colors.brand} strokeWidth={1.75} />
                 </View>
                 <View style={styles.lrowText}>
                   <Text style={styles.lrowTitle}>{replacement.title}</Text>
                   <Text style={styles.lrowSub}>{replacement.subtitle}</Text>
                 </View>
-                <ChevronRight size={18} color={colors.midGrey} />
+                <ChevronRight size={18} color={theme.colors.ink3} />
               </Pressable>
             </Card2>
           </>
@@ -81,9 +84,9 @@ export function DeepLinkUnavailableScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   root: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     flex: 1,
   },
   hero: {
@@ -93,14 +96,14 @@ const styles = StyleSheet.create({
   },
   iconTile: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 24,
     height: 72,
     justifyContent: "center",
     width: 72,
   },
   h1: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 26,
     fontWeight: "700",
     letterSpacing: -0.3,
@@ -109,14 +112,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   lead: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 16,
     lineHeight: 23,
     marginTop: spacing.sm,
     textAlign: "center",
   },
   section: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
     marginBottom: spacing.sm,
@@ -136,7 +139,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 11,
     height: 36,
     justifyContent: "center",
@@ -146,12 +149,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   lrowTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   lrowSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
   },
-});
+}));
+
+/** DeepLinkUnavailableScreen in the system theme (Z12-49): its own styles read the scope. */
+export function DeepLinkUnavailableScreen(props: Parameters<typeof DeepLinkUnavailableScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <DeepLinkUnavailableScreenBody {...props} />
+    </ThemeScope>
+  );
+}

@@ -15,6 +15,7 @@ import {
 import type {
   CoachingRelationship,
   MeResponse,
+  NotificationType,
   Role,
 } from "@fitbud/contracts";
 import { AppState, Platform } from "react-native";
@@ -54,6 +55,7 @@ import {
   coachViewSwitchPrompt,
   mobilePermittedRoles,
   resolveAppRoute,
+  roleSelectCanGoBack,
   selectInitialMobileRole,
   type AppRoute,
 } from "../navigation/resolveRoute";
@@ -67,6 +69,7 @@ import {
 import type { NotificationDeepLink } from "../notifications/routing";
 import { deepLinkFromNotificationPayload } from "../notifications/routing";
 import { clearTrainerCache, setTrainerCacheOwner } from "../trainer/cache";
+import { clearDayViews } from "../trainee/dataCache";
 import { isNetworkFailure } from "../trainer/attention/offline";
 
 type AuthContextValue = {
@@ -90,8 +93,11 @@ type AuthContextValue = {
    * first, so the trainee shell never opens a coach link itself.
    */
   pendingDeepLink: ParsedDeepLink | null;
-  /** Frame 61: a link needs the trainer role while in trainee mode (Z11-14). */
-  pendingRoleSwitch: { targetRole: "trainer"; linkKind: ParsedDeepLink["kind"] } | null;
+  /**
+   * Frame 61 / TM-08c: a link (Z11-14) or a coach push (Z12-49) needs the
+   * trainer role while in trainee mode. `pushType` is set for a push.
+   */
+  pendingRoleSwitch: PendingRoleSwitch | null;
   /** Switch to the trainer role; the trainer shell then opens the link. */
   confirmRoleSwitch: () => Promise<void>;
   /** Drop the link and stay in the current role. */
@@ -100,6 +106,19 @@ type AuthContextValue = {
   rememberRole: boolean;
   /** Trainer More's "Switch role": show role select (frame 59). */
   requestRoleSelect: () => void;
+  /**
+   * Role select was opened from More over a role already in use, so it can be
+   * left with Back (TM-08a, Z12-49). False on first run, when there is no role
+   * to go back to.
+   */
+  canLeaveRoleSelect: boolean;
+  /** Back from role select opened in More: clears the request, keeps the role. */
+  leaveRoleSelect: () => void;
+  /**
+   * A coach push was tapped in trainee mode (Z12-49): ask to switch. `onCancel`
+   * runs when the user keeps the client view, so the tap is dropped.
+   */
+  offerPushRoleSwitch: (pushType: NotificationType, onCancel: () => void) => void;
   signInWithToken: (token: string, refresh?: SessionRefresh) => Promise<void>;
   signOut: () => void;
   clearError: () => void;
@@ -116,6 +135,12 @@ type AuthContextValue = {
   handleNotificationOpen: (rawPayload: unknown) => NotificationDeepLink | null;
   clearPendingNotificationLink: () => void;
   clearPendingDeepLink: () => void;
+};
+
+export type PendingRoleSwitch = {
+  targetRole: "trainer";
+  linkKind: ParsedDeepLink["kind"] | "push";
+  pushType?: NotificationType;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -139,6 +164,9 @@ function endTrainerCacheSession(): void {
   clearTrainerCache();
   setTrainerCacheOwner(null);
   void clearMeSnapshot();
+  // The trainee day cache too (hand-off from Z12-40): the next person on this
+  // phone, or the next account, never sees the last one's days.
+  clearDayViews();
 }
 
 /** How often an app opened on the snapshot asks the server again. */
@@ -661,6 +689,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setTrainerCacheOwner(null);
       leaveSnapshotMode();
       void clearMeSnapshot();
+      // An account switch: the day views belong to whoever was signed in.
+      clearDayViews();
       tokens.signIn(trimmed, refresh);
       persistSession({ accessToken: trimmed, selectedRole: null });
       setBootstrapping(true);
@@ -788,8 +818,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
   useAppDeepLinks(onDeepLink);
 
+  // Z12-49: a coach push tapped in trainee mode asks before switching too.
+  const [pushRoleSwitch, setPushRoleSwitch] = useState<{
+    pushType: NotificationType;
+  } | null>(null);
+  const pushSwitchCancelRef = useRef<(() => void) | null>(null);
+  const offerPushRoleSwitch = useCallback(
+    (pushType: NotificationType, onCancel: () => void) => {
+      pushSwitchCancelRef.current = onCancel;
+      setPushRoleSwitch({ pushType });
+    },
+    [],
+  );
+  // Leaving trainee mode (or the session) settles the push prompt.
+  useEffect(() => {
+    if (selectedRole !== "trainee" && pushRoleSwitch) {
+      pushSwitchCancelRef.current = null;
+      setPushRoleSwitch(null);
+    }
+  }, [selectedRole, pushRoleSwitch]);
+
   // Frame 61 (Z11-14): a coach link in trainee mode asks before switching.
-  const pendingRoleSwitch = useMemo(() => {
+  const pendingRoleSwitch = useMemo<PendingRoleSwitch | null>(() => {
+    if (pushRoleSwitch && selectedRole === "trainee") {
+      return { targetRole: "trainer", linkKind: "push", pushType: pushRoleSwitch.pushType };
+    }
     if (!pendingDeepLink || !me) return null;
     const prompt = coachViewSwitchPrompt({
       selectedRole,
@@ -799,7 +852,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return prompt
       ? { targetRole: prompt.targetRole, linkKind: pendingDeepLink.kind }
       : null;
-  }, [pendingDeepLink, me, selectedRole]);
+  }, [pendingDeepLink, me, selectedRole, pushRoleSwitch]);
   const visibleDeepLink = pendingRoleSwitch ? null : pendingDeepLink;
 
   const confirmRoleSwitch = useCallback(async () => {
@@ -809,13 +862,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [selectRole]);
 
   const cancelRoleSwitch = useCallback(() => {
+    if (pushRoleSwitch) {
+      const onCancel = pushSwitchCancelRef.current;
+      pushSwitchCancelRef.current = null;
+      setPushRoleSwitch(null);
+      onCancel?.();
+      return;
+    }
     setPendingDeepLink(null);
-  }, []);
+  }, [pushRoleSwitch]);
 
   const requestRoleSelect = useCallback(() => {
     if (!me || mobilePermittedRoles(me.permittedRoles).length < 2) return;
     setRoleSelectRequested(true);
   }, [me]);
+
+  const canLeaveRoleSelect = roleSelectCanGoBack({
+    roleSelectRequested,
+    selectedRole,
+    permittedRoles: me?.permittedRoles ?? [],
+  });
+  const leaveRoleSelect = useCallback(() => {
+    setRoleSelectRequested(false);
+  }, []);
 
   const resolvedRoute = resolveAppRoute({
     accessToken: accessToken ?? (offlineSnapshot ? SNAPSHOT_SESSION : null),
@@ -856,6 +925,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelRoleSwitch,
       rememberRole,
       requestRoleSelect,
+      canLeaveRoleSelect,
+      leaveRoleSelect,
+      offerPushRoleSwitch,
       signInWithToken,
       signOut,
       clearError: () => setErrorMessage(null),
@@ -883,6 +955,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelRoleSwitch,
       rememberRole,
       requestRoleSelect,
+      canLeaveRoleSelect,
+      leaveRoleSelect,
+      offerPushRoleSwitch,
       signInWithToken,
       signOut,
       refreshSession,

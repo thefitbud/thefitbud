@@ -387,7 +387,6 @@ export function ExceptionDrawer({
     null,
   );
   const [nudgeNow, setNudgeNow] = useState(() => Date.now());
-  const [nudgePaused, setNudgePaused] = useState(false);
   const [dueByIso, setDueByIso] = useState<string | null>(null);
   const [plannedLine, setPlannedLine] = useState<string | null>(null);
   /** Client quiet hours (HH:mm) from responsiveness; null = server defaults. */
@@ -625,9 +624,6 @@ export function ExceptionDrawer({
           start: resp.quietHoursStart ?? null,
           end: resp.quietHoursEnd ?? null,
         });
-        if (resp.label === "reminders_paused") {
-          setNudgePaused(true);
-        }
       } catch {
         if (!cancelled) {
           setReminderLine(null);
@@ -946,7 +942,6 @@ export function ExceptionDrawer({
 
   async function nudge() {
     if (!detail || readOnlyRef.current) return;
-    if (nudgePaused) return;
     if (nudgeBlockedUntil != null && Date.now() < nudgeBlockedUntil) return;
     setNudgeHint(null);
     const clientTz = clientHeader?.traineeTimezone ?? null;
@@ -972,18 +967,21 @@ export function ExceptionDrawer({
       if (result.deferredForQuietHours) {
         setNudgeHint(arrivesAfter(result.quietHoursEnd));
       } else if (result.deduped) {
-        setNudgeHint("Already nudged today.");
+        setNudgeHint("Already nudged about this today.");
+      } else if (result.delivery === "inbox") {
+        // D-W12-10: push off or reminders paused: the client sees it in the
+        // app's inbox, without a notification.
+        setNudgeHint(
+          result.inboxReason === "reminders_paused"
+            ? "Nudge sent to their inbox. Reminders are paused."
+            : "Nudge sent to their inbox. Push is off.",
+        );
       } else {
         setNudgeHint("Nudge sent");
       }
     } catch (err) {
       if (handleWriteCode(err, detail.id)) return;
       if (err instanceof ApiClientError) {
-        if (err.code === "REMINDERS_PAUSED") {
-          setNudgePaused(true);
-          setNudgeHint(err.message);
-          return;
-        }
         const retryAfterRaw = err.details?.retryAfter;
         const retryAfter =
           typeof retryAfterRaw === "number" ? retryAfterRaw : null;
@@ -1189,8 +1187,7 @@ export function ExceptionDrawer({
   const dueIso =
     dueByIso ?? (detail ? windowEndIso(detail.details) : null);
   const nudgeBlocked =
-    nudgePaused ||
-    (nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil);
+    nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil;
   const isSkipped =
     detail?.type === "skipped_meal" || detail?.type === "skipped_workout";
   const showNudge = Boolean(detail && !readOnly && !isSkipped);

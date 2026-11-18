@@ -56,7 +56,7 @@ const { ReminderSettingsScreen } = await import("../settings/ReminderSettingsScr
 describe("Coach updates to my logs row", () => {
   it("shows on by default and writes coachLogUpdates when turned off", async () => {
     render(<ReminderSettingsScreen onBack={() => undefined} onOpenQuietHours={() => undefined} />);
-    const toggle = (await screen.findByLabelText("Coach updates to my logs")) as HTMLInputElement;
+    const toggle = (await screen.findByLabelText("Updates from your coach")) as HTMLInputElement;
     await waitFor(() => expect(toggle.disabled).toBe(false));
     expect(toggle.checked).toBe(true);
     fireEvent.click(toggle);

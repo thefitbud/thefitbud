@@ -223,6 +223,67 @@ describe("re-tap after a role that could not route it", () => {
   });
 });
 
+describe("coach push in trainee mode offers the role switch (Z12-49)", () => {
+  const coachData = payload("trainer_checkin_submitted", "checkin");
+
+  it("offers the switch, then routes once the session is in the coach role", () => {
+    const handle = vi.fn();
+    const offerSwitch = vi.fn(() => true);
+    const c = createNotificationOpenController({ handle, offerSwitch });
+    c.setSession({ userId: USER_A, role: "trainee" });
+    expect(c.receive(tap("p1", coachData))).toBe("queued");
+    expect(offerSwitch).toHaveBeenCalledWith(coachData, "trainer");
+    expect(handle).not.toHaveBeenCalled();
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(handle).toHaveBeenCalledTimes(1);
+    expect(handle).toHaveBeenCalledWith(coachData);
+  });
+
+  it("from cold start: queued before sign-in, offered when the role is trainee", () => {
+    const handle = vi.fn();
+    const offerSwitch = vi.fn(() => true);
+    const c = createNotificationOpenController({ handle, offerSwitch });
+    expect(c.receive(tap("p2", coachData))).toBe("queued");
+    expect(offerSwitch).not.toHaveBeenCalled();
+    c.setSession({ userId: USER_A, role: null });
+    expect(offerSwitch).not.toHaveBeenCalled();
+    c.setSession({ userId: USER_A, role: "trainee" });
+    expect(offerSwitch).toHaveBeenCalledTimes(1);
+    expect(handle).not.toHaveBeenCalled();
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(handle).toHaveBeenCalledWith(coachData);
+  });
+
+  it("Cancel drops the tap: a later manual switch does not open it", () => {
+    const handle = vi.fn();
+    const c = createNotificationOpenController({ handle, offerSwitch: () => true });
+    c.setSession({ userId: USER_A, role: "trainee" });
+    c.receive(tap("p3", coachData));
+    c.dropPending();
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(handle).not.toHaveBeenCalled();
+  });
+
+  it("keeps the old behaviour when there is nothing to offer (not a coach)", () => {
+    const handle = vi.fn();
+    const c = createNotificationOpenController({ handle, offerSwitch: () => false });
+    c.setSession({ userId: USER_A, role: "trainee" });
+    expect(c.receive(tap("p4", coachData))).toBe("ignored");
+    c.setSession({ userId: USER_A, role: "trainer" });
+    expect(c.receive(tap("p4", coachData))).toBe("routed");
+  });
+
+  it("never offers a trainee push's switch to another user", () => {
+    const handle = vi.fn();
+    const offerSwitch = vi.fn(() => true);
+    const c = createNotificationOpenController({ handle, offerSwitch });
+    c.setSession({ userId: USER_A, role: "trainee" });
+    c.receive(tap("p5", coachData));
+    c.setSession({ userId: USER_B, role: "trainer" });
+    expect(handle).not.toHaveBeenCalled();
+  });
+});
+
 describe("trainer taps (X4g)", () => {
   const handle = vi.fn();
   beforeEach(() => handle.mockReset());

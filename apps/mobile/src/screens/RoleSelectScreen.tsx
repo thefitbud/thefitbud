@@ -1,40 +1,53 @@
 import { useState } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 import { Check, Dumbbell, Users } from "lucide-react-native";
 import type { Role } from "@fitbud/contracts";
-import {
-  colors,
-  fontFamilySemiBold,
-  radii,
-  spacing,
-} from "@fitbud/ui-mobile";
+import { formatPersonName } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
-import { PrimaryButton } from "../components/PrimaryButton";
-import { Screen } from "../components/Screen";
+import { Button } from "../components/Button";
 import { Text } from "../components/Text";
 import { mobilePermittedRoles } from "../navigation/resolveRoute";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
+import { AuthPage } from "./auth/authParts";
 
 type PickableRole = Extract<Role, "trainer" | "trainee">;
-
-const OPTIONS: ReadonlyArray<{
-  role: PickableRole;
-  title: string;
-  hint: string;
-}> = [
-  { role: "trainer", title: "Coach", hint: "Manage your clients" },
-  { role: "trainee", title: "Client", hint: "Follow your plan" },
-];
 
 function firstName(fullName: string | null | undefined): string | null {
   const first = fullName?.trim().split(/\s+/)[0];
   return first ? first : null;
 }
 
-/** Frame 59: pick a role, optionally remembered for the next launch. */
-export function RoleSelectScreen() {
-  const { me, selectRole, selectedRole, rememberRole } = useAuth();
+/**
+ * TM-08a: pick a role, optionally remembered for the next launch. Opened from
+ * More (a role already in use) it has Back, which keeps that role; on first
+ * run it has none (Z12-49).
+ */
+function RoleSelectScreenBody() {
+  const {
+    me,
+    relationships,
+    selectRole,
+    selectedRole,
+    rememberRole,
+    canLeaveRoleSelect,
+    leaveRoleSelect,
+  } = useAuth();
   const roles = me ? mobilePermittedRoles(me.permittedRoles) : [];
-  const options = OPTIONS.filter((option) => roles.includes(option.role));
+  const coachFirst = firstName(
+    relationships.find((row) => row.status !== "ended")?.trainerDisplayName,
+  );
+  const options: ReadonlyArray<{ role: PickableRole; title: string; hint: string }> = [
+    { role: "trainer" as const, title: "Coach", hint: "Manage your clients" },
+    {
+      role: "trainee" as const,
+      title: "Client",
+      hint: coachFirst ? `Follow your plan from ${formatPersonName(coachFirst)}` : "Follow your plan",
+    },
+  ].filter((option) => roles.includes(option.role));
   // Opened from More (Z11-14): start on the role in use.
   const current = options.find((option) => option.role === selectedRole);
   const [choice, setChoice] = useState<PickableRole>(
@@ -43,6 +56,8 @@ export function RoleSelectScreen() {
   const [remember, setRemember] = useState(rememberRole !== false);
   const [busy, setBusy] = useState(false);
   const name = firstName(me?.trainerProfile?.displayName);
+  const styles = useStyles();
+  const theme = useTheme();
 
   async function onContinue() {
     setBusy(true);
@@ -54,47 +69,32 @@ export function RoleSelectScreen() {
   }
 
   return (
-    <Screen
+    <AuthPage
+      onBack={canLeaveRoleSelect ? leaveRoleSelect : undefined}
       title="How do you want to use FitBud?"
-      subtitle={`${name ? `${name}, your` : "Your"} account has both. You can switch later in More.`}
-      brandDisplay="mark"
+      subtitle={`${name ? `${name}, your` : "Your"} account is a coach and a client. You can switch any time in More.`}
       footer={
-        <PrimaryButton
-          label="Continue"
+        <Button
+          label={choice === "trainer" ? "Continue as coach" : "Continue as client"}
           loading={busy}
           onPress={() => {
             void onContinue();
           }}
         />
       }
+      testID="role-select"
     >
       <View style={styles.options} accessibilityRole="radiogroup">
-        {options.map((option) => {
-          const selected = option.role === choice;
-          const Icon = option.role === "trainer" ? Users : Dumbbell;
-          return (
-            <Pressable
-              key={option.role}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              aria-checked={selected}
-              accessibilityLabel={`${option.title}. ${option.hint}`}
-              onPress={() => setChoice(option.role)}
-              style={[styles.option, selected ? styles.optionSelected : null]}
-            >
-              <View style={styles.iconWrap}>
-                <Icon size={24} color={colors.darkGrey} />
-              </View>
-              <View style={styles.optionText}>
-                <Text style={styles.optionTitle}>{option.title}</Text>
-                <Text style={styles.optionHint}>{option.hint}</Text>
-              </View>
-              <View style={[styles.radio, selected ? styles.radioOn : null]}>
-                {selected ? <View style={styles.radioDot} /> : null}
-              </View>
-            </Pressable>
-          );
-        })}
+        {options.map((option) => (
+          <RoleCard
+            key={option.role}
+            role={option.role}
+            title={option.title}
+            hint={option.hint}
+            selected={option.role === choice}
+            onPress={() => setChoice(option.role)}
+          />
+        ))}
       </View>
 
       <Pressable
@@ -108,185 +108,262 @@ export function RoleSelectScreen() {
       >
         {/* Off: this session keeps the role; the next launch asks again. */}
         <View style={[styles.box, remember ? styles.boxOn : null]}>
-          {remember ? <Check size={16} color={colors.white} /> : null}
+          {remember ? <Check size={16} color={theme.colors.onBrand} strokeWidth={3} /> : null}
         </View>
-        <Text style={styles.rememberLabel}>Remember my choice</Text>
+        <Text variant="body">Remember my choice</Text>
       </Pressable>
-    </Screen>
+    </AuthPage>
+  );
+}
+
+/** A role option: icon tile, title and hint, and a radio check (TM-08a, TM-08c). */
+function RoleCard({
+  role,
+  title,
+  hint,
+  selected,
+  onPress,
+}: {
+  role: PickableRole;
+  title: string;
+  hint: string;
+  selected: boolean;
+  onPress?: () => void;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const Icon = role === "trainer" ? Users : Dumbbell;
+  const body = (
+    <>
+      <View style={[styles.tile, role === "trainee" ? styles.tileClient : styles.tileCoach]}>
+        <Icon
+          size={26}
+          color={role === "trainee" ? theme.colors.done : theme.colors.ink}
+          strokeWidth={1.9}
+        />
+      </View>
+      <View style={styles.optionText}>
+        <Text variant="headline" style={styles.optionTitle}>
+          {title}
+        </Text>
+        <Text tone="ink2" style={styles.optionHint}>
+          {hint}
+        </Text>
+      </View>
+      <View style={[styles.radio, selected ? styles.radioOn : null]}>
+        {selected ? <Check size={16} color={theme.colors.onBrand} strokeWidth={3} /> : null}
+      </View>
+    </>
+  );
+  if (!onPress) {
+    return <View style={[styles.option, selected ? styles.optionSelected : null]}>{body}</View>;
+  }
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      aria-checked={selected}
+      accessibilityLabel={`${title}. ${hint}`}
+      onPress={onPress}
+      style={[styles.option, selected ? styles.optionSelected : null]}
+    >
+      {body}
+    </Pressable>
   );
 }
 
 type SwitchRoleSheetProps = {
   visible: boolean;
-  /** Frame 61 shows the coach case only. */
-  targetRole: "trainer";
-  /** What the link opens, e.g. "Rohan Mehta's check-in". */
-  subject: string;
+  /** The view the switch opens. */
+  targetRole: PickableRole;
+  /**
+   * Frame 61 / a coach push: what the link opens, e.g. "a client's check-in".
+   * Omitted for a plain switch from More.
+   */
+  subject?: string;
+  /** Card hint, e.g. "Karan Malhotra · plan by Priya" (TM-08c). */
+  cardHint?: string;
   onCancel: () => void;
   onSwitch: () => void;
+  busy?: boolean;
 };
 
 /**
- * Frame 61: asks before a link that needs the other role switches the view.
- * AppRouter shows it for a coach link opened in trainee mode (Z11-14).
+ * TM-08c: a bottom sheet that asks before switching the view. Used for a coach
+ * link or a coach push opened in trainee mode (frame 61, Z12-49), and for
+ * "Switch to coach view" in trainee More (TM-08d).
  */
 export function SwitchRoleSheet({
   visible,
   targetRole,
   subject,
+  cardHint,
   onCancel,
   onSwitch,
+  busy = false,
 }: SwitchRoleSheetProps) {
-  void targetRole;
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onCancel}>
-      <View style={styles.scrim}>
-        <View
-          style={styles.dialog}
-          accessibilityRole="alert"
-          accessibilityViewIsModal
-        >
-          <Text style={styles.dialogTitle}>
-            Switch to coach view to open this?
-          </Text>
-          <Text style={styles.dialogBody}>
-            {`This link is for ${subject}, which you review as a coach.`}
-          </Text>
-          <View style={styles.dialogActions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Cancel"
-              onPress={onCancel}
-              style={[styles.dialogButton, styles.dialogDivider]}
-            >
-              <Text style={styles.dialogButtonLabel}>Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Switch"
-              onPress={onSwitch}
-              style={styles.dialogButton}
-            >
-              <Text style={styles.dialogButtonLabel}>Switch</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+    <Modal transparent animationType="slide" visible={visible} onRequestClose={onCancel}>
+      <ThemeScope scheme="system" drivesSystemBars={false}>
+        <SwitchRoleSheetBody
+          targetRole={targetRole}
+          subject={subject}
+          cardHint={cardHint}
+          onCancel={onCancel}
+          onSwitch={onSwitch}
+          busy={busy}
+        />
+      </ThemeScope>
     </Modal>
   );
 }
 
-const styles = StyleSheet.create({
-  options: { gap: spacing.md, marginTop: spacing.lg },
+function SwitchRoleSheetBody({
+  targetRole,
+  subject,
+  cardHint,
+  onCancel,
+  onSwitch,
+  busy,
+}: Omit<SwitchRoleSheetProps, "visible">) {
+  const styles = useStyles();
+  const coach = targetRole === "trainer";
+  const title = subject
+    ? "Switch to coach view to open this?"
+    : coach
+      ? "Switch to coach view?"
+      : "Switch to client view?";
+  const body = subject
+    ? `This is for ${subject}, which you review as a coach.`
+    : coach
+      ? "You'll see your clients. Your own plan stays as it is."
+      : "You'll see your own plan. Coach notifications keep coming.";
+  return (
+    <View style={styles.scrimWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss sheet"
+        style={styles.scrim}
+        onPress={onCancel}
+      />
+      <View style={styles.sheet} accessibilityViewIsModal testID="switch-role-sheet">
+        <View style={styles.handle} accessibilityElementsHidden />
+        <Text variant="title" style={styles.sheetTitle} accessibilityRole="header">
+          {title}
+        </Text>
+        <Text variant="body" tone="ink2" style={styles.sheetBody}>
+          {body}
+        </Text>
+        <RoleCard
+          role={targetRole}
+          title={coach ? "Coach" : "Client"}
+          hint={cardHint ?? (coach ? "Manage your clients" : "Follow your plan")}
+          selected
+        />
+        <View style={styles.sheetActions}>
+          <Button
+            label={coach ? "Switch to coach" : "Switch to client"}
+            loading={busy}
+            onPress={onSwitch}
+          />
+          <Button label="Cancel" variant="secondary" onPress={onCancel} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+const useStyles = createThemedStyles((t) => ({
+  options: { gap: 14, marginTop: t.spacing.sm },
   option: {
-    flexDirection: "row",
     alignItems: "center",
-    minHeight: 88,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
+    borderRadius: 22,
     borderWidth: 1,
-    borderColor: colors.lightGrey,
-    backgroundColor: colors.white,
-    gap: spacing.lg,
-  },
-  optionSelected: {
-    borderColor: colors.indigo,
-    borderWidth: 2,
-    backgroundColor: colors.background,
-  },
-  iconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  optionText: { flex: 1, gap: 2 },
-  optionTitle: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 18,
-  },
-  optionHint: { color: colors.midGrey, fontSize: 15 },
-  radio: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: colors.lightGrey,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioOn: { borderColor: colors.indigo, backgroundColor: colors.indigo },
-  radioDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.white,
-  },
-  remember: {
     flexDirection: "row",
+    gap: 18,
+    minHeight: 104,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  optionSelected: { borderColor: t.colors.brand, borderWidth: 2, paddingHorizontal: 19 },
+  tile: {
     alignItems: "center",
+    borderRadius: 16,
+    height: 56,
+    justifyContent: "center",
+    width: 56,
+  },
+  tileCoach: { backgroundColor: t.colors.brandTint },
+  tileClient: { backgroundColor: t.colors.doneTint },
+  optionText: { flex: 1, gap: 2 },
+  optionTitle: { fontSize: 20 },
+  optionHint: { fontSize: 16, lineHeight: 21 },
+  radio: {
+    alignItems: "center",
+    borderColor: t.colors.ink4,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    height: 28,
+    justifyContent: "center",
+    width: 28,
+  },
+  radioOn: { backgroundColor: t.colors.brand, borderColor: t.colors.brand },
+  remember: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 14,
+    marginTop: t.spacing.xl,
     minHeight: 44,
-    marginTop: spacing.xl,
-    gap: spacing.md,
   },
   box: {
-    width: 24,
-    height: 24,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: colors.lightGrey,
-    backgroundColor: colors.white,
     alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.ink4,
+    borderRadius: 7,
+    borderWidth: 1.5,
+    height: 26,
     justifyContent: "center",
+    width: 26,
   },
-  boxOn: { borderColor: colors.indigo, backgroundColor: colors.indigo },
-  rememberLabel: { color: colors.deepNavy, fontSize: 16 },
-  scrim: {
-    flex: 1,
-    backgroundColor: "rgba(20, 16, 50, 0.4)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: spacing.xl,
+  boxOn: { backgroundColor: t.colors.brand, borderColor: t.colors.brand },
+  scrimWrap: { flex: 1, justifyContent: "flex-end" },
+  scrim: { ...absoluteFill, backgroundColor: t.colors.scrim },
+  sheet: {
+    backgroundColor: t.colors.card,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingBottom: 34,
+    paddingHorizontal: 20,
+    paddingTop: 10,
   },
-  dialog: {
-    width: "100%",
-    maxWidth: 300,
-    borderRadius: 14,
-    backgroundColor: colors.background,
-    overflow: "hidden",
+  handle: {
+    alignSelf: "center",
+    backgroundColor: t.colors.line2,
+    borderRadius: 3,
+    height: 5,
+    marginBottom: t.spacing.lg,
+    width: 36,
   },
-  dialogTitle: {
-    color: colors.nearBlack,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 17,
-    textAlign: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-  },
-  dialogBody: {
-    color: colors.darkGrey,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "center",
-    padding: spacing.lg,
-    paddingTop: spacing.xs,
-  },
-  dialogActions: {
-    flexDirection: "row",
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.lightGrey,
-  },
-  dialogButton: {
-    flex: 1,
-    minHeight: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dialogDivider: {
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: colors.lightGrey,
-  },
-  dialogButtonLabel: { color: colors.indigo, fontSize: 17 },
-});
+  sheetTitle: { fontSize: 24, marginBottom: 6 },
+  sheetBody: { lineHeight: 22, marginBottom: t.spacing.lg },
+  sheetActions: { gap: 10, marginTop: t.spacing.lg },
+}));
+
+const absoluteFill = {
+  position: "absolute" as const,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
+
+/** RoleSelectScreen in the system theme (Z12-49): its own styles read the scope. */
+export function RoleSelectScreen() {
+  return (
+    <ThemeScope scheme="system">
+      <RoleSelectScreenBody />
+    </ThemeScope>
+  );
+}

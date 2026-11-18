@@ -1,0 +1,110 @@
+appId: com.thefitbud.mobile.staging
+name: F17 Role select, switch to coach view and Back (Z12-49)
+tags:
+  - device
+  - dual
+  - z12-49
+---
+# F17 (Z12-49), Karan (coach and client on the demo seed):
+# - first run: role select (TM-08a) with no Back; pick Client.
+# - trainee More (TM-08d): "Switch to coach view" asks first (TM-08c); Cancel
+#   stays, Switch moves to the coach view.
+# - coach More: "Switch role" opens role select WITH Back; Back keeps the coach
+#   view (roleSelectRequested cleared).
+# A coach push tapped in trainee mode shows the same prompt; a push cannot be
+# sent from a Maestro flow, so that path is on Z12-58's real-phone checklist
+# and covered by unit tests (openListener, AuthProvider).
+# Env: QA_DUAL_EMAIL, QA_PASSWORD.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${QA_DUAL_EMAIL}
+# Retype when the field lost keystrokes. On a cold first launch the Android
+# emulator dropped the first letter ("aarav.ontrack@..." arrived as
+# "arav.ontrack@...", device runs 44191354664 and 44200084620, light launch
+# smoke), so the API answered INVALID_CREDENTIALS and TR-01e showed. The
+# field keeps focus: erase and type again (as z12-36/sign-in-password.yaml).
+- runFlow:
+    when:
+      notVisible: "${QA_DUAL_EMAIL}.*"
+    commands:
+      - eraseText: 60
+      - inputText: ${QA_DUAL_EMAIL}
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+
+# TM-08a, first run: no Back.
+- extendedWaitUntil:
+    visible: "How do you want to use FitBud\\?"
+    timeout: 60000
+- assertVisible: "Remember my choice"
+- assertNotVisible: "Back"
+- takeScreenshot: TM-08a
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Client\\. Follow your plan.*"
+- tapOn: "Continue as client"
+
+# TM-08d: trainee More for a dual account.
+- extendedWaitUntil:
+    visible: "More"
+    timeout: 60000
+- tapOn: "More"
+- extendedWaitUntil:
+    visible: "Switch to coach view"
+    timeout: 30000
+- assertVisible: ".*also a coach"
+- takeScreenshot: TM-08d
+- runFlow: ../../common/assert-no-crash.yaml
+
+# TM-08c: the switch asks; Cancel keeps the client view.
+- tapOn: "Switch to coach view"
+- extendedWaitUntil:
+    visible: "Switch to coach view\\?"
+    timeout: 10000
+- takeScreenshot: TM-08c
+- tapOn: "Cancel"
+- extendedWaitUntil:
+    notVisible: "Switch to coach view\\?"
+    timeout: 10000
+- assertVisible: "Switch to coach view"
+- tapOn: "Switch to coach view"
+- extendedWaitUntil:
+    visible: "Switch to coach"
+    timeout: 10000
+- tapOn: "Switch to coach"
+- extendedWaitUntil:
+    visible: "Needs you.*"
+    timeout: 60000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Coach More → Switch role → role select with Back; Back keeps the coach view.
+- tapOn: "More"
+- scrollUntilVisible:
+    element: "Switch role"
+    direction: DOWN
+- tapOn: "Switch role"
+- extendedWaitUntil:
+    visible: "How do you want to use FitBud\\?"
+    timeout: 20000
+- assertVisible: "Back"
+- takeScreenshot: z12-49-role-select-from-more
+- tapOn:
+    id: "auth-back"
+- extendedWaitUntil:
+    notVisible: "How do you want to use FitBud\\?"
+    timeout: 20000
+# The coach shell opens again on its first tab, still in the coach role.
+- extendedWaitUntil:
+    visible: "Needs you.*"
+    timeout: 30000
+- runFlow: ../../common/assert-no-crash.yaml

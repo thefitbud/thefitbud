@@ -45,6 +45,14 @@ import {
 import { RemindersCard } from "./clientStatus/RemindersCard";
 import { WeekCard } from "./clientStatus/WeekCard";
 import { openContextualWhatsApp } from "./whatsapp";
+import type { NudgePickItem } from "./sheets/NudgePickSheet";
+import { NudgeSheet } from "./sheets/NudgeSheet";
+import { exceptionDateLabel } from "./sheets/exceptionSheetContent";
+import {
+  isNudgeableExceptionType,
+  nudgeTargetFromException,
+  type NudgeTarget,
+} from "./sheets/nudgeContent";
 
 type Props = {
   relationshipId: string;
@@ -115,6 +123,10 @@ export function ClientStatusScreen({
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // One sheet for both steps (TM-03j picker, then TM-04b): iOS cannot swap modals.
+  const [nudge, setNudge] = useState<
+    { target: NudgeTarget | null; items: NudgePickItem[] } | null
+  >(null);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteBody, setNoteBody] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
@@ -191,6 +203,43 @@ export function ClientStatusScreen({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // TM-03j: the nudge is about one open item. One item goes straight to the
+  // sheet; several ask first; none says so.
+  async function startNudge() {
+    try {
+      const page = await api.listExceptions(relationshipId);
+      const items: NudgePickItem[] = page.items
+        // Only unlogged items can be nudged; logged or skipped ones are settled (ACTIVITY_RESOLVED).
+        .filter(
+          (item) => item.status !== "resolved" && isNudgeableExceptionType(item.type),
+        )
+        .sort(
+          (a, b) =>
+            Number(b.severity === "critical") - Number(a.severity === "critical") ||
+            b.detectedAt.localeCompare(a.detectedAt),
+        )
+        .map((item) => ({
+          id: item.id,
+          title: item.summary,
+          detail:
+            [exceptionDateLabel(item), item.severity === "critical" ? "critical" : null]
+              .filter(Boolean)
+              .join(" · ") || "Open",
+          target: nudgeTargetFromException(item),
+        }));
+      if (items.length === 0) {
+        setToast("Nothing open to nudge about");
+      } else if (items.length === 1) {
+        setNudge({ target: items[0]!.target, items });
+      } else {
+        setNudge({ target: null, items });
+      }
+    } catch (err) {
+      reportError("client-status.nudge.items", err);
+      setToast("Could not load open items. (NUDGE-ITEMS)");
+    }
+  }
 
   const header = data?.workspace.header;
   const name = formatPersonName(header?.traineeDisplayName || displayName);
@@ -421,12 +470,7 @@ export function ClientStatusScreen({
           <Pressable
             accessibilityRole="button"
             disabled={offline}
-            onPress={() =>
-              void openContextualWhatsApp({
-                phoneE164: header?.clientWhatsappE164,
-                draftText: `Hi ${first}, `,
-              }).then(() => setToast("Opened WhatsApp"))
-            }
+            onPress={() => void startNudge()}
             style={styles.secondary}
           >
             <Text style={styles.secondaryText}>Nudge…</Text>
@@ -616,6 +660,20 @@ export function ClientStatusScreen({
           </Pressable>
         </View>
       ) : null}
+      <NudgeSheet
+        visible={nudge != null}
+        target={nudge?.target ?? null}
+        pickItems={nudge?.items}
+        traineeDisplayName={name}
+        clientTimeZone={header?.traineeTimezone ?? null}
+        trainerDisplayName={me?.trainerProfile?.displayName ?? null}
+        api={clientStatusApi(api)}
+        onDismiss={() => setNudge(null)}
+        onSent={(line) => {
+          setNudge(null);
+          setToast(line);
+        }}
+      />
       {toast ? <Snackbar message={toast} onDismiss={() => setToast(null)} /> : null}
     </Screen>
   );

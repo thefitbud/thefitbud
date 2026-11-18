@@ -1,7 +1,8 @@
-import { Linking, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
+import { Linking, Platform, ScrollView, View } from "react-native";
 import { Text } from "../../components/Text";
 import Constants from "expo-constants";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { PrimaryButton } from "../../components/PrimaryButton";
 import { Screen } from "../../components/Screen";
 
@@ -78,7 +79,8 @@ type Props = {
   onDone: () => void;
 };
 
-export function OemBatterySheet({ onDone }: Props) {
+function OemBatterySheetBody({ onDone }: Props) {
+  const styles = useStyles();
   const key = detectOemKey();
   const guide = key ? OEM_GUIDES[key] : null;
 
@@ -123,31 +125,40 @@ export function OemBatterySheet({ onDone }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   scroll: {
     maxHeight: 360,
     marginBottom: spacing.lg,
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 12,
     gap: spacing.sm,
     padding: spacing.lg,
   },
   cardTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "700",
   },
   step: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 14,
     lineHeight: 20,
   },
   body: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
     marginBottom: spacing.lg,
   },
-});
+}));
+
+/** OemBatterySheet in the system theme (Z12-49): its own styles read the scope. */
+export function OemBatterySheet(props: Parameters<typeof OemBatterySheetBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <OemBatterySheetBody {...props} />
+    </ThemeScope>
+  );
+}

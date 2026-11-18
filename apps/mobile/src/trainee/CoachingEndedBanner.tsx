@@ -1,7 +1,8 @@
-import { StyleSheet, View } from "react-native";
+import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
+import { View } from "react-native";
 import { formatCivilDate, formatLocalDate } from "@fitbud/core";
 import { Text } from "../components/Text";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
+import { radii, spacing } from "@fitbud/ui-mobile";
 
 function formatEndedDate(iso: string): string {
   const local = formatLocalDate(new Date(iso), "Asia/Kolkata");
@@ -19,13 +20,14 @@ export function coachingEndedBannerText(
   return `Coaching with ${name} has ended. Your history is still here.`;
 }
 
-export function CoachingEndedBanner({
+function CoachingEndedBannerBody({
   coachName,
   endedAt,
 }: {
   coachName: string;
   endedAt?: string | null;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.banner} accessibilityRole="text">
       <Text style={styles.text}>
@@ -35,15 +37,24 @@ export function CoachingEndedBanner({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   banner: {
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: radii.card,
     padding: spacing.md,
   },
   text: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 14,
     lineHeight: 20,
   },
-});
+}));
+
+/** CoachingEndedBanner in the system theme (Z12-49): its own styles read the scope. */
+export function CoachingEndedBanner(props: Parameters<typeof CoachingEndedBannerBody>[0]) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <CoachingEndedBannerBody {...props} />
+    </ThemeScope>
+  );
+}

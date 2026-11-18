@@ -150,7 +150,12 @@ export function notificationRowTitle(
     case "daily_summary":
       return "Things left today";
     case "activity_nudge":
-      return "Quick reminder from your coach";
+      // The server's title (D-W12-9) is what the push carried; an older row
+      // without one gets the same line from the coach's name.
+      return (
+        notification.title ??
+        `${coachOrFallback(context.coachName)} nudged you`
+      );
     case "subscription_renewal_reminder":
       return "Plan renewal coming up";
     case "plan_published":
@@ -213,7 +218,7 @@ export function notificationRowBody(
     case "daily_summary":
       return "Log what you did today, then rest easy.";
     case "activity_nudge":
-      return "Log it when you can.";
+      return notification.body ?? "Log it when you can.";
     case "subscription_renewal_reminder":
       return "Your coaching renewal window is open.";
     case "plan_published":

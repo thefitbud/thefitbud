@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { MealAssignment } from "@fitbud/contracts";
-import { canLogMealOnDate, canShowMealLogActions } from "./mealHelpers";
+import {
+  canChangeLoggedMeal,
+  canLogMealOnDate,
+  canShowMealLogActions,
+} from "./mealHelpers";
 
 function meal(partial: Partial<MealAssignment> & Pick<MealAssignment, "id">): MealAssignment {
   const { id, prescription: prescriptionOverride, ...rest } = partial;
@@ -123,5 +127,27 @@ describe("canShowMealLogActions", () => {
         unresolvedExceptionCount: 1,
       }),
     ).toBe(false);
+  });
+});
+
+describe("canChangeLoggedMeal (Z12-42)", () => {
+  const changed = meal({ id: "c1", status: "modified" });
+  const base = { lockStateKnown: true, isLogged: true, meal: changed, isLocked: false };
+
+  it("offers Change on a logged, changed, open meal", () => {
+    expect(canChangeLoggedMeal(base)).toBe(true);
+  });
+
+  it("offers nothing while the lock state is not known", () => {
+    expect(canChangeLoggedMeal({ ...base, lockStateKnown: false })).toBe(false);
+  });
+
+  it("offers nothing on a locked meal or one the coach logged", () => {
+    expect(canChangeLoggedMeal({ ...base, isLocked: true })).toBe(false);
+    const byCoach = {
+      ...changed,
+      compliance: { loggedByRole: "coach" },
+    } as unknown as MealAssignment;
+    expect(canChangeLoggedMeal({ ...base, meal: byCoach })).toBe(false);
   });
 });

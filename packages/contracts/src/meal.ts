@@ -41,6 +41,14 @@ export const loggedFoodItemSchema = z.object({
       servingLabel: z.string().trim().max(120).optional(),
     })
     .optional(),
+  /**
+   * D-W12-24: a `customFood` on a logged-foods log is also saved to the
+   * trainee's own foods (search and Recent) unless this is false. False keeps
+   * it on this log only; the coach still sees it as added by the client.
+   * Omitted means true. Ignored for library items and on other deviation
+   * kinds, which never save a food.
+   */
+  saveToMyFoods: z.boolean().optional(),
 });
 export type LoggedFoodItem = z.infer<typeof loggedFoodItemSchema>;
 
