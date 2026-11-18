@@ -22,6 +22,7 @@ import { FoodAmountPicker } from "./food/FoodAmountPicker";
 import { FoodNavHeader } from "./food/FoodNavHeader";
 import {
   addLine,
+  amountWithUnit,
   foodKey,
   formatAmount,
   lineAddedLabel,
@@ -91,8 +92,7 @@ function planRowAsItem(row: PlannedRow): FoodSearchItem | null {
 }
 
 function planRowSubtitle(row: PlannedRow): string {
-  const amount =
-    row.quantity === 1 ? row.unitLabel : `${formatAmount(row.quantity)} × ${row.unitLabel}`;
+  const amount = amountWithUnit(row.quantity, row.unitLabel);
   return row.kcalPreview != null ? `${amount} · ${formatNumber(row.kcalPreview)} kcal` : amount;
 }
 

@@ -6,7 +6,7 @@ import { BottomSheet } from "../../components/BottomSheet";
 import { Text } from "../../components/Text";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { cleanFoodLabel } from "../mealHelpers";
-import { formatAmount } from "./logLines";
+import { amountWithUnit, formatAmount } from "./logLines";
 
 /** How a changed meal was logged, as the row and this sheet name it. */
 export function deviationLabel(kind: string | null | undefined): string {
@@ -18,7 +18,7 @@ export function deviationLabel(kind: string | null | undefined): string {
 function itemAmount(item: MealComplianceLoggedItem): string | null {
   const serving = item.servingLabel ? cleanFoodLabel(item.servingLabel) : null;
   if (item.quantity != null && item.quantity !== 1) {
-    return serving ? `${formatAmount(item.quantity)} × ${serving}` : formatAmount(item.quantity);
+    return serving ? amountWithUnit(item.quantity, serving) : formatAmount(item.quantity);
   }
   return serving;
 }

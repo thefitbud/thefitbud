@@ -215,7 +215,6 @@ export function CustomFoodScreen({
             value={saveToMyFoods}
             onValueChange={setSaveToMyFoods}
             accessibilityLabel="Save to my foods"
-            accessibilityRole="switch"
             trackColor={{ false: theme.colors.fill2, true: theme.colors.done }}
             thumbColor={theme.colors.white}
             testID="custom-save-to-my-foods"

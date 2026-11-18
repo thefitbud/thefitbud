@@ -57,6 +57,21 @@ export function formatAmount(value: number): string {
   return String(Math.round(value * 100) / 100);
 }
 
+/**
+ * An amount of a serving: "3 medium chapati (40 g)" for a "1 …" serving
+ * label, otherwise "2 × Small bowl" (or the label alone for one).
+ */
+export function amountWithUnit(quantity: number, label: string): string {
+  const one = /^1\s+(.+)$/.exec(label.trim());
+  if (one) return `${formatAmount(quantity)} ${one[1]}`;
+  return quantity === 1 ? label : `${formatAmount(quantity)} × ${label}`;
+}
+
+/** The unit under a stepper: the serving label without its leading "1 ". */
+export function unitNoun(label: string): string {
+  return label.trim().replace(/^1\s+/, "");
+}
+
 function unscale(scaled: number | null | undefined): number | null {
   return scaled == null ? null : scaled / NUTRIENT_SCALE;
 }

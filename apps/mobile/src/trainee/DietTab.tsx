@@ -674,29 +674,33 @@ function DietTabBody({
   const [viewMealId, setViewMealId] = useState<string | null>(null);
   /** How each waiting changed meal was logged, for its "not sent yet" row. */
   const pendingKind = useRef(new Map<string, MealSavedNotice["kind"]>());
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
   useEffect(() => {
-    if (!savedNotice) return undefined;
-    takeMealSaved(savedNotice.id);
-    setSavedToast(savedNotice);
-    let active = true;
+    if (!savedNotice) return;
+    // Taking the notice re-renders with none, so the outbox read below must
+    // not be tied to this effect's cleanup.
+    const notice = savedNotice;
+    takeMealSaved(notice.id);
+    setSavedToast(notice);
     void (async () => {
       let waiting = false;
       try {
-        waiting = pendingDietLogIds(await sync.store.listOutbox()).has(
-          savedNotice.assignmentId,
-        );
+        waiting = pendingDietLogIds(await sync.store.listOutbox()).has(notice.assignmentId);
       } catch (err) {
         reportError("DietTab.listOutbox", err);
       }
-      if (!active || !waiting) return;
-      pendingKind.current.set(savedNotice.assignmentId, savedNotice.kind);
-      optimisticStatus.current.set(savedNotice.assignmentId, "modified");
+      if (!mountedRef.current || !waiting) return;
+      pendingKind.current.set(notice.assignmentId, notice.kind);
+      optimisticStatus.current.set(notice.assignmentId, "modified");
       setOptimisticVersion((n) => n + 1);
-      setPendingSendIds((ids) => new Set(ids).add(savedNotice.assignmentId));
+      setPendingSendIds((ids) => new Set(ids).add(notice.assignmentId));
     })();
-    return () => {
-      active = false;
-    };
   }, [savedNotice, sync]);
 
   async function confirmMeal(assignment: MealAssignment) {

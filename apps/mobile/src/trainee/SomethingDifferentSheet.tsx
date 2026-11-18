@@ -26,7 +26,7 @@ import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { AteOutForm } from "./food/AteOutForm";
 import { FoodNavHeader } from "./food/FoodNavHeader";
-import { formatAmount } from "./food/logLines";
+import { amountWithUnit, formatAmount, unitNoun } from "./food/logLines";
 import { announceMealSaved } from "./food/mealSavedNotice";
 import { deviateMealAssignment, MealSyncError } from "./mealActions";
 import { cleanFoodLabel } from "./mealHelpers";
@@ -56,10 +56,7 @@ function rowKcal(row: PortionRow): number | null {
   return Math.round((row.kcalPreview / row.plannedQuantity) * row.quantity);
 }
 
-/** "3 pieces" style plan amount for a portion row. */
-function amountLabel(quantity: number, unit: string): string {
-  return `${formatAmount(quantity)} ${unit}`;
-}
+const amountLabel = amountWithUnit;
 
 function portionRowToLoggedItem(row: PortionRow): LoggedFoodItem {
   if (row.foodId) {
@@ -355,7 +352,7 @@ export function SomethingDifferentSheet({
                     </Pressable>
                   </View>
                   <Text variant="caption" style={styles.stepUnit}>
-                    {row.unitLabel}
+                    {unitNoun(row.unitLabel)}
                   </Text>
                 </View>
               </View>
