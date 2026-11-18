@@ -1,0 +1,226 @@
+{
+  "result": "mean screenshot luminance: light 0.878 (19), dark 0.205 (24)",
+  "light": 0.878,
+  "dark": 0.205,
+  "count": {
+    "light": 19,
+    "dark": 24
+  },
+  "shots": [
+    {
+      "file": "W-02-dark-android.png",
+      "theme": "dark",
+      "luma": 0.135
+    },
+    {
+      "file": "W-02-light-android.png",
+      "theme": "light",
+      "luma": 0.939
+    },
+    {
+      "file": "W-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "W-03-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "W-03b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "W-03b-light-android.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "W-04-dark-android.png",
+      "theme": "dark",
+      "luma": 0.148
+    },
+    {
+      "file": "W-04-light-android.png",
+      "theme": "light",
+      "luma": 0.917
+    },
+    {
+      "file": "W-05a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.149
+    },
+    {
+      "file": "W-05a-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "W-05b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.165
+    },
+    {
+      "file": "W-05b-light-android.png",
+      "theme": "light",
+      "luma": 0.906
+    },
+    {
+      "file": "W-08-dark-android.png",
+      "theme": "dark",
+      "luma": 0.142
+    },
+    {
+      "file": "W-08-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "W-09-dark-android.png",
+      "theme": "dark",
+      "luma": 0.077
+    },
+    {
+      "file": "W-09b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.148
+    },
+    {
+      "file": "W-13-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "W-14-dark-android.png",
+      "theme": "dark",
+      "luma": 0.211
+    },
+    {
+      "file": "W-14-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "W-15-dark-android.png",
+      "theme": "dark",
+      "luma": 0.093
+    },
+    {
+      "file": "W-15-light-android.png",
+      "theme": "light",
+      "luma": 0.649
+    },
+    {
+      "file": "W-16-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "W-16-light-android.png",
+      "theme": "light",
+      "luma": 0.738
+    },
+    {
+      "file": "W-18-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "W-18-light-android.png",
+      "theme": "light",
+      "luma": 0.658
+    },
+    {
+      "file": "W-19-dark-android.png",
+      "theme": "dark",
+      "luma": 0.14
+    },
+    {
+      "file": "W-19-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "W-20-dark-android.png",
+      "theme": "dark",
+      "luma": 0.14
+    },
+    {
+      "file": "W-20-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.922
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.922
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "step-004-runFlow-light-android.png",
+      "theme": "light",
+      "luma": 0.878
+    },
+    {
+      "file": "step-017-assertCondition-Today_s_workout.Needs_yo-light-android.png",
+      "theme": "light",
+      "luma": 0.878
+    },
+    {
+      "file": "step-017-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "step-039-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "step-043-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "step-044-scrollUntilVisible-Continue_workoutLog_w-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "step-051-assertCondition-Set__0-9__skipped-light-android.png",
+      "theme": "light",
+      "luma": 0.936
+    },
+    {
+      "file": "z12-45-ask-coach-dark-android.png",
+      "theme": "dark",
+      "luma": 0.152
+    },
+    {
+      "file": "z12-45-discarded-day-dark-android.png",
+      "theme": "dark",
+      "luma": 0.176
+    },
+    {
+      "file": "z12-45-finished-early-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.882
+    }
+  ]
+}

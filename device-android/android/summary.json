@@ -1,0 +1,368 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 2 of 8 flows failed",
+    "dark: 1 of 8 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F03-first-workout.yaml",
+    "flows/v3/F04-plan-deviation.yaml",
+    "flows/v3/F05-exercise-detail-rest.yaml",
+    "flows/v3/F06-interruptions.yaml",
+    "flows/v3/F06b-interruptions-offline.yaml",
+    "flows/v3/F06c-interruptions-end.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 6,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)",
+          "message": "Assertion is false: \"Set [0-9]+ skipped\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 7,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)",
+          "message": "No visible element found: \"Continue workout|Log workout|Start workout\"",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 9s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 7s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)",
+        "retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 9s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 7s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen); retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 71 s",
+      "mode": "cache-hit",
+      "seconds": 71,
+      "cacheKey": "device-native-android-fd74f15532d71bc3af990090855e03fb1c84555b"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 728 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.878 (19), dark 0.205 (24)",
+      "light": 0.878,
+      "dark": 0.205,
+      "count": {
+        "light": 19,
+        "dark": 24
+      },
+      "shots": [
+        {
+          "file": "W-02-dark-android.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "W-02-light-android.png",
+          "theme": "light",
+          "luma": 0.939
+        },
+        {
+          "file": "W-03-dark-android.png",
+          "theme": "dark",
+          "luma": 0.139
+        },
+        {
+          "file": "W-03-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "W-03b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "W-03b-light-android.png",
+          "theme": "light",
+          "luma": 0.94
+        },
+        {
+          "file": "W-04-dark-android.png",
+          "theme": "dark",
+          "luma": 0.148
+        },
+        {
+          "file": "W-04-light-android.png",
+          "theme": "light",
+          "luma": 0.917
+        },
+        {
+          "file": "W-05a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.149
+        },
+        {
+          "file": "W-05a-light-android.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "W-05b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.165
+        },
+        {
+          "file": "W-05b-light-android.png",
+          "theme": "light",
+          "luma": 0.906
+        },
+        {
+          "file": "W-08-dark-android.png",
+          "theme": "dark",
+          "luma": 0.142
+        },
+        {
+          "file": "W-08-light-android.png",
+          "theme": "light",
+          "luma": 0.929
+        },
+        {
+          "file": "W-09-dark-android.png",
+          "theme": "dark",
+          "luma": 0.077
+        },
+        {
+          "file": "W-09b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.148
+        },
+        {
+          "file": "W-13-dark-android.png",
+          "theme": "dark",
+          "luma": 0.128
+        },
+        {
+          "file": "W-14-dark-android.png",
+          "theme": "dark",
+          "luma": 0.211
+        },
+        {
+          "file": "W-14-light-android.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "W-15-dark-android.png",
+          "theme": "dark",
+          "luma": 0.093
+        },
+        {
+          "file": "W-15-light-android.png",
+          "theme": "light",
+          "luma": 0.649
+        },
+        {
+          "file": "W-16-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "W-16-light-android.png",
+          "theme": "light",
+          "luma": 0.738
+        },
+        {
+          "file": "W-18-dark-android.png",
+          "theme": "dark",
+          "luma": 0.139
+        },
+        {
+          "file": "W-18-light-android.png",
+          "theme": "light",
+          "luma": 0.658
+        },
+        {
+          "file": "W-19-dark-android.png",
+          "theme": "dark",
+          "luma": 0.14
+        },
+        {
+          "file": "W-19-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "W-20-dark-android.png",
+          "theme": "dark",
+          "luma": 0.14
+        },
+        {
+          "file": "W-20-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.922
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.922
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.929
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.929
+        },
+        {
+          "file": "step-004-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.878
+        },
+        {
+          "file": "step-017-assertCondition-Today_s_workout.Needs_yo-light-android.png",
+          "theme": "light",
+          "luma": 0.878
+        },
+        {
+          "file": "step-017-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "step-039-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "step-043-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "step-044-scrollUntilVisible-Continue_workoutLog_w-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "step-051-assertCondition-Set__0-9__skipped-light-android.png",
+          "theme": "light",
+          "luma": 0.936
+        },
+        {
+          "file": "z12-45-ask-coach-dark-android.png",
+          "theme": "dark",
+          "luma": 0.152
+        },
+        {
+          "file": "z12-45-discarded-day-dark-android.png",
+          "theme": "dark",
+          "luma": 0.176
+        },
+        {
+          "file": "z12-45-finished-early-summary-light-android.png",
+          "theme": "light",
+          "luma": 0.882
+        }
+      ]
+    }
+  ]
+}

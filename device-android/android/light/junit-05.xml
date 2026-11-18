@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="1" time="96.246" timestamp="2026-11-18T11:50:58">
+    <testcase id="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" name="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" classname="F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F05-exercise-detail-rest.yaml" time="96.188" timestamp="2026-11-18T11:50:58" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

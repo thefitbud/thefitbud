@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - E4497C25-CD75-4556-8B38-87C52F0FBEAE" tests="1" failures="1" time="239.738" timestamp="2026-11-18T18:02:18">
+    <testcase id="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" name="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" classname="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F04-plan-deviation.yaml" time="239.61" timestamp="2026-11-18T18:02:18" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+      <failure>Assertion is false: "Message preview" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
