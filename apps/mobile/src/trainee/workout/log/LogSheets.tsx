@@ -4,7 +4,7 @@
  * Discard (W-15) and "Pick up where you left off?" (W-18).
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Modal, Pressable, TextInput, View } from "react-native";
+import { Modal, Platform, Pressable, TextInput, View } from "react-native";
 import {
   ChevronRight,
   CirclePlay,
@@ -29,6 +29,16 @@ import {
   type SetDraft,
 } from "../../../workout/shared";
 import type { UnloggedExercise } from "../../workoutSession";
+
+/**
+ * Run `open` once a sheet or dialog that is closing has gone. iOS will not
+ * present a modal while another is still animating out, so one that opens in
+ * the same tick as the other closes never shows there.
+ */
+export function afterModalCloses(open: () => void): void {
+  if (Platform.OS === "ios") setTimeout(open, 450);
+  else open();
+}
 
 /* ------------------------------------------------------- exercise menu */
 
@@ -248,7 +258,7 @@ export function SetSheet({
                   kg
                 </Text>
                 <TextInput
-                  accessibilityLabel="Weight in kg"
+                  accessibilityLabel="Weight you used, in kg"
                   value={load}
                   onChangeText={(text) => setLoad(cleanLoad(text))}
                   onFocus={() => setFocus("load")}
@@ -267,7 +277,7 @@ export function SetSheet({
                 Reps
               </Text>
               <TextInput
-                accessibilityLabel="Reps"
+                accessibilityLabel="Reps you did"
                 value={reps}
                 onChangeText={(text) => setReps(cleanReps(text))}
                 onFocus={() => setFocus("reps")}

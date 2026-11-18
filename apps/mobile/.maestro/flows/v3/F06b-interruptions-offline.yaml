@@ -1,0 +1,42 @@
+appId: com.thefitbud.mobile.staging
+name: F06 Interruptions, part 2 (offline mid-workout, W-20)
+tags:
+  - device
+  - trainee
+  - z12-45
+  - device-offline
+---
+# Tagged device-offline: the harness takes the device offline before this file and
+# back online after it (Android: airplane mode; iOS: the local API is stopped).
+# Continues from F06-interruptions.yaml: Rohan is in the active log.
+#
+# W-20 (with Z12-41's outbox): a set logged with no network is logged on the
+# screen at once, the header says "Offline · sets save on your phone", and
+# nothing errors. The outbox itself (TR-19a, the send on reconnect) is F10's.
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Log set [0-9]+ ·.*"
+    direction: UP
+    timeout: 30000
+- tapOn:
+    text: "Log set [0-9]+ ·.*"
+    index: 0
+# The log does not wait for the network: the rest starts at once.
+- extendedWaitUntil:
+    visible: "Rest, [0-9]+:[0-9]{2} left"
+    timeout: 10000
+- tapOn: "Skip rest"
+# The send fails, and the header says so.
+- extendedWaitUntil:
+    visible: "Offline · sets save on your phone"
+    timeout: 60000
+- assertVisible: "Set [0-9]+, .* logged.*"
+# Nothing blames the trainee or shows a raw error.
+- assertNotVisible: ".*WO-SAVE.*"
+- assertNotVisible: ".*went wrong.*"
+- takeScreenshot: W-20-active-offline
+- runFlow: ../../common/assert-no-crash.yaml

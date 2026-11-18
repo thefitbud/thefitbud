@@ -55,7 +55,7 @@ export function LogKeypad({
   return (
     <View style={styles.kpad}>
       <View style={styles.head}>
-        <Text variant="caption" style={styles.headText} numberOfLines={1}>
+        <Text variant="caption" style={styles.headText} numberOfLines={2}>
           Set {setNumber} · {isLoad ? "Weight (kg)" : "Reps"}
           {targetText ? (
             <>

@@ -24,7 +24,7 @@ import {
   sessionSetCounts,
   unloggedExercises,
 } from "../workoutSession";
-import { ConfirmDialog, FinishSheet } from "./log/LogSheets";
+import { ConfirmDialog, FinishSheet, afterModalCloses } from "./log/LogSheets";
 
 /** Executions already asked about since the app started. */
 const asked = new Set<string>();
@@ -95,10 +95,12 @@ export function OpenSessionPrompts({
   function startFinish() {
     if (!execution) return;
     const pending = sessionSetCounts(execution);
+    const fromDialog = resumeOpen;
     setResumeOpen(false);
     if (pending.total - pending.done > 0 || execution.requireSessionRpe) {
       setSessionRpe(execution.sessionRpe);
-      setFinishOpen(true);
+      if (fromDialog) afterModalCloses(() => setFinishOpen(true));
+      else setFinishOpen(true);
       return;
     }
     finish(execution.sessionRpe);
@@ -167,7 +169,7 @@ export function OpenSessionPrompts({
             variant: "dangerQuiet",
             onPress: () => {
               setResumeOpen(false);
-              setDiscardOpen(true);
+              afterModalCloses(() => setDiscardOpen(true));
             },
           },
         ]}

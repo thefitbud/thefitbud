@@ -1,0 +1,142 @@
+appId: com.thefitbud.mobile.staging
+name: F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)
+tags:
+  - device
+  - trainee
+  - z12-45
+---
+# F04 (Z12-45): changing what was planned, in the session F03 left open (Rohan,
+# local demo seed; device/z12-45/open-log.yaml brings it back).
+#   * W-08: swipe a set that is still to do, Skip, then Undo.
+#   * W-13: tap a logged set: change the reps and save; mark it not done; log it
+#     again from the skipped row.
+#   * W-09: the exercise ⋯ menu and every row of it.
+#   * W-09b: Skip exercise, the toast, Undo.
+# Not on these screens, because the server has nothing to store them in (listed
+# in the PR): Add set, Add exercise (W-21a/b), Replace exercise (W-22), Remove
+# from today, Delete set, and the exercise note (W-10).
+#
+# Screens: W-08, W-13, W-09, W-09b.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- runFlow: ../../device/z12-45/open-log.yaml
+
+# ---- W-08: swipe a set to Skip, then Undo -----------------------------------------
+- swipe:
+    from:
+      text: "Set [0-9]+ options"
+      index: 0
+    direction: LEFT
+    duration: 400
+- assertVisible: "Skip set [0-9]+"
+- takeScreenshot: W-08-swipe-set
+- tapOn: "Skip set [0-9]+"
+- assertVisible: "Set [0-9]+ skipped"
+- assertVisible: "Set [0-9]+, skipped.*"
+- tapOn: "Undo"
+- assertNotVisible: "Set [0-9]+, skipped.*"
+- assertNotVisible: "Set [0-9]+ skipped"
+
+# The same action without a swipe: the set number opens it.
+- tapOn:
+    text: "Set [0-9]+ options"
+    index: 0
+- assertVisible: "Not logged yet"
+- assertVisible: "Skip set"
+- tapOn: "Keep it"
+- assertNotVisible: "Not logged yet"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- W-13: a logged set ---------------------------------------------------------------
+# Log one as planned (the tick), end its rest, then open it.
+- tapOn:
+    text: "Log set [0-9]+ ·.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Rest, [0-9]+:[0-9]{2} left"
+    timeout: 10000
+- tapOn: "Skip rest"
+- tapOn:
+    text: "Set [0-9]+, .* logged.*"
+    index: 0
+- assertVisible: "Logged .* at [0-9]+:[0-9]{2} (am|pm).*"
+- assertVisible: "Save changes"
+- assertVisible: "Mark not done"
+- takeScreenshot: W-13-edit-logged-set
+- tapOn: "Reps you did"
+- eraseText: 3
+- inputText: "7"
+# Close the keyboard by tapping the sheet's inert title.
+- tapOn: "Set [0-9]+ · .*"
+- tapOn: "Save changes"
+- assertVisible: "Set [0-9]+, .*7(, logged| reps, logged).*"
+- assertNotVisible: "Save changes"
+# Mark it not done: the row reads skipped.
+- tapOn:
+    text: "Set [0-9]+, .*7(, logged| reps, logged).*"
+    index: 0
+- tapOn: "Mark not done"
+- extendedWaitUntil:
+    visible: "Set [0-9]+, skipped.*"
+    timeout: 15000
+# The change reached the server: no error banner, and the row stays skipped.
+- assertNotVisible: ".*WO-UNLOG.*"
+# A skipped set can still be logged.
+- tapOn:
+    text: "Set [0-9]+, skipped.*"
+    index: 0
+- assertVisible: "Skipped"
+- tapOn: "Log set"
+- assertNotVisible: "Set [0-9]+, skipped.*"
+- runFlow:
+    when:
+      visible: "Skip rest"
+    commands:
+      - tapOn: "Skip rest"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- W-09: the exercise menu --------------------------------------------------------------
+- tapOn:
+    text: "More for .*"
+    index: 0
+- assertVisible: "How to do it"
+- assertVisible: "History and records"
+- assertVisible: "Ask .* about this\\. Opens a WhatsApp message you send"
+- assertVisible: "Skip exercise\\. .* sees it as skipped"
+- takeScreenshot: W-09-exercise-menu
+# Ask the coach: the message sheet, which the trainee sends or closes. Nothing is sent.
+- tapOn: "Ask .* about this\\. Opens a WhatsApp message you send"
+- extendedWaitUntil:
+    visible: "Message preview"
+    timeout: 15000
+- takeScreenshot: z12-45-ask-coach
+- tapOn: "Dismiss"
+- extendedWaitUntil:
+    notVisible: "Message preview"
+    timeout: 15000
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 15000
+
+# ---- W-09b: skip the exercise, Undo ----------------------------------------------------------
+- tapOn:
+    text: "More for .*"
+    index: 0
+- tapOn: "Skip exercise\\. .* sees it as skipped"
+- assertVisible: ".* skipped"
+- assertVisible: "Undo"
+- takeScreenshot: W-09b-exercise-skipped
+- tapOn: "Undo"
+- assertNotVisible: "Undo"
+- assertVisible: "Log set [0-9]+ ·.*"
+- runFlow: ../../common/assert-no-crash.yaml

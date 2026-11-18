@@ -1,0 +1,91 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow (no tags: never run on its own). Opens the active workout log (Z12-45)
+# for Rohan Mehta (slipping, local demo seed) and ends on it ("Minimise workout").
+# Start signed in, on any tab.
+#
+# One workout per theme, so the light and the dark pass never share a session and
+# both can show a fresh one (W-02). On every weekday the seed leaves Rohan at
+# least these two open (apps/api/src/seed/demo/history.ts, shouldLogWorkout):
+#   light: this week's newest missed workout, from the banner's "Log it" (a late
+#          log). Once it is started the banner is gone, and the next flow finds
+#          it by walking back from today to the day that offers "Continue
+#          workout".
+#   dark:  last Saturday's (never logged for him), picked by its date in the strip.
+#
+# A flow that starts with a cleared app has no session in memory, so reaching the
+# day of an open workout shows "Pick up where you left off?" (W-18). This subflow
+# answers it with Resume; F06 asserts and captures it.
+- runFlow: ../z12-44/ist-days.yaml
+- runFlow: ../z12-44/open-workout-tab.yaml
+
+# ---- dark: last Saturday -----------------------------------------------------
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
+    commands:
+      - runFlow:
+          when:
+            notVisible: "${output.lastSat}, .*"
+          commands:
+            - tapOn: "Previous week"
+      - tapOn: "${output.lastSat}, .*"
+      - extendedWaitUntil:
+          notVisible: "Loading workouts…"
+          timeout: 30000
+
+# ---- light: the missed workout -----------------------------------------------
+- runFlow:
+    when:
+      true: ${DEVICE_THEME != 'dark'}
+      visible: "Log it"
+    commands:
+      - tapOn: "Log it"
+      - extendedWaitUntil:
+          visible: "Minimise workout"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${DEVICE_THEME != 'dark'}
+      notVisible: "Minimise workout"
+    commands:
+      - repeat:
+          times: 7
+          while:
+            notVisible: "Continue workout|Pick up where you left off\\?"
+          commands:
+            - swipe:
+                start: "15%, 70%"
+                end: "85%, 70%"
+                duration: 350
+            - extendedWaitUntil:
+                notVisible: "Loading workouts…"
+                timeout: 20000
+
+# ---- on the day: the card says what is there ---------------------------------
+- runFlow:
+    when:
+      notVisible: "Minimise workout"
+    commands:
+      # An open session's set count is read after the card paints, and the W-18
+      # dialog comes with it; an unlogged day offers its start.
+      - extendedWaitUntil:
+          visible: "[0-9]+ of [0-9]+ sets|Log workout|Start workout|Pick up where you left off\\?"
+          timeout: 30000
+      - waitForAnimationToEnd:
+          timeout: 1500
+      - runFlow:
+          when:
+            visible: "Pick up where you left off\\?"
+          commands:
+            - tapOn: "Resume workout"
+      - runFlow:
+          when:
+            notVisible: "Minimise workout"
+          commands:
+            - tapOn: "Continue workout|Log workout|Start workout"
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 30000
+- assertVisible: "Pause workout"
+- assertVisible: "Finish workout"

@@ -433,6 +433,18 @@ export function LogSetRow({
   const doneLoad = displayLoad(set.actualLoadLabel ?? set.prescribedLoadLabel);
   const doneReps = set.actualReps ?? set.prescribedReps;
 
+  const openLoad =
+    draft.load.trim() !== ""
+      ? `${draft.load} kg`
+      : isBodyweightLabel(set.prescribedLoadLabel)
+        ? ""
+        : displayLoad(set.prescribedLoadLabel);
+  const openReps = draft.reps.trim() || "—";
+  const logValues =
+    bodyweight || openLoad === ""
+      ? `${openReps} reps`
+      : `${openLoad} × ${openReps}`;
+
   const cell = (field: KeypadField) => {
     // A load the plan gives as text ("RPE 7") shows as written until a
     // weight is typed; nothing is invented for it.
@@ -515,7 +527,8 @@ export function LogSetRow({
           {cell("reps")}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Log set ${number}`}
+            // Says what the tick logs: "Log set 3 · 40 kg × 10".
+            accessibilityLabel={`Log set ${number} · ${logValues}`}
             disabled={disabled}
             onPress={onLog}
             style={[styles.colCk, styles.ckHit]}

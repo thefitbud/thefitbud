@@ -1,0 +1,129 @@
+appId: com.thefitbud.mobile.staging
+name: F06 Interruptions, part 1 (minimise, kill and resume, pause, discard confirm)
+tags:
+  - device
+  - trainee
+  - z12-45
+---
+# F06 (Z12-45): what interrupts a workout, in the session F03 left open (Rohan,
+# local demo seed).
+#   * W-14: Minimise tucks the log into the bar above the tab bar; the bar
+#     brings it back as it was. (The bar shows on the Workout tab; the shell
+#     mount for the other tabs waits for Z12-46, see the PR.)
+#   * W-18: kill the app mid-workout and reopen it: "Pick up where you left
+#     off?", and Resume returns to the log with what was logged.
+#   * W-19: Pause is a labelled control away from Minimise; the banner says
+#     when the timer stopped; logging waits; Resume.
+#   * W-15: Discard asks first; "Keep logging" keeps the session.
+# Part 2 (F06b) is the same session with no network (W-20); part 3 (F06c)
+# ends both themes' sessions: the light one finishes early, the dark one is
+# discarded.
+#
+# Screens: W-14, W-18, W-19, W-15.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- runFlow: ../../device/z12-45/open-log.yaml
+
+# ---- W-14: minimise and come back --------------------------------------------------
+- tapOn: "Minimise workout"
+- extendedWaitUntil:
+    visible: ".*, (in progress,|paused at) [0-9:]+\\. .*\\. Resume"
+    timeout: 15000
+# The tab is back behind it, with its tab bar.
+- assertVisible: "Diet"
+- assertNotVisible: "Minimise workout"
+- takeScreenshot: W-14-minimised-bar
+- tapOn: ".*, (in progress,|paused at) [0-9:]+\\. .*\\. Resume"
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 15000
+- assertVisible: "Log set [0-9]+ ·.*"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- W-18: kill the app mid-workout, reopen ----------------------------------------------
+- launchApp:
+    clearState: false
+# A cold relaunch shows the startup spinner first: wait for the tab bar.
+- extendedWaitUntil:
+    visible: "Diet"
+    timeout: 120000
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 60000
+- runFlow: ../../device/z12-44/open-workout-tab.yaml
+# Back to the session's day: last Saturday in dark, else a day at a time.
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
+    commands:
+      - runFlow:
+          when:
+            notVisible: "${output.lastSat}, .*"
+          commands:
+            - tapOn: "Previous week"
+      - tapOn: "${output.lastSat}, .*"
+- runFlow:
+    when:
+      true: ${DEVICE_THEME != 'dark'}
+    commands:
+      - repeat:
+          times: 7
+          while:
+            notVisible: "Continue workout|Pick up where you left off\\?"
+          commands:
+            - swipe:
+                start: "15%, 70%"
+                end: "85%, 70%"
+                duration: 350
+            - extendedWaitUntil:
+                notVisible: "Loading workouts…"
+                timeout: 20000
+- extendedWaitUntil:
+    visible: "Pick up where you left off\\?"
+    timeout: 30000
+- assertVisible: ".* was in progress\\. [0-9]+ sets? (was|were) logged, the last at [0-9]+:[0-9]{2} (am|pm)\\."
+- assertVisible: "Resume workout"
+- assertVisible: "Finish and save"
+- assertVisible: "Discard"
+- takeScreenshot: W-18-resume-after-kill
+- tapOn: "Resume workout"
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 30000
+# What was logged before the kill is still logged.
+- assertVisible: "Set [0-9]+, .* logged.*"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- W-19: pause ------------------------------------------------------------------------------
+- tapOn: "Pause workout"
+- assertVisible: "Paused\\. The timer stopped at [0-9:]+\\."
+- assertVisible: "Resume workout"
+- takeScreenshot: W-19-paused
+- tapOn: "Resume workout"
+- assertNotVisible: "Paused\\. The timer stopped at [0-9:]+\\."
+- assertVisible: "Pause workout"
+
+# ---- W-15: discard asks first ------------------------------------------------------------------
+- scrollUntilVisible:
+    element: "Discard workout"
+    direction: DOWN
+    timeout: 30000
+- tapOn: "Discard workout"
+- assertVisible: "Discard this workout\\?"
+- assertVisible: "[0-9]+ logged sets? won’t count\\. .* will see this workout as skipped\\."
+- assertVisible: "Keep logging"
+- takeScreenshot: W-15-discard-confirm
+- tapOn: "Keep logging"
+- assertNotVisible: "Discard this workout\\?"
+- assertVisible: "Minimise workout"
+- runFlow: ../../common/assert-no-crash.yaml

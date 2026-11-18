@@ -88,6 +88,7 @@ import {
 import {
   ConfirmDialog,
   ExerciseMenuSheet,
+  afterModalCloses,
   FinishSheet,
   SetSheet,
   type SetSheetMode,
@@ -128,7 +129,7 @@ const DEFAULT_REST_SECONDS = 90;
 /** How long "skipped · Undo" stays before the skip is sent (W-09b). */
 export const SKIP_UNDO_MS = 6000;
 /** How long the record banner stays (W-12). */
-const RECORD_NOTICE_MS = 5000;
+const RECORD_NOTICE_MS = 8000;
 
 type ExecutionSet = ExerciseExecution["sets"][number];
 
@@ -349,7 +350,10 @@ export function ActiveWorkoutScreen({
       setHistory(loaded);
       setHistoryLoading(false);
     });
-    void loadExerciseBests(api, assignment.coachingRelationshipId, today).then(
+    // A late log is for an earlier day: what counts as "before" is that day,
+    // so the session's own sets are never the record it has to beat.
+    const before = assignment.localDate < today ? assignment.localDate : today;
+    void loadExerciseBests(api, assignment.coachingRelationshipId, before).then(
       (loaded) => {
         if (!cancelled) setBests(loaded);
       },
@@ -1071,7 +1075,7 @@ export function ActiveWorkoutScreen({
             ? () => {
                 const name = menuExercise?.name;
                 setMenuExerciseId(null);
-                onAskCoach(name);
+                afterModalCloses(() => onAskCoach(name));
               }
             : undefined
         }

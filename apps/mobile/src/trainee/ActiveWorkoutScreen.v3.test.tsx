@@ -394,7 +394,7 @@ describe("ActiveWorkoutScreen set entry (W-04)", () => {
   it("any set can be logged first: the trainee moves freely (W-03)", () => {
     renderScreen("20 kg", twoExercises());
     // Set 2 of the second exercise, before anything else.
-    fireEvent.click(screen.getAllByRole("button", { name: "Log set 2" }).at(-1)!);
+    fireEvent.click(screen.getAllByRole("button", { name: /^Log set 2 ·/ }).at(-1)!);
     const row = JSON.parse(enqueued.at(-1)!.payloadJson);
     expect(row.setExecutionId).toBe(uuid(21));
     // The log carries on in that exercise, not back at the top.
@@ -554,8 +554,8 @@ describe("exercise menu and set actions (W-08, W-09, W-09b, W-13)", () => {
     tap(/^Set 1, 20 kg × 10, logged/);
     expect(screen.getByText("Set 1 · Romanian deadlift")).toBeTruthy();
     expect(screen.getByText(/^Logged 20 kg × 10 at /)).toBeTruthy();
-    fireEvent.change(screen.getByLabelText("Weight in kg"), { target: { value: "22.5" } });
-    fireEvent.change(screen.getByLabelText("Reps"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("Weight you used, in kg"), { target: { value: "22.5" } });
+    fireEvent.change(screen.getByLabelText("Reps you did"), { target: { value: "8" } });
     tap("Save changes");
     expect(enqueued.filter((row) => row.operation === "workout.complete_set")).toHaveLength(2);
     expect(lastBody()).toEqual({ actualReps: 8, actualLoadKg: 22.5 });
