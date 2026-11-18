@@ -62,6 +62,8 @@ export async function confirmMealAssignment(
     operation: "meal.confirm",
     payload: {
       assignmentId: assignment.id,
+      // Display only: the outbox sheet names the meal offline (Z12-41 hand-off).
+      mealName: assignment.mealName,
       body: { photoIntent: null },
     },
   });
@@ -94,6 +96,8 @@ export async function skipMealAssignment(
     operation: "meal.skip",
     payload: {
       assignmentId: assignment.id,
+      // Display only: the outbox sheet names the meal offline (Z12-41 hand-off).
+      mealName: assignment.mealName,
       body: { notes: notes ?? null },
     },
   });
@@ -113,6 +117,8 @@ export async function deviateMealAssignment(
     operation: "meal.deviate",
     payload: {
       assignmentId: assignment.id,
+      // Display only: the outbox sheet names the meal offline (Z12-41 hand-off).
+      mealName: assignment.mealName,
       body,
     },
   });

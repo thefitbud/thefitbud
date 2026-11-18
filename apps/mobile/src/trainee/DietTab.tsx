@@ -1,40 +1,37 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  ActivityIndicator,
-  Platform,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { ActivityIndicator, Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Svg, { Circle } from "react-native-svg";
 import {
   Bell,
   BookOpen,
   Check,
-  Clock,
+  CloudOff,
+  Cookie,
   Coffee,
-  CloudUpload,
   Ellipsis,
   Lock,
-  Moon,
+  Pizza,
+  RefreshCw,
+  Soup,
+  Sunrise,
+  Utensils,
+  UtensilsCrossed,
   WifiOff,
+  type LucideIcon,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
-import { formatClockTime, formatKcal, formatNumber, labelFor } from "@fitbud/core";
-import { rings } from "@fitbud/tokens";
-import {
-  colors,
-  radii,
-  semanticColors,
-  spacing,
-} from "@fitbud/ui-mobile";
-import { useAuth } from "../auth/AuthProvider";
+import { formatClockTime, formatCivilDate, formatNumber } from "@fitbud/core";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
-import { Snackbar } from "../components/Snackbar";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
+import { useAuth } from "../auth/AuthProvider";
 import { reportError } from "../lib/reportError";
 import { FutureDayBanner } from "./FutureDayBanner";
 import { PlannedMealSheet } from "./PlannedMealSheet";
@@ -50,9 +47,9 @@ import {
   isMealLogPending,
   MealSyncError,
   pendingMealLogIds,
-  plannedUntilSentNote,
 } from "./mealActions";
 import {
+  canChangeLoggedMeal,
   canShowMealLogActions,
   cleanFoodLabel,
   mealLockCopy,
@@ -64,117 +61,300 @@ import {
   useTraineeDayCache,
   useTraineeWeek,
 } from "./useTraineeDayCache";
+import { isNetworkFailure } from "../trainer/attention/offline";
 import { mealDueStatusLabel, nextUp } from "./nextUp";
 import {
   buildNutritionRings,
   dayKcalSummary,
   mealsForDay,
   isMealLoggedForCount,
-  mealsLoggedSummary,
   nutrientsFromMealPrescription,
 } from "./nutrition";
-import {
-  scheduledAssignments,
-  sortMealsByTime,
-} from "./scheduledAssignments";
+import { scheduledAssignments, sortMealsByTime } from "./scheduledAssignments";
 import {
   TraineeDateNavigator,
   WEEK_UNAVAILABLE_MESSAGE,
 } from "./TraineeDateNavigator";
 import { CoachLogBadge } from "./coach-log/CoachLogBadge";
 
-function MacroBar({
-  label,
-  logged,
-  assigned,
-  color,
-}: {
+/** Meal-type glyph by the meal's name (TR-07a): the plan carries no meal type. */
+function mealGlyph(name: string): LucideIcon {
+  const n = name.toLowerCase();
+  if (/early|morning|wake|pre.?workout/.test(n)) return Sunrise;
+  if (/breakfast/.test(n)) return Coffee;
+  if (/lunch/.test(n)) return Soup;
+  if (/snack|tea|evening/.test(n)) return Cookie;
+  if (/dinner|supper/.test(n)) return Pizza;
+  return Utensils;
+}
+
+type MacroRowProps = {
   label: string;
   logged: number;
   assigned: number;
   color: string;
-}) {
+};
+
+/**
+ * One macro: label, then "104 / 102 g" on one line, then a bar (TR-07a).
+ * Over the goal the logged number turns critical and the bar stays full;
+ * the figure is never the only signal, the "/ goal" reads next to it.
+ */
+function MacroRow({ label, logged, assigned, color }: MacroRowProps) {
+  const styles = useStyles();
+  const over = assigned > 0 && logged > assigned;
   const pct = assigned > 0 ? Math.min(100, (logged / assigned) * 100) : 0;
   return (
-    <View style={styles.macCol}>
-      <Text style={styles.macLabel}>{label}</Text>
-      <Text style={styles.macNums}>
-        <Text style={styles.macLogged}>{formatNumber(logged)}</Text>
-        {" of "}
-        {formatNumber(assigned)} g
-      </Text>
-      <View style={styles.macTrack}>
-        <View style={[styles.macFill, { width: `${pct}%`, backgroundColor: color }]} />
+    <View style={styles.macroRow} testID={`macro-${label.toLowerCase()}`}>
+      <View style={styles.macroHead}>
+        <Text variant="body">{label}</Text>
+        <Text
+          variant="body"
+          style={styles.macroNums}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.8}
+          maxFontSizeMultiplier={1.2}
+        >
+          <Text variant="bodyStrong" tone={over ? "crit" : "ink"}>
+            {formatNumber(logged)}
+          </Text>
+          <Text variant="body" tone="ink3">
+            {` / ${formatNumber(assigned)} g`}
+          </Text>
+        </Text>
+      </View>
+      <View style={styles.macroTrack}>
+        <View
+          style={[
+            styles.macroFill,
+            { width: `${pct}%`, backgroundColor: color },
+          ]}
+        />
       </View>
     </View>
   );
 }
 
-function KcalRing({ logged, assigned }: { logged: number; assigned: number }) {
-  const size = 76;
-  const stroke = 9;
+/**
+ * How the ring number is fitted: one line, shrinking to the ring's inner slot,
+ * and never scaled past 1.2 by the system font size. Native only; Expo web
+ * ignores `adjustsFontSizeToFit`, so a test reads these props from here.
+ */
+export const RING_NUMBER_FIT = {
+  numberOfLines: 1,
+  adjustsFontSizeToFit: true,
+  minimumFontScale: 0.5,
+  maxFontSizeMultiplier: 1.2,
+} as const;
+
+/**
+ * The kcal ring (TR-07a, TR-07e). The number sits in a fixed-width slot and
+ * shrinks to fit on one line, so 12,345 and large system fonts never spill
+ * across the ring (`maxFontSizeMultiplier` 1.2). Over the goal the ring stays
+ * full and the overshoot shows as a critical arc.
+ */
+export function KcalRing({
+  logged,
+  assigned,
+}: {
+  logged: number;
+  assigned: number;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const size = 120;
+  const stroke = 12;
   const radius = (size - stroke) / 2;
-  const progress = assigned > 0 ? Math.min(logged / assigned, 1) : 0;
   const circumference = 2 * Math.PI * radius;
-  const dash = circumference * progress;
-  return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size} height={size}>
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={rings.track}
-          strokeWidth={stroke}
-          fill="none"
-        />
-        <Circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          stroke={rings.kcal}
-          strokeWidth={stroke}
-          fill="none"
-          strokeDasharray={`${dash} ${circumference}`}
-          strokeLinecap="round"
-          transform={`rotate(-90 ${size / 2} ${size / 2})`}
-        />
-      </Svg>
-      <View style={styles.ringCenter}>
-        <Text style={styles.ringKcal}>{formatNumber(logged)}</Text>
-        <Text style={styles.ringUnit}>kcal</Text>
-      </View>
-    </View>
-  );
-}
-
-function mealTileIcon(meal: MealAssignment, variant: "due" | "logged" | "later" | "locked") {
-  if (variant === "locked") return <Lock size={19} color={colors.midGrey} />;
-  if (variant === "logged") return <Check size={19} color={colors.success} />;
-  if (variant === "due") return <Coffee size={19} color={colors.indigo} />;
-  return <Moon size={19} color={colors.midGrey} />;
-}
-
-type MealPillKind = "logged" | "waiting" | "later";
-
-/** Right-hand status pill of a compact meal row (frame 86). */
-function MealPill({ kind }: { kind: MealPillKind }) {
-  const palette =
-    kind === "logged" ? semanticColors.positive : semanticColors.neutral;
-  const label =
-    kind === "logged" ? "Logged" : kind === "waiting" ? "Waiting to send" : "Later";
-  const Icon = kind === "logged" ? Check : kind === "waiting" ? CloudUpload : Clock;
+  const progress = assigned > 0 ? Math.min(logged / assigned, 1) : 0;
+  const overshoot =
+    assigned > 0 && logged > assigned
+      ? Math.min((logged - assigned) / assigned, 1)
+      : 0;
+  const mid = size / 2;
+  const slot = size - stroke * 2 - 6;
   return (
     <View
-      style={[styles.pill, { backgroundColor: palette.fill, borderColor: palette.text + "33" }]}
-      accessibilityLabel={label}
+      style={{ width: size, height: size }}
+      accessible
+      accessibilityLabel={`${formatNumber(logged)} kcal eaten${
+        assigned > 0 ? ` of ${formatNumber(assigned)}` : ""
+      }`}
+      testID="kcal-ring"
     >
-      <Icon size={14} color={palette.text} strokeWidth={1.75} />
-      <Text style={[styles.pillLabel, { color: palette.text }]}>{label}</Text>
+      <Svg width={size} height={size}>
+        <Circle
+          cx={mid}
+          cy={mid}
+          r={radius}
+          stroke={theme.colors.fill}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        {progress > 0 ? (
+          <Circle
+            cx={mid}
+            cy={mid}
+            r={radius}
+            stroke={theme.colors.brand}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={`${circumference * progress} ${circumference}`}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${mid} ${mid})`}
+          />
+        ) : null}
+        {overshoot > 0 ? (
+          <Circle
+            cx={mid}
+            cy={mid}
+            r={radius}
+            stroke={theme.colors.crit}
+            strokeWidth={stroke}
+            fill="none"
+            strokeDasharray={`${circumference * overshoot} ${circumference}`}
+            strokeLinecap="round"
+            transform={`rotate(-90 ${mid} ${mid})`}
+          />
+        ) : null}
+      </Svg>
+      <View style={styles.ringCenter} pointerEvents="none">
+        <View style={{ width: slot, alignItems: "center" }}>
+          <Text
+            variant="numberXl"
+            style={styles.ringNumber}
+            {...RING_NUMBER_FIT}
+            testID="kcal-ring-number"
+          >
+            {formatNumber(logged)}
+          </Text>
+        </View>
+        <Text variant="subhead" maxFontSizeMultiplier={1.2}>
+          kcal eaten
+        </Text>
+      </View>
     </View>
   );
 }
 
+/** The ring card: ring, "left" or "over", the goal, and the three macros (TR-07a/e). */
+function DaySummaryCard({
+  logged,
+  planned,
+  protein,
+  carbs,
+  fat,
+}: {
+  logged: number;
+  planned: number;
+  protein: { logged: number; assigned: number };
+  carbs: { logged: number; assigned: number };
+  fat: { logged: number; assigned: number };
+}) {
+  const styles = useStyles();
+  const theme = useTheme();
+  const over = planned > 0 && logged > planned;
+  const diff = Math.abs(planned - logged);
+  return (
+    <View style={styles.summary} testID="diet-summary">
+      <KcalRing logged={logged} assigned={planned} />
+      <View style={styles.summaryBody}>
+        {planned > 0 ? (
+          <View style={styles.leftRow}>
+            <View style={styles.leftNums}>
+              <Text
+                variant="numberLg"
+                tone={over ? "crit" : "ink"}
+                maxFontSizeMultiplier={1.2}
+              >
+                {formatNumber(diff)}
+              </Text>
+              <Text
+                variant="subhead"
+                tone={over ? "crit" : "ink"}
+                maxFontSizeMultiplier={1.2}
+              >
+                {over ? "kcal over" : "kcal left"}
+              </Text>
+            </View>
+            <Text variant="caption" maxFontSizeMultiplier={1.2}>
+              Goal {formatNumber(planned)}
+            </Text>
+          </View>
+        ) : null}
+        <View style={styles.macros}>
+          <MacroRow label="Protein" {...protein} color={theme.colors.protein} />
+          <MacroRow label="Carbs" {...carbs} color={theme.colors.carbs} />
+          <MacroRow label="Fat" {...fat} color={theme.colors.fat} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/** A centred card state: icon tile, title, body and buttons (TR-07c, TR-07i). */
+function StateCard({
+  icon: Icon,
+  title,
+  body,
+  primary,
+  secondary,
+  testID,
+}: {
+  icon: LucideIcon;
+  title: string;
+  body?: string;
+  primary?: { label: string; icon?: LucideIcon; onPress: () => void };
+  secondary?: { label: string; onPress: () => void };
+  testID: string;
+}) {
+  const styles = useStyles();
+  const theme = useTheme();
+  const PrimaryIcon = primary?.icon;
+  return (
+    <View style={styles.stateCard} testID={testID}>
+      <View style={styles.stateTile}>
+        <Icon size={30} strokeWidth={2} color={theme.colors.ink} />
+      </View>
+      <Text
+        variant="title"
+        style={styles.stateTitle}
+        accessibilityRole="header"
+      >
+        {title}
+      </Text>
+      {body ? (
+        <Text variant="body" tone="ink2" style={styles.stateBody}>
+          {body}
+        </Text>
+      ) : null}
+      {primary ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={primary.label}
+          onPress={primary.onPress}
+          style={styles.stateBtn}
+        >
+          {PrimaryIcon ? (
+            <PrimaryIcon size={20} strokeWidth={2.2} color={theme.colors.ink} />
+          ) : null}
+          <Text variant="bodyStrong">{primary.label}</Text>
+        </Pressable>
+      ) : null}
+      {secondary ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={secondary.label}
+          onPress={secondary.onPress}
+          style={styles.stateLink}
+        >
+          <Text variant="bodyStrong">{secondary.label}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+}
 type MeDay = Awaited<ReturnType<ReturnType<typeof stage1Api>["getMeDay"]>>;
 
 /** One day of Diet as cached per relationship and civil date (Z12-40). */
@@ -183,32 +363,51 @@ type DietDayBundle = {
   day: MeDay | null;
 };
 
-/**
- * A load that failed for want of a connection. Diet then shows its offline
- * banner over the cached day rather than an error (frame 86).
- */
-function isNetworkFailure(err: unknown): boolean {
+/** The meal's window has opened (or passed): only then does it offer a log. */
+function windowOpened(meal: MealAssignment, now: Date): boolean {
   return (
-    err instanceof TypeError ||
-    (err instanceof ApiClientError &&
-      (err.status === 0 || err.code === "NETWORK_ERROR")) ||
-    (err instanceof Error && /fetch|network|offline|aborted/i.test(err.message))
+    meal.status === "overdue" ||
+    now.getTime() >= new Date(meal.windowStartsAt).getTime()
   );
 }
 
-export function DietTab({
-  relationship,
-  selectedDate,
-  onSelectDate,
-  onOpenOverlay,
-  unreadNotifications = 0,
-}: {
+/** The meal's window has closed with nothing logged. */
+function windowClosed(meal: MealAssignment, now: Date): boolean {
+  return (
+    meal.status === "overdue" ||
+    now.getTime() > new Date(meal.windowEndsAt).getTime()
+  );
+}
+
+type DietTabProps = {
   relationship: CoachingRelationship;
   selectedDate: string;
   onSelectDate: (localDate: string) => void;
   onOpenOverlay: TraineeOverlayOpener;
   unreadNotifications?: number;
-}) {
+};
+
+/**
+ * Diet day, v3 (Z12-42). The scope makes this body follow the system light or
+ * dark setting; the screen below opts in with `<Screen v3>`.
+ */
+export function DietTab(props: DietTabProps) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <DietTabBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function DietTabBody({
+  relationship,
+  selectedDate,
+  onSelectDate,
+  onOpenOverlay,
+  unreadNotifications = 0,
+}: DietTabProps) {
+  const styles = useStyles();
+  const theme = useTheme();
   const { api, me } = useAuth();
   const s1 = stage1Api(api);
   const sync = useSyncEngine();
@@ -228,7 +427,10 @@ export function DietTab({
    * fetched twice.
    */
   const fetchDay = useCallback(
-    async (date: string, { force }: { force: boolean }): Promise<DietDayBundle> => {
+    async (
+      date: string,
+      { force }: { force: boolean },
+    ): Promise<DietDayBundle> => {
       const [listed, day] = await Promise.all([
         sharedRead(
           cacheKey("meals", relationship.id, date, date),
@@ -261,8 +463,11 @@ export function DietTab({
   const loading = dayCache.firstLoad;
   const loadError = dayCache.error;
   const loadFailedOffline = loadError != null && isNetworkFailure(loadError);
-  const offline = loadFailedOffline;
   const lockStateKnown = bundle !== undefined && loadError == null;
+  // A failed load is reported once per error (AGENTS.md: client error handling).
+  useEffect(() => {
+    if (loadError != null) reportError("DietTab.load", loadError);
+  }, [loadError]);
   const dayTotals = bundle?.day ?? null;
   // Four-state, never a nullable model: see `WeekModelState` (CU23,
   // D-W3b-25). Cached per week and shared with Today (Z12-40).
@@ -281,28 +486,15 @@ export function DietTab({
 
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const error =
-    actionError ??
-    (loadError != null && !loadFailedOffline
-      ? loadError instanceof ApiClientError
-        ? loadError.message
-        : "Couldn't refresh diet. Pull to try again."
-      : null);
   const deviceOffline = useDeviceOffline();
   const [actingId, setActingId] = useState<string | null>(null);
   const unresolvedExceptions = 1;
-  const [skippedUndo, setSkippedUndo] = useState<{
-    assignmentId: string;
-    mealName: string;
-  } | null>(null);
   /**
    * Statuses this phone applied before the server has them (a log saved in
    * the outbox). Shown over the cached day until the server's copy is logged
    * or the outbox no longer holds the log.
    */
-  const optimisticStatus = useRef(
-    new Map<string, MealAssignment["status"]>(),
-  );
+  const optimisticStatus = useRef(new Map<string, MealAssignment["status"]>());
   const [optimisticVersion, setOptimisticVersion] = useState(0);
   const [pendingSendIds, setPendingSendIds] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -373,7 +565,8 @@ export function DietTab({
     () => buildNutritionRings(assignments, dayTotals?.totals ?? null),
     [assignments, dayTotals],
   );
-  // One kcal source for the ring and the meal rows (D-W11-6).
+  // One kcal source for the ring and the meal rows (D-W11-6); each day sum is
+  // rounded once (Z12-42).
   const kcalSummary = useMemo(
     () => dayKcalSummary(assignments, dayTotals?.totals ?? null, selectedDate),
     [assignments, dayTotals, selectedDate],
@@ -382,17 +575,12 @@ export function DietTab({
     () => new Map(kcalSummary.rows.map((row) => [row.id, row])),
     [kcalSummary],
   );
-  const showOffline = offline || deviceOffline;
-  // Pills and the offline copy follow frame 86; online with nothing queued the
-  // rows stay as frame 07 draws them.
-  const pillMode = showOffline || pendingSendIds.size > 0;
-  const plannedNote = useMemo(
-    () => plannedUntilSentNote(assignments, pendingSendIds),
-    [assignments, pendingSendIds],
-  );
-  const proteinRing = nutritionRings.find((r) => r.key === "protein");
-  const carbsRing = nutritionRings.find((r) => r.key === "carbs");
-  const fatRing = nutritionRings.find((r) => r.key === "fat");
+  const showOffline = loadFailedOffline || deviceOffline;
+  const ringOf = (key: "protein" | "carbs" | "fat") => {
+    const ring = nutritionRings.find((r) => r.key === key);
+    return { logged: ring?.logged ?? 0, assigned: ring?.assigned ?? 0 };
+  };
+  const now = new Date();
 
   const focusMealId = useMemo(() => {
     if (photoPromptId) return photoPromptId;
@@ -403,7 +591,11 @@ export function DietTab({
       workout: null,
       checkin: null,
     });
-    if (hero?.kind === "meal") return hero.meal.id;
+    // A meal whose window has not opened yet offers no log (Z12-41 hand-off):
+    // it stays a planned row until it opens.
+    if (hero?.kind === "meal" && windowOpened(hero.meal, new Date())) {
+      return hero.meal.id;
+    }
     return null;
   }, [assignments, photoPromptId, isFuture]);
 
@@ -426,7 +618,7 @@ export function DietTab({
       );
       invalidateRelationshipDayData(relationship.id);
       if (await isMealLogPending(sync, assignment.id)) {
-        // Saved on this phone, not sent (frame 86): it counts as planned until
+        // Saved on this phone, not sent (TR-07d): it counts as planned until
         // the server has it, and a photo can only follow once it is sent.
         setPendingSendIds((ids) => new Set(ids).add(assignment.id));
       } else {
@@ -434,12 +626,13 @@ export function DietTab({
       }
       await load();
     } catch (err) {
+      // `MealSyncError` carries the app's own static text; anything else is
+      // shown as fixed copy, never the raw error (AGENTS.md client errors).
+      reportError("DietTab.confirmMeal", err);
       setActionError(
         err instanceof MealSyncError
           ? err.message
-          : err instanceof ApiClientError
-            ? err.message
-            : "Could not confirm meal.",
+          : "Couldn't save that meal. Try again.",
       );
       optimisticStatus.current.delete(assignment.id);
       setOptimisticVersion((n) => n + 1);
@@ -458,14 +651,18 @@ export function DietTab({
     }
   }
 
+  const openSomethingDifferent = (meal: MealAssignment) =>
+    onOpenOverlay({ screen: "something_different", assignmentId: meal.id });
+
   /**
    * D-W12-7 (TR-07k): on a future day a meal is a planned row. Tapping it
    * opens the read-only planned meal; there is no log action anywhere on it.
    */
-  function renderPlannedRow(meal: MealAssignment, index: number) {
+  function renderPlannedRow(meal: MealAssignment) {
     const planKcal = nutrientsFromMealPrescription(meal).kcal;
     const timeLabel = formatClockTime(meal.windowStartsAt, timeZone);
     const name = cleanFoodLabel(meal.mealName);
+    const Glyph = mealGlyph(name);
     return (
       <Pressable
         key={meal.id}
@@ -473,135 +670,204 @@ export function DietTab({
         accessibilityLabel={`${name}, planned`}
         accessibilityHint="Shows the planned meal"
         onPress={() => setPlannedMeal(meal)}
-        style={[styles.lrow, index === 0 && styles.lrowFirst]}
+        style={styles.row}
       >
-        <View style={[styles.tile, styles.tileNeu]}>
-          {mealTileIcon(meal, "later")}
+        <View style={[styles.tile, styles.tileNeutral]}>
+          <Glyph size={22} strokeWidth={1.9} color={theme.colors.ink2} />
         </View>
-        <View style={styles.lrowText}>
-          <Text style={styles.mealTitle}>
+        <View style={styles.rowText}>
+          <Text variant="headline" numberOfLines={1}>
             {name}
-            <Text style={styles.mealTime}> {timeLabel}</Text>
+            <Text variant="caption"> {timeLabel}</Text>
           </Text>
-          <Text style={styles.mealSub} numberOfLines={1}>
+          <Text variant="subhead" numberOfLines={1}>
             {plannedSummaryLine(meal)}
           </Text>
         </View>
         {planKcal > 0 ? (
-          <View style={styles.lrowRight}>
-            <Text style={styles.laterKcal}>{formatNumber(planKcal)}</Text>
-            <Text style={styles.laterLabel}>planned</Text>
+          <View style={styles.kcalCol}>
+            <Text variant="numberMd">{formatNumber(planKcal)}</Text>
+            <Text variant="caption">planned</Text>
           </View>
         ) : null}
       </Pressable>
     );
   }
 
-  function renderCompactRow(meal: MealAssignment, index: number) {
-    if (isFuture) return renderPlannedRow(meal, index);
+  function renderRow(meal: MealAssignment) {
+    if (isFuture) return renderPlannedRow(meal);
     const lockCopy = lockStateKnown ? mealLockCopy(meal, coachName) : null;
-    const kcalRow = kcalRowById.get(meal.id);
-    const kcal = kcalRow?.kcal ?? null;
-    const planKcal = nutrientsFromMealPrescription(meal).kcal;
-    const loggedKcal = kcalRow?.kind === "logged" ? kcalRow.kcal : null;
-    const timeLabel = formatClockTime(meal.windowStartsAt, timeZone);
     const isLocked = Boolean(lockCopy);
-    const isLogged = isMealLoggedForCount(meal.status) && meal.id !== photoPromptId;
-    const isLater =
-      !isLocked &&
+    const isLogged =
+      isMealLoggedForCount(meal.status) && meal.id !== photoPromptId;
+    const isSkipped = meal.status === "skipped";
+    const waiting = pendingSendIds.has(meal.id) && isLogged && !isSkipped;
+    const kcalRow = kcalRowById.get(meal.id);
+    const planKcal = nutrientsFromMealPrescription(meal).kcal;
+    const shownKcal = isLogged
+      ? isSkipped
+        ? null
+        : (kcalRow?.kcal ?? null)
+      : planKcal;
+    const missed = !isLogged && !isLocked && windowClosed(meal, now);
+    const name = cleanFoodLabel(meal.mealName);
+    const timeLabel = formatClockTime(meal.windowStartsAt, timeZone);
+    const Glyph = mealGlyph(name);
+    const canLogNow =
       !isLogged &&
-      meal.id !== focusMealId &&
-      (meal.status === "pending" || meal.status === "overdue");
+      canShowMealLogActions({
+        lockStateKnown,
+        selectedDate,
+        today,
+        meal,
+        unresolvedExceptionCount: unresolvedExceptions,
+      }) &&
+      windowOpened(meal, now);
+    // A logged, changed meal can be changed again, unless it is closed
+    // (TR-07f) or the coach logged it.
+    const canChange = canChangeLoggedMeal({
+      lockStateKnown,
+      isLogged,
+      meal,
+      isLocked,
+    });
+    const summary = plannedSummaryLine(meal);
 
+    const tileStyle = waiting
+      ? styles.tileWarn
+      : isLogged
+        ? styles.tileDone
+        : isLocked
+          ? styles.tileNeutral
+          : missed
+            ? styles.tileCrit
+            : styles.tileNeutral;
+    const iconColor = waiting
+      ? theme.colors.warn
+      : isLogged
+        ? theme.colors.done
+        : isLocked
+          ? theme.colors.ink3
+          : missed
+            ? theme.colors.crit
+            : theme.colors.ink2;
+
+    // An unlogged, unlocked row opens its planned meal (TR-07j).
+    const opensDetail = !isLogged && !isLocked;
     return (
-      <View
-        key={meal.id}
-        style={[
-          styles.lrow,
-          index === 0 && styles.lrowFirst,
-          isLocked && styles.lrowLocked,
-        ]}
-      >
-        <View
-          style={[
-            styles.tile,
-            isLogged ? styles.tilePos : isLocked || isLater ? styles.tileNeu : null,
-          ]}
-        >
-          {mealTileIcon(
-            meal,
-            isLocked ? "locked" : isLogged ? "logged" : "later",
-          )}
-        </View>
-        <View style={styles.lrowText}>
-          <Text style={[styles.mealTitle, isLocked && styles.mealTitleMuted]}>
-            {cleanFoodLabel(meal.mealName)}
-            <Text style={styles.mealTime}> {timeLabel}</Text>
-          </Text>
-          {isLocked ? (
-            <Text style={styles.mealSub}>{lockCopy}</Text>
-          ) : isLogged ? (
-            <Text style={styles.mealSub}>
-              {meal.status === "skipped"
-                ? labelFor("meal_assignment_status", "skipped")
-                : meal.status === "modified"
-                  ? "Changed"
-                  : pillMode
-                    ? "As planned"
-                    : "Logged"}
-              {meal.status !== "skipped" && loggedKcal != null
-                ? ` · ${formatKcal(loggedKcal)}`
-                : ""}
-              {meal.status !== "skipped" && planKcal > 0 && planKcal !== loggedKcal
-                ? ` · plan ${formatKcal(planKcal)}`
-                : ""}
-            </Text>
-          ) : (
-            <Text style={styles.mealSub} numberOfLines={1}>
-              {plannedSummaryLine(meal)}
-            </Text>
-          )}
-          {isLogged ? (
-            <CoachLogBadge
-              loggedByRole={meal.compliance?.loggedByRole}
-              lastEditedByRole={meal.compliance?.lastEditedByRole}
-              editedAt={meal.compliance?.updatedAt}
-              timeZone={timeZone}
-            />
+      <View key={meal.id} style={styles.rowCard}>
+        <View style={styles.row}>
+          <Pressable
+            disabled={!opensDetail}
+            accessibilityRole="button"
+            accessibilityLabel={opensDetail ? `${name}, planned` : undefined}
+            accessibilityHint={
+              opensDetail ? "Shows the planned meal" : undefined
+            }
+            onPress={() => setPlannedMeal(meal)}
+            style={styles.rowMain}
+          >
+            <View style={[styles.tile, tileStyle]}>
+              <Glyph size={22} strokeWidth={1.9} color={iconColor} />
+            </View>
+            <View style={styles.rowText}>
+              <Text
+                variant="headline"
+                numberOfLines={1}
+                style={isLocked ? styles.muted : null}
+              >
+                {name}
+                <Text variant="caption"> {timeLabel}</Text>
+              </Text>
+              {isLocked ? (
+                <Text variant="subhead" numberOfLines={1}>
+                  {lockCopy}
+                </Text>
+              ) : waiting ? (
+                <Text variant="subhead" numberOfLines={1}>
+                  Eaten as planned · not sent yet
+                </Text>
+              ) : isSkipped ? (
+                <Text variant="subhead" numberOfLines={1}>
+                  Skipped
+                </Text>
+              ) : (
+                <Text variant="subhead" numberOfLines={1}>
+                  {meal.status === "modified" ? (
+                    <Text variant="subhead" tone="warn" style={styles.strong}>
+                      Changed
+                    </Text>
+                  ) : missed ? (
+                    <Text variant="subhead" tone="crit" style={styles.strong}>
+                      Not logged yet
+                    </Text>
+                  ) : null}
+                  {meal.status === "modified" || missed ? " · " : ""}
+                  {summary}
+                </Text>
+              )}
+              {isLogged ? (
+                <CoachLogBadge
+                  loggedByRole={meal.compliance?.loggedByRole}
+                  lastEditedByRole={meal.compliance?.lastEditedByRole}
+                  editedAt={meal.compliance?.updatedAt}
+                  timeZone={timeZone}
+                />
+              ) : null}
+            </View>
+            {shownKcal != null && !isSkipped ? (
+              <View style={styles.kcalCol}>
+                <Text variant="numberMd">{formatNumber(shownKcal)}</Text>
+                <Text variant="caption">{isLogged ? "kcal" : "planned"}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+          {waiting ? (
+            <View
+              style={[styles.badge, styles.tileWarn]}
+              accessibilityLabel="Not sent yet"
+            >
+              <CloudOff size={18} strokeWidth={2} color={theme.colors.warn} />
+            </View>
+          ) : isLogged && !isSkipped ? (
+            <View
+              style={[styles.badge, styles.badgeDone]}
+              accessibilityLabel="Logged"
+            >
+              <Check size={18} strokeWidth={2.6} color={theme.colors.onBrand} />
+            </View>
+          ) : isLocked ? (
+            <View style={styles.badge} accessibilityLabel="Closed">
+              <Lock size={20} strokeWidth={1.9} color={theme.colors.ink3} />
+            </View>
+          ) : missed && canLogNow ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Log ${name}`}
+              onPress={() => openSomethingDifferent(meal)}
+              style={[styles.badge, styles.badgeTap]}
+            >
+              <Ellipsis size={22} color={theme.colors.ink2} />
+            </Pressable>
           ) : null}
         </View>
-        {isLogged &&
-        meal.status === "modified" &&
-        meal.compliance?.loggedByRole !== "coach" ? (
+        {canChange ? (
           <Pressable
             accessibilityRole="button"
-            onPress={() =>
-              onOpenOverlay({
-                screen: "something_different",
-                assignmentId: meal.id,
-              })
-            }
+            accessibilityLabel={`Change ${name}`}
+            onPress={() => openSomethingDifferent(meal)}
             style={styles.changeBtn}
           >
-            <Text style={styles.changeBtnText}>Change</Text>
+            <Text variant="bodyStrong" tone="coachInk">
+              Change
+            </Text>
           </Pressable>
-        ) : pendingSendIds.has(meal.id) && isLogged && meal.status !== "skipped" ? (
-          <MealPill kind="waiting" />
-        ) : pillMode && isLogged && meal.status !== "skipped" ? (
-          <MealPill kind="logged" />
-        ) : pillMode && isLater ? (
-          <MealPill kind="later" />
-        ) : isLater && kcal != null ? (
-          <View style={styles.lrowRight}>
-            <Text style={styles.laterKcal}>{formatKcal(kcal)}</Text>
-            <Text style={styles.laterLabel}>Later</Text>
-          </View>
         ) : null}
       </View>
     );
   }
 
-  function renderExpandedMeal(meal: MealAssignment) {
+  function renderFocusMeal(meal: MealAssignment) {
     const canLog = canShowMealLogActions({
       lockStateKnown,
       selectedDate,
@@ -610,128 +876,133 @@ export function DietTab({
       unresolvedExceptionCount: unresolvedExceptions,
     });
     const kcal = kcalRowById.get(meal.id)?.kcal ?? null;
-    const macros = nutrientsFromMealPrescription(meal);
-    const itemsLine = plannedSummaryLine(meal);
     const showPhotoPrompt =
       photoPromptId === meal.id &&
       (meal.status === "confirmed" || meal.status === "logged_later");
     const dueNow = canLog && !showPhotoPrompt;
+    const name = cleanFoodLabel(meal.mealName);
+    const Glyph = mealGlyph(name);
+    const due = mealDueStatusLabel(meal, timeZone, now);
+    const overdue = due === "Overdue";
 
     return (
       <View
         key={meal.id}
-        style={[styles.mealc, dueNow && styles.mealcDue]}
+        style={[styles.rowCard, dueNow && styles.focusCard]}
+        testID="diet-focus-meal"
       >
-        <View style={styles.mealHd}>
-          <View style={[styles.tileLg, showPhotoPrompt && styles.tilePos]}>
+        <View style={styles.row}>
+          <View
+            style={[
+              styles.tile,
+              showPhotoPrompt ? styles.tileDone : styles.tileBrand,
+            ]}
+          >
             {showPhotoPrompt ? (
-              <Check size={22} color={colors.success} />
+              <Check size={22} color={theme.colors.done} strokeWidth={2.4} />
             ) : (
-              <Coffee size={22} color={colors.indigo} />
+              <Glyph
+                size={22}
+                strokeWidth={1.9}
+                color={theme.colors.brandInk}
+              />
             )}
           </View>
-          <View style={styles.mealHdText}>
-            <Text style={styles.mealHdTitle}>{cleanFoodLabel(meal.mealName)}</Text>
-            {showPhotoPrompt ? (
-              <View style={styles.savedRow}>
-                <Check size={14} color={colors.success} strokeWidth={2.4} />
-                <Text style={styles.savedText}>Eaten as planned</Text>
-              </View>
-            ) : (
-              <View style={styles.dueMetaLine}>
-                <View style={styles.dueRow}>
-                  <Clock size={14} color={colors.indigo} strokeWidth={2.1} />
-                  <Text style={styles.dueText} numberOfLines={1}>
-                    {formatClockTime(meal.windowStartsAt, timeZone)} ·{" "}
-                    {mealDueStatusLabel(meal, timeZone)}
-                  </Text>
-                </View>
-              </View>
-            )}
+          <View style={styles.rowText}>
+            <Text variant="headline" numberOfLines={1}>
+              {name}
+              <Text variant="caption">
+                {" "}
+                {formatClockTime(meal.windowStartsAt, timeZone)}
+              </Text>
+              {!showPhotoPrompt ? (
+                <Text
+                  variant="caption"
+                  tone={overdue ? "crit" : "coralInk"}
+                  style={styles.strong}
+                >
+                  {"  "}
+                  {overdue ? "Overdue" : due === "due now" ? "Due now" : due}
+                </Text>
+              ) : null}
+            </Text>
+            <Text variant="subhead" numberOfLines={1}>
+              {showPhotoPrompt ? "Eaten as planned" : plannedSummaryLine(meal)}
+            </Text>
           </View>
           {kcal != null ? (
-            <Text style={styles.mealKcalRight}>{formatKcal(kcal)}</Text>
+            <View style={styles.kcalCol}>
+              <Text variant="numberMd">{formatNumber(kcal)}</Text>
+              <Text variant="caption">kcal</Text>
+            </View>
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="More options"
-            style={styles.moreBtn}
-          >
-            <Ellipsis size={22} color={colors.darkGrey} />
-          </Pressable>
         </View>
-        {itemsLine ? <Text style={styles.itemsLine}>{itemsLine}</Text> : null}
-        {!showPhotoPrompt ? (
-          <View style={styles.metaRow}>
-            <Text style={styles.macLine}>
-              P <Text style={styles.macBold}>{macros.protein}</Text> · C{" "}
-              <Text style={styles.macBold}>{macros.carbs}</Text> · F{" "}
-              <Text style={styles.macBold}>{macros.fat}</Text> g
-            </Text>
-            <Pressable accessibilityRole="button" style={styles.seeDetails}>
-              <Text style={styles.seeDetailsText}>See details</Text>
-            </Pressable>
-          </View>
-        ) : null}
         {canLog && !showPhotoPrompt ? (
-          <View style={styles.btn2}>
+          <View style={styles.actions}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Eaten as planned"
               disabled={actingId === meal.id}
               onPress={() => void confirmMeal(meal)}
-              style={[styles.eatenBtn, actingId === meal.id && styles.btnDisabled]}
+              style={[
+                styles.primaryBtn,
+                actingId === meal.id && styles.btnDisabled,
+              ]}
             >
               {actingId === meal.id ? (
-                <ActivityIndicator color={colors.white} />
+                <ActivityIndicator color={theme.colors.onBrand} />
               ) : (
                 <>
-                  <Check size={18} color={colors.white} strokeWidth={1.75} />
-                  <Text style={styles.eatenBtnText}>Eaten as planned</Text>
+                  <Check
+                    size={18}
+                    color={theme.colors.onBrand}
+                    strokeWidth={2.2}
+                  />
+                  <Text variant="bodyStrong" tone="onBrand" numberOfLines={1}>
+                    Eaten as planned
+                  </Text>
                 </>
               )}
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Something different"
-              onPress={() =>
-                onOpenOverlay({
-                  screen: "something_different",
-                  assignmentId: meal.id,
-                })
-              }
-              style={styles.diffBtn}
+              onPress={() => openSomethingDifferent(meal)}
+              style={styles.secondaryBtn}
             >
-              <Text style={styles.diffBtnText}>Something different</Text>
+              <Text variant="bodyStrong" numberOfLines={1}>
+                Something different
+              </Text>
             </Pressable>
           </View>
         ) : null}
         {showPhotoPrompt ? (
-          <View style={styles.photop}>
-            <View style={styles.photopHead}>
-              <Text style={styles.photopTitle}>Add a photo for {coachName}?</Text>
-            </View>
-            <Text style={styles.photopBody}>
+          <View style={styles.photoPrompt}>
+            <Text variant="bodyStrong">Add a photo for {coachName}?</Text>
+            <Text variant="subhead">
               Your log is saved. A photo is optional and can follow later.
             </Text>
-            <View style={styles.photopBtns}>
+            <View style={styles.actions}>
               <Pressable
                 accessibilityRole="button"
-                style={styles.photopBtn}
+                style={styles.secondaryBtn}
                 onPress={() => void addMealPhoto(meal)}
               >
-                <Text style={styles.photopBtnText}>Camera</Text>
+                <Text variant="bodyStrong">Camera</Text>
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                style={styles.photopBtn}
+                style={styles.secondaryBtn}
                 onPress={() => void addMealPhoto(meal)}
               >
-                <Text style={styles.photopBtnText}>Gallery</Text>
+                <Text variant="bodyStrong">Gallery</Text>
               </Pressable>
             </View>
             {photoUploadingId === meal.id ? (
-              <ActivityIndicator color={colors.indigo} style={{ marginTop: 8 }} />
+              <ActivityIndicator
+                color={theme.colors.brand}
+                style={styles.photoSpinner}
+              />
             ) : null}
           </View>
         ) : null}
@@ -739,229 +1010,246 @@ export function DietTab({
     );
   }
 
-  const compactMeals = assignments.filter((m) => m.id !== focusMealId);
-  const focusMeal = assignments.find((m) => m.id === focusMealId);
-
-  const compactBefore = compactMeals.filter((meal) => {
-    if (!focusMeal) return true;
-    return (
-      new Date(meal.windowStartsAt).getTime() <
-      new Date(focusMeal.windowStartsAt).getTime()
-    );
-  });
-  const compactAfter = compactMeals.filter((meal) => {
-    if (!focusMeal) return false;
-    return (
-      new Date(meal.windowStartsAt).getTime() >=
-      new Date(focusMeal.windowStartsAt).getTime()
-    );
-  });
+  const loggedCount = assignments.filter((m) =>
+    isMealLoggedForCount(m.status),
+  ).length;
+  // The centred error state: nothing to show for the day and the load failed
+  // (TR-07i). With a cached day the content stays and a short banner says so.
+  const showLoadError = loadError != null && bundle === undefined;
+  // The connection copy only when the failure was a connection one; an API
+  // error shows its own curated message, anything else (a ZodError included)
+  // stays neutral (AGENTS.md: no misleading catch).
+  const loadErrorBody = loadFailedOffline
+    ? "Check your connection. Anything you logged is saved on your phone."
+    : loadError instanceof ApiClientError
+      ? loadError.message
+      : "Something went wrong. Try again.";
+  const staleError =
+    loadError != null && bundle !== undefined && !loadFailedOffline;
+  const sentCount = pendingSendIds.size;
+  const offlineNote =
+    sentCount > 0
+      ? `Offline. ${sentCount === 1 ? "1 meal is" : `${sentCount} meals are`} saved on your phone and will send when you’re back.`
+      : `Offline. Your logs are saved on your phone and will send when you’re back.`;
 
   return (
     // A horizontal swipe anywhere on the screen moves a day (Z12-40): a
     // native pan around the whole screen, so the empty space under a short
     // day counts too.
     <GestureDetector gesture={dayState.swipeGesture}>
-    <Screen
-      chrome="app"
-      title="Diet"
-      showHeader={false}
-      refreshing={refreshing}
-      onRefresh={() => void onRefresh()}
-    >
-      <View style={styles.swipeBody}>
-      <View style={styles.ttlrow}>
-        <View style={styles.titles}>
-          <Text style={styles.eyebrow} testID="day-eyebrow">
-            {dayEyebrow(selectedDate, dayState.kind, `${coachName}’s plan`)}
-          </Text>
-          <Text style={styles.h1} accessibilityRole="header">
-            Diet
-          </Text>
-        </View>
-        <View style={styles.headerActions}>
-          {pendingSendIds.size > 0 ? (
-            <View
-              style={styles.waitChip}
-              accessibilityLabel={`Waiting to send ${pendingSendIds.size}`}
-            >
-              <CloudUpload size={14} color={semanticColors.attention.text} strokeWidth={1.75} />
-              <Text style={styles.waitChipText}>
-                Waiting to send {pendingSendIds.size}
+      <Screen
+        v3
+        chrome="app"
+        title="Diet"
+        showHeader={false}
+        refreshing={refreshing}
+        onRefresh={() => void onRefresh()}
+      >
+        <View style={styles.swipeBody}>
+          <View style={styles.ttlrow}>
+            <View style={styles.titles}>
+              <Text variant="subhead" testID="day-eyebrow">
+                {dayEyebrow(selectedDate, dayState.kind, `${coachName}’s plan`)}
+              </Text>
+              <Text variant="largeTitle" accessibilityRole="header">
+                Diet
+              </Text>
+            </View>
+            <View style={styles.headerActions}>
+              {!showOffline && sentCount > 0 ? (
+                <View
+                  style={styles.chip}
+                  accessibilityLabel={`Waiting to send ${sentCount}`}
+                >
+                  <CloudOff
+                    size={16}
+                    strokeWidth={2}
+                    color={theme.colors.warn}
+                  />
+                  <Text variant="bodyStrong" tone="ink2">
+                    Waiting to send {sentCount}
+                  </Text>
+                </View>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Meal plan"
+                onPress={() => onOpenOverlay({ screen: "meal_plan" })}
+                style={styles.iconBtn}
+              >
+                <BookOpen
+                  size={22}
+                  color={theme.colors.ink2}
+                  strokeWidth={1.9}
+                />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Notifications"
+                onPress={() => onOpenOverlay({ screen: "notifications" })}
+                style={styles.iconBtn}
+              >
+                <Bell size={22} color={theme.colors.ink2} strokeWidth={1.9} />
+                {unreadNotifications > 0 ? (
+                  <View style={styles.unreadDot} />
+                ) : null}
+              </Pressable>
+            </View>
+          </View>
+
+          {/*
+            The shared v3 strip (Z12-40): the same control, day states and
+            moves as Today and Workout. Its states come from `GET /me/week`
+            and the day's own `GET /me/day` (Z5-8), so the tabs never disagree.
+          */}
+          <TraineeDateNavigator
+            selectedDate={selectedDate}
+            onSelectDate={onSelectDate}
+            weekState={weekState}
+            day={dayTotals ?? stripDay}
+            showPreviewBanner={false}
+          />
+
+          {actionError ? <ErrorBanner message={actionError} /> : null}
+          {staleError ? (
+            <ErrorBanner message="Couldn’t refresh your meals. Pull down to try again." />
+          ) : null}
+          {/*
+            The week strip's states come from `GET /me/week`. When that call
+            fails the dots carry no state and the trainee is told so (CU23,
+            D-W3b-25): they are never filled in from the date alone.
+          */}
+          {weekState.status === "unavailable" ? (
+            <ErrorBanner message={WEEK_UNAVAILABLE_MESSAGE} />
+          ) : null}
+          {isFuture ? (
+            <View style={styles.gap}>
+              <FutureDayBanner
+                kind="neutral"
+                text={dietFutureBannerText(coachName, selectedDate)}
+              />
+            </View>
+          ) : null}
+          {showOffline && !showLoadError ? (
+            <View style={styles.offlineBanner} accessibilityRole="alert">
+              <WifiOff size={20} color={theme.colors.ink2} strokeWidth={1.9} />
+              <Text variant="body" tone="ink2" style={styles.offlineText}>
+                {offlineNote}
               </Text>
             </View>
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Meal plan"
-            onPress={() => onOpenOverlay({ screen: "meal_plan" })}
-            style={styles.ibtn}
-          >
-            <BookOpen size={22} color={colors.darkGrey} strokeWidth={1.75} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-            onPress={() => onOpenOverlay({ screen: "notifications" })}
-            style={styles.iconbtn}
-          >
-            <Bell size={22} color={colors.darkGrey} strokeWidth={1.75} />
-            {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
-          </Pressable>
-        </View>
-      </View>
 
-      {/*
-        The shared v3 strip (Z12-40): the same control, day states and moves
-        as Today and Workout. Its states come from `GET /me/week` and the
-        day's own `GET /me/day` (Z5-8), so the two tabs never disagree.
-      */}
-      <TraineeDateNavigator
-        selectedDate={selectedDate}
-        onSelectDate={onSelectDate}
-        weekState={weekState}
-        day={dayTotals ?? stripDay}
-        showPreviewBanner={false}
-      />
-
-      {error ? <ErrorBanner message={error} /> : null}
-      {/*
-        The week strip's states come from `GET /me/week`. When that call
-        fails the dots carry no state and the trainee is told so (CU23,
-        D-W3b-25) — they are never filled in from the date alone.
-      */}
-      {weekState.status === "unavailable" ? (
-        <ErrorBanner message={WEEK_UNAVAILABLE_MESSAGE} />
-      ) : null}
-      {isFuture ? (
-        <View style={styles.futureBanner}>
-          <FutureDayBanner
-            kind="neutral"
-            text={dietFutureBannerText(coachName, selectedDate)}
-          />
-        </View>
-      ) : null}
-      {showOffline ? (
-        <View style={styles.offlineBanner} accessibilityRole="alert">
-          <WifiOff size={20} color={semanticColors.attention.text} strokeWidth={1.75} />
-          <Text style={styles.offlineBannerText}>
-            You&apos;re offline. Your logs are saved on this phone and sent to{" "}
-            {coachName} when you&apos;re online.
-          </Text>
-        </View>
-      ) : null}
-
-      <View style={styles.daysum2}>
-        <KcalRing
-          logged={kcalSummary.loggedTotal}
-          assigned={kcalSummary.plannedTotal}
-        />
-        <View style={styles.daysumBody}>
-          <Text style={styles.daysumHead}>
-            {formatNumber(kcalSummary.loggedTotal)}{" "}
-            <Text style={styles.daysumOf}>
-              of {formatNumber(kcalSummary.plannedTotal)} kcal
+          {showLoadError ? (
+            <StateCard
+              testID="diet-load-error"
+              icon={CloudOff}
+              title="Couldn’t load your meals"
+              body={loadErrorBody}
+              primary={{
+                label: "Try again",
+                icon: RefreshCw,
+                onPress: () => void onRefresh(),
+              }}
+            />
+          ) : loading ? (
+            <Text variant="subhead" style={styles.loadingText}>
+              Loading meals…
             </Text>
-          </Text>
-          <Text style={styles.daysumSub}>
-            {assignments.length === 0
-              ? isFuture
-                ? "No meals planned"
-                : mealsLoggedSummary(assignments)
-              : plannedNote
-                ? `${mealsLoggedSummary(assignments)} · ${plannedNote}`
-                : isFuture
-                  ? mealsLoggedSummary(assignments)
-                  : `${mealsLoggedSummary(assignments)} today`}
-          </Text>
-          <View style={styles.mac3}>
-            <MacroBar
-              label="Protein"
-              logged={proteinRing?.logged ?? 0}
-              assigned={proteinRing?.assigned ?? 0}
-              color={rings.protein}
-            />
-            <MacroBar
-              label="Carbs"
-              logged={carbsRing?.logged ?? 0}
-              assigned={carbsRing?.assigned ?? 0}
-              color={rings.carbs}
-            />
-            <MacroBar
-              label="Fat"
-              logged={fatRing?.logged ?? 0}
-              assigned={fatRing?.assigned ?? 0}
-              color={rings.fat}
-            />
-          </View>
-        </View>
-      </View>
+          ) : assignments.length === 0 ? (
+            isFuture ? (
+              <StateCard
+                testID="diet-no-meals"
+                icon={Utensils}
+                title="No meals planned"
+              />
+            ) : (
+              <StateCard
+                testID="diet-no-meals"
+                icon={UtensilsCrossed}
+                title="No meals planned today"
+                body={`${coachName} hasn’t set meals for today.`}
+                secondary={{
+                  label: `Ask ${coachName} on WhatsApp`,
+                  onPress: () =>
+                    onOpenOverlay({
+                      screen: "ask_coach",
+                      itemType: "plan_version",
+                      itemId: "plan",
+                      itemLabel: "Meal plan",
+                      dateLabel: formatCivilDate(selectedDate),
+                    }),
+                }}
+              />
+            )
+          ) : (
+            <>
+              <DaySummaryCard
+                logged={kcalSummary.loggedTotal}
+                planned={kcalSummary.plannedTotal}
+                protein={ringOf("protein")}
+                carbs={ringOf("carbs")}
+                fat={ringOf("fat")}
+              />
+              <View style={styles.sectionHead}>
+                <Text variant="title" accessibilityRole="header">
+                  Meals
+                </Text>
+                {isFuture ? null : (
+                  <Text variant="subhead" testID="meals-logged">
+                    {loggedCount} of {assignments.length} logged
+                  </Text>
+                )}
+              </View>
+              <View style={styles.list}>
+                {assignments.map((meal) =>
+                  meal.id === focusMealId
+                    ? renderFocusMeal(meal)
+                    : renderRow(meal),
+                )}
+              </View>
+            </>
+          )}
 
-      <View style={styles.sh}>
-        <Text style={styles.shTitle}>
-          {isFuture ? "Meals" : "Today's meals"}
-        </Text>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => onOpenOverlay({ screen: "meal_plan" })}
-        >
-          <Text style={styles.shLink}>Meal plan</Text>
-        </Pressable>
-      </View>
-
-      {loading ? (
-        <Text style={styles.muted}>Loading meals…</Text>
-      ) : assignments.length === 0 ? (
-        <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>
-            {/* A future day is not "today" (copy as in the trainer phone preview). */}
-            {isFuture ? "No meals planned" : "No meals planned today."}
-          </Text>
-        </View>
-      ) : (
-        <>
-          {compactBefore.length > 0 ? (
-            <View style={styles.listCard}>
-              {compactBefore.map((meal, index) => renderCompactRow(meal, index))}
-            </View>
+          {plannedMeal ? (
+            <PlannedMealSheet
+              meal={plannedMeal}
+              coachName={coachName}
+              timeZone={timeZone}
+              onClose={() => setPlannedMeal(null)}
+              actions={
+                !isFuture &&
+                canShowMealLogActions({
+                  lockStateKnown,
+                  selectedDate,
+                  today,
+                  meal: plannedMeal,
+                  unresolvedExceptionCount: unresolvedExceptions,
+                }) &&
+                windowOpened(plannedMeal, now)
+                  ? {
+                      onEaten: () => {
+                        const meal = plannedMeal;
+                        setPlannedMeal(null);
+                        void confirmMeal(meal);
+                      },
+                      onDifferent: () => {
+                        const meal = plannedMeal;
+                        setPlannedMeal(null);
+                        openSomethingDifferent(meal);
+                      },
+                    }
+                  : undefined
+              }
+            />
           ) : null}
-          {focusMeal ? renderExpandedMeal(focusMeal) : null}
-          {compactAfter.length > 0 ? (
-            <View style={[styles.listCard, styles.listCardGap]}>
-              {compactAfter.map((meal, index) => renderCompactRow(meal, index))}
-            </View>
-          ) : null}
-        </>
-      )}
-
-      {skippedUndo ? (
-        <Snackbar
-          message={`${skippedUndo.mealName} skipped`}
-          actionLabel="Undo"
-          onAction={() => {
-            setSkippedUndo(null);
-            setActionError(
-              "Undo is not synced yet — log the meal again if you skipped by mistake.",
-            );
-          }}
-          onDismiss={() => setSkippedUndo(null)}
-        />
-      ) : null}
-      {plannedMeal && isFuture ? (
-        <PlannedMealSheet
-          meal={plannedMeal}
-          coachName={coachName}
-          timeZone={timeZone}
-          onClose={() => setPlannedMeal(null)}
-        />
-      ) : null}
-      </View>
-    </Screen>
+        </View>
+      </Screen>
     </GestureDetector>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
+  swipeBody: { flexGrow: 1 },
   ttlrow: {
     alignItems: "center",
     flexDirection: "row",
@@ -969,24 +1257,9 @@ const styles = StyleSheet.create({
     marginBottom: 6,
     paddingHorizontal: 4,
   },
-  h1: {
-    color: colors.deepNavy,
-    fontSize: 30,
-    fontWeight: "700",
-    letterSpacing: -0.66,
-    lineHeight: 36,
-  },
-  headerActions: {
-    flexDirection: "row",
-    gap: 4,
-  },
-  ibtn: {
-    alignItems: "center",
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  iconbtn: {
+  titles: { flex: 1 },
+  headerActions: { alignItems: "center", flexDirection: "row", gap: 4 },
+  iconBtn: {
     alignItems: "center",
     height: 44,
     justifyContent: "center",
@@ -994,7 +1267,7 @@ const styles = StyleSheet.create({
     width: 44,
   },
   unreadDot: {
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.coral,
     borderRadius: 5,
     height: 9,
     position: "absolute",
@@ -1002,500 +1275,210 @@ const styles = StyleSheet.create({
     top: 10,
     width: 9,
   },
-  swipeBody: {
-    flexGrow: 1,
-  },
-  titles: {
-    flex: 1,
-  },
-  eyebrow: {
-    color: colors.midGrey,
-    fontSize: 14,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  daysum2: {
+  chip: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
+    backgroundColor: t.colors.fill,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  gap: { marginBottom: 12 },
+  offlineBanner: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 14,
+    padding: 14,
+  },
+  offlineText: { flex: 1 },
+  loadingText: { paddingVertical: 24, textAlign: "center" },
+  summary: {
+    alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card + 4,
     borderWidth: 1,
     flexDirection: "row",
     gap: 14,
-    marginBottom: spacing.md,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#1A1248",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 3,
-      },
-      default: { elevation: 1 },
-    }),
-  },
-  ringCenter: {
-    alignItems: "center",
-    justifyContent: "center",
-    position: "absolute",
-    inset: 0,
-  },
-  ringKcal: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  ringUnit: {
-    color: colors.midGrey,
-    fontSize: 11,
-    fontWeight: "500",
-    marginTop: -2,
-  },
-  daysumBody: {
-    flex: 1,
-  },
-  daysumHead: {
-    color: colors.deepNavy,
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 22,
-  },
-  daysumOf: {
-    color: colors.midGrey,
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  daysumSub: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 19,
-    marginTop: 1,
-  },
-  mac3: {
-    flexDirection: "row",
-    gap: 10,
-    marginTop: 9,
-  },
-  macCol: {
-    flex: 1,
-  },
-  macLabel: {
-    color: colors.midGrey,
-    fontSize: 12,
-    fontWeight: "500",
-  },
-  macNums: {
-    color: colors.midGrey,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  macLogged: {
-    color: colors.darkGrey,
-    fontWeight: "700",
-  },
-  macTrack: {
-    backgroundColor: rings.track,
-    borderRadius: 3,
-    height: 5,
     marginTop: 4,
+    padding: 14,
+  },
+  summaryBody: { flex: 1, minWidth: 0 },
+  leftRow: {
+    alignItems: "baseline",
+    borderBottomColor: t.colors.line,
+    borderBottomWidth: 1,
+    columnGap: 8,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    paddingBottom: 8,
+  },
+  leftNums: {
+    alignItems: "baseline",
+    columnGap: 4,
+    flexDirection: "row",
+    flexShrink: 0,
+  },
+  macros: { gap: 8, paddingTop: 8 },
+  macroRow: { gap: 4 },
+  macroHead: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "space-between",
+  },
+  macroNums: { flexShrink: 1, textAlign: "right" },
+  macroTrack: {
+    backgroundColor: t.colors.fill,
+    borderRadius: 4,
+    height: 8,
     overflow: "hidden",
   },
-  macFill: {
-    borderRadius: 3,
-    height: 5,
+  macroFill: { borderRadius: 4, height: 8 },
+  ringCenter: {
+    alignItems: "center",
+    bottom: 0,
+    justifyContent: "center",
+    left: 0,
+    position: "absolute",
+    right: 0,
+    top: 0,
   },
-  sh: {
+  ringNumber: { fontSize: 28, lineHeight: 32, textAlign: "center" },
+  sectionHead: {
     alignItems: "baseline",
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 10,
-    marginTop: 6,
+    marginTop: 22,
     paddingHorizontal: 4,
   },
-  shTitle: {
-    color: colors.deepNavy,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  shLink: {
-    color: colors.indigo,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  listCard: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
+  list: { gap: 10 },
+  rowCard: {
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.meal,
     borderWidth: 1,
     overflow: "hidden",
   },
-  listCardGap: {
-    marginTop: 10,
-  },
-  lrowFirst: {
-    borderTopWidth: 0,
-  },
-  lrow: {
+  focusCard: { borderColor: t.colors.coral, borderWidth: 2 },
+  row: {
     alignItems: "center",
-    borderTopColor: "#E7E9F2",
-    borderTopWidth: 1,
     flexDirection: "row",
     gap: 12,
-    minHeight: 56,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    minHeight: 72,
+    padding: 12,
   },
-  lrowLocked: {},
+  rowMain: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 12,
+    minWidth: 0,
+  },
+  rowText: { flex: 1, gap: 2, minWidth: 0 },
+  muted: { color: t.colors.ink3 },
+  strong: { fontWeight: "700" },
   tile: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    borderRadius: 11,
+    borderRadius: 14,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  tileNeutral: { backgroundColor: t.colors.fill },
+  tileBrand: { backgroundColor: t.colors.brandTint },
+  tileDone: { backgroundColor: t.colors.doneTint },
+  tileWarn: { backgroundColor: t.colors.warnTint },
+  tileCrit: { backgroundColor: t.colors.critTint },
+  kcalCol: { alignItems: "flex-end", minWidth: 44 },
+  badge: {
+    alignItems: "center",
+    borderRadius: 18,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
-  tileNeu: {
-    backgroundColor: colors.background,
-  },
-  tilePos: {
-    backgroundColor: "#ECFDF5",
-  },
-  lrowText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  mealTitle: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  mealTitleMuted: {
-    color: colors.midGrey,
-  },
-  mealTime: {
-    color: colors.midGrey,
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  mealSub: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 19,
-  },
+  /** 44 pt touch target for the "Log {meal}" ellipsis (AGENTS.md). */
+  badgeTap: { borderRadius: 22, height: 44, width: 44 },
+  badgeDone: { backgroundColor: t.colors.done },
   changeBtn: {
-    minHeight: 44,
+    alignItems: "flex-start",
     justifyContent: "center",
+    minHeight: 44,
+    paddingBottom: 4,
+    paddingHorizontal: 72,
   },
-  changeBtnText: {
-    color: colors.indigo,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  lrowRight: {
-    alignItems: "flex-end",
-  },
-  laterKcal: {
-    color: colors.darkGrey,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  laterLabel: {
-    color: colors.midGrey,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  mealc: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 10,
-    padding: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#1A1248",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.06,
-        shadowRadius: 3,
-      },
-      default: { elevation: 1 },
-    }),
-  },
-  mealcDue: {
-    borderColor: "#D9D2FF",
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.indigo,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.07,
-        shadowRadius: 6,
-      },
-      default: { elevation: 2 },
-    }),
-  },
-  mealHd: {
-    alignItems: "center",
+  actions: {
     flexDirection: "row",
     gap: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
   },
-  tileLg: {
+  primaryBtn: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    borderRadius: 14,
-    height: 44,
-    justifyContent: "center",
-    width: 44,
-  },
-  mealHdText: {
-    flex: 1,
-  },
-  mealHdTitle: {
-    color: colors.deepNavy,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  dueMetaLine: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "nowrap",
-    gap: 8,
-    justifyContent: "space-between",
-    marginTop: 2,
-  },
-  dueRow: {
-    alignItems: "center",
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "nowrap",
-    gap: 4,
-    minWidth: 0,
-  },
-  dueText: {
-    color: colors.indigo,
-    flexShrink: 1,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  savedRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 5,
-    marginTop: 2,
-  },
-  savedText: {
-    color: colors.success,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  mealKcalRight: {
-    color: colors.deepNavy,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  moreBtn: {
-    alignItems: "center",
-    height: 44,
-    justifyContent: "center",
-    marginRight: -10,
-    width: 44,
-  },
-  itemsLine: {
-    color: colors.darkGrey,
-    fontSize: 16,
-    lineHeight: 23,
-    marginTop: 12,
-  },
-  metaRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 14,
-    marginTop: 8,
-  },
-  macLine: {
-    color: colors.midGrey,
-    fontSize: 14,
-  },
-  macBold: {
-    color: colors.darkGrey,
-    fontWeight: "700",
-  },
-  seeDetails: {
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  seeDetailsText: {
-    color: colors.indigo,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  btn2: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  mealHdrMeta: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    marginTop: 4,
-  },
-  mealHdrMetaTime: {
-    color: colors.midGrey,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  mealHdrMetaLink: {
-    minHeight: 44,
-    justifyContent: "center",
-  },
-  mealHdrMetaLinkText: {
-    color: colors.indigo,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  eatenBtn: {
-    alignItems: "center",
-    backgroundColor: colors.indigo,
-    borderRadius: 16,
+    backgroundColor: t.colors.brand,
+    borderRadius: t.radii.button,
     flex: 1,
     flexDirection: "row",
     gap: 6,
-    height: 56,
     justifyContent: "center",
+    minHeight: 48,
     paddingHorizontal: 8,
   },
-  eatenBtnText: {
-    color: colors.white,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  diffBtn: {
+  secondaryBtn: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: 16,
-    borderWidth: 1,
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.button,
     flex: 1,
-    height: 56,
     justifyContent: "center",
+    minHeight: 48,
     paddingHorizontal: 8,
   },
-  diffBtnText: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  btnDisabled: {
-    opacity: 0.7,
-  },
-  photop: {
-    backgroundColor: colors.paleLavender,
-    borderColor: "#E4DEFF",
-    borderRadius: 16,
-    borderWidth: 1,
-    marginTop: 12,
-    padding: 12,
-  },
-  photopHead: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  photopTitle: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "700",
-  },
-  photopBody: {
-    color: colors.midGrey,
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 10,
-    marginTop: 2,
-  },
-  photopBtns: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  photopBtn: {
+  btnDisabled: { opacity: 0.6 },
+  photoPrompt: { gap: 4, paddingBottom: 4, paddingHorizontal: 12 },
+  photoSpinner: { marginTop: 8 },
+  stateCard: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: 16,
-    flex: 1,
-    height: 48,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card + 4,
+    borderWidth: 1,
+    marginTop: 4,
+    paddingBottom: 24,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+  },
+  stateTile: {
+    alignItems: "center",
+    backgroundColor: t.colors.brandTint,
+    borderRadius: 24,
+    height: 80,
     justifyContent: "center",
+    width: 80,
   },
-  photopBtnText: {
-    color: colors.deepNavy,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  futureBanner: {
-    marginBottom: spacing.md,
-  },
-  offlineBanner: {
+  stateTitle: { marginTop: 16, textAlign: "center" },
+  stateBody: { marginTop: 8, textAlign: "center" },
+  stateBtn: {
     alignItems: "center",
-    backgroundColor: semanticColors.attention.fill,
-    borderColor: "#FDE68A",
-    borderRadius: 16,
-    borderWidth: 1,
+    alignSelf: "stretch",
+    backgroundColor: t.colors.brandTint,
+    borderRadius: t.radii.button,
     flexDirection: "row",
-    gap: 10,
-    marginBottom: spacing.sm,
-    padding: 12,
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 20,
+    minHeight: 52,
   },
-  offlineBannerText: {
-    color: semanticColors.attention.text,
-    flex: 1,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-  waitChip: {
+  stateLink: {
     alignItems: "center",
-    alignSelf: "center",
-    backgroundColor: semanticColors.attention.fill,
-    borderColor: "#FDE68A",
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 4,
-    marginRight: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    justifyContent: "center",
+    marginTop: 8,
+    minHeight: 48,
   },
-  waitChipText: {
-    color: semanticColors.attention.text,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  pill: {
-    alignItems: "center",
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-  },
-  pillLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  muted: {
-    color: colors.midGrey,
-    fontSize: 15,
-  },
-  emptyCard: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
-    borderWidth: 1,
-    padding: spacing.xl,
-  },
-  emptyTitle: {
-    color: colors.deepNavy,
-    fontSize: 16,
-    fontWeight: "600",
-  },
-});
+}));
