@@ -32,9 +32,10 @@ tags:
 - runFlow: ../../device/z12-45/open-log.yaml
 
 # ---- W-08: swipe a set to Skip, then Undo -----------------------------------------
+# From the row's tick, at its right edge, so the swipe has room to travel.
 - swipe:
     from:
-      text: "Set [0-9]+ options"
+      text: "Log set [0-9]+ ·.*"
       index: 0
     direction: LEFT
     duration: 400

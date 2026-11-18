@@ -9,16 +9,42 @@
  *
  * Every call is best effort: a device without a vibrator, the web build and
  * the test environment must never fail the screen.
+ *
+ * Android: `Vibrator.vibrate` throws on the native side when the app's
+ * manifest lacks `android.permission.VIBRATE`, where no JS try/catch can see
+ * it. The permission is a normal one (granted at install when declared), so
+ * the call is made only after the system confirms the app holds it. Z12-57
+ * owns the manifest and should make sure it is declared.
  */
-import { Vibration } from "react-native";
+import { PermissionsAndroid, Platform, Vibration } from "react-native";
 
 /** Two short buzzes when a rest reaches its end (W-05b). */
 export const REST_END_PATTERN = [0, 220, 120, 220];
 
-export function restEndHaptic(): void {
+const ANDROID_VIBRATE = "android.permission.VIBRATE";
+
+function vibrate(pattern: number[]): void {
   try {
-    Vibration.vibrate(REST_END_PATTERN);
+    Vibration.vibrate(pattern);
   } catch {
     // No vibrator, or the platform refused: nothing to do.
+  }
+}
+
+export function restEndHaptic(): void {
+  if (Platform.OS !== "android") {
+    vibrate(REST_END_PATTERN);
+    return;
+  }
+  try {
+    void PermissionsAndroid.check(
+      ANDROID_VIBRATE as Parameters<typeof PermissionsAndroid.check>[0],
+    )
+      .then((granted) => {
+        if (granted) vibrate(REST_END_PATTERN);
+      })
+      .catch(() => undefined);
+  } catch {
+    // The permission could not be read: stay silent.
   }
 }
