@@ -1,0 +1,131 @@
+{
+  "result": "mean screenshot luminance: light 0.894 (13), dark 0.196 (11)",
+  "light": 0.894,
+  "dark": 0.196,
+  "count": {
+    "light": 13,
+    "dark": 11
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "TR-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.916
+    },
+    {
+      "file": "TR-06h-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-06h-light-android.png",
+      "theme": "light",
+      "luma": 0.915
+    },
+    {
+      "file": "TR-13a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13a-light-android.png",
+      "theme": "light",
+      "luma": 0.926
+    },
+    {
+      "file": "TR-13b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13b-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "TR-13c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-13c-light-android.png",
+      "theme": "light",
+      "luma": 0.702
+    },
+    {
+      "file": "TR-14a-light-android.png",
+      "theme": "light",
+      "luma": 0.896
+    },
+    {
+      "file": "TR-14c-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "TR-14d-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "TR-14g-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "TR-14g-light-android.png",
+      "theme": "light",
+      "luma": 0.891
+    },
+    {
+      "file": "TR-14-card-next-checkin-dark-android.png",
+      "theme": "dark",
+      "luma": 0.118
+    },
+    {
+      "file": "Today-no-plan-dark-android.png",
+      "theme": "dark",
+      "luma": 0.103
+    },
+    {
+      "file": "Today-no-plan-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.918
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "z12-38-after-swipe-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "z12-38-after-swipe-light-android.png",
+      "theme": "light",
+      "luma": 0.916
+    }
+  ]
+}

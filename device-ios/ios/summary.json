@@ -1,0 +1,227 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "dark: 2 of 6 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-38/1-trainee-note-banner.yaml",
+    "device/z12-46/1-no-plan.yaml",
+    "flows/v3/F11-weekly-checkin.yaml",
+    "flows/v3/F12-progress-weight.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 6,
+      "passed": 4,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap",
+          "message": "Assertion is false: \"Rahul left a note.*\" is not visible"
+        },
+        {
+          "flow": "F12 Progress and log weight (Z12-46)",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 149 s",
+      "mode": "cache-hit",
+      "seconds": 149,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.919 (13), dark 0.322 (10)",
+      "light": 0.919,
+      "dark": 0.322,
+      "count": {
+        "light": 13,
+        "dark": 10
+      },
+      "shots": [
+        {
+          "file": "TR-06a-light-ios.png",
+          "theme": "light",
+          "luma": 0.932
+        },
+        {
+          "file": "TR-06h-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.13
+        },
+        {
+          "file": "TR-06h-light-ios.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "TR-13a-light-ios.png",
+          "theme": "light",
+          "luma": 0.944
+        },
+        {
+          "file": "TR-13b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "TR-13b-light-ios.png",
+          "theme": "light",
+          "luma": 0.907
+        },
+        {
+          "file": "TR-13c-light-ios.png",
+          "theme": "light",
+          "luma": 0.825
+        },
+        {
+          "file": "TR-14a-light-ios.png",
+          "theme": "light",
+          "luma": 0.909
+        },
+        {
+          "file": "TR-14c-light-ios.png",
+          "theme": "light",
+          "luma": 0.91
+        },
+        {
+          "file": "TR-14d-light-ios.png",
+          "theme": "light",
+          "luma": 0.908
+        },
+        {
+          "file": "TR-14g-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.127
+        },
+        {
+          "file": "TR-14g-light-ios.png",
+          "theme": "light",
+          "luma": 0.905
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.13
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.936
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-004-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.708
+        },
+        {
+          "file": "step-014-assertCondition-Today_s_workout.Needs_yo-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.708
+        },
+        {
+          "file": "step-023-assertCondition-_BANNER-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.124
+        },
+        {
+          "file": "Today-no-plan-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "Today-no-plan-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "TR-14-card-next-checkin-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.109
+        },
+        {
+          "file": "z12-38-after-swipe-light-ios.png",
+          "theme": "light",
+          "luma": 0.937
+        }
+      ]
+    }
+  ]
+}
