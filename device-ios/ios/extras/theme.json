@@ -1,0 +1,71 @@
+{
+  "result": "mean screenshot luminance: light 0.916 (4), dark 0.32 (8)",
+  "light": 0.916,
+  "dark": 0.32,
+  "count": {
+    "light": 4,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "BP1-delete-account-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "BP1-reactivate-account-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.136
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.935
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.935
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-005-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.891
+    },
+    {
+      "file": "step-018-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+      "theme": "light",
+      "luma": 0.891
+    },
+    {
+      "file": "z12-29-archived-notice-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "z12-29-delete-proof-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.101
+    },
+    {
+      "file": "z12-29-privacy-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.08
+    },
+    {
+      "file": "z12-29-reactivated-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    }
+  ]
+}

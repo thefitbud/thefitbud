@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="0" time="231.96" timestamp="2026-11-18T12:30:55">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="46.913" timestamp="2026-11-18T12:30:55" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="42.825" timestamp="2026-11-18T12:31:42" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-29 delete account from Privacy, archived notice, sign in again, reactivate" name="Z12-29 delete account from Privacy, archived notice, sign in again, reactivate" classname="Z12-29 delete account from Privacy, archived notice, sign in again, reactivate" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-29/1-delete-and-reactivate.yaml" time="142.167" timestamp="2026-11-18T12:32:25" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-29"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
