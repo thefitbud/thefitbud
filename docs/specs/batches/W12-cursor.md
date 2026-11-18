@@ -13,7 +13,7 @@
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
 | Z12-W12C-0 Ledger | — | merged | #488 | `893691c3` | this file | lighter (docs) |
-| Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | CI green; review PASS; waiting device | #490 | — | Expo web CLOSE for TR-08a–c + TR-26a–f; iOS/Android pending device dispatch (Cursor token 403) | strongest (opus) + opus review |
+| Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | CI green; review PASS; waiting device | #490 | — | Expo web CLOSE for TR-26a–f (both themes) and TR-08a–c light; TR-08a–c dark GAP (sheet renders light, no ThemeScope in the overlay host) and TR-08b/c need a web-only `flex: 0` CSS harness (`docs/qa/Z12-43/web/README.md`); iOS/Android pending device dispatch (Cursor token 403) | strongest (opus) + opus review |
 | Z12-30 Delete account (web) | #487 (Z12-29) | blocked | — | — | fresh proof = Firebase `auth_time` (W6 follow-up) | lighter / sonnet |
 | Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | strongest |
 | Z12-49 follow-up Ended-coaching tab bar | #484 (Z12-45) | blocked | — | — | small; tab bar must show on ended screen | lighter |
