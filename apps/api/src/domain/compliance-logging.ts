@@ -215,12 +215,14 @@ export async function buildLoggedFoodsCompliance(
           ...line,
         });
       }
-      // `custom: true` marks it added by the client on the log itself, so the
-      // coach sees that even when it was not saved to the trainee's foods.
+      // `custom: true` means "added by the client as a food" (D-W12-11 /
+      // D-W12-24 / TM-12a). Only logged_foods sets allowSaveToMyFoods; ate-out
+      // and portion lines reuse this builder for kcal totals but must not look
+      // like library candidates ("Add to my food library") on the coach panel.
       stored.push({
         ...(customId ? { customFoodId: customId } : {}),
         ...item.customFood,
-        custom: true,
+        ...(input.allowSaveToMyFoods ? { custom: true as const } : {}),
       });
       macroLines.push(line);
       continue;

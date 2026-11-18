@@ -50,6 +50,7 @@
 | D-W12C-11 | Z12-43: TR-26c's Meal row is shown but static | Tap map marks it `LATER: meal picker` | Z12-43 |
 | D-W12C-12 | Z12-43: offline, the food search filters the plan and recent foods already loaded on the phone ("Offline. Showing foods saved on your phone.") | There is no full offline food index on mobile; TR-26d's copy is true for these foods | Z12-43 |
 | D-W12C-13 | Z12-43: "Changed the portion" loses its old note field and uses ½ steps; the unit under each stepper is the serving label without its leading "1 " | TR-08b mock has no note and says "Steps are ½"; the plan carries serving labels, not unit nouns | Z12-43 |
+| D-W12C-14 | Z12-43: `custom: true` on loggedItems only for `logged_foods` (`allowSaveToMyFoods`); ate-out / portion lines keep kcal totals without the coach "Add to my food library" cue | Fresh review #490 FAIL: TM-12b / MealPanel treated ate-out as a custom food | Z12-43 review fix |
 
 *(Add implementer decide-and-note choices here as they arise.)*
 

@@ -410,6 +410,11 @@ describe("trainee custom foods (Z12-43, D-W12-24)", () => {
     expect(ateOut.status).toBe(200);
     expect(ateOut.body.data).toMatchObject({ deviationKind: "restaurant", notes: "Office party" });
     expect(ateOut.body.data.loggedTotals.energyKcal).toBe(1120);
+    // Not a client-created food — coach must not see "Add to my food library".
+    expect(ateOut.body.data.loggedItems).toEqual([
+      expect.objectContaining({ name: "Ate out", energyKcal: 1120 }),
+    ]);
+    expect(ateOut.body.data.loggedItems[0].custom).toBeFalsy();
 
     const portion = await deviate(asha, asha.breakfast, {
       deviationKind: "portion_adjustment",
@@ -417,6 +422,10 @@ describe("trainee custom foods (Z12-43, D-W12-24)", () => {
     });
     expect(portion.status).toBe(200);
     expect(portion.body.data.loggedTotals.energyKcal).toBe(300);
+    expect(portion.body.data.loggedItems).toEqual([
+      expect.objectContaining({ name: "Vegetable poha", energyKcal: 300 }),
+    ]);
+    expect(portion.body.data.loggedItems[0].custom).toBeFalsy();
 
     expect(await ownFoods(asha)).toEqual([]);
   });
