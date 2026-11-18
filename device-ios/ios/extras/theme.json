@@ -1,0 +1,86 @@
+{
+  "result": "mean screenshot luminance: light 0.93 (7), dark 0.321 (8)",
+  "light": 0.93,
+  "dark": 0.321,
+  "count": {
+    "light": 7,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "BP1-delete-account-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "BP1-delete-account-light-ios.png",
+      "theme": "light",
+      "luma": 0.907
+    },
+    {
+      "file": "BP1-reactivate-account-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.136
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.94
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "step-015-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "step-060-assertCondition-Your_account_is_archived-light-ios.png",
+      "theme": "light",
+      "luma": 0.913
+    },
+    {
+      "file": "z12-29-archived-notice-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "z12-29-delete-proof-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.1
+    },
+    {
+      "file": "z12-29-delete-proof-light-ios.png",
+      "theme": "light",
+      "luma": 0.917
+    },
+    {
+      "file": "z12-29-privacy-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.08
+    },
+    {
+      "file": "z12-29-privacy-light-ios.png",
+      "theme": "light",
+      "luma": 0.944
+    },
+    {
+      "file": "z12-29-reactivated-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    }
+  ]
+}

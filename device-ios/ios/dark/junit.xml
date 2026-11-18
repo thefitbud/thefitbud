@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 628E92BB-6E2E-4252-831E-53785F3BEFD1" tests="3" failures="0" time="383.437" timestamp="2026-11-18T18:38:25">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="142.975" timestamp="2026-11-18T18:38:25" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="74.389" timestamp="2026-11-18T18:40:48" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-29 delete account from Privacy, archived notice, sign in again, reactivate" name="Z12-29 delete account from Privacy, archived notice, sign in again, reactivate" classname="Z12-29 delete account from Privacy, archived notice, sign in again, reactivate" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-29/1-delete-and-reactivate.yaml" time="165.803" timestamp="2026-11-18T18:42:02" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-29"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

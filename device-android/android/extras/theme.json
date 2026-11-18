@@ -1,0 +1,91 @@
+{
+  "result": "mean screenshot luminance: light 0.908 (8), dark 0.312 (8)",
+  "light": 0.908,
+  "dark": 0.312,
+  "count": {
+    "light": 8,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "BP1-delete-account-dark-android.png",
+      "theme": "dark",
+      "luma": 0.129
+    },
+    {
+      "file": "BP1-delete-account-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "BP1-reactivate-account-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "BP1-reactivate-account-light-android.png",
+      "theme": "light",
+      "luma": 0.879
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.921
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.922
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "z12-29-archived-notice-dark-android.png",
+      "theme": "dark",
+      "luma": 0.111
+    },
+    {
+      "file": "z12-29-archived-notice-light-android.png",
+      "theme": "light",
+      "luma": 0.889
+    },
+    {
+      "file": "z12-29-delete-proof-dark-android.png",
+      "theme": "dark",
+      "luma": 0.097
+    },
+    {
+      "file": "z12-29-delete-proof-light-android.png",
+      "theme": "light",
+      "luma": 0.899
+    },
+    {
+      "file": "z12-29-privacy-dark-android.png",
+      "theme": "dark",
+      "luma": 0.078
+    },
+    {
+      "file": "z12-29-privacy-light-android.png",
+      "theme": "light",
+      "luma": 0.924
+    },
+    {
+      "file": "z12-29-reactivated-dark-android.png",
+      "theme": "dark",
+      "luma": 0.104
+    },
+    {
+      "file": "z12-29-reactivated-light-android.png",
+      "theme": "light",
+      "luma": 0.927
+    }
+  ]
+}

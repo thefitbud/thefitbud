@@ -1,0 +1,184 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 2 of 3 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-29/1-delete-and-reactivate.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 1,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible"
+        },
+        {
+          "flow": "Z12-29 delete account from Privacy, archived notice, sign in again, reactivate",
+          "message": "Assertion is false: \"Your account is archived\\. Sign in before [A-Z][a-z]{2} \\d{1,2} [A-Z][a-z]{2} \\d{4} to bring it back\\.\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 320 s",
+      "mode": "cache-hit",
+      "seconds": 320,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.93 (7), dark 0.321 (8)",
+      "light": 0.93,
+      "dark": 0.321,
+      "count": {
+        "light": 7,
+        "dark": 8
+      },
+      "shots": [
+        {
+          "file": "BP1-delete-account-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.139
+        },
+        {
+          "file": "BP1-delete-account-light-ios.png",
+          "theme": "light",
+          "luma": 0.907
+        },
+        {
+          "file": "BP1-reactivate-account-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.136
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.94
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-004-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.94
+        },
+        {
+          "file": "step-015-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+          "theme": "light",
+          "luma": 0.94
+        },
+        {
+          "file": "step-060-assertCondition-Your_account_is_archived-light-ios.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "z12-29-archived-notice-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.115
+        },
+        {
+          "file": "z12-29-delete-proof-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.1
+        },
+        {
+          "file": "z12-29-delete-proof-light-ios.png",
+          "theme": "light",
+          "luma": 0.917
+        },
+        {
+          "file": "z12-29-privacy-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.08
+        },
+        {
+          "file": "z12-29-privacy-light-ios.png",
+          "theme": "light",
+          "luma": 0.944
+        },
+        {
+          "file": "z12-29-reactivated-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.109
+        }
+      ]
+    }
+  ]
+}

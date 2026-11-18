@@ -1,0 +1,3 @@
+Device gate run 44303128416, attempt 1
+App ref: claude/Z12-29-delete-account
+Run: https://github.com/thefitbud/thefitbud/actions/runs/44303128416
