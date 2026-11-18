@@ -1,0 +1,36 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - D93B41F6-E581-47F1-B9D8-3E5FEA0CEB58" tests="6" failures="1" time="618.581" timestamp="2026-11-18T13:41:49">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="95.15" timestamp="2026-11-18T13:41:49" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="87.764" timestamp="2026-11-18T13:43:24" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" name="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" classname="Z12-38 trainee in-app banner (TR-06h) leaves by itself, swipes away, opens on a tap" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-38/1-trainee-note-banner.yaml" time="127.614" timestamp="2026-11-18T13:44:52" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-38"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" name="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" classname="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-46/1-no-plan.yaml" time="65.214" timestamp="2026-11-18T13:47:00" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+    <testcase id="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" name="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" classname="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F11-weekly-checkin.yaml" time="159.461" timestamp="2026-11-18T13:48:05" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+      <failure>Assertion is false: "Your answers" is visible</failure>
+    </testcase>
+    <testcase id="F12 Progress and log weight (Z12-46)" name="F12 Progress and log weight (Z12-46)" classname="F12 Progress and log weight (Z12-46)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F12-progress-weight.yaml" time="83.048" timestamp="2026-11-18T13:50:45" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

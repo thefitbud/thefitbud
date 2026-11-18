@@ -1,0 +1,126 @@
+{
+  "result": "mean screenshot luminance: light 0.895 (13), dark 0.323 (10)",
+  "light": 0.895,
+  "dark": 0.323,
+  "count": {
+    "light": 13,
+    "dark": 10
+  },
+  "shots": [
+    {
+      "file": "TR-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.921
+    },
+    {
+      "file": "TR-06h-dark-android.png",
+      "theme": "dark",
+      "luma": 0.127
+    },
+    {
+      "file": "TR-06h-light-android.png",
+      "theme": "light",
+      "luma": 0.921
+    },
+    {
+      "file": "TR-13a-light-android.png",
+      "theme": "light",
+      "luma": 0.922
+    },
+    {
+      "file": "TR-13b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13b-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "TR-13c-light-android.png",
+      "theme": "light",
+      "luma": 0.702
+    },
+    {
+      "file": "TR-14a-light-android.png",
+      "theme": "light",
+      "luma": 0.896
+    },
+    {
+      "file": "TR-14c-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "TR-14d-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "TR-14g-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "TR-14g-light-android.png",
+      "theme": "light",
+      "luma": 0.89
+    },
+    {
+      "file": "TR-14-card-next-checkin-dark-android.png",
+      "theme": "dark",
+      "luma": 0.114
+    },
+    {
+      "file": "Today-no-plan-dark-android.png",
+      "theme": "dark",
+      "luma": 0.104
+    },
+    {
+      "file": "Today-no-plan-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.124
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.922
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-004-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.734
+    },
+    {
+      "file": "step-014-assertCondition-Today_s_workout.Needs_yo-dark-android.png",
+      "theme": "dark",
+      "luma": 0.734
+    },
+    {
+      "file": "z12-38-after-swipe-dark-android.png",
+      "theme": "dark",
+      "luma": 0.124
+    },
+    {
+      "file": "z12-38-after-swipe-light-android.png",
+      "theme": "light",
+      "luma": 0.921
+    }
+  ]
+}
