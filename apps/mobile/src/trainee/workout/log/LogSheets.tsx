@@ -36,7 +36,7 @@ import type { UnloggedExercise } from "../../workoutSession";
  * the same tick as the other closes never shows there.
  */
 export function afterModalCloses(open: () => void): void {
-  if (Platform.OS === "ios") setTimeout(open, 450);
+  if (Platform.OS === "ios") setTimeout(open, 900);
   else open();
 }
 
