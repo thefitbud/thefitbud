@@ -6,8 +6,10 @@ import type {
 } from "@fitbud/contracts";
 import {
   coachLinkSubject,
+  coachPushSubject,
   coachViewSwitchPrompt,
   resolveAppRoute,
+  roleSelectCanGoBack,
   roleForLinkKind,
   roleSwitchPrompt,
   selectInitialMobileRole,
@@ -331,5 +333,55 @@ describe("coachViewSwitchPrompt (frame 61, Z11-14)", () => {
     expect(coachLinkSubject("exception")).toBe("a client's exception");
     expect(coachLinkSubject("ask")).toBe("a client's question");
     expect(coachLinkSubject("client")).toBe("a client's profile");
+  });
+
+  it("names what a coach push opens (Z12-49)", () => {
+    expect(coachPushSubject("trainer_checkin_submitted")).toBe("a client's check-in");
+    expect(coachPushSubject("trainer_ask_coach")).toBe("a client's question");
+    expect(coachPushSubject("trainer_intake_submitted")).toBe("a client's intake form");
+    expect(coachPushSubject("trainer_meal_times_changed")).toBe("a client's meal times");
+  });
+});
+
+describe("role select Back (TM-08a, Z12-49)", () => {
+  const dual = ["trainer", "trainee"] as const;
+
+  it("first run has no Back: no role selected yet", () => {
+    expect(
+      roleSelectCanGoBack({ roleSelectRequested: false, selectedRole: null, permittedRoles: dual }),
+    ).toBe(false);
+    expect(
+      roleSelectCanGoBack({ roleSelectRequested: true, selectedRole: null, permittedRoles: dual }),
+    ).toBe(false);
+  });
+
+  it("opened from More over a role in use has Back", () => {
+    expect(
+      roleSelectCanGoBack({ roleSelectRequested: true, selectedRole: "trainee", permittedRoles: dual }),
+    ).toBe(true);
+  });
+
+  it("Back clears the request, so the route returns to the role in use", () => {
+    const base = {
+      accessToken: "tok",
+      bootstrapping: false,
+      me: { ...meTrainee, permittedRoles: ["trainer", "trainee"] } as MeResponse,
+      selectedRole: "trainer" as const,
+      needsAccountLink: false,
+      relationships: [],
+    };
+    expect(resolveAppRoute({ ...base, roleSelectRequested: true }).name).toBe("role_select");
+    // leaveRoleSelect sets roleSelectRequested back to false.
+    expect(resolveAppRoute({ ...base, roleSelectRequested: false }).name).toBe("trainer_shell");
+  });
+
+  it("never offers Back for a role the account no longer has on mobile", () => {
+    expect(
+      roleSelectCanGoBack({
+        roleSelectRequested: true,
+        selectedRole: "trainer",
+        permittedRoles: ["trainee"],
+      }),
+    ).toBe(false);
   });
 });

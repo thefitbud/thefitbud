@@ -111,6 +111,37 @@ their own job, `device-harness-tests`):
    the flows and the logs. Each task states which outcome it needs (§3 item 5).
 6. **Logs** (`logs.sh`, `scan-logs.mjs`) and **verdict** (`gate-summary.mjs`).
 
+### Android adb link: steady waits, logcat restarts, one infra retry
+
+The emulator's adb transport can drop for a few seconds (or about 30) after the snapshot
+boot. Every run logs `adb: device offline` at boot. In runs 44130567993 (both attempts),
+44135603252 and 44114041962 it dropped again during the light pass. Maestro failed the
+running flow in 2–4 s with `Unknown error` (or dadb's `device 'emulator-5554' not found`),
+and the single `adb logcat` stream exited. That truncated the log (17,972 and 11,489 lines,
+against about 120,000 in a green run of the same flows), so the scan reported
+`capture-empty` even though the app ran every later flow. This was the "app never starts"
+flake in the W12 handoff. So:
+
+- **Steady waits** (`android_wait_stable` in `lib.sh`): run-gate waits before the install,
+  before each theme and before a retry. The link counts as steady after 8 one-second
+  checks in a row in which `adb get-state` is `device`, `sys.boot_completed` is 1 and
+  `pm path android` answers (`DEVICE_ADB_STABLE_CHECKS`). The waits are recorded in
+  `extras/adb.json`.
+- **Logcat restarts** (`logs.sh`): the stream restarts after each drop, from the last
+  timestamp it wrote. Each restart is marked in the log and counted in
+  `logs/<name>.reconnects` and in `extras/adb.json`.
+- **One infra retry** (`infra-retry.mjs`): a failed flow runs once more only when all of
+  these hold:
+  - the failure is `Unknown error` or an adb transport error;
+  - it failed within 15 s, too soon to reach an app screen;
+  - Maestro's command log shows no completed step past launching the app;
+  - the flow starts from a clean install (`launchApp` with `clearState: true`);
+  - the device log for that pass shows no app crash, ANR, tombstone or red box.
+
+  The summary always shows an **Infra retries** line, listing each retry and its outcome.
+  A failure that was not retried shows the reason. A flow that fails its retry stays
+  failed.
+
 ## Native-build cache
 
 A full native build takes about 45 minutes on iOS (both simulator architectures) and 12 on
@@ -325,6 +356,7 @@ missing and writes nothing; `--stdout` prints instead of writing.
 | `shot-luma.mjs` | mean screenshot luminance per theme (did the app switch theme?) |
 | `lockscreen-tap.sh`, `find-element.mjs` | lock-screen notification and Live Activity taps |
 | `select-flows.mjs`, `run-gate.sh`, `gate-summary.mjs` | flow selection, the run, the verdict |
+| `infra-retry.mjs` | which failed Android flows failed on the adb link and may run once more |
 | `native-fingerprint.mjs`, `swap-bundle.sh` | native-build cache key; JS-bundle swap on a hit |
 | `parity-gen.mjs` | parity matrix rows |
 | `*.test.mjs` | unit tests, run by `node --test "scripts/qa/**/*.test.mjs"` |

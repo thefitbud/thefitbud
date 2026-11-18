@@ -133,7 +133,10 @@ describe("coach-logged workout (Z9-11)", () => {
       />,
     );
     expect(screen.getByText("Edited by your coach")).toBeTruthy();
-    expect(screen.getByLabelText("Note for coach")).toBeTruthy();
+    // Still the trainee's own summary (W-17a), with its share step.
+    expect(
+      screen.getByRole("button", { name: "Save and share with Rahul" }),
+    ).toBeTruthy();
   });
 
   it("shows no banner for the trainee's own log", () => {

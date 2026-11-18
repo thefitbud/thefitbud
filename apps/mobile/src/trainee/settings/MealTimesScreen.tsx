@@ -1,8 +1,8 @@
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Utensils } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import { brand, ink } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -31,7 +31,9 @@ type MealTimeSlot = {
   dayPattern?: Pattern | null;
 };
 
-export function MealTimesScreen({ onBack, coachName = "Your coach" }: Props) {
+function MealTimesScreenBody({ onBack, coachName = "Your coach" }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const { api } = useAuth();
   const s1 = stage1Api(api);
   const first = coachName.split(/\s+/)[0] || "Your coach";
@@ -175,7 +177,7 @@ export function MealTimesScreen({ onBack, coachName = "Your coach" }: Props) {
               <View key={slot.slotKey} style={styles.card}>
                 <View style={styles.head}>
                   <View style={styles.tile}>
-                    <Utensils color={brand.indigo} size={18} strokeWidth={1.75} />
+                    <Utensils color={theme.colors.brand} size={18} strokeWidth={1.75} />
                   </View>
                   <View style={styles.headText}>
                     <Text style={styles.label}>{slot.label}</Text>
@@ -242,12 +244,12 @@ export function MealTimesScreen({ onBack, coachName = "Your coach" }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   stack: { gap: 12 },
-  muted: { color: ink[500], fontSize: 15 },
+  muted: { color: t.colors.ink3, fontSize: 15 },
   card: {
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     gap: 8,
@@ -261,7 +263,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     alignItems: "center",
-    backgroundColor: brand.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 11,
     height: 36,
     justifyContent: "center",
@@ -269,12 +271,21 @@ const styles = StyleSheet.create({
   },
   headText: { flex: 1 },
   label: {
-    color: ink[900],
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
-  plan: { color: ink[500], fontSize: 13 },
-  reminder: { color: ink[500], fontSize: 13 },
-  warn: { color: "#9A3412", fontSize: 14, lineHeight: 20 },
-  toast: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 14 },
-});
+  plan: { color: t.colors.ink3, fontSize: 13 },
+  reminder: { color: t.colors.ink3, fontSize: 13 },
+  warn: { color: t.colors.warnInk, fontSize: 14, lineHeight: 20 },
+  toast: { color: t.colors.brand, fontFamily: fontFamilySemiBold, fontSize: 14 },
+}));
+
+/** MealTimesScreen in the system theme (Z12-49): its own styles read the scope. */
+export function MealTimesScreen(props: Parameters<typeof MealTimesScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <MealTimesScreenBody {...props} />
+    </ThemeScope>
+  );
+}

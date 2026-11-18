@@ -1,5 +1,5 @@
-/* Z12-4 · iPad portrait shell (frame 196). Colocated — do not edit styles/shell.css
-   (D-W12b-2, D-W12b-5). Z12-9 takes the search palette later.
+/* Z12-4 · iPad portrait shell (frame 196) + Z12-9 search palette (frame 190).
+   Colocated — do not edit styles/shell.css (D-W12b-2, D-W12b-5).
 
    tap-targets.css sets .shell-search { min-width: 44px !important } under 1024px;
    shell.css keeps the 72px icon rail at 768–1279. Both are overridden here with
@@ -184,4 +184,172 @@
     min-width: 8rem !important;
     width: auto !important;
   }
+}
+
+/* Z12-9 · Search palette (frame 190). Overrides frozen styles/shell.css. */
+
+.shell-palette {
+  width: min(560px, calc(100vw - 32px)) !important;
+}
+
+.shell-palette-input {
+  position: relative;
+}
+
+.shell-palette-esc {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  height: 1.5rem;
+  padding: 0 0.4rem;
+  border: 1px solid var(--line, var(--border));
+  border-radius: 6px;
+  background: var(--page-bg, var(--bg));
+  color: var(--ink-500, var(--ink3));
+  font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+}
+
+.shell-palette-results {
+  max-height: min(420px, 56vh);
+  overflow: auto;
+  padding: 0.5rem 0 0.75rem;
+}
+
+.shell-palette-empty {
+  margin: 0;
+  padding: 0.75rem 1rem;
+}
+
+.shell-palette-group {
+  margin: 0;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.shell-palette-group-label {
+  margin: 0;
+  padding: 0.5rem 1rem 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-500, var(--ink3));
+}
+
+.shell-palette .shell-palette-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0.5rem;
+  max-height: none;
+  overflow: visible;
+}
+
+.shell-palette .shell-palette-row {
+  width: 100%;
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap;
+  align-items: center !important;
+  gap: 0.75rem;
+  min-height: 44px;
+  padding: 0.625rem 0.75rem;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  color: var(--deep-navy, var(--ink));
+}
+
+.shell-palette-row:hover,
+.shell-palette-row.is-active {
+  background: var(--lavender-50, var(--sel-bg, var(--bg)));
+}
+
+.shell-palette-av,
+.shell-palette-icon {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.shell-palette-icon {
+  background: var(--page-bg, var(--bg));
+  color: var(--ink-700, var(--ink2));
+}
+
+.shell-palette-av-c1 {
+  background: var(--coach-tint, #ebe7ff);
+  color: var(--coach-ink, #4527c6);
+}
+.shell-palette-av-c2 {
+  background: var(--av6-bg, #e0f2f1);
+  color: var(--av6-fg, #0f5f5a);
+}
+.shell-palette-av-c3 {
+  background: var(--coral-tint, #ffe8e2);
+  color: var(--coral-ink, #b42318);
+}
+.shell-palette-av-c4 {
+  background: var(--av3-bg, #fff3d6);
+  color: var(--av3-fg, #8a4b06);
+}
+.shell-palette-av-c5 {
+  background: var(--av4-bg, #e3eefd);
+  color: var(--av4-fg, #1e4b9e);
+}
+.shell-palette-av-c6 {
+  background: var(--av2-bg, #eaf5e4);
+  color: var(--av2-fg, #2f6b1e);
+}
+.shell-palette-av-c7 {
+  background: var(--av5-bg, #f1e8fa);
+  color: var(--av5-fg, #6b2a93);
+}
+.shell-palette-av-c8 {
+  background: var(--fill, #f3f4f6);
+  color: var(--ink2, #4b5563);
+}
+
+.shell-palette-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+}
+
+.shell-palette-row-text b {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.shell-palette-row-text .muted {
+  font-size: 0.8125rem;
+  color: var(--ink-500, var(--ink3));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.shell-palette-enter {
+  flex: none;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--ink-500, var(--ink3));
+  white-space: nowrap;
 }

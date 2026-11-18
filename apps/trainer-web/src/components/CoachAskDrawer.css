@@ -1,0 +1,195 @@
+/*
+ * Asked-coach drawer v3 (Z12-16; frames 182 / 183).
+ * Colocated per D-W12b-2 — does not touch frozen global styles.
+ */
+
+.cad-panel.drawer-panel {
+  width: min(480px, 100vw);
+}
+
+.cad-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line, #e7e9f2);
+}
+
+.home-av.cad-avatar {
+  width: 40px;
+  height: 40px;
+  font-size: 14px;
+  flex: none;
+}
+
+.cad-head-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.cad-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--deep-navy, var(--ink));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cad-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.cad-chip-ask {
+  background: var(--info-tint, #eff6ff);
+  color: var(--info-ink, #1d4ed8);
+}
+
+.cad-chip-pain {
+  background: var(--coral-tint, #fde8e4);
+  color: var(--coral-ink, #9f2d20);
+}
+
+.cad-chip-pain svg {
+  flex: none;
+}
+
+.cad-close {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line, #e7e9f2);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--deep-navy, var(--ink));
+  cursor: pointer;
+}
+
+.cad-close:hover {
+  background: #f7f8fc;
+}
+
+.cad-close:focus-visible {
+  outline: 2px solid var(--indigo, #4527c6);
+  outline-offset: 2px;
+}
+
+.cad-body.drawer-body {
+  gap: 18px;
+}
+
+.cad-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--deep-navy, var(--ink));
+}
+
+.cad-sub {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ink-500, var(--ink3));
+}
+
+.cad-pain {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--coral-tint, #fde8e4);
+  color: var(--coral-ink, #9f2d20);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.cad-pain svg {
+  flex: none;
+  margin-top: 1px;
+}
+
+.cad-source.drawer-source {
+  padding: 0;
+  background: #fff;
+  overflow: hidden;
+}
+
+.cad-source-head {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #f4f5f8;
+  border-bottom: 1px solid var(--line, #e7e9f2);
+  color: var(--ink-700, var(--ink2));
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.cad-source-rows {
+  margin: 0;
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 8px 12px;
+  font-size: 13px;
+}
+
+.cad-source-rows dt {
+  color: var(--ink-500, var(--ink3));
+}
+
+.cad-source-rows dd {
+  margin: 0;
+  color: var(--near-black, var(--ink));
+  font-variant-numeric: tabular-nums;
+}
+
+.cad-helper {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-500, var(--ink3));
+}
+
+.cad-foot.drawer-foot {
+  gap: 10px;
+}
+
+.cad-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cad-actions .button-primary,
+.cad-actions .button-secondary {
+  flex: 1 1 160px;
+  min-height: 44px;
+  justify-content: center;
+}
+
+.cad-foot-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-500, var(--ink3));
+}

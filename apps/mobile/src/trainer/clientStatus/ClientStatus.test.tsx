@@ -59,6 +59,7 @@ const responsiveness = responsivenessResponseSchema.parse({
 
 const api = {
   getClientWorkspace: vi.fn(),
+  listExceptions: vi.fn(),
   listWorkoutAssignments: vi.fn(async () => ({ items: [], nextCursor: null })),
   listMealAssignments: vi.fn(async () => ({ items: [], nextCursor: null })),
   listTrainerNotes: vi.fn(async () => ({ items: [], nextCursor: null })),
@@ -205,6 +206,42 @@ describe("ClientStatusScreen", () => {
     expect(screen.getByText("Recent activity")).toBeTruthy();
     expect(screen.getByText("Lower body A")).toBeTruthy();
     expect(screen.queryByText("Reactivate")).toBeNull();
+  });
+
+  it("Nudge… offers only unlogged items: logged meals (deviation, logged later) are not offered", async () => {
+    const item = (id: string, type: string, source: string) => ({
+      id,
+      coachingRelationshipId: RID,
+      type,
+      severity: "warning",
+      status: "active",
+      sourceEntityType: type === "missed_workout" ? "workout_assignment" : "meal_assignment",
+      sourceEntityId: UID,
+      summary: `${type} summary`,
+      details: { localDate: "2026-11-17", mealName: source, workoutDayName: source },
+      detectedAt: "2026-11-17T04:00:00.000Z",
+    });
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: false }));
+    api.listExceptions.mockResolvedValue({
+      items: [
+        item("e1", "meal_deviation", "Dinner"),
+        item("e2", "meal_logged_later", "Lunch"),
+      ],
+      nextCursor: null,
+    });
+    renderScreen();
+    await screen.findByText("410 of 1,950");
+    fireEvent.click(screen.getByText("Nudge…"));
+    await screen.findByText("Nothing open to nudge about");
+    expect(screen.queryByText("Nudge Kavya")).toBeNull();
+
+    api.listExceptions.mockResolvedValue({
+      items: [item("e1", "meal_deviation", "Dinner"), item("e3", "missed_workout", "Lower body A")],
+      nextCursor: null,
+    });
+    fireEvent.click(screen.getByText("Nudge…"));
+    await screen.findByText("Nudge Kavya");
+    expect(screen.getByText("Lower body A is waiting. Can you fit it in soon?")).toBeTruthy();
   });
 
   it("ended client: read-only summary, no Reactivate, no live reads", async () => {

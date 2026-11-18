@@ -1,0 +1,76 @@
+appId: com.thefitbud.mobile.staging
+name: F02b Auth errors on the code path and reset (Z12-49)
+tags:
+  - device
+  - trainee
+  - z12-49
+---
+# F02b (Z12-49): a wrong login code shows inline under the boxes, in the copy
+# reserved for the API's 401 OTP_INVALID (TR-01g pattern; the local API answers
+# an expired code with OTP_INVALID too, so the "expired" copy has no device
+# state), then the reset request screen. TR-01d (set a new password) needs the
+# emailed reset code, which the demo accounts do not receive on the runner: it
+# is graded on Expo web. TR-01f needs 15 failed tries from one IP and would lock
+# every later flow on the runner: Expo web only. Env: QA_ONTRACK_EMAIL.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${QA_ONTRACK_EMAIL}
+# Retype when the field lost keystrokes. On a cold first launch the Android
+# emulator dropped the first letter ("aarav.ontrack@..." arrived as
+# "arav.ontrack@...", device runs 44191354664 and 44200084620, light launch
+# smoke), so the API answered INVALID_CREDENTIALS and TR-01e showed. The
+# field keeps focus: erase and type again (as z12-36/sign-in-password.yaml).
+- runFlow:
+    when:
+      notVisible: "${QA_ONTRACK_EMAIL}.*"
+    commands:
+      - eraseText: 60
+      - inputText: ${QA_ONTRACK_EMAIL}
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn: "Sign in with a code instead"
+- extendedWaitUntil:
+    visible: "Send code"
+    timeout: 10000
+- tapOn: "Send code"
+- extendedWaitUntil:
+    visible: "Enter your code"
+    timeout: 20000
+# A code that is certainly wrong: the six boxes submit on the sixth digit.
+- tapOn: "6-digit code"
+- inputText: "111111"
+- extendedWaitUntil:
+    visible: "That code didn't work\\. Check the latest message or tap Resend\\."
+    timeout: 30000
+- takeScreenshot: z12-49-wrong-code
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Reset password: the request step.
+- tapOn:
+    id: "auth-back"
+- extendedWaitUntil:
+    visible: "Send code"
+    timeout: 10000
+- tapOn:
+    id: "auth-back"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 10000
+- tapOn: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "Reset password"
+    timeout: 10000
+- assertVisible: "We'll email you a code to reset your password\\."
+- takeScreenshot: z12-49-reset-request
+- tapOn:
+    id: "auth-back"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 10000
+- runFlow: ../../common/assert-no-crash.yaml

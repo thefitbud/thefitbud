@@ -13,7 +13,7 @@ tags:
 # Account: the on-track trainee, aarav.ontrack on the local demo seed
 # (Asia/Kolkata). Env from the device harness: QA_ONTRACK_EMAIL, QA_PASSWORD.
 #
-# Screens (by v3 screen ID): TR-06a, TR-07a, W-01a. F29 (tag z12-39) runs
+# Screens (by v3 screen ID): TR-06a, TR-07a. F29 (tag z12-39) runs
 # beside it for TR-06c, TR-06d, TR-07k and W-01e.
 - launchApp:
     clearState: true
@@ -120,7 +120,10 @@ tags:
 - extendedWaitUntil:
     notVisible: "Loading workouts…"
     timeout: 30000
-- takeScreenshot: W-01a-workout-tab-not-started
+# Not named W-01a (Z12-44 review): Aarav's day here is done or a rest day, never
+# "not started", yet run 44144088662 filed this shot as the W-01a evidence. The
+# W-01a capture is Rohan's, in z12-44/2-finish-workout.yaml.
+- takeScreenshot: z12-40-workout-day
 # Left on the exercise list (cards).
 - swipe:
     start: "85%, 62%"

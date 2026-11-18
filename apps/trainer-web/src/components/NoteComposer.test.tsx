@@ -1,0 +1,140 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+
+const REL_ID = "c422296e-ed7b-4196-a2b4-647096af3002";
+const NOTE_A = {
+  id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  coachingRelationshipId: REL_ID,
+  trainerUserId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  checkinId: null,
+  body: "Knee felt sore on walking lunges. Swapped to step-ups until the next check-in.",
+  visibility: "private" as const,
+  subjectType: null,
+  subjectId: null,
+  sharedAt: null,
+  seenAt: null,
+  createdAt: "2026-10-13T10:00:00.000Z",
+  updatedAt: "2026-10-13T10:00:00.000Z",
+};
+const NOTE_B = {
+  ...NOTE_A,
+  id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+  body: "Breakfasts were spot on last week.",
+  visibility: "client" as const,
+  createdAt: "2026-10-12T10:00:00.000Z",
+  updatedAt: "2026-10-12T10:00:00.000Z",
+};
+
+const api = vi.hoisted(() => ({
+  listTrainerNotes: vi.fn(),
+  createTrainerNote: vi.fn(),
+  deleteTrainerNote: vi.fn(),
+  getEffectivePlan: vi.fn(),
+}));
+
+const stage1 = vi.hoisted(() => ({
+  patchTrainerNote: vi.fn(),
+}));
+
+vi.mock("../lib/api", () => ({ apiClient: api }));
+vi.mock("../lib/stage1-api", () => ({ stage1Api: stage1 }));
+vi.mock("../auth/AuthProvider", () => ({
+  useAuth: () => ({
+    me: {
+      timezone: "Asia/Kolkata",
+      trainerProfile: { displayName: "Rahul Verma" },
+    },
+  }),
+}));
+
+import { NoteComposer } from "./NoteComposer";
+
+beforeEach(() => {
+  api.listTrainerNotes.mockResolvedValue({ items: [NOTE_A, NOTE_B] });
+  api.getEffectivePlan.mockResolvedValue({
+    plan: { id: "plan-1", title: "Fat loss, phase 2" },
+    version: { id: "ver-1" },
+  });
+  api.createTrainerNote.mockResolvedValue({ ...NOTE_A, id: "new-note" });
+  api.deleteTrainerNote.mockResolvedValue({ id: NOTE_A.id, deleted: true });
+  stage1.patchTrainerNote.mockResolvedValue(NOTE_A);
+});
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
+
+describe("NoteComposer (frames 188 / 189)", () => {
+  it("shows About select, Visible switch, Earlier notes, and of-counter", async () => {
+    render(
+      <NoteComposer
+        relationshipId={REL_ID}
+        traineeName="Rohan Mehta"
+        traineeGender="male"
+      />,
+    );
+
+    expect(await screen.findByText("About · optional")).toBeTruthy();
+    expect(
+      await screen.findByRole("option", {
+        name: /Workout plan · Fat loss, phase 2/,
+      }),
+    ).toBeTruthy();
+    const visibility = await screen.findByRole("switch", {
+      name: /Visible to Rohan/i,
+    });
+    expect((visibility as HTMLInputElement).checked).toBe(false);
+    expect(
+      screen.getByText(/He sees it on Today and gets one notification/i),
+    ).toBeTruthy();
+    expect(screen.getByText(/Earlier notes/i)).toBeTruthy();
+    expect(screen.getByText(NOTE_A.body)).toBeTruthy();
+    expect(screen.getByText(/0 of 1,000|0 of 1000/)).toBeTruthy();
+  });
+
+  it("delete confirm quotes the note and uses You can't undo this", async () => {
+    render(
+      <NoteComposer
+        relationshipId={REL_ID}
+        traineeName="Rohan Mehta"
+        traineeGender="male"
+      />,
+    );
+    await screen.findByText(NOTE_A.body);
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[0]!);
+    expect(await screen.findByText("Delete this note?")).toBeTruthy();
+    expect(
+      screen.getByText(/will be deleted\. You can't undo this/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete note" }));
+    await waitFor(() =>
+      expect(api.deleteTrainerNote).toHaveBeenCalledWith(REL_ID, NOTE_A.id),
+    );
+  });
+
+  it("saves privately by default", async () => {
+    const onSaved = vi.fn();
+    render(
+      <NoteComposer
+        relationshipId={REL_ID}
+        traineeName="Rohan Mehta"
+        traineeGender="male"
+        onSaved={onSaved}
+      />,
+    );
+    await screen.findByText("About · optional");
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Move Tuesday session" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save note" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Saved privately"));
+    expect(api.createTrainerNote).toHaveBeenCalled();
+    const body = api.createTrainerNote.mock.calls[0]?.[1];
+    expect(body.visibility).toBe("private");
+  });
+});

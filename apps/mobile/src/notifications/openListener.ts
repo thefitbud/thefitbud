@@ -3,6 +3,7 @@ import { Platform } from "react-native";
 import type { Role } from "@fitbud/contracts";
 import { pushPayloadSchema } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
+import { mobilePermittedRoles } from "../navigation/resolveRoute";
 import { notificationAudience } from "./routing";
 
 /**
@@ -41,6 +42,8 @@ type Pending = {
   audience: Audience;
   /** User who was signed in when the tap happened, or the last one this run. */
   ownerUserId: string | null;
+  /** The role prompt was shown for it; it waits for the switch (Z12-49). */
+  offered?: boolean;
 };
 
 const MAX_HANDLED = 50;
@@ -50,6 +53,13 @@ export function createNotificationOpenController(input: {
   handle: (data: unknown) => unknown;
   /** Shared across controller instances so a remount cannot replay a tap. */
   handled?: Set<string>;
+  /**
+   * A tap for the other role (a coach push in trainee mode, Z12-49): show the
+   * role prompt. Returns true when it was shown; the tap then waits and routes
+   * once the session is in its role, or is dropped by `dropPending` (Cancel).
+   * Returns false when there is nothing to offer (the account lacks that role).
+   */
+  offerSwitch?: (data: unknown, audience: Audience) => boolean;
 }) {
   const handled = input.handled ?? new Set<string>();
   let session: OpenSession | null = null;
@@ -94,9 +104,25 @@ export function createNotificationOpenController(input: {
       }
       if (next.role === null) return; // Wait for the role pick.
       const { data, audience } = pending;
-      pending = null;
       // A tap only ever routes under the role it was meant for.
-      if (next.role === audience) input.handle(data);
+      if (next.role === audience) {
+        pending = null;
+        input.handle(data);
+        return;
+      }
+      // Another role: keep it while the role prompt is up (offered now or
+      // earlier); otherwise drop it, as before.
+      if (pending.offered) return;
+      if (input.offerSwitch?.(data, audience)) {
+        pending = { ...pending, offered: true };
+        return;
+      }
+      pending = null;
+    },
+
+    /** The user kept the current role (role prompt Cancel): forget the tap. */
+    dropPending(): void {
+      pending = null;
     },
 
     /** A notification response from the listener or the cold-start lookup. */
@@ -104,9 +130,20 @@ export function createNotificationOpenController(input: {
       if (tap.actionId !== DEFAULT_TAP_ACTION) return "ignored"; // Buttons: nativeActions.ts.
       const audience = audienceOf(tap.data);
       if (!audience) return "ignored";
-      // A role that cannot route this tap must not burn its key: the user may
-      // switch role and tap the same notification again.
-      if (session?.role && session.role !== audience) return "ignored";
+      if (session?.role && session.role !== audience) {
+        // A role that cannot route this tap must not burn its key unless the
+        // role prompt took it: the user may switch role and tap it again.
+        if (handled.has(tap.key)) return "ignored";
+        if (!input.offerSwitch?.(tap.data, audience)) return "ignored";
+        markHandled(tap.key);
+        pending = {
+          data: tap.data,
+          audience,
+          ownerUserId: session.userId,
+          offered: true,
+        };
+        return "queued";
+      }
       if (!markHandled(tap.key)) return "ignored";
       if (!session) {
         pending = { data: tap.data, audience, ownerUserId: lastUserId };
@@ -193,9 +230,12 @@ export function bindNotificationResponses(
 
 /** Mount once inside `AuthProvider`. */
 export function useNotificationOpenListener(): void {
-  const { me, selectedRole, handleNotificationOpen } = useAuth();
+  const { me, selectedRole, handleNotificationOpen, offerPushRoleSwitch } =
+    useAuth();
   const handleRef = useRef(handleNotificationOpen);
   handleRef.current = handleNotificationOpen;
+  const offerRef = useRef({ me, offerPushRoleSwitch });
+  offerRef.current = { me, offerPushRoleSwitch };
   const controllerRef = useRef<ReturnType<
     typeof createNotificationOpenController
   > | null>(null);
@@ -203,6 +243,21 @@ export function useNotificationOpenListener(): void {
     controllerRef.current = createNotificationOpenController({
       handle: (data) => handleRef.current(data),
       handled: handledTaps,
+      // Z12-49: a coach push tapped in trainee mode offers the coach view
+      // (TM-08c pattern) when this account is also a coach.
+      offerSwitch: (data, audience) => {
+        const current = offerRef.current;
+        if (audience !== "trainer" || !current.me) return false;
+        if (!mobilePermittedRoles(current.me.permittedRoles).includes("trainer")) {
+          return false;
+        }
+        const parsed = pushPayloadSchema.safeParse(data);
+        if (!parsed.success) return false;
+        current.offerPushRoleSwitch(parsed.data.notificationType, () =>
+          controllerRef.current?.dropPending(),
+        );
+        return true;
+      },
     });
   }
   const controller = controllerRef.current;

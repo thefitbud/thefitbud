@@ -53,6 +53,7 @@ import {
   durationMinutesFromExecution,
   estimateDurationMinutesFromDay,
 } from "./workoutDuration";
+import { isWorkoutDone, workoutHeroState } from "./workoutHeroState";
 import { cacheKey, subscribeAll } from "./dataCache";
 import { dayEyebrow, useDayState } from "./useDayState";
 import {
@@ -476,11 +477,14 @@ export function TodayTab({
   // out of the planned ones. The day's execution here is a summary without
   // exercises, so the full one is read through the API client; when that
   // cannot be read the card keeps its plain "N exercises" label.
+  // One state for this card and the Workout tab's (Z12-44): a day is done
+  // when its assignment or its execution says so, so a stale assignment
+  // status can no longer show Start beside View summary (ISSUE-MAP #4).
+  const workoutHero = workoutHeroState(workout, today);
+  const workoutShowsDone =
+    workoutHero.kind === "done" || workoutHero.kind === "coach_logged";
   const doneExecutionId =
-    workout &&
-    (workout.status === "completed" || workout.status === "modified")
-      ? (workout.execution?.id ?? null)
-      : null;
+    workout && workoutShowsDone ? (workout.execution?.id ?? null) : null;
   const [doneExecuted, setDoneExecuted] = useState<number | null>(null);
   useEffect(() => {
     setDoneExecuted(null);
@@ -572,24 +576,27 @@ export function TodayTab({
   // finished; otherwise the usual next-up item (meal, check-in).
   const hero = useMemo(() => {
     if (!isToday) return null;
-    if (
-      workout &&
-      workout.status !== "completed" &&
-      workout.status !== "modified" &&
-      workout.status !== "skipped" &&
-      workout.status !== "missed"
-    ) {
+    // Start or Continue only for a workout still to do (workoutHeroState): a
+    // done day has View summary on its own card, nothing else.
+    const heroKind = workoutHeroState(workout, today).kind;
+    if (workout && (heroKind === "not_started" || heroKind === "in_progress")) {
       return { kind: "workout" as const, workout };
     }
     // Done and rest cards lead the day (frames 04 done / rest); the meal
     // is then carried by the Meals list. A due check-in still shows.
     const next = nextUp({ meals, workout, checkin });
-    const workoutCardLeads =
-      !workout ||
-      workout.status === "completed" ||
-      workout.status === "modified";
+    const workoutCardLeads = !workout || isWorkoutDone(workout);
     return next && next.kind === "meal" && workoutCardLeads ? null : next;
-  }, [checkin, isToday, meals, workout]);
+  }, [checkin, isToday, meals, today, workout]);
+
+  // Continue or Start from the one hero state Workout reads too (Z12-44
+  // review): a session the list's status has not caught up with (the
+  // execution says started) is Continue on both tabs.
+  const workoutHeroLabel =
+    hero?.kind === "workout" &&
+    workoutHeroState(hero.workout, today).action === "continue"
+      ? "Continue workout"
+      : "Start workout";
 
   const nextOpenMeal = meals.find(
     (meal) => meal.status === "pending" || meal.status === "overdue",
@@ -817,12 +824,7 @@ export function TodayTab({
         {planState.status === "loaded" && !loading ? (
           <TodaySummaryCard
             rings={rings}
-            workoutDone={
-              workout &&
-              (workout.status === "completed" || workout.status === "modified")
-                ? 1
-                : 0
-            }
+            workoutDone={workout && isWorkoutDone(workout) ? 1 : 0}
             workoutTotal={workout ? 1 : 0}
             mealsDone={mealsDone}
             mealsTotal={meals.length}
@@ -835,7 +837,7 @@ export function TodayTab({
         {planState.status === "loaded" &&
         !loading &&
         workout &&
-        (workout.status === "completed" || workout.status === "modified") ? (
+        workoutShowsDone ? (
           <View
             style={styles.hero}
             accessibilityLabel={`Workout done: ${workout.workoutDayName}`}
@@ -996,20 +998,12 @@ export function TodayTab({
                 <View style={styles.heroBtns}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      hero.workout.status === "in_progress" ||
-                      hero.workout.status === "paused"
-                        ? "Continue workout"
-                        : "Start workout"
-                    }
+                    accessibilityLabel={workoutHeroLabel}
                     onPress={onStartWorkout}
                     style={styles.heroPrimary}
                   >
                     <Text style={styles.heroPrimaryLabel}>
-                      {hero.workout.status === "in_progress" ||
-                      hero.workout.status === "paused"
-                        ? "Continue workout"
-                        : "Start workout"}
+                      {workoutHeroLabel}
                     </Text>
                   </Pressable>
                 </View>
