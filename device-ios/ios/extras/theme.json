@@ -1,0 +1,121 @@
+{
+  "result": "mean screenshot luminance: light 0.874 (12), dark 0.226 (10)",
+  "light": 0.874,
+  "dark": 0.226,
+  "count": {
+    "light": 12,
+    "dark": 10
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.154
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.806
+    },
+    {
+      "file": "TR-06h-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.161
+    },
+    {
+      "file": "TR-06h-light-ios.png",
+      "theme": "light",
+      "luma": 0.802
+    },
+    {
+      "file": "TR-13a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.123
+    },
+    {
+      "file": "TR-13a-light-ios.png",
+      "theme": "light",
+      "luma": 0.942
+    },
+    {
+      "file": "TR-13c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.217
+    },
+    {
+      "file": "TR-13c-light-ios.png",
+      "theme": "light",
+      "luma": 0.825
+    },
+    {
+      "file": "TR-14a-light-ios.png",
+      "theme": "light",
+      "luma": 0.911
+    },
+    {
+      "file": "TR-14c-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "TR-14d-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "TR-14g-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.127
+    },
+    {
+      "file": "TR-14g-light-ios.png",
+      "theme": "light",
+      "luma": 0.905
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.161
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.805
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-009-tapOnElement-Your_coach_s_plan_for_today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.095
+    },
+    {
+      "file": "step-009-tapOnElement-Your_coach_s_plan_for_today-light-ios.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "step-024-assertCondition-_BANNER-light-ios.png",
+      "theme": "light",
+      "luma": 0.802
+    },
+    {
+      "file": "TR-14-card-next-checkin-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    },
+    {
+      "file": "z12-38-after-swipe-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.161
+    }
+  ]
+}
