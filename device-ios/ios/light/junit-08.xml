@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - D7C1BA44-AE38-461D-B342-CDB625768765" tests="1" failures="1" time="52.381" timestamp="2026-11-18T13:21:19">
+    <testcase id="F06 Interruptions, part 3 (back online; light finishes early, dark discards)" name="F06 Interruptions, part 3 (back online; light finishes early, dark discards)" classname="F06 Interruptions, part 3 (back online; light finishes early, dark discards)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F06c-interruptions-end.yaml" time="52.19" timestamp="2026-11-18T13:21:19" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+      <failure>Assertion is false: "Minimise workout" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

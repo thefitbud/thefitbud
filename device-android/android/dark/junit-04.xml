@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="1" time="176.014" timestamp="2026-11-18T07:06:15">
+    <testcase id="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" name="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" classname="F04 Plan deviation (swipe to skip, Undo, edit a logged set, mark not done, exercise menu, skip exercise)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F04-plan-deviation.yaml" time="175.976" timestamp="2026-11-18T07:06:15" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-45"/>
+      </properties>
+      <failure>Assertion is false: "Skip exercise\. .* sees it as skipped" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,211 @@
+{
+  "result": "mean screenshot luminance: light 0.863 (20), dark 0.213 (20)",
+  "light": 0.863,
+  "dark": 0.213,
+  "count": {
+    "light": 20,
+    "dark": 20
+  },
+  "shots": [
+    {
+      "file": "W-02-dark-android.png",
+      "theme": "dark",
+      "luma": 0.135
+    },
+    {
+      "file": "W-02-light-android.png",
+      "theme": "light",
+      "luma": 0.939
+    },
+    {
+      "file": "W-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "W-03-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "W-03b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "W-03b-light-android.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "W-04-dark-android.png",
+      "theme": "dark",
+      "luma": 0.148
+    },
+    {
+      "file": "W-04-light-android.png",
+      "theme": "light",
+      "luma": 0.917
+    },
+    {
+      "file": "W-05a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.152
+    },
+    {
+      "file": "W-05a-light-android.png",
+      "theme": "light",
+      "luma": 0.89
+    },
+    {
+      "file": "W-05b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.172
+    },
+    {
+      "file": "W-05b-light-android.png",
+      "theme": "light",
+      "luma": 0.896
+    },
+    {
+      "file": "W-08-dark-android.png",
+      "theme": "dark",
+      "luma": 0.142
+    },
+    {
+      "file": "W-08-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "W-13-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "W-13-light-android.png",
+      "theme": "light",
+      "luma": 0.692
+    },
+    {
+      "file": "W-14-dark-android.png",
+      "theme": "dark",
+      "luma": 0.212
+    },
+    {
+      "file": "W-14-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "W-15-dark-android.png",
+      "theme": "dark",
+      "luma": 0.093
+    },
+    {
+      "file": "W-15-light-android.png",
+      "theme": "light",
+      "luma": 0.65
+    },
+    {
+      "file": "W-16-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "W-16-light-android.png",
+      "theme": "light",
+      "luma": 0.738
+    },
+    {
+      "file": "W-18-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "W-18-light-android.png",
+      "theme": "light",
+      "luma": 0.658
+    },
+    {
+      "file": "W-19-dark-android.png",
+      "theme": "dark",
+      "luma": 0.143
+    },
+    {
+      "file": "W-19-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "W-20-dark-android.png",
+      "theme": "dark",
+      "luma": 0.137
+    },
+    {
+      "file": "W-20-light-android.png",
+      "theme": "light",
+      "luma": 0.935
+    },
+    {
+      "file": "W-26-dark-android.png",
+      "theme": "dark",
+      "luma": 0.074
+    },
+    {
+      "file": "W-26-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "W-27-dark-android.png",
+      "theme": "dark",
+      "luma": 0.068
+    },
+    {
+      "file": "W-27-light-android.png",
+      "theme": "light",
+      "luma": 0.932
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.925
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-122-assertCondition-Skip_exercise_._._sees_i-light-android.png",
+      "theme": "light",
+      "luma": 0.73
+    },
+    {
+      "file": "step-123-assertCondition-Skip_exercise_._._sees_i-dark-android.png",
+      "theme": "dark",
+      "luma": 0.077
+    },
+    {
+      "file": "z12-45-discarded-day-dark-android.png",
+      "theme": "dark",
+      "luma": 0.176
+    },
+    {
+      "file": "z12-45-finished-early-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.883
+    }
+  ]
+}
