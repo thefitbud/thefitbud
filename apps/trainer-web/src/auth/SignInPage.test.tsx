@@ -20,6 +20,8 @@ vi.mock("./AuthProvider", () => ({
   useAuth: () => ({
     me: null,
     loading: false,
+    sessionError: null,
+    clearSessionError: vi.fn(),
     signInWithPassword,
     signInDevTest,
   }),

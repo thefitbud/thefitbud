@@ -27,6 +27,8 @@ const h = vi.hoisted(() => {
 vi.mock("react-native", () => ({
   Platform: { OS: "ios" },
   NativeModules: {},
+  // AuthProvider wraps the app in a View (Z12-29); a pass-through is enough here.
+  View: ({ children }: { children?: unknown }) => children,
   AppState: {
     currentState: "active",
     addEventListener: (_type: string, listener: (state: string) => void) => {
