@@ -65,6 +65,7 @@
 
 | Source | Finding | Owner | Notes |
 |---|---|---|---|
+| Z12-43 | Cursor cloud `ghs_` token cannot `workflow_dispatch` device.yml (HTTP 403) | Firoz / Actions write | #490: `gh workflow run "Device gate" --ref cursor/z12-43-manual-food-db78 -f flows='launch,z12-43' -f platforms=both -f themes=both -f extras=none` |
 | Z12-43 | A meal logged from Today (Something different → Log it myself) returns to Today, which shows no TR-26f toast | Cursor (Today owner) | `TodayTab.tsx` is outside Z12-43's files; it can read `useMealSavedNotice` the way Diet does |
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
 | Z12-43 | The Something different sheet takes the overlay host's theme, not Diet's system scope | Z12-52 (sheet theme fix already listed) | `TraineeOverlay.tsx` |
