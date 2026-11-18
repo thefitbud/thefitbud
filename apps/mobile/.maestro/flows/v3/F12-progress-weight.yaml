@@ -1,0 +1,65 @@
+appId: com.thefitbud.mobile.staging
+name: F12 Progress and log weight (Z12-46)
+tags:
+  - device
+  - trainee
+  - z12-46
+---
+# F12 (Z12-46): Progress shows the weight card and its history; "Log weight" opens the
+# keypad sheet (TR-13c), a typed value saves and shows as the new weight.
+#
+# Account: the on-track trainee, aarav.ontrack on the local demo seed. Env from the
+# device harness: QA_ONTRACK_EMAIL, QA_PASSWORD. Writes one weigh-in to the local DB,
+# which every run re-seeds.
+#
+# Screens and screenshots (named by v3 screen ID, see scripts/qa/device/collect-shots.mjs):
+#   TR-06a  Today (the summary card, the hero, below)
+#   TR-13a  Progress with the weight card
+#   TR-13c  the Log weight sheet on the keypad
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+# The summary card: ring, "kcal left" and Goal, the three chips (TR-06a).
+- assertVisible: ".*kcal eaten.*"
+- assertVisible: "Workout"
+- assertVisible: "Meals"
+- assertVisible: "Steps"
+- takeScreenshot: TR-06a-today-default
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "Progress"
+- extendedWaitUntil:
+    visible: "Log weight"
+    timeout: 30000
+- takeScreenshot: TR-13a-progress-default
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Log weight"
+# TR-13c: a typed value on the keypad, the last value, the date row, Save weight.
+- extendedWaitUntil:
+    visible: "Save weight"
+    timeout: 20000
+- assertVisible: "Last: .* kg on .*"
+- assertVisible: "Date"
+- takeScreenshot: TR-13c-log-weight-sheet
+- tapOn: "Log weight, kg"
+- eraseText: 8
+- inputText: "78.3"
+- tapOn: "Save weight"
+# The sheet closes and the card shows the new value.
+- extendedWaitUntil:
+    notVisible: "Save weight"
+    timeout: 30000
+- assertVisible: "78.3"
+- runFlow: ../../common/assert-no-crash.yaml

@@ -1,0 +1,84 @@
+appId: com.thefitbud.mobile.staging
+name: F11 Weekly check-in, sent, and a reviewed one (Z12-46)
+tags:
+  - device
+  - trainee
+  - z12-46
+---
+# F11 (Z12-46): the weekly check-in from Today, through the form and review to Sent
+# (TR-14d), then a reviewed check-in from Progress (TR-14g, read-only).
+#
+# Account: Meera (`meera.ack`, local demo seed, password from QA_PASSWORD). Her
+# check-in dated today is a draft the trainee can start (the seed makes one per
+# demo day), and her 8 Nov check-in is reviewed. ASSERTED, not skipped: a seed
+# without them fails here. Writes one submitted check-in to the local DB.
+#
+# Screens and screenshots (named by v3 screen ID):
+#   TR-14a  the form, step 1      TR-14c  the review step
+#   TR-14d  Sent                  TR-14g  a reviewed check-in
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: meera.ack@demo.fitbud.test
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    notVisible: ".*Checking for a due check-in.*"
+    timeout: 30000
+# The check-in card sits low on Today. Its error state would say "CHK-"; it must not.
+- scrollUntilVisible:
+    element: "Start"
+    timeout: 30000
+- assertNotVisible: ".*CHK-.*"
+- tapOn: "Start"
+- extendedWaitUntil:
+    visible: "Weekly check-in"
+    timeout: 20000
+- assertVisible: ".*step 1 of 3.*"
+- takeScreenshot: TR-14a-checkin-questions
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Continue"
+- assertVisible: ".*step 2 of 3.*"
+- tapOn: "Continue"
+- assertVisible: ".*step 3 of 3.*"
+- runFlow:
+    when:
+      visible: "One line: how was the week\\?"
+    commands:
+      - tapOn: "One line: how was the week\\?"
+      - inputText: "Solid week, one session missed."
+      - tapOn: "Weekly check-in"
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Send to .*"
+    timeout: 10000
+- takeScreenshot: TR-14c-checkin-review
+- tapOn: "Send to .*"
+# TR-14d: Sent, with Done.
+- extendedWaitUntil:
+    visible: "Sent to .*"
+    timeout: 30000
+- assertVisible: "Done"
+- takeScreenshot: TR-14d-checkin-sent
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Done"
+
+# TR-14g: a reviewed check-in opens read-only, with the coach's reply.
+- tapOn: "Progress"
+- scrollUntilVisible:
+    element: "Sun 8 Nov.*"
+    timeout: 30000
+- tapOn: "Sun 8 Nov.*"
+- extendedWaitUntil:
+    visible: "Your answers"
+    timeout: 30000
+- assertNotVisible: "Continue"
+- assertNotVisible: "Send to .*"
+- takeScreenshot: TR-14g-checkin-reviewed
+- runFlow: ../../common/assert-no-crash.yaml

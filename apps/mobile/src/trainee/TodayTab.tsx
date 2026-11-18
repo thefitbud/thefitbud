@@ -1243,7 +1243,7 @@ function TodayTabInner({
           D-W3b-25's "Weekly view isn't available yet" rehearsal fallback is
           retired by D-W3b-37; this is the real endpoint's failure state.
         */}
-        {weekState.status === "loaded" ? (
+        {weekState.status === "loaded" && planState.status === "loaded" ? (
           <>
             <View style={styles.secHead}>
               <Text style={styles.secTitle}>This week</Text>
@@ -1558,7 +1558,7 @@ const useStyles = createThemedStyles((t) => ({
   },
   doneChipLabel: { color: t.colors.heroFg, fontSize: 14, fontWeight: "600" },
   restCard: {
-    backgroundColor: t.colors.heroFg,
+    backgroundColor: t.colors.card,
     borderColor: t.colors.line,
     borderRadius: 22,
     borderWidth: 1,
