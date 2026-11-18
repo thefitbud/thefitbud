@@ -51,6 +51,7 @@
 | D-W12C-12 | Z12-43: offline, the food search filters the plan and recent foods already loaded on the phone ("Offline. Showing foods saved on your phone.") | There is no full offline food index on mobile; TR-26d's copy is true for these foods | Z12-43 |
 | D-W12C-13 | Z12-43: "Changed the portion" loses its old note field and uses ½ steps; the unit under each stepper is the serving label without its leading "1 " | TR-08b mock has no note and says "Steps are ½"; the plan carries serving labels, not unit nouns | Z12-43 |
 | D-W12C-14 | Z12-43: `custom: true` on loggedItems only for `logged_foods` (`allowSaveToMyFoods`); ate-out / portion lines keep kcal totals without the coach "Add to my food library" cue | Fresh review #490 FAIL: TM-12b / MealPanel treated ate-out as a custom food | Z12-43 review fix |
+| D-W12C-15 | Z12-43: Something different sheet wraps itself in `ThemeScope scheme="system"` and uses `flexGrow/flexShrink: 0` (not `flex: 0`) for sheet sub-screens | Expo-web capture: dark sheet stayed light; `flex: 0` collapsed TR-08b/c on web | Z12-43 capture follow-up |
 
 *(Add implementer decide-and-note choices here as they arise.)*
 
@@ -69,7 +70,7 @@
 | Z12-43 | Cursor cloud `ghs_` token cannot `workflow_dispatch` device.yml (HTTP 403) | Firoz / Actions write | #490: `gh workflow run "Device gate" --ref cursor/z12-43-manual-food-db78 -f flows='launch,z12-43' -f platforms=both -f themes=both -f extras=none` |
 | Z12-43 | A meal logged from Today (Something different → Log it myself) returns to Today, which shows no TR-26f toast | Cursor (Today owner) | `TodayTab.tsx` is outside Z12-43's files; it can read `useMealSavedNotice` the way Diet does |
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
-| Z12-43 | The Something different sheet takes the overlay host's theme, not Diet's system scope | Z12-52 (sheet theme fix already listed) | `TraineeOverlay.tsx` |
+| Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |
 
 *(Z12-58: Claude-owned-area findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
 

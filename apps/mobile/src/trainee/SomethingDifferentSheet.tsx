@@ -22,7 +22,7 @@ import { Screen } from "../components/Screen";
 import { Text } from "../components/Text";
 import { plannedRowsFromAssignment, type PlannedRow } from "../lib/plannedMealItems";
 import { reportError } from "../lib/reportError";
-import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { AteOutForm } from "./food/AteOutForm";
 import { FoodNavHeader } from "./food/FoodNavHeader";
@@ -83,9 +83,18 @@ function initialRows(assignment: MealAssignment): PortionRow[] {
 /**
  * Something different (TR-08a): changed the portion (TR-08b), log it myself
  * (TR-26a) or ate out (TR-08c). In the bottom sheet each sub-screen gets a
- * real height (Z11b-5).
+ * real height (Z11b-5). The sheet follows the system theme itself so it
+ * reads right when hosted outside Diet's ThemeScope (overlay Modal).
  */
-export function SomethingDifferentSheet({
+export function SomethingDifferentSheet(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <SomethingDifferentSheetBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function SomethingDifferentSheetBody({
   assignment,
   relationshipId,
   variant = "screen",
@@ -103,9 +112,18 @@ export function SomethingDifferentSheet({
   const { height: windowHeight } = useWindowDimensions();
   // In the sheet, BottomSheet hosts children in a flexGrow:0 ScrollView, so a
   // flex:1 sub-screen collapses to 0. Give it a real height there (Z11b-5).
+  // Use flexGrow/flexShrink instead of `flex: 0`: react-native-web maps
+  // `flex: 0` to CSS `0 1 0%`, which overrides height and collapses the view.
   const subScreenStyle =
     variant === "sheet"
-      ? [styles.subScreen, { flex: 0, height: Math.min(520, Math.max(320, windowHeight * 0.75)) }]
+      ? [
+          styles.subScreen,
+          {
+            flexGrow: 0,
+            flexShrink: 0,
+            height: Math.min(520, Math.max(320, windowHeight * 0.75)),
+          },
+        ]
       : styles.subScreen;
   const coachShort = coachName.split(/\s+/)[0] ?? coachName;
   const mealName = cleanFoodLabel(assignment.mealName);

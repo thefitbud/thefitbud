@@ -22,11 +22,11 @@ No API response is stubbed. Aarav has no recent foods on the seed, so TR-26a has
 
 ## Finding 1: sub-screens collapse on web (TR-08b, TR-08c)
 
-`SomethingDifferentSheet` gives its sub-screens `{ flex: 0, height }` inside `BottomSheet`'s flexGrow:0 ScrollView (Z11b-5). React Native's Yoga reads `flex: 0` as "no flex", so the height applies. react-native-web writes CSS `flex: 0`, which is `0 1 0%`; that flex-basis wins over `height`, so the sub-screen is 0 px tall and the portion rows and the Ate out fields are not drawn (`TR-08b-raw-*`, `TR-08c-raw-*`). This is Expo-web only as far as this check can tell; the device gate must confirm the native layout. A `flexGrow: 0, flexShrink: 0` pair in place of `flex: 0` would cover both engines (not changed here: this task only produces captures).
+`SomethingDifferentSheet` used to give its sub-screens `{ flex: 0, height }` inside `BottomSheet`'s flexGrow:0 ScrollView (Z11b-5). React Native's Yoga reads `flex: 0` as "no flex", so the height applies. react-native-web writes CSS `flex: 0`, which is `0 1 0%`; that flex-basis wins over `height`, so the sub-screen was 0 px tall (`TR-08b-raw-*`, `TR-08c-raw-*`). **Fixed in product** (D-W12C-15): `flexGrow: 0, flexShrink: 0` plus height. These shots still used the harness CSS rule; re-run without the rule after the fix to confirm.
 
 ## Finding 2: the Something different sheet renders light in dark (TR-08a, TR-08b, TR-08c dark)
 
-In dark the sheet keeps the light card with dark text over a dark scrim. The TR-26 screens and the Diet tab follow the system theme; the sheet is hosted by `TraineeOverlay`'s sheet presentation, outside the Diet tab's `ThemeScope scheme="system"`, so it never gets the dark tokens. Expected fix: wrap the sheet host in `ThemeScope scheme="system"` (Z12-58 also checks that every screen is opted in). Native behaviour is unverified; on iOS the app is still pinned to light until Z12-57.
+In these shots the sheet kept the light card over a dark scrim because it was hosted outside Diet's `ThemeScope`. **Fixed in product** (D-W12C-15): the sheet wraps itself in `ThemeScope scheme="system"` (same pattern as `NudgeSheet`). Dark grades below stay GAP until the shots are re-captured.
 
 ## Grades vs v3 mocks
 
