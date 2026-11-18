@@ -1,0 +1,46 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 748F30DA-AECE-4BBC-BB38-C049FC443C80" tests="8" failures="1" time="1006.612" timestamp="2026-11-18T07:37:36">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="70.37" timestamp="2026-11-18T07:37:37" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="144.268" timestamp="2026-11-18T07:38:47" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F01 Onboarding states, intake and waiting for the coach (Z12-49)" name="F01 Onboarding states, intake and waiting for the coach (Z12-49)" classname="F01 Onboarding states, intake and waiting for the coach (Z12-49)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F01-first-install.yaml" time="151.534" timestamp="2026-11-18T07:41:11" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+      <failure>Assertion is false: "Your plan will be here as soon as it's ready\." is visible</failure>
+    </testcase>
+    <testcase id="F02 Sign in, wrong password, code request and code entry (Z12-49)" name="F02 Sign in, wrong password, code request and code entry (Z12-49)" classname="F02 Sign in, wrong password, code request and code entry (Z12-49)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02-sign-in.yaml" time="140.774" timestamp="2026-11-18T07:43:43" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F02b Auth errors on the code path and reset (Z12-49)" name="F02b Auth errors on the code path and reset (Z12-49)" classname="F02b Auth errors on the code path and reset (Z12-49)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02b-auth-errors.yaml" time="85.729" timestamp="2026-11-18T07:46:04" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" name="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" classname="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F15-settings-account.yaml" time="137.172" timestamp="2026-11-18T07:47:29" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F16 Ended coaching and the coach's restart request (Z12-49)" name="F16 Ended coaching and the coach's restart request (Z12-49)" classname="F16 Ended coaching and the coach's restart request (Z12-49)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F16-expiry-errors-ended.yaml" time="124.943" timestamp="2026-11-18T07:49:47" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F17 Role select, switch to coach view and Back (Z12-49)" name="F17 Role select, switch to coach view and Back (Z12-49)" classname="F17 Role select, switch to coach view and Back (Z12-49)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F17-role-switch.yaml" time="151.446" timestamp="2026-11-18T07:51:52" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, dual, z12-49"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

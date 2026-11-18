@@ -1,0 +1,281 @@
+{
+  "result": "mean screenshot luminance: light 0.892 (27), dark 0.18 (27)",
+  "light": 0.892,
+  "dark": 0.18,
+  "count": {
+    "light": 27,
+    "dark": 27
+  },
+  "shots": [
+    {
+      "file": "TM-08a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.134
+    },
+    {
+      "file": "TM-08a-light-android.png",
+      "theme": "light",
+      "luma": 0.881
+    },
+    {
+      "file": "TM-08c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.128
+    },
+    {
+      "file": "TM-08c-light-android.png",
+      "theme": "light",
+      "luma": 0.7
+    },
+    {
+      "file": "TM-08d-dark-android.png",
+      "theme": "dark",
+      "luma": 0.162
+    },
+    {
+      "file": "TM-08d-light-android.png",
+      "theme": "light",
+      "luma": 0.937
+    },
+    {
+      "file": "TR-01a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.126
+    },
+    {
+      "file": "TR-01a-light-android.png",
+      "theme": "light",
+      "luma": 0.881
+    },
+    {
+      "file": "TR-01b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "TR-01b-light-android.png",
+      "theme": "light",
+      "luma": 0.886
+    },
+    {
+      "file": "TR-01c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "TR-01c-light-android.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "TR-01e-dark-android.png",
+      "theme": "dark",
+      "luma": 0.13
+    },
+    {
+      "file": "TR-01e-light-android.png",
+      "theme": "light",
+      "luma": 0.876
+    },
+    {
+      "file": "TR-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "TR-03-light-android.png",
+      "theme": "light",
+      "luma": 0.927
+    },
+    {
+      "file": "TR-04-dark-android.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "TR-04-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "TR-16a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.102
+    },
+    {
+      "file": "TR-16a-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "TR-20a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.165
+    },
+    {
+      "file": "TR-20a-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "TR-20b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.078
+    },
+    {
+      "file": "TR-20b-light-android.png",
+      "theme": "light",
+      "luma": 0.965
+    },
+    {
+      "file": "TR-20c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.087
+    },
+    {
+      "file": "TR-20c-light-android.png",
+      "theme": "light",
+      "luma": 0.938
+    },
+    {
+      "file": "TR-20e-dark-android.png",
+      "theme": "dark",
+      "luma": 0.076
+    },
+    {
+      "file": "TR-20e-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "TR-20g-dark-android.png",
+      "theme": "dark",
+      "luma": 0.078
+    },
+    {
+      "file": "TR-20g-light-android.png",
+      "theme": "light",
+      "luma": 0.964
+    },
+    {
+      "file": "TR-22a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.104
+    },
+    {
+      "file": "TR-22a-light-android.png",
+      "theme": "light",
+      "luma": 0.927
+    },
+    {
+      "file": "TR-22b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.126
+    },
+    {
+      "file": "TR-22b-light-android.png",
+      "theme": "light",
+      "luma": 0.679
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.929
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    },
+    {
+      "file": "step-065-assertCondition-Your_plan_will_be_here_a-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "step-067-assertCondition-Your_plan_will_be_here_a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "z12-49-ended-code-dark-android.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "z12-49-ended-code-light-android.png",
+      "theme": "light",
+      "luma": 0.694
+    },
+    {
+      "file": "z12-49-meal-times-dark-android.png",
+      "theme": "dark",
+      "luma": 0.16
+    },
+    {
+      "file": "z12-49-meal-times-light-android.png",
+      "theme": "light",
+      "luma": 0.886
+    },
+    {
+      "file": "z12-49-past-coaching-dark-android.png",
+      "theme": "dark",
+      "luma": 0.113
+    },
+    {
+      "file": "z12-49-past-coaching-light-android.png",
+      "theme": "light",
+      "luma": 0.932
+    },
+    {
+      "file": "z12-49-quiet-hours-dark-android.png",
+      "theme": "dark",
+      "luma": 0.148
+    },
+    {
+      "file": "z12-49-quiet-hours-light-android.png",
+      "theme": "light",
+      "luma": 0.878
+    },
+    {
+      "file": "z12-49-reset-request-dark-android.png",
+      "theme": "dark",
+      "luma": 0.114
+    },
+    {
+      "file": "z12-49-reset-request-light-android.png",
+      "theme": "light",
+      "luma": 0.889
+    },
+    {
+      "file": "z12-49-role-select-from-more-dark-android.png",
+      "theme": "dark",
+      "luma": 0.136
+    },
+    {
+      "file": "z12-49-role-select-from-more-light-android.png",
+      "theme": "light",
+      "luma": 0.878
+    },
+    {
+      "file": "z12-49-wrong-code-dark-android.png",
+      "theme": "dark",
+      "luma": 0.164
+    },
+    {
+      "file": "z12-49-wrong-code-light-android.png",
+      "theme": "light",
+      "luma": 0.899
+    }
+  ]
+}
