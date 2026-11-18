@@ -12,8 +12,8 @@
 
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
-| Z12-W12C-0 Ledger | — | in review (#488) | #488 | — | this file | lighter (docs) |
-| Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | in progress (branch `cursor/z12-43-manual-food-db78`) | — | — | mocks TR-26a–f, TR-08a–c; finding 7 toast; captures pending (D-W12-34) | strongest (opus) |
+| Z12-W12C-0 Ledger | — | merged | #488 | `893691c3` | this file | lighter (docs) |
+| Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | in review | #490 | — | mocks TR-26a–f, TR-08a–c; finding 7 toast; Expo-web captures in progress; device dispatch 403 from Cursor token | strongest (opus) + opus review |
 | Z12-30 Delete account (web) | #487 (Z12-29) | blocked | — | — | fresh proof = Firebase `auth_time` (W6 follow-up) | lighter / sonnet |
 | Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | strongest |
 | Z12-49 follow-up Ended-coaching tab bar | #484 (Z12-45) | blocked | — | — | small; tab bar must show on ended screen | lighter |
@@ -27,6 +27,8 @@
 |---|---|---|---|
 | 18 Nov 2026 (launch ~16:07 IST; #470 merge was earlier that day) | `58ac1b11` | #470 (already on main at launch) | Cursor run base |
 | 18 Nov 2026 | `4982d567` | #460 (Z12-42, Claude) | unblocks Z12-43; its branch starts here |
+| 18 Nov 2026 | `893691c3` | #488 (Z12-W12C-0) | Cursor ledger on main |
+| 18 Nov 2026 | `9e8c5ef9` | #489 (Claude W12-d36) | main moved while Z12-43 built; merged into #490 |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
