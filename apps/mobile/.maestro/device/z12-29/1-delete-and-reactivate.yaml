@@ -1,0 +1,133 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-29 delete account from Privacy, archived notice, sign in again, reactivate
+tags:
+  - device
+  - trainee
+  - z12-29
+---
+# Z12-29: Account → Privacy → Delete account (BP1-delete-account-ios.png with
+# D-W12-6's copy, D-W12-25), typed DELETE, the password as the fresh sign-in
+# (D-W6-31), the archived notice with the purge date, then signing in again
+# shows the reactivate screen (BP1-reactivate-account-ios.png) and "Reactivate
+# my account" brings the account back with its coaching ended (D-W6-8).
+#
+# This really archives an account on the job's own local seeded API, so each
+# theme uses its own persona and the second theme starts from an active
+# account: siddharth.yearly (light), divya.wedding (dark). Neither is used by
+# the launch smoke flows. Env: DEVICE_THEME, QA_PASSWORD.
+- evalScript: ${output.deleteEmail = DEVICE_THEME === 'dark' ? 'divya.wedding@demo.fitbud.test' : 'siddharth.yearly@demo.fitbud.test'}
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${output.deleteEmail}
+- extendedWaitUntil:
+    visible: "Today's workout.*"
+    timeout: 60000
+
+# More → Account → Privacy (Delete account sits under Privacy).
+- tapOn: "More"
+- extendedWaitUntil:
+    visible: "Coached by .*"
+    timeout: 30000
+- tapOn: "Account"
+- extendedWaitUntil:
+    visible: "SIGN-IN"
+    timeout: 20000
+- tapOn: "Privacy"
+- extendedWaitUntil:
+    visible: "How FitBud handles your data\\."
+    timeout: 20000
+- assertVisible: "Delete account"
+- takeScreenshot: z12-29-privacy
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Delete account: the archive copy, the email for immediate deletion, typed confirm.
+- tapOn: "Delete account"
+- extendedWaitUntil:
+    visible: "We'll archive your account for 6 months\\..*"
+    timeout: 20000
+- assertVisible: "Want it deleted permanently right away\\?.*tech@thefitbud\\.com.*"
+- assertVisible: "Type DELETE to confirm"
+- assertNotVisible: ".*30 days.*"
+- tapOn:
+    id: "delete-account-confirm"
+- inputText: "DELETE"
+# Retype when the field lost a keystroke (the Android emulator drops some).
+- runFlow:
+    when:
+      notVisible: "DELETE"
+    commands:
+      - eraseText: 20
+      - inputText: "DELETE"
+- assertVisible: "DELETE"
+# Dismiss the keyboard by tapping inert text.
+- tapOn: "Next, we'll ask for your password to check it's you\\."
+- takeScreenshot: BP1-delete-account
+- tapOn:
+    id: "delete-account-continue"
+
+# Fresh proof: the password signs in again just now.
+- extendedWaitUntil:
+    visible: "Enter your password to delete your account\\."
+    timeout: 20000
+- assertVisible: "Send me a code instead"
+- tapOn:
+    id: "delete-account-password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Enter your password to delete your account\\."
+- takeScreenshot: z12-29-delete-proof
+- tapOn:
+    id: "delete-account-submit"
+
+# The session ends; the archived notice names the purge date ("Tue 18 May 2027").
+- extendedWaitUntil:
+    visible: "Your account is archived\\. Sign in before [A-Z][a-z]{2} \\d{1,2} [A-Z][a-z]{2} \\d{4} to bring it back\\."
+    timeout: 30000
+- takeScreenshot: z12-29-archived-notice
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "OK"
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 20000
+
+# Sign in again: the archived account gets the reactivate screen, not the app.
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${output.deleteEmail}
+- runFlow:
+    when:
+      notVisible: "${output.deleteEmail}.*"
+    commands:
+      - eraseText: 60
+      - inputText: ${output.deleteEmail}
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "Welcome back"
+    timeout: 60000
+- assertVisible: "Your account is archived and will be deleted for good on [A-Z][a-z]{2} \\d{1,2} [A-Z][a-z]{2} \\d{4}\\."
+- assertVisible: "Coaching that ended when you deleted your account stays ended\\. Ask your coach to restart it\\."
+- assertVisible: "Reactivate my account"
+- assertVisible: "Sign out"
+- assertVisible: "Signing out keeps it archived\\."
+- assertNotVisible: "Today's workout.*"
+- takeScreenshot: BP1-reactivate-account
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Reactivate: back into the app; coaching that ended with the deletion stays ended.
+- tapOn: "Reactivate my account"
+- extendedWaitUntil:
+    visible: "View past coaching"
+    timeout: 60000
+- assertVisible: "Coaching with .* ended on .*"
+- assertNotVisible: "Welcome back"
+- takeScreenshot: z12-29-reactivated
+- runFlow: ../../common/assert-no-crash.yaml

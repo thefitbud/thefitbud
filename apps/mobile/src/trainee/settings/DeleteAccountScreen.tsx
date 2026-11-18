@@ -451,7 +451,7 @@ const useStyles = createThemedStyles((t) => ({
   cardTitle: { color: t.colors.ink, fontSize: 19, fontWeight: "600" },
   cardBody: { color: t.colors.ink, fontSize: 16, lineHeight: 23 },
   emailBody: { color: t.colors.ink, fontSize: 15, lineHeight: 21 },
-  emailLink: { color: t.colors.brand, fontWeight: "500" },
+  emailLink: { color: t.colors.brand, fontWeight: "500", textDecorationLine: "underline" },
   hint: { lineHeight: 22, marginTop: -4 },
   lead: { lineHeight: 22, marginBottom: 14 },
   footer: { gap: 6 },
