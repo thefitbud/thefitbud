@@ -67,23 +67,36 @@ appId: com.thefitbud.mobile.staging
     when:
       notVisible: "Minimise workout"
     commands:
-      # An open session's set count is read after the card paints, and the W-18
-      # dialog comes with it; an unlogged day offers its start.
-      - extendedWaitUntil:
-          visible: "[0-9]+ of [0-9]+ sets|Log workout|Start workout|Pick up where you left off\\?"
-          timeout: 30000
+      # An open session is read a moment after the card paints, and the W-18
+      # dialog comes with it: give it that moment before looking.
       - waitForAnimationToEnd:
-          timeout: 1500
+          timeout: 4000
       - runFlow:
           when:
             visible: "Pick up where you left off\\?"
           commands:
             - tapOn: "Resume workout"
+      # No dialog: the day's own button. On a small screen a long card puts
+      # it below the fold (iOS, run 44220623583), so scroll to it.
       - runFlow:
           when:
-            notVisible: "Minimise workout"
+            notVisible: "Minimise workout|Pick up where you left off\\?"
           commands:
-            - tapOn: "Continue workout|Log workout|Start workout"
+            - scrollUntilVisible:
+                element: "Continue workout|Log workout|Start workout"
+                direction: DOWN
+                timeout: 30000
+            - runFlow:
+                when:
+                  notVisible: "Pick up where you left off\\?"
+                commands:
+                  - tapOn: "Continue workout|Log workout|Start workout"
+      # The dialog can still arrive while the card was being scrolled.
+      - runFlow:
+          when:
+            visible: "Pick up where you left off\\?"
+          commands:
+            - tapOn: "Resume workout"
 - extendedWaitUntil:
     visible: "Minimise workout"
     timeout: 30000

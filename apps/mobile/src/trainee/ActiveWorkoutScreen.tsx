@@ -12,6 +12,7 @@ import {
   Platform,
   SafeAreaView,
   ScrollView,
+  StatusBar,
   View,
 } from "react-native";
 import { Trash2 } from "lucide-react-native";
@@ -128,6 +129,8 @@ import {
 const DEFAULT_REST_SECONDS = 90;
 /** How long "skipped · Undo" stays before the skip is sent (W-09b). */
 export const SKIP_UNDO_MS = 6000;
+/** A rest found already over by more than this was missed, not just ended. */
+const REST_DONE_GRACE_MS = 3000;
 /** How long the record banner stays (W-12). */
 const RECORD_NOTICE_MS = 8000;
 
@@ -378,6 +381,12 @@ export function ActiveWorkoutScreen({
   // and never comes through here.
   useEffect(() => {
     if (rest == null || restRender.kind !== "ended") return;
+    // A rest that ended while the log was away (minimised) is simply over:
+    // "Rest done" and the buzz belong to the moment it ends.
+    if (Date.now() - rest.endsAt > REST_DONE_GRACE_MS) {
+      setRest(null);
+      return;
+    }
     const current = executionRef.current;
     const id = currentSetId(current, pickedSetId);
     const found = id ? findSessionSet(current, id) : null;
@@ -507,9 +516,12 @@ export function ActiveWorkoutScreen({
     setSheetSetId(null);
     setError(null);
     setRestDone(null);
-    // The set just logged was the picked one: the log moves on from it.
-    setPickedSetId(set.id);
-    if (firstLog) startRestForSet(set.setTargetId);
+    if (firstLog) {
+      // The log moves on from the set just logged; a correction leaves the
+      // current set where it is and starts no rest.
+      setPickedSetId(set.id);
+      startRestForSet(set.setTargetId);
+    }
 
     if (
       sessionRecordSetIds(optimistic, bestKgByName).has(set.id) &&
@@ -1211,7 +1223,7 @@ function LogFrame({
   const styles = useFrameStyles();
   return (
     <SafeAreaView style={styles.safe} accessibilityRole="summary">
-      <View style={styles.header}>{header}</View>
+      <View style={[styles.header, ANDROID_STATUS_BAR_PAD]}>{header}</View>
       <ScrollView
         ref={scrollRef}
         style={styles.scroll}
@@ -1224,6 +1236,16 @@ function LogFrame({
     </SafeAreaView>
   );
 }
+
+/**
+ * Android draws the app under a translucent status bar and its SafeAreaView
+ * adds no inset, so the pinned header clears the bar itself (device run
+ * 44220623583: the minimise button sat under the clock).
+ */
+const ANDROID_STATUS_BAR_PAD =
+  Platform.OS === "android"
+    ? { paddingTop: 8 + (StatusBar.currentHeight ?? 24) }
+    : null;
 
 const dockStyles = {
   pad: { paddingHorizontal: 12, paddingTop: 8 },

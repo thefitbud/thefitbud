@@ -100,8 +100,8 @@ tags:
 - extendedWaitUntil:
     visible: "Minimise workout"
     timeout: 30000
-# What was logged before the kill is still logged.
-- assertVisible: "Set [0-9]+, .* logged.*"
+# What was logged before the kill is still logged: the header counts it.
+- assertVisible: "[1-9][0-9]* of [0-9]+ sets"
 - runFlow: ../../common/assert-no-crash.yaml
 
 # ---- W-19: pause ------------------------------------------------------------------------------

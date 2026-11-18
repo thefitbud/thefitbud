@@ -42,6 +42,8 @@ tags:
 - assertNotVisible: "Rest done"
 
 # ---- W-27: How to ---------------------------------------------------------------
+# The exercise with logged sets, opened if it folded when its last set went in.
+- runFlow: ../../device/z12-45/show-logged-set.yaml
 - tapOn:
     text: "More for .*"
     index: 0
@@ -87,12 +89,13 @@ tags:
 - repeat:
     times: 14
     while:
-      visible: "Rest, ([1-9][0-9]*:[0-9]{2}|0:[2-5][0-9]) left"
+      visible: "Rest, ([1-9][0-9]*:[0-9]{2}|0:[4-5][0-9]) left"
     commands:
       - tapOn: "15 seconds less"
+# Under 40 s are left: let it run out on its own.
 - extendedWaitUntil:
     visible: "Rest done"
-    timeout: 40000
+    timeout: 60000
 - assertVisible: "Next: (set [0-9]+ · .*|finish workout)"
 - takeScreenshot: W-05b-rest-ended
 - tapOn: "OK"

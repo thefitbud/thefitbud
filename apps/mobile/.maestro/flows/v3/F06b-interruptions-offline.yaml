@@ -18,10 +18,17 @@ tags:
 - extendedWaitUntil:
     visible: "Minimise workout"
     timeout: 30000
-- scrollUntilVisible:
-    element: "Log set [0-9]+ ·.*"
-    direction: UP
-    timeout: 30000
+# F06 left the list at its end: back to the top, where the next set to log is.
+- repeat:
+    times: 4
+    commands:
+      - swipe:
+          start: "50%, 40%"
+          end: "50%, 85%"
+          duration: 300
+- assertVisible: "Log set [0-9]+ ·.*"
+# The header's set count before the log, to see it move.
+- copyTextFrom: "[0-9]+ of [0-9]+ sets"
 - tapOn:
     text: "Log set [0-9]+ ·.*"
     index: 0
@@ -34,7 +41,9 @@ tags:
 - extendedWaitUntil:
     visible: "Offline · sets save on your phone"
     timeout: 60000
-- assertVisible: "Set [0-9]+, .* logged.*"
+# The set is logged on the screen: the count moved on.
+- assertNotVisible: ${maestro.copiedText}
+- assertVisible: "[1-9][0-9]* of [0-9]+ sets"
 # Nothing blames the trainee or shows a raw error.
 - assertNotVisible: ".*WO-SAVE.*"
 - assertNotVisible: ".*went wrong.*"
