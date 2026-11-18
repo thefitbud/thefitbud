@@ -1,37 +1,22 @@
+import type { FitBudApiClient } from "@fitbud/api-client";
 import {
   traineeFoodSearchResponseSchema,
   type TraineeFoodSearchResponse,
 } from "@fitbud/contracts";
-import { resolveApiBaseUrl } from "./api";
 
-async function parseJson<T>(
-  response: Response,
-  label: string,
-): Promise<T> {
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    throw new Error(text || `${label} failed (${response.status}).`);
-  }
-  return (await response.json()) as T;
-}
-
-/** GET /me/foods/recent — not on FitBudApiClient public surface yet. */
-export async function fetchMeFoodRecent(
-  accessToken: string,
+/**
+ * GET /me/foods/recent: the trainee's own saved foods and the library foods
+ * from their recent logs, newest first (TR-26a "Recently logged"). Not on the
+ * client's named surface yet, so it goes through the client's typed request
+ * (auth, refresh and the error body all as for every other call).
+ */
+export function fetchMeFoodRecent(
+  api: FitBudApiClient,
 ): Promise<TraineeFoodSearchResponse> {
-  const response = await fetch(`${resolveApiBaseUrl()}/me/foods/recent`, {
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-    },
-  });
-  const body = await parseJson<{ data?: unknown } | unknown>(
-    response,
-    "Recent foods",
+  return api.request(
+    "GET",
+    "/me/foods/recent",
+    traineeFoodSearchResponseSchema,
+    { auth: true },
   );
-  const payload =
-    body && typeof body === "object" && "data" in body
-      ? (body as { data: unknown }).data
-      : body;
-  return traineeFoodSearchResponseSchema.parse(payload);
 }

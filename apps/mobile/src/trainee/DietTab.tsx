@@ -26,6 +26,7 @@ import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatCivilDate, formatNumber } from "@fitbud/core";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
+import { Snackbar } from "../components/Snackbar";
 import {
   ThemeScope,
   createThemedStyles,
@@ -76,6 +77,13 @@ import {
   WEEK_UNAVAILABLE_MESSAGE,
 } from "./TraineeDateNavigator";
 import { CoachLogBadge } from "./coach-log/CoachLogBadge";
+import { deviationLabel, LoggedMealSheet } from "./food/LoggedMealSheet";
+import { formatAmount } from "./food/logLines";
+import {
+  takeMealSaved,
+  useMealSavedNotice,
+  type MealSavedNotice,
+} from "./food/mealSavedNotice";
 
 /** Meal-type glyph by the meal's name (TR-07a): the plan carries no meal type. */
 function mealGlyph(name: string): LucideIcon {
@@ -379,6 +387,58 @@ function windowClosed(meal: MealAssignment, now: Date): boolean {
   );
 }
 
+/**
+ * Meals whose log still waits in the outbox: eaten as planned, skipped, or
+ * logged another way (`meal.deviate`, TR-08 and TR-26).
+ */
+function pendingDietLogIds(
+  outbox: ReadonlyArray<{ status: string; operation: string; recordId: string }>,
+): Set<string> {
+  const ids = pendingMealLogIds(outbox);
+  for (const row of outbox) {
+    if (
+      (row.status === "pending" || row.status === "in_flight") &&
+      row.operation === "meal.deviate"
+    ) {
+      ids.add(row.recordId);
+    }
+  }
+  return ids;
+}
+
+/** Lowercase a later item's first letter ("Roti × 2, ragi dosa"), not an acronym's. */
+function laterItemName(name: string): string {
+  if (name.length > 1 && name[1] === name[1]!.toUpperCase() && /[A-Z]/.test(name[1]!)) {
+    return name;
+  }
+  return name.charAt(0).toLowerCase() + name.slice(1);
+}
+
+/**
+ * What a changed meal's row reads after its label (TR-26f, TR-07e): the foods
+ * the trainee logged, or an ate-out meal's kcal. Null keeps the plan's line.
+ */
+function changedMealSummary(meal: MealAssignment): string | null {
+  const compliance = meal.compliance;
+  if (!compliance) return null;
+  if (compliance.deviationKind === "logged_foods") {
+    const names = (compliance.loggedItems ?? []).map((item, index) => {
+      const name = cleanFoodLabel(item.name);
+      const shown = index === 0 ? name : laterItemName(name);
+      return item.quantity != null && item.quantity !== 1
+        ? `${shown} × ${formatAmount(item.quantity)}`
+        : shown;
+    });
+    return names.length > 0 ? names.join(", ") : null;
+  }
+  if (compliance.deviationKind === "restaurant") {
+    const kcal = compliance.loggedTotals?.energyKcal;
+    if (kcal != null) return `${formatNumber(Math.round(kcal))} kcal`;
+    return compliance.notes?.trim() || null;
+  }
+  return null;
+}
+
 type DietTabProps = {
   relationship: CoachingRelationship;
   selectedDate: string;
@@ -524,7 +584,7 @@ function DietTabBody({
     void (async () => {
       let pendingIds: Set<string>;
       try {
-        pendingIds = pendingMealLogIds(await sync.store.listOutbox());
+        pendingIds = pendingDietLogIds(await sync.store.listOutbox());
       } catch (err) {
         // Unreadable outbox: keep what this phone applied as waiting rather
         // than claiming it was sent.
@@ -603,6 +663,45 @@ function DietTabBody({
     optimisticStatus.current.set(id, status);
     setOptimisticVersion((n) => n + 1);
   }
+
+  /**
+   * TR-26f: a meal saved on another screen (food search, Something
+   * different) comes back here as a toast. Taken once, so the toast shows on
+   * this visit only. A log still in the outbox reads as changed and waiting.
+   */
+  const savedNotice = useMealSavedNotice(relationship.id);
+  const [savedToast, setSavedToast] = useState<MealSavedNotice | null>(null);
+  const [viewMealId, setViewMealId] = useState<string | null>(null);
+  /** How each waiting changed meal was logged, for its "not sent yet" row. */
+  const pendingKind = useRef(new Map<string, MealSavedNotice["kind"]>());
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    [],
+  );
+  useEffect(() => {
+    if (!savedNotice) return;
+    // Taking the notice re-renders with none, so the outbox read below must
+    // not be tied to this effect's cleanup.
+    const notice = savedNotice;
+    takeMealSaved(notice.id);
+    setSavedToast(notice);
+    void (async () => {
+      let waiting = false;
+      try {
+        waiting = pendingDietLogIds(await sync.store.listOutbox()).has(notice.assignmentId);
+      } catch (err) {
+        reportError("DietTab.listOutbox", err);
+      }
+      if (!mountedRef.current || !waiting) return;
+      pendingKind.current.set(notice.assignmentId, notice.kind);
+      optimisticStatus.current.set(notice.assignmentId, "modified");
+      setOptimisticVersion((n) => n + 1);
+      setPendingSendIds((ids) => new Set(ids).add(notice.assignmentId));
+    })();
+  }, [savedNotice, sync]);
 
   async function confirmMeal(assignment: MealAssignment) {
     setActingId(assignment.id);
@@ -785,7 +884,9 @@ function DietTabBody({
                 </Text>
               ) : waiting ? (
                 <Text variant="subhead" numberOfLines={1}>
-                  Eaten as planned · not sent yet
+                  {meal.status === "modified"
+                    ? `${deviationLabel(pendingKind.current.get(meal.id))} · not sent yet`
+                    : "Eaten as planned · not sent yet"}
                 </Text>
               ) : isSkipped ? (
                 <Text variant="subhead" numberOfLines={1}>
@@ -795,7 +896,7 @@ function DietTabBody({
                 <Text variant="subhead" numberOfLines={1}>
                   {meal.status === "modified" ? (
                     <Text variant="subhead" tone="warn" style={styles.strong}>
-                      Changed
+                      {deviationLabel(meal.compliance?.deviationKind)}
                     </Text>
                   ) : missed ? (
                     <Text variant="subhead" tone="crit" style={styles.strong}>
@@ -803,7 +904,8 @@ function DietTabBody({
                     </Text>
                   ) : null}
                   {meal.status === "modified" || missed ? " · " : ""}
-                  {summary}
+                  {(meal.status === "modified" ? changedMealSummary(meal) : null) ??
+                    summary}
                 </Text>
               )}
               {isLogged ? (
@@ -965,6 +1067,7 @@ function DietTabBody({
               )}
             </Pressable>
             <Pressable
+              testID="diet-something-different"
               accessibilityRole="button"
               accessibilityLabel="Something different"
               onPress={() => openSomethingDifferent(meal)}
@@ -1027,6 +1130,14 @@ function DietTabBody({
   const staleError =
     loadError != null && bundle !== undefined && !loadFailedOffline;
   const sentCount = pendingSendIds.size;
+  const viewMeal = viewMealId
+    ? (assignments.find((meal) => meal.id === viewMealId) ?? null)
+    : null;
+  const savedToastMessage = savedToast
+    ? savedToast.kcal != null
+      ? `${savedToast.mealName} saved · ${formatNumber(savedToast.kcal)} kcal`
+      : `${savedToast.mealName} saved`
+    : null;
   const offlineNote =
     sentCount > 0
       ? `Offline. ${sentCount === 1 ? "1 meal is" : `${sentCount} meals are`} saved on your phone and will send when you’re back.`
@@ -1044,6 +1155,23 @@ function DietTabBody({
         showHeader={false}
         refreshing={refreshing}
         onRefresh={() => void onRefresh()}
+        footerVariant="toast"
+        footer={
+          savedToast && savedToastMessage ? (
+            <Snackbar
+              key={savedToast.id}
+              leadingCheck
+              message={savedToastMessage}
+              actionLabel="View"
+              onAction={() => {
+                if (savedToast.localDate !== selectedDate) {
+                  onSelectDate(savedToast.localDate);
+                }
+                setViewMealId(savedToast.assignmentId);
+              }}
+            />
+          ) : undefined
+        }
       >
         <View style={styles.swipeBody}>
           <View style={styles.ttlrow}>
@@ -1210,6 +1338,15 @@ function DietTabBody({
             </>
           )}
 
+          {viewMeal ? (
+            <LoggedMealSheet
+              meal={viewMeal}
+              coachName={coachName}
+              timeZone={timeZone}
+              waitingToSend={pendingSendIds.has(viewMeal.id)}
+              onClose={() => setViewMealId(null)}
+            />
+          ) : null}
           {plannedMeal ? (
             <PlannedMealSheet
               meal={plannedMeal}
