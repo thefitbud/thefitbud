@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 6FADA5E0-924D-4EBB-85F7-49F548846824" tests="4" failures="4" time="407.332" timestamp="2026-11-18T08:43:30">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="89.322" timestamp="2026-11-18T08:43:30" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+      <failure>Assertion is false: "Sign in with a code instead" is visible</failure>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="120.333" timestamp="2026-11-18T08:45:00" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+      <failure>Assertion is false: "Sign in with a code instead" is visible</failure>
+    </testcase>
+    <testcase id="Z12-36 trainer Needs you (TM-01a) and the nudge sheet (TM-04b)" name="Z12-36 trainer Needs you (TM-01a) and the nudge sheet (TM-04b)" classname="Z12-36 trainer Needs you (TM-01a) and the nudge sheet (TM-04b)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/4-trainer-needs-you-nudge.yaml" time="78.591" timestamp="2026-11-18T08:47:00" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-36"/>
+      </properties>
+      <failure>Assertion is false: "Sign in with a code instead" is visible</failure>
+    </testcase>
+    <testcase id="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" name="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" classname="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F21-review-resolve-notes.yaml" time="118.208" timestamp="2026-11-18T08:48:19" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-51"/>
+      </properties>
+      <failure>Assertion is false: "Sign in with a code instead" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
