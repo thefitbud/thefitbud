@@ -17,7 +17,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 |---|---|---|---|---|---|---|
 | Z12-W12C-0 Ledger | — | merged | #488 | `893691c3` | this file | Cursor Auto |
 | Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | **merged** | #490 | `4aa28299` | Expo web CLOSE; device gate [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS (F08 soft-skips when seed already logged); harness Screen/Results + iOS center tap fixes | Cursor Auto |
-| Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **in review** | (this PR) | — | fresh proof = password re-login bearer + `credentials:omit` (cookie would win otherwise); cookie `created_at`≠Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
+| Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **in review** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | — | fresh proof = password re-login bearer + `credentials:omit` (cookie would win otherwise); cookie `created_at`≠Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
 | Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 (Z12-45) | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
 | Z12-52 Coach logs a meal | Z12-43 ✅ + #486 (Z12-51) | blocked on #486 | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
