@@ -46,7 +46,7 @@ MATCH, CLOSE or GAP against `docs/design/v3/png/` (light) and `png-dark/` (dark)
 | TR-20f | unit test only | needs unsent logs; render test covers Send first / Sign out anyway / Cancel |
 | TR-20g | CLOSE / CLOSE | "At least 8 characters" (the API's rule; the mock says 10) |
 | TR-21 | not captured | the app-level error view uses the TR-21 layout (CenteredState); a failing /me after a stored session is needed to show it |
-| TR-22a | CLOSE / CLOSE | standalone (no tab bar) until TraineeShell is free (#461) |
+| TR-22a | CLOSE / CLOSE | standalone (no tab bar): TraineeShell is still held (Z12-46 → Z12-45); the embedded wiring is a Z12-49 follow-up PR after Z12-45 merges |
 | TR-22b | CLOSE / CLOSE | ended relationship, not "coaching with Asha now" |
 | TR-23 | not captured | unchanged content (only the reason line has a source), tokens and dark |
 | TR-24 | render test | `AuthScreen.sessionExpired.render.test.tsx`; shown after a refused refresh |
@@ -58,13 +58,22 @@ MATCH, CLOSE or GAP against `docs/design/v3/png/` (light) and `png-dark/` (dark)
 
 ## Device gate
 
-Run 44191354664 (`device.yml`, flows `launch,z12-49`) on code commit `ae1297709966d3748486a8d8a527691b84c8e44b` (the job logs' `git log -1`). An earlier run, 44179371246 on `76a913f`, found two flow and label bugs, fixed in `ae12977`.
+Run 44226630437 (`device.yml`, flows `launch,z12-49`) on code commit `c104ce91673e924b984a5b70bbca8f0ea6b6276d` (the job logs' `app:` line, both platforms). Every device shot in this folder comes from that run.
 
 | Platform | Light | Dark | Device log |
 |---|---|---|---|
 | iOS | 8/8 PASS | 8/8 PASS | clean |
-| Android | 7/8: launch smoke dropped keystrokes ("arav.ontrack"), a known emulator flake | 6/8: F01 tapped Sign out while the account sheet slid in (flow now waits for the sheet); F02b typed email dropped (keystroke flake) | clean |
+| Android | 8/8 PASS | 8/8 PASS | clean |
 
-All 17 device-reachable screens have shots on both platforms and both themes (Android shots come from the flows that passed in the other theme or before the failing step). Device grades are CLOSE for every captured screen, with the same notes as Expo web.
+All 17 device-reachable screens have shots on both platforms and both themes. Device grades are CLOSE for every captured screen, with the same notes as Expo web; TR-20a's title now clears the Android status bar (`130a5ce`).
 
-Postdate the evidence: `130a5ce` (v3 screens clear the Android status bar; the More title sat under it in the shots, also on `main` before this PR) and the F01 wait-for-sheet fix. Not re-run on the device (one scoped run plus one re-run per the gate budget).
+### Earlier runs
+
+- 44179371246 on `76a913f`: two flow and label bugs, fixed in `ae12977`.
+- 44191354664 on `ae12977` and 44200084620 on `178c7dfc`: Android light launch smoke and Android dark F01 failed both times (root causes below).
+- 44218640571 on `f32d2817`: launch smoke passed everywhere; F01 failed on Android light and dark and iOS light at the new "sheet still open" check, which proved the sheet was closing by itself; iOS dark F02b showed "Couldn't reach FitBud" on code entry once (it passed in the other theme, in the two runs before and in the run after).
+
+### Review fixes: root causes
+
+1. **Launch smoke, Android light.** Not the tap anchor. The failure shot on both runs shows the email field holding `arav.ontrack@demo.fitbud.test`: on a cold first launch the emulator lost the first keystroke of `aarav.ontrack@…`, the API answered 401 `INVALID_CREDENTIALS`, and TR-01e showed. The shared subflows (`common/sign-in-password.yaml`, `common/sign-in-code-request.yaml`) and the v3 flows now erase and retype the identifier when the typed value is not on screen, the guard `device/z12-36/sign-in-password.yaml` already used. No assertion was loosened.
+2. **F01 Sign out, Android dark.** An app bug. TR-04 checked for the plan every 20 s with `refreshSession`, which routes through "loading" and remounts WaitingReviewScreen, so the account sheet closed (and an open Reminders page was dropped) every 20 s. The flow tapped Sign out on a sheet that had just shut. The check now reads the relationships and reloads the session only when this relationship has moved on from "submitted" or the session was refused (`WaitingReviewScreen.poll.render.test.tsx`). The flow also waits for the screen to settle, taps once and checks that the sheet is still open before it taps Sign out.
