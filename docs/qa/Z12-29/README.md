@@ -31,4 +31,16 @@ MATCH, CLOSE or GAP against the named frame. Never a pixel claim.
 
 ## Device gate
 
-Filled in from the device run (see the PR).
+Run 44296122295 (`device.yml`, flows `launch,z12-29`), app commit `90dae2cce1e66778c6e48544efd6415407b4968a` (the job logs' `app:` line, both platforms). Every device shot in this folder comes from that run.
+
+| Platform | Light | Dark | Device log |
+|---|---|---|---|
+| iOS | 3/3 PASS | 3/3 PASS | clean |
+| Android | 3/3 PASS | 3/3 PASS | clean |
+
+Flows: `device/launch/*` (launch smoke) and `device/z12-29/1-delete-and-reactivate.yaml`. The second flow covers the whole change on the device: Account → Privacy → Delete account → typed DELETE → password re-sign-in → real `POST /account/deletion` on the job's local seeded API → archived notice → sign in again → reactivate screen → Reactivate → app (coaching ended). Personas: `siddharth.yearly` (light) and `divya.wedding` (dark), one per theme so dark starts from an active account; neither is used by the launch flows.
+
+Device grades: BP1-delete-account and BP1-reactivate-account CLOSE on both platforms and themes (same notes as Expo web).
+
+### Earlier runs
+- 44256764329 and 44257442762 (`e24fa276`, `d7c6d07a`): the launch smoke passed; the z12-29 flow failed on both platforms. Two root causes. (1) An app bug: the delete screen's own styles resolved outside M2Page's theme scope, so its cards stayed light in dark mode. Fixed by wrapping the screen in `ThemeScope scheme="system"`. (2) A flow bug: the flow tapped hint text that the keyboard covered. It now dismisses the keyboard by tapping the card text above the field. Both fixes are in `9ad91957`.
