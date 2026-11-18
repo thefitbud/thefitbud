@@ -57,16 +57,20 @@ tags:
 - tapOn:
     id: "delete-account-confirm"
 - inputText: "DELETE"
+# Dismiss the keyboard by tapping inert text above it (the field sits under it).
+- tapOn: "We'll archive your account for 6 months\\..*"
 # Retype when the field lost a keystroke (the Android emulator drops some).
 - runFlow:
     when:
       notVisible: "DELETE"
     commands:
+      - tapOn:
+          id: "delete-account-confirm"
       - eraseText: 20
       - inputText: "DELETE"
+      - tapOn: "We'll archive your account for 6 months\\..*"
 - assertVisible: "DELETE"
-# Dismiss the keyboard by tapping inert text.
-- tapOn: "Next, we'll ask for your password to check it's you\\."
+- assertVisible: "Next, we'll ask for your password to check it's you\\."
 - takeScreenshot: BP1-delete-account
 - tapOn:
     id: "delete-account-continue"

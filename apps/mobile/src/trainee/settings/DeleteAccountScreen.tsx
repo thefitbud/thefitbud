@@ -18,7 +18,7 @@ import { createMobileApiClient } from "../../lib/api";
 import { authFailure, mismatchedResponseCopy } from "../../lib/authErrors";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
-import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import {
   CodeBoxes,
   InlineError,
@@ -108,7 +108,17 @@ type ProofMode = "password" | "code";
  * Typed confirm, then a fresh sign-in (password or a code), then the request.
  * On success the session ends and the archived notice shows (AuthProvider).
  */
-export function DeleteAccountScreen({ onBack }: Props) {
+export function DeleteAccountScreen(props: Props) {
+  // The screen's own styles must read the system theme too, not only M2Page's
+  // subtree (Z12-49 pattern), so the cards go dark in dark mode.
+  return (
+    <ThemeScope scheme="system">
+      <DeleteAccountBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function DeleteAccountBody({ onBack }: Props) {
   const { api, me, selectedRole, selectRole, finishAccountDeletion } = useAuth();
   const s1 = stage1Api(api);
   const theme = useTheme();
