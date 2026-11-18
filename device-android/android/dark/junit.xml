@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="1" time="258.257" timestamp="2026-11-18T14:59:16">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="49.644" timestamp="2026-11-18T14:59:16" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="46.237" timestamp="2026-11-18T15:00:06" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F08 Log it myself (Z12-43)" name="F08 Log it myself (Z12-43)" classname="F08 Log it myself (Z12-43)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F08-log-it-myself.yaml" time="162.327" timestamp="2026-11-18T15:00:52" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-43"/>
+      </properties>
+      <failure>No visible element found: "Something different"</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - F8CE1DDE-E8E8-4C70-9EB9-3CD52D5D3A1D" tests="3" failures="1" time="433.169" timestamp="2026-11-18T20:50:45">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="112.652" timestamp="2026-11-18T20:50:45" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="116.18" timestamp="2026-11-18T20:52:37" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F08 Log it myself (Z12-43)" name="F08 Log it myself (Z12-43)" classname="F08 Log it myself (Z12-43)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F08-log-it-myself.yaml" time="204.146" timestamp="2026-11-18T20:54:34" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-43"/>
+      </properties>
+      <failure>No visible element found: "Something different"</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

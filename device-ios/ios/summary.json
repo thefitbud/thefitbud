@@ -1,0 +1,112 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 3 flows failed",
+    "dark: 1 of 3 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F08-log-it-myself.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F08 Log it myself (Z12-43)",
+          "message": "No visible element found: \"Something different\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F08 Log it myself (Z12-43)",
+          "message": "No visible element found: \"Something different\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 126 s",
+      "mode": "cache-hit",
+      "seconds": 126,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.936 (3), dark 0.695 (3)",
+      "light": 0.936,
+      "dark": 0.695,
+      "count": {
+        "light": 3,
+        "dark": 3
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.935
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.935
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.947
+        },
+        {
+          "file": "step-020-scrollUntilVisible-Something_different-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.202
+        },
+        {
+          "file": "step-020-scrollUntilVisible-Something_different-light-ios.png",
+          "theme": "light",
+          "luma": 0.926
+        }
+      ]
+    }
+  ]
+}
