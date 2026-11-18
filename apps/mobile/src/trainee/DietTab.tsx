@@ -1067,6 +1067,7 @@ function DietTabBody({
               )}
             </Pressable>
             <Pressable
+              testID="diet-something-different"
               accessibilityRole="button"
               accessibilityLabel="Something different"
               onPress={() => openSomethingDifferent(meal)}
