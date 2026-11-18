@@ -61,6 +61,7 @@ import {
   useTraineeDayCache,
   useTraineeWeek,
 } from "./useTraineeDayCache";
+import { isNetworkFailure } from "../trainer/attention/offline";
 import { mealDueStatusLabel, nextUp } from "./nextUp";
 import {
   buildNutritionRings,
@@ -361,19 +362,6 @@ type DietDayBundle = {
   meals: MealAssignment[];
   day: MeDay | null;
 };
-
-/**
- * A load that failed for want of a connection. Diet then shows its offline
- * banner over the cached day rather than an error (TR-07d).
- */
-function isNetworkFailure(err: unknown): boolean {
-  return (
-    err instanceof TypeError ||
-    (err instanceof ApiClientError &&
-      (err.status === 0 || err.code === "NETWORK_ERROR")) ||
-    (err instanceof Error && /fetch|network|offline|aborted/i.test(err.message))
-  );
-}
 
 /** The meal's window has opened (or passed): only then does it offer a log. */
 function windowOpened(meal: MealAssignment, now: Date): boolean {

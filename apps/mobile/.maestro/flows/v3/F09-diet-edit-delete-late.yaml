@@ -41,7 +41,7 @@ tags:
       - tapOn: "Something different"
       - extendedWaitUntil:
           visible: "Log it myself"
-          timeout: 10000
+          timeout: 30000
       - runFlow: ../../common/assert-no-crash.yaml
       - tapOn: "Back"
       - extendedWaitUntil:

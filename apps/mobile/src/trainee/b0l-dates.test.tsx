@@ -111,7 +111,7 @@ const api = new Proxy(
       if (key === "then") return undefined;
       if (key === "listMealAssignments")
         return async () => {
-          if (offline) throw new Error("offline");
+          if (offline) throw new TypeError("Network request failed");
           return { items: meals, nextCursor: null };
         };
       if (key === "getMeDay") return async () => dayTotals;

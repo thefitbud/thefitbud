@@ -466,6 +466,38 @@ describe("Diet day v3 (Z12-42)", () => {
     expect(screen.queryByText(CONNECTION_COPY)).toBeNull();
   });
 
+  it("a programming TypeError never reads as a connection problem", async () => {
+    items = [];
+    listFails = true;
+    listError = new TypeError(
+      "Cannot read properties of undefined (reading 'items')",
+    );
+    renderDiet();
+    await waitFor(() =>
+      expect(screen.getByText("Couldn’t load your meals")).toBeTruthy(),
+    );
+    expect(screen.getByText("Something went wrong. Try again.")).toBeTruthy();
+    expect(screen.queryByText(CONNECTION_COPY)).toBeNull();
+  });
+
+  it("a 500 whose message mentions the network shows its own message, not the connection copy", async () => {
+    items = [];
+    listFails = true;
+    listError = new ApiClientError({
+      code: "UPSTREAM_FAILED",
+      message: "The network provider failed. Try again.",
+      requestId: "r2",
+      status: 500,
+    });
+    renderDiet();
+    await waitFor(() =>
+      expect(
+        screen.getByText("The network provider failed. Try again."),
+      ).toBeTruthy(),
+    );
+    expect(screen.queryByText(CONNECTION_COPY)).toBeNull();
+  });
+
   it("a connection failure with nothing cached shows the connection copy", async () => {
     items = [];
     listFails = true;
