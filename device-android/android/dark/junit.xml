@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="0" time="140.083" timestamp="2026-11-18T13:17:06">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="48.848" timestamp="2026-11-18T13:17:06" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="44.927" timestamp="2026-11-18T13:17:55" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F08 Log it myself (Z12-43)" name="F08 Log it myself (Z12-43)" classname="F08 Log it myself (Z12-43)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F08-log-it-myself.yaml" time="46.222" timestamp="2026-11-18T13:18:40" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-43"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
