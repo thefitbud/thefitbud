@@ -106,6 +106,55 @@ Method: local API on port 8796 against this worktree's own D1 (`pnpm db:reset`),
 
 **Minimised bar (W-14):** one mount in `TraineeShell.tsx` above the tab bar on Today, Diet, Progress and More. Hidden on the Workout tab — that tab keeps only the hero's Continue workout / Finish now.
 
-## 6. Device gate
+## 6. Device gate (evidence — do not invent PNGs)
 
-See the PR body for the run, the per-platform results and the control list. Shots: `docs/qa/Z12-45/<ID>-<theme>-<platform>.png`.
+Shots land as `docs/qa/Z12-45/<ID>-<theme>-<platform>.png` only after a **final passing** device run. Until then, **[44402973183](https://github.com/thefitbud/thefitbud/actions/runs/44402973183)** (`launch,z12-45`, pre-must-fix head) is the interim device evidence. PNGs from that run are **not** copied into this folder yet.
+
+**Not ready for device yet** — more code may land; one scoped device run after all must-fixes.
+
+### Covered by 44402973183 (screens no must-fix 1–4 touched)
+
+Valid interim for these IDs (both themes × iOS + Android unless noted):
+
+| IDs | Notes |
+|---|---|
+| W-02, W-03, W-03b, W-04, W-05a, W-05b | F03 |
+| W-08, W-09b, W-13 | F04 |
+| W-12 | iOS light only in the run (no dark / no Android shot) |
+| W-15, W-18, W-19 | F06 part 1 |
+| W-26 | F05 History |
+
+### Need re-capture after must-fixes 1–4
+
+| ID | Must-fix | Why the 44402973183 shot is stale |
+|---|---|---|
+| W-09 | #4 How to | Menu always offered "How to do it"; now hidden when the plan exercise has no note/muscles/equipment |
+| W-14 | #2 minimised bar | Shot was on the **Workout** tab with bar + hero; bar now mounts only on Today/Diet/Progress/More (capture over **Diet**) |
+| W-16 | #1 sheet seq | F06c race: "Finish early?" after a sheet/keypad close (iOS light failed once in this run) |
+| W-20 | #3 offline | Header line truncated ("…on yo…"); now wraps on its own row |
+| W-27 | #4 How to | Empty How to ("coach hasn't added notes…") was shown; empty How to is hidden / opens History; library steps still need the trainee API |
+
+### Not in 44402973183 / not built
+
+| IDs | Status |
+|---|---|
+| W-10, W-21a, W-21b, W-22 | Not built (§1 / Decide) |
+| W-12 dark + Android | Missing from the run; re-capture with the final pass |
+| W-17a, W-17b | Z12-44 (unchanged here) |
+
+## 7. Decide / Follow-ups (scope cut)
+
+**Decide (scope):** Add set, Add exercise (W-21a/b), Replace (W-22), Note (W-10), Delete set, Remove from today, the coach "edited" mark, and the "finished early" label were **not built**. They need schema, contracts, api-client, sync ops and coach surfaces. Controls that would do nothing are not drawn.
+
+**Named backend follow-up task:** **Z12-45fu Active-workout trainee mutations** — one API/contracts/migration task for: trainee-added sets and exercises (W-21a/b), coach alternatives + replace link (W-22), trainee exercise note (W-10), removed-set / remove-from-today distinct from skip, stored edited flag and finish reason ("finished early"). Mobile UI follows once those fields exist.
+
+**W-27 library steps API (must-fix #4 follow-up):** trainee read of `exercise_library_instructions` + muscles/equipment (contracts outside this task). Device W-27 after that lands. Already noted in W12-cursor Follow-ups.
+
+**Should-fixes deferred (not cheap / need tests):**
+
+| Item | Why deferred |
+|---|---|
+| Bump `execution.recordVersion` on set complete/skip (corrections) in `workouts.ts` | pause/complete bump today; set handlers emit without bump — needs API tests for version conflict |
+| `executionRef.current.recordVersion` in pause and finish | closure stale-version risk; needs outbox/conflict tests |
+| "Mark not done" → skipped: relabel button or strengthen caption | sheet already says coach sees skipped; copy choice only |
+| One exercise-name source for minimised bar and exercise card | both already use `exercise.name` / `minimisedLine`; hero "Up next" truncates separately — confirm before changing |

@@ -100,6 +100,9 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-30 | Cookie session still uses `web_sessions.created_at` as authTime (API); UI avoids it for delete by bearer+omit. True Firebase `auth_time` on cookie sessions needs an API change outside `files_owned`. | W6 / API | do not weaken UI proof |
 | Z12-46fu (e) | Device evidence: TR-14a iOS was shot on "Loading form…"; TR-14a/c/d lack dark captures | Z12-58 | wait for the form before the shot; capture dark TR-14a/c/d |
 | Z12-45 #484 | Trainee API for library How-to: steps (`exercise_library_instructions`), muscles, equipment already in DB; no trainee contract/route exposes them. Mobile hides empty How to until then. | later API + mobile | contracts outside Z12-45; device W-27 after |
+| Z12-45 #484 | **Scope cut:** Add set, Add exercise (W-21a/b), Replace (W-22), Note (W-10), Delete set, Remove from today, "edited" mark, "finished early" label not built — need schema/contracts/coach surfaces. Do not draw dead controls. Named follow-up: **Z12-45fu Active-workout trainee mutations**. | Z12-45fu (API + mobile) | see `docs/qa/Z12-45/README.md` §7 |
+| Z12-45 #484 | Should-fix deferred: bump `recordVersion` on set complete/skip; `executionRef.current.recordVersion` in pause/finish; Mark-not-done copy vs skipped; single exercise-name source for bar/card | #484 or Z12-45fu | needs API/outbox tests; not done in docs pass |
+| Z12-45 #484 | Device evidence: 44402973183 interim; re-capture W-09, W-14 (Diet), W-16, W-20, W-27 after must-fixes 1–4. **Not ready for device yet.** | #484 final device run | no PNGs invented; see README §6 |
 
 *(Z12-58 findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
 

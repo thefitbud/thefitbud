@@ -185,56 +185,56 @@ Template row (W12-PROMPT §3):
 | W-01d | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-01d-plan-changed-banner.png` | — |
 | W-01e | light | yes · device/z12-44/1 (swipe to a planned day) | CLOSE | CLOSE | `docs/qa/Z12-44/W-01e-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-01e-workout-tab-future-day.png` | Z12-44: "Opens on …" in place of Start, no options; Monday-first strip; run 44144088662 (app 7d8ababa) |
 | W-01e | dark | yes · device/z12-44/1 (swipe to a planned day) | CLOSE | CLOSE | `docs/qa/Z12-44/W-01e-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-01e-workout-tab-future-day.png` | Z12-44: "Opens on …" in place of Start, no options; Monday-first strip; run 44144088662 (app 7d8ababa) |
-| W-02 | light | — | — | — | — | `docs/design/v3/png/trainee/W-02-active-start.png` | — |
-| W-02 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-02-active-start.png` | — |
-| W-03 | light | yes · state: Rohan → Workout → Sat Lower B → set 1 logged (device/z12-36/3) | GAP | GAP | docs/qa/Z12-36/W-03-light-ios.png, …-android.png | `docs/design/v3/png/trainee/W-03-active-mid.png` | Z12-36 anchor for primitives only: active workout not migrated yet (v2 indigo log bar and set rows); Inter is in |
-| W-03 | dark | yes · state: Rohan → Workout → Sat Lower B → set 1 logged (device/z12-36/3) | GAP | GAP | docs/qa/Z12-36/W-03-dark-ios.png, …-android.png | `docs/design/v3/png-dark/trainee/W-03-active-mid.png` | renders light under system dark by design: not opted in to dark until its own W12 task sets `<Screen v3>` (Z12-36 decision 3); status bar follows (dark content) |
-| W-03b | light | — | — | — | — | `docs/design/v3/png/trainee/W-03b-active-end-of-list.png` | — |
-| W-03b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-03b-active-end-of-list.png` | — |
-| W-04 | light | — | — | — | — | `docs/design/v3/png/trainee/W-04-active-keypad.png` | — |
-| W-04 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-04-active-keypad.png` | — |
-| W-05a | light | — | — | — | — | `docs/design/v3/png/trainee/W-05a-rest-running.png` | — |
-| W-05a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-05a-rest-running.png` | — |
-| W-05b | light | — | — | — | — | `docs/design/v3/png/trainee/W-05b-rest-ended.png` | — |
-| W-05b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-05b-rest-ended.png` | — |
-| W-08 | light | — | — | — | — | `docs/design/v3/png/trainee/W-08-swipe-set.png` | — |
-| W-08 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-08-swipe-set.png` | — |
-| W-09 | light | — | — | — | — | `docs/design/v3/png/trainee/W-09-exercise-menu.png` | — |
-| W-09 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-09-exercise-menu.png` | — |
-| W-09b | light | — | — | — | — | `docs/design/v3/png/trainee/W-09b-exercise-skipped.png` | — |
-| W-09b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-09b-exercise-skipped.png` | — |
-| W-10 | light | — | — | — | — | `docs/design/v3/png/trainee/W-10-exercise-note.png` | — |
-| W-10 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-10-exercise-note.png` | — |
-| W-12 | light | — | — | — | — | `docs/design/v3/png/trainee/W-12-pr-moment.png` | — |
-| W-12 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-12-pr-moment.png` | — |
-| W-13 | light | — | — | — | — | `docs/design/v3/png/trainee/W-13-edit-logged-set.png` | — |
-| W-13 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-13-edit-logged-set.png` | — |
-| W-14 | light | — | — | — | — | `docs/design/v3/png/trainee/W-14-minimised-bar.png` | — |
-| W-14 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-14-minimised-bar.png` | — |
-| W-15 | light | — | — | — | — | `docs/design/v3/png/trainee/W-15-discard-confirm.png` | — |
-| W-15 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-15-discard-confirm.png` | — |
-| W-16 | light | — | — | — | — | `docs/design/v3/png/trainee/W-16-finish-early.png` | — |
-| W-16 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-16-finish-early.png` | — |
+| W-02 | light | yes · F03 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact (not copied to `docs/qa/Z12-45/` yet); Expo web `docs/qa/Z12-45/web/W-02-light-web.png` | `docs/design/v3/png/trainee/W-02-active-start.png` | Z12-45: v3 nav, stats strip, every exercise open; subtitle "From Rahul’s plan" (no week/day source); Pause pill beside Finish (W-19); no Note chip, no Add set (scope cut). Interim shot valid until final device run |
+| W-02 | dark | yes · F03 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-02-dark-web.png` | `docs/design/v3/png-dark/trainee/W-02-active-start.png` | as light |
+| W-03 | light | yes · F03 (run 44402973183); also Z12-36/3 Sat Lower B | CLOSE | CLOSE | run 44402973183 artifact (supersedes Z12-36 v2 indigo shots for grading); Expo web `docs/qa/Z12-45/web/W-03-light-web.png` | `docs/design/v3/png/trainee/W-03-active-mid.png` | Z12-45: mid-session log; "Previous" is a dash when the seed has no prior set rows; done exercises fold. Interim shot valid |
+| W-03 | dark | yes · F03 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-03-dark-web.png` | `docs/design/v3/png-dark/trainee/W-03-active-mid.png` | as light; opted in via ThemeScope / active log layout |
+| W-03b | light | yes · F03 (run 44402973183) | GAP | GAP | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-03b-light-web.png` | `docs/design/v3/png/trainee/W-03b-active-end-of-list.png` | Discard at end of list only; **Add exercise not built** (needs schema/contracts — Z12-45fu). Interim Discard shot still valid |
+| W-03b | dark | yes · F03 (run 44402973183) | GAP | GAP | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-03b-dark-web.png` | `docs/design/v3/png-dark/trainee/W-03b-active-end-of-list.png` | as light |
+| W-04 | light | yes · F03 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-04-light-web.png` | `docs/design/v3/png/trainee/W-04-active-keypad.png` | v3 keypad ±2.5 / ±1, Next, Log, kg or Bodyweight; kg/Bodyweight link in keypad head. Interim shot valid (sheet-seq destination; content unchanged) |
+| W-04 | dark | yes · F03 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-04-dark-web.png` | `docs/design/v3/png-dark/trainee/W-04-active-keypad.png` | as light |
+| W-05a | light | yes · F03 / F05 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-05a-light-web.png` | `docs/design/v3/png/trainee/W-05a-rest-running.png` | Slim rest bar from end instant; docked above list bottom (not floating). Interim shot valid |
+| W-05a | dark | yes · F03 / F05 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-05a-dark-web.png` | `docs/design/v3/png-dark/trainee/W-05a-rest-running.png` | as light |
+| W-05b | light | yes · F03 / F05 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-05b-light-web.png` | `docs/design/v3/png/trainee/W-05b-rest-ended.png` | "Rest done" bar; two buzzes at end (native sound → Z12-57). Interim shot valid |
+| W-05b | dark | yes · F03 / F05 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-05b-dark-web.png` | `docs/design/v3/png-dark/trainee/W-05b-rest-ended.png` | as light |
+| W-08 | light | yes · F04 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web stand-in `docs/qa/Z12-45/web/W-08-set-options-light-web.png` | `docs/design/v3/png/trainee/W-08-swipe-set.png` | Swipe Skip on device; set number opens the same Skip (Delete set not built). Interim shot valid |
+| W-08 | dark | yes · F04 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web stand-in `docs/qa/Z12-45/web/W-08-set-options-dark-web.png` | `docs/design/v3/png-dark/trainee/W-08-swipe-set.png` | as light |
+| W-09 | light | yes · F04 (run 44402973183) | GAP | GAP | run 44402973183 artifact (stale after must-fix #4); Expo web `docs/qa/Z12-45/web/W-09-light-web.png` | `docs/design/v3/png/trainee/W-09-exercise-menu.png` | **Replace and Remove from today not built** (Z12-45fu). How to row now conditional (must-fix #4) — re-capture after fixes. No dead controls drawn |
+| W-09 | dark | yes · F04 (run 44402973183) | GAP | GAP | run 44402973183 artifact (stale); Expo web `docs/qa/Z12-45/web/W-09-dark-web.png` | `docs/design/v3/png-dark/trainee/W-09-exercise-menu.png` | as light |
+| W-09b | light | yes · F04 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-09b-light-web.png` | `docs/design/v3/png/trainee/W-09b-exercise-skipped.png` | Skip exercise + Undo toast; coach sees skipped. Interim shot valid |
+| W-09b | dark | yes · F04 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-09b-dark-web.png` | `docs/design/v3/png-dark/trainee/W-09b-exercise-skipped.png` | as light |
+| W-10 | light | no · not built | GAP | GAP | none | `docs/design/v3/png/trainee/W-10-exercise-note.png` | Exercise note / Note chip not built (needs trainee note on exercise execution — Z12-45fu). No dead control |
+| W-10 | dark | no · not built | GAP | GAP | none | `docs/design/v3/png-dark/trainee/W-10-exercise-note.png` | as light |
+| W-12 | light | yes · F03 (run 44402973183, iOS) | CLOSE | GAP | run 44402973183 iOS light only; Expo web dark `docs/qa/Z12-45/web/W-12-dark-web.png` (no light web: seed lift had no earlier kg) | `docs/design/v3/png/trainee/W-12-pr-moment.png` | Banner + PR mark from strength read model. Android + dark device missing in 44402973183 — re-capture on final run |
+| W-12 | dark | yes · Expo web; device dark missing in 44402973183 | GAP | GAP | Expo web `docs/qa/Z12-45/web/W-12-dark-web.png`; no device dark/android in run | `docs/design/v3/png-dark/trainee/W-12-pr-moment.png` | Web proves copy/structure; device dark + Android pending final pass |
+| W-13 | light | yes · F04 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-13-light-web.png` | `docs/design/v3/png/trainee/W-13-edit-logged-set.png` | Save changes + Mark not done; no Delete set; no "edited" mark (no stored flag). Interim shot valid |
+| W-13 | dark | yes · F04 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-13-dark-web.png` | `docs/design/v3/png-dark/trainee/W-13-edit-logged-set.png` | as light |
+| W-14 | light | yes · F06 (run 44402973183); code must-fix #2 | CLOSE | CLOSE | run 44402973183 artifact **stale** (Workout tab with bar+hero); Expo web `docs/qa/Z12-45/web/W-14-light-web.png`; **re-capture over Diet** after #2 | `docs/design/v3/png/trainee/W-14-minimised-bar.png` | Shell mount on Today/Diet/Progress/More; hidden on Workout. Grade from code + web; device shot must be over Diet on final run |
+| W-14 | dark | yes · F06 (run 44402973183); code must-fix #2 | CLOSE | CLOSE | run 44402973183 artifact **stale**; Expo web `docs/qa/Z12-45/web/W-14-dark-web.png`; re-capture over Diet | `docs/design/v3/png-dark/trainee/W-14-minimised-bar.png` | as light |
+| W-15 | light | yes · F06 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-15-light-web.png` | `docs/design/v3/png/trainee/W-15-discard-confirm.png` | Copy: workout recorded as skipped (server `workout.skip`). Interim shot valid |
+| W-15 | dark | yes · F06 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-15-dark-web.png` | `docs/design/v3/png-dark/trainee/W-15-discard-confirm.png` | as light |
+| W-16 | light | yes · F03 / F06c (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact **re-capture** after sheet-seq must-fix #1; Expo web `docs/qa/Z12-45/web/W-16-light-web.png` | `docs/design/v3/png/trainee/W-16-finish-early.png` | Unlogged list + Go to; copy without "finished early" label (no finish reason). F06c iOS light failed once pre-fix — re-prove after #1 |
+| W-16 | dark | yes · F03 / F06c (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-16-dark-web.png`; re-capture with #1 | `docs/design/v3/png-dark/trainee/W-16-finish-early.png` | as light |
 | W-17a | light | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17a-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-17a-summary.png` | Z12-44: no RPE picker, note or record card (no backend after a finish); RPE shows read-only when recorded; run 44144088662 (app 7d8ababa) |
 | W-17a | dark | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17a-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-17a-summary.png` | Z12-44: no RPE picker, note or record card (no backend after a finish); RPE shows read-only when recorded; run 44144088662 (app 7d8ababa) |
 | W-17b | light | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17b-light-ios.png`, `…-android.png` | `docs/design/v3/png/trainee/W-17b-summary-shared.png` | Z12-44: ticks equal "N of M done" (ISSUE-MAP #10); copy without "the record and your note"; Monday-first; run 44144088662 (app 7d8ababa) |
 | W-17b | dark | yes · device/z12-44/1 and /2 | CLOSE | CLOSE | `docs/qa/Z12-44/W-17b-dark-ios.png`, `…-android.png` | `docs/design/v3/png-dark/trainee/W-17b-summary-shared.png` | Z12-44: ticks equal "N of M done" (ISSUE-MAP #10); copy without "the record and your note"; Monday-first; run 44144088662 (app 7d8ababa) |
-| W-18 | light | — | — | — | — | `docs/design/v3/png/trainee/W-18-resume-after-kill.png` | — |
-| W-18 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-18-resume-after-kill.png` | — |
-| W-19 | light | — | — | — | — | `docs/design/v3/png/trainee/W-19-paused.png` | — |
-| W-19 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-19-paused.png` | — |
-| W-20 | light | — | — | — | — | `docs/design/v3/png/trainee/W-20-active-offline.png` | — |
-| W-20 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-20-active-offline.png` | — |
-| W-21a | light | — | — | — | — | `docs/design/v3/png/trainee/W-21a-add-exercise.png` | — |
-| W-21a | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-21a-add-exercise.png` | — |
-| W-21b | light | — | — | — | — | `docs/design/v3/png/trainee/W-21b-added-exercise.png` | — |
-| W-21b | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-21b-added-exercise.png` | — |
-| W-22 | light | — | — | — | — | `docs/design/v3/png/trainee/W-22-replace-exercise.png` | — |
-| W-22 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-22-replace-exercise.png` | — |
-| W-26 | light | — | — | — | — | `docs/design/v3/png/trainee/W-26-exercise-history.png` | — |
-| W-26 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-26-exercise-history.png` | — |
-| W-27 | light | — | — | — | — | `docs/design/v3/png/trainee/W-27-exercise-how-to.png` | — |
-| W-27 | dark | — | — | — | — | `docs/design/v3/png-dark/trainee/W-27-exercise-how-to.png` | — |
+| W-18 | light | yes · F06 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-18-light-web.png` | `docs/design/v3/png/trainee/W-18-resume-after-kill.png` | Resume dialog after relaunch. Interim shot valid |
+| W-18 | dark | yes · F06 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-18-dark-web.png` | `docs/design/v3/png-dark/trainee/W-18-resume-after-kill.png` | as light |
+| W-19 | light | yes · F06 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-19-light-web.png` | `docs/design/v3/png/trainee/W-19-paused.png` | Pause text pill on the right; banner with stopped time. Interim shot valid |
+| W-19 | dark | yes · F06 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-19-dark-web.png` | `docs/design/v3/png-dark/trainee/W-19-paused.png` | as light |
+| W-20 | light | yes · F06b (run 44402973183); code must-fix #3 | CLOSE | CLOSE | run 44402973183 artifact **stale** (truncated offline line); Expo web `docs/qa/Z12-45/web/W-20-light-web.png`; **re-capture** after wrap fix | `docs/design/v3/png/trainee/W-20-active-offline.png` | Header "Offline · sets save on your phone" on its own wrapping row (must-fix #3). Grade from code + web |
+| W-20 | dark | yes · F06b (run 44402973183); code must-fix #3 | CLOSE | CLOSE | run 44402973183 artifact **stale**; Expo web `docs/qa/Z12-45/web/W-20-dark-web.png`; re-capture | `docs/design/v3/png-dark/trainee/W-20-active-offline.png` | as light |
+| W-21a | light | no · not built | GAP | GAP | none | `docs/design/v3/png/trainee/W-21a-add-exercise.png` | Add exercise not built (schema/contracts/coach — Z12-45fu). No dead control |
+| W-21a | dark | no · not built | GAP | GAP | none | `docs/design/v3/png-dark/trainee/W-21a-add-exercise.png` | as light |
+| W-21b | light | no · not built | GAP | GAP | none | `docs/design/v3/png/trainee/W-21b-added-exercise.png` | "Added by you" not built (Z12-45fu) |
+| W-21b | dark | no · not built | GAP | GAP | none | `docs/design/v3/png-dark/trainee/W-21b-added-exercise.png` | as light |
+| W-22 | light | no · not built | GAP | GAP | none | `docs/design/v3/png/trainee/W-22-replace-exercise.png` | Replace / coach alternatives not built (Z12-45fu). No dead control |
+| W-22 | dark | no · not built | GAP | GAP | none | `docs/design/v3/png-dark/trainee/W-22-replace-exercise.png` | as light |
+| W-26 | light | yes · F05 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-26-light-web.png` | `docs/design/v3/png/trainee/W-26-exercise-history.png` | This session + last three finished of the same workout day; earlier sessions empty on seed. Interim shot valid |
+| W-26 | dark | yes · F05 (run 44402973183) | CLOSE | CLOSE | run 44402973183 artifact; Expo web `docs/qa/Z12-45/web/W-26-dark-web.png` | `docs/design/v3/png-dark/trainee/W-26-exercise-history.png` | as light |
+| W-27 | light | yes · F05 (run 44402973183); code must-fix #4 | GAP | GAP | run 44402973183 artifact **stale** (empty How to); Expo web `docs/qa/Z12-45/web/W-27-light-web.png`; **re-capture** after #4 | `docs/design/v3/png/trainee/W-27-exercise-how-to.png` | No coach video or numbered library steps (trainee API follow-up). Empty How to hidden (must-fix #4). Still GAP until library steps/video have a backend source |
+| W-27 | dark | yes · F05 (run 44402973183); code must-fix #4 | GAP | GAP | run 44402973183 artifact **stale**; Expo web `docs/qa/Z12-45/web/W-27-dark-web.png`; re-capture | `docs/design/v3/png-dark/trainee/W-27-exercise-how-to.png` | as light |
 
 ## Trainer (TM-)
 
