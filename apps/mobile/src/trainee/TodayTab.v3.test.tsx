@@ -15,6 +15,9 @@ import {
 } from "@fitbud/contracts";
 import { mockAuth, render, screen, waitFor, fireEvent, act } from "../test/render";
 import { localDateInTimezone } from "../lib/dates";
+import { Appearance } from "react-native";
+import { ThemeProvider } from "../providers/ThemeProvider";
+import { themes } from "@fitbud/ui-mobile";
 
 const TIME_ZONE = "Asia/Kolkata";
 const TODAY = localDateInTimezone(TIME_ZONE);
@@ -143,6 +146,7 @@ const workoutAssignment = workoutAssignmentSchema.parse({
 
 let failDay = false;
 let failOutbox = false;
+let apiReachable: boolean | null = null;
 let holdDay: Promise<void> | null = null;
 let outboxRows: { status: string; payloadJson: string }[] = [];
 let workouts: unknown[] = [];
@@ -209,6 +213,10 @@ vi.mock("../sync/SyncProvider", async () => {
   );
   return {
     ...actual,
+    useReachability: () =>
+      apiReachable === null
+        ? null
+        : { isReachable: () => apiReachable, subscribe: () => () => undefined },
     useSyncEngine: () => ({
       pullAndApply: vi.fn(async () => undefined),
       store: {
@@ -297,6 +305,7 @@ beforeEach(() => {
   markRead.mockClear();
   resume.mockClear();
   failOutbox = false;
+  apiReachable = null;
   outboxRows = [];
   Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
   failDay = false;
@@ -364,6 +373,46 @@ describe("Today v3 summary", () => {
       screen.getByText(/^2 exercises(?: · about \d+ min)? · 6 sets$/),
     ).toBeTruthy();
     expect(screen.getByLabelText("Start workout")).toBeTruthy();
+  });
+
+  it("dark: the workout hero sits on heroB, never on the same colour as its text (Z12-46)", async () => {
+    workouts = [workoutAssignment];
+    meals = [meal(1, "Early morning", "pending")];
+    vi.spyOn(Appearance, "getColorScheme").mockReturnValue("dark");
+    render(
+      <ThemeProvider>
+        <TodayTab
+          relationship={relationship}
+          planState={effectivePlanStateFor(livePlan)}
+          planCacheError={null}
+          selectedDate={TODAY}
+          onSelectDate={onSelectDate}
+          onStartWorkout={() => undefined}
+          onOpenDiet={() => undefined}
+          onOpenCheckin={() => undefined}
+          onRefreshPlan={() => undefined}
+          onOpenOverlay={openOverlay}
+        />
+      </ThemeProvider>,
+    );
+    const title = await screen.findByText("Lower body B");
+    const dark = themes.dark.colors;
+    // "rgb(242, 242, 246)" and "rgba(242, 242, 246, 1.00)" are the same colour.
+    const rgbOf = (css: string) => (css.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const toRgb = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      return [n >> 16, (n >> 8) & 255, n & 255];
+    };
+    expect(dark.heroB).not.toBe(dark.heroFg);
+    expect(rgbOf(getComputedStyle(title).color)).toEqual(toRgb(dark.heroFg));
+    let node: HTMLElement | null = title;
+    let bg = "";
+    while (node && !bg) {
+      const c = getComputedStyle(node).backgroundColor;
+      if (c && !/^rgba\(0, 0, 0, 0(\.0+)?\)$/.test(c) && c !== "transparent") bg = c;
+      node = node.parentElement;
+    }
+    expect(rgbOf(bg)).toEqual(toRgb(dark.heroB));
   });
 
   it("a session the list has not caught up with reads Continue, as on Workout (Z12-44)", async () => {
@@ -862,6 +911,16 @@ describe("Today header, past notice and done card (Z10-20)", () => {
       await screen.findByRole("button", { name: "Sync status, Synced" }),
     );
     expect(openOverlay).toHaveBeenCalledWith({ screen: "sync" });
+  });
+
+  it("header: offline with nothing waiting reads 'Offline', never 'Synced' (TR-06e)", async () => {
+    apiReachable = false;
+    renderToday();
+    await screen.findByText("Meals");
+    expect(
+      await screen.findByRole("button", { name: "Sync status, Offline" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Sync status, Synced" })).toBeNull();
   });
 
   it("header: a failed outbox row changes the sync button's label", async () => {
