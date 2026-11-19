@@ -1,16 +1,15 @@
 appId: com.thefitbud.mobile.staging
 ---
-# Subflow (no tags). From Today, opens the Workout tab and waits for its week.
-# "Workout" also names a tile on Today; the tab is the later match. If the first tap
-# left Today on screen (its macro summary is still there), tap the tab bar's match.
-- tapOn: "Workout"
-- runFlow:
-    when:
-      visible: ".*of [0-9,]+ kcal"
-    commands:
-      - tapOn:
-          text: "Workout"
-          index: 1
+# Subflow (no tags). From Today (or Diet/Progress), opens the Workout tab and
+# waits for its week. Tap the tab bar by testID — never the Today tile labelled
+# "Workout", which Maestro can hit first and leave the shell on the wrong tab
+# (iOS dark W-03 on Diet, 44517473406). Fail loudly if Workout did not open.
+- tapOn:
+    id: "tab-workout"
+- assertVisible:
+    id: "workout-tab-root"
+- assertNotVisible:
+    id: "diet-summary"
 - extendedWaitUntil:
     notVisible: "Loading workouts…"
     timeout: 30000

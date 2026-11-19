@@ -1088,7 +1088,7 @@ function WorkoutDayView(props: DayViewProps) {
   } = props;
 
   return (
-    <View style={styles.swipeBody}>
+    <View style={styles.swipeBody} testID="workout-tab-root">
       <View style={styles.ttlrow}>
         <View style={styles.titles}>
           <Text variant="subhead" tone="ink3" testID="day-eyebrow">

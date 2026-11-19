@@ -29,19 +29,9 @@ tags:
 # Drain check-in review banner; prove Today with an above-the-fold marker (FitBud #485).
 - runFlow: ../../common/wait-trainee-today-ready.yaml
 
-# "Workout" also names a tile on Today; the tab is the later match. If the first tap
-# left Today on screen (its macro summary is still there), tap the tab bar's match.
-- tapOn: "Workout"
-- runFlow:
-    when:
-      visible: ".*of [0-9,]+ kcal"
-    commands:
-      - tapOn:
-          text: "Workout"
-          index: 1
-- extendedWaitUntil:
-    notVisible: "Loading workouts…"
-    timeout: 30000
+# Tab bar by testID (not the Today "Workout" tile). Assert Workout before the
+# strip / select-day steps so a wrong tab fails here (44517473406 iOS dark).
+- runFlow: ../z12-44/open-workout-tab.yaml
 - runFlow: ../z12-44/ist-days.yaml
 - runFlow:
     when:
