@@ -8,7 +8,7 @@ import { stepsChipText } from "./today/TodaySummaryCard";
 
 describe("Z12-46fu Steps chip copy", () => {
   it("uses short Set up so the chip fits at 360 dp", () => {
-    expect(stepsChipText({ status: "not_synced" })).toEqual({
+    expect(stepsChipText({ status: "not_synced", target: null })).toEqual({
       value: "Set up",
       a11y: "Steps: set up steps",
     });
