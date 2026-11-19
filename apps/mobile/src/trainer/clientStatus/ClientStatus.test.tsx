@@ -241,7 +241,10 @@ describe("ClientStatusScreen", () => {
     });
     fireEvent.click(screen.getByText("Nudge…"));
     await screen.findByText("Nudge Kavya");
-    expect(screen.getByText("Lower body A is waiting. Can you fit it in soon?")).toBeTruthy();
+    // Body is filled in a useEffect one tick after the heading (NudgeSheet).
+    expect(
+      await screen.findByText("Lower body A is waiting. Can you fit it in soon?"),
+    ).toBeTruthy();
   });
 
   it("ended client: read-only summary, no Reactivate, no live reads", async () => {
