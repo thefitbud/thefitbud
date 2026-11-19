@@ -592,6 +592,19 @@ describe("exercise menu and set actions (W-08, W-09, W-09b, W-13)", () => {
 });
 
 describe("finish, pause, minimise and discard (W-14, W-15, W-16, W-19)", () => {
+  it("Finish early opens when the set sheet closes and Finish is requested in the same tick", () => {
+    renderScreen("20 kg");
+    tap("Set 2 options");
+    expect(screen.getByText("Set 2 · Romanian deadlift")).toBeTruthy();
+    // Same tick as a fast tap (and the F06c race): dismiss the set sheet and
+    // request Finish together. requestFinish must still present "Finish early?".
+    act(() => {
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss sheet" }));
+      fireEvent.click(screen.getByRole("button", { name: "Finish workout" }));
+    });
+    expect(screen.getByText("Finish early?")).toBeTruthy();
+  });
+
   it("Finish mid-session lists what is not logged; Go to makes that set current; Finish anyway completes", async () => {
     const onFinished = vi.fn();
     renderScreen("20 kg", twoExercises(), { onFinished });

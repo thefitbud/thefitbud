@@ -24,7 +24,11 @@ import {
   sessionSetCounts,
   unloggedExercises,
 } from "../workoutSession";
-import { ConfirmDialog, FinishSheet, afterModalCloses } from "./log/LogSheets";
+import {
+  ConfirmDialog,
+  FinishSheet,
+  useModalCloseGate,
+} from "./log/LogSheets";
 
 /** Executions already asked about since the app started. */
 const asked = new Set<string>();
@@ -63,6 +67,7 @@ export function OpenSessionPrompts({
 }) {
   const theme = useTheme();
   const sync = useSyncEngine();
+  const sheetGate = useModalCloseGate();
   const [resumeOpen, setResumeOpen] = useState(false);
   const [finishOpen, setFinishOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -99,7 +104,7 @@ export function OpenSessionPrompts({
     setResumeOpen(false);
     if (pending.total - pending.done > 0 || execution.requireSessionRpe) {
       setSessionRpe(execution.sessionRpe);
-      if (fromDialog) afterModalCloses(() => setFinishOpen(true));
+      if (fromDialog) sheetGate.afterClose(() => setFinishOpen(true));
       else setFinishOpen(true);
       return;
     }
@@ -169,11 +174,12 @@ export function OpenSessionPrompts({
             variant: "dangerQuiet",
             onPress: () => {
               setResumeOpen(false);
-              afterModalCloses(() => setDiscardOpen(true));
+              sheetGate.afterClose(() => setDiscardOpen(true));
             },
           },
         ]}
         onDismiss={() => setResumeOpen(false)}
+        onClosed={sheetGate.notifyClosed}
       />
       <FinishSheet
         visible={finishOpen}
@@ -190,6 +196,7 @@ export function OpenSessionPrompts({
         }}
         onFinish={() => finish(sessionRpe)}
         onDismiss={() => setFinishOpen(false)}
+        onClosed={sheetGate.notifyClosed}
       />
       <DiscardDialog
         visible={discardOpen}
@@ -197,6 +204,7 @@ export function OpenSessionPrompts({
         coachFirst={coachFirst}
         onDiscard={discard}
         onDismiss={() => setDiscardOpen(false)}
+        onClosed={sheetGate.notifyClosed}
       />
     </>
   );

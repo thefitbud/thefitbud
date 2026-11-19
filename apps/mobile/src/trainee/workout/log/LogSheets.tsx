@@ -4,7 +4,7 @@
  * Discard (W-15) and "Pick up where you left off?" (W-18).
  */
 import { useEffect, useState, type ReactNode } from "react";
-import { Modal, Platform, Pressable, TextInput, View } from "react-native";
+import { Modal, Pressable, TextInput, View } from "react-native";
 import {
   ChevronRight,
   CirclePlay,
@@ -30,15 +30,12 @@ import {
 } from "../../../workout/shared";
 import type { UnloggedExercise } from "../../workoutSession";
 
-/**
- * Run `open` once a sheet or dialog that is closing has gone. iOS will not
- * present a modal while another is still animating out, so one that opens in
- * the same tick as the other closes never shows there.
- */
-export function afterModalCloses(open: () => void): void {
-  if (Platform.OS === "ios") setTimeout(open, 900);
-  else open();
-}
+export {
+  MODAL_CLOSE_FALLBACK_MS,
+  createModalCloseGate,
+  useModalCloseGate,
+  type ModalCloseGate,
+} from "./modalCloseGate";
 
 /* ------------------------------------------------------- exercise menu */
 
@@ -53,6 +50,7 @@ export function ExerciseMenuSheet({
   onAskCoach,
   onSkip,
   onDismiss,
+  onClosed,
 }: {
   visible: boolean;
   name: string;
@@ -66,13 +64,20 @@ export function ExerciseMenuSheet({
   onAskCoach?: () => void;
   onSkip: () => void;
   onDismiss: () => void;
+  /** iOS: Modal finished leaving — see `useModalCloseGate`. */
+  onClosed?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
   const coach = coachFirst === "your coach" ? "Your coach" : coachFirst;
   const icon = (node: ReactNode) => <View style={styles.menuIcon}>{node}</View>;
   return (
-    <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
+    <BottomSheet
+      visible={visible}
+      headerless
+      onDismiss={onDismiss}
+      onClosed={onClosed}
+    >
       <View style={styles.menuHead}>
         <View style={styles.tile}>
           <Dumbbell color={theme.colors.brand} size={20} strokeWidth={2} />
@@ -194,6 +199,7 @@ export function SetSheet({
   onMarkNotDone,
   onSkip,
   onDismiss,
+  onClosed,
 }: {
   visible: boolean;
   mode: SetSheetMode;
@@ -212,6 +218,8 @@ export function SetSheet({
   onMarkNotDone: () => void;
   onSkip: () => void;
   onDismiss: () => void;
+  /** iOS: Modal finished leaving — see `useModalCloseGate`. */
+  onClosed?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -242,7 +250,12 @@ export function SetSheet({
   const coach = coachFirst === "your coach" ? "Your coach" : coachFirst;
 
   return (
-    <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
+    <BottomSheet
+      visible={visible}
+      headerless
+      onDismiss={onDismiss}
+      onClosed={onClosed}
+    >
       <View>
         <Text variant="headline" accessibilityRole="header">
           {title}
@@ -339,6 +352,7 @@ export function FinishSheet({
   onGoTo,
   onFinish,
   onDismiss,
+  onClosed,
 }: {
   visible: boolean;
   unlogged: readonly UnloggedExercise[];
@@ -351,12 +365,19 @@ export function FinishSheet({
   onGoTo: (row: UnloggedExercise) => void;
   onFinish: () => void;
   onDismiss: () => void;
+  /** iOS: Modal finished leaving — see `useModalCloseGate`. */
+  onClosed?: () => void;
 }) {
   const styles = useStyles();
   const early = notLogged > 0;
   const coach = coachFirst === "your coach" ? "Your coach" : coachFirst;
   return (
-    <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
+    <BottomSheet
+      visible={visible}
+      headerless
+      onDismiss={onDismiss}
+      onClosed={onClosed}
+    >
       <View>
         <Text variant="title" accessibilityRole="header">
           {early ? "Finish early?" : "Finish workout?"}
@@ -452,6 +473,7 @@ export function ConfirmDialog({
   body,
   actions,
   onDismiss,
+  onClosed,
 }: {
   visible: boolean;
   icon: ReactNode;
@@ -461,6 +483,8 @@ export function ConfirmDialog({
   actions: readonly DialogAction[];
   /** Hardware back and a tap outside. */
   onDismiss: () => void;
+  /** iOS: Modal finished leaving — see `useModalCloseGate`. */
+  onClosed?: () => void;
 }) {
   const styles = useStyles();
   return (
@@ -470,6 +494,7 @@ export function ConfirmDialog({
       statusBarTranslucent
       visible={visible}
       onRequestClose={onDismiss}
+      onDismiss={onClosed}
     >
       <View style={styles.dialogRoot} accessibilityViewIsModal>
         <Pressable

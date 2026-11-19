@@ -89,9 +89,9 @@ import {
 import {
   ConfirmDialog,
   ExerciseMenuSheet,
-  afterModalCloses,
   FinishSheet,
   SetSheet,
+  useModalCloseGate,
   type SetSheetMode,
 } from "./workout/log/LogSheets";
 import {
@@ -236,6 +236,8 @@ export function ActiveWorkoutScreen({
   const sync = useSyncEngine();
   const { api, me } = useAuth();
   const reachable = useApiReachable();
+  /** iOS: open the next sheet only after the closing Modal's onDismiss. */
+  const sheetGate = useModalCloseGate();
   const [error, setError] = useState<string | null>(null);
   const [finishOpen, setFinishOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
@@ -630,12 +632,24 @@ export function ActiveWorkoutScreen({
   }
 
   function requestFinish() {
-    if (notLogged > 0 || execution.requireSessionRpe) {
-      setKeypad(null);
+    if (!(notLogged > 0 || execution.requireSessionRpe)) {
+      finishWorkout();
+      return;
+    }
+    // Close keypad (not a Modal) at once. If a sheet or dialog is still up,
+    // wait for its Modal onDismiss before presenting "Finish early?" — opening
+    // in the same tick never shows on iOS (F06c run 44402973183).
+    const modalOpen =
+      menuExerciseId != null || sheetSetId != null || discardOpen;
+    setKeypad(null);
+    setMenuExerciseId(null);
+    setSheetSetId(null);
+    setDiscardOpen(false);
+    if (!modalOpen) {
       setFinishOpen(true);
       return;
     }
-    finishWorkout();
+    sheetGate.afterClose(() => setFinishOpen(true));
   }
 
   function finishWorkout() {
@@ -752,7 +766,12 @@ export function ActiveWorkoutScreen({
     if (paused) return;
     setPickedSetId(set.id);
     setRestDone(null);
-    setKeypad({ field, replace: true });
+    // Set sheet is a Modal; open the keypad only after it has left on iOS.
+    const sheetWasOpen = sheetSetId != null;
+    setSheetSetId(null);
+    const showKeypad = () => setKeypad({ field, replace: true });
+    if (sheetWasOpen) sheetGate.afterClose(showKeypad);
+    else showKeypad();
   }
 
   function keypadKey(key: string) {
@@ -1074,20 +1093,26 @@ export function ActiveWorkoutScreen({
         }
         onHowTo={() => {
           if (!menuExercise) return;
-          setDetail({ exerciseExecutionId: menuExercise.id, tab: "how_to" });
+          const id = menuExercise.id;
           setMenuExerciseId(null);
+          sheetGate.afterClose(() =>
+            setDetail({ exerciseExecutionId: id, tab: "how_to" }),
+          );
         }}
         onHistory={() => {
           if (!menuExercise) return;
-          setDetail({ exerciseExecutionId: menuExercise.id, tab: "history" });
+          const id = menuExercise.id;
           setMenuExerciseId(null);
+          sheetGate.afterClose(() =>
+            setDetail({ exerciseExecutionId: id, tab: "history" }),
+          );
         }}
         onAskCoach={
           onAskCoach
             ? () => {
                 const name = menuExercise?.name;
                 setMenuExerciseId(null);
-                afterModalCloses(() => onAskCoach(name));
+                sheetGate.afterClose(() => onAskCoach(name));
               }
             : undefined
         }
@@ -1099,6 +1124,7 @@ export function ActiveWorkoutScreen({
           );
         }}
         onDismiss={() => setMenuExerciseId(null)}
+        onClosed={sheetGate.notifyClosed}
       />
 
       <SetSheet
@@ -1118,6 +1144,7 @@ export function ActiveWorkoutScreen({
           if (sheet) skipWithUndo([sheet.set.id], `Set ${sheetNumber} skipped`);
         }}
         onDismiss={() => setSheetSetId(null)}
+        onClosed={sheetGate.notifyClosed}
       />
 
       <FinishSheet
@@ -1132,6 +1159,7 @@ export function ActiveWorkoutScreen({
         onGoTo={goTo}
         onFinish={finishWorkout}
         onDismiss={() => setFinishOpen(false)}
+        onClosed={sheetGate.notifyClosed}
       />
 
       <DiscardDialog
@@ -1140,6 +1168,7 @@ export function ActiveWorkoutScreen({
         coachFirst={coachFirst}
         onDiscard={discardWorkout}
         onDismiss={() => setDiscardOpen(false)}
+        onClosed={sheetGate.notifyClosed}
       />
     </ThemeScope>
   );
@@ -1152,12 +1181,14 @@ export function DiscardDialog({
   coachFirst,
   onDiscard,
   onDismiss,
+  onClosed,
 }: {
   visible: boolean;
   logged: number;
   coachFirst: string;
   onDiscard: () => void;
   onDismiss: () => void;
+  onClosed?: () => void;
 }) {
   const theme = useTheme();
   const coach = coachFirst === "your coach" ? "Your coach" : coachFirst;
@@ -1177,6 +1208,7 @@ export function DiscardDialog({
         { label: "Keep logging", variant: "secondary", onPress: onDismiss },
       ]}
       onDismiss={onDismiss}
+      onClosed={onClosed}
     />
   );
 }
