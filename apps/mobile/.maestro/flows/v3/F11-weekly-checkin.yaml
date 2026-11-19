@@ -1,0 +1,88 @@
+appId: com.thefitbud.mobile.staging
+name: F11 Weekly check-in, sent, and a reviewed one (Z12-46)
+tags:
+  - device
+  - trainee
+  - z12-46
+---
+# F11 (Z12-46): the weekly check-in from Today, through the form and review to Sent
+# (TR-14d), then a reviewed check-in from Progress (TR-14g, read-only).
+#
+# Account: Meera (`meera.ack`, local demo seed, password from QA_PASSWORD). Her
+# check-in dated today is a draft the trainee can start (the seed makes one per
+# demo day; her form requires the "Wellbeing" line, filled where it shows), and her
+# 8 Nov check-in is reviewed. ASSERTED, not skipped: a seed
+# without them fails here. Writes one submitted check-in to the local DB.
+#
+# Screens and screenshots (named by v3 screen ID):
+#   TR-14a  the form, step 1      TR-14c  the review step
+#   TR-14d  Sent                  TR-14g  a reviewed check-in
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: meera.ack@demo.fitbud.test
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    notVisible: ".*Checking for a due check-in.*"
+    timeout: 30000
+# The check-in card sits low on Today. Its error state would say "CHK-"; it must not.
+# The device run seeds once and runs both themes, so the second theme finds the
+# check-in the first one sent: that state is asserted (the card now reads "Next
+# check-in <day>"), and TR-14a, 14c and 14d come from the first theme only.
+- assertNotVisible: ".*CHK-.*"
+- scrollUntilVisible:
+    element: "Start|Next check-in.*"
+    timeout: 30000
+# First theme (light): the seed has a due check-in, so "Start" MUST be there and the
+# send path runs. A missing check-in fails here instead of skipping (D-W12-37).
+- runFlow:
+    when:
+      true: ${DEVICE_THEME != 'dark'}
+    commands:
+      - assertVisible: "Start"
+      - runFlow: ../../common/z12-46-send-checkin.yaml
+# Second theme (dark): the first theme already sent the one check-in the seed has, so
+# the card reads "Next check-in <day>". That is the only state allowed to skip the
+# send path, and only here. A dark-only run still sees "Start" and sends.
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
+      visible: "Start"
+    commands:
+      - runFlow: ../../common/z12-46-send-checkin.yaml
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
+      visible: "Next check-in.*"
+    commands:
+      # Reason: the light run in this job already sent this seed's check-in (one local DB
+      # per job), so the send path (TR-14a/c/d) is not repeated in dark.
+      - assertNotVisible: "Start"
+- runFlow:
+    when:
+      visible: "Next check-in.*"
+    commands:
+      - takeScreenshot: TR-14-card-next-checkin
+
+# TR-14g: a reviewed check-in opens read-only, with the coach's reply.
+- tapOn: "Progress"
+- scrollUntilVisible:
+    element: "Sun 8 Nov.*"
+    timeout: 30000
+# The row can stop under the floating tab bar (iOS), where a tap lands on Diet: lift it.
+- scroll
+- tapOn: "Sun 8 Nov.*"
+- extendedWaitUntil:
+    visible: "Your answers"
+    timeout: 30000
+- assertNotVisible: "Continue"
+- assertNotVisible: "Send to .*"
+- takeScreenshot: TR-14g-checkin-reviewed
+- runFlow: ../../common/assert-no-crash.yaml

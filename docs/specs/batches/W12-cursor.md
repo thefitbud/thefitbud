@@ -13,7 +13,7 @@
 
 ## Task list and status
 
-Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu → Z12-52 → Z12-53 → Z12-57 → Z12-58 → Z12-59 prep → Z12-60.
+Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parallel with #484) → Z12-48 + Z12-49fu → Z12-52 → Z12-53 → Z12-57 → Z12-58 → Z12-59 prep → Z12-60.
 
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
@@ -21,9 +21,10 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 | Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | **merged** | #490 | `4aa28299` | Expo web CLOSE; device gate [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS (F08 soft-skips when seed already logged); harness Screen/Results + iOS center tap fixes | Cursor Auto |
 | Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **merged** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | `21792a2e` | fresh proof = password re-login bearer + `credentials:omit`; review fix D-W12C-21; cookie Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
 | Z12-51 Exception review sheet | — | **merged** | [#486](https://github.com/thefitbud/thefitbud/pull/486) | `1272b972` | CI race fix `f1b10f36`; review PASS; auto launch iOS-light flake ignored (scoped [44403709387](https://github.com/thefitbud/thefitbud/actions/runs/44403709387) PASS) | Cursor Auto |
-| Z12-46 Today / Progress | after #486 ✅ | **ready for device run** | [#483](https://github.com/thefitbud/thefitbud/pull/483) `claude/Z12-46-today-progress` | — | Maestro keyboard + banner wait `fcbdcd52`; CI green; see Device-run queue | Cursor Auto |
-| Z12-44 follow-up weekday flows | after #483 | **ready for device run** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | main merged; no-plan keyboard fix `f3fedc2f`; merge before #484 | Cursor Auto |
-| Z12-45 Active workout | after #485+#483 | blocked | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | must-fix list (handover §4); one device run after all fixes; draft | Cursor Auto (planned) |
+| Z12-46 Today / Progress | after #486 ✅ | **merged** | [#483](https://github.com/thefitbud/thefitbud/pull/483) | `ab0e015b` | device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) PASS; review PASS; FitBud UI 71 shots | Cursor Auto |
+| Z12-46fu Today/Progress pixel fixes | after #483 ✅ | **ready for device run** | [#497](https://github.com/thefitbud/thefitbud/pull/497) `cursor/z12-46fu-pixel-db78` | — | tip `7c0a4f37`; CI green; (a–d) + tests; (e) Z12-58 evidence gaps noted. See Device-run queue | Cursor Auto |
+| Z12-44 follow-up weekday flows | after #483 | **device running** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | scoped [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f`; Android dark Launch smoke failed (light PASS); iOS still running; PR tip `fbc35eaf` Android PASS on separate check; merge before #484 | Cursor Auto |
+| Z12-45 Active workout | after #485+#483 ✅ | **must-fixes 1–7 done** | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | tip `d043c4b3`: #1 sheet-seq, #2 W-14 bar, #3/#4 offline+How to, #5–7 evidence/parity/scope-cut (Z12-45fu). Wait #485 → merge main (mf8) → one device run (mf9) | Cursor Auto |
 | Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
 | Z12-52 Coach logs a meal | Z12-43 ✅ + #486 ✅ | ready after #483/#485/#484 lane or when a slot frees | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
@@ -46,6 +47,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 | 19 Nov 2026 ~00:00 IST | `e679b85d` | #493 (ledger) | mark Z12-30 merged |
 | 19 Nov 2026 ~12:40 IST | `df709196` | #494 (ledger) | D-W12C-22 Claude lane → Cursor |
 | 19 Nov 2026 ~13:15 IST | `1272b972` | #486 (Z12-51) | unblocks Z12-52 / Z12-53; review PASS |
+| 19 Nov 2026 ~13:40 IST | `ab0e015b` | #483 (Z12-46) | frees TraineeShell for #484; device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
@@ -96,8 +98,9 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
 | Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |
 | Z12-30 | Cookie session still uses `web_sessions.created_at` as authTime (API); UI avoids it for delete by bearer+omit. True Firebase `auth_time` on cookie sessions needs an API change outside `files_owned`. | W6 / API | do not weaken UI proof |
+| Z12-46fu (e) | Device evidence: TR-14a iOS was shot on "Loading form…"; TR-14a/c/d lack dark captures | Z12-58 | wait for the form before the shot; capture dark TR-14a/c/d |
 
-*(Z12-58: Claude-owned-area findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
+*(Z12-58 findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
 
 ## Usage wrap-up
 
@@ -110,8 +113,9 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 
 | Task | Command | Recorded |
 |---|---|---|
-| Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | 19 Nov 2026 ~13:15 IST (after Maestro fix `fcbdcd52` + #486 merge) |
-| Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | 19 Nov 2026 ~13:16 IST (`f3fedc2f`) |
+| Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | **PASS** [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) on `fcbdcd52` (FitBud UI, 71 shots) |
+| Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | running [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f` (FitBud UI); Android dark Launch smoke FAIL (light PASS); awaiting iOS + FitBud verdict |
+| Z12-46fu #497 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-46fu-pixel-db78 -f flows=launch,z12-46` | 19 Nov 2026 ~14:05 IST (`7c0a4f37`, CI green) |
 
 ## Done when (Cursor side)
 

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import {
   Camera,
@@ -22,13 +22,12 @@ import {
   formatCivilDate,
   zonedDateTimeFormat,
 } from "@fitbud/core";
+import { spacing, touchTargetMin } from "@fitbud/ui-mobile";
 import {
-  colors,
-  radii,
-  semanticColors,
-  spacing,
-  touchTargetMin,
-} from "@fitbud/ui-mobile";
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { reportError } from "../lib/reportError";
@@ -50,6 +49,7 @@ import {
   draftBody,
   encodeChoiceList,
   hasBodyWeightField,
+  isNetworkFailure,
   lastWeightHint,
   submitBody,
   valuesFromStoredAnswers,
@@ -156,6 +156,7 @@ function sentEntryText(
 
 /** Sent state (frame 100): weight and photo count from the real answers. */
 function SentTiles({ entries }: { entries: SentEntry[] }) {
+  const styles = useStyles();
   const weight = entries.find(
     (entry) =>
       entry.type === "measurement" &&
@@ -190,11 +191,12 @@ function SentList({
   entries: SentEntry[];
   fields: readonly CheckinFieldDefinition[];
 }) {
+  const styles = useStyles();
   if (entries.length === 0) return null;
   return (
     <View>
       <Text style={styles.sentHeading} accessibilityRole="header">
-        What you sent
+        Your answers
       </Text>
       <View style={styles.banner}>
         {entries.map((entry) => (
@@ -258,6 +260,8 @@ function FieldControl({
   lastMeasure?: string | null;
   firstRow?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   const label = `${field.label}${field.required ? " *" : ""}`;
 
   if (field.type === "scale_1_5") {
@@ -395,13 +399,13 @@ function FieldControl({
               strokeWidth={1.75}
             />
             <View style={styles.phOk}>
-              <Check size={13} color={semanticColors.positive.text} strokeWidth={3} />
+              <Check size={13} color={theme.colors.done} strokeWidth={3} />
             </View>
             <Text style={styles.phTileLabel}>{slot}</Text>
           </>
         ) : (
           <>
-            <Camera size={24} color={colors.indigo} strokeWidth={1.75} />
+            <Camera size={24} color={theme.colors.coachInk} strokeWidth={1.75} />
             <Text style={styles.phTileLabel}>{slot}</Text>
             <Text style={styles.phTileSub}>Add photo</Text>
           </>
@@ -469,7 +473,7 @@ function FieldControl({
                 onBlur();
               }}
             >
-              <Minus size={22} color={colors.indigo} strokeWidth={2} />
+              <Minus size={22} color={theme.colors.coachInk} strokeWidth={2} />
             </Pressable>
             <Pressable
               accessibilityRole="button"
@@ -481,7 +485,7 @@ function FieldControl({
                 onBlur();
               }}
             >
-              <Plus size={22} color={colors.indigo} strokeWidth={2} />
+              <Plus size={22} color={theme.colors.coachInk} strokeWidth={2} />
             </Pressable>
           </View>
         </View>
@@ -514,13 +518,21 @@ function FieldControl({
         keyboardType={field.type === "number" ? "decimal-pad" : "default"}
         style={field.type === "long_text" ? styles.input : styles.inputSingle}
         placeholder={field.helpText ?? ""}
-        placeholderTextColor={colors.midGrey}
+        placeholderTextColor={theme.colors.ink3}
       />
     </View>
   );
 }
 
-export function CheckinScreen({
+export function CheckinScreen(props: ComponentProps<typeof CheckinScreenInner>) {
+  return (
+    <ThemeScope scheme="system">
+      <CheckinScreenInner {...props} />
+    </ThemeScope>
+  );
+}
+
+function CheckinScreenInner({
   relationship,
   checkin,
   onDone,
@@ -529,6 +541,8 @@ export function CheckinScreen({
   checkin: Checkin;
   onDone: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   const sync = useSyncEngine();
   const { api, me } = useAuth();
   const coach = coachFirstName(relationship);
@@ -755,7 +769,8 @@ export function CheckinScreen({
         setError(null);
         setOffline(false);
         setDraftSavedAt(new Date());
-      } catch {
+      } catch (err) {
+        reportError("checkin.saveDraft", err);
         setOffline(true);
       }
     })();
@@ -885,8 +900,15 @@ export function CheckinScreen({
         setError(syncMsg);
         return;
       }
-      const result =
-        results.find((item) => item.recordId === checkin.id) ?? results[0];
+      // enqueueAndPush swallows a failed push and returns only this
+      // mutation's results: none means the check-in is in the outbox, not
+      // accepted. Never say "Sent" for that (TR-14e).
+      if (!results.some((item) => item.recordId === checkin.id)) {
+        setStep("done");
+        setOffline(true);
+        return;
+      }
+      const result = results.find((item) => item.recordId === checkin.id);
       if (result?.serverVersion != null) {
         recordVersionRef.current = result.serverVersion;
         setRecordVersion(result.serverVersion);
@@ -894,13 +916,19 @@ export function CheckinScreen({
       setStep("done");
       setOffline(false);
     } catch (err) {
-      setOffline(true);
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Queued offline · will send when you're back.",
-      );
-      setStep("done");
+      reportError("checkin.submit", err);
+      if (err instanceof ApiClientError) {
+        // The API's own curated message, never a guess about the cause.
+        setError(err.message);
+        setStep("done");
+      } else if (isNetworkFailure(err)) {
+        setOffline(true);
+        setStep("done");
+      } else {
+        // A client/server disagreement is not "offline" and is not the
+        // trainee's mistake: a short code, and the form stays open.
+        setError("Couldn't send the check-in (CHK-SUBMIT). Try again.");
+      }
     } finally {
       setActing(false);
     }
@@ -908,7 +936,7 @@ export function CheckinScreen({
 
   if (checkin.status === "scheduled") {
     return (
-      <Screen chrome="app" title="Check-in">
+      <Screen v3 chrome="app" title="Check-in">
         <View style={styles.banner}>
           <Text style={styles.bannerTitle} accessibilityRole="header">
             Next check-in{" "}
@@ -931,58 +959,85 @@ export function CheckinScreen({
           { includeWeekday: true },
         )
       : null;
+    const reviewedAt = review
+      ? zonedDateTimeFormat("en-IN", {
+          hour: "numeric",
+          minute: "2-digit",
+          timeZone,
+        }).format(new Date(review.createdAt))
+      : null;
     return (
       <Screen
+        v3
         chrome="app"
         title="Check-in"
-        subtitle={
-          reviewedOn
-            ? `${coach} reviewed this · ${reviewedOn}`
-            : `${coach} reviewed this`
-        }
+        subtitle={`Due ${formatCivilDate(checkin.localDate, { includeWeekday: true })}`}
+        footer={<PrimaryButton label="Back to Today" onPress={onDone} />}
       >
         {error ? <ErrorBanner message={error} /> : null}
-        <View style={styles.banner}>
-          <Text style={styles.bannerTitle} accessibilityRole="header">
-            {review ? outcomeCopy(review.outcome, coach) : "Acknowledged"}
-          </Text>
-          {review?.notes ? (
-            <View style={styles.coachNote}>
-              <Text style={styles.coachNoteLabel}>Note from {coach}</Text>
-              <Text style={styles.bannerBody}>{review.notes}</Text>
+        <View style={styles.replyCard}>
+          <View style={styles.replyHead}>
+            <View style={styles.replyAvatar}>
+              <Text style={styles.replyInitials}>
+                {coach.slice(0, 1).toUpperCase()}
+              </Text>
             </View>
+            <View style={styles.replyWho}>
+              <Text variant="bodyStrong" accessibilityRole="header">
+                {review ? outcomeCopy(review.outcome, coach) : "Acknowledged"}
+              </Text>
+              {reviewedOn ? (
+                <Text variant="caption" tone="ink3">
+                  {reviewedAt ? `${reviewedOn} · ${reviewedAt}` : reviewedOn}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+          {review?.notes ? (
+            <Text variant="body" accessibilityLabel={`Note from ${coach}`}>
+              {review.notes}
+            </Text>
           ) : null}
         </View>
         <SentList entries={sentEntries} fields={fields} />
-        <PrimaryButton label="Back to Today" onPress={onDone} />
       </Screen>
     );
   }
 
   if (step === "done") {
     return (
-      <Screen chrome="app" title="Check-in" subtitle="Sent">
+      <Screen
+        v3
+        chrome="app"
+        title="Check-in"
+        showHeader={false}
+        footer={<PrimaryButton label="Done" onPress={onDone} />}
+      >
         {error ? <ErrorBanner message={error} /> : null}
         {offline ? (
           <Text style={styles.offline}>You're offline · it will send when you're back</Text>
         ) : null}
-        <View style={styles.banner}>
-          <Text style={styles.bannerTitle} accessibilityRole="header">
-            Sent. {coach} will review this.
+        <View style={styles.sentCenter}>
+          <View style={styles.sentCircle}>
+            <Check size={44} color={theme.colors.done} strokeWidth={2.5} />
+          </View>
+          <Text variant="title" style={styles.sentTitle} accessibilityRole="header">
+            {offline ? `Saved for ${coach}` : `Sent to ${coach}`}
           </Text>
-          <Text style={styles.bannerBody}>
-            Nothing else is required for this check-in.
+          <Text variant="body" tone="ink2" style={styles.sentTitle}>
+            {offline
+              ? "It will send when you're back online."
+              : `${coach} will review it. We'll let you know.`}
           </Text>
         </View>
         <SentTiles entries={sentEntries} />
-        <PrimaryButton label="Back to Today" onPress={onDone} />
       </Screen>
     );
   }
 
   if (step === "review") {
     return (
-      <Screen chrome="app" title="Review" subtitle={`Send to ${coach}`}>
+      <Screen v3 chrome="app" title="Review" subtitle={`Send to ${coach}`}>
         {error ? <ErrorBanner message={error} /> : null}
         {offline ? (
           <Text style={styles.offline}>You're offline · submit will queue</Text>
@@ -1075,7 +1130,7 @@ export function CheckinScreen({
       />
       {draftTimeLabel ? (
         <View style={styles.savedRow}>
-          <RefreshCw size={16} color={colors.midGrey} strokeWidth={1.75} />
+          <RefreshCw size={16} color={theme.colors.ink3} strokeWidth={1.75} />
           <Text style={styles.savedText}>
             Draft saved on your phone · {draftTimeLabel}
           </Text>
@@ -1085,7 +1140,7 @@ export function CheckinScreen({
   );
 
   return (
-    <Screen chrome="app" title="Check-in" showHeader={false} footer={formFooter}>
+    <Screen v3 chrome="app" title="Check-in" showHeader={false} footer={formFooter}>
       <View style={styles.topnav}>
         <Pressable
           accessibilityRole="button"
@@ -1252,18 +1307,45 @@ export function CheckinScreen({
 export function TodayCheckinCard({
   relationship,
   onOpen,
+  noPlan = false,
+  planLoading = false,
 }: {
   relationship: CoachingRelationship;
   onOpen: (checkin: Checkin) => void;
+  /**
+   * The effective plan is still loading: don't ask the server for a due
+   * check-in yet (it refuses with NO_ACTIVE_CONFIGURATION until a plan is
+   * published, and we don't know yet).
+   */
+  planLoading?: boolean;
+  /**
+   * The trainee has no published plan yet. The server has no check-in to
+   * make due for them, so the card does not ask: it says the first one comes
+   * once the coach has set the plan up (Z12-46; it used to show the server's
+   * refusal).
+   */
+  noPlan?: boolean;
 }) {
+  const styles = useStyles();
   const { api } = useAuth();
   const [checkin, setCheckin] = useState<Checkin | null>(null);
   const [nextScheduled, setNextScheduled] = useState<Checkin | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  // The server said the relationship has no active configuration yet.
+  const [notOpenYet, setNotOpenYet] = useState(false);
 
   const load = useCallback(async () => {
+    if (planLoading) return;
+    setNotOpenYet(false);
+    if (noPlan) {
+      setCheckin(null);
+      setNextScheduled(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -1272,15 +1354,27 @@ export function TodayCheckinCard({
       setCheckin(pickTodayCheckin(listed.items));
       setNextScheduled(pickNextScheduledCheckin(listed.items));
     } catch (err) {
+      reportError("TodayCheckinCard.load", err);
+      if (err instanceof ApiClientError && err.code === "NO_ACTIVE_CONFIGURATION") {
+        // Not a failure: the first check-in simply isn't open yet.
+        setCheckin(null);
+        setNextScheduled(null);
+        setNotOpenYet(true);
+        return;
+      }
+      // Only the API's own curated message is shown as it is; anything else
+      // (a client/server disagreement, no connection) is a short code.
       setError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not load check-in.",
+          : isNetworkFailure(err)
+            ? "Couldn't reach FitBud (CHK-NET). Check your connection and try again."
+            : "Couldn't load your check-in (CHK-CARD). Try again.",
       );
     } finally {
       setLoading(false);
     }
-  }, [api, relationship.id]);
+  }, [api, noPlan, planLoading, relationship.id]);
 
   useEffect(() => {
     void load();
@@ -1292,7 +1386,7 @@ export function TodayCheckinCard({
     });
   }, []);
 
-  if (loading) {
+  if (loading || planLoading) {
     return (
       <View style={styles.banner}>
         <Text style={styles.bannerBody}>Checking for a due check-in…</Text>
@@ -1300,8 +1394,35 @@ export function TodayCheckinCard({
     );
   }
 
+  if (noPlan || notOpenYet) {
+    const given =
+      relationship.trainerDisplayName?.trim().split(/\s+/)[0] || "Your coach";
+    return (
+      <View style={styles.banner} accessibilityLabel="Weekly check-in, not open yet">
+        <Text style={styles.bannerTitle} accessibilityRole="header">
+          Weekly check-in
+        </Text>
+        <Text style={styles.bannerBody}>
+          Your first check-in opens once {given} has set up your plan.
+        </Text>
+      </View>
+    );
+  }
+
   if (error) {
-    return <ErrorBanner message={error} />;
+    return (
+      <View style={styles.banner}>
+        <Text style={styles.bannerTitle} accessibilityRole="header">
+          Weekly check-in
+        </Text>
+        <ErrorBanner message={error} />
+        <PrimaryButton
+          label="Try again"
+          variant="secondary"
+          onPress={() => setRefreshNonce((value) => value + 1)}
+        />
+      </View>
+    );
   }
 
   if (!checkin) {
@@ -1392,21 +1513,21 @@ export function TodayCheckinCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   banner: {
-    backgroundColor: colors.white,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderRadius: t.radii.card,
     gap: spacing.sm,
     marginBottom: spacing.lg,
     padding: spacing.xl,
   },
   bannerTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   bannerBody: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -1415,7 +1536,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   coachNoteLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 13,
     fontWeight: "600",
   },
@@ -1423,7 +1544,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   sectionTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "700",
     marginBottom: spacing.sm,
@@ -1433,30 +1554,30 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   label: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 14,
     fontWeight: "600",
   },
   help: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
   },
   input: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
-    color: colors.nearBlack,
+    color: t.colors.ink,
     minHeight: 96,
     padding: spacing.md,
     textAlignVertical: "top",
   },
   inputSingle: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
-    color: colors.nearBlack,
+    color: t.colors.ink,
     minHeight: touchTargetMin,
     paddingHorizontal: spacing.md,
   },
@@ -1467,8 +1588,8 @@ const styles = StyleSheet.create({
   },
   scaleChip: {
     alignItems: "center",
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     minHeight: touchTargetMin,
     minWidth: touchTargetMin,
@@ -1476,20 +1597,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   scaleChipOn: {
-    backgroundColor: colors.paleLavender,
-    borderColor: colors.indigo,
+    backgroundColor: t.colors.brandTint,
+    borderColor: t.colors.coachInk,
   },
   photoSlot: {
     alignItems: "center",
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     minHeight: touchTargetMin,
     justifyContent: "center",
     paddingHorizontal: spacing.md,
   },
   photoSlotText: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 14,
     fontWeight: "500",
   },
@@ -1500,51 +1621,51 @@ const styles = StyleSheet.create({
   },
   stepperBtn: {
     alignItems: "center",
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     height: touchTargetMin,
     justifyContent: "center",
     minWidth: touchTargetMin,
   },
   stepperGlyph: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 22,
     fontWeight: "600",
   },
   stepperValue: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 22,
     fontWeight: "700",
     minWidth: 96,
     textAlign: "center",
   },
   reviewRow: {
-    borderBottomColor: colors.lightGrey,
+    borderBottomColor: t.colors.line,
     borderBottomWidth: StyleSheet.hairlineWidth,
     gap: 2,
     paddingVertical: spacing.sm,
   },
   reviewLabel: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
   },
   reviewValue: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "500",
   },
   overdue: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 14,
     marginBottom: spacing.md,
   },
   muted: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
   },
   offline: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     marginBottom: spacing.sm,
   },
@@ -1560,12 +1681,12 @@ const styles = StyleSheet.create({
     paddingLeft: 2,
   },
   closeLabel: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 16,
     fontWeight: "600",
   },
   topTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     flex: 1,
     fontSize: 17,
     fontWeight: "700",
@@ -1581,13 +1702,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   stepSeg: {
-    backgroundColor: colors.lightGrey,
+    backgroundColor: t.colors.line,
     borderRadius: 2,
     flex: 1,
     height: 4,
   },
   stepSegOn: {
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.coachInk,
   },
   stepl: {
     columnGap: spacing.md,
@@ -1599,19 +1720,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   steplMain: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 14,
   },
   steplBold: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontWeight: "700",
   },
   steplDue: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
   },
   intro: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
     lineHeight: 21,
     marginBottom: spacing.md,
@@ -1625,12 +1746,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   shLink: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 15,
     fontWeight: "600",
   },
   sectionCnt: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
     fontWeight: "600",
   },
@@ -1638,14 +1759,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   cardPad: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     padding: spacing.lg,
   },
   ov: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
@@ -1657,36 +1778,64 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   wbigVal: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 40,
     fontWeight: "700",
     letterSpacing: -1.2,
     lineHeight: 44,
   },
   wbigUnit: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 18,
     fontWeight: "600",
   },
+  sentCenter: { alignItems: "center", gap: spacing.md, paddingTop: 96 },
+  sentCircle: {
+    alignItems: "center",
+    backgroundColor: t.colors.doneTint,
+    borderRadius: 48,
+    height: 96,
+    justifyContent: "center",
+    width: 96,
+  },
+  sentTitle: { textAlign: "center" },
+  replyCard: {
+    backgroundColor: t.colors.brandTint,
+    borderRadius: t.radii.card,
+    gap: spacing.md,
+    marginBottom: spacing.lg,
+    padding: spacing.lg,
+  },
+  replyHead: { alignItems: "center", flexDirection: "row", gap: spacing.md },
+  replyAvatar: {
+    alignItems: "center",
+    backgroundColor: t.colors.coach,
+    borderRadius: 20,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  replyInitials: { color: t.colors.onCoach, fontSize: 15, fontWeight: "700" },
+  replyWho: { flex: 1 },
   sentTiles: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     flexDirection: "row",
     marginBottom: spacing.lg,
     overflow: "hidden",
   },
   sentTile: {
-    borderRightColor: "#E7E9F2",
+    borderRightColor: t.colors.line,
     borderRightWidth: 1,
     flex: 1,
     padding: spacing.md,
   },
-  sentTileValue: { color: colors.deepNavy, fontSize: 20 },
-  sentTileLabel: { color: colors.midGrey, fontSize: 14, marginTop: 4 },
+  sentTileValue: { color: t.colors.ink, fontSize: 20 },
+  sentTileLabel: { color: t.colors.ink3, fontSize: 14, marginTop: 4 },
   sentHeading: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     marginBottom: spacing.sm,
     marginTop: spacing.md,
@@ -1696,12 +1845,12 @@ const styles = StyleSheet.create({
     minHeight: touchTargetMin,
   },
   lastWeightLink: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontWeight: "600",
     textDecorationLine: "underline",
   },
   lastWeight: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     marginTop: 4,
   },
@@ -1711,8 +1860,8 @@ const styles = StyleSheet.create({
   },
   rstpBtn: {
     alignItems: "center",
-    backgroundColor: colors.background,
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.bg,
+    borderColor: t.colors.line,
     borderRadius: 22,
     borderWidth: 1,
     height: 44,
@@ -1721,7 +1870,7 @@ const styles = StyleSheet.create({
   },
   mrow2: {
     alignItems: "center",
-    borderTopColor: "#E7E9F2",
+    borderTopColor: t.colors.line,
     borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1729,14 +1878,14 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
   },
   mrowTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   stp: {
     alignItems: "center",
-    backgroundColor: colors.background,
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.bg,
+    borderColor: t.colors.line,
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
@@ -1748,14 +1897,14 @@ const styles = StyleSheet.create({
     width: 44,
   },
   stpVal: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
     minWidth: 52,
     textAlign: "center",
   },
   stpUnit: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "500",
   },
@@ -1773,11 +1922,11 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   phTileDone: {
-    backgroundColor: "#D9D3F7",
+    backgroundColor: t.colors.brandTint2,
   },
   phTileEmpty: {
-    backgroundColor: colors.white,
-    borderColor: "#D5D6DE",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
     borderStyle: "dashed",
     borderWidth: 1.5,
     justifyContent: "center",
@@ -1786,7 +1935,7 @@ const styles = StyleSheet.create({
   },
   phOk: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 11,
     height: 22,
     justifyContent: "center",
@@ -1796,28 +1945,28 @@ const styles = StyleSheet.create({
     width: 22,
   },
   phTileLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 14,
     fontWeight: "600",
   },
   phTileSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
     fontWeight: "500",
   },
   qLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
     marginBottom: spacing.sm,
   },
   scaleChipText: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 16,
     fontWeight: "600",
   },
   scaleChipTextOn: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
   },
   scaleAnch: {
     flexDirection: "row",
@@ -1834,7 +1983,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   savedText: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
   },
-});
+}));
