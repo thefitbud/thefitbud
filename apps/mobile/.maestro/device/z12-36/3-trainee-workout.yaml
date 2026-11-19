@@ -26,9 +26,8 @@ tags:
     file: sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
-- extendedWaitUntil:
-    notVisible: ".*Loading your day.*"
-    timeout: 30000
+# Drain check-in review banner; prove Today with an above-the-fold marker (FitBud #485).
+- runFlow: ../../common/wait-trainee-today-ready.yaml
 
 # "Workout" also names a tile on Today; the tab is the later match. If the first tap
 # left Today on screen (its macro summary is still there), tap the tab bar's match.

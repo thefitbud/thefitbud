@@ -1,0 +1,19 @@
+# Subflow: trainee Today is loaded and usable after sign-in (FitBud #485).
+# A check-in review banner can cover the header; Z12-46 puts the workout card
+# below This week / From your coach. Drain the banner, then require an
+# above-the-fold home marker (This week) or the workout heading.
+appId: com.thefitbud.mobile.staging
+---
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: ".*reviewed your check-in.*"
+    commands:
+      - extendedWaitUntil:
+          notVisible: ".*reviewed your check-in.*"
+          timeout: 15000
+- extendedWaitUntil:
+    visible: "This week|Today's workout.*"
+    timeout: 30000

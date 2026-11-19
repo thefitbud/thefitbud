@@ -5,22 +5,38 @@ appId: com.thefitbud.mobile.staging
 # that the day offers View summary only. Starts on the Workout tab, today focused.
 
 # ---- Open a session ---------------------------------------------------------------
+# Wait for the CTA to settle before tapping: the missed banner can shift layout
+# and an early tap leaves the pre-start card on screen (FitBud #485 iOS light).
 - runFlow:
     when:
       true: ${output.fwKind == 'today'}
     commands:
-      - tapOn: "Start workout"
+      - extendedWaitUntil:
+          visible: "Start workout"
+          timeout: 30000
+      - waitForAnimationToEnd:
+          timeout: 2000
+      - tapOn:
+          text: "Start workout"
+          waitToSettleTimeoutMs: 2000
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
-          timeout: 30000
+          timeout: 45000
 - runFlow:
     when:
       true: ${output.fwKind == 'banner'}
     commands:
-      - tapOn: "Log it"
+      - extendedWaitUntil:
+          visible: "Log it"
+          timeout: 30000
+      - waitForAnimationToEnd:
+          timeout: 2000
+      - tapOn:
+          text: "Log it"
+          waitToSettleTimeoutMs: 2000
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
-          timeout: 30000
+          timeout: 45000
 - runFlow:
     when:
       true: ${output.fwKind == 'day'}
@@ -29,10 +45,17 @@ appId: com.thefitbud.mobile.staging
           file: select-day.yaml
           env:
             LABEL: ${output.fwLabel}
-      - tapOn: "Log workout|Continue workout"
+      - extendedWaitUntil:
+          visible: "Log workout|Continue workout"
+          timeout: 30000
+      - waitForAnimationToEnd:
+          timeout: 2000
+      - tapOn:
+          text: "Log workout|Continue workout"
+          waitToSettleTimeoutMs: 2000
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
-          timeout: 30000
+          timeout: 45000
 - tapOn: "Log set [0-9]+ ·.*"
 - runFlow:
     when:
@@ -104,7 +127,7 @@ appId: com.thefitbud.mobile.staging
 - tapOn: "Done"
 - extendedWaitUntil:
     visible: "View summary"
-    timeout: 30000
+    timeout: 60000
 - assertNotVisible: "Start workout"
 - assertNotVisible: "Continue workout"
 # Not a W-01c shot: it is a day the pass chose (often a past one); Aarav's flow has W-01c.
@@ -120,9 +143,20 @@ appId: com.thefitbud.mobile.staging
       - extendedWaitUntil:
           notVisible: ".*Loading your day.*"
           timeout: 30000
+      - runFlow:
+          when:
+            visible: ".*reviewed your check-in.*"
+          commands:
+            - extendedWaitUntil:
+                notVisible: ".*reviewed your check-in.*"
+                timeout: 15000
+      # Wait for the done CTA before scrolling (FitBud #485 iOS dark).
+      - extendedWaitUntil:
+          visible: "View summary"
+          timeout: 60000
       - scrollUntilVisible:
           element: "View summary"
-          timeout: 20000
+          timeout: 30000
       - assertNotVisible: "Start workout"
       - assertNotVisible: "Continue workout"
       - takeScreenshot: z12-44-today-done-card
@@ -147,7 +181,9 @@ appId: com.thefitbud.mobile.staging
           file: select-day.yaml
           env:
             LABEL: ${output.fwLabel}
-- assertVisible: "View summary"
+- extendedWaitUntil:
+    visible: "View summary"
+    timeout: 60000
 - assertNotVisible: "Start workout"
 - assertNotVisible: "Continue workout"
 - runFlow:

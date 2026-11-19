@@ -341,7 +341,10 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   const files = selectFlows({ flows: "launch" }).map((f) => path.relative(path.join(repo, "apps/mobile/.maestro"), f));
   assert.deepEqual(files, ["device/launch/1-trainee-today.yaml", "device/launch/2-trainer-attention.yaml"]);
   const signIn = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/sign-in-password.yaml"), "utf8");
-  assert.match(signIn, /visible: "Today's workout\.\*\|/);
+  // Rest-day iOS label still needs Today's workout.*; This week is the above-the-fold
+  // fallback when a check-in review banner covers the header (FitBud #485).
+  assert.match(signIn, /visible: "Today's workout\.\*\|This week\|Needs you\.\*\|Choose mode"/);
+  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
 });
 
 test("flows lists may mix tags and globs; an item with no match is an error", () => {
