@@ -21,8 +21,8 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | **merged** | #490 | `4aa28299` | Expo web CLOSE; device gate [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS (F08 soft-skips when seed already logged); harness Screen/Results + iOS center tap fixes | Cursor Auto |
 | Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **merged** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | `21792a2e` | fresh proof = password re-login bearer + `credentials:omit`; review fix D-W12C-21; cookie Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
 | Z12-51 Exception review sheet | — | **merged** | [#486](https://github.com/thefitbud/thefitbud/pull/486) | `1272b972` | CI race fix `f1b10f36`; review PASS; auto launch iOS-light flake ignored (scoped [44403709387](https://github.com/thefitbud/thefitbud/actions/runs/44403709387) PASS) | Cursor Auto |
-| Z12-46 Today / Progress | after #486 ✅ | **merging** | [#483](https://github.com/thefitbud/thefitbud/pull/483) | — | device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) PASS on `fcbdcd52` (FitBud UI reviewed 71 shots); tip docs-only merges OK | Cursor Auto |
-| Z12-46fu Today/Progress pixel fixes | after #483 | blocked on #483 | — (branch `cursor/z12-46fu-pixel-db78`) | — | JS-only; parallel with #484. (a) iOS note time via shared formatter + assert "7:00 pm"; (b) remove leading note divider; (c) Steps chip fits 360 dp; (d) Progress chart x-label inset; (e) Z12-58 evidence: wait for form before TR-14a shot; dark TR-14a/c/d. Each code item needs a render test. Device when ready: `launch,z12-46` | Cursor Auto (planned) |
+| Z12-46 Today / Progress | after #486 ✅ | **merged** | [#483](https://github.com/thefitbud/thefitbud/pull/483) | `ab0e015b` | device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) PASS; review PASS; FitBud UI 71 shots | Cursor Auto |
+| Z12-46fu Today/Progress pixel fixes | after #483 ✅ | **in progress** | — (branch `cursor/z12-46fu-pixel-db78`) | — | JS-only; parallel with #484. (a) iOS note time via shared formatter + assert "7:00 pm"; (b) remove leading note divider; (c) Steps chip fits 360 dp; (d) Progress chart x-label inset; (e) Z12-58 evidence notes. Each code item needs a render test. Device when ready: `launch,z12-46` | Cursor Auto |
 | Z12-44 follow-up weekday flows | after #483 | **device running** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | scoped [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f`; merge main OK if no PR-file changes; merge before #484 | Cursor Auto |
 | Z12-45 Active workout | after #485+#483 | blocked | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | must-fix list (handover §4); one device run after all fixes; draft | Cursor Auto (planned) |
 | Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
@@ -47,6 +47,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | 19 Nov 2026 ~00:00 IST | `e679b85d` | #493 (ledger) | mark Z12-30 merged |
 | 19 Nov 2026 ~12:40 IST | `df709196` | #494 (ledger) | D-W12C-22 Claude lane → Cursor |
 | 19 Nov 2026 ~13:15 IST | `1272b972` | #486 (Z12-51) | unblocks Z12-52 / Z12-53; review PASS |
+| 19 Nov 2026 ~13:40 IST | `ab0e015b` | #483 (Z12-46) | frees TraineeShell for #484; device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
