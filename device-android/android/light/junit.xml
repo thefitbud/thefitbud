@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="8" failures="0" time="724.031" timestamp="2026-11-19T18:13:05">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="68.695" timestamp="2026-11-19T18:13:05" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="44.205" timestamp="2026-11-19T18:14:14" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F01 Onboarding states, intake and waiting for the coach (Z12-49)" name="F01 Onboarding states, intake and waiting for the coach (Z12-49)" classname="F01 Onboarding states, intake and waiting for the coach (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F01-first-install.yaml" time="104.856" timestamp="2026-11-19T18:14:58" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F02 Sign in, wrong password, code request and code entry (Z12-49)" name="F02 Sign in, wrong password, code request and code entry (Z12-49)" classname="F02 Sign in, wrong password, code request and code entry (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02-sign-in.yaml" time="105.789" timestamp="2026-11-19T18:16:43" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F02b Auth errors on the code path and reset (Z12-49)" name="F02b Auth errors on the code path and reset (Z12-49)" classname="F02b Auth errors on the code path and reset (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02b-auth-errors.yaml" time="66.966" timestamp="2026-11-19T18:18:28" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" name="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" classname="F15 More, reminders, account, help, profile, password, sign out (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F15-settings-account.yaml" time="135.606" timestamp="2026-11-19T18:19:35" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F16 Ended coaching and the coach's restart request (Z12-49)" name="F16 Ended coaching and the coach's restart request (Z12-49)" classname="F16 Ended coaching and the coach's restart request (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F16-expiry-errors-ended.yaml" time="103.052" timestamp="2026-11-19T18:21:51" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F17 Role select, switch to coach view and Back (Z12-49)" name="F17 Role select, switch to coach view and Back (Z12-49)" classname="F17 Role select, switch to coach view and Back (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F17-role-switch.yaml" time="94.776" timestamp="2026-11-19T18:23:34" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, dual, z12-49"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
