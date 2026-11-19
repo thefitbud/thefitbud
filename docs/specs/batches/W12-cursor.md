@@ -22,7 +22,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **merged** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | `21792a2e` | fresh proof = password re-login bearer + `credentials:omit`; review fix D-W12C-21; cookie Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
 | Z12-51 Exception review sheet | — | **merged** | [#486](https://github.com/thefitbud/thefitbud/pull/486) | `1272b972` | CI race fix `f1b10f36`; review PASS; auto launch iOS-light flake ignored (scoped [44403709387](https://github.com/thefitbud/thefitbud/actions/runs/44403709387) PASS) | Cursor Auto |
 | Z12-46 Today / Progress | after #486 ✅ | **merged** | [#483](https://github.com/thefitbud/thefitbud/pull/483) | `ab0e015b` | device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) PASS; review PASS; FitBud UI 71 shots | Cursor Auto |
-| Z12-46fu Today/Progress pixel fixes | after #483 ✅ | **in progress** | [#497](https://github.com/thefitbud/thefitbud/pull/497) `cursor/z12-46fu-pixel-db78` | — | (a–d) coded + tests; (e) Z12-58 evidence (wait for form before TR-14a; dark TR-14a/c/d). Device when ready: `launch,z12-46` | Cursor Auto |
+| Z12-46fu Today/Progress pixel fixes | after #483 ✅ | **ready for device run** | [#497](https://github.com/thefitbud/thefitbud/pull/497) `cursor/z12-46fu-pixel-db78` | — | tip `7c0a4f37`; CI green; (a–d) + tests; (e) Z12-58 evidence gaps noted. See Device-run queue | Cursor Auto |
 | Z12-44 follow-up weekday flows | after #483 | **device running** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | scoped [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f`; Android dark Launch smoke failed (light PASS); iOS still running; PR tip `fbc35eaf` Android PASS on separate check; merge before #484 | Cursor Auto |
 | Z12-45 Active workout | after #485+#483 ✅ | **must-fixes 1–7 done** | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | tip `d043c4b3`: #1 sheet-seq, #2 W-14 bar, #3/#4 offline+How to, #5–7 evidence/parity/scope-cut (Z12-45fu). Wait #485 → merge main (mf8) → one device run (mf9) | Cursor Auto |
 | Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
@@ -115,7 +115,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 |---|---|---|
 | Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | **PASS** [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) on `fcbdcd52` (FitBud UI, 71 shots) |
 | Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | running [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f` (FitBud UI); Android dark Launch smoke FAIL (light PASS); awaiting iOS + FitBud verdict |
-| Z12-46fu | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-46fu-pixel-db78 -f flows=launch,z12-46` | (record when ready) |
+| Z12-46fu #497 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-46fu-pixel-db78 -f flows=launch,z12-46` | 19 Nov 2026 ~14:05 IST (`7c0a4f37`, CI green) |
 
 ## Done when (Cursor side)
 
