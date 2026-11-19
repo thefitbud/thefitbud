@@ -1,0 +1,6 @@
+{
+  "platform": "android",
+  "notificationType": "daily_summary",
+  "method": "shell-notification",
+  "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+}
