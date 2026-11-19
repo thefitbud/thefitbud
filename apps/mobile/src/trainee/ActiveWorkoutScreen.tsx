@@ -64,6 +64,7 @@ import {
 } from "../workout/shared";
 import {
   ExerciseDetailScreen,
+  exerciseHasHowTo,
   historyWhen,
   type ExerciseDetailSession,
   type ExerciseDetailTab,
@@ -1091,13 +1092,17 @@ export function ActiveWorkoutScreen({
           menuExercise != null &&
           skippableSetIds(execution, menuExercise.id).length > 0
         }
+        showHowTo={
+          menuExercise != null && exerciseHasHowTo(planExercise(menuExercise))
+        }
         onHowTo={() => {
           if (!menuExercise) return;
           const id = menuExercise.id;
+          const tab: ExerciseDetailTab = exerciseHasHowTo(planExercise(menuExercise))
+            ? "how_to"
+            : "history";
           setMenuExerciseId(null);
-          sheetGate.afterClose(() =>
-            setDetail({ exerciseExecutionId: id, tab: "how_to" }),
-          );
+          sheetGate.afterClose(() => setDetail({ exerciseExecutionId: id, tab }));
         }}
         onHistory={() => {
           if (!menuExercise) return;

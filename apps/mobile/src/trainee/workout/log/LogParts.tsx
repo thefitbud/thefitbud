@@ -38,6 +38,9 @@ import {
 
 const TARGET = 44;
 
+/** W-20: full offline header line — must not truncate at 360 dp / 393 pt. */
+export const OFFLINE_NAV_LINE = "Offline · sets save on your phone";
+
 /* ------------------------------------------------------------------ nav */
 
 export function LogNav({
@@ -61,52 +64,56 @@ export function LogNav({
   const theme = useTheme();
   const styles = useStyles();
   return (
-    <View style={styles.nav}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Minimise workout"
-        onPress={onMinimise}
-        hitSlop={6}
-        style={styles.circBtn}
-      >
-        <ChevronDown color={theme.colors.ink} size={20} strokeWidth={2.2} />
-      </Pressable>
-      <View style={styles.navTitle}>
-        <Text variant="headline" numberOfLines={1} accessibilityRole="header">
-          {title}
-        </Text>
-        {offline ? (
-          <Text variant="caption" numberOfLines={1}>
-            <Text variant="caption" tone="warn" style={styles.strong}>
-              Offline
+    <View style={styles.navBlock}>
+      <View style={styles.nav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Minimise workout"
+          onPress={onMinimise}
+          hitSlop={6}
+          style={styles.circBtn}
+        >
+          <ChevronDown color={theme.colors.ink} size={20} strokeWidth={2.2} />
+        </Pressable>
+        <View style={styles.navTitle}>
+          <Text variant="headline" numberOfLines={1} accessibilityRole="header">
+            {title}
+          </Text>
+          {!offline && subtitle ? (
+            <Text variant="caption" numberOfLines={1}>
+              {subtitle}
             </Text>
-            {" · sets save on your phone"}
-          </Text>
-        ) : subtitle ? (
-          <Text variant="caption" numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
+          ) : null}
+        </View>
+        {/* W-19: Pause is a labelled control on the far side from Back. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={paused ? "Resume workout" : "Pause workout"}
+          onPress={onPauseToggle}
+          hitSlop={4}
+          style={styles.navPill}
+        >
+          <Text style={styles.navPillText}>{paused ? "Resume" : "Pause"}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Finish workout"
+          onPress={onFinish}
+          hitSlop={4}
+          style={[styles.navPill, styles.navPillBrand]}
+        >
+          <Text style={[styles.navPillText, styles.navPillBrandText]}>Finish</Text>
+        </Pressable>
       </View>
-      {/* W-19: Pause is a labelled control on the far side from Back. */}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={paused ? "Resume workout" : "Pause workout"}
-        onPress={onPauseToggle}
-        hitSlop={4}
-        style={styles.navPill}
-      >
-        <Text style={styles.navPillText}>{paused ? "Resume" : "Pause"}</Text>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Finish workout"
-        onPress={onFinish}
-        hitSlop={4}
-        style={[styles.navPill, styles.navPillBrand]}
-      >
-        <Text style={[styles.navPillText, styles.navPillBrandText]}>Finish</Text>
-      </Pressable>
+      {/* Own row so the full offline line wraps at phone widths (W-20). */}
+      {offline ? (
+        <Text variant="caption" style={styles.offlineLine} numberOfLines={2}>
+          <Text variant="caption" tone="warn" style={styles.strong}>
+            Offline
+          </Text>
+          {" · sets save on your phone"}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -765,12 +772,12 @@ const useStyles = createThemedStyles((t) => ({
   center: { textAlign: "center" },
   centerBox: { alignItems: "center", justifyContent: "center" },
 
+  navBlock: { backgroundColor: t.colors.card },
   nav: {
     alignItems: "center",
-    backgroundColor: t.colors.card,
     flexDirection: "row",
     gap: 10,
-    height: 52,
+    minHeight: 52,
     paddingHorizontal: 16,
   },
   circBtn: {
@@ -782,6 +789,10 @@ const useStyles = createThemedStyles((t) => ({
     width: 36,
   },
   navTitle: { flex: 1, minWidth: 0 },
+  offlineLine: {
+    paddingBottom: 8,
+    paddingHorizontal: 16,
+  },
   navPill: {
     alignItems: "center",
     backgroundColor: t.colors.fill,

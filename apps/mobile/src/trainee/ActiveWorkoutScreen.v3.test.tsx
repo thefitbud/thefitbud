@@ -472,22 +472,39 @@ describe("exercise menu and set actions (W-08, W-09, W-09b, W-13)", () => {
     vi.useRealTimers();
   });
 
-  it("the ⋯ menu offers How to, History and Skip exercise, and How to opens the exercise, not the coach message", () => {
+  it("with nothing on the plan, the ⋯ menu hides How to and History opens History", () => {
     const onAskCoach = vi.fn();
     renderScreen("20 kg", execution("20 kg"), { onAskCoach });
     tap("More for Romanian deadlift");
-    expect(screen.getByRole("button", { name: "How to do it" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "How to do it" })).toBeNull();
     expect(screen.getByRole("button", { name: "History and records" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Skip exercise/ })).toBeTruthy();
-    tap("How to do it");
+    tap("History and records");
     expect(onAskCoach).not.toHaveBeenCalled();
-    expect(
-      screen.getByText("Your coach hasn’t added notes for this exercise."),
-    ).toBeTruthy();
-    fireEvent.click(screen.getByRole("tab", { name: "History" }));
+    expect(screen.queryByRole("tab", { name: "How to" })).toBeNull();
     expect(screen.getByText("No logged sets for this exercise yet.")).toBeTruthy();
+    expect(
+      screen.queryByText("Your coach hasn’t added notes for this exercise."),
+    ).toBeNull();
     tap("Back to workout");
     expect(screen.getByRole("button", { name: "More for Romanian deadlift" })).toBeTruthy();
+  });
+
+  it("with a coach note on the plan, How to opens the note, not the coach message", async () => {
+    const onAskCoach = vi.fn();
+    await act(async () => {
+      renderScreen("20 kg", execution("20 kg"), {
+        onAskCoach,
+        assignment: assignment(),
+      });
+    });
+    tap("More for Romanian deadlift");
+    expect(screen.getByRole("button", { name: "How to do it" })).toBeTruthy();
+    tap("How to do it");
+    expect(onAskCoach).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: "How to" })).toBeTruthy();
+    expect(screen.getByText("Soft knees, push the hips back.")).toBeTruthy();
+    expect(screen.getByText("Hamstrings")).toBeTruthy();
   });
 
   it("Ask the coach passes the exercise it is about", () => {

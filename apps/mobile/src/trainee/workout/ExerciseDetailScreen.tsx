@@ -4,8 +4,10 @@
  * equipment, the coach's note), this session's sets, the earlier sessions of
  * the same workout day, and the strength read model for the bests.
  *
- * Not built, because the plan carries neither: the coach's video and the
- * numbered steps of W-27.
+ * Numbered library steps, library muscles and library equipment live in
+ * `exercise_library_*` but no trainee API exposes them yet (contracts are
+ * outside this task) — see the W12-cursor follow-up. Until then How to only
+ * opens when the plan exercise itself carries a note, muscles or equipment.
  */
 import { Pressable, View } from "react-native";
 import { ChevronLeft, Medal } from "lucide-react-native";
@@ -31,6 +33,21 @@ export type ExerciseDetailSession = {
   /** Orders of the sets that are records (this session only). */
   recordOrders?: ReadonlySet<number>;
 };
+
+/** True when How to would show a coach note, muscles or equipment. */
+export function exerciseHasHowTo(
+  exercise: Pick<
+    WorkoutExercise,
+    "instructions" | "primaryMuscles" | "secondaryMuscles" | "equipment"
+  > | null,
+): boolean {
+  if (!exercise) return false;
+  if (exercise.instructions?.trim()) return true;
+  if ((exercise.primaryMuscles?.length ?? 0) > 0) return true;
+  if ((exercise.secondaryMuscles?.length ?? 0) > 0) return true;
+  if ((exercise.equipment?.length ?? 0) > 0) return true;
+  return false;
+}
 
 export function ExerciseDetailScreen({
   name,
@@ -64,6 +81,9 @@ export function ExerciseDetailScreen({
     ...(exercise?.secondaryMuscles ?? []).map((label) => ({ label, primary: false })),
     ...(exercise?.equipment ?? []).map((label) => ({ label, primary: false })),
   ];
+  const hasHowTo = exerciseHasHowTo(exercise);
+  // Never land on an empty How to page.
+  const activeTab: ExerciseDetailTab = hasHowTo && tab === "how_to" ? "how_to" : "history";
   // The heaviest set on record, this session included.
   const todayBest = sessions
     .flatMap((session) => (session.when === "Today" ? session.sets : []))
@@ -101,16 +121,18 @@ export function ExerciseDetailScreen({
         </Text>
         <View style={styles.back} />
       </View>
-      <SegmentedControl
-        options={[
-          { id: "how_to", label: "How to" },
-          { id: "history", label: "History" },
-        ]}
-        value={tab}
-        onChange={onTabChange}
-      />
+      {hasHowTo ? (
+        <SegmentedControl
+          options={[
+            { id: "how_to", label: "How to" },
+            { id: "history", label: "History" },
+          ]}
+          value={activeTab}
+          onChange={onTabChange}
+        />
+      ) : null}
 
-      {tab === "how_to" ? (
+      {activeTab === "how_to" ? (
         <View style={styles.section}>
           {tags.length > 0 ? (
             <View style={styles.tags}>
@@ -135,11 +157,6 @@ export function ExerciseDetailScreen({
                 {cue}
               </Text>
             </View>
-          ) : null}
-          {tags.length === 0 && !cue ? (
-            <Text variant="body" tone="ink2">
-              Your coach hasn’t added notes for this exercise.
-            </Text>
           ) : null}
         </View>
       ) : (

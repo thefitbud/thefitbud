@@ -99,6 +99,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |
 | Z12-30 | Cookie session still uses `web_sessions.created_at` as authTime (API); UI avoids it for delete by bearer+omit. True Firebase `auth_time` on cookie sessions needs an API change outside `files_owned`. | W6 / API | do not weaken UI proof |
 | Z12-46fu (e) | Device evidence: TR-14a iOS was shot on "Loading form…"; TR-14a/c/d lack dark captures | Z12-58 | wait for the form before the shot; capture dark TR-14a/c/d |
+| Z12-45 #484 | Trainee API for library How-to: steps (`exercise_library_instructions`), muscles, equipment already in DB; no trainee contract/route exposes them. Mobile hides empty How to until then. | later API + mobile | contracts outside Z12-45; device W-27 after |
 
 *(Z12-58 findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
 

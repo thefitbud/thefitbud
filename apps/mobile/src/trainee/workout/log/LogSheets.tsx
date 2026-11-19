@@ -45,6 +45,8 @@ export function ExerciseMenuSheet({
   planLine,
   coachFirst,
   canSkip,
+  /** False when the plan exercise has no note, muscles or equipment. */
+  showHowTo = true,
   onHowTo,
   onHistory,
   onAskCoach,
@@ -58,6 +60,7 @@ export function ExerciseMenuSheet({
   coachFirst: string;
   /** False once nothing of the exercise is left to do. */
   canSkip: boolean;
+  showHowTo?: boolean;
   onHowTo: () => void;
   onHistory: () => void;
   /** Omitted when the screen has no way to open the coach message. */
@@ -90,12 +93,14 @@ export function ExerciseMenuSheet({
         </View>
       </View>
       <View style={styles.group}>
-        <MenuRow
-          icon={icon(<CirclePlay color={theme.colors.ink2} size={18} strokeWidth={2} />)}
-          title="How to do it"
-          chevron
-          onPress={onHowTo}
-        />
+        {showHowTo ? (
+          <MenuRow
+            icon={icon(<CirclePlay color={theme.colors.ink2} size={18} strokeWidth={2} />)}
+            title="How to do it"
+            chevron
+            onPress={onHowTo}
+          />
+        ) : null}
         <MenuRow
           icon={icon(<Clock color={theme.colors.ink2} size={18} strokeWidth={2} />)}
           title="History and records"

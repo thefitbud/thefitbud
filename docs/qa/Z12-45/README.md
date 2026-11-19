@@ -91,6 +91,8 @@ Method: local API on port 8796 against this worktree's own D1 (`pnpm db:reset`),
 
 ## 5. Hand-overs
 
+**Library How-to API (must-fix #4 follow-up):** the exercise library already stores numbered steps (`exercise_library_instructions`), muscles and equipment, but no trainee API exposes them (`packages/contracts` / api-client are outside this task). Until a trainee read of library steps/muscles/equipment lands, How to only opens when the plan exercise itself carries a coach note, muscles or equipment; otherwise the menu hides "How to do it" and detail opens on History. Device W-27 after that API.
+
 **Z12-57 (native), to switch:**
 - `apps/mobile/src/trainee/workout/haptics.ts` `restEndHaptic()`: `Vibration` → `expo-haptics`, and add the rest-end sound. Declare `android.permission.VIBRATE` (the call is skipped without it).
 - `apps/mobile/src/trainee/ActiveWorkoutScreen.tsx` `activateWorkoutKeepAwake()`: `requireOptionalNativeModule("ExpoKeepAwake")` → `expo-keep-awake` (unchanged from Z11b-3).
