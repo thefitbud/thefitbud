@@ -1,0 +1,3 @@
+Device gate run 44517473406, attempt 1
+App ref: claude/Z12-44-flows-weekday
+Run: https://github.com/thefitbud/thefitbud/actions/runs/44517473406

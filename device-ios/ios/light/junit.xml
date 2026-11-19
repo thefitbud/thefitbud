@@ -1,0 +1,35 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - E661D94A-DFDC-444C-9F23-0DF14034C358" tests="6" failures="0" time="1389.812" timestamp="2026-11-19T18:07:57">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="217.909" timestamp="2026-11-19T18:07:57" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="108.692" timestamp="2026-11-19T18:11:35" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-36 trainee active workout mid-session (W-03)" name="Z12-36 trainee active workout mid-session (W-03)" classname="Z12-36 trainee active workout mid-session (W-03)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/3-trainee-workout.yaml" time="240.69" timestamp="2026-11-19T18:13:24" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" name="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" classname="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/1-workout-tab.yaml" time="289.553" timestamp="2026-11-19T18:17:25" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" name="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" classname="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/2-finish-workout.yaml" time="433.344" timestamp="2026-11-19T18:22:15" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-44 Workout tab, no plan yet (TR-10b)" name="Z12-44 Workout tab, no plan yet (TR-10b)" classname="Z12-44 Workout tab, no plan yet (TR-10b)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/3-no-plan.yaml" time="98.638" timestamp="2026-11-19T18:29:28" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
