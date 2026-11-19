@@ -22,7 +22,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 | Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **merged** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | `21792a2e` | fresh proof = password re-login bearer + `credentials:omit`; review fix D-W12C-21; cookie Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
 | Z12-51 Exception review sheet | — | **merged** | [#486](https://github.com/thefitbud/thefitbud/pull/486) | `1272b972` | CI race fix `f1b10f36`; review PASS; auto launch iOS-light flake ignored (scoped [44403709387](https://github.com/thefitbud/thefitbud/actions/runs/44403709387) PASS) | Cursor Auto |
 | Z12-46 Today / Progress | after #486 ✅ | **ready for device run** | [#483](https://github.com/thefitbud/thefitbud/pull/483) `claude/Z12-46-today-progress` | — | Maestro keyboard + banner wait `fcbdcd52`; CI green; see Device-run queue | Cursor Auto |
-| Z12-44 follow-up weekday flows | after #483 | blocked | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | merge main; prior Android launch flake not this PR; merge before #484 (shared Maestro files) | Cursor Auto (planned) |
+| Z12-44 follow-up weekday flows | after #483 | **ready for device run** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | main merged; no-plan keyboard fix `f3fedc2f`; merge before #484 | Cursor Auto |
 | Z12-45 Active workout | after #485+#483 | blocked | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | must-fix list (handover §4); one device run after all fixes; draft | Cursor Auto (planned) |
 | Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
@@ -111,6 +111,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 | Task | Command | Recorded |
 |---|---|---|
 | Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | 19 Nov 2026 ~13:15 IST (after Maestro fix `fcbdcd52` + #486 merge) |
+| Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | 19 Nov 2026 ~13:16 IST (`f3fedc2f`) |
 
 ## Done when (Cursor side)
 
