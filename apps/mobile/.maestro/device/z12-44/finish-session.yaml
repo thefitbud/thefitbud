@@ -52,13 +52,17 @@ appId: com.thefitbud.mobile.staging
           timeout: 30000
       - waitForAnimationToEnd:
           timeout: 2000
-      # Past-day cards put the CTA below the exercise list (same as z12-36/3).
+      # Past-day cards put the CTA below the exercise list (same as z12-36/3);
+      # centre it so the tab bar cannot take the tap.
       - scrollUntilVisible:
-          element: "Log workout|Continue workout"
+          element:
+            id: "workout-day-cta"
           direction: DOWN
+          centerElement: true
+          visibilityPercentage: 100
           timeout: 60000
       - tapOn:
-          text: "Log workout|Continue workout"
+          id: "workout-day-cta"
           waitToSettleTimeoutMs: 2000
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
@@ -99,10 +103,14 @@ appId: com.thefitbud.mobile.staging
 
 # ---- Finish it ----------------------------------------------------------------------
 - scrollUntilVisible:
-    element: "Continue workout"
+    element:
+      id: "workout-day-cta"
     direction: DOWN
+    centerElement: true
+    visibilityPercentage: 100
     timeout: 60000
-- tapOn: "Continue workout"
+- tapOn:
+    id: "workout-day-cta"
 - extendedWaitUntil:
     visible: "Log set [0-9]+ ·.*|Finish workout"
     timeout: 30000

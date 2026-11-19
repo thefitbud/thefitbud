@@ -44,12 +44,19 @@ tags:
       # No fallback to another day: the day is open ("Log workout") or already the
       # session this flow's light run left ("Continue workout"), or the seed is wrong.
       # The CTA sits below the exercise list on a past-day card (FitBud 44501381102
-      # iOS W-03: Log workout was below the fold).
+      # iOS W-03: Log workout was below the fold). Centre it so the tab bar (the dark
+      # run's Continue card is taller) cannot cover it and take the tap (FitBud
+      # 44536235116: the tap hit the Diet tab). A tap that lands elsewhere fails on the
+      # Log set assert below; there is no re-tap recovery.
       - scrollUntilVisible:
-          element: "Log workout|Continue workout"
+          element:
+            id: "workout-day-cta"
           direction: DOWN
+          centerElement: true
+          visibilityPercentage: 100
           timeout: 60000
-      - tapOn: "Log workout|Continue workout"
+      - tapOn:
+          id: "workout-day-cta"
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
           timeout: 30000
