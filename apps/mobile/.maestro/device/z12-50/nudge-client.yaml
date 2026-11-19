@@ -1,0 +1,37 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow of flows/v3/F20-triage-nudge.yaml (Z12-50). No tags: it is only ever called.
+# Input: CLIENT (the name as the Clients list shows it). Starts from a signed-in trainer
+# at any screen after a relaunch, opens the client, and presses Nudge… (TM-03j picker when
+# the client has several open items, then the sheet).
+- launchApp:
+    stopApp: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Needs you [0-9]+"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
+- tapOn: "Clients"
+- scrollUntilVisible:
+    element: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
+    timeout: 30000
+- tapOn: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
+# A row tap can land on the row's own Review button (the exception screen, run
+# 44127718482 iOS light): its ⋯ menu's "Open <first>'s profile" gets to the client
+# either way (Z12-51 replaced the old "Open client status" button).
+- extendedWaitUntil:
+    visible: "Log measurement|Mark reviewed|Resolve"
+    timeout: 30000
+- runFlow:
+    when:
+      visible:
+        id: "exception-more"
+    commands:
+      - tapOn:
+          id: "exception-more"
+      - tapOn:
+          id: "more-profile"
+- runFlow: to-nudge.yaml

@@ -1,7 +1,7 @@
+import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
 import { useCallback, useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import { brand, ink } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -19,7 +19,8 @@ const PRESETS: Array<{ id: string; label: string; hint: string; start: string; e
   { id: "late", label: "Late night", hint: "11:00 pm – 6:00 am", start: "23:00", end: "06:00" },
 ];
 
-export function QuietHoursScreen({ onBack }: Props) {
+function QuietHoursScreenBody({ onBack }: Props) {
+  const styles = useStyles();
   const { api } = useAuth();
   const [start, setStart] = useState("22:00");
   const [end, setEnd] = useState("07:00");
@@ -187,6 +188,7 @@ function TimeStepper({
   value: string;
   onChange: (next: string) => void;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.step}>
       <Text style={styles.stepLabel}>{label}</Text>
@@ -201,24 +203,33 @@ function TimeStepper({
   );
 }
 
-const styles = StyleSheet.create({
-  muted: { color: ink[500], fontSize: 15 },
+const useStyles = createThemedStyles((t) => ({
+  muted: { color: t.colors.ink3, fontSize: 15 },
   presets: { gap: 8 },
   pickers: { gap: 12 },
   step: {
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     gap: 8,
     padding: 14,
   },
   stepLabel: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 13,
   },
-  warn: { color: "#9A3412", fontSize: 14, lineHeight: 20 },
-  rule: { color: ink[700], fontSize: 14, lineHeight: 20 },
-  toast: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 14 },
-});
+  warn: { color: t.colors.warnInk, fontSize: 14, lineHeight: 20 },
+  rule: { color: t.colors.ink2, fontSize: 14, lineHeight: 20 },
+  toast: { color: t.colors.brand, fontFamily: fontFamilySemiBold, fontSize: 14 },
+}));
+
+/** QuietHoursScreen in the system theme (Z12-49): its own styles read the scope. */
+export function QuietHoursScreen(props: Parameters<typeof QuietHoursScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <QuietHoursScreenBody {...props} />
+    </ThemeScope>
+  );
+}

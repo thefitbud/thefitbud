@@ -15,8 +15,9 @@ env:
 # Writes (acknowledges and resolves one exception). Allowed on the QA accounts
 # only (D-QA1-7); the nightly reset restores it. Product rule: only the trainer
 # resolves an exception, and this is the trainer doing it by hand.
-# Mobile resolves from the exception screen: the review sheet's "Resolve…" is not
-# wired in Attention yet, and "Mark reviewed" only moves the client to Reviewed.
+# This flow resolves from the exception screen. Since Z12-51 the review sheet's
+# "Resolve…" also resolves (flows/v3/F21 covers it); "Mark reviewed" only moves the
+# client to Reviewed.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -81,35 +82,48 @@ env:
     timeout: 30000
 - tapOn: "Review"
 - extendedWaitUntil:
-    visible: "Review the signal, then acknowledge or resolve.*"
-    timeout: 20000
-- extendedWaitUntil:
-    notVisible: "Loading exception…"
-    timeout: 20000
+    visible:
+      id: "exception-more"
+    timeout: 30000
 - takeScreenshot: trainer-exception__review
 - runFlow: ../../common/assert-no-crash.yaml
 
-# Acknowledge first when it is not acknowledged yet; Resolve only follows that.
+# Mark reviewed first when it is still open; the API resolves a reviewed item only
+# (v3 exception review, Z12-51: TM-04a -> TM-04e -> TM-04d -> TM-04f).
 - runFlow:
     when:
-      visible: "Acknowledge"
+      visible:
+        id: "exception-markReviewed"
     commands:
-      - tapOn: "Acknowledge"
+      - tapOn:
+          id: "exception-markReviewed"
       - extendedWaitUntil:
-          visible: "Acknowledged\\. Source signals were not changed\\."
+          visible: "Reviewed by you.*"
           timeout: 20000
+- tapOn:
+    id: "exception-resolve"
 - extendedWaitUntil:
-    visible: "Resolve"
-    timeout: 20000
-- tapOn: "Resolve"
+    visible: "Note \\(only you\\)"
+    timeout: 10000
+- tapOn:
+    id: "resolve-confirm"
 - extendedWaitUntil:
-    visible: "Resolved\\. Source signals were not changed\\."
+    visible: "Resolved by you.*"
     timeout: 20000
 - takeScreenshot: trainer-exception__resolved
 - runFlow: ../../common/assert-no-crash.yaml
 
 # Back to the inbox: one fewer open item for QA Rohan.
-- tapOn: "Back to attention"
+- tapOn:
+    id: "exception-back"
+- extendedWaitUntil:
+    visible: "‹ Clients|Attention"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "‹ Clients"
+    commands:
+      - tapOn: "‹ Clients"
 - tapOn: "Attention"
 - extendedWaitUntil:
     visible: ${QA_SLIPPING_NAME}

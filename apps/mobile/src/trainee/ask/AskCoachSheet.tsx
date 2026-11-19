@@ -1,12 +1,6 @@
+import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
 import { useMemo, useState } from "react";
-import {
-  Linking,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Linking, Modal, Pressable, ScrollView, View } from "react-native";
 import { Text } from "../../components/Text";
 import type {
   CoachingRelationship,
@@ -17,7 +11,9 @@ import {
   buildAskCoachMessage,
   whatsappHref,
 } from "@fitbud/core";
-import { colors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { ApiClientError } from "@fitbud/api-client";
+import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -102,7 +98,7 @@ function firstName(name: string): string {
   return trimmed.split(/\s+/)[0] ?? trimmed;
 }
 
-export function AskCoachSheet({
+function AskCoachSheetBody({
   relationship,
   relationshipId,
   coachName,
@@ -115,6 +111,7 @@ export function AskCoachSheet({
   onDone,
   onCancel,
 }: Props) {
+  const styles = useStyles();
   const { api } = useAuth();
   const s1 = stage1Api(api);
   const resolvedRelationshipId = relationship?.id ?? relationshipId ?? "";
@@ -182,17 +179,21 @@ export function AskCoachSheet({
       });
       try {
         await Linking.openURL(url);
-      } catch {
-        setError("Couldn't open WhatsApp. The ask was still recorded.");
+      } catch (openErr) {
+        reportError("AskCoachSheet.openWhatsApp", openErr);
+        setError("Couldn't open WhatsApp (ASK-WA). Your question was still noted.");
         setLoading(false);
         return;
       }
       onDone();
     } catch (err) {
+      // AGENTS.md no misleading catch: only the API's own curated message is
+      // shown as-is; anything else gets a short code and is reported.
+      reportError("AskCoachSheet.createAsk", err);
       setError(
-        err instanceof Error
+        err instanceof ApiClientError
           ? err.message
-          : "You're offline. Try again when you're back online.",
+          : "Couldn't send your question (ASK-NET). Check your connection and try again.",
       );
     } finally {
       setLoading(false);
@@ -218,11 +219,11 @@ export function AskCoachSheet({
           <View style={styles.grab} />
           <View style={styles.sheetHead}>
             <View style={styles.sheetTitles}>
-              <Text style={styles.sheetTitle}>
-                Ask {coachShort} about {itemLabel} · {dateLabel}
+              <Text style={styles.sheetTitle} accessibilityRole="header">
+                Ask {coachShort}
               </Text>
               <Text style={styles.sheetSub}>
-                Pick a topic. WhatsApp opens with a draft you can edit.
+                About: {itemLabel} · {dateLabel}
               </Text>
             </View>
             <M2CloseButton onPress={onCancel} />
@@ -298,7 +299,7 @@ export function AskCoachSheet({
                 <>
                   <WhatsAppGlyph size={22} />
                   <Text style={styles.waBtnLabel}>
-                    {isPain && !painAck ? "Continue" : "Open WhatsApp"}
+                    {isPain && !painAck ? "Continue" : "Open in WhatsApp"}
                   </Text>
                 </>
               )}
@@ -314,31 +315,31 @@ export function AskCoachSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   root: {
     flex: 1,
     justifyContent: "flex-end",
   },
   scrim: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(15, 12, 40, 0.42)",
+    ...absoluteFill,
+    backgroundColor: t.colors.scrim,
   },
   sheet: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: "88%",
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    shadowColor: "#0F0C28",
+    shadowColor: t.colors.fixedNavy,
     shadowOffset: { width: 0, height: -10 },
     shadowOpacity: 0.22,
     shadowRadius: 40,
   },
   grab: {
     alignSelf: "center",
-    backgroundColor: "#D5D6DE",
+    backgroundColor: t.colors.line2,
     borderRadius: 3,
     height: 5,
     marginBottom: 10,
@@ -354,14 +355,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   sheetTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 22,
     fontWeight: "700",
     letterSpacing: -0.3,
     lineHeight: 28,
   },
   sheetSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
     marginTop: 2,
@@ -376,7 +377,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   chip: {
-    borderColor: "#D5D6DE",
+    borderColor: t.colors.line2,
     borderRadius: 14,
     borderWidth: 1,
     justifyContent: "center",
@@ -385,26 +386,26 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   chipOn: {
-    backgroundColor: "#EDE9FF",
-    borderColor: "#C9BEFF",
+    backgroundColor: t.colors.brandTint,
+    borderColor: t.colors.brand,
   },
   chipLabel: {
-    color: colors.nearBlack,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
   },
   chipLabelOn: {
-    color: colors.indigo,
+    color: t.colors.brand,
   },
   previewLabel: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "600",
     marginTop: spacing.sm,
   },
   waprev: {
-    backgroundColor: "#E7F8EE",
-    borderColor: "#C9EED8",
+    backgroundColor: t.colors.waBubble,
+    borderColor: t.colors.line,
     borderRadius: 16,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
@@ -415,33 +416,33 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   waprevText: {
-    color: "#14321F",
+    color: t.colors.ink,
     fontSize: 15,
     lineHeight: 21,
   },
   waprevLink: {
-    color: "#3B6B4D",
+    color: t.colors.waInk,
     fontSize: 13,
     marginTop: 4,
   },
   safety: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 14,
     lineHeight: 20,
   },
   fallback: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
   },
   caption: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     textAlign: "center",
   },
   waBtn: {
     alignItems: "center",
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
     borderRadius: 16,
     flexDirection: "row",
     gap: spacing.sm,
@@ -453,8 +454,25 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   waBtnLabel: {
-    color: colors.white,
+    color: t.colors.card,
     fontSize: 17,
     fontWeight: "700",
   },
-});
+}));
+
+const absoluteFill = {
+  position: "absolute" as const,
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
+
+/** AskCoachSheet in the system theme (Z12-49): its own styles read the scope. */
+export function AskCoachSheet(props: Parameters<typeof AskCoachSheetBody>[0]) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <AskCoachSheetBody {...props} />
+    </ThemeScope>
+  );
+}

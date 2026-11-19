@@ -13,7 +13,7 @@ import {
   fontFamilySemiBold,
 } from "./typography.js";
 
-function satoshiFamilyForWeight(weight: TextStyle["fontWeight"]): string {
+function familyForWeight(weight: TextStyle["fontWeight"]): string {
   const numeric =
     typeof weight === "number"
       ? weight
@@ -29,7 +29,7 @@ function satoshiFamilyForWeight(weight: TextStyle["fontWeight"]): string {
 }
 
 /**
- * Flatten caller styles, map fontWeight → Satoshi-* face, and drop fontWeight
+ * Flatten caller styles, map fontWeight → the registered Inter face, and drop fontWeight
  * so RN-web does not fall back to -apple-system when synthesizing bold.
  */
 function resolveFitTextStyle(style: StyleProp<TextStyle>): TextStyle[] {
@@ -38,12 +38,12 @@ function resolveFitTextStyle(style: StyleProp<TextStyle>): TextStyle[] {
   const family =
     typeof explicitFamily === "string" && explicitFamily.length > 0
       ? explicitFamily
-      : satoshiFamilyForWeight(fontWeight);
+      : familyForWeight(fontWeight);
   return [{ ...defaultTextStyle, ...rest, fontFamily: family }];
 }
 
 /**
- * Body Text that always applies Satoshi. Prefer this over raw RN `Text` so
+ * Body Text that always applies the app font (Inter). Prefer this over raw RN `Text` so
  * style objects that set color/size without fontFamily cannot fall back to
  * -apple-system / system UI fonts.
  */

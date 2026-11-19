@@ -1,8 +1,8 @@
+import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { ScrollView, View } from "react-native";
 import type { MealAssignment } from "@fitbud/contracts";
 import { formatHhMmTime, formatPersonName, greetingFor } from "@fitbud/core";
-import { brand, ink } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, radii } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
@@ -43,13 +43,14 @@ type Props = {
   onGoToday?: () => void;
 };
 
-export function WidgetTipsScreen({
+function WidgetTipsScreenBody({
   onBack,
   coachName,
   onOpenMeal,
   onOpenDiet,
   onGoToday,
 }: Props) {
+  const styles = useStyles();
   const { api, me } = useAuth();
   const sync = useSyncEngine();
   const [meal, setMeal] = useState<MealAssignment | null>(null);
@@ -328,7 +329,7 @@ export function WidgetTipsScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   page: { width: 361 },
   dots: {
     flexDirection: "row",
@@ -337,26 +338,26 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   dot: {
-    backgroundColor: "#C4C0D8",
+    backgroundColor: t.colors.ink4,
     borderRadius: 4,
     height: 6,
     width: 6,
   },
   lock: {
-    backgroundColor: "#1A1248",
+    backgroundColor: t.colors.fixedNavy,
     borderRadius: 28,
     overflow: "hidden",
     paddingBottom: 20,
     paddingTop: 28,
   },
   lockDate: {
-    color: "#fff",
+    color: t.colors.white,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
     textAlign: "center",
   },
   lockClock: {
-    color: "#fff",
+    color: t.colors.white,
     fontFamily: fontFamilyBold,
     fontSize: 72,
     letterSpacing: -1,
@@ -369,13 +370,14 @@ const styles = StyleSheet.create({
     paddingTop: 16,
   },
   lockCaption: {
-    color: "rgba(255,255,255,0.72)",
+    color: t.colors.white,
+    opacity: 0.72,
     fontFamily: fontFamilySemiBold,
     fontSize: 12,
   },
-  onLock: { color: "#fff", fontSize: 15 },
+  onLock: { color: t.colors.white, fontSize: 15 },
   today: {
-    backgroundColor: "#F4F2FB",
+    backgroundColor: t.colors.fill,
     borderRadius: 24,
     minHeight: 220,
     overflow: "hidden",
@@ -385,33 +387,42 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   snapGreeting: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilyBold,
     fontSize: 28,
   },
-  snapSub: { color: ink[500], fontSize: 15, marginBottom: 8 },
-  snapLine: { color: ink[700], fontSize: 15, lineHeight: 21 },
-  muted: { color: ink[500], fontSize: 15 },
-  warn: { color: "#9A3412", fontSize: 14 },
+  snapSub: { color: t.colors.ink3, fontSize: 15, marginBottom: 8 },
+  snapLine: { color: t.colors.ink2, fontSize: 15, lineHeight: 21 },
+  muted: { color: t.colors.ink3, fontSize: 15 },
+  warn: { color: t.colors.warnInk, fontSize: 14 },
   preview: {
-    backgroundColor: "#fff",
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: radii.card,
     borderWidth: 1,
     gap: 8,
     padding: 16,
   },
   previewKicker: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 12,
   },
   previewTitle: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
     lineHeight: 24,
   },
-  previewSub: { color: ink[500], fontSize: 14 },
-  toast: { color: brand.indigo, fontFamily: fontFamilySemiBold, fontSize: 14 },
-});
+  previewSub: { color: t.colors.ink3, fontSize: 14 },
+  toast: { color: t.colors.brand, fontFamily: fontFamilySemiBold, fontSize: 14 },
+}));
+
+/** WidgetTipsScreen in the system theme (Z12-49): its own styles read the scope. */
+export function WidgetTipsScreen(props: Parameters<typeof WidgetTipsScreenBody>[0]) {
+  return (
+    <ThemeScope scheme="system">
+      <WidgetTipsScreenBody {...props} />
+    </ThemeScope>
+  );
+}

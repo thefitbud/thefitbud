@@ -28,6 +28,8 @@ const h = vi.hoisted(() => {
 vi.mock("react-native", () => ({
   Platform: h.platform,
   NativeModules: {},
+  // AuthProvider wraps the app in a View (Z12-29); a pass-through is enough here.
+  View: ({ children }: { children?: unknown }) => children,
   AppState: {
     currentState: "active",
     addEventListener: () => ({ remove: () => undefined }),
@@ -58,6 +60,7 @@ vi.mock("../navigation/useAppDeepLinks", () => ({
 }));
 
 import { AuthProvider, useAuth } from "./AuthProvider";
+import { dayViewKey, getCached, setCached } from "../trainee/dataCache";
 
 const USER = "7a2d4c1e-5b3f-4d6a-9e8c-2f1a0b9c8d7e";
 const TRAINER_OF_USER = "3c9e1b7a-2d4f-4a6c-8e0b-5f7d9a1c3e2b";
@@ -336,6 +339,86 @@ describe("Links that need the other role (frame 61)", () => {
     expect(auth!.pendingRoleSwitch).toBeNull();
     await pick("trainee");
     expect(auth!.pendingRoleSwitch).toEqual({ targetRole: "trainer", linkKind: "exception" });
+  });
+});
+
+describe("Role select Back from More (TM-08a, Z12-49)", () => {
+  it("first run cannot leave role select", async () => {
+    launch();
+    await signInDual();
+    expect(auth!.canLeaveRoleSelect).toBe(false);
+  });
+
+  it("opened from More, Back clears the request and keeps the role", async () => {
+    launch();
+    await signInDual();
+    await pick("trainee");
+    act(() => auth!.requestRoleSelect());
+    expect(auth!.route.name).toBe("role_select");
+    expect(auth!.canLeaveRoleSelect).toBe(true);
+    act(() => auth!.leaveRoleSelect());
+    expect(auth!.route.name).toBe("trainee_shell");
+    expect(auth!.selectedRole).toBe("trainee");
+    expect(auth!.canLeaveRoleSelect).toBe(false);
+  });
+});
+
+describe("Day cache on sign-out and account switch (hand-off from Z12-40)", () => {
+  it("sign-out drops the day views", async () => {
+    launch();
+    await signInDual();
+    await pick("trainee");
+    const key = dayViewKey("today", RELATIONSHIP, "2026-11-17");
+    setCached(key, { meals: 3 });
+    act(() => auth!.signOut());
+    expect(getCached(key)).toBeUndefined();
+  });
+
+  it("signing in another account drops the day views", async () => {
+    launch();
+    await signInDual();
+    await pick("trainee");
+    const key = dayViewKey("diet", RELATIONSHIP, "2026-11-17");
+    setCached(key, { meals: 3 });
+    h.client.me.mockResolvedValueOnce(meFor(["trainer"]));
+    await act(async () => {
+      await auth!.signInWithToken("test-token-other");
+    });
+    expect(getCached(key)).toBeUndefined();
+  });
+});
+
+describe("Coach push in trainee mode (Z12-49)", () => {
+  it("asks first; Switch moves to the coach role", async () => {
+    launch();
+    await signInDual();
+    await pick("trainee");
+    const onCancel = vi.fn();
+    act(() => auth!.offerPushRoleSwitch("trainer_checkin_submitted", onCancel));
+    expect(auth!.pendingRoleSwitch).toEqual({
+      targetRole: "trainer",
+      linkKind: "push",
+      pushType: "trainer_checkin_submitted",
+    });
+    h.client.me.mockResolvedValueOnce(meFor(["trainer", "trainee"]));
+    await act(async () => {
+      await auth!.confirmRoleSwitch();
+    });
+    expect(auth!.selectedRole).toBe("trainer");
+    expect(auth!.pendingRoleSwitch).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it("Cancel keeps the client view and drops the tap", async () => {
+    launch();
+    await signInDual();
+    await pick("trainee");
+    const onCancel = vi.fn();
+    act(() => auth!.offerPushRoleSwitch("trainer_ask_coach", onCancel));
+    act(() => auth!.cancelRoleSwitch());
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(auth!.selectedRole).toBe("trainee");
+    expect(auth!.pendingRoleSwitch).toBeNull();
   });
 });
 

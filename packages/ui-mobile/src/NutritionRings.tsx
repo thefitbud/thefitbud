@@ -60,11 +60,17 @@ function Ring({
         />
       </Svg>
       <View style={styles.ringCenter}>
-        <Text style={styles.ringValue}>
+        <Text
+          style={[styles.ringValue, { maxWidth: size - 14 }]}
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.6}
+          maxFontSizeMultiplier={1.2}
+        >
           {datum.unknown ? "≥ " : ""}
           {datum.logged}
         </Text>
-        <Text style={styles.ringSub}>
+        <Text style={styles.ringSub} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {datum.assigned > 0 ? `of ${datum.assigned}` : datum.unit}
         </Text>
       </View>

@@ -1,86 +1,73 @@
-import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Text } from "../../components/Text";
-import type { FitBudApiClient } from "@fitbud/api-client";
-import type { TraineeFoodSearchResponse } from "@fitbud/contracts";
-import { colors, spacing } from "@fitbud/ui-mobile";
-import { loadServingPresetsForFood } from "./foodServingsApi";
-import type { ServingPresetV2 } from "./servingPresetsV2";
+import { createThemedStyles } from "../../providers/ThemeProvider";
 
-type FoodItem = TraineeFoodSearchResponse["items"][number];
+export type ServingChipOption = { id: string; label: string };
 
 type Props = {
-  api: FitBudApiClient;
-  item: FoodItem;
-  onSelect: (
-    item: FoodItem,
-    quantity: number,
-    servingId?: string,
-  ) => void;
+  options: readonly ServingChipOption[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  /** Read by screen readers before each chip ("Unit", "Amount"). */
+  groupLabel: string;
+  testIDPrefix?: string;
 };
 
-export function FoodServingChips({ api, item, onSelect }: Props) {
-  const [presets, setPresets] = useState<ServingPresetV2[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      const rows = await loadServingPresetsForFood(api, item);
-      if (!cancelled) {
-        setPresets(rows);
-        setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [api, item.id]);
-
-  if (loading) {
-    return <Text style={styles.loading}>Loading servings…</Text>;
-  }
-
+/**
+ * One-of chips (TR-26c unit and quick amounts). Labels wrap instead of
+ * truncating (Z12-22: "1.5 1 ka…"), and every chip is a 44 pt target. The
+ * selected chip is filled and also announced as selected, never colour alone.
+ */
+export function FoodServingChips({
+  options,
+  selectedId,
+  onSelect,
+  groupLabel,
+  testIDPrefix = "serving-chip",
+}: Props) {
+  const styles = useStyles();
   return (
-    <View style={styles.servingRow}>
-      {presets.map((preset) => (
-        <Pressable
-          key={preset.id}
-          accessibilityRole="button"
-          accessibilityLabel={preset.label}
-          style={styles.servingChip}
-          onPress={() =>
-            onSelect(item, preset.quantity, preset.servingId ?? item.defaultServingId ?? undefined)
-          }
-        >
-          <Text style={styles.servingChipText}>{preset.label}</Text>
-        </Pressable>
-      ))}
+    <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={groupLabel}>
+      {options.map((option) => {
+        const selected = option.id === selectedId;
+        return (
+          <Pressable
+            key={option.id}
+            accessibilityRole="radio"
+            accessibilityLabel={option.label}
+            accessibilityState={{ selected, checked: selected }}
+            onPress={() => onSelect(option.id)}
+            style={[styles.chip, selected ? styles.chipOn : null]}
+            testID={`${testIDPrefix}-${option.id}`}
+          >
+            <Text
+              variant="bodyStrong"
+              tone={selected ? "onBrand" : "ink"}
+              style={styles.label}
+            >
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  loading: {
-    color: colors.midGrey,
-    fontSize: 12,
+const useStyles = createThemedStyles((t) => ({
+  row: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  chip: {
+    alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
+    borderRadius: 22,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: t.touchTarget,
+    minWidth: t.touchTarget,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
-  servingRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing.xs,
-    marginTop: spacing.xs,
-  },
-  servingChip: {
-    backgroundColor: colors.paleLavender,
-    borderRadius: 8,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 4,
-  },
-  servingChipText: {
-    color: colors.deepNavy,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-});
+  chipOn: { backgroundColor: t.colors.brand, borderColor: t.colors.brand },
+  label: { textAlign: "center" },
+}));

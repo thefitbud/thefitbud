@@ -27,12 +27,15 @@ import { MealTimesScreen } from "../trainee/settings/MealTimesScreen";
 import { PasswordScreen } from "../trainee/settings/PasswordScreen";
 import { PastCoachingScreen } from "../trainee/settings/PastCoachingScreen";
 import { PrivacyScreen } from "../trainee/settings/PrivacyScreen";
+import { DeleteAccountScreen } from "../trainee/settings/DeleteAccountScreen";
 import { ProfileScreen } from "../trainee/settings/ProfileScreen";
 import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
 import { ReminderSettingsScreen } from "../trainee/settings/ReminderSettingsScreen";
 import { StepsSetupScreen } from "../trainee/steps/StepsSetupScreen";
 import { LanguageScreen } from "../trainee/settings/LanguageScreen";
 import { SyncStatusScreen } from "../trainee/settings/SyncStatusScreen";
+import { AccountScreen } from "../trainee/settings/AccountScreen";
+import { HelpScreen } from "../trainee/settings/HelpScreen";
 
 export type TraineeOverlay =
   | { screen: "notifications" }
@@ -77,8 +80,12 @@ export type TraineeOverlay =
   | { screen: "past_coaching" }
   | { screen: "widget_tips" }
   | { screen: "privacy" }
+  /** Z12-29: Privacy → Delete account. */
+  | { screen: "delete_account" }
   | { screen: "password" }
-  | { screen: "language" };
+  | { screen: "language" }
+  | { screen: "account" }
+  | { screen: "help" };
 
 export type TraineeOverlayOpener = (overlay: TraineeOverlay) => void;
 
@@ -186,6 +193,7 @@ export function TraineeOverlayHost({
           onOpenQuietHours={() => onOpen({ screen: "quiet_hours" })}
           onOpenMealTimes={() => onOpen({ screen: "meal_times" })}
           onOpenBatteryHelp={() => onOpen({ screen: "reminder_setup" })}
+          coachName={coachName}
         />
       );
     case "quiet_hours":
@@ -370,7 +378,7 @@ export function TraineeOverlayHost({
       return (
         <ProfileScreen
           onBack={onClose}
-          onChangePassword={() => onOpen({ screen: "password" })}
+          coachName={coachName}
         />
       );
     case "past_coaching":
@@ -395,9 +403,35 @@ export function TraineeOverlayHost({
         />
       );
     case "privacy":
-      return <PrivacyScreen onBack={onClose} />;
+      return (
+        <PrivacyScreen
+          onBack={onClose}
+          onDeleteAccount={() => onOpen({ screen: "delete_account" })}
+        />
+      );
+    case "delete_account":
+      return <DeleteAccountScreen onBack={() => onOpen({ screen: "privacy" })} />;
     case "password":
       return <PasswordScreen onBack={onClose} />;
+    case "account":
+      return (
+        <AccountScreen
+          onBack={onClose}
+          onOpenPassword={() => onOpen({ screen: "password" })}
+          onOpenPrivacy={() => onOpen({ screen: "privacy" })}
+          onOpenLanguage={() => onOpen({ screen: "language" })}
+          onOpenPastCoaching={() => onOpen({ screen: "past_coaching" })}
+        />
+      );
+    case "help":
+      return (
+        <HelpScreen
+          onBack={onClose}
+          coachName={coachName}
+          coachWhatsappE164={relationship.trainerWhatsappE164}
+          coachingActive={relationship.status !== "ended"}
+        />
+      );
     default: {
       const _exhaustive: never = overlay;
       return _exhaustive;

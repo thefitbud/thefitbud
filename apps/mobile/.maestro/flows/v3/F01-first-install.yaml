@@ -1,0 +1,123 @@
+appId: com.thefitbud.mobile.staging
+name: F01 Onboarding states, intake and waiting for the coach (Z12-49)
+tags:
+  - device
+  - trainee
+  - z12-49
+env:
+  # Public demo accounts on the local seed (same demo password as the others).
+  INTAKE_EMAIL: vikram.onboarding@demo.fitbud.test
+  WAITING_EMAIL: sneha.review@demo.fitbud.test
+---
+# F01 (Z12-49), the onboarding states a fresh install reaches after the invite:
+# Vikram has a part-filled intake (TR-03), Sneha has sent hers and waits for
+# Rahul (TR-04: the plan card, "While you wait" rows, the outlined WhatsApp
+# button, sign-out behind the account button). Accepting an invite (TR-02a/b)
+# needs an invite token from a link the runner cannot open: Expo web only.
+# Nothing here submits the intake, so the seed stays as it is.
+# Env: QA_PASSWORD.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${INTAKE_EMAIL}
+# Retype when the field lost keystrokes. On a cold first launch the Android
+# emulator dropped the first letter ("aarav.ontrack@..." arrived as
+# "arav.ontrack@...", device runs 44191354664 and 44200084620, light launch
+# smoke), so the API answered INVALID_CREDENTIALS and TR-01e showed. The
+# field keeps focus: erase and type again (as z12-36/sign-in-password.yaml).
+- runFlow:
+    when:
+      notVisible: "${INTAKE_EMAIL}.*"
+    commands:
+      - eraseText: 60
+      - inputText: ${INTAKE_EMAIL}
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+
+# TR-03
+- extendedWaitUntil:
+    visible: "Getting to know you"
+    timeout: 60000
+- assertVisible: ".* of 5"
+- takeScreenshot: TR-03
+- runFlow: ../../common/assert-no-crash.yaml
+- killApp
+
+# TR-04
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- tapOn: "you@example.com or 9876543210"
+- inputText: ${WAITING_EMAIL}
+# Retype when the field lost keystrokes (see the first sign-in above).
+- runFlow:
+    when:
+      notVisible: "${WAITING_EMAIL}.*"
+    commands:
+      - eraseText: 60
+      - inputText: ${WAITING_EMAIL}
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: ".* is building your plan"
+    timeout: 60000
+- assertVisible: "WHILE YOU WAIT"
+- assertVisible: "Intake form"
+- assertNotVisible: "Pull to refresh for updates"
+- takeScreenshot: TR-04
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Reminders"
+- extendedWaitUntil:
+    visible: "REMIND ME ABOUT"
+    timeout: 20000
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: ".* is building your plan"
+    timeout: 20000
+# Android dark, runs 44191354664 and 44200084620: the failure shot after
+# "Sign out" is TR-04 with the sheet closed, so the sheet was dismissed and
+# sign-out never ran (Sign out calls signOut() directly, no dialog). The
+# account button sits where the sheet's scrim lands once the sheet is open:
+# a second tap on it (Maestro's retry of a tap that has not changed the screen
+# yet, or a tap still landing during the Reminders pop) closes the sheet,
+# whose text stays in the hierarchy while it slides out. So: let the pop
+# settle, tap once, let the sheet settle, check it is still open, tap once.
+- waitForAnimationToEnd:
+    timeout: 5000
+- tapOn:
+    text: "Account"
+    retryTapIfNoChange: false
+- extendedWaitUntil:
+    visible: "Your plan will be here as soon as it's ready\\."
+    timeout: 10000
+# The sheet slides in: let it settle, then check it is still open before
+# tapping inside it.
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible: "Your plan will be here as soon as it's ready\\."
+- tapOn:
+    text: "Sign out"
+    retryTapIfNoChange: false
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 20000
+- runFlow: ../../common/assert-no-crash.yaml

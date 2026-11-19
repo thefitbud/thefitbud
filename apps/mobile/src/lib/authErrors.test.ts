@@ -15,6 +15,8 @@ import {
   SRV_COPY,
   UNK_COPY,
   WRONG_CREDENTIALS_COPY,
+  LOGIN_RATE_COPY,
+  wrongPasswordCopy,
   authErrorCopy,
   classifyAuthError,
   mismatchedResponseCopy,
@@ -22,6 +24,7 @@ import {
 import {
   OTP_FINISH_FAILED_COPY,
   OTP_INVALID_COPY,
+  OTP_EXPIRED_COPY,
   OTP_NETWORK_COPY,
   verifyCodeError,
 } from "../screens/auth/verifyCodeError";
@@ -288,6 +291,64 @@ describe("screens route every catch through the mapper", () => {
   it("AuthScreen.verifyCode is still QT9's controller", () => {
     const source = readFileSync(join(dir, "../screens/AuthScreen.tsx"), "utf8");
     expect(source).toContain("verifier.current.submit(code, identifier.trim())");
+  });
+});
+
+describe("inline sign-in states only behind their codes (TR-01e/f/g, Z12-49)", () => {
+  it("wrong password is inline only for 401 INVALID_CREDENTIALS", () => {
+    expect(classifyAuthError(apiError(401, "INVALID_CREDENTIALS"), "password-login")).toEqual({
+      code: null,
+      copy: WRONG_CREDENTIALS_COPY,
+      kind: "wrong-credentials",
+    });
+    for (const err of [
+      apiError(401, "UNAUTHORIZED"),
+      apiError(400, "INVALID_REQUEST"),
+      apiError(500, "INTERNAL"),
+      new TypeError("Network request failed"),
+    ]) {
+      expect(classifyAuthError(err, "password-login").kind).toBeUndefined();
+    }
+  });
+
+  it("names the number or the email the user typed", () => {
+    expect(wrongPasswordCopy("98201 45678")).toBe("That number and password don't match.");
+    expect(wrongPasswordCopy("aarav@example.com")).toBe("That email and password don't match.");
+  });
+
+  it("too many tries is the rate-limited state only for a 429", () => {
+    expect(classifyAuthError(apiError(429, "RATE_LIMITED"), "password-login")).toEqual({
+      code: "AUTH-RATE",
+      copy: LOGIN_RATE_COPY,
+      kind: "rate-limited",
+    });
+    expect(classifyAuthError(apiError(503, "UNAVAILABLE"), "password-login").kind).toBeUndefined();
+  });
+
+  it("code expired only for OTP_EXPIRED; OTP_INVALID keeps its own copy", async () => {
+    expect(verifyCodeError(apiError(401, "OTP_EXPIRED"))).toBe(OTP_EXPIRED_COPY);
+    expect(verifyCodeError(apiError(401, "OTP_INVALID"))).toBe(OTP_INVALID_COPY);
+    const verifier = createCodeVerifier({
+      verify: async () => {
+        throw apiError(401, "OTP_EXPIRED");
+      },
+      finish: async () => undefined,
+    });
+    expect(await verifier.submit("482019", "aarav@example.com")).toEqual({
+      kind: "error",
+      message: OTP_EXPIRED_COPY,
+      expired: true,
+    });
+    const invalid = createCodeVerifier({
+      verify: async () => {
+        throw apiError(401, "OTP_INVALID");
+      },
+      finish: async () => undefined,
+    });
+    expect(await invalid.submit("482019", "aarav@example.com")).toEqual({
+      kind: "error",
+      message: OTP_INVALID_COPY,
+    });
   });
 });
 

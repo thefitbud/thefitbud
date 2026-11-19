@@ -6,6 +6,7 @@ import { ApiClientError } from "@fitbud/api-client";
 import type {
   AttentionGroupsResponse,
   CoachAsk,
+  ExceptionDetail,
   TrainerCheckinInboxItem,
 } from "@fitbud/contracts";
 import {
@@ -36,6 +37,7 @@ import { createIdempotencyKey } from "../lib/idempotency";
 import { StatusChip } from "../components/StatusChip";
 import { SwipeActionRow } from "../components/SwipeActionRow";
 import { Snackbar } from "../components/Snackbar";
+import { isAlreadyResolved, isResolveConflict } from "./sheets/resolveRecovery";
 import { initialsFromName } from "../components/m2";
 import {
   acknowledgeAttentionItem,
@@ -68,10 +70,19 @@ import {
   nextReviewClientName,
   reviewSheetIndexForItem,
   reviewSheetItemsForRelationship,
+  withSessionResolved,
 } from "./reviewSheetNav";
 import { localDateInTimezone } from "../lib/dates";
 import { openContextualWhatsApp } from "./whatsapp";
 import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
+import { clientStatusApi } from "./clientStatus/api";
+import { MoreSheet } from "./sheets/MoreSheet";
+import { NoteSheet, type NoteSaveInput } from "./sheets/NoteSheet";
+import { NudgeSheet } from "./sheets/NudgeSheet";
+import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
+import { firstNameOf } from "./sheets/exceptionSheetContent";
+import { offlineBannerText } from "./sheets/exceptionStateContent";
+import { nudgeTargetFromException } from "./sheets/nudgeContent";
 
 type ReviewSheetState = {
   relationshipId: string;
@@ -80,12 +91,22 @@ type ReviewSheetState = {
 };
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
+type AttentionGroupItem = AttentionGroup["items"][number];
+
+/** A sheet opened over the review sheet (Z12-51). One at a time. */
+type ReviewSubSheet =
+  | { kind: "nudge"; detail: ExceptionDetail; clientTimeZone: string | null }
+  | { kind: "resolve"; item: AttentionGroupItem }
+  | { kind: "more" }
+  | { kind: "note" };
 type Segment = "needs_you" | "asked" | "checkins";
 
 type Props = {
   onReviewException: (exceptionId: string) => void;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
   onOpenClients: () => void;
+  /** The client's profile (status screen), from the review sheet's ⋯ menu. */
+  onOpenClient?: (relationshipId: string) => void;
 };
 
 type Snapshot = {
@@ -131,8 +152,9 @@ const CACHE_KEY = "trainer:attention";
 export function AttentionTab({
   onReviewException,
   onReviewCheckin,
+  onOpenClient,
 }: Props) {
-  const { api, relationships, refreshSession } = useAuth();
+  const { api, me, relationships, refreshSession } = useAuth();
   // The trainer's device zone, falling back to Asia/Kolkata when it cannot be
   // read at all — never UTC (D-W3b-11 (b)). A zone that is present but
   // unresolvable still surfaces a named error from the resolver.
@@ -156,7 +178,16 @@ export function AttentionTab({
   // No data on screen and the load failed: the frame 45 state with Retry.
   const [loadFailed, setLoadFailed] = useState(false);
   const hasData = useRef(false);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToastText] = useState<string | null>(null);
+  // Each toast request gets its own Snackbar instance. The shared notice queue
+  // can drop a toast early (a tap outside it, a cap), and a second request
+  // with the same words ("Marked answered" for client B after A's left) would
+  // otherwise change no prop and never show, taking its Undo with it (Z12-51).
+  const [toastSeq, setToastSeq] = useState(0);
+  const setToast = useCallback((next: string | null) => {
+    setToastText(next);
+    if (next != null) setToastSeq((seq) => seq + 1);
+  }, []);
   const [undoTarget, setUndoTarget] = useState<ReviewedUndoItem[] | null>(null);
   const [reviewSheet, setReviewSheet] = useState<ReviewSheetState | null>(null);
   const [reviewIndex, setReviewIndex] = useState(0);
@@ -166,6 +197,23 @@ export function AttentionTab({
   const [reviewUndoStatus, setReviewUndoStatus] = useState<
     Record<string, "detected" | "active">
   >({});
+  // Items resolved from the sheet this session: the API drops them from
+  // Attention, the sheet keeps them read only (resolved, all-resolved).
+  const [sheetResolved, setSheetResolved] = useState<AttentionGroupItem[]>([]);
+  const [subSheet, setSubSheet] = useState<ReviewSubSheet | null>(null);
+  const [subSheetError, setSubSheetError] = useState<string | null>(null);
+  // A toast raised while the review sheet is up draws inside the sheet: the
+  // screen's footer is under the sheet's modal there.
+  const [sheetToast, setSheetToastText] = useState<string | null>(null);
+  // Same per-request key as the main toast, so a repeated line shows again.
+  const [sheetToastSeq, setSheetToastSeq] = useState(0);
+  const setSheetToast = useCallback((next: string | null) => {
+    setSheetToastText(next);
+    if (next != null) setSheetToastSeq((seq) => seq + 1);
+  }, []);
+  // One idempotency key per resolve or note composer session, reused on retry.
+  const resolveKeys = useRef<{ ack: string; resolve: string } | null>(null);
+  const noteKey = useRef<string | null>(null);
 
   const applySnapshot = useCallback((snapshot: Snapshot) => {
     setLists(listsFromSnapshot(snapshot));
@@ -282,11 +330,11 @@ export function AttentionTab({
 
   const reviewItems = useMemo(() => {
     if (!reviewSheet) return [];
-    return reviewSheetItemsForRelationship(
-      lists.groups,
-      reviewSheet.relationshipId,
+    return withSessionResolved(
+      reviewSheetItemsForRelationship(lists.groups, reviewSheet.relationshipId),
+      sheetResolved,
     );
-  }, [lists.groups, reviewSheet]);
+  }, [lists.groups, reviewSheet, sheetResolved]);
 
   const safeReviewIndex = clampReviewSheetIndex(reviewIndex, reviewItems.length);
 
@@ -367,6 +415,8 @@ export function AttentionTab({
     setReviewBrowsing(false);
     setJustResolvedIds([]);
     setReviewUndoStatus({});
+    setSheetResolved([]);
+    setSubSheet(null);
     setReviewSheet({
       relationshipId: card.relationshipId,
       traineeDisplayName: card.traineeDisplayName,
@@ -473,6 +523,9 @@ export function AttentionTab({
     setReviewBrowsing(false);
     setJustResolvedIds([]);
     setReviewUndoStatus({});
+    setSheetResolved([]);
+    setSubSheet(null);
+    setSheetToast(null);
   }
 
   function openNextClient() {
@@ -485,16 +538,129 @@ export function AttentionTab({
     openReviewSheet(next);
   }
 
-  async function nudgeFromSheet() {
+  function openSubSheet(next: ReviewSubSheet) {
+    setSubSheetError(null);
+    if (next.kind === "resolve") resolveKeys.current = null;
+    if (next.kind === "note") noteKey.current = null;
+    setSubSheet(next);
+  }
+
+  function finishResolved(item: AttentionGroupItem, outcome: ResolveOutcome | null) {
+    resolveKeys.current = null;
+    const resolved: AttentionGroupItem = {
+      ...item,
+      status: "resolved",
+      details: { ...(item.details ?? {}), outcome: outcome ?? undefined },
+    };
+    setLists((current) =>
+      partitionAttentionGroups(
+        current.groups.map((group) => ({
+          ...group,
+          items: group.items.map((entry) =>
+            entry.id === item.id ? { ...entry, status: "resolved" as const } : entry,
+          ),
+        })),
+      ),
+    );
+    setSheetResolved((current) => [
+      ...current.filter((entry) => entry.id !== item.id),
+      resolved,
+    ]);
+    setJustResolvedIds((current) =>
+      current.includes(item.id) ? current : [...current, item.id],
+    );
+    setReviewBrowsing(false);
+    setSubSheet(null);
+  }
+
+  /**
+   * Resolve from the sheet (TM-04d). Only the trainer resolves, by this
+   * press. The API resolves an acknowledged item only, so an item that is
+   * still open is marked reviewed first, as the trainer would on the web.
+   * Both calls carry keys reused on a retry.
+   */
+  async function resolveInSheet(
+    item: AttentionGroupItem,
+    input: { outcome: ResolveOutcome | null; note: string | null },
+  ) {
     if (!reviewSheet || offline) return;
-    const first = formatPersonName(reviewSheet.traineeDisplayName).split(
-      " ",
-    )[0];
-    await openContextualWhatsApp({
-      phoneE164: reviewSheet.clientWhatsappE164,
-      draftText: `Hi ${first}, `,
-    });
-    setToast("Opened WhatsApp");
+    setReviewActing(true);
+    setSubSheetError(null);
+    resolveKeys.current ??= {
+      ack: createIdempotencyKey(),
+      resolve: createIdempotencyKey(),
+    };
+    const keys = resolveKeys.current;
+    try {
+      const status = lists.groups
+        .flatMap((group) => group.items)
+        .find((entry) => entry.id === item.id)?.status;
+      if (status === "detected" || status === "active") {
+        await api.acknowledgeException(item.id, {}, keys.ack);
+        setLists((current) =>
+          partitionAttentionGroups(acknowledgeAttentionItem(current.groups, item.id)),
+        );
+      }
+      await api.resolveException(
+        item.id,
+        {
+          note: input.note,
+          interventionKind: "resolve",
+          ...(input.outcome ? { outcome: input.outcome } : {}),
+        },
+        keys.resolve,
+      );
+      finishResolved(item, input.outcome);
+    } catch (err) {
+      if (isNetworkFailure(err)) {
+        setSubSheetError(offlineBannerText(true));
+      } else if (
+        isResolveConflict(err) &&
+        (await isAlreadyResolved((id) => api.getException(id), item.id))
+      ) {
+        // A lost success: the item is resolved, so this is success, not an error.
+        finishResolved(item, input.outcome);
+      } else {
+        if (!(err instanceof ApiClientError)) reportError("attention.resolve", err);
+        setSubSheetError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not resolve. (RES-ERR)",
+        );
+      }
+    } finally {
+      setReviewActing(false);
+    }
+  }
+
+  async function saveNoteFromSheet(input: NoteSaveInput) {
+    if (!reviewSheet || offline) return;
+    setReviewActing(true);
+    setSubSheetError(null);
+    noteKey.current ??= createIdempotencyKey();
+    try {
+      await api.createTrainerNote(reviewSheet.relationshipId, input, noteKey.current);
+      noteKey.current = null;
+      setSubSheet(null);
+      setSheetToast(
+        input.visibility === "client"
+          ? `Shown on ${firstNameOf(reviewSheet.traineeDisplayName) || "your client"}'s Today`
+          : "Saved privately",
+      );
+    } catch (err) {
+      if (isNetworkFailure(err)) {
+        setSubSheetError(offlineBannerText(true));
+      } else {
+        if (!(err instanceof ApiClientError)) reportError("attention.note", err);
+        setSubSheetError(
+          err instanceof ApiClientError
+            ? err.message
+            : "Could not save note. (NOTE-ERR)",
+        );
+      }
+    } finally {
+      setReviewActing(false);
+    }
   }
 
   async function sendAnswer(ask: CoachAsk) {
@@ -596,6 +762,7 @@ export function AttentionTab({
       footer={
         toast ? (
           <Snackbar
+            key={toastSeq}
             message={toast}
             leadingCheck={markReviewedToast || answerUndo}
             actionLabel={undoTarget || answerUndo ? "Undo" : undefined}
@@ -821,10 +988,84 @@ export function AttentionTab({
           void undoReviewedInSheet(exceptionId);
         }}
         onNextClient={openNextClient}
-        onNudge={() => {
-          void nudgeFromSheet();
-        }}
-      />
+        onNudge={(detail, clientTimeZone) =>
+          openSubSheet({ kind: "nudge", detail, clientTimeZone })
+        }
+        onResolve={(item) => openSubSheet({ kind: "resolve", item })}
+        onMore={() => openSubSheet({ kind: "more" })}
+      >
+        {reviewSheet ? (
+          <>
+            <ResolveSheet
+              visible={subSheet?.kind === "resolve"}
+              detail={
+                subSheet?.kind === "resolve"
+                  ? { type: subSheet.item.type, details: subSheet.item.details ?? null }
+                  : { type: "missed_workout", details: null }
+              }
+              traineeDisplayName={reviewSheet.traineeDisplayName}
+              acting={reviewActing}
+              errorMessage={subSheet?.kind === "resolve" ? subSheetError : null}
+              onDismiss={() => setSubSheet(null)}
+              onConfirm={(input) => {
+                if (subSheet?.kind === "resolve") {
+                  void resolveInSheet(subSheet.item, input);
+                }
+              }}
+            />
+            {subSheet?.kind === "nudge" ? (
+              <NudgeSheet
+                visible
+                target={nudgeTargetFromException(subSheet.detail)}
+                traineeDisplayName={reviewSheet.traineeDisplayName}
+                clientTimeZone={subSheet.clientTimeZone}
+                trainerDisplayName={me?.trainerProfile?.displayName ?? null}
+                api={clientStatusApi(api)}
+                onDismiss={() => setSubSheet(null)}
+                onSent={(line) => {
+                  setSubSheet(null);
+                  setSheetToast(line);
+                }}
+              />
+            ) : null}
+            <MoreSheet
+              visible={subSheet?.kind === "more"}
+              traineeDisplayName={reviewSheet.traineeDisplayName}
+              onDismiss={() => setSubSheet(null)}
+              onAddNote={() => openSubSheet({ kind: "note" })}
+              onMessageOnWhatsApp={() => {
+                // A wa.me chat with no template (TM-04j); the trainer sends it.
+                void openContextualWhatsApp({
+                  phoneE164: reviewSheet.clientWhatsappE164,
+                });
+              }}
+              onOpenProfile={() => {
+                const relationshipId = reviewSheet.relationshipId;
+                leaveReviewSheet();
+                onOpenClient?.(relationshipId);
+              }}
+            />
+            <NoteSheet
+              visible={subSheet?.kind === "note"}
+              traineeDisplayName={reviewSheet.traineeDisplayName}
+              acting={reviewActing}
+              errorMessage={subSheet?.kind === "note" ? subSheetError : null}
+              onDismiss={() => setSubSheet(null)}
+              onSave={(input) => {
+                void saveNoteFromSheet(input);
+              }}
+            />
+            {sheetToast ? (
+              <Snackbar
+                key={sheetToastSeq}
+                message={sheetToast}
+                leadingCheck
+                onDismiss={() => setSheetToast(null)}
+              />
+            ) : null}
+          </>
+        ) : null}
+      </ReviewSheet>
     </Screen>
   );
 }

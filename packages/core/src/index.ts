@@ -360,3 +360,12 @@ export { routeForLinkKind, type LinkKind } from "./links.js";
 export { canLog, type LogDecision } from "./late-logging.js";
 export { TEST_OTP_IDENTIFIER_RE } from "./test-otp-identifier.js";
 export { scaleMacro, sumMacros, type MacroLine } from "./macros.js";
+export {
+  ACCOUNT_DELETION_CONFIRM_WORD,
+  ACCOUNT_DELETION_EMAIL,
+  ACCOUNT_DELETION_EMAIL_SUBJECT,
+  ACCOUNT_DELETION_MAILTO,
+  accountDeletionCopy,
+  accountReactivationCopy,
+  formatPurgeDate,
+} from "./account-deletion-copy.js";
