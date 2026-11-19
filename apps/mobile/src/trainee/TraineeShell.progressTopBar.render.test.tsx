@@ -131,6 +131,11 @@ describe("TraineeShell on the Progress tab", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Today").length).toBeGreaterThan(0);
     });
+    // Device flows open tabs by testID (Z12-44fu: text "Workout" hits Today's tile).
+    expect(screen.getByTestId("tab-today")).toBeTruthy();
+    expect(screen.getByTestId("tab-workout")).toBeTruthy();
+    expect(screen.getByTestId("tab-diet")).toBeTruthy();
+    expect(screen.getByTestId("tab-progress")).toBeTruthy();
     fireEvent.click(screen.getByText("Progress"));
     await waitFor(() => {
       expect(screen.getAllByRole("heading", { name: "Progress" }).length).toBe(1);

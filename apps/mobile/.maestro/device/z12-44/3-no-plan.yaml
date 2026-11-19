@@ -23,7 +23,8 @@ tags:
 - inputText: harpreet.ready@demo.fitbud.test
 - tapOn: "Your password"
 - inputText: ${QA_PASSWORD}
-- tapOn: "Your coach's plan for today is waiting\\."
+# Same dismiss as common/sign-in-password.yaml (old "Your coach's plan…" subtitle gone on main).
+- tapOn: "Use the mobile number or email your coach invited\\."
 - tapOn:
     text: "Sign in"
     below: "Forgot password\\??"
