@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 8CBD3A25-6E81-42D8-A7BE-14F03C067068" tests="6" failures="2" time="1085.893" timestamp="2026-11-19T14:10:37">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="111.222" timestamp="2026-11-19T14:10:37" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="119.043" timestamp="2026-11-19T14:12:28" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-36 trainee active workout mid-session (W-03)" name="Z12-36 trainee active workout mid-session (W-03)" classname="Z12-36 trainee active workout mid-session (W-03)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/3-trainee-workout.yaml" time="113.594" timestamp="2026-11-19T14:14:27" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" name="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" classname="Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/1-workout-tab.yaml" time="284.182" timestamp="2026-11-19T14:16:21" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" name="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" classname="Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/2-finish-workout.yaml" time="360.923" timestamp="2026-11-19T14:21:05" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+      <failure>No visible element found: "View summary"</failure>
+    </testcase>
+    <testcase id="Z12-44 Workout tab, no plan yet (TR-10b)" name="Z12-44 Workout tab, no plan yet (TR-10b)" classname="Z12-44 Workout tab, no plan yet (TR-10b)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-44/3-no-plan.yaml" time="96.256" timestamp="2026-11-19T14:27:06" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-44"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

@@ -1,0 +1,277 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 2 of 6 flows failed",
+    "dark: 2 of 6 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-36/3-trainee-workout.yaml",
+    "device/z12-44/1-workout-tab.yaml",
+    "device/z12-44/2-finish-workout.yaml",
+    "device/z12-44/3-no-plan.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 6,
+      "passed": 4,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Z12-36 trainee active workout mid-session (W-03)",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible"
+        },
+        {
+          "flow": "Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)",
+          "message": "Assertion is false: \"Log set [0-9]+ ·.*\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 6,
+      "passed": 4,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Z12-36 trainee active workout mid-session (W-03)",
+          "message": "Assertion is false: \"Today's workout.*|Needs you.*|Choose mode\" is visible"
+        },
+        {
+          "flow": "Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)",
+          "message": "No visible element found: \"View summary\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 147 s",
+      "mode": "cache-hit",
+      "seconds": 147,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.919 (15), dark 0.396 (16)",
+      "light": 0.919,
+      "dark": 0.396,
+      "count": {
+        "light": 15,
+        "dark": 16
+      },
+      "shots": [
+        {
+          "file": "TR-10a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.157
+        },
+        {
+          "file": "TR-10a-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "TR-10b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.157
+        },
+        {
+          "file": "TR-10b-light-ios.png",
+          "theme": "light",
+          "luma": 0.955
+        },
+        {
+          "file": "TR-10c-light-ios.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "W-01a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.2
+        },
+        {
+          "file": "W-01a-light-ios.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "W-01b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.201
+        },
+        {
+          "file": "W-01c-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.171
+        },
+        {
+          "file": "W-01c-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "W-01e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.18
+        },
+        {
+          "file": "W-01e-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "W-17a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "W-17a-light-ios.png",
+          "theme": "light",
+          "luma": 0.901
+        },
+        {
+          "file": "W-17b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.136
+        },
+        {
+          "file": "W-17b-light-ios.png",
+          "theme": "light",
+          "luma": 0.898
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.79
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.79
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-004-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.136
+        },
+        {
+          "file": "step-004-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.941
+        },
+        {
+          "file": "step-015-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+          "theme": "light",
+          "luma": 0.941
+        },
+        {
+          "file": "step-017-assertCondition-Today_s_workout.Needs_yo-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.136
+        },
+        {
+          "file": "step-050-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.945
+        },
+        {
+          "file": "step-051-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "step-054-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.913
+        },
+        {
+          "file": "step-056-assertCondition-Log_set__0-9-light-ios.png",
+          "theme": "light",
+          "luma": 0.912
+        },
+        {
+          "file": "step-164-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.945
+        },
+        {
+          "file": "step-168-scrollUntilVisible-View_summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.945
+        },
+        {
+          "file": "z12-44-finished-day-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.171
+        }
+      ]
+    }
+  ]
+}
