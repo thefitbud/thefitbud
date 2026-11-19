@@ -1,0 +1,137 @@
+{
+  "result": "mean screenshot luminance: light 0.924 (14), dark 0.196 (11)",
+  "light": 0.924,
+  "dark": 0.196,
+  "count": {
+    "light": 14,
+    "dark": 11
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.113
+    },
+    {
+      "file": "TR-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "TR-07c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.093
+    },
+    {
+      "file": "TR-07c-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "TR-10b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.095
+    },
+    {
+      "file": "TR-10b-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    },
+    {
+      "file": "TR-13a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "TR-13a-light-ios.png",
+      "theme": "light",
+      "luma": 0.916
+    },
+    {
+      "file": "TR-13b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-13b-light-ios.png",
+      "theme": "light",
+      "luma": 0.908
+    },
+    {
+      "file": "TR-13c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.217
+    },
+    {
+      "file": "TR-13c-light-ios.png",
+      "theme": "light",
+      "luma": 0.825
+    },
+    {
+      "file": "TR-14a-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "TR-14c-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "TR-14d-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "TR-14g-light-ios.png",
+      "theme": "light",
+      "luma": 0.905
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.113
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.949
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.949
+    },
+    {
+      "file": "step-022-scrollUntilVisible-StartNext_check-in-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.112
+    },
+    {
+      "file": "Today-no-plan-checkin-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "Today-no-plan-checkin-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "Today-no-plan-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "Today-no-plan-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    }
+  ],
+  "w03DarkTooBright": []
+}
