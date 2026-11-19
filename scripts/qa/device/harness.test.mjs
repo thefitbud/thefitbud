@@ -348,7 +348,9 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
 
 test("trainee Today home-ready helper and F15 use it; gate clears auth rate limits per theme", () => {
   const ready = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/wait-trainee-today-ready.yaml"), "utf8");
-  assert.match(ready, /This week\|Today's workout\.\*/);
+  assert.match(ready, /visible: "This week\|Today's workout\.\*\|View summary"/);
+  const f02 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F02-sign-in.yaml"), "utf8");
+  assert.match(f02, /wait-trainee-today-ready\.yaml/);
   const f15 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F15-settings-account.yaml"), "utf8");
   assert.match(f15, /wait-trainee-today-ready\.yaml/);
   const localApi = fs.readFileSync(path.join(repo, "scripts/qa/device/local-api.sh"), "utf8");
