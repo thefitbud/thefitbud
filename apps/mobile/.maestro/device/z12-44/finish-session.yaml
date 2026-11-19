@@ -7,6 +7,8 @@ appId: com.thefitbud.mobile.staging
 # ---- Open a session ---------------------------------------------------------------
 # Wait for the CTA to settle before tapping: the missed banner can shift layout
 # and an early tap leaves the pre-start card on screen (FitBud #485 iOS light).
+# Open waits 60 s: iOS light banner Log it can sit busy through a slow
+# workout.start + sync/push (~17–23 s in run 44484383185) before ActiveWorkout.
 - runFlow:
     when:
       true: ${output.fwKind == 'today'}
@@ -21,7 +23,7 @@ appId: com.thefitbud.mobile.staging
           waitToSettleTimeoutMs: 2000
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
-          timeout: 45000
+          timeout: 60000
 - runFlow:
     when:
       true: ${output.fwKind == 'banner'}
@@ -36,7 +38,7 @@ appId: com.thefitbud.mobile.staging
           waitToSettleTimeoutMs: 2000
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
-          timeout: 45000
+          timeout: 60000
 - runFlow:
     when:
       true: ${output.fwKind == 'day'}
@@ -55,7 +57,7 @@ appId: com.thefitbud.mobile.staging
           waitToSettleTimeoutMs: 2000
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
-          timeout: 45000
+          timeout: 60000
 - tapOn: "Log set [0-9]+ ·.*"
 - runFlow:
     when:
