@@ -160,6 +160,26 @@ describe("week dots and count from one source (ISSUE-MAP #10)", () => {
     expect(after.days.filter((d) => d.done)).toHaveLength(after.completed);
   });
 
+  it("marks only the finished assignment of the week done, not the others", () => {
+    const week = [
+      assignment("a", "2026-11-09", "in_progress"),
+      assignment("b", "2026-11-12", "assigned"),
+      assignment("c", "2026-11-14", "in_progress"),
+    ];
+    const patched = withFinishedExecution(week, { id: "x", assignmentId: "b" });
+    expect(patched.map((item) => item.status)).toEqual([
+      "in_progress",
+      "completed",
+      "in_progress",
+    ]);
+    // What the card reads: View summary on the finished day only.
+    expect(
+      patched.map((item) => workoutHeroState(item, "2026-11-14").action),
+    ).toEqual(["continue", "view_summary", "continue"]);
+    // The input list is not mutated.
+    expect(week[1]!.status).toBe("assigned");
+  });
+
   it("leaves the list untouched when nothing needs patching", () => {
     const list = [assignment("a", "2026-11-09", "completed")];
     expect(withFinishedExecution(list, { id: "x", assignmentId: "a" })).toBe(list);
