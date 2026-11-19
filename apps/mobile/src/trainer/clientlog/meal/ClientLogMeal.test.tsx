@@ -1,4 +1,4 @@
-/** Trainer log and edit of a client's meal (Z10-19): copy, rules and request bodies. */
+/** Trainer log and edit of a client's meal (Z10-19, Z12-52): editors and coach payloads. */
 import { describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "@fitbud/api-client";
 import { mealAssignmentSchema } from "@fitbud/contracts";
@@ -44,7 +44,24 @@ function meal(over: { id?: string; name?: string; order?: number; compliance?: u
     windowEndsAt: "2026-11-04T05:00:00.000Z",
     photoRequired: false,
     status: over.compliance ? "confirmed" : "pending",
-    prescription: { id: ids(4), order: over.order ?? 1, name: over.name ?? "Breakfast", scheduleHint: null, instructions: null, photoRequired: false },
+    prescription: {
+      id: ids(4),
+      order: over.order ?? 1,
+      name: over.name ?? "Breakfast",
+      scheduleHint: null,
+      instructions: null,
+      photoRequired: false,
+      items: [
+        {
+          name: "Vegetable poha",
+          portionLabel: "1 bowl",
+          calories: 400,
+          proteinGrams: 20,
+          carbsGrams: 60,
+          fatGrams: 10,
+        },
+      ],
+    },
     compliance: over.compliance ?? null,
     createdAt: "2026-11-01T00:00:00.000Z",
     updatedAt: "2026-11-01T00:00:00.000Z",
@@ -65,6 +82,16 @@ vi.mock("../../../components/Screen", () => ({
 vi.mock("../../../lib/dates", async (orig) => ({
   ...(await orig<typeof import("../../../lib/dates")>()),
   localDateInTimezone: () => "2026-11-04",
+}));
+vi.mock("../../../sync/SyncProvider", () => ({ useSyncEngine: () => ({}) }));
+vi.mock("../../../lib/meFoodsApi", () => ({
+  fetchMeFoodRecent: vi.fn(async () => ({ items: [], nextCursor: null })),
+}));
+vi.mock("expo-modules-core", () => ({
+  requireOptionalNativeModule: () => null,
+  requireNativeModule: () => null,
+  NativeModulesProxy: {},
+  EventEmitter: class {},
 }));
 
 const { ClientLogMealScreen } = await import("./ClientLogMealScreen");
@@ -93,8 +120,8 @@ describe("meal model", () => {
   it("needs a change kind for a changed meal and drops it when the outcome moves away", () => {
     const d = setOutcome(startDraft(null), "modified");
     expect(isComplete(d)).toBe(false);
-    expect(isComplete({ ...d, deviationKind: "substitute" })).toBe(true);
-    expect(setOutcome({ ...d, deviationKind: "substitute" }, "skipped").deviationKind).toBeNull();
+    expect(isComplete({ ...d, deviationKind: "portion_adjustment" })).toBe(true);
+    expect(setOutcome({ ...d, deviationKind: "portion_adjustment" }, "skipped").deviationKind).toBeNull();
   });
 
   it("offers only scheduled, current meals of the day", () => {
@@ -104,22 +131,85 @@ describe("meal model", () => {
 });
 
 describe("ClientLogMealScreen", () => {
-  it("logs a changed meal with its kind and note, sends no recordVersion, says Logged by you", async () => {
+  it("Modified opens TR-08a; portion editor posts coach-authored portion_adjustment", async () => {
     api.listMealAssignments.mockResolvedValue({ items: [meal()], nextCursor: null });
-    api.request.mockResolvedValue(compliance());
+    api.request.mockResolvedValue(compliance({ loggedByRole: "coach", deviationKind: "portion_adjustment", outcome: "modified" }));
     const onSaved = vi.fn();
     renderForm({ onSaved });
     await screen.findByText(/Planned for Wed 4 Nov/);
     fireEvent.click(await screen.findByRole("button", { name: "Modified" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Substitute" }));
-    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Had poha instead" } });
-    fireEvent.click(await screen.findByRole("button", { name: "Save meal" }));
+    expect(await screen.findByText("Changed the portion")).toBeTruthy();
+    expect(screen.getByText("Log it myself")).toBeTruthy();
+    expect(screen.getByText("Ate out")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Changed the portion" }));
+    expect(screen.getByText("Change how much you had. Steps are ½.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Save portion" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
     const [method, path, , opts] = api.request.mock.calls[0]!;
     expect(method).toBe("PUT");
     expect(path).toBe(`/meals/compliance/${ids(10)}/2026-11-04`);
-    expect(opts.body).toEqual({ outcome: "modified", deviationKind: "substitute", notes: "Had poha instead" });
+    expect(opts.body).toMatchObject({
+      outcome: "modified",
+      deviationKind: "portion_adjustment",
+      notes: null,
+    });
+    expect(opts.body.items).toEqual([
+      {
+        customFood: { name: "Vegetable poha", kcal: 400, servingLabel: "1 bowl" },
+        saveToMyFoods: false,
+      },
+    ]);
     expect(opts.idempotencyKey).toBeTruthy();
+  });
+
+  it("Ate out editor posts coach-authored restaurant with kcal", async () => {
+    api.request.mockReset();
+    api.listMealAssignments.mockResolvedValue({ items: [meal()], nextCursor: null });
+    api.request.mockResolvedValue(compliance({ loggedByRole: "coach", deviationKind: "restaurant", outcome: "modified" }));
+    const onSaved = vi.fn();
+    renderForm({ onSaved });
+    await screen.findByText(/Planned for/);
+    fireEvent.click(await screen.findByRole("button", { name: "Modified" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ate out" }));
+    fireEvent.change(screen.getByLabelText("Kcal"), { target: { value: "1120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
+    expect(api.request.mock.calls[0]![3].body).toEqual({
+      outcome: "modified",
+      deviationKind: "restaurant",
+      notes: null,
+      items: [{ customFood: { name: "Ate out", kcal: 1120 } }],
+    });
+  });
+
+  it("Log it myself opens TR-26a and posts coach-authored logged_foods", async () => {
+    api.request.mockReset();
+    api.listMealAssignments.mockResolvedValue({ items: [meal()], nextCursor: null });
+    api.request.mockResolvedValue(
+      compliance({ loggedByRole: "coach", deviationKind: "logged_foods", outcome: "modified" }),
+    );
+    const onSaved = vi.fn();
+    renderForm({ onSaved });
+    await screen.findByText(/Planned for/);
+    fireEvent.click(await screen.findByRole("button", { name: "Modified" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Log it myself" }));
+    expect(await screen.findByTestId("food-search-screen")).toBeTruthy();
+    expect(screen.getByText("Tap a food to set katori, piece, cup or grams.")).toBeTruthy();
+    // Plan food + adds at once (TR-26b); Save posts logged_foods as the coach.
+    fireEvent.click(screen.getByTestId("food-add-plan:0"));
+    fireEvent.click(screen.getByTestId("food-log-save"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
+    expect(api.request.mock.calls[0]![3].body).toMatchObject({
+      outcome: "modified",
+      deviationKind: "logged_foods",
+      notes: null,
+    });
+    expect(api.request.mock.calls[0]![3].body.items).toEqual([
+      {
+        customFood: { name: "Vegetable poha", kcal: 400, servingLabel: "1 bowl" },
+        saveToMyFoods: false,
+      },
+    ]);
   });
 
   it("edits a client's entry with its recordVersion and says Edited by you", async () => {
@@ -150,7 +240,8 @@ describe("ClientLogMealScreen", () => {
     renderForm();
     await screen.findByText(/logged the foods for this meal/);
     expect((screen.getByRole("button", { name: "Skipped" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: "Substitute" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Something different" })).toBeNull();
+    expect(screen.queryByText("Changed the portion")).toBeNull();
   });
 
   it("reuses the key after a 5xx and replaces it after a 4xx", async () => {

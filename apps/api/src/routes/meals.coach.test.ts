@@ -574,7 +574,7 @@ describe("trainer logs and edits a client's meal entry (Z6-20)", () => {
     const kcal = deviated.body.data.loggedTotals.energyKcal;
     expect(kcal).toBe(520);
 
-    // A trainer cannot author a food list.
+    // Without items, logged_foods is only valid when keeping a client's list.
     const authored = await putMeal(f.mondayBreakfast, {
       outcome: "modified",
       deviationKind: "logged_foods",
@@ -643,6 +643,49 @@ describe("trainer logs and edits a client's meal entry (Z6-20)", () => {
     expect(JSON.parse(stored!.itemsJson!)).toHaveLength(1);
     expect(stored!.kcalScaled).toBeGreaterThan(0);
     expect(await auditRows(deviated.body.data.id)).toHaveLength(1);
+  });
+
+  it("Z12-52: coach can author portion, ate-out and logged_foods with items", async () => {
+    const portion = await putMeal(f.mondayBreakfast, {
+      outcome: "modified",
+      deviationKind: "portion_adjustment",
+      notes: null,
+      items: [{ customFood: { name: "Vegetable poha", kcal: 600, servingLabel: "1½ bowl" }, saveToMyFoods: false }],
+    });
+    expect(portion.status).toBe(201);
+    expect(portion.body.data).toMatchObject({
+      loggedByRole: "coach",
+      deviationKind: "portion_adjustment",
+      outcome: "modified",
+    });
+    expect(portion.body.data.loggedTotals.energyKcal).toBe(600);
+
+    const ateOut = await putMeal(f.mondayLunch, {
+      outcome: "modified",
+      deviationKind: "restaurant",
+      notes: "Office party",
+      items: [{ customFood: { name: "Ate out", kcal: 1120 } }],
+    });
+    expect(ateOut.status).toBe(201);
+    expect(ateOut.body.data).toMatchObject({
+      loggedByRole: "coach",
+      deviationKind: "restaurant",
+      notes: "Office party",
+    });
+    expect(ateOut.body.data.loggedTotals.energyKcal).toBe(1120);
+
+    const foods = await putMeal(f.tuesdayBreakfast, {
+      outcome: "modified",
+      deviationKind: "logged_foods",
+      items: [{ customFood: { name: "Idli", kcal: 80 }, saveToMyFoods: false }],
+    });
+    expect(foods.status).toBe(201);
+    expect(foods.body.data).toMatchObject({
+      loggedByRole: "coach",
+      deviationKind: "logged_foods",
+    });
+    expect(foods.body.data.loggedTotals.energyKcal).toBe(80);
+    expect(foods.body.data.loggedItems).toHaveLength(1);
   });
 
   it("R2: dates outside the last 7 days or in the future return 422 BACKDATE_LIMIT, and the date must match the meal", async () => {
