@@ -1,0 +1,62 @@
+# Shared by F11 (Z12-46): the weekly check-in from the Today card, tapping "Start",
+# through the form and the review step to Sent (TR-14a, TR-14c, TR-14d). The caller
+# has already scrolled to the card and asserted "Start" is visible. Writes one
+# submitted check-in to the local DB.
+appId: com.thefitbud.mobile.staging
+---
+- tapOn: "Start"
+- extendedWaitUntil:
+    visible: "Weekly check-in"
+    timeout: 20000
+- assertVisible: ".*step 1 of 3.*"
+- takeScreenshot: TR-14a-checkin-questions
+- runFlow: assert-no-crash.yaml
+- evalScript: ${output.filled = 'no'}
+- runFlow:
+    when:
+      true: ${output.filled == 'no'}
+      visible: "Wellbeing"
+    commands:
+      - tapOn: "Wellbeing"
+      - inputText: "Good week, one session missed."
+      - tapOn: "Weekly check-in"
+      - evalScript: ${output.filled = 'yes'}
+- tapOn: "Continue"
+- assertVisible: ".*step 2 of 3.*"
+- runFlow:
+    when:
+      true: ${output.filled == 'no'}
+      visible: "Wellbeing"
+    commands:
+      - tapOn: "Wellbeing"
+      - inputText: "Good week, one session missed."
+      - tapOn: "Weekly check-in"
+      - evalScript: ${output.filled = 'yes'}
+- tapOn: "Continue"
+- assertVisible: ".*step 3 of 3.*"
+- runFlow:
+    when:
+      true: ${output.filled == 'no'}
+      visible: "Wellbeing"
+    commands:
+      - tapOn: "Wellbeing"
+      - inputText: "Good week, one session missed."
+      - tapOn: "Weekly check-in"
+      - evalScript: ${output.filled = 'yes'}
+- tapOn: "Continue"
+- extendedWaitUntil:
+    visible: "Send to .*"
+    timeout: 10000
+- takeScreenshot: TR-14c-checkin-review
+# "Send to Rahul" is also the Review subtitle: the button is the second match.
+- tapOn:
+    text: "Send to .*"
+    index: 1
+# TR-14d: Sent, with Done. A cold iOS simulator can take over a minute to send.
+- extendedWaitUntil:
+    visible: "Sent to .*"
+    timeout: 120000
+- assertVisible: "Done"
+- takeScreenshot: TR-14d-checkin-sent
+- runFlow: assert-no-crash.yaml
+- tapOn: "Done"

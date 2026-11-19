@@ -1,0 +1,84 @@
+appId: com.thefitbud.mobile.staging
+name: Z12-46 No-plan trainee, Today and Progress (calm states, no server text)
+tags:
+  - device
+  - trainee
+  - z12-46
+---
+# Z12-46: Harpreet (`harpreet.ready`, local demo seed): an active relationship with no
+# plan. Today says the coach is preparing the plan (TR-10b's pattern, recorded in the
+# PR) and the check-in card says the first check-in follows the plan, never a server
+# message; Progress shows its empty state (TR-13b).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+# common/sign-in-password.yaml ends by waiting for "Today's workout", a heading a
+# trainee with no plan never gets (CU22): wait for the tab bar instead. Keyboard
+# dismiss matches common/sign-in-password.yaml (the old "Your coach's plan…"
+# subtitle is gone on main; run 44402757234).
+- extendedWaitUntil:
+    visible: "Sign in with a code instead"
+    timeout: 60000
+- tapOn: "you@example.com or 9876543210"
+- inputText: harpreet.ready@demo.fitbud.test
+- runFlow:
+    when:
+      notVisible: "harpreet.ready@demo.fitbud.test.*"
+    commands:
+      - eraseText: 60
+      - inputText: harpreet.ready@demo.fitbud.test
+- tapOn: "Your password"
+- inputText: ${QA_PASSWORD}
+- tapOn: "Use the mobile number or email your coach invited\\."
+- tapOn:
+    text: "Sign in"
+    below: "Forgot password\\??"
+- extendedWaitUntil:
+    visible: "Diet"
+    timeout: 60000
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Your coach is preparing your plan"
+    timeout: 30000
+- assertNotVisible: "Couldn't load your plan"
+- takeScreenshot: Today-no-plan
+- runFlow: ../../common/assert-no-crash.yaml
+# The check-in card sits below the plan card. It says the first check-in follows the
+# plan, never the server's refusal and never a "CHK-" error code.
+- scrollUntilVisible:
+    element: "Your first check-in opens once.*"
+    timeout: 30000
+- assertVisible: "Your first check-in opens once.*has set up your plan\\."
+- assertNotVisible: ".*CHK-.*"
+- takeScreenshot: Today-no-plan-checkin
+- runFlow: ../../common/assert-no-crash.yaml
+# TR-13b: Progress empty state (its own text, not just the tab label).
+- tapOn: "Progress"
+- extendedWaitUntil:
+    visible: "Your progress will show here.*"
+    timeout: 20000
+- assertVisible: "Log weight"
+- takeScreenshot: TR-13b-progress-empty
+- runFlow: ../../common/assert-no-crash.yaml
+# TR-10b: Workout empty state (owned by Z12-44; asserted here so this account is
+# checked on every tab).
+- tapOn: "Workout"
+- extendedWaitUntil:
+    visible: "No workouts planned yet"
+    timeout: 30000
+- assertNotVisible: "Couldn't load your plan"
+- assertNotVisible: "Start workout"
+- takeScreenshot: TR-10b-workout-no-plan
+- runFlow: ../../common/assert-no-crash.yaml
+# TR-07c: Diet empty state.
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "No meals planned today"
+    timeout: 30000
+- assertNotVisible: "Couldn't load your plan"
+- takeScreenshot: TR-07c-diet-no-meals-planned
+- runFlow: ../../common/assert-no-crash.yaml

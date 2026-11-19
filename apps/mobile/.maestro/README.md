@@ -359,9 +359,10 @@ change. Known gaps, to be fixed in a follow-up (QT3b) that touches app code:
   civil day in that trainee's own timezone, as well as the *submitted* one waiting
   for the trainer (`guarantees.pendingCheckinsSlipping`, for
   `trainer/checkin-review.yaml`).
-- **Resolve** happens on the exception screen, reached from the client status.
-  The review sheet's "Resolve…" is not wired in the Attention tab, and "Mark
-  reviewed" only moves a client to Reviewed.
+- **Resolve** happens on the exception screen, reached from the client status
+  (`trainer/attention.yaml`), or from the review sheet's "Resolve…" in the
+  Attention tab (`v3/F21-review-resolve-notes.yaml`, Z12-51). "Mark reviewed"
+  only moves a client to Reviewed.
 - **Rest timer** assertions use the rest bar's timer label ("Rest, 1:30 left",
   Z12-45). The countdown itself is specified in
   `apps/mobile/src/notifications/restCountdown.test.ts`.

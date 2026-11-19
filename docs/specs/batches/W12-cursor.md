@@ -1,29 +1,38 @@
 # W12-cursor · Cursor run for remaining W12 tasks
 
-**Status:** Running. Launched 18 Nov 2026 (IST) by FitBud UI, from `main` at `58ac1b11` (or later).
-**Authority:** this file for Cursor-owned work only. Claude owns [`W12.md`](W12.md) — never edit it from this run. W12b is finished ([`W12b.md`](W12b.md)); leave it alone.
+**Status:** Running. Launched 18 Nov 2026 (IST) by FitBud UI, from `main` at `58ac1b11` (or later). **Claude lane handed to Cursor 19 Nov 2026 (D-W12C-22).**
+**Authority:** this file for Cursor-owned work. Claude’s open W12 PRs and Z12-57/Z12-60 are now Cursor’s (D-W12C-22). W12b is finished ([`W12b.md`](W12b.md)); leave it alone.
 **Repo rules:** `CLAUDE.md`, `AGENTS.md`. Design: `docs/design/v3/` (mocks win over older frames; record departures).
-**Branch prefix:** `cursor/<task>-<slug>-db78`. One task, one PR, merge commits only.
-**Concurrency:** at most **2** Cursor tasks at once (Claude uses up to 3 on the same runners). Never cancel or force-cancel any Actions run.
-**Claude fence:** never push to, review, comment on, rebase or merge a `claude/` branch or PR. Open Claude PRs at launch: #460 (Z12-42), #483 (Z12-46), #484 (Z12-45), #485 (Z12-44 follow-up), #486 (Z12-51), #487 (Z12-29). Claude keeps Z12-57 and Z12-60. **Z12-53 is Cursor-owned** (D-W12C-16 / Firoz D-W12-39).
-**JS only:** native / Swift / Expo-SDK changes go under **Native items for Z12-57** below. No deploy. No repo-settings changes.
+**Branch prefix:** new Cursor tasks use `cursor/<task>-<slug>-db78`. Handed Claude PRs keep their `claude/...` branch names and existing PRs (no new PRs for those). Z12-57 / Z12-60: `cursor/z12-57-native-db78`, `cursor/z12-60-report-db78`.
+**Concurrency:** at most **2** Cursor tasks at once. Never cancel or force-cancel any Actions run.
+**Claude fence (narrowed, D-W12C-22):** may push, review, rebase and merge `claude/Z12-45-active-workout` (#484), `claude/Z12-46-today-progress` (#483), `claude/Z12-51-review-sheet` (#486), `claude/Z12-44-flows-weekday` (#485). Still never touch other `claude/` work (#177, #307, Z10-7, Z14-*).
+**W12.md edits (D-W12C-1 narrowed):** only the status of handed tasks and Z12-60’s Report section.
+**JS only:** native / Swift / Expo-SDK changes go under **Native items for Z12-57** below, except Z12-57 itself. No deploy. No repo-settings changes.
 **Models:** D-W12C-17 (subscription-included / Auto only; supersedes D-W12C-3).
+**Device runs:** Cursor cannot dispatch `device.yml` (403). At “ready for device run”, record the exact `gh workflow run …` in this ledger and the PR, then continue; FitBud UI / Firoz starts the run.
 
 ## Task list and status
 
-Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12-53** → Z12-58 after Claude’s Z12-57 → Z12-59 prep.
+Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parallel with #484) → Z12-48 + Z12-49fu → Z12-52 → Z12-53 → Z12-57 → Z12-58 → Z12-59 prep → Z12-60.
 
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
 | Z12-W12C-0 Ledger | — | merged | #488 | `893691c3` | this file | Cursor Auto |
 | Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | **merged** | #490 | `4aa28299` | Expo web CLOSE; device gate [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS (F08 soft-skips when seed already logged); harness Screen/Results + iOS center tap fixes | Cursor Auto |
 | Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **merged** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | `21792a2e` | fresh proof = password re-login bearer + `credentials:omit`; review fix D-W12C-21; cookie Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
-| Z12-48 Live Activity (JS) | #484 (Z12-45) | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
-| Z12-49 follow-up Ended-coaching tab bar | #484 (Z12-45) | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
-| Z12-52 Coach logs a meal | Z12-43 ✅ + #486 (Z12-51) | blocked on #486 | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
-| Z12-53 Trainer mobile v3 | Z12-52 + #486 (Z12-51); Z12-56/38/47 already on main | blocked | — | — | TM-01a–TM-10b; WorkspaceHeader (D-W12-26); F22–F28; expo-push title/body (D-W12-38); grade TM-13a/b | Cursor Auto (planned); review Auto |
-| Z12-58 Full device pass | Z12-57 (Claude) | blocked | — | — | F01–F29 + parity matrix + device checklist | Cursor Auto (planned) |
+| Z12-51 Exception review sheet | — | **merged** | [#486](https://github.com/thefitbud/thefitbud/pull/486) | `1272b972` | CI race fix `f1b10f36`; review PASS; auto launch iOS-light flake ignored (scoped [44403709387](https://github.com/thefitbud/thefitbud/actions/runs/44403709387) PASS) | Cursor Auto |
+| Z12-46 Today / Progress | after #486 ✅ | **merged** | [#483](https://github.com/thefitbud/thefitbud/pull/483) | `ab0e015b` | device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) PASS; review PASS; FitBud UI 71 shots | Cursor Auto |
+| Z12-46fu Today/Progress pixel fixes | after #483 ✅ | **in progress** | [#497](https://github.com/thefitbud/thefitbud/pull/497) `cursor/z12-46fu-pixel-db78` | — | (a–d) coded + tests; (e) Z12-58 evidence (wait for form before TR-14a; dark TR-14a/c/d). Device when ready: `launch,z12-46` | Cursor Auto |
+| Z12-44 follow-up weekday flows | after #483 | **device running** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | scoped [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f`; merge main OK if no PR-file changes; merge before #484 | Cursor Auto |
+| Z12-45 Active workout | after #485+#483 | blocked | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | must-fix list (handover §4); one device run after all fixes; draft | Cursor Auto (planned) |
+| Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
+| Z12-49 follow-up Ended-coaching tab bar | #484 | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
+| Z12-52 Coach logs a meal | Z12-43 ✅ + #486 ✅ | ready after #483/#485/#484 lane or when a slot frees | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
+| Z12-53 Trainer mobile v3 | Z12-52 + #486; Z12-56/38/47 already on main | blocked | — | — | TM-01a–TM-10b; WorkspaceHeader (D-W12-26); F22–F28; expo-push title/body (D-W12-38); grade TM-13a/b | Cursor Auto (planned); review Auto |
+| Z12-57 Native | every other mobile JS task | blocked | — (branch `cursor/z12-57-native-db78` when started) | — | expo-haptics / keep-awake / rest-end sound; EAS builds = Firoz manual | Cursor Auto (planned) |
+| Z12-58 Full device pass | Z12-57 | blocked | — | — | F01–F29 + parity matrix + device checklist | Cursor Auto (planned) |
 | Z12-59 prep | after Z12-58 | blocked | — | — | SHA, migrations, commands, smoke in `docs/tasks/manual-steps.md`; then mark ready for Z12-60 and stop | Cursor Auto (planned) |
+| Z12-60 Report | after Z12-59 | blocked | — (branch `cursor/z12-60-report-db78` when started) | — | fresh whole-batch review + Report in `W12.md` | Cursor Auto (planned) |
 
 ## Merged-SHA ledger
 
@@ -35,6 +44,10 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | 18 Nov 2026 | `9e8c5ef9` | #489 (Claude W12-d36) | main moved while Z12-43 built; merged into #490 |
 | 18 Nov 2026 ~21:30 IST | `4aa28299` | #490 (Z12-43) | unblocks Z12-52 (still waits #486); device [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) |
 | 19 Nov 2026 ~00:00 IST | `21792a2e` | #492 (Z12-30) | delete/reactivate web; CI green; fresh review PASS after D-W12C-21 |
+| 19 Nov 2026 ~00:00 IST | `e679b85d` | #493 (ledger) | mark Z12-30 merged |
+| 19 Nov 2026 ~12:40 IST | `df709196` | #494 (ledger) | D-W12C-22 Claude lane → Cursor |
+| 19 Nov 2026 ~13:15 IST | `1272b972` | #486 (Z12-51) | unblocks Z12-52 / Z12-53; review PASS |
+| 19 Nov 2026 ~13:40 IST | `ab0e015b` | #483 (Z12-46) | frees TraineeShell for #484; device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
@@ -42,7 +55,7 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 
 | ID | Decision | Reason | When |
 |---|---|---|---|
-| D-W12C-1 | Cursor edits only `W12-cursor.md` as its batch file; never `W12.md` | Handover from FitBud UI, 18 Nov 2026 | launch |
+| D-W12C-1 | Cursor edits `W12-cursor.md` as its batch file. **Narrowed 19 Nov (D-W12C-22):** may also edit `W12.md` only for status of handed Claude tasks and Z12-60’s Report section. | Handover from FitBud UI, 18 Nov 2026; narrowed 19 Nov | launch; narrowed |
 | D-W12C-2 | At most 2 Cursor implementers at once | Same runners as Claude (up to 3); handover rule | launch |
 | D-W12C-3 | ~~Strongest available model for Z12-43, Z12-48, Z12-58 and every fresh review~~ | Superseded by D-W12C-17 (Firoz, 18 Nov 2026) | launch; superseded |
 | D-W12C-4 | Z12-43: `saveToMyFoods` is `z.boolean().optional()`; the server reads "not false" as true (D-W12-24's default) | A Zod `.default(true)` makes the field required in the inferred `LoggedFoodItem` type and breaks every client literal; behaviour is the same. *(Firoz’s 18 Nov addendum also wanted ID D-W12C-4 for the Z12-53 handoff; that handoff is D-W12C-16 below.)* | Z12-43 |
@@ -63,16 +76,18 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | D-W12C-19 | Z12-30: delete fresh proof uses a one-off `FitBudApiClient` with the password-login bearer and `credentials: "omit"` so the cookie cannot override `auth_time` (middleware prefers cookie `created_at`). Cookie-session Firebase `auth_time` on `createWebSession` stays a W6 API follow-up. | Spec gap + D-W6-31 | Z12-30 |
 | D-W12C-20 | Z12-30: reactivate footer shows "Signed in as {email}" from the frame; omit "archived Tue 3 Nov" (not in `accountReactivationCopy`). Colocated CSS files for the modal and reactivate shell. | Frame vs D-W12-6 copy | Z12-30 |
 | D-W12C-21 | Z12-30 review fix: `SignInPage` shows `sessionError`; `RequireAuth` sends token-less session errors to `/sign-in` (not the "Can't reach FitBud" retry panel) so `RECENT_SIGN_IN_REQUIRED` after reactivate matches mobile. | Fresh review #492 | Z12-30 |
+| D-W12C-22 | **Claude’s W12 lane handed to Cursor** (Firoz via FitBud UI, 19 Nov 2026 IST). Covers Z12-45 #484, Z12-46 #483, Z12-51 #486, Z12-44 follow-up #485, Z12-57 and Z12-60. Keep existing `claude/…` branches and PRs for those four; create `cursor/z12-57-native-db78` and `cursor/z12-60-report-db78` when those start. Poll timer `w12-cursor-poll-blockers` stopped. Device runs: record exact `gh workflow run device.yml …` at ready-for-device and continue; FitBud UI / Firoz dispatches. Order: #486 → #483 → #485 → #484 → own Z12-48/49fu/52/53 → Z12-57 → Z12-58 → Z12-59 prep → Z12-60. | Claude out of usage; Firoz approved | 19 Nov 2026 |
 
 *(Add implementer decide-and-note choices here as they arise.)*
 
 ## Native items for Z12-57
 
-*(JS-only tasks that discover a native need: exact file, behaviour, and why the JS fallback is insufficient. Claude’s Z12-57 consumes this list.)*
+*(JS-only tasks that discover a native need: exact file, behaviour, and why the JS fallback is insufficient. Z12-57 consumes this list.)*
 
 | Source task | Item | Detail | JS fallback until then |
 |---|---|---|---|
-| — | — | — | — |
+| #484 Z12-45 | Rest-end haptic + sound | `haptics.ts` `restEndHaptic` → `expo-haptics`; rest-end sound; Android `VIBRATE` | no-op / silent JS |
+| #484 Z12-45 | Keep-awake in active workout | `activateWorkoutKeepAwake` → `expo-keep-awake` | no-op |
 
 ## Follow-ups
 
@@ -83,17 +98,28 @@ Order: Z12-43 → (Z12-30, Z12-48, Z12-49fu as waits clear) → Z12-52 → **Z12
 | Z12-43 | The coach edit path (`PUT` compliance) still keeps items only for `logged_foods`, so a coach edit of an ate-out entry drops its kcal | Z12-52 | `apps/api/src/routes/meals.ts` coach branch; D-W6-40 |
 | Z12-43 | Something different dark was GAP on Expo web (sheet outside Diet ThemeScope); fixed in-sheet with ThemeScope (D-W12C-15) — re-capture dark TR-08a–c to confirm CLOSE | this PR / device | was listed for Z12-52; product fix is in SomethingDifferentSheet |
 | Z12-30 | Cookie session still uses `web_sessions.created_at` as authTime (API); UI avoids it for delete by bearer+omit. True Firebase `auth_time` on cookie sessions needs an API change outside `files_owned`. | W6 / API | do not weaken UI proof |
+| Z12-46fu (e) | Device evidence: TR-14a iOS was shot on "Loading form…"; TR-14a/c/d lack dark captures | Z12-58 | wait for the form before the shot; capture dark TR-14a/c/d |
 
-*(Z12-58: Claude-owned-area findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
+*(Z12-58 findings go here with clear repro; Cursor-owned-area findings are fixed in this run.)*
 
 ## Usage wrap-up
 
 - **Wrap at ~92%:** record what merged, what remains, models used.
 - **Usage at last update:** not recorded yet (launch).
 
+## Device-run queue (FitBud UI / Firoz)
+
+*(When a task is ready for device, append the exact command here and in the PR. Do not dispatch from this agent.)*
+
+| Task | Command | Recorded |
+|---|---|---|
+| Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | **PASS** [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) on `fcbdcd52` (FitBud UI, 71 shots) |
+| Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | running [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f` (FitBud UI started) |
+| Z12-46fu | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-46fu-pixel-db78 -f flows=launch,z12-46` | (record when ready) |
+
 ## Done when (Cursor side)
 
-1. Every row in the task table is merged (or blocked only on Claude work still open), with PR + merge SHA filled.
+1. Every row in the task table is merged, with PR + merge SHA filled (including handed Claude PRs and Z12-57 / Z12-60).
 2. Z12-59 prep is in `docs/tasks/manual-steps.md` and this ledger is marked **ready for Z12-60**.
-3. Claude’s Z12-60 writes the W12 report; Cursor stops after the ready mark.
+3. Z12-60 writes the W12 report in `W12.md` and merges.
 

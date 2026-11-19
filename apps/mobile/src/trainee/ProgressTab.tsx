@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
+import { Platform, Pressable, TextInput, View } from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -27,8 +27,13 @@ import type {
   MeasurementType,
   ProgressSummary,
 } from "@fitbud/contracts";
-import { formatCivilDate } from "@fitbud/core";
-import { colors, radii, semanticColors, spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import { formatCivilDate, formatClockTime } from "@fitbud/core";
+import { spacing, touchTargetMin } from "@fitbud/ui-mobile";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 import { useAuth } from "../auth/AuthProvider";
 import { BottomSheet } from "../components/BottomSheet";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -39,7 +44,10 @@ import { localDateInTimezone } from "../lib/dates";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { outcomeCopy } from "./CheckinScreen";
+import { outcomeCopy, } from "./CheckinScreen";
+import { cleanMeasureInput } from "./checkin/MeasureRow";
+import { reportError } from "../lib/reportError";
+import { isNetworkFailure } from "./checkinAnswers";
 import {
   getCached,
   messageFromSyncResults,
@@ -193,6 +201,8 @@ function WeightTrendChart({
   startedAt: string;
   timeZone: string;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   const [pillWidth, setPillWidth] = useState(0);
   const width = 329;
   const height = 150;
@@ -268,8 +278,8 @@ function WeightTrendChart({
       <Svg width={width} height={height} accessibilityLabel="Weight trend">
         <Defs>
           <LinearGradient id="weightArea" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={colors.indigo} stopOpacity={0.16} />
-            <Stop offset="1" stopColor={colors.indigo} stopOpacity={0} />
+            <Stop offset="0" stopColor={theme.colors.coachInk} stopOpacity={0.16} />
+            <Stop offset="1" stopColor={theme.colors.coachInk} stopOpacity={0} />
           </LinearGradient>
         </Defs>
         {yTicks.map((tick, i) => (
@@ -279,7 +289,7 @@ function WeightTrendChart({
             x2={width - padRight}
             y1={tick.y}
             y2={tick.y}
-            stroke="#ECEDF3"
+            stroke={theme.colors.fill2}
             strokeWidth={1}
           />
         ))}
@@ -289,7 +299,7 @@ function WeightTrendChart({
             x={width - 4}
             y={tick.y + 4}
             fontSize={11}
-            fill={colors.midGrey}
+            fill={theme.colors.ink3}
             fontWeight="500"
             textAnchor="end"
           >
@@ -302,14 +312,14 @@ function WeightTrendChart({
           x2={marker.x}
           y1={chartTop - 4}
           y2={chartBottom}
-          stroke="#B7A9F5"
+          stroke={theme.colors.coach}
           strokeWidth={1.5}
           strokeDasharray="3 3"
         />
         <Polyline
           points={points.map((p) => `${p.x},${p.y}`).join(" ")}
           fill="none"
-          stroke={colors.indigo}
+          stroke={theme.colors.coachInk}
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -320,8 +330,8 @@ function WeightTrendChart({
             cx={p.x}
             cy={p.y}
             r={i === points.length - 1 ? 5 : 3}
-            fill={i === points.length - 1 ? colors.indigo : colors.white}
-            stroke={colors.indigo}
+            fill={i === points.length - 1 ? theme.colors.coachInk : theme.colors.card}
+            stroke={theme.colors.coachInk}
             strokeWidth={i === points.length - 1 ? 2.5 : 1.5}
             opacity={i === points.length - 1 ? 1 : 0.55}
           />
@@ -332,7 +342,7 @@ function WeightTrendChart({
             x={p.x}
             y={height - 6}
             fontSize={11}
-            fill={colors.midGrey}
+            fill={theme.colors.ink3}
             fontWeight="500"
             textAnchor="middle"
           >
@@ -344,7 +354,15 @@ function WeightTrendChart({
   );
 }
 
-export function ProgressTab({
+export function ProgressTab(props: ComponentProps<typeof ProgressTabInner>) {
+  return (
+    <ThemeScope scheme="system">
+      <ProgressTabInner {...props} />
+    </ThemeScope>
+  );
+}
+
+function ProgressTabInner({
   relationship,
   unreadNotifications = 0,
   onOpenOverlay,
@@ -355,6 +373,8 @@ export function ProgressTab({
   onOpenOverlay?: TraineeOverlayOpener;
   onOpenCheckin?: (checkin: Checkin) => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   const { api, me, refreshSession } = useAuth();
   const timeZone = me?.timezone ?? "UTC";
   const sync = useSyncEngine();
@@ -375,7 +395,8 @@ export function ProgressTab({
   const [offline, setOffline] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [logType, setLogType] = useState<MeasurementType>("body_weight_kg");
-  const [stepValue, setStepValue] = useState(70);
+  /** What the trainee has typed on the keypad (TR-13c). */
+  const [logText, setLogText] = useState("");
   const [confirmOdd, setConfirmOdd] = useState<number | null>(null);
 
   const load = useCallback(
@@ -388,7 +409,9 @@ export function ProgressTab({
         setCached(cacheKey, result);
         setOffline(false);
       } catch (err) {
-        setOffline(true);
+        reportError("ProgressTab.load", err);
+        // Offline is only claimed for a request that never got an answer.
+        setOffline(err instanceof ApiClientError ? false : isNetworkFailure(err));
         const cached = getCached<ProgressSummary>(cacheKey);
         if (cached) {
           setSummary(cached);
@@ -412,7 +435,9 @@ export function ProgressTab({
             setError(
               err instanceof ApiClientError
                 ? err.message
-                : "Could not load progress.",
+                : isNetworkFailure(err)
+                  ? "Couldn't reach FitBud (PRG-NET). Check your connection and try again."
+                  : "Couldn't load your progress (PRG-LOAD). Try again.",
             );
           }
         }
@@ -433,7 +458,8 @@ export function ProgressTab({
         .slice(0, 5);
       setCheckins(rows);
       setCached(checkinsKey, rows);
-    } catch {
+    } catch (err) {
+      reportError("ProgressTab.loadCheckins", err);
       const cached = getCached<Checkin[]>(checkinsKey);
       if (cached) setCheckins(cached);
     }
@@ -510,7 +536,7 @@ export function ProgressTab({
         ? (latestWeight?.value ?? 70)
         : (last?.value ?? 80);
     setLogType(type);
-    setStepValue(Math.round(fallback * 10) / 10);
+    setLogText(String(Math.round(fallback * 10) / 10));
     setConfirmOdd(null);
     setLogOpen(true);
   }
@@ -599,12 +625,15 @@ export function ProgressTab({
       await load({ soft: true });
       await sync.pullAndApply().catch(() => undefined);
     } catch (err) {
-      setOffline(true);
-      setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Saved on phone · will sync when online.",
-      );
+      reportError("ProgressTab.saveMeasurement", err);
+      if (err instanceof ApiClientError) {
+        setError(err.message);
+      } else if (isNetworkFailure(err)) {
+        setOffline(true);
+        setError("Saved on phone · will sync when online.");
+      } else {
+        setError("Couldn't save that (PRG-SAVE). Try again.");
+      }
       setLogOpen(false);
     } finally {
       setActing(false);
@@ -620,7 +649,19 @@ export function ProgressTab({
     .filter((row) => row.latest != null);
 
   const logUnit = logType === "body_weight_kg" ? "kg" : "cm";
-  const logStep = logType === "body_weight_kg" ? 0.1 : 0.5;
+  const lastLogged = (() => {
+    const last = latestOfType(measurements, logType);
+    return last
+      ? {
+          value: last.value,
+          when: formatCivilDate(civilFromObservedAt(last.observedAt, timeZone), {
+            includeWeekday: true,
+          }),
+        }
+      : null;
+  })();
+  // The entry is stamped now (observedAt), so the date row is read-only.
+  const logWhen = `Today, ${formatClockTime(new Date().toISOString(), timeZone)}`;
   const logTitle =
     logType === "body_weight_kg"
       ? "Log weight"
@@ -643,6 +684,7 @@ export function ProgressTab({
 
   return (
     <Screen
+      v3
       chrome="app"
       title="Progress"
       showHeader={false}
@@ -665,7 +707,7 @@ export function ProgressTab({
             onPress={() => onOpenOverlay({ screen: "notifications" })}
             style={styles.iconbtn}
           >
-            <Bell size={22} color={colors.darkGrey} strokeWidth={1.75} />
+            <Bell size={22} color={theme.colors.ink2} strokeWidth={1.75} />
             {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
           </Pressable>
         ) : null}
@@ -707,7 +749,7 @@ export function ProgressTab({
               onPress={() => openLog("body_weight_kg")}
               style={styles.logWeightBtn}
             >
-              <Plus size={18} color={colors.white} strokeWidth={2} />
+              <Plus size={18} color={theme.colors.brandInk} strokeWidth={2} />
               <Text style={styles.logWeightLabel}>Log weight</Text>
             </Pressable>
           </View>
@@ -757,7 +799,7 @@ export function ProgressTab({
         {bodyMeasurements.length === 0 ? (
           <View style={styles.lrow}>
             <View style={styles.tile}>
-              <Ruler size={19} color={colors.indigo} strokeWidth={1.75} />
+              <Ruler size={19} color={theme.colors.coachInk} strokeWidth={1.75} />
             </View>
             <View style={styles.lrowText}>
               <Text style={styles.rowTitle}>Waist</Text>
@@ -789,7 +831,7 @@ export function ProgressTab({
                 style={[styles.lrow, index === 0 && styles.lrowFirst]}
               >
                 <View style={styles.tile}>
-                  <Ruler size={19} color={colors.indigo} strokeWidth={1.75} />
+                  <Ruler size={19} color={theme.colors.coachInk} strokeWidth={1.75} />
                 </View>
                 <View style={styles.lrowText}>
                   <Text style={styles.rowTitle}>
@@ -859,13 +901,13 @@ export function ProgressTab({
                   {item.review ? (
                     <CheckCircle2
                       size={19}
-                      color={semanticColors.positive.text}
+                      color={theme.colors.done}
                       strokeWidth={1.75}
                     />
                   ) : (
                     <MessageCircle
                       size={19}
-                      color={semanticColors.info.text}
+                      color={theme.colors.info}
                       strokeWidth={1.75}
                     />
                   )}
@@ -876,7 +918,7 @@ export function ProgressTab({
                     <Text style={styles.rowMeta}>{subtitle}</Text>
                   ) : null}
                 </View>
-                <ChevronRight size={18} color={colors.midGrey} strokeWidth={2} />
+                <ChevronRight size={18} color={theme.colors.ink3} strokeWidth={2} />
               </Pressable>
             );
           })}
@@ -888,33 +930,39 @@ export function ProgressTab({
       <BottomSheet
         visible={logOpen}
         title={logTitle}
-        subtitle="Adjust with the stepper, then save."
         onDismiss={() => setLogOpen(false)}
       >
-        <View style={styles.stepperRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Decrease"
-            style={styles.stepperBtn}
-            onPress={() =>
-              setStepValue((v) => Math.round((v - logStep) * 10) / 10)
-            }
-          >
-            <Text style={styles.stepperGlyph}>−</Text>
-          </Pressable>
-          <Text style={styles.stepperValue}>
-            {formatKg(stepValue)} {logUnit}
+        <View style={styles.keypadValue}>
+          <TextInput
+            value={logText}
+            onChangeText={(next) => {
+              setLogText(cleanMeasureInput(next));
+              setConfirmOdd(null);
+            }}
+            keyboardType="decimal-pad"
+            inputMode="decimal"
+            autoFocus
+            selectTextOnFocus
+            maxLength={6}
+            accessibilityLabel={`${logTitle}, ${logUnit}`}
+            placeholder="0"
+            placeholderTextColor={theme.colors.ink4}
+            style={styles.keypadInput}
+          />
+          <Text variant="headline" tone="ink3">
+            {logUnit}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Increase"
-            style={styles.stepperBtn}
-            onPress={() =>
-              setStepValue((v) => Math.round((v + logStep) * 10) / 10)
-            }
-          >
-            <Text style={styles.stepperGlyph}>+</Text>
-          </Pressable>
+        </View>
+        {lastLogged ? (
+          <Text variant="subhead" tone="ink3" style={styles.keypadLast}>
+            {`Last: ${formatKg(lastLogged.value)} ${logUnit} on ${lastLogged.when}`}
+          </Text>
+        ) : null}
+        <View style={styles.dateRow} accessible accessibilityLabel={`Date, ${logWhen}`}>
+          <Text variant="body">Date</Text>
+          <Text variant="body" tone="ink3">
+            {logWhen}
+          </Text>
         </View>
         {confirmOdd != null ? (
           <Text style={styles.confirmOdd}>
@@ -922,15 +970,21 @@ export function ProgressTab({
           </Text>
         ) : null}
         <PrimaryButton
-          label={acting ? "Saving…" : "Save"}
-          disabled={acting}
+          label={
+            acting
+              ? "Saving…"
+              : logType === "body_weight_kg"
+                ? "Save weight"
+                : "Save"
+          }
+          disabled={acting || !(parseFloat(logText) > 0)}
           onPress={() => {
-            void saveMeasurement(stepValue);
+            void saveMeasurement(parseFloat(logText));
           }}
         />
         <PrimaryButton
           label="Cancel"
-          variant="ghost"
+          variant="text"
           onPress={() => setLogOpen(false)}
         />
       </BottomSheet>
@@ -948,7 +1002,7 @@ const cardShadow = Platform.select({
   default: { elevation: 1 },
 });
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   ttlrow: {
     alignItems: "center",
     flexDirection: "row",
@@ -957,7 +1011,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   h1: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 30,
     fontWeight: "700",
     letterSpacing: -0.66,
@@ -971,7 +1025,7 @@ const styles = StyleSheet.create({
     width: 44,
   },
   unreadDot: {
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.coachInk,
     borderRadius: 5,
     height: 9,
     position: "absolute",
@@ -980,9 +1034,9 @@ const styles = StyleSheet.create({
     width: 9,
   },
   cardPad: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     gap: spacing.sm,
     marginBottom: spacing.md,
@@ -990,9 +1044,9 @@ const styles = StyleSheet.create({
     ...cardShadow,
   },
   listCard: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: radii.card,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: t.radii.card,
     borderWidth: 1,
     marginBottom: spacing.md,
     overflow: "hidden",
@@ -1007,17 +1061,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   shTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
   },
   shLink: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 15,
     fontWeight: "600",
   },
   ov: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
@@ -1029,20 +1083,20 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   weightBig: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 40,
     fontWeight: "700",
     letterSpacing: -1.2,
     lineHeight: 44,
   },
   weightUnit: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 18,
     fontWeight: "600",
   },
   logWeightBtn: {
     alignItems: "center",
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 14,
     flexDirection: "row",
     gap: 6,
@@ -1052,21 +1106,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   logWeightLabel: {
-    color: colors.white,
+    color: t.colors.brandInk,
     fontSize: 15,
     fontWeight: "600",
   },
   chg: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 15,
     lineHeight: 21,
   },
   chgBold: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontWeight: "700",
   },
   chgMuted: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
   },
   chartWrap: {
     marginBottom: spacing.sm,
@@ -1074,7 +1128,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   chartMarker: {
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 11,
     height: 22,
     justifyContent: "center",
@@ -1084,7 +1138,7 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   chartMarkerText: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -1093,7 +1147,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   tip: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     marginTop: spacing.xs,
@@ -1103,7 +1157,7 @@ const styles = StyleSheet.create({
   },
   lrow: {
     alignItems: "center",
-    borderTopColor: "#E7E9F2",
+    borderTopColor: t.colors.line,
     borderTopWidth: 1,
     flexDirection: "row",
     gap: 12,
@@ -1117,30 +1171,30 @@ const styles = StyleSheet.create({
   },
   tile: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 11,
     height: 36,
     justifyContent: "center",
     width: 36,
   },
   tilePos: {
-    backgroundColor: semanticColors.positive.fill,
+    backgroundColor: t.colors.doneTint,
   },
   tileInfo: {
-    backgroundColor: semanticColors.info.fill,
+    backgroundColor: t.colors.infoTint,
   },
   rowTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
   rowMeta: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 19,
   },
   logLink: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 15,
     fontWeight: "600",
     minHeight: touchTargetMin,
@@ -1154,7 +1208,7 @@ const styles = StyleSheet.create({
   },
   phDone: {
     alignItems: "center",
-    backgroundColor: "#D9D3F7",
+    backgroundColor: t.colors.brandTint2,
     borderRadius: 18,
     flex: 1,
     height: 128,
@@ -1163,13 +1217,13 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   phLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 14,
     fontWeight: "600",
   },
   phEmpty: {
     alignItems: "center",
-    borderColor: "#D5D6DE",
+    borderColor: t.colors.line2,
     borderRadius: 18,
     borderStyle: "dashed",
     borderWidth: 1.5,
@@ -1179,57 +1233,56 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   phEmptyTitle: {
-    color: colors.indigo,
+    color: t.colors.coachInk,
     fontSize: 14,
     fontWeight: "600",
   },
   emptyTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "600",
   },
-  stepperRow: {
-    alignItems: "center",
+  keypadValue: {
+    alignItems: "baseline",
     flexDirection: "row",
-    gap: spacing.lg,
+    gap: spacing.sm,
     justifyContent: "center",
-    marginVertical: spacing.md,
+    marginTop: spacing.md,
   },
-  stepperBtn: {
-    alignItems: "center",
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
-    borderWidth: 1,
-    height: touchTargetMin,
-    justifyContent: "center",
-    minWidth: touchTargetMin,
-  },
-  stepperGlyph: {
-    color: colors.nearBlack,
-    fontSize: 24,
-    fontWeight: "600",
-  },
-  stepperValue: {
-    color: colors.nearBlack,
-    fontSize: 28,
+  keypadInput: {
+    color: t.colors.ink,
+    fontSize: 56,
     fontWeight: "700",
     minWidth: 120,
+    padding: 0,
     textAlign: "center",
+    ...({ fontVariant: ["tabular-nums"] } as object),
+  },
+  keypadLast: { marginBottom: spacing.md, textAlign: "center" },
+  dateRow: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.group,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: spacing.md,
+    minHeight: touchTargetMin,
+    paddingHorizontal: spacing.lg,
   },
   confirmOdd: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
     fontSize: 14,
     lineHeight: 20,
   },
   muted: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
     marginBottom: spacing.md,
   },
   offline: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     marginBottom: spacing.sm,
   },
-});
+}));

@@ -1,23 +1,23 @@
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
-import { Check, Lock, X } from "lucide-react-native";
+import { Pressable, TextInput, View } from "react-native";
+import { Lock, X } from "lucide-react-native";
 import type { ExceptionDetail, ResolveExceptionRequest } from "@fitbud/contracts";
-import {
-  colors,
-  defaultTextStyle,
-  fontFamilyMedium,
-  radii,
-  spacing,
-  touchTargetMin,
-} from "@fitbud/ui-mobile";
 import { BottomSheet } from "../../components/BottomSheet";
 import { Button } from "../../components/Button";
+import { Chip } from "../../components/Chip";
 import { Text } from "../../components/Text";
 import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../../providers/ThemeProvider";
+import {
   RESOLVE_OUTCOMES,
+  firstNameOf,
   resolveLockLine,
   resolveSheetSubtitle,
 } from "./exceptionSheetContent";
+import { resolvedOutcomePhrase } from "./exceptionStateContent";
 
 export type ResolveOutcome = Exclude<
   NonNullable<ResolveExceptionRequest["outcome"]>,
@@ -36,8 +36,21 @@ type Props = {
   onConfirm: (input: { outcome: Outcome | null; note: string | null }) => void;
 };
 
-/** Frame 33: confirm before resolving, optional outcome chip and note. */
-export function ResolveSheet({
+/**
+ * TM-04d: the trainer resolves the item, with an optional outcome and a
+ * private note, after reading the lock helper. Only the trainer resolves
+ * (AGENTS.md); nothing here resolves on its own. The sheet follows the system
+ * theme itself, so it reads right over a screen that has not migrated yet.
+ */
+export function ResolveSheet(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <ResolveSheetBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function ResolveSheetBody({
   visible,
   detail,
   traineeDisplayName,
@@ -46,8 +59,11 @@ export function ResolveSheet({
   onDismiss,
   onConfirm,
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [note, setNote] = useState("");
+  const first = firstNameOf(traineeDisplayName);
 
   useEffect(() => {
     if (visible) {
@@ -60,10 +76,10 @@ export function ResolveSheet({
     <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
       <View style={styles.header}>
         <View style={styles.headerText}>
-          <Text style={styles.title} accessibilityRole="header">
-            Resolve this item?
+          <Text variant="title" accessibilityRole="header">
+            Resolve
           </Text>
-          <Text style={styles.subtitle}>
+          <Text variant="subhead">
             {resolveSheetSubtitle(detail, traineeDisplayName)}
           </Text>
         </View>
@@ -73,49 +89,47 @@ export function ResolveSheet({
           onPress={onDismiss}
           style={styles.close}
         >
-          <X size={20} color={colors.darkGrey} />
+          <X size={20} color={theme.colors.ink} />
         </Pressable>
       </View>
 
-      <Text style={styles.label}>
-        What happened? <Text style={styles.labelMuted}>Optional</Text>
+      <Text variant="label" style={styles.label}>
+        Outcome
       </Text>
       <View style={styles.chips} accessibilityRole="radiogroup">
         {RESOLVE_OUTCOMES.map((option) => {
           const selected = outcome === option.value;
+          const label = resolvedOutcomePhrase(option.value, first) ?? option.label;
           return (
-            <Pressable
+            <Chip
               key={option.value}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
+              label={label}
+              selected={selected}
+              accessibilityLabel={label}
               onPress={() => setOutcome(selected ? null : option.value)}
-              style={[styles.chip, selected && styles.chipSelected]}
-            >
-              {selected ? <Check size={18} color={colors.indigo} /> : null}
-              <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                {option.label}
-              </Text>
-            </Pressable>
+            />
           );
         })}
       </View>
 
-      <Text style={styles.label}>
-        Note <Text style={styles.labelMuted}>· optional</Text>
+      <Text variant="bodyStrong" tone="ink2" style={styles.label}>
+        Note (only you)
       </Text>
       <TextInput
-        accessibilityLabel="Note"
+        accessibilityLabel="Note (only you)"
         multiline
         value={note}
         onChangeText={setNote}
         maxLength={2000}
-        placeholderTextColor={colors.midGrey}
+        placeholderTextColor={theme.colors.ink4}
         style={styles.input}
       />
 
       <View style={styles.lockCard}>
-        <Lock size={20} color={colors.darkGrey} />
-        <Text style={styles.lockText}>{resolveLockLine(traineeDisplayName)}</Text>
+        <Lock size={20} color={theme.colors.ink2} />
+        <Text variant="body" tone="ink2" style={styles.lockText}>
+          {resolveLockLine(traineeDisplayName)}
+        </Text>
       </View>
 
       {errorMessage ? (
@@ -127,6 +141,7 @@ export function ResolveSheet({
       <Button
         label="Resolve"
         loading={acting}
+        testID="resolve-confirm"
         onPress={() =>
           onConfirm({ outcome, note: note.trim() ? note.trim() : null })
         }
@@ -135,61 +150,38 @@ export function ResolveSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  header: { flexDirection: "row", alignItems: "flex-start", gap: spacing.md },
-  headerText: { flex: 1, gap: spacing.xs },
-  title: { color: colors.deepNavy, fontSize: 24, fontWeight: "600" },
-  subtitle: { color: colors.midGrey, fontSize: 14, lineHeight: 20 },
+const useStyles = createThemedStyles((t) => ({
+  header: { flexDirection: "row", alignItems: "flex-start", gap: t.spacing.md },
+  headerText: { flex: 1, gap: t.spacing.xs },
   close: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.fill,
     borderRadius: 999,
-    height: touchTargetMin,
+    height: t.touchTarget,
     justifyContent: "center",
-    width: touchTargetMin,
+    width: t.touchTarget,
   },
-  label: {
-    color: colors.darkGrey,
-    fontFamily: fontFamilyMedium,
-    fontSize: 14,
-  },
-  labelMuted: { color: colors.midGrey },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
-  chip: {
-    alignItems: "center",
-    borderColor: colors.lightGrey,
-    borderRadius: 999,
-    borderWidth: 1,
-    flexDirection: "row",
-    gap: spacing.sm,
-    minHeight: touchTargetMin,
-    paddingHorizontal: spacing.lg,
-  },
-  chipSelected: {
-    backgroundColor: colors.paleLavender,
-    borderColor: colors.indigo,
-  },
-  chipText: { color: colors.deepNavy, fontSize: 16 },
-  chipTextSelected: { color: colors.indigo },
+  label: { marginTop: t.spacing.xs },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm },
   input: {
-    ...defaultTextStyle,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
+    ...t.text.body.style,
+    color: t.colors.ink,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
+    borderRadius: t.radii.input,
     borderWidth: 1,
-    minHeight: 88,
-    padding: spacing.md,
+    minHeight: 64,
+    padding: t.spacing.md,
     textAlignVertical: "top",
   },
   lockCard: {
-    alignItems: "flex-start",
-    backgroundColor: colors.background,
-    borderColor: colors.lightGrey,
-    borderRadius: radii.card,
-    borderWidth: 1,
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.card,
     flexDirection: "row",
-    gap: spacing.md,
-    padding: spacing.md,
+    gap: t.spacing.md,
+    padding: t.spacing.md,
   },
-  lockText: { color: colors.darkGrey, flex: 1, fontSize: 15, lineHeight: 22 },
-  error: { color: colors.error, fontSize: 14 },
-});
+  lockText: { flex: 1 },
+  error: { color: t.colors.crit, fontSize: 14 },
+}));

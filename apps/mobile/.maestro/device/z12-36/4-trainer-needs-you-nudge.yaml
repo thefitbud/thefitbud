@@ -13,11 +13,10 @@ env:
 # Same opt-in note as 2-trainee-today-diet: these screens stay light in the dark run
 # until their own W12 task opts them in.
 #
-# The nudge sheet today is the exception review's "Nudge" sheet
-# (ExceptionReviewScreen.tsx -> NudgeSheet.tsx); the review sheet's "Nudge…" on Needs
-# you opens WhatsApp directly (run 43643116147 landed in Chrome), so it is not used.
-# The sheet is opened and closed; nothing is sent (WhatsApp is only ever a prefill the
-# trainer sends).
+# The nudge sheet here is the exception review's "Nudge" sheet
+# (ExceptionReviewScreen.tsx -> NudgeSheet.tsx). Since Z12-51 the review sheet's
+# "Nudge…" on Needs you opens the same FitBud sheet (flows/v3/F21 covers it). The sheet
+# is opened and closed; nothing is sent.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -47,16 +46,14 @@ env:
     visible: "Review"
     timeout: 30000
 - tapOn: "Review"
+# The v3 exception review (Z12-51): Nudge is a footer button once the item and the
+# client's status have loaded.
 - extendedWaitUntil:
-    visible: "Review the signal, then acknowledge or resolve.*"
-    timeout: 20000
-- extendedWaitUntil:
-    notVisible: "Loading exception…"
-    timeout: 20000
-- scrollUntilVisible:
-    element: "Nudge"
-    timeout: 20000
-- tapOn: "Nudge"
+    visible:
+      id: "exception-nudge"
+    timeout: 30000
+- tapOn:
+    id: "exception-nudge"
 - extendedWaitUntil:
     visible: "PREVIEW · TAP TO EDIT"
     timeout: 20000
