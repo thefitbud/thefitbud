@@ -244,6 +244,35 @@ describe("ClientLogMealScreen", () => {
     expect(screen.queryByText("Changed the portion")).toBeNull();
   });
 
+  it("coach Something different reuses the entry key after a 5xx", async () => {
+    api.request.mockReset();
+    api.listMealAssignments.mockResolvedValue({ items: [meal()], nextCursor: null });
+    api.request
+      .mockRejectedValueOnce(
+        new ApiClientError({
+          code: "INTERNAL",
+          message: "Something went wrong on our side.",
+          requestId: "r",
+          status: 500,
+        }),
+      )
+      .mockResolvedValue(
+        compliance({ loggedByRole: "coach", deviationKind: "portion_adjustment", outcome: "modified" }),
+      );
+    const onSaved = vi.fn();
+    renderForm({ onSaved });
+    await screen.findByText(/Planned for Wed 4 Nov/);
+    fireEvent.click(await screen.findByRole("button", { name: "Modified" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Changed the portion" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save portion" }));
+    await screen.findByText(/Something went wrong on our side/);
+    fireEvent.click(screen.getByRole("button", { name: "Save portion" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
+    const keys = api.request.mock.calls.map((c) => c[3].idempotencyKey);
+    expect(keys.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(keys).size).toBe(1);
+  });
+
   it("reuses the key after a 5xx and replaces it after a 4xx", async () => {
     api.request.mockReset();
     api.listMealAssignments.mockResolvedValue({ items: [meal()], nextCursor: null });

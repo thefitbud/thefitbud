@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
+import { ApiClientError } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import { formatCivilDate, formatPersonName, labelFor } from "@fitbud/core";
 import { colors } from "@fitbud/ui-mobile";
 import { useAuth } from "../../../auth/AuthProvider";
 import { Screen } from "../../../components/Screen";
 import { Text } from "../../../components/Text";
-import { createIdempotencyKey } from "../../../lib/idempotency";
 import { localDateInTimezone } from "../../../lib/dates";
 import { reportError } from "../../../lib/reportError";
 import { FoodSearchScreen } from "../../../trainee/FoodSearchScreen";
@@ -56,7 +56,8 @@ export function ClientLogMealScreen({ relationshipId, displayName, ended, client
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<MealDraft>(startDraft(null));
   const [different, setDifferent] = useState<DifferentView>("closed");
-  const { save, setSave, newEntry, run } = useLogSave("client-log.meal");
+  const { save, setSave, newEntry, run, idempotencyKey, rotateKeyAfterClientError } =
+    useLogSave("client-log.meal");
 
   const load = useCallback(async () => {
     setLoadFailed(false);
@@ -134,8 +135,21 @@ export function ClientLogMealScreen({ relationshipId, displayName, ended, client
 
   async function saveCoachDeviate(body: CoachDeviateBody) {
     if (!meal) return;
-    const key = createIdempotencyKey();
-    await putCoachMeal(api, meal.id, date, buildCoachDeviateBody(body, existing), key);
+    // Reuse the entry key so a retry after network/5xx replays the same write (Bugbot).
+    try {
+      await putCoachMeal(
+        api,
+        meal.id,
+        date,
+        buildCoachDeviateBody(body, existing),
+        idempotencyKey(),
+      );
+    } catch (err) {
+      if (err instanceof ApiClientError && err.status >= 400 && err.status < 500) {
+        rotateKeyAfterClientError();
+      }
+      throw err;
+    }
   }
 
   function afterDifferentSaved() {
