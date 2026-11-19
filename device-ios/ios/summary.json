@@ -1,0 +1,251 @@
+{
+  "platform": "ios",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-38/1-trainee-note-banner.yaml",
+    "device/z12-46/1-no-plan.yaml",
+    "flows/v3/F11-weekly-checkin.yaml",
+    "flows/v3/F12-progress-weight.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 110 s",
+      "mode": "cache-hit",
+      "seconds": 110,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.892 (16), dark 0.194 (14)",
+      "light": 0.892,
+      "dark": 0.194,
+      "count": {
+        "light": 16,
+        "dark": 14
+      },
+      "shots": [
+        {
+          "file": "TR-06a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.165
+        },
+        {
+          "file": "TR-06a-light-ios.png",
+          "theme": "light",
+          "luma": 0.791
+        },
+        {
+          "file": "TR-06h-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.165
+        },
+        {
+          "file": "TR-06h-light-ios.png",
+          "theme": "light",
+          "luma": 0.791
+        },
+        {
+          "file": "TR-07c-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.093
+        },
+        {
+          "file": "TR-07c-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "TR-10b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.095
+        },
+        {
+          "file": "TR-10b-light-ios.png",
+          "theme": "light",
+          "luma": 0.955
+        },
+        {
+          "file": "TR-13a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "TR-13a-light-ios.png",
+          "theme": "light",
+          "luma": 0.945
+        },
+        {
+          "file": "TR-13b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "TR-13b-light-ios.png",
+          "theme": "light",
+          "luma": 0.908
+        },
+        {
+          "file": "TR-13c-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.217
+        },
+        {
+          "file": "TR-13c-light-ios.png",
+          "theme": "light",
+          "luma": 0.825
+        },
+        {
+          "file": "TR-14a-light-ios.png",
+          "theme": "light",
+          "luma": 0.947
+        },
+        {
+          "file": "TR-14c-light-ios.png",
+          "theme": "light",
+          "luma": 0.91
+        },
+        {
+          "file": "TR-14d-light-ios.png",
+          "theme": "light",
+          "luma": 0.909
+        },
+        {
+          "file": "TR-14g-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.127
+        },
+        {
+          "file": "TR-14g-light-ios.png",
+          "theme": "light",
+          "luma": 0.905
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.165
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.794
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "Today-no-plan-checkin-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "Today-no-plan-checkin-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "Today-no-plan-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "Today-no-plan-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "TR-14-card-next-checkin-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.109
+        },
+        {
+          "file": "z12-38-after-swipe-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.166
+        },
+        {
+          "file": "z12-38-after-swipe-light-ios.png",
+          "theme": "light",
+          "luma": 0.795
+        }
+      ]
+    }
+  ]
+}
