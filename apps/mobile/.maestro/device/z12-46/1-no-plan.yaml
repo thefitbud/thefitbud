@@ -15,15 +15,23 @@ tags:
     permissions:
       all: allow
 # common/sign-in-password.yaml ends by waiting for "Today's workout", a heading a
-# trainee with no plan never gets (CU22): wait for the tab bar instead.
+# trainee with no plan never gets (CU22): wait for the tab bar instead. Keyboard
+# dismiss matches common/sign-in-password.yaml (the old "Your coach's plan…"
+# subtitle is gone on main; run 44402757234).
 - extendedWaitUntil:
     visible: "Sign in with a code instead"
     timeout: 60000
 - tapOn: "you@example.com or 9876543210"
 - inputText: harpreet.ready@demo.fitbud.test
+- runFlow:
+    when:
+      notVisible: "harpreet.ready@demo.fitbud.test.*"
+    commands:
+      - eraseText: 60
+      - inputText: harpreet.ready@demo.fitbud.test
 - tapOn: "Your password"
 - inputText: ${QA_PASSWORD}
-- tapOn: "Your coach's plan for today is waiting\\."
+- tapOn: "Use the mobile number or email your coach invited\\."
 - tapOn:
     text: "Sign in"
     below: "Forgot password\\??"

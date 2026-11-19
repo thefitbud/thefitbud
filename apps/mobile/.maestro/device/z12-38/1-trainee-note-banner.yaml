@@ -38,12 +38,20 @@ env:
     env:
       SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
 # Banners from an earlier run's unread notes may show and leave meanwhile.
+# Wait until the queue is clear before seeding a new note (iOS light run
+# 44402757234: "Rahul left a note" not visible — raced a leftover banner).
 - extendedWaitUntil:
     notVisible: "${BANNER}"
-    timeout: 15000
+    timeout: 20000
+- extendedWaitUntil:
+    notVisible: ".*left a note.*"
+    timeout: 10000
 
 # 1. It shows (a due-meal banner may come first: one at a time), then leaves by itself.
 - tapOn: "Progress"
+- extendedWaitUntil:
+    notVisible: "${BANNER}"
+    timeout: 10000
 - runScript:
     file: share-note.js
     env:
@@ -61,15 +69,18 @@ env:
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 30000
+    timeout: 45000
 - takeScreenshot: TR-06h
 - extendedWaitUntil:
     notVisible: "${BANNER}"
-    timeout: 8000
+    timeout: 12000
 - runFlow: ../../common/assert-no-crash.yaml
 
-# 2. Swipe up removes it.
+# 2. Swipe up removes it. Wait for any auto-leave to finish first.
 - tapOn: "Progress"
+- extendedWaitUntil:
+    notVisible: "${BANNER}"
+    timeout: 10000
 - runScript:
     file: share-note.js
     env:
@@ -83,7 +94,7 @@ env:
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 30000
+    timeout: 45000
 - swipe:
     from: "${BANNER}"
     direction: UP
@@ -96,10 +107,13 @@ env:
 - takeScreenshot: z12-38-after-swipe
 - extendedWaitUntil:
     notVisible: "${BANNER}"
-    timeout: 8000
+    timeout: 12000
 
 # 3. A tap removes it and lands on Today (a coach note opens Today); it marks it read.
 - tapOn: "Progress"
+- extendedWaitUntil:
+    notVisible: "${BANNER}"
+    timeout: 10000
 - runScript:
     file: share-note.js
     env:
@@ -113,10 +127,10 @@ env:
     waitToSettleTimeoutMs: 500
 - extendedWaitUntil:
     visible: "${BANNER}"
-    timeout: 30000
+    timeout: 45000
 - tapOn: "${BANNER}"
 - extendedWaitUntil:
     notVisible: "${BANNER}"
-    timeout: 8000
+    timeout: 12000
 - assertVisible: "Today's workout.*"
 - runFlow: ../../common/assert-no-crash.yaml
