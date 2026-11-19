@@ -1,0 +1,56 @@
+{
+  "result": "mean screenshot luminance: light 0.906 (5), dark 0.353 (4)",
+  "light": 0.906,
+  "dark": 0.353,
+  "count": {
+    "light": 5,
+    "dark": 4
+  },
+  "shots": [
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.173
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.891
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.113
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.949
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.949
+    },
+    {
+      "file": "step-067-tapOnElement-Open-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-068-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.891
+    },
+    {
+      "file": "step-071-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    }
+  ]
+}
