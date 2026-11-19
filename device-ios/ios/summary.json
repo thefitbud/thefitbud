@@ -1,0 +1,241 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "dark: 3 of 6 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-36/3-trainee-workout.yaml",
+    "device/z12-44/1-workout-tab.yaml",
+    "device/z12-44/2-finish-workout.yaml",
+    "device/z12-44/3-no-plan.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 6,
+      "passed": 3,
+      "failed": 3,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Z12-36 trainee active workout mid-session (W-03)",
+          "message": "Assertion is false: \"Log set [0-9]+ ·.*\" is visible"
+        },
+        {
+          "flow": "Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)",
+          "message": "Assertion is false: \"rohan.slipping@demo.fitbud.test.*\" is visible"
+        },
+        {
+          "flow": "Z12-44 Workout tab, no plan yet (TR-10b)",
+          "message": "Assertion is false: \".*Loading your day.*\" is not visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 131 s",
+      "mode": "cache-hit",
+      "seconds": 131,
+      "cacheKey": "device-native-ios-d157bd9813a49f8a57143e80b699f8617af6aa33"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.918 (13), dark 0.202 (12)",
+      "light": 0.918,
+      "dark": 0.202,
+      "count": {
+        "light": 13,
+        "dark": 12
+      },
+      "shots": [
+        {
+          "file": "TR-10a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.095
+        },
+        {
+          "file": "TR-10a-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "TR-10b-light-ios.png",
+          "theme": "light",
+          "luma": 0.955
+        },
+        {
+          "file": "TR-10c-light-ios.png",
+          "theme": "light",
+          "luma": 0.909
+        },
+        {
+          "file": "W-01a-light-ios.png",
+          "theme": "light",
+          "luma": 0.909
+        },
+        {
+          "file": "W-01b-light-ios.png",
+          "theme": "light",
+          "luma": 0.914
+        },
+        {
+          "file": "W-01c-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.109
+        },
+        {
+          "file": "W-01c-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "W-01e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "W-01e-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "W-03-light-ios.png",
+          "theme": "light",
+          "luma": 0.9
+        },
+        {
+          "file": "W-17a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "W-17a-light-ios.png",
+          "theme": "light",
+          "luma": 0.901
+        },
+        {
+          "file": "W-17b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.136
+        },
+        {
+          "file": "W-17b-light-ios.png",
+          "theme": "light",
+          "luma": 0.898
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.163
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.801
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.947
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-004-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.187
+        },
+        {
+          "file": "step-012-assertCondition-Loading_your_day-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.098
+        },
+        {
+          "file": "step-013-assertCondition-_SIGN_IN_EMAIL-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.187
+        },
+        {
+          "file": "step-033-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.13
+        },
+        {
+          "file": "step-044-assertCondition-Log_set__0-9-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.13
+        },
+        {
+          "file": "z12-44-finished-day-light-ios.png",
+          "theme": "light",
+          "luma": 0.947
+        }
+      ]
+    }
+  ]
+}

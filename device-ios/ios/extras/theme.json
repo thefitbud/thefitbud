@@ -1,0 +1,136 @@
+{
+  "result": "mean screenshot luminance: light 0.918 (13), dark 0.202 (12)",
+  "light": 0.918,
+  "dark": 0.202,
+  "count": {
+    "light": 13,
+    "dark": 12
+  },
+  "shots": [
+    {
+      "file": "TR-10a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.095
+    },
+    {
+      "file": "TR-10a-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "TR-10b-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    },
+    {
+      "file": "TR-10c-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "W-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "W-01b-light-ios.png",
+      "theme": "light",
+      "luma": 0.914
+    },
+    {
+      "file": "W-01c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    },
+    {
+      "file": "W-01c-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "W-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "W-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    },
+    {
+      "file": "W-17a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "W-17a-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "W-17b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.136
+    },
+    {
+      "file": "W-17b-light-ios.png",
+      "theme": "light",
+      "luma": 0.898
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.163
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.801
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.187
+    },
+    {
+      "file": "step-012-assertCondition-Loading_your_day-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "step-013-assertCondition-_SIGN_IN_EMAIL-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.187
+    },
+    {
+      "file": "step-033-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.13
+    },
+    {
+      "file": "step-044-assertCondition-Log_set__0-9-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.13
+    },
+    {
+      "file": "z12-44-finished-day-light-ios.png",
+      "theme": "light",
+      "luma": 0.947
+    }
+  ]
+}
