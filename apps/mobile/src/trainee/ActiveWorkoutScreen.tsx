@@ -106,6 +106,7 @@ import {
   historySetsOf,
   loadExerciseBests,
   loadWorkoutHistory,
+  previousSetLabel,
   type ExerciseBest,
   type WorkoutHistory,
 } from "./workoutDisplay";
@@ -1046,10 +1047,11 @@ export function ActiveWorkoutScreen({
                           initialDraft(set.prescribedLoadLabel, set.prescribedReps).reps
                       }
                       activeField={state === "cur" ? (keypad?.field ?? null) : null}
-                      previousLabel={
-                        history.previousByKey[`${exercise.exerciseId}:${set.order}`] ??
-                        "—"
-                      }
+                      previousLabel={previousSetLabel(
+                        exercise,
+                        set,
+                        history.previousByKey,
+                      )}
                       record={recordSetIds.has(set.id)}
                       disabled={paused}
                       onOpenField={(field) => openField(set, field)}

@@ -61,9 +61,8 @@ export function M2Screen({
 export function BrandRow() {
   const styles = useStyles();
   return (
-    <View style={styles.brandRow} accessibilityLabel="FitBud">
-      <BrandMark size={30} />
-      <Text style={styles.brandWord}>FitBud</Text>
+    <View style={styles.brandRow}>
+      <BrandMark wordmark size={40} />
     </View>
   );
 }
@@ -216,16 +215,8 @@ const useStyles = createThemedStyles((t) => ({
   brandRow: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
     paddingTop: spacing.xs,
     paddingBottom: spacing.xs,
-  },
-  brandWord: {
-    color: t.colors.ink,
-    fontFamily: fontFamilyBold,
-    fontSize: 17,
-    fontWeight: "700",
-    letterSpacing: -0.3,
   },
   avatar: {
     alignItems: "center",

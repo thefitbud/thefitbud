@@ -434,7 +434,7 @@ FitBud has two **server-side** flags: KV or D1 config, read at send time and exp
 - `apps/mobile/src/components/Screen.tsx` already takes optional `refreshing`/`onRefresh` (a `RefreshControl`). But these screens still render a manual **"Refresh"** button: `trainee/ProgressTab.tsx:281`, `trainee/WorkoutTab.tsx:328`, `trainee/NotificationsScreen.tsx:148`, `trainer/AttentionTab.tsx:133`, `trainer/CheckinsTab.tsx:51`, `trainer/ClientsTab.tsx:135` and `trainer/ActivityFeedScreen.tsx:128`.
 
 **Brand / logo**
-- The Honest Week four-dot mark is `packages/brand/logo/mark.svg` (also `mark-white.svg` and `mark-dark.svg`): three filled `#1A1248` dots, then a `#FF587D` outlined ring. Mobile uses it as `apps/mobile/assets/brand-mark.png` through `components/BrandMark.tsx`. **Web doesn't use it:** `layout/AppShell.tsx:63–72` shows `/favicon-32.png` plus "FitBud Coach · Active Coaching" with a `live-dot`.
+- The Honest Week four-dot mark is `packages/brand/logo/mark.svg` (also `mark-white.svg` and `mark-dark.svg`): three filled `#1A1248` dots, then a `#FF587D` outlined ring. Mobile renders it as a theme-aware SVG in `components/BrandMark.tsx` (navy dots on light, white on dark; coral ring always; optional Inter-bold "FitBud" wordmark). **Web doesn't use it:** `layout/AppShell.tsx:63–72` shows `/favicon-32.png` plus "FitBud Coach · Active Coaching" with a `live-dot`.
 
 **Tests and capture**
 - Web E2E: `apps/trainer-web/e2e/trainer-flows.spec.ts` (Playwright, `pnpm --filter trainer-web test:e2e`). RCA.md says these drive flows through API `fetch`, which is a presence check only. Don't count them as UI evidence.

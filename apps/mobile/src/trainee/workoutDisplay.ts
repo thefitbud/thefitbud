@@ -174,7 +174,8 @@ export function previousSetLabel(
   const key = `${exercise.exerciseId}:${set.order}`;
   const fromHistory = historyByKey[key];
   if (fromHistory) return fromHistory;
-  if (set.order === 1) return "— first time";
+  // Short: "— first time" truncated to "— first…" in the Previous column on iOS (FitBud W-03).
+  if (set.order === 1) return "— first";
   const prescribedPrior = formatLoadRepsPair(
     set.prescribedLoadLabel,
     set.prescribedReps,

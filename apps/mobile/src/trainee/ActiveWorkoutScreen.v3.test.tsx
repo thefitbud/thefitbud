@@ -5,10 +5,12 @@
  * set sheet, finish early, pause, minimise, discard and the record banner.
  * DOM-shaped (react-native-web), so layout is checked in the visual captures,
  * not here; swiping a set is native-only and is walked on the device.
+ *
+ * Z12-63: under system dark the screen opts into v3 tokens (not light-only).
  */
 import { useState } from "react";
+import { Appearance, Vibration } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Vibration } from "react-native";
 import {
   workoutExecutionSchema,
   completeSetRequestSchema,
@@ -16,7 +18,9 @@ import {
   type WorkoutAssignment,
   type WorkoutExecution,
 } from "@fitbud/contracts";
+import { themes } from "@fitbud/ui-mobile";
 import { act, mockAuth, render, screen, fireEvent } from "../test/render";
+import { ThemeProvider } from "../providers/ThemeProvider";
 import {
   backspace,
   initialDraft,
@@ -757,5 +761,59 @@ describe("offline addressing (Z12-41)", () => {
       setTargetId: uuid(110),
       workoutName: "Lower body B",
     });
+  });
+});
+
+describe("ActiveWorkoutScreen dark opt-in (Z12-63)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("under system dark, key surfaces use dark card/ink — not light-only white", () => {
+    // Same Appearance driver as ThemeProvider.render.test: getColorScheme + listeners.
+    const current: "light" | "dark" | null = "dark";
+    vi.spyOn(Appearance, "getColorScheme").mockImplementation(() => current);
+    vi.spyOn(Appearance, "addChangeListener").mockImplementation(() => ({
+      remove: () => undefined,
+    }) as ReturnType<typeof Appearance.addChangeListener>);
+    render(
+      <ThemeProvider>
+        <Harness initial={execution("20 kg")} options={{}} />
+      </ThemeProvider>,
+    );
+    const title = screen.getByText("Lower body B");
+    const dark = themes.dark.colors;
+    const light = themes.light.colors;
+    const rgbOf = (css: string) =>
+      (css.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
+    const toRgb = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      return [n >> 16, (n >> 8) & 255, n & 255];
+    };
+    expect(rgbOf(getComputedStyle(title).color)).toEqual(toRgb(dark.ink));
+    expect(rgbOf(getComputedStyle(title).color)).not.toEqual(
+      toRgb(light.ink),
+    );
+    let node: HTMLElement | null = title;
+    let bg = "";
+    while (node && !bg) {
+      const c = getComputedStyle(node).backgroundColor;
+      if (c && !/^rgba?\(0, 0, 0, 0(\.0+)?\)$/.test(c) && c !== "transparent") {
+        bg = c;
+      }
+      node = node.parentElement;
+    }
+    // Screen canvas (bg) or exercise card — either is a dark surface token.
+    const surface = rgbOf(bg);
+    expect(
+      [toRgb(dark.bg), toRgb(dark.card)].some(
+        (tok) =>
+          tok[0] === surface[0] &&
+          tok[1] === surface[1] &&
+          tok[2] === surface[2],
+      ),
+    ).toBe(true);
+    expect(surface).not.toEqual(toRgb(light.card));
+    expect(surface).not.toEqual(toRgb(light.bg));
   });
 });

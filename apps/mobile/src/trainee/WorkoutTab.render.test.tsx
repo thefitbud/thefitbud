@@ -190,6 +190,8 @@ describe("WorkoutTab week state", () => {
     await waitFor(() => {
       expect(screen.getByText("Loading workouts…")).toBeTruthy();
     });
+    // Maestro open-workout-tab asserts this root so a wrong tab fails early.
+    expect(screen.getByTestId("workout-tab-root")).toBeTruthy();
 
     // The assertion the defect fails. "No plan yet" is a claim about the
     // coach, and nothing has answered yet.

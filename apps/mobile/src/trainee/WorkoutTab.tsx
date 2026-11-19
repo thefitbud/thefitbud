@@ -1170,7 +1170,7 @@ function WorkoutDayView(props: DayViewProps) {
   } = props;
 
   return (
-    <View style={styles.swipeBody}>
+    <View style={styles.swipeBody} testID="workout-tab-root">
       <View style={styles.ttlrow}>
         <View style={styles.titles}>
           <Text variant="subhead" tone="ink3" testID="day-eyebrow">
@@ -1602,6 +1602,7 @@ function HeroCard({
         <ExerciseRows exercises={rest} />
         <Button
           label="Continue workout"
+          testID="workout-day-cta"
           loading={acting}
           icon={<Play size={20} color={theme.colors.onBrand} strokeWidth={2} />}
           onPress={onAct}
@@ -1711,6 +1712,7 @@ function HeroCard({
       ) : action ? (
         <Button
           label={action}
+          testID={hero.action === "view_workout" ? undefined : "workout-day-cta"}
           variant={hero.action === "view_workout" ? "secondary" : "primary"}
           loading={acting}
           icon={

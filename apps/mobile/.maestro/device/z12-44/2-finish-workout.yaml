@@ -6,25 +6,23 @@ tags:
   - z12-44
 ---
 # Z12-44: finish a workout on the device. Rohan Mehta (slipping, local demo seed):
-# today not started (W-01a), this week's missed workout in the banner (TR-10c).
+# today not started (W-01a), this week's missed workouts in the banner (TR-10c).
 # The flow opens a session, logs a set, kills and relaunches the app: the Workout
 # tab shows it in progress with its clock and set count from the server (W-01b;
 # the duration survives the relaunch). It then finishes it: summary (W-17a),
 # shared (W-17b, week ticks equal to "N of M done"), and the day offers View
-# summary only, also after another relaunch (ISSUE-MAP #4, #10).
+# summary only, also after another relaunch (ISSUE-MAP #4, #10). The session part
+# is finish-session.yaml.
 #
-# Today's state is asserted before anything branches on it (Z12-44 review): on a
-# training day it must read "To do", on the other days Rest (ist-days.yaml). A
-# seed made for another IST day fails here.
-#
-# One unlogged workout per use, so both themes get W-01a (Z12-44 review):
-#   * z12-36/3 opens last Saturday's (light starts it, dark continues it);
-#   * light here takes this week's missed one ("Log it", a late log), leaving
-#     today untouched for the dark pass's W-01a;
-#   * dark here takes today's ("Start workout"): the done-today path, checked
-#     on Workout and on Today.
-# Rohan's seed leaves those three open on a Tuesday or a Thursday (IST); on
-# other days the flow still asserts today's state, and the missing shots show.
+# What Rohan has open depends on the weekday (IST) and on what the earlier flows and
+# the other theme already used (z12-36/3 first, light before dark), so ist-days.js
+# works it out: which workout this pass opens (fwKind/fwLabel), whether today is
+# still to do (W-01a), whether the missed banner shows (TR-10c). Every one is
+# ASSERTED against the screen, never branched on silently: a seed made for another
+# IST day fails here. When no workout is left (Mon dark after light took both, Sun
+# dark, ...) the finish steps are skipped, and ist-days.js logs "SKIP ..." (maestro.log).
+# Tuesday and Thursday leave three open workouts: both themes get W-01a, TR-10c is
+# in light, and both finish a session.
 # Screens: W-01a, TR-10c, W-01b, W-17a, W-17b.
 - launchApp:
     clearState: true
@@ -40,187 +38,55 @@ tags:
     timeout: 30000
 - runFlow: ist-days.yaml
 - runFlow: open-workout-tab.yaml
-# MANDATORY: the seed's day and the device's agree ("Thu 19 Nov, To do").
+# MANDATORY: the seed's day and the device's agree, and today's state is what the
+# earlier passes left ("Thu 19 Nov, To do" / "Done" / "Rest").
 - assertVisible: "${output.today}, ${output.rohanToday}"
 
-# ---- W-01a: today, not started (training day) -----------------------------------
+# ---- W-01a: today, not started ------------------------------------------------------
 - runFlow:
     when:
-      true: ${output.trainingDay == 'yes'}
+      true: ${output.fwW01a == 'yes'}
     commands:
       - assertVisible: "Start workout"
       - assertNotVisible: "Continue workout"
       - assertNotVisible: "View summary"
       - takeScreenshot: W-01a-workout-tab-not-started
+# Today is done (an earlier pass finished it): View summary only (ISSUE-MAP #4).
 - runFlow:
     when:
-      visible: "You missed .*"
+      true: ${output.rohanToday == 'Done'}
     commands:
-      - takeScreenshot: TR-10c-workout-missed-banner
-- runFlow: ../../common/assert-no-crash.yaml
-
-# ---- Open a session ---------------------------------------------------------------
-# Dark, training day: today's (the done-today path).
+      - assertVisible: "View summary"
+      - assertNotVisible: "Start workout"
 - runFlow:
     when:
-      true: ${DEVICE_THEME == 'dark' && output.trainingDay == 'yes'}
+      true: ${output.rohanToday == 'Rest'}
     commands:
-      - tapOn: "Start workout"
-      - extendedWaitUntil:
-          visible: "Log set [0-9]+ ·.*"
-          timeout: 30000
-# Light: this week's missed workout, from the banner.
-- runFlow:
-    when:
-      true: ${DEVICE_THEME != 'dark'}
-      visible: "Log it"
-    commands:
-      - tapOn: "Log it"
-      - extendedWaitUntil:
-          visible: "Log set [0-9]+ ·.*"
-          timeout: 30000
-# Anything else (another weekday): whatever open-session finds.
-- runFlow: open-session.yaml
-- tapOn: "Log set [0-9]+ ·.*"
-- runFlow:
-    when:
-      visible: "Skip rest"
-    commands:
-      - tapOn: "Skip rest"
-- launchApp:
-    clearState: false
-# A cold relaunch shows the startup spinner first: wait for the tab bar.
-- extendedWaitUntil:
-    visible: "Diet"
-    timeout: 120000
-- extendedWaitUntil:
-    notVisible: ".*Loading your day.*"
-    timeout: 60000
-- runFlow: open-workout-tab.yaml
-# The session may be on an earlier day than today: walk back to it.
-- repeat:
-    times: 7
-    while:
-      notVisible: "Continue workout"
-    commands:
-      - swipe:
-          start: "15%, 70%"
-          end: "85%, 70%"
-          duration: 350
-      - extendedWaitUntil:
-          notVisible: "Loading workouts…"
-          timeout: 20000
-# Z12-45 (W-18): reopened mid-workout, the tab asks "Pick up where you left off?".
-# Resume, then minimise (W-14), so the card behind is what this flow checks.
-- extendedWaitUntil:
-    visible: "Pick up where you left off\\?"
-    timeout: 30000
-- tapOn: "Resume workout"
-- extendedWaitUntil:
-    visible: "Minimise workout"
-    timeout: 30000
-- tapOn: "Minimise workout"
-- extendedWaitUntil:
-    visible: "Continue workout"
-    timeout: 30000
-- assertVisible: "(In progress|Paused) · [0-9:]+"
-# The set count comes from the full execution, read after the card paints.
-- extendedWaitUntil:
-    visible: "[0-9]+ of [0-9]+ sets"
-    timeout: 20000
-- takeScreenshot: W-01b-workout-tab-in-progress
-- runFlow: ../../common/assert-no-crash.yaml
-
-# ---- Finish it ----------------------------------------------------------------------
-- tapOn: "Continue workout"
-- extendedWaitUntil:
-    visible: "Log set [0-9]+ ·.*|Finish workout"
-    timeout: 30000
-- repeat:
-    times: 30
-    commands:
-      - runFlow:
-          when:
-            visible: "Log set [0-9]+ ·.*"
-          commands:
-            - tapOn: "Log set [0-9]+ ·.*"
-            - waitForAnimationToEnd:
-                timeout: 500
-- assertNotVisible: "Log set [0-9]+ ·.*"
-- tapOn: "Finish workout"
-- runFlow:
-    when:
-      visible: "How hard was the session\\?"
-    commands:
-      - tapOn: "RPE 7.*"
-      - tapOn: "Finish workout"
-- extendedWaitUntil:
-    visible: "Workout done"
-    timeout: 30000
-- takeScreenshot: W-17a-summary
-- tapOn: "Save and share with .*"
-- extendedWaitUntil:
-    visible: "This week"
-    timeout: 10000
-- assertVisible: "[0-9]+ of [0-9]+ done"
-- takeScreenshot: W-17b-summary-shared
-- runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Done"
-- extendedWaitUntil:
-    visible: "View summary"
-    timeout: 30000
-- assertNotVisible: "Start workout"
-- assertNotVisible: "Continue workout"
-# Not a W-01c shot: the light pass finishes a past day; Aarav's flow has W-01c.
-- takeScreenshot: z12-44-finished-day
-
-# ---- Dark, training day: today is done on Workout and on Today --------------------
-- runFlow:
-    when:
-      true: ${DEVICE_THEME == 'dark' && output.trainingDay == 'yes'}
-    commands:
-      - assertVisible: "${output.today}, Done"
-      - tapOn: "Today"
-      - extendedWaitUntil:
-          notVisible: ".*Loading your day.*"
-          timeout: 30000
-      - scrollUntilVisible:
-          element: "View summary"
-          timeout: 20000
       - assertNotVisible: "Start workout"
       - assertNotVisible: "Continue workout"
-      - takeScreenshot: z12-44-today-done-card
-      - runFlow: open-workout-tab.yaml
 
-# ---- Kill and relaunch: still View summary only ------------------------------------
-- launchApp:
-    clearState: false
-# A cold relaunch shows the startup spinner first: wait for the tab bar.
-- extendedWaitUntil:
-    visible: "Diet"
-    timeout: 120000
-- extendedWaitUntil:
-    notVisible: ".*Loading your day.*"
-    timeout: 60000
-- runFlow: open-workout-tab.yaml
-- repeat:
-    times: 7
-    while:
-      notVisible: "View summary"
-    commands:
-      - swipe:
-          start: "15%, 70%"
-          end: "85%, 70%"
-          duration: 350
-      - extendedWaitUntil:
-          notVisible: "Loading workouts…"
-          timeout: 20000
-- assertVisible: "View summary"
-- assertNotVisible: "Start workout"
-- assertNotVisible: "Continue workout"
+# ---- TR-10c: the missed banner shows exactly when this week has an open miss ---------
 - runFlow:
     when:
-      true: ${DEVICE_THEME == 'dark' && output.trainingDay == 'yes'}
+      true: ${output.fwBanner == 'yes'}
     commands:
-      - assertVisible: "${output.today}, Done"
+      - assertVisible: "You missed .*"
+      - takeScreenshot: TR-10c-workout-missed-banner
+- runFlow:
+    when:
+      true: ${output.fwBanner == 'no'}
+    commands:
+      - assertNotVisible: "You missed .*"
 - runFlow: ../../common/assert-no-crash.yaml
+
+# ---- Open, relaunch, finish ----------------------------------------------------------
+- runFlow:
+    when:
+      true: ${output.fwKind != 'none'}
+    file: finish-session.yaml
+# Nothing left to open for this pass: said, not silent (the reason is in ist-days.js's log).
+- runFlow:
+    when:
+      true: ${output.fwKind == 'none'}
+    commands:
+      - assertNotVisible: "Continue workout"
