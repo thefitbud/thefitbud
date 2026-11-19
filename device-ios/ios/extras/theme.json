@@ -1,0 +1,236 @@
+{
+  "result": "mean screenshot luminance: light 0.885 (20), dark 0.156 (25)",
+  "light": 0.885,
+  "dark": 0.156,
+  "count": {
+    "light": 20,
+    "dark": 25
+  },
+  "shots": [
+    {
+      "file": "TM-08a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.145
+    },
+    {
+      "file": "TM-08a-light-ios.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "TM-08c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.132
+    },
+    {
+      "file": "TM-08c-light-ios.png",
+      "theme": "light",
+      "luma": 0.712
+    },
+    {
+      "file": "TM-08d-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.104
+    },
+    {
+      "file": "TM-08d-light-ios.png",
+      "theme": "light",
+      "luma": 0.959
+    },
+    {
+      "file": "TR-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.903
+    },
+    {
+      "file": "TR-01b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.121
+    },
+    {
+      "file": "TR-01b-light-ios.png",
+      "theme": "light",
+      "luma": 0.905
+    },
+    {
+      "file": "TR-01c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.162
+    },
+    {
+      "file": "TR-01c-light-ios.png",
+      "theme": "light",
+      "luma": 0.924
+    },
+    {
+      "file": "TR-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.137
+    },
+    {
+      "file": "TR-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.895
+    },
+    {
+      "file": "TR-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.943
+    },
+    {
+      "file": "TR-04-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.102
+    },
+    {
+      "file": "TR-04-light-ios.png",
+      "theme": "light",
+      "luma": 0.95
+    },
+    {
+      "file": "TR-16a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "TR-20a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "TR-20b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.08
+    },
+    {
+      "file": "TR-20c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.089
+    },
+    {
+      "file": "TR-20e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.078
+    },
+    {
+      "file": "TR-20g-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.078
+    },
+    {
+      "file": "TR-22a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.109
+    },
+    {
+      "file": "TR-22a-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "TR-22b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.132
+    },
+    {
+      "file": "TR-22b-light-ios.png",
+      "theme": "light",
+      "luma": 0.7
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.163
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.79
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.954
+    },
+    {
+      "file": "step-015-assertCondition-That_code_didn_t_work-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.211
+    },
+    {
+      "file": "step-015-assertCondition-Today_s_workout.Needs_yo-light-ios.png",
+      "theme": "light",
+      "luma": 0.954
+    },
+    {
+      "file": "z12-49-ended-code-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.121
+    },
+    {
+      "file": "z12-49-ended-code-light-ios.png",
+      "theme": "light",
+      "luma": 0.709
+    },
+    {
+      "file": "z12-49-meal-times-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.158
+    },
+    {
+      "file": "z12-49-past-coaching-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.066
+    },
+    {
+      "file": "z12-49-past-coaching-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "z12-49-quiet-hours-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.154
+    },
+    {
+      "file": "z12-49-reset-request-light-ios.png",
+      "theme": "light",
+      "luma": 0.903
+    },
+    {
+      "file": "z12-49-role-select-from-more-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.147
+    },
+    {
+      "file": "z12-49-role-select-from-more-light-ios.png",
+      "theme": "light",
+      "luma": 0.891
+    },
+    {
+      "file": "z12-49-wrong-code-light-ios.png",
+      "theme": "light",
+      "luma": 0.875
+    }
+  ]
+}
