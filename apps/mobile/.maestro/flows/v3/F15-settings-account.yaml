@@ -19,9 +19,9 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
-- extendedWaitUntil:
-    visible: "Today's workout.*"
-    timeout: 60000
+# Above-the-fold home proof (This week / Today's workout); drains check-in banner
+# (FitBud #502 F15 flake / same helper as #485).
+- runFlow: ../../common/wait-trainee-today-ready.yaml
 
 # TR-20a
 - tapOn: "More"

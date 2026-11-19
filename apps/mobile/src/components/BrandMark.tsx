@@ -30,12 +30,28 @@ export function brandMarkColors(theme: Theme): {
   };
 }
 
+/** Inter-bold wordmark size scaled to the mark (balanced lockup at ≥40 pt). */
+export function brandWordmarkFontSize(markSize: number): number {
+  const size = Math.max(BRAND_MARK_MIN_SIZE, markSize);
+  // At 40 pt mark → 26 pt word (matches the former auth brandWord).
+  return Math.max(26, Math.round(size * 0.65));
+}
+
 export function BrandMark({ size = BRAND_MARK_MIN_SIZE, wordmark = false }: Props) {
   const theme = useTheme();
   const markSize = Math.max(BRAND_MARK_MIN_SIZE, size);
   const { dot, ring, word } = brandMarkColors(theme);
+  // flexShrink: 0 — a row lockup otherwise compresses the SVG below the 40 pt
+  // minimum on iOS (FitBud 44497557237 measured ~32 pt).
+  const markBox = {
+    width: markSize,
+    height: markSize,
+    minWidth: BRAND_MARK_MIN_SIZE,
+    minHeight: BRAND_MARK_MIN_SIZE,
+    flexShrink: 0 as const,
+  };
 
-  const mark = (
+  const svg = (
     <Svg
       width={markSize}
       height={markSize}
@@ -61,22 +77,25 @@ export function BrandMark({ size = BRAND_MARK_MIN_SIZE, wordmark = false }: Prop
       <View
         accessibilityLabel="FitBud"
         accessibilityRole="image"
-        style={{ width: markSize, height: markSize }}
+        style={markBox}
+        testID="brand-mark"
       >
-        {mark}
+        {svg}
       </View>
     );
   }
 
   return (
     <View style={styles.row} accessibilityLabel="FitBud" accessibilityRole="header">
-      {mark}
+      <View style={markBox} testID="brand-mark">
+        {svg}
+      </View>
       <Text
         style={[
           styles.word,
           {
             color: word,
-            fontSize: Math.max(17, Math.round(markSize * 0.55)),
+            fontSize: brandWordmarkFontSize(markSize),
           },
         ]}
       >
@@ -90,6 +109,7 @@ const styles = StyleSheet.create({
   row: {
     alignItems: "center",
     flexDirection: "row",
+    flexShrink: 0,
     gap: 12,
   },
   word: {

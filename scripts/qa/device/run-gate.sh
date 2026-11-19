@@ -235,6 +235,10 @@ for theme in $THEMES; do
   mkdir -p "$dir"
   [ "$PLATFORM" = "android" ] && adb_wait "theme $theme"
   pass_from="$(log_offset)"
+  # Fresh auth rate-limit window per theme (local D1 only). Password login shares
+  # one IP bucket; wrong-password F02 in dark must not inherit light's count
+  # (FitBud #502).
+  "$DEVICE_LIB_DIR/local-api.sh" clear-auth-rate-limits || true
   if ! "$DEVICE_LIB_DIR/theme.sh" "$PLATFORM" "$theme"; then
     echo 1 >"$dir/maestro-exit"
     continue

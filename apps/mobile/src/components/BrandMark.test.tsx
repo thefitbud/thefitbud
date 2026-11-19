@@ -10,6 +10,7 @@ import {
   BrandMark,
   BRAND_MARK_MIN_SIZE,
   brandMarkColors,
+  brandWordmarkFontSize,
 } from "./BrandMark";
 
 describe("brandMarkColors", () => {
@@ -32,33 +33,33 @@ describe("brandMarkColors", () => {
   });
 });
 
-describe("BrandMark", () => {
-  it("clamps below the 40 pt minimum", () => {
+describe("BrandMark size", () => {
+  it("keeps the 40 pt minimum and scales the wordmark with it", () => {
     expect(BRAND_MARK_MIN_SIZE).toBe(40);
+    expect(brandWordmarkFontSize(24)).toBe(26);
+    expect(brandWordmarkFontSize(40)).toBe(26);
+    expect(brandWordmarkFontSize(48)).toBe(31);
+
     render(
       <ThemeProvider>
         <ThemeScope scheme="light">
-          <BrandMark size={24} />
+          <BrandMark size={24} wordmark />
         </ThemeScope>
       </ThemeProvider>,
     );
-    expect(screen.getByLabelText("FitBud")).toBeTruthy();
-  });
-
-  it("renders the wordmark as FitBud", () => {
-    render(
-      <ThemeProvider>
-        <ThemeScope scheme="light">
-          <BrandMark wordmark />
-        </ThemeScope>
-      </ThemeProvider>,
+    const mark = screen.getByTestId("brand-mark");
+    expect(mark).toBeTruthy();
+    // RN web flattens style onto the node; clamp must leave width ≥ 40.
+    const style = (mark as HTMLElement).style;
+    expect(Number.parseFloat(style.width || style.minWidth || "0")).toBeGreaterThanOrEqual(
+      BRAND_MARK_MIN_SIZE,
     );
     expect(screen.getByLabelText("FitBud").textContent).toContain("FitBud");
   });
 });
 
 describe("Auth brand row (Z12-62)", () => {
-  it("renders BrandMark with the wordmark and no Dumbbell tile", () => {
+  it("renders BrandMark with the wordmark and no Dumbbell tile at ≥40 pt", () => {
     const { container } = render(
       <ThemeProvider>
         <AuthPage brand title="Sign in">
@@ -67,7 +68,10 @@ describe("Auth brand row (Z12-62)", () => {
       </ThemeProvider>,
     );
     expect(screen.getByLabelText("FitBud").textContent).toContain("FitBud");
-    // lucide stand-in tags are svg-<name>; the old navy tile used Dumbbell.
     expect(container.querySelector("svg-dumbbell")).toBeNull();
+    const mark = screen.getByTestId("brand-mark") as HTMLElement;
+    expect(Number.parseFloat(mark.style.width || mark.style.minWidth || "0")).toBeGreaterThanOrEqual(
+      BRAND_MARK_MIN_SIZE,
+    );
   });
 });
