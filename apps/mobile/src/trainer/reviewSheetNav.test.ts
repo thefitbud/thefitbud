@@ -5,6 +5,7 @@ import {
   canGoPrevReviewSheet,
   clampReviewSheetIndex,
   nextReviewClientName,
+  reviewSheetAllResolved,
   reviewSheetAllResolvedLeaveLine,
   reviewSheetAllResolvedTitle,
   reviewSheetAllReviewed,
@@ -23,6 +24,7 @@ import {
   reviewSheetResolvedRowLabel,
   reviewSheetStepLabel,
   stepReviewSheetIndex,
+  withSessionResolved,
   REVIEW_SHEET_BACK_LABEL,
 } from "./reviewSheetNav";
 
@@ -180,8 +182,25 @@ describe("review sheet resolved and all-resolved", () => {
       "All 3 resolved for Rohan",
     );
     expect(reviewSheetAllResolvedLeaveLine("Rohan")).toBe(
-      "Rohan leaves Needs you. You'll find this in his History.",
+      "Rohan leaves Needs you. You'll find these in History.",
     );
+    // Only marked reviewed: the summary never says resolved (Z12-51).
+    expect(reviewSheetAllResolved(allAcknowledged)).toBe(false);
+    expect(reviewSheetAllResolvedTitle(3, "Rohan", false)).toBe(
+      "All 3 reviewed for Rohan",
+    );
+    expect(reviewSheetAllResolvedLeaveLine("Rohan", false)).toBe(
+      "Rohan moves to Reviewed until every item is resolved.",
+    );
+    expect(reviewSheetResolvedRowLabel("Talked to client", "acknowledged")).toBe(
+      "Reviewed",
+    );
+    expect(reviewSheetResolvedBanner("Talked to client", true, "acknowledged")).toBe(
+      "Reviewed by you · just now",
+    );
+    expect(
+      reviewSheetAllResolved([{ status: "resolved" }, { status: "resolved" }]),
+    ).toBe(true);
     expect(reviewSheetResolvedRowLabel("Talked to client")).toBe(
       "Resolved · Talked to client",
     );
@@ -244,5 +263,21 @@ describe("review sheet resolved and all-resolved", () => {
       ),
     ).toBe("Arjun Kapoor");
     expect(nextReviewClientName([cards[0]!], "rohan")).toBeNull();
+  });
+});
+
+describe("withSessionResolved (Z12-51)", () => {
+  it("keeps a resolved item in its place and prefers the session copy", () => {
+    const open = [
+      { id: "a", severity: "critical", ageMinutes: 300, status: "active" },
+      { id: "c", severity: "attention", ageMinutes: 900, status: "active" },
+    ];
+    const resolved = [
+      { id: "b", severity: "critical", ageMinutes: 100, status: "resolved" },
+      { id: "a", severity: "critical", ageMinutes: 300, status: "resolved" },
+    ];
+    const merged = withSessionResolved(open, resolved);
+    expect(merged.map((item) => item.id)).toEqual(["a", "b", "c"]);
+    expect(merged[0]!.status).toBe("resolved");
   });
 });
