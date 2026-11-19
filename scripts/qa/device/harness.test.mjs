@@ -13,7 +13,7 @@ import { collect, targetFor } from "./collect-shots.mjs";
 import { buildGateSummary, toMarkdown } from "./gate-summary.mjs";
 import { androidData, buildRouting, iosPayload } from "./push-payload.mjs";
 import { flowTags, globToRegExp, selectFlows } from "./select-flows.mjs";
-import { pngLuma, summarise } from "./shot-luma.mjs";
+import { main as shotLumaMain, pngLuma, summarise } from "./shot-luma.mjs";
 import zlib from "node:zlib";
 import { findHeadPipes, literalGrepsWithoutF, logicalLines } from "../shell-patterns.test.mjs";
 
@@ -341,7 +341,24 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   const files = selectFlows({ flows: "launch" }).map((f) => path.relative(path.join(repo, "apps/mobile/.maestro"), f));
   assert.deepEqual(files, ["device/launch/1-trainee-today.yaml", "device/launch/2-trainer-attention.yaml"]);
   const signIn = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/sign-in-password.yaml"), "utf8");
-  assert.match(signIn, /visible: "Today's workout\.\*\|/);
+  // Rest-day iOS label still needs Today's workout.*; This week is the above-the-fold
+  // fallback when a check-in review banner covers the header (FitBud #485 / #502).
+  assert.match(signIn, /visible: "Today's workout\.\*\|This week\|Needs you\.\*\|Choose mode"/);
+  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
+});
+
+test("trainee Today home-ready helper and F15 use it; gate clears auth rate limits per theme", () => {
+  const ready = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/wait-trainee-today-ready.yaml"), "utf8");
+  assert.match(ready, /visible: "This week\|Today's workout\.\*\|View summary"/);
+  const f02 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F02-sign-in.yaml"), "utf8");
+  assert.match(f02, /wait-trainee-today-ready\.yaml/);
+  const f15 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F15-settings-account.yaml"), "utf8");
+  assert.match(f15, /wait-trainee-today-ready\.yaml/);
+  const localApi = fs.readFileSync(path.join(repo, "scripts/qa/device/local-api.sh"), "utf8");
+  assert.match(localApi, /clear-auth-rate-limits/);
+  assert.match(localApi, /DELETE FROM auth_rate_limits/);
+  const gate = fs.readFileSync(path.join(repo, "scripts/qa/device/run-gate.sh"), "utf8");
+  assert.match(gate, /clear-auth-rate-limits/);
 });
 
 test("flows lists may mix tags and globs; an item with no match is an error", () => {
@@ -460,6 +477,24 @@ test("shot-luma tells a light screenshot from a dark one", () => {
   write(path.join(dir, "TR-06a-dark-ios.png"), png(8, 8, [20, 20, 20, 255]));
   const s = summarise([path.join(dir, "TR-06a-light-ios.png"), path.join(dir, "TR-06a-dark-ios.png")]);
   assert.ok(s.light > 0.9 && s.dark < 0.1);
+});
+
+test("shot-luma fails a light W-03 dark screenshot (Z12-63)", () => {
+  const dir = tmp();
+  const bright = path.join(dir, "W-03-dark-ios.png");
+  const darkOk = path.join(dir, "W-03-dark-android.png");
+  const other = path.join(dir, "TR-06a-dark-ios.png");
+  write(bright, png(8, 8, [250, 250, 250, 255]));
+  write(darkOk, png(8, 8, [20, 20, 20, 255]));
+  write(other, png(8, 8, [240, 240, 240, 255]));
+  const bad = summarise([bright, other]);
+  assert.equal(bad.w03DarkTooBright.length, 1);
+  assert.equal(bad.w03DarkTooBright[0].file, "W-03-dark-ios.png");
+  assert.ok(bad.w03DarkTooBright[0].luma >= 0.5);
+  assert.equal(shotLumaMain([bright]), 1);
+  assert.equal(shotLumaMain([darkOk, other]), 0);
+  const ok = summarise([darkOk]);
+  assert.equal(ok.w03DarkTooBright.length, 0);
 });
 
 test("patch-native (android) refuses to overwrite an existing network security config", () => {

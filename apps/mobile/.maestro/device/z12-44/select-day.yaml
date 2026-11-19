@@ -1,0 +1,17 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow (no tags). On the Workout tab, selects the strip day named by LABEL
+# ("Sat 14 Nov", from ist-days.js): the previous week first when the label is not on
+# the current one. Fails when the day is on neither (a seed for another day).
+- runFlow:
+    when:
+      notVisible: "${LABEL}, .*"
+    commands:
+      - tapOn: "Previous week"
+      - extendedWaitUntil:
+          notVisible: "Loading workouts…"
+          timeout: 30000
+- tapOn: "${LABEL}, .*"
+- extendedWaitUntil:
+    notVisible: "Loading workouts…"
+    timeout: 30000

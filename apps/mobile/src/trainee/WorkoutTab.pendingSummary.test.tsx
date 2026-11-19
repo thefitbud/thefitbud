@@ -326,4 +326,49 @@ describe("WorkoutTab after a finish, before the reload answers (Z12-44 review)",
       release();
     });
   });
+
+  it("leaves a session that is still open as it was (Continue workout, never View summary)", async () => {
+    // Only a completed or modified execution marks its day done. A summary opened
+    // on a started one (the list and the server both say so) must not.
+    const done = doneToday("trainee");
+    const started = {
+      ...done.execution,
+      status: "started",
+      completedAt: null,
+    };
+    items = [
+      workoutAssignmentSchema.parse({
+        ...done,
+        status: "in_progress",
+        execution: started,
+      }),
+    ];
+    executionDetail = {
+      ...(executionDetail as Record<string, unknown>),
+      status: "started",
+      completedAt: null,
+    };
+    render(
+      <WorkoutTab
+        relationship={relationship}
+        selectedDate={TODAY}
+        pendingSummaryExecutionId={uuid(8001)}
+      />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save and share with Rahul" }, { timeout: 5000 }),
+    );
+    let release!: () => void;
+    holdList = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const doneButton = await screen.findByRole("button", { name: "Done" });
+    await act(async () => {});
+    fireEvent.click(doneButton);
+    expect(await screen.findByRole("button", { name: "Continue workout" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "View summary" })).toBeNull();
+    await act(async () => {
+      release();
+    });
+  });
 });

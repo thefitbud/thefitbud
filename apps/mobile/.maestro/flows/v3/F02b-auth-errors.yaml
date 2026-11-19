@@ -45,9 +45,10 @@ tags:
 # A code that is certainly wrong: the six boxes submit on the sixth digit.
 - tapOn: "6-digit code"
 - inputText: "111111"
+# 45s: OTP verify is not on the password IP bucket; still allow a slow local API.
 - extendedWaitUntil:
     visible: "That code didn't work\\. Check the latest message or tap Resend\\."
-    timeout: 30000
+    timeout: 45000
 - takeScreenshot: z12-49-wrong-code
 - runFlow: ../../common/assert-no-crash.yaml
 

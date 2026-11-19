@@ -1145,6 +1145,7 @@ function TabBarRow({
         return (
           <Pressable
             key={item.id}
+            testID={`tab-${item.id}`}
             accessibilityRole="tab"
             accessibilityLabel={item.label}
             accessibilityState={{ selected }}

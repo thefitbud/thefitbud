@@ -7,6 +7,7 @@
 #   scripts/qa/device/local-api.sh start   # seed the local D1, then serve in the background
 #   scripts/qa/device/local-api.sh serve   # serve the existing local D1 in the background
 #   scripts/qa/device/local-api.sh wait    # block until /health answers and demo sign-in works
+#   scripts/qa/device/local-api.sh clear-auth-rate-limits  # wipe auth_rate_limits (local only)
 #   scripts/qa/device/local-api.sh stop    # stop the server (the D1 state is kept)
 #
 # `start` seeds with `pnpm db:reset` (migrations, library, demo seed), or with
@@ -118,11 +119,24 @@ stop() {
   device_die "the API still answers on port $DEVICE_API_PORT after stop."
 }
 
+# Wipe the password/OTP IP rate-limit table on the local D1 only. Every password
+# login bumps auth:ip:* (30 / 15 min); a long light theme can starve dark F02.
+# Safe on the device gate's local persist; never run against remote D1.
+clear_auth_rate_limits() {
+  device_log "clearing local auth_rate_limits"
+  (
+    cd "$API_DIR"
+    pnpm exec wrangler d1 execute fitbud --local --persist-to .wrangler/state \
+      --command "DELETE FROM auth_rate_limits;" >/dev/null
+  ) || device_warn "could not clear auth_rate_limits (continuing)"
+}
+
 device_require curl jq pnpm
 case "${1:-}" in
   start) seed; serve ;;
   serve) serve ;;
   wait) wait_ready ;;
+  clear-auth-rate-limits) clear_auth_rate_limits ;;
   stop) stop ;;
-  *) device_die "usage: local-api.sh start|serve|wait|stop" ;;
+  *) device_die "usage: local-api.sh start|serve|wait|clear-auth-rate-limits|stop" ;;
 esac

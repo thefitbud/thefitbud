@@ -538,7 +538,8 @@ describe("Today v3 done and rest states", () => {
     workouts = [workoutAssignment];
     renderToday();
     const header = await screen.findByText("Today's workout");
-    expect(header.getAttribute("aria-label")).toBeNull();
+    // Explicit label so iOS a11y exposes the marker (FitBud #485).
+    expect(header.getAttribute("aria-label")).toBe("Today's workout");
   });
 
   it("a failed day load does not read as a rest day", async () => {
@@ -551,7 +552,7 @@ describe("Today v3 done and rest states", () => {
     expect(screen.queryByText("Rest day")).toBeNull();
     expect(screen.queryByLabelText("Workout: rest day")).toBeNull();
     const header = screen.getByText("Today's workout");
-    expect(header.getAttribute("aria-label")).toBeNull();
+    expect(header.getAttribute("aria-label")).toBe("Today's workout");
   });
 
   it("Next line skips missed workouts", async () => {
@@ -993,7 +994,14 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     const onViewSummary = vi.fn();
     renderToday(TODAY, { onViewSummary });
     expect(await screen.findByText("1 of 2 exercises · 52 min")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "View summary" }));
+    // Done-card label and View summary must both be addressable (iOS collapses
+    // children when the label sits on the hero wrapper — FitBud #485).
+    expect(
+      screen.getByLabelText(`Workout done: ${completedWorkout.workoutDayName}`),
+    ).toBeTruthy();
+    const viewSummary = screen.getByRole("button", { name: "View summary" });
+    expect(viewSummary).toBeTruthy();
+    fireEvent.click(viewSummary);
     expect(onViewSummary).toHaveBeenCalledWith(completedWorkout.execution!.id);
   });
 

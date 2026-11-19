@@ -889,8 +889,10 @@ function TodayTabInner({
           <Text
             style={styles.srOnly}
             accessibilityRole="header"
+            // Always set a label: iOS often omits clipped srOnly text from the
+            // a11y tree when accessibilityLabel is undefined (FitBud #485).
             accessibilityLabel={
-              restDay ? "Today's workout: rest day" : undefined
+              restDay ? "Today's workout: rest day" : "Today's workout"
             }
           >
             Today&apos;s workout
@@ -914,25 +916,33 @@ function TodayTabInner({
         !loading &&
         workout &&
         workoutShowsDone ? (
-          <View
-            style={styles.hero}
-            accessibilityLabel={`Workout done: ${workout.workoutDayName}`}
-          >
-            <View style={styles.doneChip}>
-              <Check size={16} color={theme.colors.heroFg} strokeWidth={2.25} />
-              <Text style={styles.doneChipLabel}>
-                {workout.execution?.completedAt
-                  ? `Done · ${formatClockTime(workout.execution.completedAt, timeZone)}`
-                  : "Done"}
+          // Label lives on an inner wrapper, not this hero: a parent
+          // accessibilityLabel on iOS collapses children, so Maestro could not
+          // see "View summary" after finish (FitBud #485 run 44484383185).
+          <View style={styles.hero}>
+            <View
+              accessibilityLabel={`Workout done: ${workout.workoutDayName}`}
+            >
+              <View style={styles.doneChip}>
+                <Check
+                  size={16}
+                  color={theme.colors.heroFg}
+                  strokeWidth={2.25}
+                />
+                <Text style={styles.doneChipLabel}>
+                  {workout.execution?.completedAt
+                    ? `Done · ${formatClockTime(workout.execution.completedAt, timeZone)}`
+                    : "Done"}
+                </Text>
+              </View>
+              <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
+              <Text style={styles.heroItems}>
+                {doneExecuted != null
+                  ? `${doneExecuted} of ${workout.workoutDay.exercises.length} exercises`
+                  : exerciseCountLabel(workout.workoutDay.exercises.length)}
+                {doneMinutes != null ? ` · ${doneMinutes} min` : ""}
               </Text>
             </View>
-            <Text style={styles.heroTitle}>{workout.workoutDayName}</Text>
-            <Text style={styles.heroItems}>
-              {doneExecuted != null
-                ? `${doneExecuted} of ${workout.workoutDay.exercises.length} exercises`
-                : exerciseCountLabel(workout.workoutDay.exercises.length)}
-              {doneMinutes != null ? ` · ${doneMinutes} min` : ""}
-            </Text>
             {workout.execution && onViewSummary ? (
               <View style={styles.heroBtns}>
                 <Pressable
