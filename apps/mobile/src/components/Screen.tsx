@@ -98,7 +98,11 @@ function ScreenBody({
                     const display = brandDisplay ?? "text";
                     if (display === "none") return null;
                     if (display === "mark") {
-                      return <BrandMark size={36} />;
+                      return (
+                        <View style={styles.markBrand}>
+                          <BrandMark size={40} />
+                        </View>
+                      );
                     }
                     return (
                       <Text style={styles.brand} accessibilityRole="header">
@@ -156,6 +160,9 @@ const useStyles = createThemedStyles((t) => ({
     color: t.colors.brand,
     fontSize: 13,
     letterSpacing: 1.1,
+    marginBottom: spacing.sm,
+  },
+  markBrand: {
     marginBottom: spacing.sm,
   },
   title: {
