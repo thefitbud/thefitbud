@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { StyleSheet, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
 
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
+import { createThemedStyles } from "../../providers/ThemeProvider";
 
 import { validateCheckinAnswer, type CheckinStandardKey } from "@fitbud/core";
 import type { CheckinFieldDefinition } from "@fitbud/contracts";
@@ -91,6 +92,7 @@ export function MeasureRow({
   onChange: (next: string) => void;
   onBlur: () => void;
 }) {
+  const styles = useStyles();
   const [focused, setFocused] = useState(false);
   return (
     <View style={[styles.row, first ? styles.rowFirst : null]}>
@@ -131,10 +133,10 @@ export function MeasureRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   row: {
     alignItems: "center",
-    borderTopColor: "#E7E9F2",
+    borderTopColor: t.colors.line,
     borderTopWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
@@ -143,12 +145,12 @@ const styles = StyleSheet.create({
   },
   rowFirst: { marginTop: spacing.sm },
   text: { flex: 1 },
-  title: { color: colors.deepNavy, fontSize: 17, fontWeight: "600" },
-  help: { color: colors.midGrey, fontSize: 13, marginTop: 2 },
+  title: { color: t.colors.ink, fontSize: 17, fontWeight: "600" },
+  help: { color: t.colors.ink3, fontSize: 13, marginTop: 2 },
   problem: { color: "#B42318", fontSize: 13, fontWeight: "600", marginTop: 2 },
   box: {
     alignItems: "center",
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderColor: "#D9DCE8",
     borderRadius: 14,
     borderWidth: 1,
@@ -158,10 +160,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     width: 112,
   },
-  boxOn: { borderColor: colors.indigo, borderWidth: 2 },
+  boxOn: { borderColor: t.colors.coachInk, borderWidth: 2 },
   boxBad: { borderColor: "#B42318" },
   input: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     flex: 1,
     fontSize: 18,
     fontVariant: ["tabular-nums"],
@@ -173,5 +175,5 @@ const styles = StyleSheet.create({
     // Web only: the box draws the focus ring, not the bare input.
     ...({ outlineStyle: "none", outlineWidth: 0 } as object),
   },
-  unit: { color: colors.midGrey, fontSize: 13, fontWeight: "600", marginLeft: 4 },
-});
+  unit: { color: t.colors.ink3, fontSize: 13, fontWeight: "600", marginLeft: 4 },
+}));

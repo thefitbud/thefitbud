@@ -24,8 +24,8 @@ Created by Z12-32 (planning, 14 Nov 2026). Source of the flows: `docs/design/v3/
 | F08 | Trainee | `flows/v3/F08-log-it-myself.yaml` | `trainee/meal-log.yaml` (food library search) | written (Z12-43, tag z12-43; writes one meal log, run on a fresh seed; not yet run on a device) |
 | F09 | Trainee | `flows/v3/F09-diet-edit-delete-late.yaml` | none (new) | written (Z12-42, tag z12-42; no delete-log step, not built) |
 | F10 | Trainee | `flows/v3/F10-offline-sync.yaml` | none (new; Android airplane mode, iOS API stop per Z12-35) | planned |
-| F11 | Trainee | `flows/v3/F11-weekly-checkin.yaml` | `trainee/checkin.yaml` | planned |
-| F12 | Trainee | `flows/v3/F12-progress-weight.yaml` | `trainee/progress.yaml` | planned |
+| F11 | Trainee | `flows/v3/F11-weekly-checkin.yaml` | `trainee/checkin.yaml` | written (Z12-46, tag z12-46, device gate)|
+| F12 | Trainee | `flows/v3/F12-progress-weight.yaml` | `trainee/progress.yaml` | written (Z12-46, tag z12-46, device gate)|
 | F13 | Trainee | `flows/v3/F13-notifications-deep-links.yaml` | none (new; lock-screen steps through the Z12-35 helpers) | planned |
 | F14 | Trainee | `flows/v3/F14-ask-coach.yaml` | none (new) | planned |
 | F15 | Trainee | `flows/v3/F15-settings-account.yaml` | `trainee/settings.yaml` | planned |
