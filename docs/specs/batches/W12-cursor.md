@@ -20,13 +20,13 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 | Z12-W12C-0 Ledger | — | merged | #488 | `893691c3` | this file | Cursor Auto |
 | Z12-43 Manual food logging | #460 (Z12-42) merged `4982d567` | **merged** | #490 | `4aa28299` | Expo web CLOSE; device gate [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) PASS (F08 soft-skips when seed already logged); harness Screen/Results + iOS center tap fixes | Cursor Auto |
 | Z12-30 Delete account (web) | #487 (Z12-29) merged `450874d7` | **merged** | [#492](https://github.com/thefitbud/thefitbud/pull/492) | `21792a2e` | fresh proof = password re-login bearer + `credentials:omit`; review fix D-W12C-21; cookie Firebase `auth_time` remains W6 API follow-up | Cursor Auto |
-| Z12-51 Exception review sheet | — | **in progress** | [#486](https://github.com/thefitbud/thefitbud/pull/486) `claude/Z12-51-review-sheet` | — | CI race fix `ClientStatus.test` `findByText` for nudge body (`f1b10f36`); device [44403709387](https://github.com/thefitbud/thefitbud/actions/runs/44403709387) already PASS — no new device run | Cursor Auto |
-| Z12-46 Today / Progress | after #486 | blocked | [#483](https://github.com/thefitbud/thefitbud/pull/483) `claude/Z12-46-today-progress` | — | fix Maestro keyboard dismiss + banner wait; then ready-for-device | Cursor Auto (planned) |
-| Z12-44 follow-up weekday flows | after #483 | blocked | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | merge main; prior Android launch flake not this PR; merge before #484 (shared Maestro files) | Cursor Auto (planned) |
+| Z12-51 Exception review sheet | — | **merged** | [#486](https://github.com/thefitbud/thefitbud/pull/486) | `1272b972` | CI race fix `f1b10f36`; review PASS; auto launch iOS-light flake ignored (scoped [44403709387](https://github.com/thefitbud/thefitbud/actions/runs/44403709387) PASS) | Cursor Auto |
+| Z12-46 Today / Progress | after #486 ✅ | **ready for device run** | [#483](https://github.com/thefitbud/thefitbud/pull/483) `claude/Z12-46-today-progress` | — | Maestro keyboard + banner wait `fcbdcd52`; CI green; see Device-run queue | Cursor Auto |
+| Z12-44 follow-up weekday flows | after #483 | **ready for device run** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | main merged; no-plan keyboard fix `f3fedc2f`; merge before #484 | Cursor Auto |
 | Z12-45 Active workout | after #485+#483 | blocked | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | must-fix list (handover §4); one device run after all fixes; draft | Cursor Auto (planned) |
 | Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
-| Z12-52 Coach logs a meal | Z12-43 ✅ + #486 | blocked on #486 | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
+| Z12-52 Coach logs a meal | Z12-43 ✅ + #486 ✅ | ready after #483/#485/#484 lane or when a slot frees | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
 | Z12-53 Trainer mobile v3 | Z12-52 + #486; Z12-56/38/47 already on main | blocked | — | — | TM-01a–TM-10b; WorkspaceHeader (D-W12-26); F22–F28; expo-push title/body (D-W12-38); grade TM-13a/b | Cursor Auto (planned); review Auto |
 | Z12-57 Native | every other mobile JS task | blocked | — (branch `cursor/z12-57-native-db78` when started) | — | expo-haptics / keep-awake / rest-end sound; EAS builds = Firoz manual | Cursor Auto (planned) |
 | Z12-58 Full device pass | Z12-57 | blocked | — | — | F01–F29 + parity matrix + device checklist | Cursor Auto (planned) |
@@ -44,6 +44,8 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 | 18 Nov 2026 ~21:30 IST | `4aa28299` | #490 (Z12-43) | unblocks Z12-52 (still waits #486); device [44336404989](https://github.com/thefitbud/thefitbud/actions/runs/44336404989) |
 | 19 Nov 2026 ~00:00 IST | `21792a2e` | #492 (Z12-30) | delete/reactivate web; CI green; fresh review PASS after D-W12C-21 |
 | 19 Nov 2026 ~00:00 IST | `e679b85d` | #493 (ledger) | mark Z12-30 merged |
+| 19 Nov 2026 ~12:40 IST | `df709196` | #494 (ledger) | D-W12C-22 Claude lane → Cursor |
+| 19 Nov 2026 ~13:15 IST | `1272b972` | #486 (Z12-51) | unblocks Z12-52 / Z12-53; review PASS |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
@@ -108,7 +110,8 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** → Z12-48 + Z12-49fu →
 
 | Task | Command | Recorded |
 |---|---|---|
-| — | — | — |
+| Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | 19 Nov 2026 ~13:15 IST (after Maestro fix `fcbdcd52` + #486 merge) |
+| Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | 19 Nov 2026 ~13:16 IST (`f3fedc2f`) |
 
 ## Done when (Cursor side)
 
