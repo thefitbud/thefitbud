@@ -53,6 +53,12 @@ tags:
             LABEL: ${output.z36Label}
       # No fallback to another day: the day is open ("Log workout") or already the
       # session this flow's light run left ("Continue workout"), or the seed is wrong.
+      # The CTA sits below the exercise list on a past-day card (FitBud 44501381102
+      # iOS W-03: Log workout was below the fold).
+      - scrollUntilVisible:
+          element: "Log workout|Continue workout"
+          direction: DOWN
+          timeout: 60000
       - tapOn: "Log workout|Continue workout"
       - extendedWaitUntil:
           visible: "Log set [0-9]+ ·.*"
