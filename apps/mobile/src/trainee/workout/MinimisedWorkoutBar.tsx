@@ -65,8 +65,8 @@ export function MinimisedWorkoutBarView({
 
 /**
  * The bar for the open session of `relationshipId`; nothing when there is no
- * session or it is on screen. `onResume` brings the log back (the caller
- * switches to the Workout tab); the bar clears `minimised` itself.
+ * session or it is on screen. `onResume` brings the log back: the shell
+ * switches to the Workout tab and clears `minimised`.
  */
 export function MinimisedWorkoutBar({
   relationshipId,

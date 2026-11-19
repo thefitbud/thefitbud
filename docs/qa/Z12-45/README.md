@@ -41,7 +41,7 @@ These are one backend task (schema, contracts, api-client, sync operations, trai
 | W-09, W-09b | None; the ▶ button opened Ask coach | ⋯ menu: How to, History, Ask coach, Skip exercise; Undo toast |
 | W-12 | None | Banner and PR mark |
 | W-13 | None | Set sheet: Save changes, Mark not done (Delete set not built) |
-| W-14 | None | Minimised bar (Workout tab now; other tabs wait for `TraineeShell.tsx`) |
+| W-14 | None | Minimised bar above the tab bar on Today/Diet/Progress/More; hidden on Workout |
 | W-15 | None | Confirm dialog |
 | W-16 | A two-button sheet with a count | The list of what is not logged, with Go to |
 | W-18 | None | Dialog on the Workout tab after a relaunch |
@@ -68,7 +68,7 @@ Method: local API on port 8796 against this worktree's own D1 (`pnpm db:reset`),
 | W-09b | yes | yes | CLOSE | — |
 | W-12 | — | yes | CLOSE | Light's Saturday starts with a lift that has no earlier kg on the seed, so nothing is a record there |
 | W-13 | yes | yes | CLOSE | No Delete set; the caption says the coach sees the set as last saved (no "edited" mark exists) |
-| W-14 | yes | yes | CLOSE | On the Workout tab (the mock shows Diet) |
+| W-14 | yes | yes | CLOSE | Shell mount on non-Workout tabs; device shot over Diet later |
 | W-15 | yes | yes | CLOSE | Copy says the workout is recorded as skipped (the mock says the coach won't see it) |
 | W-16 | yes | yes | CLOSE | Copy: "Rahul will see which sets you did" (no "finished early" label exists) |
 | W-18 | — | yes | CLOSE | Light's session was opened in the same page load |
@@ -102,7 +102,7 @@ Method: local API on port 8796 against this worktree's own D1 (`pnpm db:reset`),
 - The Live Activity hook still lives in `ActiveWorkoutScreen`, so the activity ends when the log is minimised (W-14) and starts again when it comes back. Keeping it alive while minimised means moving the hook to wherever the session store is read for the whole shell.
 - Sets can now be logged in any order, corrected and skipped: `execution` is the source, as before.
 
-**Z12-46 / orchestrator:** the minimised bar on the other tabs is one mount in `TraineeShell.tsx` (`<MinimisedWorkoutBar relationshipId onResume>` above the tab bar, hidden on the Workout tab, which shows its own). `TraineeShell.tsx` is held by #483.
+**Minimised bar (W-14):** one mount in `TraineeShell.tsx` above the tab bar on Today, Diet, Progress and More. Hidden on the Workout tab — that tab keeps only the hero's Continue workout / Finish now.
 
 ## 6. Device gate
 

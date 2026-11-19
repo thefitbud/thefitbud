@@ -99,7 +99,6 @@ import {
   updateActiveSession,
   useActiveSession,
 } from "./workout/activeSession";
-import { MinimisedWorkoutBar } from "./workout/MinimisedWorkoutBar";
 import { OpenSessionPrompts } from "./workout/OpenSessionPrompts";
 
 /**
@@ -947,18 +946,6 @@ export function WorkoutTab({
         onRefresh={() => {
           void onRefresh();
         }}
-        // W-14 on this tab. Other tabs get the bar from the shell.
-        footer={
-          session?.minimised ? (
-            <MinimisedWorkoutBar
-              relationshipId={relationship.id}
-              onResume={() =>
-                updateActiveSession(relationship.id, { minimised: false })
-              }
-            />
-          ) : undefined
-        }
-        footerVariant="toast"
       >
         <WorkoutDayView
           eyebrow={eyebrow}
