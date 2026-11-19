@@ -1329,7 +1329,7 @@ const useStyles = createThemedStyles((t) => ({
   rpeChip: {
     alignItems: "center",
     backgroundColor: t.colors.brandTint,
-    borderRadius: t.radii.control,
+    borderRadius: t.radii.button,
     height: TARGET,
     justifyContent: "center",
     minWidth: TARGET,

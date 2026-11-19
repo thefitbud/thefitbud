@@ -347,7 +347,7 @@ describe("ActiveWorkoutScreen dark opt-in (Z12-63)", () => {
 
   it("under system dark, key surfaces use dark card/ink — not light-only white", () => {
     // Same Appearance driver as ThemeProvider.render.test: getColorScheme + listeners.
-    let current: "light" | "dark" | null = "dark";
+    const current: "light" | "dark" | null = "dark";
     vi.spyOn(Appearance, "getColorScheme").mockImplementation(() => current);
     vi.spyOn(Appearance, "addChangeListener").mockImplementation(() => ({
       remove: () => undefined,
