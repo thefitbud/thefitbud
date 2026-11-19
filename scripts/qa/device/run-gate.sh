@@ -294,12 +294,13 @@ for theme in $THEMES; do
 done
 
 # Did the app follow the system theme? Mean luminance of the flows' screenshots per
-# theme (evidence in the summary, not part of the verdict).
+# theme (evidence in the summary). A W-03 dark shot that is still light fails the
+# gate (Z12-63); other themes stay evidence-only inside shot-luma.
 luma_files=()
 for f in "$SHOTS"/*-"$PLATFORM".png "$SHOTS"/flows/*-"$PLATFORM".png; do
   [ -f "$f" ] && luma_files+=("$f")
 done
-node "$DEVICE_LIB_DIR/shot-luma.mjs" --out "$OUT/extras/theme.json" ${luma_files[@]+"${luma_files[@]}"} || true
+node "$DEVICE_LIB_DIR/shot-luma.mjs" --out "$OUT/extras/theme.json" ${luma_files[@]+"${luma_files[@]}"}
 
 # --- 4. extras ------------------------------------------------------------------
 if [ "$EXTRAS" = "all" ] && [ -n "$last_theme" ]; then

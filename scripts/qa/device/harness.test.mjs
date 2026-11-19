@@ -13,7 +13,7 @@ import { collect, targetFor } from "./collect-shots.mjs";
 import { buildGateSummary, toMarkdown } from "./gate-summary.mjs";
 import { androidData, buildRouting, iosPayload } from "./push-payload.mjs";
 import { flowTags, globToRegExp, selectFlows } from "./select-flows.mjs";
-import { pngLuma, summarise } from "./shot-luma.mjs";
+import { main as shotLumaMain, pngLuma, summarise } from "./shot-luma.mjs";
 import zlib from "node:zlib";
 import { findHeadPipes, literalGrepsWithoutF, logicalLines } from "../shell-patterns.test.mjs";
 
@@ -477,6 +477,24 @@ test("shot-luma tells a light screenshot from a dark one", () => {
   write(path.join(dir, "TR-06a-dark-ios.png"), png(8, 8, [20, 20, 20, 255]));
   const s = summarise([path.join(dir, "TR-06a-light-ios.png"), path.join(dir, "TR-06a-dark-ios.png")]);
   assert.ok(s.light > 0.9 && s.dark < 0.1);
+});
+
+test("shot-luma fails a light W-03 dark screenshot (Z12-63)", () => {
+  const dir = tmp();
+  const bright = path.join(dir, "W-03-dark-ios.png");
+  const darkOk = path.join(dir, "W-03-dark-android.png");
+  const other = path.join(dir, "TR-06a-dark-ios.png");
+  write(bright, png(8, 8, [250, 250, 250, 255]));
+  write(darkOk, png(8, 8, [20, 20, 20, 255]));
+  write(other, png(8, 8, [240, 240, 240, 255]));
+  const bad = summarise([bright, other]);
+  assert.equal(bad.w03DarkTooBright.length, 1);
+  assert.equal(bad.w03DarkTooBright[0].file, "W-03-dark-ios.png");
+  assert.ok(bad.w03DarkTooBright[0].luma >= 0.5);
+  assert.equal(shotLumaMain([bright]), 1);
+  assert.equal(shotLumaMain([darkOk, other]), 0);
+  const ok = summarise([darkOk]);
+  assert.equal(ok.w03DarkTooBright.length, 0);
 });
 
 test("patch-native (android) refuses to overwrite an existing network security config", () => {

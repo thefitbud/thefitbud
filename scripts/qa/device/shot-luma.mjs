@@ -7,7 +7,8 @@
 //
 // The theme is read from the file name (<name>-<light|dark>-<platform>.png). Only
 // 8-bit RGB / RGBA, non-interlaced PNGs are measured (what simctl and screencap write);
-// anything else is skipped. Node built-ins only. Evidence, never a verdict: exit 0.
+// anything else is skipped. Node built-ins only. Overall means stay evidence (exit 0),
+// except a W-03 dark shot that is still light (luma ≥ 0.5) fails the gate (Z12-63).
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -80,9 +81,15 @@ export function themeOf(file) {
   return /-(light|dark)-(ios|android)\.png$/.exec(path.basename(file))?.[1] ?? null;
 }
 
+/** Active workout mid-session dark shots must not still be light (Z12-63). */
+export function isW03DarkShot(file) {
+  return /^W-03-dark-/.test(path.basename(file));
+}
+
 export function summarise(files) {
   const per = { light: [], dark: [] };
   const shots = [];
+  const w03DarkTooBright = [];
   for (const f of files) {
     const theme = themeOf(f);
     if (!theme) continue;
@@ -94,10 +101,20 @@ export function summarise(files) {
     }
     if (luma === null) continue;
     per[theme].push(luma);
-    shots.push({ file: path.basename(f), theme, luma: Math.round(luma * 1000) / 1000 });
+    const rounded = Math.round(luma * 1000) / 1000;
+    shots.push({ file: path.basename(f), theme, luma: rounded });
+    if (isW03DarkShot(f) && luma >= 0.5) {
+      w03DarkTooBright.push({ file: path.basename(f), luma: rounded });
+    }
   }
   const mean = (xs) => (xs.length ? Math.round((xs.reduce((s, x) => s + x, 0) / xs.length) * 1000) / 1000 : null);
-  return { light: mean(per.light), dark: mean(per.dark), count: { light: per.light.length, dark: per.dark.length }, shots };
+  return {
+    light: mean(per.light),
+    dark: mean(per.dark),
+    count: { light: per.light.length, dark: per.dark.length },
+    shots,
+    w03DarkTooBright,
+  };
 }
 
 export function main(argv) {
@@ -111,6 +128,15 @@ export function main(argv) {
   const note = `mean screenshot luminance: light ${s.light ?? "—"} (${s.count.light}), dark ${s.dark ?? "—"} (${s.count.dark})`;
   if (out) fs.writeFileSync(out, `${JSON.stringify({ result: note, ...s }, null, 2)}\n`);
   console.log(`shot-luma: ${note}`);
+  if (s.w03DarkTooBright.length > 0) {
+    const detail = s.w03DarkTooBright
+      .map((x) => `${x.file} luma=${x.luma}`)
+      .join(", ");
+    console.error(
+      `shot-luma: W-03 dark screenshot still light (luma ≥ 0.5): ${detail}`,
+    );
+    return 1;
+  }
   return 0;
 }
 
