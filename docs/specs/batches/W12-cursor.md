@@ -114,7 +114,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Task | Command | Recorded |
 |---|---|---|
 | Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | **PASS** [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) on `fcbdcd52` (FitBud UI, 71 shots) |
-| Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | running [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f` (FitBud UI); Android dark Launch smoke FAIL (light PASS); awaiting iOS + FitBud verdict |
+| Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | **FAIL** [44484383185](https://github.com/thefitbud/thefitbud/actions/runs/44484383185) on `f3fedc2f` (FitBud UI): Android dark Launch flake; iOS z12-36 sign-in / light Log it / dark Today View summary. Re-record after fix. |
 | Z12-46fu #497 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-46fu-pixel-db78 -f flows=launch,z12-46` | 19 Nov 2026 ~14:05 IST (`7c0a4f37`, CI green) |
 
 ## Done when (Cursor side)
