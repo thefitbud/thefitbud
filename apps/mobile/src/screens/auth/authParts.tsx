@@ -10,8 +10,9 @@ import {
   View,
   type TextInputProps,
 } from "react-native";
-import { ChevronLeft, CircleAlert, Clock, Dumbbell, Eye, EyeOff } from "lucide-react-native";
+import { ChevronLeft, CircleAlert, Clock, Eye, EyeOff } from "lucide-react-native";
 import { defaultTextStyle } from "@fitbud/ui-mobile";
+import { BrandMark } from "../../components/BrandMark";
 import { Button } from "../../components/Button";
 import { Text } from "../../components/Text";
 import {
@@ -112,11 +113,8 @@ function AuthPageBody({
               </Pressable>
             ) : null}
             {brand ? (
-              <View style={styles.brandRow} accessibilityLabel="FitBud">
-                <View style={styles.brandMark}>
-                  <Dumbbell color={theme.colors.white} size={24} strokeWidth={2} />
-                </View>
-                <Text style={styles.brandWord}>FitBud</Text>
+              <View style={styles.brandRow}>
+                <BrandMark wordmark size={40} />
               </View>
             ) : null}
             {title ? (
@@ -161,26 +159,8 @@ const usePageStyles = createThemedStyles((t) => ({
     width: 44,
   },
   brandRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
     marginBottom: 36,
     marginTop: t.spacing.md,
-  },
-  brandMark: {
-    alignItems: "center",
-    backgroundColor: t.colors.fixedNavy,
-    borderRadius: 12,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
-  },
-  brandWord: {
-    ...t.text.title.style,
-    color: t.colors.ink,
-    fontSize: 26,
-    fontWeight: "700",
-    letterSpacing: -0.4,
   },
   title: { marginBottom: t.spacing.sm },
   subtitle: { lineHeight: 22, marginBottom: t.spacing.lg },

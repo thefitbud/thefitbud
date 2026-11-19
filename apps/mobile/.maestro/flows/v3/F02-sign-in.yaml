@@ -9,8 +9,9 @@ tags:
 # (shown only behind the API's 401 INVALID_CREDENTIALS), TR-01b ask for a code,
 # TR-01c enter it (screenshot taken before any code is typed, D-QA1-14), then a
 # password sign-in that lands on Today. Env from the device harness:
-# QA_ONTRACK_EMAIL, QA_PASSWORD. One wrong password only: the API allows 15
-# tries per IP per window, so this never trips TR-01f for the other flows.
+# QA_ONTRACK_EMAIL, QA_PASSWORD. One wrong password only. Password login shares an
+# IP bucket of 30 attempts / 15 min (auth-login.ts); the device gate clears
+# auth_rate_limits between themes so a long light pass cannot starve dark F02.
 #
 # Screenshots are named by v3 screen ID (scripts/qa/device/collect-shots.mjs).
 - launchApp:
@@ -47,9 +48,11 @@ tags:
 - tapOn:
     text: "Sign in"
     below: "Forgot password\\??"
+# 45s: local API can be slow after prior flows; RATE_LIMITED shows different copy
+# (AUTH-RATE) — gate clears auth_rate_limits between themes to keep this path.
 - extendedWaitUntil:
     visible: "That email and password don't match\\."
-    timeout: 30000
+    timeout: 45000
 - takeScreenshot: TR-01e
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -88,7 +91,5 @@ tags:
 - tapOn:
     text: "Sign in"
     below: "Forgot password\\??"
-- extendedWaitUntil:
-    visible: "Today's workout.*"
-    timeout: 60000
+- runFlow: ../../common/wait-trainee-today-ready.yaml
 - runFlow: ../../common/assert-no-crash.yaml
