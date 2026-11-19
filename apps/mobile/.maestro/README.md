@@ -359,9 +359,10 @@ change. Known gaps, to be fixed in a follow-up (QT3b) that touches app code:
   civil day in that trainee's own timezone, as well as the *submitted* one waiting
   for the trainer (`guarantees.pendingCheckinsSlipping`, for
   `trainer/checkin-review.yaml`).
-- **Resolve** happens on the exception screen, reached from the client status.
-  The review sheet's "Resolve…" is not wired in the Attention tab, and "Mark
-  reviewed" only moves a client to Reviewed.
+- **Resolve** happens on the exception screen, reached from the client status
+  (`trainer/attention.yaml`), or from the review sheet's "Resolve…" in the
+  Attention tab (`v3/F21-review-resolve-notes.yaml`, Z12-51). "Mark reviewed"
+  only moves a client to Reviewed.
 - **Rest timer** assertions use the visible countdown ("N s left"); the flow
   checks that the number changes, not how long a second takes.
 - The flows first ran on 3 Nov 2026, in the `android` job of QA runs 41648846215

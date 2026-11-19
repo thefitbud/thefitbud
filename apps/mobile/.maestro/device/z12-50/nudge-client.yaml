@@ -20,10 +20,18 @@ appId: com.thefitbud.mobile.staging
     timeout: 30000
 - tapOn: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"
 # A row tap can land on the row's own Review button (the exception screen, run
-# 44127718482 iOS light): "Open client status" gets to the client either way.
+# 44127718482 iOS light): its ⋯ menu's "Open <first>'s profile" gets to the client
+# either way (Z12-51 replaced the old "Open client status" button).
+- extendedWaitUntil:
+    visible: "Log measurement|Mark reviewed|Resolve"
+    timeout: 30000
 - runFlow:
     when:
-      visible: "Review the signal.*"
+      visible:
+        id: "exception-more"
     commands:
-      - tapOn: "Open client status"
+      - tapOn:
+          id: "exception-more"
+      - tapOn:
+          id: "more-profile"
 - runFlow: to-nudge.yaml

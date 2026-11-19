@@ -2,42 +2,35 @@ import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "../../test/render";
 import { MoreSheet } from "./MoreSheet";
 import { NoteSheet } from "./NoteSheet";
-import { noteCounterLabel } from "./exceptionSheetContent";
 
-describe("NoteSheet", () => {
-  it("shows the frame 36 title, counter, visible toggle and preview chip", () => {
-    render(
-      <NoteSheet
-        visible
-        traineeDisplayName="Rohan Mehta"
-        trainerDisplayName="Rahul Sharma"
-        onDismiss={() => {}}
-        onSave={() => {}}
-      />,
-    );
-    expect(screen.getByText("Note about Rohan")).toBeTruthy();
-    expect(screen.getByText("Private unless you share it")).toBeTruthy();
-    expect(screen.getByText("0 of 1,000")).toBeTruthy();
-    expect(noteCounterLabel(96)).toBe("96 of 1,000");
-    expect(screen.getByText("Visible to Rohan")).toBeTruthy();
-    expect(screen.getByText(/Rohan will see this on their Today screen/)).toBeTruthy();
-    expect(screen.getByText("From Rahul · just now")).toBeTruthy();
+function mountNote(onSave = vi.fn(), onDismiss = vi.fn()) {
+  render(
+    <NoteSheet
+      visible
+      traineeDisplayName="Rohan Mehta"
+      onDismiss={onDismiss}
+      onSave={onSave}
+    />,
+  );
+  return { onSave, onDismiss };
+}
+
+describe("NoteSheet (TM-04k)", () => {
+  it("shows Cancel, the title, Save and the Today toggle", () => {
+    mountNote();
+    expect(screen.getByText("Cancel")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Note for Rohan" })).toBeTruthy();
+    expect(screen.getByLabelText("Save")).toBeTruthy();
+    expect(screen.getByText("Show on Rohan's Today")).toBeTruthy();
+    expect(screen.getByText("Off: only you can see it")).toBeTruthy();
   });
 
-  it("saves a shared note by default with the trimmed body", () => {
-    const onSave = vi.fn();
-    render(
-      <NoteSheet
-        visible
-        traineeDisplayName="Rohan Mehta"
-        onDismiss={() => {}}
-        onSave={onSave}
-      />,
-    );
+  it("saves a note shown on the client's Today by default, trimmed", () => {
+    const { onSave } = mountNote();
     fireEvent.change(screen.getByLabelText("Note"), {
       target: { value: "  Move leg day  " },
     });
-    fireEvent.click(screen.getByText("Save note"));
+    fireEvent.click(screen.getByLabelText("Save"));
     expect(onSave).toHaveBeenCalledWith({
       body: "Move leg day",
       visibility: "client",
@@ -45,67 +38,48 @@ describe("NoteSheet", () => {
   });
 
   it("saves a private note when the toggle is off", () => {
-    const onSave = vi.fn();
-    render(
-      <NoteSheet
-        visible
-        traineeDisplayName="Rohan Mehta"
-        onDismiss={() => {}}
-        onSave={onSave}
-      />,
-    );
+    const { onSave } = mountNote();
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Hi" } });
-    fireEvent.click(screen.getByLabelText("Visible to Rohan"));
-    expect(screen.queryByText(/just now/)).toBeNull();
-    expect(screen.getByText("Only you see this.")).toBeTruthy();
-    fireEvent.click(screen.getByText("Save note"));
+    fireEvent.click(screen.getByLabelText("Show on Rohan's Today"));
+    fireEvent.click(screen.getByLabelText("Save"));
     expect(onSave).toHaveBeenCalledWith({ body: "Hi", visibility: "private" });
   });
 
-  it("does not save an empty note", () => {
-    const onSave = vi.fn();
-    render(
-      <NoteSheet
-        visible
-        traineeDisplayName="Rohan Mehta"
-        onDismiss={() => {}}
-        onSave={onSave}
-      />,
-    );
-    fireEvent.click(screen.getByText("Save note"));
+  it("does not save an empty note, and Cancel closes", () => {
+    const { onSave, onDismiss } = mountNote();
+    fireEvent.click(screen.getByLabelText("Save"));
     expect(onSave).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("MoreSheet", () => {
-  const detail = {
-    type: "missed_workout" as const,
-    details: { localDate: "2026-10-13", workoutDayName: "Lower body A" },
-  };
-
-  it("offers Add note, Message on WhatsApp and Cancel", () => {
+describe("MoreSheet (TM-04j)", () => {
+  it("offers Add note, WhatsApp and the profile; each closes the menu first", () => {
     const onAddNote = vi.fn();
     const onWhatsApp = vi.fn();
+    const onProfile = vi.fn();
     const onDismiss = vi.fn();
     render(
       <MoreSheet
         visible
-        detail={detail}
         traineeDisplayName="Rohan Mehta"
         onAddNote={onAddNote}
         onMessageOnWhatsApp={onWhatsApp}
+        onOpenProfile={onProfile}
         onDismiss={onDismiss}
       />,
     );
-    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
-    expect(
-      screen.getByText("Missed workout · Lower body A · Tue 13 Oct"),
-    ).toBeTruthy();
+    expect(screen.getByText("Private, or shared on Rohan's Today")).toBeTruthy();
+    expect(screen.getByText("Opens a chat without a template")).toBeTruthy();
     fireEvent.click(screen.getByText("Add note"));
-    fireEvent.click(screen.getByText("Message on WhatsApp"));
-    fireEvent.click(screen.getByText("Cancel"));
-    expect(onAddNote).toHaveBeenCalledTimes(1);
-    expect(onWhatsApp).toHaveBeenCalledTimes(1);
     expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onAddNote).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("Message on WhatsApp"));
+    expect(onWhatsApp).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("Open Rohan's profile"));
+    expect(onProfile).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(onDismiss).toHaveBeenCalledTimes(4);
   });
 });
