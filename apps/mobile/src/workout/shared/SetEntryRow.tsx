@@ -1,7 +1,7 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Check } from "lucide-react-native";
-import { colors } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import {
   displayLoad,
   isBodyweightLabel,
@@ -58,6 +58,7 @@ export function SetEntryHeader({
   /** Pass false to match rows without the tick column. */
   showTick?: boolean;
 }) {
+  const styles = useStyles();
   return (
     <View style={styles.stabTh}>
       <Text style={styles.thCell}>Set</Text>
@@ -87,6 +88,8 @@ export function SetEntryRow({
   filled = false,
   completeDisabled = false,
 }: RowProps) {
+  const styles = useStyles();
+  const theme = useTheme();
   const isEditable = editable ?? isNow;
   const isOk = set.status !== "pending";
   const shownLoadLabel = isOk
@@ -176,7 +179,9 @@ export function SetEntryRow({
           style={[styles.ck, isOk ? styles.ckOk : null, isNow ? styles.ckNow : null]}
         >
           <Check
-            color={isOk || isNow ? colors.white : colors.midGrey}
+            color={
+              isOk || isNow ? theme.colors.onBrand : theme.colors.ink3
+            }
             size={22}
             strokeWidth={2.6}
           />
@@ -186,7 +191,7 @@ export function SetEntryRow({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   stabTh: {
     flexDirection: "row",
     gap: 6,
@@ -194,7 +199,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   thCell: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.5,
@@ -219,30 +224,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
   },
   trOk: {
-    backgroundColor: "#F9F7FF",
+    backgroundColor: t.colors.brandTint,
   },
   trNow: {
-    backgroundColor: colors.white,
-    borderColor: colors.indigo,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.brand,
     borderWidth: 1.5,
   },
   stabNo: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
     fontWeight: "700",
     textAlign: "center",
     width: 34,
   },
   stabNoNow: {
-    color: colors.indigo,
+    color: t.colors.brand,
   },
   stabPrev: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     flex: 1,
     fontSize: 14,
   },
   valStatic: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 17,
     fontWeight: "600",
     textAlign: "center",
@@ -253,11 +258,11 @@ const styles = StyleSheet.create({
     width: 76,
   },
   valInput: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 12,
     borderWidth: 1.5,
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 18,
     fontWeight: "700",
     height: 44,
@@ -265,23 +270,29 @@ const styles = StyleSheet.create({
     width: 76,
   },
   valInputText: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
   },
   valUnit: { fontSize: 12, fontWeight: "600" },
-  valFilled: { backgroundColor: "#F6F5FB", borderColor: "#F6F5FB" },
-  valActive: { borderColor: colors.indigo, borderWidth: 2 },
-  valBw: { backgroundColor: "#ECE9FF", borderColor: "#ECE9FF" },
-  valBwText: { color: colors.indigo, fontSize: 14 },
+  valFilled: {
+    backgroundColor: t.colors.fill,
+    borderColor: t.colors.fill,
+  },
+  valActive: { borderColor: t.colors.brand, borderWidth: 2 },
+  valBw: {
+    backgroundColor: t.colors.brandTint,
+    borderColor: t.colors.brandTint,
+  },
+  valBwText: { color: t.colors.brand, fontSize: 14 },
   valStaticBw: { fontSize: 14 },
   valReps: {
     fontSize: 17,
     width: 64,
   },
   modBadge: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 9,
     fontWeight: "700",
     letterSpacing: 0.3,
@@ -289,7 +300,7 @@ const styles = StyleSheet.create({
   },
   ck: {
     alignItems: "center",
-    borderColor: colors.lightGrey,
+    borderColor: t.colors.line,
     borderRadius: 14,
     borderWidth: 1.5,
     height: 48,
@@ -297,11 +308,11 @@ const styles = StyleSheet.create({
     width: 48,
   },
   ckOk: {
-    backgroundColor: colors.deepNavy,
-    borderColor: colors.deepNavy,
+    backgroundColor: t.colors.ink,
+    borderColor: t.colors.ink,
   },
   ckNow: {
-    backgroundColor: colors.indigo,
-    borderColor: colors.indigo,
+    backgroundColor: t.colors.brand,
+    borderColor: t.colors.brand,
   },
-});
+}));

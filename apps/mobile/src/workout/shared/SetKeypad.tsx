@@ -1,7 +1,11 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Delete } from "lucide-react-native";
-import { colors, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import {
+  createThemedStyles,
+  shadowColor,
+  useTheme,
+} from "../../providers/ThemeProvider";
 import type { KeypadField } from "./setEntry";
 
 type Props = {
@@ -43,6 +47,8 @@ export function SetKeypad({
   primaryLabel,
   hint: hintOverride,
 }: Props) {
+  const styles = useStyles();
+  const theme = useTheme();
   const isLoad = field === "load";
   // A bodyweight set has no kg to type.
   const keysOff = disabled || (isLoad && bodyweight);
@@ -119,7 +125,7 @@ export function SetKeypad({
               accessibilityLabel="Delete"
               disabled={keysOff}
               onPress={onBackspace}
-              icon={<Delete color={colors.deepNavy} size={22} />}
+              icon={<Delete color={theme.colors.ink} size={22} />}
             />
           </View>
         </View>
@@ -169,6 +175,7 @@ function Key({
   icon?: React.ReactNode;
   accessibilityLabel?: string;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -193,21 +200,21 @@ function Key({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   sheet: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderTopLeftRadius: 28,
     borderTopRightRadius: 28,
-    paddingBottom: spacing.lg,
-    paddingHorizontal: spacing.md,
-    shadowColor: "#1B1464",
+    paddingBottom: t.spacing.lg,
+    paddingHorizontal: t.spacing.md,
+    shadowColor: shadowColor(t),
     shadowOffset: { width: 0, height: -6 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
   },
   handleHit: { alignItems: "center", height: 44, justifyContent: "center" },
   handle: {
-    backgroundColor: colors.lightGrey,
+    backgroundColor: t.colors.line,
     borderRadius: 3,
     height: 5,
     width: 40,
@@ -215,16 +222,16 @@ const styles = StyleSheet.create({
   head: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: t.spacing.sm,
     justifyContent: "space-between",
-    marginBottom: spacing.sm,
+    marginBottom: t.spacing.sm,
     paddingHorizontal: 4,
   },
   headTx: { flex: 1, minWidth: 0 },
-  title: { color: colors.deepNavy, fontSize: 17, fontWeight: "600" },
-  hint: { color: colors.midGrey, fontSize: 13, marginTop: 2 },
+  title: { color: t.colors.ink, fontSize: 17, fontWeight: "600" },
+  hint: { color: t.colors.ink3, fontSize: 13, marginTop: 2 },
   seg: {
-    backgroundColor: "#EEEDF6",
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     flexDirection: "row",
     padding: 3,
@@ -236,34 +243,39 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 16,
   },
-  segOn: { backgroundColor: colors.white },
-  segText: { color: colors.midGrey, fontSize: 15, fontWeight: "600" },
-  segTextOn: { color: colors.deepNavy },
+  segOn: { backgroundColor: t.colors.card },
+  segText: { color: t.colors.ink3, fontSize: 15, fontWeight: "600" },
+  segTextOn: { color: t.colors.ink },
   grid: { flexDirection: "row", gap: 8 },
   keys: { flex: 3, gap: 8 },
   row: { flexDirection: "row", gap: 8 },
   side: { flex: 1, gap: 8 },
   key: {
     alignItems: "center",
-    backgroundColor: "#F6F5FB",
+    backgroundColor: t.colors.kbd,
     borderRadius: 14,
     flex: 1,
     height: 52,
     justifyContent: "center",
     minHeight: 44,
   },
-  keyStep: { backgroundColor: "#ECE9FF" },
-  keyText: { color: colors.deepNavy, fontSize: 24, fontWeight: "500" },
-  keyTextStep: { color: colors.indigo, fontSize: 19, fontWeight: "600" },
+  keyStep: { backgroundColor: t.colors.brandTint },
+  keyText: { color: t.colors.ink, fontSize: 24, fontWeight: "500" },
+  keyTextStep: { color: t.colors.brand, fontSize: 19, fontWeight: "600" },
   primary: {
     alignItems: "center",
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
     borderRadius: 14,
     flex: 1,
     justifyContent: "center",
     minHeight: 116,
     paddingHorizontal: 6,
   },
-  primaryText: { color: colors.white, fontSize: 17, fontWeight: "600", textAlign: "center" },
+  primaryText: {
+    color: t.colors.onBrand,
+    fontSize: 17,
+    fontWeight: "600",
+    textAlign: "center",
+  },
   off: { opacity: 0.4 },
-});
+}));

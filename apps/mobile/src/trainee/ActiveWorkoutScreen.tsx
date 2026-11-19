@@ -1,6 +1,6 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
 import { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import {
   Check,
   ChevronDown,
@@ -15,7 +15,6 @@ import type {
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
-import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { BottomSheet } from "../components/BottomSheet";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -24,6 +23,13 @@ import { useAuth } from "../auth/AuthProvider";
 import { localDateInTimezone } from "../lib/dates";
 import type { RestWindow } from "../notifications/liveActivity";
 import { useWorkoutLiveActivity } from "../notifications/liveActivitySession";
+import {
+  ThemeScope,
+  createThemedStyles,
+  shadowColor,
+  useTheme,
+  withAlpha,
+} from "../providers/ThemeProvider";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
 import {
@@ -218,17 +224,7 @@ export function activateWorkoutKeepAwake(): () => void {
   };
 }
 
-export function ActiveWorkoutScreen({
-  execution,
-  assignment = null,
-  onChange,
-  onFinished,
-  onExit,
-  sessionName,
-  coachName = "Your coach",
-  restSecondsBySetTargetId = {},
-  onAskCoach,
-}: {
+type ActiveWorkoutProps = {
   execution: WorkoutExecution;
   assignment?: WorkoutAssignment | null;
   onChange: (execution: WorkoutExecution) => void;
@@ -238,7 +234,34 @@ export function ActiveWorkoutScreen({
   coachName?: string;
   restSecondsBySetTargetId?: Record<string, number>;
   onAskCoach?: () => void;
-}) {
+};
+
+/**
+ * Active workout (W-03). ThemeScope opts the body into system light/dark before
+ * styles are built; `<Screen v3>` keeps the same opt-in for Screen chrome and
+ * Z12-58 (MoreScreen / DietTab pattern).
+ */
+export function ActiveWorkoutScreen(props: ActiveWorkoutProps) {
+  return (
+    <ThemeScope scheme="system">
+      <ActiveWorkoutBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function ActiveWorkoutBody({
+  execution,
+  assignment = null,
+  onChange,
+  onFinished,
+  onExit,
+  sessionName,
+  coachName = "Your coach",
+  restSecondsBySetTargetId = {},
+  onAskCoach,
+}: ActiveWorkoutProps) {
+  const styles = useStyles();
+  const theme = useTheme();
   const sync = useSyncEngine();
   const { api, me } = useAuth();
   const [error, setError] = useState<string | null>(null);
@@ -534,7 +557,7 @@ export function ActiveWorkoutScreen({
 
   if (emptyOrDone) {
     return (
-      <Screen chrome="app" title={title}>
+      <Screen v3 chrome="app" title={title}>
         <View style={styles.guardCard}>
           <Text style={styles.guardTitle} accessibilityRole="header">
             This workout is already done
@@ -678,7 +701,7 @@ export function ActiveWorkoutScreen({
           execution.status === "paused" ? styles.logBtnDisabled : null,
         ]}
       >
-        <Check color={colors.white} size={24} strokeWidth={2.6} />
+        <Check color={theme.colors.onBrand} size={24} strokeWidth={2.6} />
         <Text style={styles.logBtnText}>{logLabel}</Text>
       </Pressable>
       <Text style={styles.logSub}>{logSub}</Text>
@@ -690,7 +713,7 @@ export function ActiveWorkoutScreen({
   ) : null;
 
   return (
-    <Screen chrome="app" title={title} showHeader={false} footer={logFooter}>
+    <Screen v3 chrome="app" title={title} showHeader={false} footer={logFooter}>
       <View style={styles.awl}>
         <View style={styles.hdr}>
           <Pressable
@@ -704,9 +727,9 @@ export function ActiveWorkoutScreen({
             style={styles.ibtnFill}
           >
             {execution.status === "paused" ? (
-              <Play color={colors.deepNavy} size={22} />
+              <Play color={theme.colors.ink} size={22} />
             ) : (
-              <Pause color={colors.deepNavy} size={22} />
+              <Pause color={theme.colors.ink} size={22} />
             )}
           </Pressable>
           <View style={styles.hdrTitle}>
@@ -828,7 +851,11 @@ export function ActiveWorkoutScreen({
               <View style={styles.ah}>
                 <View style={[styles.exn, done ? styles.exnDone : null]}>
                   {done ? (
-                    <Check color={colors.white} size={18} strokeWidth={2.6} />
+                    <Check
+                      color={theme.colors.onBrand}
+                      size={18}
+                      strokeWidth={2.6}
+                    />
                   ) : (
                     <Text style={styles.exnNum}>{idx + 1}</Text>
                   )}
@@ -850,14 +877,14 @@ export function ActiveWorkoutScreen({
                     onPress={onAskCoach}
                     style={styles.coachVid}
                   >
-                    <CirclePlay color={colors.indigo} size={22} />
+                    <CirclePlay color={theme.colors.brand} size={22} />
                   </Pressable>
                 ) : null}
                 {!isCurrent ? (
-                  <ChevronDown color={colors.midGrey} size={20} />
+                  <ChevronDown color={theme.colors.ink3} size={20} />
                 ) : (
                   <ChevronDown
-                    color={colors.midGrey}
+                    color={theme.colors.ink3}
                     size={20}
                     style={{ transform: [{ rotate: "180deg" }] }}
                   />
@@ -932,13 +959,19 @@ export function ActiveWorkoutScreen({
                     {exercisePrescriptionLine(ex, restSecondsBySetTargetId)}
                   </Text>
                 </View>
-                <ChevronDown color={colors.midGrey} size={20} />
+                <ChevronDown color={theme.colors.ink3} size={20} />
               </View>
             </View>
           );
         })}
 
-        <View style={{ height: keypadOpen ? KEYPAD_HEIGHT : LOGBAR_HEIGHT + spacing.xl }} />
+        <View
+          style={{
+            height: keypadOpen
+              ? KEYPAD_HEIGHT
+              : LOGBAR_HEIGHT + theme.spacing.xl,
+          }}
+        />
       </View>
 
       <BottomSheet
@@ -998,20 +1031,20 @@ export function ActiveWorkoutScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   awl: {
-    marginHorizontal: -spacing.xs,
+    marginHorizontal: -t.spacing.xs,
   },
   hdr: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: t.spacing.sm,
     height: 52,
-    marginBottom: spacing.sm,
+    marginBottom: t.spacing.sm,
   },
   ibtnFill: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 22,
     height: TARGET,
     justifyContent: "center",
@@ -1022,7 +1055,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   hdrName: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
     lineHeight: 21,
@@ -1034,20 +1067,20 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   hdrMeta: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     fontWeight: "500",
     lineHeight: 18,
   },
   recDot: {
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
     borderRadius: 4,
     height: 7,
     width: 7,
   },
   fin: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 22,
     height: 44,
     justifyContent: "center",
@@ -1058,35 +1091,35 @@ const styles = StyleSheet.create({
     minWidth: 64,
   },
   finText: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 15,
     fontWeight: "700",
   },
   pauseBanner: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.card,
+    backgroundColor: t.colors.brandTint,
+    borderRadius: t.radii.card,
     flexDirection: "row",
-    gap: spacing.md,
+    gap: t.spacing.md,
     justifyContent: "space-between",
-    marginBottom: spacing.md,
-    padding: spacing.md,
+    marginBottom: t.spacing.md,
+    padding: t.spacing.md,
   },
   pauseText: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontWeight: "700",
   },
   restband: {
-    backgroundColor: "#ECE9FF",
-    borderColor: "#D9D3FA",
+    backgroundColor: t.colors.brandTint,
+    borderColor: t.colors.brandTint2,
     borderRadius: 20,
     borderWidth: 1,
-    marginBottom: spacing.md,
-    marginTop: spacing.xs,
+    marginBottom: t.spacing.md,
+    marginTop: t.spacing.xs,
     overflow: "hidden",
-    paddingBottom: spacing.md,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
+    paddingBottom: t.spacing.md,
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.md,
   },
   restbandRow: {
     alignItems: "flex-start",
@@ -1097,30 +1130,30 @@ const styles = StyleSheet.create({
   restMain: {
     flex: 1,
     minWidth: 0,
-    paddingRight: spacing.sm,
+    paddingRight: t.spacing.sm,
   },
   restK: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.6,
   },
   restV: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 34,
     fontWeight: "700",
     letterSpacing: -0.5,
     lineHeight: 38,
   },
   restVs: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
   },
   restNx: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 14,
-    marginTop: spacing.sm,
+    marginTop: t.spacing.sm,
   },
   restCtl: {
     flexDirection: "row",
@@ -1129,8 +1162,8 @@ const styles = StyleSheet.create({
   },
   restCtlBtn: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: "#D9D3FA",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.brandTint2,
     borderRadius: 22,
     borderWidth: 1,
     height: 48,
@@ -1139,28 +1172,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   restCtlText: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 14,
     fontWeight: "700",
   },
   restTrack: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 3,
     height: 6,
-    marginTop: spacing.sm,
+    marginTop: t.spacing.sm,
     overflow: "hidden",
   },
   restBar: {
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
     borderRadius: 3,
     height: 6,
   },
   acc: {
-    backgroundColor: colors.white,
-    borderColor: colors.lightGrey,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
-    shadowColor: "#0F0C28",
+    shadowColor: shadowColor(t),
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
     shadowRadius: 8,
@@ -1170,21 +1203,21 @@ const styles = StyleSheet.create({
   },
   accDone: {},
   accCur: {
-    borderColor: "#CFC6FF",
+    borderColor: t.colors.brandTint2,
     borderWidth: 1.5,
   },
   ah: {
     alignItems: "center",
     flexDirection: "row",
-    gap: spacing.md,
+    gap: t.spacing.md,
     minHeight: 64,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: t.spacing.md,
     paddingVertical: 10,
   },
   exn: {
     alignItems: "center",
-    backgroundColor: "#F6F4FF",
-    borderColor: "#E6E0FF",
+    backgroundColor: t.colors.brandTint,
+    borderColor: t.colors.brandTint2,
     borderRadius: 12,
     borderWidth: 1,
     height: 40,
@@ -1192,11 +1225,11 @@ const styles = StyleSheet.create({
     width: 40,
   },
   exnDone: {
-    backgroundColor: colors.deepNavy,
-    borderColor: colors.deepNavy,
+    backgroundColor: t.colors.ink,
+    borderColor: t.colors.ink,
   },
   exnNum: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 15,
     fontWeight: "700",
   },
@@ -1205,16 +1238,16 @@ const styles = StyleSheet.create({
     minWidth: 0,
   },
   exName: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "700",
     lineHeight: 21,
   },
   exNameDone: {
-    color: colors.darkGrey,
+    color: t.colors.ink2,
   },
   exSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 2,
@@ -1227,10 +1260,10 @@ const styles = StyleSheet.create({
   },
   note2: {
     marginBottom: 6,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: t.spacing.md,
   },
   note2Text: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 14,
     lineHeight: 20,
   },
@@ -1238,8 +1271,8 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   stab: {
-    paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.sm,
+    paddingBottom: t.spacing.sm,
+    paddingHorizontal: t.spacing.sm,
   },
   sh: {
     marginBottom: 10,
@@ -1247,29 +1280,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   shTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "700",
   },
   shCnt: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
     fontWeight: "600",
   },
   logbar: {
-    backgroundColor: "rgba(246,245,251,0.94)",
-    borderTopColor: colors.lightGrey,
+    backgroundColor: withAlpha(t.colors.card, 0.94),
+    borderTopColor: t.colors.line,
     borderTopWidth: 1,
-    paddingBottom: spacing.xl,
-    paddingHorizontal: spacing.lg,
+    paddingBottom: t.spacing.xl,
+    paddingHorizontal: t.spacing.lg,
     paddingTop: 10,
   },
   logBtn: {
     alignItems: "center",
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
     borderRadius: 20,
     flexDirection: "row",
-    gap: spacing.sm,
+    gap: t.spacing.sm,
     height: LOGBAR_HEIGHT,
     justifyContent: "center",
   },
@@ -1277,12 +1310,12 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   logBtnText: {
-    color: colors.white,
+    color: t.colors.onBrand,
     fontSize: 18,
     fontWeight: "700",
   },
   logSub: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     marginTop: 6,
     textAlign: "center",
@@ -1290,46 +1323,46 @@ const styles = StyleSheet.create({
   rpeRow: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: spacing.xs,
-    marginBottom: spacing.sm,
+    gap: t.spacing.xs,
+    marginBottom: t.spacing.sm,
   },
   rpeChip: {
     alignItems: "center",
-    backgroundColor: colors.paleLavender,
-    borderRadius: radii.control,
+    backgroundColor: t.colors.brandTint,
+    borderRadius: t.radii.control,
     height: TARGET,
     justifyContent: "center",
     minWidth: TARGET,
   },
   rpeChipActive: {
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
   },
   rpeChipText: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontWeight: "600",
   },
   rpeChipTextActive: {
-    color: colors.white,
+    color: t.colors.onBrand,
     fontWeight: "700",
   },
   rpeAnchors: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
-    marginBottom: spacing.md,
+    marginBottom: t.spacing.md,
   },
   guardCard: {
-    backgroundColor: colors.white,
-    borderRadius: radii.card,
-    gap: spacing.md,
-    padding: spacing.xl,
+    backgroundColor: t.colors.card,
+    borderRadius: t.radii.card,
+    gap: t.spacing.md,
+    padding: t.spacing.xl,
   },
   guardTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 20,
     fontWeight: "700",
   },
   guardBody: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
   },
-});
+}));
