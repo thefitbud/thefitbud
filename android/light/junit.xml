@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="0" time="226.854" timestamp="2026-11-20T11:51:32">
+    <testcase id="F13 Notifications inbox and its taps (Z12-47)" name="F13 Notifications inbox and its taps (Z12-47)" classname="F13 Notifications inbox and its taps (Z12-47)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F13-notifications-deep-links.yaml" time="226.746" timestamp="2026-11-20T11:51:33" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-47"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

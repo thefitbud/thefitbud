@@ -1,0 +1,138 @@
+{
+  "platform": "android",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "flows/v3/F13-notifications-deep-links.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 10s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 8s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 10s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 8s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 72 s",
+      "mode": "cache-hit",
+      "seconds": 72,
+      "cacheKey": "device-native-android-9a9eb257e1e3b8bb8f901894fb66821a37ae9b3b"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 730 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.932 (3), dark 0.072 (3)",
+      "light": 0.932,
+      "dark": 0.072,
+      "count": {
+        "light": 3,
+        "dark": 3
+      },
+      "shots": [
+        {
+          "file": "TR-15a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.074
+        },
+        {
+          "file": "TR-15a-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "TR-15b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.068
+        },
+        {
+          "file": "TR-15b-light-android.png",
+          "theme": "light",
+          "luma": 0.93
+        },
+        {
+          "file": "z12-47-read-all-dark-android.png",
+          "theme": "dark",
+          "luma": 0.074
+        },
+        {
+          "file": "z12-47-read-all-light-android.png",
+          "theme": "light",
+          "luma": 0.934
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

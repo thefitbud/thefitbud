@@ -1,0 +1,42 @@
+{
+  "result": "mean screenshot luminance: light 0.932 (3), dark 0.072 (3)",
+  "light": 0.932,
+  "dark": 0.072,
+  "count": {
+    "light": 3,
+    "dark": 3
+  },
+  "shots": [
+    {
+      "file": "TR-15a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.074
+    },
+    {
+      "file": "TR-15a-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "TR-15b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.068
+    },
+    {
+      "file": "TR-15b-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "z12-47-read-all-dark-android.png",
+      "theme": "dark",
+      "luma": 0.074
+    },
+    {
+      "file": "z12-47-read-all-light-android.png",
+      "theme": "light",
+      "luma": 0.934
+    }
+  ],
+  "w03DarkTooBright": []
+}
