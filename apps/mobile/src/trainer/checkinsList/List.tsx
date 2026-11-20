@@ -1,8 +1,15 @@
-import { Platform, Pressable, StyleSheet, View } from "react-native";
-import { ClipboardCheck, Clock3 } from "lucide-react-native";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
+import {
+  Check,
+  ChevronRight,
+  ClipboardCheck,
+  Clock3,
+} from "lucide-react-native";
+import { v3LightColors } from "@fitbud/tokens";
 import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
-import { initialsFromName, WhatsAppGlyph } from "../../components/m2";
+import { initialsFromName } from "../../components/m2";
 import {
   emptyCopy,
   type CheckinListModel,
@@ -30,7 +37,11 @@ type Props = {
   segment: CheckinListSegment;
   onSegmentChange: (segment: CheckinListSegment) => void;
   onReview: (row: CheckinListRow) => void;
-  onWhatsApp: (row: CheckinListRow) => void;
+  onNudge: (row: CheckinListRow) => void;
+  /** Swipe-right shortcut on To review (TM-05a / TM-06c). */
+  onMarkReviewed?: (row: CheckinListRow) => void;
+  /** Optional footer under the list (reminders paused, swipe hint). */
+  footerHint?: string | null;
 };
 
 export function CheckinsList({
@@ -39,10 +50,17 @@ export function CheckinsList({
   segment,
   onSegmentChange,
   onReview,
-  onWhatsApp,
+  onNudge,
+  onMarkReviewed,
+  footerHint,
 }: Props) {
-  const rows = segment === "to_review" ? model.toReview : model.overdue;
-  const count = (n: number) => (loading ? "" : ` ${n}`);
+  const rows =
+    segment === "to_review"
+      ? model.toReview
+      : segment === "overdue"
+        ? model.overdue
+        : model.reviewed;
+  const count = (n: number) => (loading ? "" : ` · ${n}`);
   return (
     <View>
       <View accessibilityRole="tablist" style={styles.tabs}>
@@ -55,6 +73,11 @@ export function CheckinsList({
           label={`Overdue${count(model.overdue.length)}`}
           selected={segment === "overdue"}
           onPress={() => onSegmentChange("overdue")}
+        />
+        <Tab
+          label="Reviewed"
+          selected={segment === "reviewed"}
+          onPress={() => onSegmentChange("reviewed")}
         />
       </View>
 
@@ -71,17 +94,22 @@ export function CheckinsList({
                 row={row}
                 segment={segment}
                 onReview={onReview}
-                onWhatsApp={onWhatsApp}
+                onNudge={onNudge}
+                onMarkReviewed={onMarkReviewed}
               />
             </View>
           ))}
         </View>
       )}
-      {!loading &&
-      Platform.OS !== "android" &&
-      segment === "to_review" &&
-      rows.length > 0 ? (
-        <Text style={styles.hint}>Pull down to check for new check-ins</Text>
+      {!loading && footerHint ? (
+        <Text style={styles.hint}>{footerHint}</Text>
+      ) : !loading &&
+        segment === "to_review" &&
+        rows.length > 0 &&
+        onMarkReviewed ? (
+        <Text style={styles.hint}>
+          Swipe right on a row to mark it reviewed.
+        </Text>
       ) : null}
     </View>
   );
@@ -114,16 +142,21 @@ function Row({
   row,
   segment,
   onReview,
-  onWhatsApp,
+  onNudge,
+  onMarkReviewed,
 }: {
   row: CheckinListRow;
   segment: CheckinListSegment;
   onReview: (row: CheckinListRow) => void;
-  onWhatsApp: (row: CheckinListRow) => void;
+  onNudge: (row: CheckinListRow) => void;
+  onMarkReviewed?: (row: CheckinListRow) => void;
 }) {
   const tone = avatarTone(row.name);
   const overdue = segment === "overdue";
-  return (
+  const reviewed = segment === "reviewed";
+  const openable = !overdue;
+
+  const body = (
     <View style={styles.row}>
       <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
         <Text style={[styles.avatarText, { color: tone.color }]}>
@@ -134,51 +167,95 @@ function Row({
         <Text style={styles.name}>{row.name}</Text>
         <Text style={styles.line}>{row.line}</Text>
         <View style={styles.foot}>
-          {overdue ? (
+          {reviewed ? (
+            <View style={[styles.chip, styles.chipReviewed]}>
+              <Check color={v3LightColors.done} size={13} strokeWidth={2.6} />
+              <Text style={[styles.chipText, { color: v3LightColors.done }]}>
+                Reviewed
+              </Text>
+            </View>
+          ) : overdue ? (
             <View style={[styles.chip, styles.chipOverdue]}>
-              <Clock3 color="#B45309" size={14} />
-              <Text style={[styles.chipText, { color: "#B45309" }]}>Overdue</Text>
+              <Clock3 color={v3LightColors.warn} size={13} strokeWidth={2.2} />
+              <Text style={[styles.chipText, { color: v3LightColors.warn }]}>
+                Overdue
+              </Text>
             </View>
           ) : (
             <View style={[styles.chip, styles.chipReview]}>
-              <ClipboardCheck color="#1D4ED8" size={14} />
-              <Text style={[styles.chipText, { color: "#1D4ED8" }]}>
+              <ClipboardCheck
+                color={v3LightColors.info}
+                size={13}
+                strokeWidth={2.2}
+              />
+              <Text style={[styles.chipText, { color: v3LightColors.info }]}>
                 To review
               </Text>
             </View>
           )}
+          {row.age ? <Text style={styles.age}>{row.age}</Text> : null}
           {overdue ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`WhatsApp ${row.name}`}
-              onPress={() => onWhatsApp(row)}
-              style={[styles.action, styles.actionQuiet]}
+              accessibilityLabel={`Nudge ${row.name}`}
+              onPress={() => onNudge(row)}
+              style={styles.nudge}
             >
-              <WhatsAppGlyph size={20} />
-              <Text style={styles.actionQuietText}>WhatsApp</Text>
+              <Text style={styles.nudgeText}>Nudge</Text>
             </Pressable>
           ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Review ${row.name}'s check-in`}
-              onPress={() => onReview(row)}
-              style={[styles.action, styles.actionPrimary]}
-            >
-              <Text style={styles.actionPrimaryText}>Review</Text>
-            </Pressable>
+            <ChevronRight color={colors.midGrey} size={18} />
           )}
         </View>
       </View>
     </View>
   );
+
+  const openableRow = openable ? (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={
+        reviewed
+          ? `Open ${row.name}'s reviewed check-in`
+          : `Review ${row.name}'s check-in`
+      }
+      onPress={() => onReview(row)}
+    >
+      {body}
+    </Pressable>
+  ) : (
+    body
+  );
+
+  if (segment === "to_review" && onMarkReviewed) {
+    return (
+      <Swipeable
+        overshootLeft={false}
+        overshootRight={false}
+        renderLeftActions={() => (
+          <View style={styles.swipeDone}>
+            <Check color={colors.white} size={22} strokeWidth={2.4} />
+            <Text style={styles.swipeDoneText}>Reviewed</Text>
+          </View>
+        )}
+        onSwipeableOpen={(direction) => {
+          if (direction === "left") onMarkReviewed(row);
+        }}
+      >
+        {openableRow}
+      </Swipeable>
+    );
+  }
+
+  return openableRow;
 }
 
 function Empty({ segment }: { segment: CheckinListSegment }) {
   const copy = emptyCopy(segment);
   return (
-    <View style={styles.empty}>
+    <View style={styles.emptyCard}>
       <View style={styles.emptyIcon}>
-        <ClipboardCheck color="#047857" size={32} />
+        <Check color={v3LightColors.ink} size={28} strokeWidth={2.4} />
       </View>
       <Text style={styles.emptyTitle}>{copy.title}</Text>
       {copy.body ? <Text style={styles.emptyBody}>{copy.body}</Text> : null}
@@ -198,8 +275,12 @@ function Skeleton() {
             <View style={[styles.avatar, styles.block]} />
             <View style={styles.body}>
               <View style={[styles.block, { height: 14, width: "52%" }]} />
-              <View style={[styles.block, { height: 12, width: "86%", marginTop: 10 }]} />
-              <View style={[styles.block, { height: 20, width: "36%", marginTop: 10 }]} />
+              <View
+                style={[styles.block, { height: 12, width: "86%", marginTop: 10 }]}
+              />
+              <View
+                style={[styles.block, { height: 20, width: "36%", marginTop: 10 }]}
+              />
             </View>
           </View>
         </View>
@@ -210,7 +291,7 @@ function Skeleton() {
 
 const styles = StyleSheet.create({
   tabs: {
-    backgroundColor: "#EDEAFF",
+    backgroundColor: v3LightColors.fill,
     borderRadius: 14,
     flexDirection: "row",
     gap: 2,
@@ -224,18 +305,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     minHeight: 44,
+    paddingHorizontal: 4,
   },
-  tabOn: { backgroundColor: colors.white },
-  tabText: { color: colors.midGrey, fontSize: 15, fontFamily: fontFamilySemiBold },
+  tabOn: {
+    backgroundColor: colors.white,
+    shadowColor: "#1B1650",
+    shadowOffset: { height: 1, width: 0 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  tabText: {
+    color: colors.midGrey,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 13,
+    textAlign: "center",
+  },
   tabTextOn: { color: colors.deepNavy },
   card: {
     backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    borderColor: v3LightColors.line,
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
   },
-  divider: { backgroundColor: "#E7E9F2", height: 1 },
+  divider: { backgroundColor: v3LightColors.line, height: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", gap: 12, padding: 14 },
   avatar: {
     alignItems: "center",
@@ -246,82 +339,91 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontFamily: fontFamilySemiBold, fontSize: 14 },
   body: { flex: 1, minWidth: 0 },
-  name: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
-  line: { color: colors.midGrey, fontSize: 15, lineHeight: 21, marginTop: 2 },
+  name: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 17 },
+  line: { color: colors.midGrey, fontSize: 14, lineHeight: 20, marginTop: 2 },
   foot: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    justifyContent: "space-between",
     marginTop: 10,
   },
   chip: {
     alignItems: "center",
     borderRadius: 999,
-    borderWidth: 1,
     flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  chipReview: { backgroundColor: "#EEF4FF", borderColor: "#C7DAFB" },
-  chipOverdue: { backgroundColor: "#FFF5DC", borderColor: "#F8DFA4" },
-  chipText: { fontFamily: fontFamilySemiBold, fontSize: 14 },
-  action: {
+  chipReview: { backgroundColor: v3LightColors.infoTint },
+  chipOverdue: { backgroundColor: v3LightColors.warnTint },
+  chipReviewed: { backgroundColor: v3LightColors.doneTint },
+  chipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
+  age: { color: colors.midGrey, flex: 1, fontSize: 13 },
+  nudge: {
     alignItems: "center",
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 8,
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 999,
+    height: 36,
     justifyContent: "center",
-    minHeight: 48,
-    minWidth: 96,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
   },
-  actionPrimary: { backgroundColor: "#EDEAFF" },
-  actionPrimaryText: {
-    color: colors.indigo,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 17,
-  },
-  actionQuiet: {
-    backgroundColor: colors.white,
-    borderColor: "#DAD8EA",
-    borderWidth: 1,
-  },
-  actionQuietText: {
+  nudgeText: {
     color: colors.deepNavy,
     fontFamily: fontFamilySemiBold,
-    fontSize: 17,
+    fontSize: 14,
   },
   hint: {
     color: colors.midGrey,
-    fontSize: 15,
-    marginTop: 20,
+    fontSize: 14,
+    marginTop: 14,
     textAlign: "center",
   },
-  empty: { alignItems: "center", gap: 8, paddingHorizontal: 24, paddingTop: 56 },
+  emptyCard: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: v3LightColors.line,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+  },
   emptyIcon: {
     alignItems: "center",
-    backgroundColor: "#ECFDF5",
-    borderRadius: 28,
-    height: 88,
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 18,
+    height: 56,
     justifyContent: "center",
-    marginBottom: 16,
-    width: 88,
+    marginBottom: 8,
+    width: 56,
   },
   emptyTitle: {
     color: colors.deepNavy,
     fontFamily: fontFamilySemiBold,
-    fontSize: 26,
+    fontSize: 20,
     textAlign: "center",
   },
   emptyBody: {
     color: colors.midGrey,
-    fontSize: 17,
-    lineHeight: 24,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: "center",
   },
-  block: { backgroundColor: "#EDEBF5", borderRadius: 999 },
+  block: { backgroundColor: v3LightColors.skel1, borderRadius: 999 },
   srOnly: { height: 1, overflow: "hidden", position: "absolute", width: 1 },
+  swipeDone: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.done,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-start",
+    paddingHorizontal: 20,
+  },
+  swipeDoneText: {
+    color: colors.white,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+  },
 });

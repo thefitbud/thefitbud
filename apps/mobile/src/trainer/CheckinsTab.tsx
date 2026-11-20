@@ -1,20 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
-import { deviceTimeZone, formatCivilDate } from "@fitbud/core";
+import {
+  addDaysToLocalDate,
+  deviceTimeZone,
+  formatCivilDate,
+  formatLocalDate,
+} from "@fitbud/core";
 import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
+import { Snackbar } from "../components/Snackbar";
+import { createIdempotencyKey } from "../lib/idempotency";
 import { localDateInTimezone } from "../lib/dates";
 import { reportError } from "../lib/reportError";
+import { scheduleUndoable, type UndoableAction } from "./attentionCards";
 import { CheckinsList } from "./checkinsList/List";
 import {
   buildCheckinListModel,
+  coachingWeekAt,
+  inboxItemFromCheckin,
   type CheckinListRow,
   type CheckinListSegment,
+  type WeekLookup,
 } from "./checkinsList/model";
 import { openContextualWhatsApp } from "./whatsapp";
 
@@ -25,17 +36,76 @@ type Props = {
 export function CheckinsTab({ onReviewCheckin }: Props) {
   const { api, refreshSession } = useAuth();
   const trainerZone = deviceTimeZone();
-  const [items, setItems] = useState<TrainerCheckinInboxItem[]>([]);
+  const [inboxItems, setInboxItems] = useState<TrainerCheckinInboxItem[]>([]);
+  const [reviewedItems, setReviewedItems] = useState<TrainerCheckinInboxItem[]>(
+    [],
+  );
+  const [weeksByRelationship, setWeeksByRelationship] = useState<WeekLookup>(
+    new Map(),
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [segment, setSegment] = useState<CheckinListSegment>("to_review");
+  const [toast, setToast] = useState<string | null>(null);
+  const [heldIds, setHeldIds] = useState<ReadonlySet<string>>(new Set());
+  const undoRef = useRef<UndoableAction | null>(null);
+  const heldRowRef = useRef<CheckinListRow | null>(null);
 
   const load = useCallback(async () => {
     setError(null);
     try {
-      const inbox = await api.listTrainerCheckinInbox();
-      setItems(inbox.items);
+      const [inbox, clients] = await Promise.all([
+        api.listTrainerCheckinInbox(),
+        api.listClients({ limit: 100 }),
+      ]);
+      setInboxItems(inbox.items);
+
+      const weeks = new Map<string, number>();
+      const now = Date.now();
+      for (const client of clients.items) {
+        if (!client.relationshipId || client.status === "ended") continue;
+        // Directory items do not carry startedAt; week labels stay optional.
+        const week = coachingWeekAt(
+          (client as { startedAt?: string | null }).startedAt,
+          now,
+        );
+        if (week != null) weeks.set(client.relationshipId, week);
+      }
+      setWeeksByRelationship(weeks);
+
+      if (segment === "reviewed") {
+        const since = addDaysToLocalDate(
+          formatLocalDate(new Date(), "UTC"),
+          -30,
+        );
+        const active = clients.items.filter(
+          (row) => row.relationshipId && row.status !== "ended",
+        );
+        const lists = await Promise.all(
+          active.slice(0, 24).map(async (client) => {
+            if (!client.relationshipId) return [] as TrainerCheckinInboxItem[];
+            try {
+              const list = await api.listCheckins(client.relationshipId, {
+                fromDate: since,
+                limit: 20,
+              });
+              return list.items
+                .filter((checkin) => checkin.status === "reviewed")
+                .map((checkin) =>
+                  inboxItemFromCheckin(checkin, {
+                    relationshipId: client.relationshipId!,
+                    traineeDisplayName: client.traineeDisplayName ?? "Client",
+                  }),
+                );
+            } catch (err) {
+              reportError("trainer.checkins.reviewed", err);
+              return [];
+            }
+          }),
+        );
+        setReviewedItems(lists.flat());
+      }
     } catch (err) {
       setError(
         err instanceof ApiClientError
@@ -45,21 +115,28 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, segment]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const today = localDateInTimezone(trainerZone);
+  const visibleInbox = useMemo(
+    () => inboxItems.filter((item) => !heldIds.has(item.checkin.id)),
+    [inboxItems, heldIds],
+  );
   const model = useMemo(
-    () => buildCheckinListModel(items, { trainerZone, today }),
-    [items, trainerZone, today],
+    () =>
+      buildCheckinListModel([...visibleInbox, ...reviewedItems], {
+        trainerZone,
+        today,
+        weeksByRelationship,
+      }),
+    [visibleInbox, reviewedItems, trainerZone, today, weeksByRelationship],
   );
 
   async function nudge(row: CheckinListRow) {
-    // The phone number lives on the client workspace; a lookup failure still
-    // opens WhatsApp with the draft so the trainer can pick the contact.
     let phone: string | null = null;
     try {
       const workspace = await api.getClientWorkspace(row.relationshipId);
@@ -70,9 +147,67 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
     }
     await openContextualWhatsApp({
       phoneE164: phone,
-      draftText: `Hi ${row.firstName}, `,
+      draftText: `Hi ${row.firstName}, your check-in is overdue — can you send it when you can?`,
     });
   }
+
+  function markReviewedFromList(row: CheckinListRow) {
+    if (row.item.checkin.status !== "submitted") return;
+    undoRef.current?.undo();
+    setHeldIds((prev) => new Set([...prev, row.id]));
+    heldRowRef.current = row;
+    setToast(`${row.firstName}'s check-in reviewed`);
+    const action = scheduleUndoable(async () => {
+      try {
+        await api.recordCheckinReview(
+          row.id,
+          { outcome: "acknowledged", notes: null },
+          createIdempotencyKey(),
+        );
+        setInboxItems((prev) => prev.filter((item) => item.checkin.id !== row.id));
+        setHeldIds((prev) => {
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
+        heldRowRef.current = null;
+      } catch (err) {
+        reportError("trainer.checkins.markReviewed", err);
+        setHeldIds((prev) => {
+          const next = new Set(prev);
+          next.delete(row.id);
+          return next;
+        });
+        setToast("Couldn't mark it reviewed. Try again.");
+        heldRowRef.current = null;
+      } finally {
+        undoRef.current = null;
+      }
+    });
+    undoRef.current = action;
+  }
+
+  function undoMarkReviewed() {
+    if (!undoRef.current?.undo()) return;
+    const row = heldRowRef.current;
+    if (row) {
+      setHeldIds((prev) => {
+        const next = new Set(prev);
+        next.delete(row.id);
+        return next;
+      });
+    }
+    heldRowRef.current = null;
+    undoRef.current = null;
+    setToast(null);
+  }
+
+  const overdueHint =
+    segment === "overdue" && model.overdue.length === 1
+      ? `${model.overdue[0]!.firstName}'s reminders may be paused, so they may not have seen it.`
+      : segment === "overdue" && model.overdue.length > 1
+        ? "Some clients may have reminders paused."
+        : null;
 
   return (
     <Screen
@@ -87,7 +222,6 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
         void load().finally(() => setRefreshing(false));
       }}
     >
-      {/* Frame 50 (Android) has no date line above the title. */}
       {Platform.OS === "android" ? null : (
         <Text style={styles.eyebrow}>{formatCivilDate(today)}</Text>
       )}
@@ -99,10 +233,26 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
         loading={loading}
         model={model}
         segment={segment}
-        onSegmentChange={setSegment}
+        onSegmentChange={(next) => {
+          setSegment(next);
+          if (next === "reviewed") setLoading(true);
+        }}
         onReview={(row) => onReviewCheckin(row.item)}
-        onWhatsApp={(row) => void nudge(row)}
+        onNudge={(row) => void nudge(row)}
+        footerHint={overdueHint}
+        onMarkReviewed={markReviewedFromList}
       />
+      {toast ? (
+        <Snackbar
+          leadingCheck
+          message={toast}
+          actionLabel={heldRowRef.current ? "Undo" : undefined}
+          onAction={heldRowRef.current ? undoMarkReviewed : undefined}
+          onDismiss={() => {
+            if (!heldRowRef.current) setToast(null);
+          }}
+        />
+      ) : null}
     </Screen>
   );
 }

@@ -166,18 +166,21 @@ describe("saved review helpers", () => {
 });
 
 describe("CheckinReviewScreen", () => {
-  it("shows rating tiles, measurements with a since line and the review sheet", async () => {
+  it("shows ratings, measurements and Mark reviewed / Reply (TM-06a)", async () => {
+    api.getCheckinReviewContext.mockImplementation(async () => context(false));
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
     expect(await screen.findByText("3 of 5")).toBeTruthy();
     expect(screen.getAllByText("4 of 5")).toHaveLength(2);
-    expect(screen.getByText("What went well?")).toBeTruthy();
+    expect(screen.getByText("Hit my protein most days.")).toBeTruthy();
     expect(screen.getByText("86.4 kg")).toBeTruthy();
     expect(screen.getByText(/−0\.5 since Fri 9 Oct/)).toBeTruthy();
-    expect(screen.getByText("Save review")).toBeTruthy();
+    expect(screen.getByText("Mark reviewed")).toBeTruthy();
+    expect(screen.getByText("Reply")).toBeTruthy();
   });
 
   it("shows only this check-in's uploaded photos as thumbnails", async () => {
     api.getDownloadTarget.mockClear();
+    api.getCheckinReviewContext.mockImplementation(async () => context(false));
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
     await screen.findByText("Photos");
     await waitFor(() => expect(screen.getAllByLabelText("Check-in photo")).toHaveLength(2));
@@ -187,9 +190,8 @@ describe("CheckinReviewScreen", () => {
     expect(screen.getByText("2")).toBeTruthy();
   });
 
-  it("stays on the screen after saving and turns read-only", async () => {
+  it("Mark reviewed stays on screen and turns read-only", async () => {
     const onBack = vi.fn();
-    // The screen reloads after saving; the server then returns the review.
     let saved = false;
     api.recordCheckinReview.mockImplementationOnce(async () => {
       saved = true;
@@ -197,21 +199,15 @@ describe("CheckinReviewScreen", () => {
     });
     api.getCheckinReviewContext.mockImplementation(async () => context(saved));
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={onBack} onOpenClient={vi.fn()} />);
-    fireEvent.change(await screen.findByLabelText("Add a note for Rohan"), {
-      target: { value: "Weekend leg day works." },
-    });
-    fireEvent.click(screen.getByText("Save review"));
-    await waitFor(() => expect(screen.getByText("Check-in item closed in Attention")).toBeTruthy());
+    fireEvent.click(await screen.findByText("Mark reviewed"));
+    await waitFor(() => expect(screen.getByText("Your reply")).toBeTruthy());
     expect(onBack).not.toHaveBeenCalled();
     expect(api.recordCheckinReview).toHaveBeenCalledTimes(1);
-    expect(screen.getByText("Review saved · shared with Rohan")).toBeTruthy();
-    expect(screen.getByText("Needs follow-up · Sun 18 Oct, 9:46 am")).toBeTruthy();
-    expect(screen.getByText("Visible to Rohan")).toBeTruthy();
-    expect(screen.queryByText("Save review")).toBeNull();
-    expect(screen.queryByLabelText("Add a note for Rohan")).toBeNull();
+    expect(screen.getByText("Review saved")).toBeTruthy();
+    expect(screen.queryByText("Mark reviewed")).toBeNull();
   });
 
-  it("review saved but note failed: read-only, honest message, nothing claimed as shared", async () => {
+  it("Reply + mark reviewed: note failure stays honest", async () => {
     let saved = false;
     api.recordCheckinReview.mockImplementationOnce(async () => {
       saved = true;
@@ -220,27 +216,26 @@ describe("CheckinReviewScreen", () => {
     api.createTrainerNote.mockRejectedValueOnce(new Error("boom"));
     api.getCheckinReviewContext.mockImplementation(async () => context(saved, false));
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    fireEvent.click(await screen.findByText("Reply"));
     fireEvent.change(await screen.findByLabelText("Add a note for Rohan"), {
       target: { value: "Weekend leg day works." },
     });
-    fireEvent.click(screen.getByText("Save review"));
-    await waitFor(() => expect(screen.getByText("Check-in item closed in Attention")).toBeTruthy());
-    expect(screen.getByText("Review saved. The note wasn't shared.")).toBeTruthy();
-    expect(screen.queryByText("Couldn't load. Pull to try again.")).toBeNull();
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() =>
+      expect(screen.getByText("Review saved. The note wasn't shared.")).toBeTruthy(),
+    );
     expect(screen.queryByText(/shared with Rohan/)).toBeNull();
-    expect(screen.queryByText("Visible to Rohan")).toBeNull();
-    expect(screen.queryByText("Save review")).toBeNull();
+    expect(screen.queryByText("Mark reviewed")).toBeNull();
   });
 
-  it("one press on the Visible to row toggles exactly once", async () => {
+  it("Reply sheet offers Also mark reviewed and Send (TM-06b)", async () => {
     api.getCheckinReviewContext.mockImplementation(async () => context(false));
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
-    await screen.findByText("Visible to Rohan");
-    expect(screen.getByText("He'll see this note on his Today screen")).toBeTruthy();
-    fireEvent.click(screen.getByText("Visible to Rohan"));
-    expect(screen.getByText("Only you see this note")).toBeTruthy();
-    fireEvent.click(screen.getAllByRole("switch")[0]!);
-    expect(screen.getByText("He'll see this note on his Today screen")).toBeTruthy();
+    fireEvent.click(await screen.findByText("Reply"));
+    expect(screen.getByText("Also mark reviewed")).toBeTruthy();
+    expect(screen.getByText("Send")).toBeTruthy();
+    expect(screen.getByText("Cancel")).toBeTruthy();
+    expect(screen.getByLabelText("Add a note for Rohan")).toBeTruthy();
   });
 
   it("partial save reports a non-API note failure", async () => {
@@ -254,11 +249,14 @@ describe("CheckinReviewScreen", () => {
     api.getCheckinReviewContext.mockImplementation(async () => context(saved, false));
     reportError.mockClear();
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
+    fireEvent.click(await screen.findByText("Reply"));
     fireEvent.change(await screen.findByLabelText("Add a note for Rohan"), {
       target: { value: "Weekend leg day works." },
     });
-    fireEvent.click(screen.getByText("Save review"));
-    await waitFor(() => expect(screen.getByText("Review saved. The note wasn't shared.")).toBeTruthy());
+    fireEvent.click(screen.getByText("Send"));
+    await waitFor(() =>
+      expect(screen.getByText("Review saved. The note wasn't shared.")).toBeTruthy(),
+    );
     expect(reportError).toHaveBeenCalledWith("checkinReview.save", boom);
   });
 });
@@ -327,6 +325,7 @@ describe("CheckinReviewScreen on the demo seed's form", () => {
                 sleep: 2,
                 pain: false,
                 wellbeing: "Positive week, felt in control of food",
+                notes: "Weight is stuck for 2 weeks, what to do?",
               },
             }
           : null,
@@ -334,20 +333,17 @@ describe("CheckinReviewScreen on the demo seed's form", () => {
     });
   }
 
-  it("renders the submitted check-in's answers, measurement and review sheet", async () => {
+  it("renders the submitted check-in's answers, measurement and Mark reviewed", async () => {
     api.getCheckinReviewContext.mockImplementation(async () => seedContext("submitted"));
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
     expect(await screen.findByText("How did training feel?")).toBeTruthy();
     expect(screen.getByText("4 of 5")).toBeTruthy();
     expect(screen.getByText("2 of 5")).toBeTruthy();
-    expect(screen.getByText("How many planned workouts did you complete?")).toBeTruthy();
-    expect(screen.getByText("All")).toBeTruthy();
-    expect(screen.getByText("Any pain or niggles?")).toBeTruthy();
-    expect(screen.getByText("No")).toBeTruthy();
     expect(screen.getByText("Positive week, felt in control of food")).toBeTruthy();
     expect(screen.getByText("Weight is stuck for 2 weeks, what to do?")).toBeTruthy();
-    expect(screen.getByText("55.7 kg")).toBeTruthy();
-    expect(screen.getByText("Save review")).toBeTruthy();
+    expect(screen.getAllByText("55.7 kg").length).toBeGreaterThan(0);
+    expect(screen.getByText("Mark reviewed")).toBeTruthy();
+    expect(screen.getByText("Reply")).toBeTruthy();
     expect(screen.queryByText(/not submitted yet/)).toBeNull();
   });
 
@@ -356,10 +352,10 @@ describe("CheckinReviewScreen on the demo seed's form", () => {
     api.recordCheckinReview.mockClear();
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
     expect(await screen.findByText("Due Mon 16 Nov · not submitted yet")).toBeTruthy();
-    expect(screen.getByText(/Meals logged/)).toBeTruthy();
-    expect(screen.queryByText("Save review")).toBeNull();
+    expect(screen.getByText(/has started but not sent it/)).toBeTruthy();
+    expect(screen.queryByText("Mark reviewed")).toBeNull();
+    expect(screen.queryByText("Reply")).toBeNull();
     expect(screen.queryByLabelText("Add a note for Rohan")).toBeNull();
-    expect(screen.queryByText("Check-in item closed in Attention")).toBeNull();
     expect(api.recordCheckinReview).not.toHaveBeenCalled();
   });
 });
