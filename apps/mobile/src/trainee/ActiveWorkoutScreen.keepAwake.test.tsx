@@ -1,8 +1,8 @@
 /**
  * Z12-57: the active workout keeps the screen awake through `expo-keep-awake`
- * (`useKeepAwake` on the screen; `activateWorkoutKeepAwake` for the
- * programmatic path). Z11b-3's `requireOptionalNativeModule("ExpoKeepAwake")`
- * remains the fallback when the package path throws.
+ * via `activateWorkoutKeepAwake` on mount. Z11b-3's
+ * `requireOptionalNativeModule("ExpoKeepAwake")` remains the fallback when the
+ * package path throws.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workoutExecutionSchema, type WorkoutExecution } from "@fitbud/contracts";
@@ -155,9 +155,11 @@ beforeEach(() => {
 });
 
 describe("active workout keep-awake", () => {
-  it("calls useKeepAwake on mount with the workout tag", () => {
+  it("activates keep-awake on mount with the workout tag", () => {
     mount();
-    expect(keepAwake.useKeepAwake).toHaveBeenCalledWith("fitbud-active-workout");
+    expect(keepAwake.activateKeepAwakeAsync).toHaveBeenCalledWith(
+      "fitbud-active-workout",
+    );
   });
 
   it("activateWorkoutKeepAwake uses expo-keep-awake", async () => {

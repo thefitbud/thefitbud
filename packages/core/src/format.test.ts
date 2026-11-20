@@ -50,6 +50,13 @@ describe("canonicalShortMonth / formatInstant", () => {
     expect(out).toMatch(/\bSep\b/);
     expect(out).not.toMatch(/\bSept\b/);
   });
+
+  it("includes a clock time via formatClockTime (not empty Hermes hour parts)", () => {
+    // 2026-10-08T13:30:00.000Z = 7:00 pm Asia/Kolkata
+    const out = formatInstant("2026-10-08T13:30:00.000Z", "Asia/Kolkata");
+    expect(out).toContain("7:00 pm");
+    expect(out).not.toMatch(/,\s*:/);
+  });
 });
 
 describe("formatRelative", () => {

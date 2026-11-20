@@ -290,6 +290,11 @@ function mapExecution(bundle: ExecutionBundle) {
  * otherwise `setCompletionIsModified` decides. Omitted reps or load keep the
  * prescribed values (no re-entry).
  */
+/** A set the trainee logged with values (as planned or changed). */
+function wasLoggedSet(status: string): boolean {
+  return status === "completed" || status === "modified";
+}
+
 function resolveSetCompletion(
   setRow: { prescribedReps: number | null; prescribedLoadLabel: string | null },
   input: {
@@ -1258,7 +1263,7 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete.",
-    description: `Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete. ${FUTURE_DAY_OPENAPI_NOTE}`,
+    description: `Logs one set of an open workout. A set that was already logged or skipped can be logged again while the workout is open: the latest values stand and the first logged time is kept. 409 INVALID_TRANSITION once the workout is finished. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
     errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     body: completeSetRequestSchema,
@@ -1299,10 +1304,10 @@ workoutRoutes.post(
     if (!setRow) {
       return fail(c, 404, "SET_NOT_FOUND", "Set execution not found.");
     }
-    if (setRow.status !== "pending") {
-      return fail(c, 409, "SET_ALREADY_RECORDED", "Set already recorded.");
-    }
-
+    // Z12-45 (W-13): while the workout is open the trainee may log a set
+    // again, to correct what they logged or to log a set they had skipped.
+    // The latest log stands. A finished workout is refused above
+    // (INVALID_TRANSITION), so a coach never sees a closed session change.
     const { status: setStatus, actualReps, actualLoadLabel, loadColumns } =
       resolveSetCompletion(setRow, parsed.data);
     const modified = setStatus === "modified";
@@ -1315,7 +1320,10 @@ workoutRoutes.post(
         actualReps,
         actualLoadLabel,
         ...loadColumns,
-        completedAt: now,
+        // A correction keeps the time the set was first logged.
+        completedAt: wasLoggedSet(setRow.status)
+          ? (setRow.completedAt ?? now)
+          : now,
         updatedAt: now,
       })
       .where(eq(setExecutions.id, setRow.id));
@@ -1357,7 +1365,7 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/skip.",
-    description: `Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/skip. ${FUTURE_DAY_OPENAPI_NOTE}`,
+    description: `Skips one set of an open workout. A set that was already logged can be skipped while the workout is open, which clears what was logged. 409 INVALID_TRANSITION once the workout is finished. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
     errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
     response: workoutExecutionSchema,
@@ -1388,16 +1396,21 @@ workoutRoutes.post(
     if (!setRow) {
       return fail(c, 404, "SET_NOT_FOUND", "Set execution not found.");
     }
-    if (setRow.status !== "pending") {
-      return fail(c, 409, "SET_ALREADY_RECORDED", "Set already recorded.");
-    }
-
+    // Z12-45 (W-08, W-13 "Mark not done"): while the workout is open a set
+    // the trainee logged can be turned into a skipped one. What was logged
+    // is cleared, so a skipped set never carries reps or a load.
     const now = nowIso();
     await db
       .update(setExecutions)
       .set({
-        // Load columns stay as written at workout start (the row is pending, Z6-15).
         status: "skipped",
+        actualReps: null,
+        actualLoadLabel: null,
+        // Back to the columns a set has before it is logged (Z6-15).
+        ...resolveSetLoad({
+          prescribedLoadLabel: setRow.prescribedLoadLabel,
+          actualLoadLabel: null,
+        }),
         completedAt: now,
         updatedAt: now,
       })

@@ -1,0 +1,77 @@
+appId: com.thefitbud.mobile.staging
+name: F06 Interruptions, part 3 (back online; light finishes early, dark discards)
+tags:
+  - device
+  - trainee
+  - z12-45
+---
+# Continues from F06b: Rohan is in the active log and the network is back.
+# Ends each theme's session a different way, so both are proven on the device:
+#   light: Finish → "Finish early?" → Finish anyway → the summary (W-17a), which
+#          counts the sets that were logged, not the plan's.
+#   dark:  Discard workout → confirm → the Workout tab, with nothing left to
+#          continue on that day (the server records the workout as skipped).
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 30000
+# Back online: the next send goes through and the header stops saying Offline.
+- extendedWaitUntil:
+    notVisible: "Offline · sets save on your phone"
+    timeout: 120000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- light: finish early ------------------------------------------------------------
+- runFlow:
+    when:
+      true: ${DEVICE_THEME != 'dark'}
+    commands:
+      - tapOn: "Finish workout"
+      - assertVisible: "Finish early\\?"
+      - runFlow:
+          when:
+            visible: "How hard was the session\\?"
+          commands:
+            - tapOn: "RPE 7.*"
+      - tapOn: "Finish anyway"
+      - extendedWaitUntil:
+          visible: "Workout done"
+          timeout: 30000
+      - takeScreenshot: z12-45-finished-early-summary
+      - tapOn: "Save and share with .*"
+      - extendedWaitUntil:
+          visible: "This week"
+          timeout: 15000
+      - tapOn: "Done"
+      - extendedWaitUntil:
+          visible: "View summary"
+          timeout: 30000
+      - assertNotVisible: "Continue workout"
+      - assertNotVisible: "Minimise workout"
+
+# ---- dark: discard ---------------------------------------------------------------------
+- runFlow:
+    when:
+      true: ${DEVICE_THEME == 'dark'}
+    commands:
+      - scrollUntilVisible:
+          element: "Discard workout"
+          direction: DOWN
+          timeout: 30000
+      - tapOn: "Discard workout"
+      - assertVisible: "Discard this workout\\?"
+      - tapOn:
+          text: "Discard workout"
+          below: "Discard this workout\\?"
+      - extendedWaitUntil:
+          visible: "Diet"
+          timeout: 30000
+      - extendedWaitUntil:
+          notVisible: "Loading workouts…"
+          timeout: 30000
+      - assertNotVisible: "Minimise workout"
+      - assertNotVisible: "Continue workout"
+      - assertNotVisible: "Pick up where you left off\\?"
+      - takeScreenshot: z12-45-discarded-day
+- runFlow: ../../common/assert-no-crash.yaml

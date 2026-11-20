@@ -334,7 +334,11 @@ describe("ClientOverviewPage week nav + activity (Z12-6)", () => {
       header: { startedAt: "2026-08-04T04:30:00.000Z" },
     });
     expect(await screen.findByRole("heading", { name: "This week" })).toBeTruthy();
-    expect(screen.getByText(/Mon 16 Nov – Sun 22 Nov · week 16/)).toBeTruthy();
+    // Await the week caption: under load the mock can still read "Loading week…"
+    // after the heading paints (Z12-46fu CI flake on run 44486303892).
+    expect(
+      await screen.findByText(/Mon 16 Nov – Sun 22 Nov · week 16/),
+    ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Previous week" })).toBeTruthy();
     const next = screen.getByRole("button", { name: "Next week" });
     expect(next.hasAttribute("disabled")).toBe(true);

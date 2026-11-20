@@ -14,11 +14,11 @@
 }
 
 .shell-crumb-link:hover {
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
 }
 
 .shell-crumb-link:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -44,7 +44,7 @@
 }
 
 .shell-menu-btn:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -82,6 +82,7 @@
   }
 
   .app-shell.is-nav-open .shell-side .shell-brand b,
+  .app-shell.is-nav-open .shell-side .ui-lockup-words,
   .app-shell.is-nav-open .shell-side .shell-nav-label,
   .app-shell.is-nav-open .shell-side .shell-me-text,
   .app-shell.is-nav-open .shell-side .shell-nav-badge {

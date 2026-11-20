@@ -132,7 +132,7 @@ export function liveActivityContentFor(
 
   // Last: the set before this one (as logged, else as prescribed, like the
   // screen's "Previous" column), else the previous session's same set, else
-  // unknown: the activity then shows no "Last" (the screen says "first time").
+  // unknown: the activity then shows no "Last" (the screen says "— first").
   let lastKg = planKg;
   let lastReps = planReps;
   let lastKnown = true;
