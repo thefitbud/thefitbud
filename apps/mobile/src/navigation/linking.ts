@@ -126,6 +126,12 @@ export function routeFromParsedLink(link: ParsedDeepLink): ResolvedAppRoute {
     case "meal":
       return { type: "meal", assignmentId: link.id };
     case "workout":
+      // Z12-48 Live Activity Open / tile: ?active=1 → W-03 (active log).
+      // TraineeShell must resume the running execution for workout_active;
+      // until then workoutOpenUrl keeps the query-only fallback.
+      if (link.query?.active === "1" || link.query?.active === "true") {
+        return { type: "workout_active", assignmentId: link.id };
+      }
       return { type: "workout_overview", assignmentId: link.id };
     case "checkin":
       return { type: "checkin", checkinId: link.id };

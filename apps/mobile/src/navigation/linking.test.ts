@@ -44,4 +44,23 @@ describe("routeFromParsedLink", () => {
       requestId: "r",
     });
   });
+
+  it("maps Live Activity Open (?active=1) to the active log (W-03)", () => {
+    expect(
+      parseDeepLinkUrl(
+        "fitbud://workout/22222222-2222-4222-8222-222222222222?active=1",
+      ),
+    ).toEqual({
+      kind: "workout",
+      id: "22222222-2222-4222-8222-222222222222",
+      query: { active: "1" },
+    });
+    expect(
+      routeFromParsedLink({
+        kind: "workout",
+        id: "a",
+        query: { active: "1" },
+      }),
+    ).toEqual({ type: "workout_active", assignmentId: "a" });
+  });
 });
