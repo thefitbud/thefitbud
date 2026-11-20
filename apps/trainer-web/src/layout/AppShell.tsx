@@ -36,7 +36,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { useConfig } from "../lib/config";
 import { apiClient } from "../lib/api";
 import { stage1Api } from "../lib/stage1-api";
-import { BrandMark } from "../components/BrandMark";
+import { LogoLockup } from "../components/ui/LogoLockup";
 import {
   getShellClientTitle,
   subscribeShellClientTitle,
@@ -602,8 +602,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <aside className="shell-side" aria-label="Primary" id="shell-side-nav">
         <div className="shell-brand">
-          <BrandMark size={34} variant="inverse" />
-          <b>FitBud</b>
+          <LogoLockup />
         </div>
         <nav className="shell-nav" aria-label="Primary">
           {navItems}

@@ -160,7 +160,7 @@
 .libraries-source-trigger.has-selection {
   background: var(--coach-tint, var(--pale-lavender));
   border-color: transparent;
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .libraries-source-trigger:focus-visible {
@@ -334,7 +334,7 @@
 
 .libraries-source-chip.is-mine {
   background: var(--coach-tint, var(--pale-lavender));
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .libraries-row-chevron {
@@ -457,7 +457,7 @@
   padding: 0.85rem 0.95rem;
   border-radius: 12px;
   background: var(--coach-tint, var(--pale-lavender));
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
   font-size: 0.8125rem;
   line-height: 1.45;
 }
