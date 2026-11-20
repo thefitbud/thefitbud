@@ -1,0 +1,211 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 3 flows failed",
+    "dark: 2 of 3 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F16-expiry-errors-ended.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F16 Ended coaching and the coach's restart request (Z12-49)",
+          "message": "Element not found: Text matching regex: Sign out"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 1,
+      "failed": 2,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|This week|Rest day|Recovery is part of the plan|View summary|Needs you.*|Choose mode|preparing your plan\" is visible"
+        },
+        {
+          "flow": "F16 Ended coaching and the coach's restart request (Z12-49)",
+          "message": "Element not found: Text matching regex: Sign out"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 113 s",
+      "mode": "cache-hit",
+      "seconds": 113,
+      "cacheKey": "device-native-ios-c30787716725700d8fa2cdb48f53f503dbf3f34b"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.917 (9), dark 0.356 (10)",
+      "light": 0.917,
+      "dark": 0.356,
+      "count": {
+        "light": 9,
+        "dark": 10
+      },
+      "shots": [
+        {
+          "file": "TR-22a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.115
+        },
+        {
+          "file": "TR-22a-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.937
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-004-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.091
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.098
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.951
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.933
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.901
+        },
+        {
+          "file": "step-025-assertCondition-Today_s_workout.This_wee-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.091
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.933
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.957
+        },
+        {
+          "file": "step-041-tapOnElement-Sign_out-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.115
+        },
+        {
+          "file": "step-043-tapOnElement-Sign_out-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "z12-49-ended-code-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.121
+        },
+        {
+          "file": "z12-49-ended-code-light-ios.png",
+          "theme": "light",
+          "luma": 0.707
+        },
+        {
+          "file": "z12-49-past-coaching-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.111
+        },
+        {
+          "file": "z12-49-past-coaching-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

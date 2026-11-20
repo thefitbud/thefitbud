@@ -1,0 +1,107 @@
+{
+  "result": "mean screenshot luminance: light 0.917 (9), dark 0.356 (10)",
+  "light": 0.917,
+  "dark": 0.356,
+  "count": {
+    "light": 9,
+    "dark": 10
+  },
+  "shots": [
+    {
+      "file": "TR-22a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "TR-22a-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.937
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.091
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "step-025-assertCondition-Today_s_workout.This_wee-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.091
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.957
+    },
+    {
+      "file": "step-041-tapOnElement-Sign_out-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "step-043-tapOnElement-Sign_out-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "z12-49-ended-code-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.121
+    },
+    {
+      "file": "z12-49-ended-code-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "z12-49-past-coaching-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.111
+    },
+    {
+      "file": "z12-49-past-coaching-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    }
+  ],
+  "w03DarkTooBright": []
+}

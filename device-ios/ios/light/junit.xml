@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - F81C7A2F-FFD8-48C6-B55E-46B6DDADEB75" tests="3" failures="1" time="494.912" timestamp="2026-11-20T16:38:05">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="160.324" timestamp="2026-11-20T16:38:05" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="197.713" timestamp="2026-11-20T16:40:46" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F16 Ended coaching and the coach's restart request (Z12-49)" name="F16 Ended coaching and the coach's restart request (Z12-49)" classname="F16 Ended coaching and the coach's restart request (Z12-49)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F16-expiry-errors-ended.yaml" time="136.677" timestamp="2026-11-20T16:44:04" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+      <failure>Element not found: Text matching regex: Sign out</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

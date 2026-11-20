@@ -1,0 +1,97 @@
+{
+  "result": "mean screenshot luminance: light 0.901 (9), dark 0.419 (8)",
+  "light": 0.901,
+  "dark": 0.419,
+  "count": {
+    "light": 9,
+    "dark": 8
+  },
+  "shots": [
+    {
+      "file": "TR-22a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "TR-22a-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.919
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.919
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-041-tapOnElement-Sign_out-dark-android.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "step-041-tapOnElement-Sign_out-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "z12-49-ended-code-dark-android.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "z12-49-ended-code-light-android.png",
+      "theme": "light",
+      "luma": 0.695
+    },
+    {
+      "file": "z12-49-past-coaching-dark-android.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "z12-49-past-coaching-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    }
+  ],
+  "w03DarkTooBright": []
+}
