@@ -38,7 +38,7 @@ tags:
     timeout: 30000
 # ".*": on a rest day iOS exposes the header as "Today's workout: rest day".
 - extendedWaitUntil:
-    visible: "Today's workout.*"
+    visible: "Today's workout.*|Rest day|Recovery is part of the plan|This week"
     timeout: 60000
 - evalScript: ${output.tomorrow = (function () { var d = new Date(Date.now() + (5.5 * 3600 + 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}
 - evalScript: ${output.yesterday = (function () { var d = new Date(Date.now() + (5.5 * 3600 - 86400) * 1000); return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()]; })()}

@@ -35,7 +35,7 @@
 }
 
 .settings-signout:focus-visible {
-  outline: 2px solid var(--indigo, var(--brand, var(--ink)));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -54,8 +54,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: color-mix(in srgb, var(--indigo, var(--brand, #4527c6)) 14%, white);
-  color: var(--indigo, var(--brand, #4527c6));
+  background: color-mix(in srgb, var(--brand) 14%, white);
+  color: var(--brand);
   font-weight: 700;
   font-size: 1.25rem;
   letter-spacing: 0.02em;
@@ -84,8 +84,8 @@
 
 .settings-change-photo:hover,
 .settings-change-photo:focus-visible {
-  border-color: var(--indigo, var(--brand));
-  outline: 2px solid var(--indigo, var(--brand));
+  border-color: var(--brand);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -207,7 +207,7 @@
 }
 
 .settings-switch:checked {
-  background: var(--indigo, var(--brand, #4527c6));
+  background: var(--brand);
 }
 
 .settings-switch:checked::after {
@@ -215,7 +215,7 @@
 }
 
 .settings-switch:focus-visible {
-  outline: 2px solid var(--indigo, var(--brand));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 

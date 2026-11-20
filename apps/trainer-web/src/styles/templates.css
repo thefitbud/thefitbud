@@ -85,7 +85,7 @@
   justify-content: center;
   border-radius: 10px;
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .templates-switch {
@@ -146,7 +146,7 @@
 }
 
 .templates-filter-search:focus-within {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -257,7 +257,7 @@
 
 .templates-item.is-selected {
   border-color: #c9c0f5;
-  box-shadow: inset 0 3px 0 var(--indigo), var(--shadow);
+  box-shadow: inset 0 3px 0 var(--brand), var(--shadow);
 }
 
 .templates-item-top {
@@ -282,7 +282,7 @@
   padding: 0.125rem 0.625rem;
   border-radius: 999px;
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -294,7 +294,7 @@
 
 .templates-type-combined {
   background: #eef2ff;
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .templates-item-actions {
@@ -573,7 +573,7 @@
 .templates-item button:focus-visible,
 .templates-switch button:focus-visible,
 .templates-hero button:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 

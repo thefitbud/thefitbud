@@ -120,3 +120,48 @@ export function restAlarmPlan(input: RestCountdownInput, now: number): RestAlarm
     fireAtMs: render.kind === "resting" ? (input.restEndsAt as number) : null,
   };
 }
+
+/* -------------------------------------------------------------------------- */
+/* What the in-app rest bar reads (Z12-45, W-05a)                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The whole seconds a running rest shows. Every surface counts down to the
+ * same `restEndsAt` and shows the seconds still to go rounded up: a 90 s rest
+ * opens on 1:30, reads 0:01 through its last second, and is over (no clock at
+ * all, see `restCountdownRender`) at the end instant. The in-app bar derives
+ * its text from this at every tick and never keeps a counter of its own, so
+ * it cannot drift from the lock-screen countdown, which counts to the same
+ * instant (Z12-48).
+ */
+export function restSecondsShown(render: RestCountdownRender): number {
+  if (render.kind !== "resting") return 0;
+  return Math.max(1, Math.ceil(render.remainingMs / 1000));
+}
+
+/** "1:30", "0:58": minutes and two-digit seconds. */
+export function formatRestClock(totalSeconds: number): string {
+  const safe = Math.max(0, Math.floor(totalSeconds));
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
+}
+
+/** The part of the rest already spent, 0 to 1, for the bar's fill. */
+export function restElapsedFraction(render: RestCountdownRender): number {
+  if (render.kind !== "resting" || render.totalMs <= 0) return 1;
+  return Math.min(1, Math.max(0, render.elapsedMs / render.totalMs));
+}
+
+/**
+ * A rest moved by `deltaSeconds` (the −15 / +15 keys). The planned length
+ * follows, so the fill stays a share of the rest as it now is; a rest moved
+ * to its end or before it is over, and null says so.
+ */
+export function adjustRest(
+  rest: { endsAt: number; seconds: number },
+  deltaSeconds: number,
+  now: number,
+): { endsAt: number; seconds: number } | null {
+  const endsAt = rest.endsAt + deltaSeconds * 1000;
+  if (endsAt <= now) return null;
+  return { endsAt, seconds: Math.max(1, rest.seconds + deltaSeconds) };
+}

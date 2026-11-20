@@ -695,7 +695,7 @@ function TodayTabInner({
         void onRefresh();
       }}
     >
-      <View style={styles.stack}>
+      <View style={styles.stack} testID="trainee-today">
         <TodayHeader
           eyebrow={dayEyebrow(selectedDate, dayState.kind)}
           unreadNotifications={unreadNotifications}
@@ -961,6 +961,7 @@ function TodayTabInner({
         {restDay ? (
           <View
             style={styles.restCard}
+            testID="today-rest-day"
             accessibilityLabel="Rest day. Recovery is part of the plan"
           >
             <View style={styles.restChip}>
@@ -1308,8 +1309,12 @@ function TodayTabInner({
               <Text style={styles.secTitle}>From your coach</Text>
             </View>
             <View style={styles.card}>
-              {coachNotes.map((note) => (
-                <View key={note.id} style={styles.note}>
+              {coachNotes.map((note, index) => (
+                <View
+                  key={note.id}
+                  testID={index === 0 ? "coach-note-first" : `coach-note-${index}`}
+                  style={[styles.note, index === 0 ? styles.noteFirst : null]}
+                >
                   <Text style={styles.noteBody}>{note.body}</Text>
                   <Text style={styles.noteMeta}>
                     {note.seenAt ? "Read" : "New"} ·{" "}
@@ -1634,6 +1639,10 @@ const useStyles = createThemedStyles((t) => ({
     borderTopWidth: StyleSheet.hairlineWidth,
     gap: spacing.xs,
     paddingTop: spacing.sm,
+  },
+  noteFirst: {
+    borderTopWidth: 0,
+    paddingTop: 0,
   },
   noteBody: {
     color: t.colors.ink2,

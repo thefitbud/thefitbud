@@ -8,6 +8,7 @@ import type {
 } from "@fitbud/contracts";
 import { formatClockTime } from "@fitbud/core";
 import { addDays, startOfWeekMonday } from "../lib/dates";
+import { exerciseNameKey } from "./workoutSession";
 
 export type WeekStripStatus = "done" | "miss" | "rest" | "today" | "future";
 
@@ -173,64 +174,13 @@ export function previousSetLabel(
   const key = `${exercise.exerciseId}:${set.order}`;
   const fromHistory = historyByKey[key];
   if (fromHistory) return fromHistory;
-  if (set.order === 1) return "— first time";
+  // Short: "— first time" truncated to "— first…" in the Previous column on iOS (FitBud W-03).
+  if (set.order === 1) return "— first";
   const prescribedPrior = formatLoadRepsPair(
     set.prescribedLoadLabel,
     set.prescribedReps,
   );
   return prescribedPrior || "—";
-}
-
-export async function loadPreviousSetHistory(
-  api: {
-    listWorkoutAssignments: (
-      relationshipId: string,
-      query: { fromDate: string; toDate: string },
-    ) => Promise<{ items: WorkoutAssignment[] }>;
-    getWorkoutExecution: (id: string) => Promise<WorkoutExecution>;
-  },
-  assignment: WorkoutAssignment,
-  today: string,
-): Promise<Record<string, string>> {
-  const map: Record<string, string> = {};
-  try {
-    const listed = await api.listWorkoutAssignments(
-      assignment.coachingRelationshipId,
-      {
-        fromDate: addDays(today, -84),
-        toDate: addDays(today, -1),
-      },
-    );
-    const candidates = (listed.items as WorkoutAssignment[])
-      .filter(
-        (item) =>
-          item.id !== assignment.id &&
-          item.workoutDayId === assignment.workoutDayId &&
-          (item.status === "completed" || item.status === "modified") &&
-          item.execution?.id,
-      )
-      .sort(
-        (a, b) =>
-          b.localDate.localeCompare(a.localDate) ||
-          Date.parse(b.windowStartsAt) - Date.parse(a.windowStartsAt),
-      );
-    const latest = candidates[0];
-    if (!latest?.execution?.id) return map;
-    const exec = await api.getWorkoutExecution(latest.execution.id);
-    for (const exercise of exec.exercises) {
-      for (const set of exercise.sets) {
-        if (set.status === "pending") continue;
-        const label = formatLoadRepsPair(
-          set.actualLoadLabel ?? set.prescribedLoadLabel,
-          set.actualReps ?? set.prescribedReps,
-        );
-        map[`${exercise.exerciseId}:${set.order}`] = label;
-      }
-    }
-  } catch {
-    // Offline / errors — column falls back to in-session values.
-  }
-  return map;
 }
 
 export type PlanChangeRow = {
@@ -324,4 +274,236 @@ export function exerciseInstructionsFor(
   const match = assignment.workoutDay.exercises.find((ex) => ex.id === exerciseId);
   const note = match?.instructions?.trim();
   return note || null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Exercise history and records for the active log (Z12-45: W-12, W-26)        */
+/* -------------------------------------------------------------------------- */
+
+/** One logged set as History lists it: "42.5 kg × 10", "12 reps". */
+export type HistorySet = { order: number; label: string; kg: number | null };
+
+/** One earlier session of a workout day, newest first in the list. */
+export type HistorySession = {
+  assignmentId: string;
+  workoutDayName: string;
+  localDate: string;
+  /** Logged sets by exercise name (`exerciseNameKey`): plan versions renumber ids. */
+  setsByExerciseName: Record<string, HistorySet[]>;
+};
+
+export type WorkoutHistory = {
+  /** `${exerciseId}:${setOrder}` → "37.5 × 10": the Previous column. */
+  previousByKey: Record<string, string>;
+  /** Earlier finished sessions of this workout day, newest first. */
+  sessions: HistorySession[];
+};
+
+export const EMPTY_WORKOUT_HISTORY: WorkoutHistory = {
+  previousByKey: {},
+  sessions: [],
+};
+
+/** How many earlier sessions History shows. */
+export const HISTORY_SESSIONS = 3;
+
+function kgOfLabel(label: string | null | undefined): number | null {
+  const match = label?.trim().match(/^(\d+(?:\.\d+)?)\s*kg$/i);
+  if (!match) return null;
+  const kg = Number(match[1]);
+  return Number.isFinite(kg) ? kg : null;
+}
+
+/** "42.5 kg × 10", "12 reps", "Bodyweight" when nothing more is known. */
+export function historySetLabel(
+  loadLabel: string | null | undefined,
+  reps: number | null | undefined,
+): string {
+  const kg = kgOfLabel(loadLabel);
+  const raw = loadLabel?.trim() ?? "";
+  const bodyweight = raw === "" || /^(body\s*weight|bw)$/i.test(raw);
+  if (kg != null) return reps != null ? `${kg} kg × ${reps}` : `${kg} kg`;
+  if (bodyweight) return reps != null ? `${reps} reps` : "Bodyweight";
+  return reps != null ? `${raw} × ${reps}` : raw;
+}
+
+/** The logged sets of one exercise of an execution, in order. */
+export function historySetsOf(
+  exercise: Pick<ExerciseExecution, "sets">,
+): HistorySet[] {
+  return [...exercise.sets]
+    .sort((a, b) => a.order - b.order)
+    .filter((set) => set.status === "completed" || set.status === "modified")
+    .map((set) => {
+      const load = set.actualLoadLabel ?? set.prescribedLoadLabel;
+      return {
+        order: set.order,
+        label: historySetLabel(load, set.actualReps ?? set.prescribedReps),
+        kg: kgOfLabel(load),
+      };
+    });
+}
+
+/**
+ * The earlier finished sessions of this assignment's workout day in the last
+ * 12 weeks (newest first, at most HISTORY_SESSIONS), and the Previous column
+ * read from the newest one. A failed read gives an empty history: the column
+ * falls back to in-session values and History says there is nothing yet.
+ */
+export async function loadWorkoutHistory(
+  api: {
+    listWorkoutAssignments: (
+      relationshipId: string,
+      query: { fromDate: string; toDate: string },
+    ) => Promise<{ items: WorkoutAssignment[] }>;
+    getWorkoutExecution: (id: string) => Promise<WorkoutExecution>;
+  },
+  assignment: WorkoutAssignment,
+  today: string,
+): Promise<WorkoutHistory> {
+  try {
+    const listed = await api.listWorkoutAssignments(
+      assignment.coachingRelationshipId,
+      { fromDate: addDays(today, -84), toDate: addDays(today, -1) },
+    );
+    const candidates = (listed.items as WorkoutAssignment[])
+      .filter(
+        (item) =>
+          item.id !== assignment.id &&
+          item.workoutDayId === assignment.workoutDayId &&
+          (item.status === "completed" || item.status === "modified") &&
+          item.execution?.id,
+      )
+      .sort(
+        (a, b) =>
+          b.localDate.localeCompare(a.localDate) ||
+          Date.parse(b.windowStartsAt) - Date.parse(a.windowStartsAt),
+      )
+      .slice(0, HISTORY_SESSIONS);
+    const sessions: HistorySession[] = [];
+    const previousByKey: Record<string, string> = {};
+    for (const item of candidates) {
+      const execution = await api.getWorkoutExecution(item.execution!.id);
+      const setsByExerciseName: Record<string, HistorySet[]> = {};
+      for (const exercise of execution.exercises) {
+        const sets = historySetsOf(exercise);
+        if (sets.length > 0) setsByExerciseName[exerciseNameKey(exercise.name)] = sets;
+        if (sessions.length > 0) continue;
+        for (const set of exercise.sets) {
+          if (set.status === "pending") continue;
+          previousByKey[`${exercise.exerciseId}:${set.order}`] =
+            formatLoadRepsPair(
+              set.actualLoadLabel ?? set.prescribedLoadLabel,
+              set.actualReps ?? set.prescribedReps,
+            );
+        }
+      }
+      sessions.push({
+        assignmentId: item.id,
+        workoutDayName: item.workoutDayName,
+        localDate: item.localDate,
+        setsByExerciseName,
+      });
+    }
+    return { previousByKey, sessions };
+  } catch {
+    // Offline or a failed read: no history to show.
+    return EMPTY_WORKOUT_HISTORY;
+  }
+}
+
+/** The heaviest load logged for a lift before today, with the reps it was done for. */
+export type ExerciseBest = { kg: number; reps: number | null };
+
+/**
+ * Every lift's heaviest kg load before `today`, by exercise name
+ * (`exerciseNameKey`), from the strength read model (all time). It is what a
+ * new record has to beat (W-12) and the History tab's "Heaviest" (W-26). A
+ * failed read gives none, and then nothing is called a record.
+ */
+export async function loadExerciseBests(
+  api: {
+    getStrength: (
+      relationshipId: string,
+      query: { range: "all" },
+    ) => Promise<{
+      exercises: Array<{
+        name: string;
+        points: Array<{
+          localDate: string;
+          topLoadKg: number | null;
+          reps: number | null;
+        }>;
+      }>;
+    }>;
+  },
+  relationshipId: string,
+  today: string,
+): Promise<Record<string, ExerciseBest>> {
+  const bests: Record<string, ExerciseBest> = {};
+  try {
+    const model = await api.getStrength(relationshipId, { range: "all" });
+    for (const exercise of model.exercises) {
+      const key = exerciseNameKey(exercise.name);
+      for (const point of exercise.points) {
+        if (point.localDate >= today || point.topLoadKg == null) continue;
+        const best = bests[key];
+        if (!best || point.topLoadKg > best.kg) {
+          bests[key] = { kg: point.topLoadKg, reps: point.reps };
+        }
+      }
+    }
+  } catch {
+    // No baseline: no record is claimed.
+  }
+  return bests;
+}
+
+/** "1:30" for a rest of 90 s; "0:45". */
+export function formatRestLength(seconds: number): string {
+  const safe = Math.max(0, Math.round(seconds));
+  return `${Math.floor(safe / 60)}:${String(safe % 60).padStart(2, "0")}`;
+}
+
+/** "3 × 8–10 · 40 kg", "3 × 12", "3 sets": the plan chip of an exercise (W-03). */
+export function exercisePlanLine(
+  exercise: Pick<ExerciseExecution, "sets">,
+): string {
+  const sets = [...exercise.sets].sort((a, b) => a.order - b.order);
+  if (sets.length === 0) return "";
+  const reps = sets
+    .map((set) => set.prescribedReps)
+    .filter((value): value is number => value != null);
+  let repPart = `${sets.length} ${sets.length === 1 ? "set" : "sets"}`;
+  if (reps.length === sets.length) {
+    const low = Math.min(...reps);
+    const high = Math.max(...reps);
+    repPart = `${sets.length} × ${low === high ? low : `${low}–${high}`}`;
+  }
+  const loads = new Set(
+    sets.map((set) => {
+      const kg = kgOfLabel(set.prescribedLoadLabel);
+      return kg != null ? `${kg} kg` : (set.prescribedLoadLabel?.trim() ?? "");
+    }),
+  );
+  const load = loads.size === 1 ? [...loads][0]! : "";
+  const bodyweight = load === "" || /^(body\s*weight|bw)$/i.test(load);
+  return bodyweight ? repPart : `${repPart} · ${load}`;
+}
+
+/** "4 sets · best 16 kg × 12", "2 of 3 sets", "Skipped": a finished exercise's line. */
+export function exerciseDoneLine(
+  exercise: Pick<ExerciseExecution, "sets">,
+): string {
+  const total = exercise.sets.length;
+  const logged = historySetsOf(exercise);
+  if (logged.length === 0) return "Skipped";
+  const count =
+    logged.length === total
+      ? `${total} ${total === 1 ? "set" : "sets"}`
+      : `${logged.length} of ${total} sets`;
+  const withKg = logged.filter((set) => set.kg != null);
+  if (withKg.length === 0) return count;
+  const best = withKg.reduce((a, b) => (b.kg! > a.kg! ? b : a));
+  return `${count} · best ${best.label}`;
 }

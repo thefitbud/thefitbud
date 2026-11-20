@@ -306,7 +306,9 @@ exit 0
 test("the smoke-path auth flows dismiss the keyboard with a tap, not hideKeyboard", () => {
   const maestro = path.join(repo, "apps/mobile/.maestro");
   const files = {
-    "common/sign-in-password.yaml": /- inputText: \$\{QA_PASSWORD\}\n(?:#.*\n)*- tapOn: "Use the mobile number or email your coach invited\\\\\."/,
+    // Password filled assert/retry may sit between the first QA_PASSWORD type
+    // and the keyboard-dismiss tap (FitBud #484 / #516).
+    "common/sign-in-password.yaml": /- inputText: \$\{QA_PASSWORD\}\n[\s\S]*?- tapOn: "Use the mobile number or email your coach invited\\\\\."/,
     "common/sign-in-code-request.yaml": /- inputText: \$\{SIGN_IN_EMAIL\}\n(?:#.*\n)*- tapOn: "Use the mobile number or email your coach invited\\\\\."/,
     "common/sign-in-code.yaml": /- inputText: \$\{QA_OTP_CODE\}\n- tapOn:\n\s+text: "Sent to \.\*"\n\s+optional: true/,
     "flows/auth/sign-in-code.yaml": /- inputText: \$\{QA_OTP_CODE\}\n- tapOn:\n\s+text: "Sent to \.\*"\n\s+optional: true/,
