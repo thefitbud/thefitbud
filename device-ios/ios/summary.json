@@ -1,0 +1,131 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "dark: 1 of 3 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F28-settings-inperson-signout.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 130 s",
+      "mode": "cache-hit",
+      "seconds": 130,
+      "cacheKey": "device-native-ios-c30787716725700d8fa2cdb48f53f503dbf3f34b"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "ios",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i (dump: lockscreen/ios-live-activity-locked-swiped.json)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "ios",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /FitBud/i (dump: lockscreen/ios-notification-locked-swiped.json)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "local API stopped and restarted (the simulator has no airplane mode)",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "ios",
+      "notificationType": "daily_summary",
+      "method": "simctl-push",
+      "note": "APNs payload in Expo's envelope delivered by xcrun simctl push; the tap reaches the app's notification response listener"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.947 (2), dark 0.408 (3)",
+      "light": 0.947,
+      "dark": 0.408,
+      "count": {
+        "light": 2,
+        "dark": 3
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.948
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.948
+        },
+        {
+          "file": "step-004-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.138
+        },
+        {
+          "file": "step-019-assertCondition-Today_s_workout.This_wee-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.138
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

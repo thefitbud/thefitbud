@@ -1,0 +1,37 @@
+{
+  "result": "mean screenshot luminance: light 0.947 (2), dark 0.408 (3)",
+  "light": 0.947,
+  "dark": 0.408,
+  "count": {
+    "light": 2,
+    "dark": 3
+  },
+  "shots": [
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-004-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.138
+    },
+    {
+      "file": "step-019-assertCondition-Today_s_workout.This_wee-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.138
+    }
+  ],
+  "w03DarkTooBright": []
+}
