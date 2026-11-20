@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import { ChevronLeft, ChevronRight, KeyRound } from "lucide-react-native";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
+import { CURRENT_WRONG_COPY } from "../trainee/settings/PasswordScreen";
 import { brand, ink, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
@@ -68,8 +69,13 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
       setDone(true);
     } catch (err) {
       if (err instanceof ApiClientError) {
-        // The API's own curated message (INVALID_CREDENTIALS says the current password is wrong).
-        setError(userFacingMessage(err));
+        // Only INVALID_CREDENTIALS proves the current password was wrong
+        // (same rule as trainee PasswordScreen — not the login copy).
+        if (err.status === 401 && err.code === "INVALID_CREDENTIALS") {
+          setError(CURRENT_WRONG_COPY);
+        } else {
+          setError(userFacingMessage(err));
+        }
       } else {
         reportError("trainer-password-change", err);
         setError("PASSWORD-SAVE");
