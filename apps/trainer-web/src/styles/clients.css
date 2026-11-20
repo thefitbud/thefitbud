@@ -84,7 +84,7 @@
 }
 
 .kpi-accent dd {
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .roster-card {
@@ -144,7 +144,7 @@
 }
 
 .roster-search input:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -200,7 +200,7 @@
 
 .clients-page .segment-btn[data-filter="invited"] .segment-count,
 .checkins-page .segment-btn[data-filter="scheduled"] .segment-count {
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .clients-page .segment-btn[data-filter="onboarding_pending"] .segment-count,
@@ -224,7 +224,7 @@
 
 .clients-page .segment-btn.is-on,
 .checkins-page .segment-btn.is-on {
-  background: var(--indigo);
+  background: var(--brand);
   color: var(--white);
 }
 
@@ -352,7 +352,7 @@
 
 .roster-table tbody tr:focus-within td {
   background: var(--bg);
-  box-shadow: inset 3px 0 0 var(--indigo);
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 
 .roster-table tbody tr:focus-within td:not(:first-child) {
@@ -362,7 +362,7 @@
 .roster-table a:focus-visible,
 .roster-table .button-secondary:focus-visible,
 .roster-table .button-primary:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -635,7 +635,7 @@
 
 .segment-tab.is-selected {
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
 }
 
 /* Z8-19 / D-W8-13: one toolbar row (frames 136, 140): search, four filter
@@ -689,7 +689,7 @@
 }
 
 .filter-search:focus-within {
-  border-color: var(--indigo, var(--coach-ink));
+  border-color: var(--brand);
   box-shadow: 0 0 0 3px rgb(69 39 198 / 14%);
 }
 
@@ -744,15 +744,15 @@
 .clients-segment-tab:focus-visible,
 .filter-dropdown-option:focus-visible,
 .filter-dropdown-clear:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
 /* Selection is spelled out in the label ("Status: Invited"); the border only
    reinforces it. */
 .filter-dropdown-trigger.has-selection {
-  border-color: var(--indigo, var(--coach-ink));
-  color: var(--indigo, var(--coach-ink));
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 .filter-dropdown-text {
@@ -818,8 +818,8 @@
 }
 
 .filter-dropdown-option[aria-checked="true"] .filter-dropdown-check {
-  background: var(--indigo, var(--coach-ink));
-  border-color: var(--indigo, var(--coach-ink));
+  background: var(--brand);
+  border-color: var(--brand);
 }
 
 .filter-dropdown-option-label {
@@ -836,7 +836,7 @@
   margin-top: 4px;
   border-top: 1px solid var(--border, var(--line));
   border-radius: 0 0 8px 8px;
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   font-weight: 600;
 }
 
@@ -930,7 +930,7 @@
 
 .filter-pill.is-selected {
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   border-color: transparent;
 }
 
@@ -1188,7 +1188,7 @@
 }
 
 .client-card.is-selected {
-  box-shadow: 0 0 0 2px var(--indigo, var(--coach-ink));
+  box-shadow: 0 0 0 2px var(--brand);
 }
 
 .client-card-chips {
@@ -1230,7 +1230,7 @@
 
 .welcome-progress-step.is-done,
 .welcome-progress-step.is-active {
-  background: var(--indigo, var(--coach-ink));
+  background: var(--brand);
 }
 
 .welcome-card {
@@ -1314,7 +1314,7 @@
   height: 28px;
   border-radius: 50%;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   display: inline-flex;
   align-items: center;
   justify-content: center;

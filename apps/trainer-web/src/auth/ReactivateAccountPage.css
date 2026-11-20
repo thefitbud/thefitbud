@@ -42,7 +42,7 @@
   align-items: center;
   justify-content: center;
   background: var(--lavender, #ebe7ff);
-  color: var(--brand, var(--indigo, #5b4cdb));
+  color: var(--brand, var(--brand));
   margin-bottom: 0.25rem;
 }
 

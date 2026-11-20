@@ -24,7 +24,7 @@
 }
 .legal-back,
 .legal-page a {
-  color: var(--brand-indigo, #4527c6);
+  color: var(--brand);
   font-weight: 600;
 }
 .legal-back {
@@ -82,7 +82,7 @@
   background: var(--semantic-brand-selected-fill, #ece8fb);
   color: var(--semantic-brand-selected-text, #4527c6);
   /* Current page is shown by fill, weight and a left bar, not colour alone. */
-  box-shadow: inset 3px 0 0 var(--brand-indigo, #4527c6);
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 .legal-nav-link.is-current svg {
   color: var(--semantic-brand-selected-text, #4527c6);

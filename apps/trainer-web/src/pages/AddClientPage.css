@@ -83,7 +83,7 @@
 }
 
 .add-client-page .whats-next-stepper li:first-child::before {
-  background: var(--indigo, var(--coach-ink));
+  background: var(--brand);
 }
 
 .add-client-page .whats-next-reactivate {
@@ -112,7 +112,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 500;
@@ -123,7 +123,7 @@
 }
 
 .add-client-form .field-preview-link:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: 4px;
 }
@@ -163,7 +163,7 @@
 }
 
 .add-client-reactivate-banner svg {
-  color: var(--info, var(--indigo, var(--coach-ink)));
+  color: var(--info, var(--brand));
   margin-top: 0.1rem;
   flex: none;
 }

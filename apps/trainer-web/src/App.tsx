@@ -40,6 +40,7 @@ import { SettingsHelpPage } from "./pages/settings/SettingsHelpPage";
 import { SettingsLayout } from "./pages/settings/SettingsLayout";
 import { UnitsLanguagePage } from "./pages/settings/UnitsLanguagePage";
 import { SpecimensPage } from "./pages/SpecimensPage";
+import { DesignSystemPage } from "./pages/DesignSystemPage";
 import { CreditsPage, PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
 
 export function App() {
@@ -51,6 +52,7 @@ export function App() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/set-password" element={<SetPasswordPage />} />
         <Route path="/__specimens" element={<SpecimensPage />} />
+        {import.meta.env.DEV ? <Route path="/__ds" element={<DesignSystemPage />} /> : null}
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
         <Route path="/credits" element={<CreditsPage />} />

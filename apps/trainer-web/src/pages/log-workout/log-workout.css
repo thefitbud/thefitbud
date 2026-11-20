@@ -43,7 +43,7 @@
 }
 
 .lw-back:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -86,13 +86,13 @@
 }
 
 .lw-day.is-on {
-  border: 2px solid var(--indigo);
+  border: 2px solid var(--brand);
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .lw-day:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -217,7 +217,7 @@
 }
 
 .lw-choice:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -247,7 +247,7 @@
 }
 
 .lw-exercise-head:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: -2px;
 }
 
@@ -259,7 +259,7 @@
   height: 40px;
   border-radius: 12px;
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
   font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
@@ -353,7 +353,7 @@
 }
 
 .lw-input input:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
   background: var(--white);
 }
@@ -390,7 +390,7 @@
 .lw-check input {
   width: 20px;
   height: 20px;
-  accent-color: var(--indigo);
+  accent-color: var(--brand);
 }
 
 .lw-load .lw-check {

@@ -1,10 +1,10 @@
-/* TW-03 App shell — navy sidebar, top bar, bottom nav, palette (mockup target) */
+/* TW-03 App shell — light sidebar (D-WEB-1), top bar, bottom nav. */
 
 .app-shell {
   min-height: 100vh;
   min-height: 100dvh;
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: var(--nav-w) 1fr;
   background: var(--page-bg, var(--bg));
 }
 
@@ -16,16 +16,12 @@
   min-height: 100dvh;
   height: 100vh;
   height: 100dvh;
-  background: var(--deep-navy, var(--ink));
-  color: var(--white);
+  background: var(--bg-plain);
+  color: var(--ink);
   display: flex;
   flex-direction: column;
   padding: 20px 14px 16px;
-  background-image: radial-gradient(
-    120% 60% at 0% 0%,
-    rgb(69 39 198 / 28%) 0%,
-    transparent 60%
-  );
+  border-right: 1px solid var(--line);
   z-index: 20;
 }
 
@@ -36,11 +32,18 @@
   padding: 4px 10px 22px;
 }
 
-.shell-brand b {
-  font-size: 19px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--white);
+.shell-brand b,
+.shell-brand .ui-lockup-words {
+  color: var(--ink);
+}
+
+.shell-brand .ui-lockup {
+  align-items: center;
+  height: 40px;
+}
+
+.shell-brand .ui-lockup-mark {
+  margin-top: 0;
 }
 
 .shell-nav {
@@ -59,7 +62,7 @@
   border-radius: 10px;
   font-size: 14px;
   font-weight: 500;
-  color: rgb(255 255 255 / 74%);
+  color: var(--ink2);
   text-decoration: none;
   border: 0;
   background: transparent;
@@ -68,24 +71,30 @@
 }
 
 .shell-nav-link svg {
-  color: rgb(255 255 255 / 62%);
+  color: var(--ink3);
   flex: none;
 }
 
 .shell-nav-link:hover {
-  background: rgb(255 255 255 / 8%);
-  color: var(--white);
+  background: var(--fill);
+  color: var(--ink);
 }
 
 .shell-nav-link.is-active,
 .shell-nav-link[aria-current="page"] {
-  background: rgb(69 39 198 / 42%);
-  color: var(--white);
+  background: var(--brand-tint);
+  color: var(--brand);
+  font-weight: 600;
 }
 
 .shell-nav-link.is-active svg,
 .shell-nav-link[aria-current="page"] svg {
-  color: var(--white);
+  color: var(--brand);
+}
+
+.shell-nav-link.is-active .shell-nav-badge,
+.shell-nav-link[aria-current="page"] .shell-nav-badge {
+  background: var(--bg-plain);
 }
 
 .shell-nav-badge {
@@ -94,9 +103,9 @@
   height: 20px;
   padding: 0 7px;
   border-radius: 999px;
-  background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo, var(--coach-ink));
-  border: 1px solid #d4ccff;
+  background: var(--fill2);
+  color: var(--ink);
+  border: 0;
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -114,7 +123,7 @@
   flex-direction: column;
   gap: 8px;
   padding-top: 12px;
-  border-top: 1px solid rgb(255 255 255 / 10%);
+  border-top: 1px solid var(--line);
 }
 
 .shell-me {
@@ -124,11 +133,11 @@
   padding: 8px 10px;
   border-radius: 12px;
   text-decoration: none;
-  color: var(--white);
+  color: var(--ink);
 }
 
 .shell-me:hover {
-  background: rgb(255 255 255 / 8%);
+  background: var(--fill);
 }
 
 .shell-av {
@@ -161,7 +170,7 @@
 
 .shell-me-text span {
   font-size: 12px;
-  color: rgb(255 255 255 / 64%);
+  color: var(--ink3);
 }
 
 .shell-main {
@@ -221,7 +230,7 @@
   border-radius: 5px;
   border: 1px solid var(--line2);
   background: var(--white);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--ink-500, var(--ink3));
 }
@@ -252,7 +261,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--crit);
+  background: var(--coral-strong);
 }
 
 .shell-bell-popover {
@@ -402,6 +411,7 @@
   }
 
   .shell-brand b,
+  .shell-brand .ui-lockup-words,
   .shell-nav-label,
   .shell-me-text,
   .shell-nav-badge {
@@ -491,7 +501,7 @@
     gap: 2px;
     height: auto;
     color: var(--ink-500, var(--ink3));
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 500;
     padding: 6px 4px;
     width: auto;
@@ -503,7 +513,7 @@
 
   .shell-bottom-nav .shell-nav-link.is-active,
   .shell-bottom-nav .shell-nav-link[aria-current="page"] {
-    color: var(--indigo, var(--coach-ink));
+    color: var(--brand);
     background: transparent;
   }
 

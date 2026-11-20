@@ -271,7 +271,7 @@
 }
 
 .intake-switch-row input[role="switch"]:checked {
-  background: var(--brand, var(--ink, var(--indigo)));
+  background: var(--brand, var(--ink, var(--brand)));
 }
 
 .intake-switch-row input[role="switch"]:checked::after {
