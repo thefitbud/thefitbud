@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { Upload } from "lucide-react";
+import { ChevronDown, Upload } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
 import { formatCivilDate, normalizeWhatsappE164 } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
@@ -192,7 +192,7 @@ export function ProfileSettingsPage() {
   const reminderName = displayName.trim().split(/\s+/)[0] || "Your name";
 
   return (
-    <div data-testid="screen-TW-28">
+    <div className="settings-stack" data-testid="screen-TW-28">
       {!online ? (
         <p className="form-error settings-banner" role="status">
           You&apos;re offline. You can view settings but saves are disabled.
@@ -309,19 +309,22 @@ export function ProfileSettingsPage() {
           </SettingsRow>
 
           <SettingsRow label="Time zone" help="Your day and quiet hours follow this">
-            <select
-              className="ui-select settings-native-select"
-              required
-              aria-label="Time zone"
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-            >
-              {timezoneChoices.map((z) => (
-                <option key={z} value={z}>
-                  {timezoneOptionLabel(z)}
-                </option>
-              ))}
-            </select>
+            <div className="ui-select settings-select">
+              <select
+                className="settings-native-select"
+                required
+                aria-label="Time zone"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+              >
+                {timezoneChoices.map((z) => (
+                  <option key={z} value={z}>
+                    {timezoneOptionLabel(z)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="ui-i" strokeWidth={1.75} aria-hidden />
+            </div>
           </SettingsRow>
 
           {fieldError ? (

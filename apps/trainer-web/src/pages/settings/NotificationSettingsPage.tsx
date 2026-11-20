@@ -236,7 +236,7 @@ export function NotificationSettingsPage() {
   const emailRows = FRAME_ROWS.filter((item) => item.key === "morningSummary");
 
   return (
-    <div data-testid="screen-TW-29">
+    <div className="settings-stack" data-testid="screen-TW-29">
       {!online ? (
         <p className="form-error settings-banner" role="status">
           You&apos;re offline. Changes will save when you reconnect.

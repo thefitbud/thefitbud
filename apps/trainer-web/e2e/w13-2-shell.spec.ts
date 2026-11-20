@@ -173,7 +173,13 @@ test.describe("W13-2 shell, nav and settings", () => {
       await expect(page.getByTestId("screen-settings")).toBeVisible({ timeout: 20_000 });
       if (url.includes("profile")) {
         await expect(page.getByTestId("screen-TW-28")).toBeVisible();
-        await expect(page.getByLabel("WhatsApp number")).not.toHaveValue("");
+        const phone = page.getByLabel("WhatsApp number");
+        await expect(phone).not.toHaveValue("");
+        const phoneBox = await phone.boundingBox();
+        const codeBox = await page.locator(".settings-phone-code").boundingBox();
+        expect(codeBox?.width ?? 0).toBeGreaterThan(80);
+        expect(codeBox?.width ?? 999).toBeLessThan(120);
+        expect(phoneBox?.width ?? 0).toBeGreaterThan(120);
       }
       if (url.includes("notifications")) {
         await expect(page.getByTestId("screen-TW-29")).toBeVisible({ timeout: 20_000 });
