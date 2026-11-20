@@ -1,0 +1,5 @@
+{
+  "result": "ok",
+  "method": "adb shell cmd connectivity airplane-mode enable/disable",
+  "note": "screenshots offline-app and online-app"
+}
