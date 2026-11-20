@@ -1,0 +1,102 @@
+{
+  "result": "mean screenshot luminance: light 0.919 (9), dark 0.382 (9)",
+  "light": 0.919,
+  "dark": 0.382,
+  "count": {
+    "light": 9,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TR-15a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.073
+    },
+    {
+      "file": "TR-15a-light-android.png",
+      "theme": "light",
+      "luma": 0.934
+    },
+    {
+      "file": "W-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.14
+    },
+    {
+      "file": "W-03-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.919
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-062-assertCondition-Today_s_workout.Rest_day-dark-android.png",
+      "theme": "dark",
+      "luma": 0.073
+    },
+    {
+      "file": "step-062-assertCondition-Today_s_workout.Rest_day-light-android.png",
+      "theme": "light",
+      "luma": 0.934
+    },
+    {
+      "file": "step-082-tapOnElement-Open-dark-android.png",
+      "theme": "dark",
+      "luma": 0.172
+    },
+    {
+      "file": "step-083-tapOnElement-Open-light-android.png",
+      "theme": "light",
+      "luma": 0.837
+    },
+    {
+      "file": "z12-47-read-all-dark-android.png",
+      "theme": "dark",
+      "luma": 0.073
+    },
+    {
+      "file": "z12-47-read-all-light-android.png",
+      "theme": "light",
+      "luma": 0.934
+    }
+  ],
+  "w03DarkTooBright": []
+}

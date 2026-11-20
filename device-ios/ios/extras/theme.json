@@ -1,0 +1,117 @@
+{
+  "result": "mean screenshot luminance: light 0.946 (10), dark 0.333 (11)",
+  "light": 0.946,
+  "dark": 0.333,
+  "count": {
+    "light": 10,
+    "dark": 11
+  },
+  "shots": [
+    {
+      "file": "TR-15a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.076
+    },
+    {
+      "file": "TR-15a-light-ios.png",
+      "theme": "light",
+      "luma": 0.954
+    },
+    {
+      "file": "TR-15b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.07
+    },
+    {
+      "file": "TR-15b-light-ios.png",
+      "theme": "light",
+      "luma": 0.95
+    },
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.144
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.937
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "step-081-tapOnElement-Open-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-097-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.091
+    },
+    {
+      "file": "step-097-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "z12-47-read-all-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.075
+    },
+    {
+      "file": "z12-47-read-all-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    }
+  ],
+  "w03DarkTooBright": []
+}

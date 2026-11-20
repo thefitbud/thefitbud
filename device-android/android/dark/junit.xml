@@ -1,0 +1,26 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="4" failures="1" time="447.671" timestamp="2026-11-20T11:02:57">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="86.613" timestamp="2026-11-20T11:02:57" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="77.207" timestamp="2026-11-20T11:04:24" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-36 trainee active workout mid-session (W-03)" name="Z12-36 trainee active workout mid-session (W-03)" classname="Z12-36 trainee active workout mid-session (W-03)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-36/3-trainee-workout.yaml" time="149.535" timestamp="2026-11-20T11:05:41" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-36"/>
+      </properties>
+    </testcase>
+    <testcase id="F13 Notifications inbox and its taps (Z12-47)" name="F13 Notifications inbox and its taps (Z12-47)" classname="F13 Notifications inbox and its taps (Z12-47)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F13-notifications-deep-links.yaml" time="134.261" timestamp="2026-11-20T11:08:11" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-47"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|Rest day|Recovery is part of the plan|This week" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
