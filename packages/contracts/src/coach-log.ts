@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { isoDateTimeSchema, uuidSchema } from "./identity.js";
-import { mealComplianceOutcomeSchema, mealDeviationKindSchema } from "./meal.js";
+import {
+  loggedFoodItemSchema,
+  mealComplianceOutcomeSchema,
+  mealDeviationKindSchema,
+} from "./meal.js";
 
 /** Z5-4 scaffold marker, still asserted by `w6-scaffold.test.ts`. */
 export type W6CoachLogContract = Record<string, never>;
@@ -165,13 +169,19 @@ export function parseCoachLogDedupeKey(
  * within the last 7 days and not in the future (422 BACKDATE_LIMIT).
  * `recordVersion` is required when an entry exists (stale: 409
  * VERSION_CONFLICT) and must be left out for a first log.
+ *
+ * Z12-52: in-person "Something different" may send `items` for
+ * `portion_adjustment`, `restaurant`, or `logged_foods` so the day ring
+ * counts what was eaten. A trainee-authored `logged_foods` list still cannot
+ * be replaced (D-W6-40); the coach may only change its note.
  */
 export const coachLogMealRequestSchema = z
   .object({
     outcome: mealComplianceOutcomeSchema,
-    /** `logged_foods` only keeps the client's own food list; a trainer cannot author one. */
     deviationKind: mealDeviationKindSchema.nullable().optional(),
     notes: z.string().trim().max(500).nullable().optional(),
+    /** Foods / kcal lines for portion, ate-out, or logged-foods (Z12-52). */
+    items: z.array(loggedFoodItemSchema).max(20).optional(),
     recordVersion: z.number().int().nonnegative().optional(),
   })
   .superRefine((body, ctx) => {
@@ -187,6 +197,13 @@ export const coachLogMealRequestSchema = z
         code: "custom",
         path: ["deviationKind"],
         message: "Only a changed meal has a deviation kind.",
+      });
+    }
+    if (body.outcome !== "modified" && body.items && body.items.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["items"],
+        message: "Only a changed meal carries food items.",
       });
     }
   });
