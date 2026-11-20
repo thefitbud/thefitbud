@@ -376,7 +376,8 @@ describe("template list usedBy", () => {
       expect(fiveLookups).toHaveLength(1);
       expect(fiveLookups[0]).toContain("source_template_id");
       expect(fiveLookups[0]).toContain("coaching_relationships");
-      expect(fiveLookups[0]?.toLowerCase()).toContain("distinct");
+      expect(fiveLookups[0]).toContain("effective_to");
+      expect(fiveLookups[0]).toContain("trainer_user_id");
 
       const usageSql = fiveLookups[0]!;
       const marks = usageSql.match(/\?/g)?.length ?? 0;
@@ -393,7 +394,7 @@ describe("template list usedBy", () => {
       const detail = (explained.results ?? [])
         .map((row) => row.detail)
         .join("\n");
-      expect(detail).toContain("plan_versions_source_template_status_idx");
+      expect(detail).toMatch(/USING INDEX \S*(coaching_relationships_trainer_idx|plan_versions_)/);
 
       const draftId = await addClient(coachA.cookie, "draft");
       await applyTemplate(coachA.cookie, draftId, sharedId, "apply-draft");
@@ -473,6 +474,74 @@ describe("template list usedBy", () => {
         "immediate",
       );
 
+      const closedId = await addClient(coachA.cookie, "closed");
+      const closedPlan = await applyTemplate(
+        coachA.cookie,
+        closedId,
+        sharedId,
+        "apply-closed",
+      );
+      await publishVersion(
+        coachA.cookie,
+        closedPlan.plan.id,
+        closedPlan.version.id,
+        closedPlan.version.recordVersion,
+        "publish-closed",
+        "immediate",
+      );
+      handle.sqlite.run(
+        "UPDATE plan_versions SET effective_to = ? WHERE id = ?",
+        ["2000-01-01T00:00:00.000Z", closedPlan.version.id],
+      );
+
+      const replacedByBlankId = await addClient(coachA.cookie, "blank");
+      const fromTemplate = await applyTemplate(
+        coachA.cookie,
+        replacedByBlankId,
+        sharedId,
+        "apply-blank-template",
+      );
+      await publishVersion(
+        coachA.cookie,
+        fromTemplate.plan.id,
+        fromTemplate.version.id,
+        fromTemplate.version.recordVersion,
+        "publish-blank-template",
+        "immediate",
+      );
+      const blank = await app.request(
+        `/plans/relationships/${replacedByBlankId}`,
+        {
+          method: "POST",
+          headers: {
+            Cookie: coachA.cookie,
+            "Content-Type": "application/json",
+            "Idempotency-Key": "create-blank-plan",
+          },
+          body: JSON.stringify({
+            title: "Later blank plan",
+            content: workoutContent(),
+          }),
+        },
+        testEnv(),
+      );
+      const blankText = await blank.text();
+      expect(blank.status, blankText).toBe(201);
+      const blankBody = JSON.parse(blankText) as {
+        data: {
+          plan: { id: string };
+          version: { id: string; recordVersion: number };
+        };
+      };
+      await publishVersion(
+        coachA.cookie,
+        blankBody.data.plan.id,
+        blankBody.data.version.id,
+        blankBody.data.version.recordVersion,
+        "publish-blank-plan",
+        "immediate",
+      );
+
       const otherId = await addClient(coachB.cookie, "b-0");
       const otherPlan = await applyTemplate(
         coachB.cookie,
@@ -504,6 +573,8 @@ describe("template list usedBy", () => {
       expect(sharedIds).not.toContain(scheduledId);
       expect(sharedIds).not.toContain(endedId);
       expect(sharedIds).not.toContain(replacedId);
+      expect(sharedIds).not.toContain(closedId);
+      expect(sharedIds).not.toContain(replacedByBlankId);
       expect(sharedIds).not.toContain(otherId);
 
       const otherList = await listTemplates(coachB.cookie);

@@ -674,11 +674,6 @@ export const planVersions = sqliteTable(
       table.status,
       table.effectiveFrom,
     ),
-    // One lookup for the templates list "used by" aggregate (W13-12).
-    index("plan_versions_source_template_status_idx").on(
-      table.sourceTemplateId,
-      table.status,
-    ),
   ],
 );
 

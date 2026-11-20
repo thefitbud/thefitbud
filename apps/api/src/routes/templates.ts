@@ -152,6 +152,7 @@ templateRoutes.get(
       db,
       actor.userId,
       rows.map((row) => row.id),
+      nowIso(),
     );
     const page = buildPage(
       rows.map((row) => ({
