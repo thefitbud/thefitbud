@@ -67,6 +67,16 @@ type Props = {
   relationshipId?: string;
   clients?: ActivityClientOption[];
   onOpenClient?: (relationshipId: string, displayName: string) => void;
+  onOpenAsk?: (
+    askId: string,
+    relationshipId: string,
+    displayName: string,
+  ) => void;
+  onOpenSession?: (
+    executionId: string,
+    relationshipId: string,
+    displayName: string,
+  ) => void;
   /** Called when the parent Screen pulls to refresh. */
   refreshToken?: number;
 };
@@ -75,6 +85,8 @@ export function ActivityFeedScreen({
   relationshipId: lockedRid,
   clients = [],
   onOpenClient,
+  onOpenAsk,
+  onOpenSession,
   refreshToken = 0,
 }: Props) {
   const { api } = useAuth();
@@ -201,14 +213,34 @@ export function ActivityFeedScreen({
   }
 
   function openEvent(event: ActivityFeedEvent) {
-    if (event.type.toLowerCase().includes("meal")) {
+    const type = event.type.toLowerCase();
+    const name = event.traineeDisplayName ?? "Client";
+    if (type.includes("meal")) {
       setMealEvent(event);
       return;
     }
-    onOpenClient?.(
-      event.relationshipId,
-      event.traineeDisplayName ?? "Client",
-    );
+    if (type.includes("workout") && onOpenSession) {
+      const executionId = event.id.startsWith("workout:")
+        ? event.id.slice("workout:".length)
+        : null;
+      if (executionId) {
+        onOpenSession(executionId, event.relationshipId, name);
+        return;
+      }
+    }
+    if (
+      (type.includes("ask") || type.includes("coach_ask")) &&
+      onOpenAsk
+    ) {
+      const askId = event.id.startsWith("ask:")
+        ? event.id.slice("ask:".length)
+        : null;
+      if (askId) {
+        onOpenAsk(askId, event.relationshipId, name);
+        return;
+      }
+    }
+    onOpenClient?.(event.relationshipId, name);
   }
 
   return (

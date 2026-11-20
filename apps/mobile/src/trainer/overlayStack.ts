@@ -10,7 +10,14 @@
  * A check-in opened cold (a push or deep link) has nothing below it. If its
  * client is known, Back goes to the client's page instead of the tab list.
  */
-export type OverlayKind = "exception" | "client" | "checkin" | "notifications" | "profile";
+export type OverlayKind =
+  | "exception"
+  | "client"
+  | "checkin"
+  | "ask"
+  | "session"
+  | "notifications"
+  | "profile";
 
 export type OverlayBase = { kind: OverlayKind };
 

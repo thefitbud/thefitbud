@@ -98,6 +98,8 @@ type Props = {
   onOpenClients: () => void;
   /** The client's profile (status screen), from the review sheet's ⋯ menu. */
   onOpenClient?: (relationshipId: string) => void;
+  /** TM-10 ask detail (Needs you Reply / card). */
+  onOpenAsk?: (ask: CoachAsk, displayName: string) => void;
 };
 
 type Snapshot = {
@@ -131,6 +133,7 @@ export function AttentionTab({
   onReviewCheckin,
   onOpenClients,
   onOpenClient,
+  onOpenAsk,
 }: Props) {
   const { api, me, relationships, refreshSession } = useAuth();
   // The trainer's device zone, falling back to Asia/Kolkata when it cannot be
@@ -741,9 +744,13 @@ export function AttentionTab({
       return;
     }
     if (card.source.kind === "ask") {
-      // TM-10 ask detail is a later slice; Reply keeps the existing undoable
-      // Mark answered path until that screen lands.
-      void answerAsk(card.source.ask);
+      const ask = card.source.ask;
+      if (onOpenAsk) {
+        onOpenAsk(ask, card.name);
+        return;
+      }
+      // Fallback when the shell has not wired TM-10 yet.
+      void answerAsk(ask);
       return;
     }
     onReviewCheckin(card.source.item);

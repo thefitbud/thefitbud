@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
-import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
+import type { CoachAsk, TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
@@ -18,6 +18,8 @@ import {
 import { ClientsTab } from "./ClientsTab";
 import { ClientStatusScreen } from "./ClientStatusScreen";
 import { ExceptionReviewScreen } from "./ExceptionReviewScreen";
+import { AskDetailScreen } from "./ask/AskDetailScreen";
+import { SessionDetailScreen } from "./session/SessionDetailScreen";
 import {
   isCaptureModeEnabled,
   registerTrainerCaptureNav,
@@ -42,6 +44,19 @@ type Overlay =
       relationshipId: string;
       // Opened from a push with no screen below it: Back goes to the client page.
       cold?: boolean;
+    }
+  | {
+      kind: "ask";
+      askId: string;
+      relationshipId: string;
+      displayName: string;
+      initialAsk?: CoachAsk | null;
+    }
+  | {
+      kind: "session";
+      executionId: string;
+      relationshipId: string;
+      displayName: string;
     }
   | { kind: "notifications" }
   | { kind: "profile" };
@@ -285,6 +300,32 @@ export function TrainerShell() {
     );
   }
 
+  if (overlay?.kind === "ask") {
+    return (
+      <AskDetailScreen
+        key={refreshNonce}
+        askId={overlay.askId}
+        initialAsk={overlay.initialAsk}
+        relationshipId={overlay.relationshipId}
+        displayName={overlay.displayName}
+        onBack={() => goBack()}
+        onAnswered={() => goBack()}
+      />
+    );
+  }
+
+  if (overlay?.kind === "session") {
+    return (
+      <SessionDetailScreen
+        key={refreshNonce}
+        executionId={overlay.executionId}
+        relationshipId={overlay.relationshipId}
+        displayName={overlay.displayName}
+        onBack={() => goBack()}
+      />
+    );
+  }
+
   if (overlay?.kind === "notifications") {
     return (
       <TrainerNotificationSettingsScreen onBack={() => goBack()} />
@@ -309,6 +350,15 @@ export function TrainerShell() {
             onOpenClient={(relationshipId) => {
               void openClientById(relationshipId, undefined, "start");
             }}
+            onOpenAsk={(ask, displayName) =>
+              startAt({
+                kind: "ask",
+                askId: ask.id,
+                relationshipId: ask.relationshipId,
+                displayName,
+                initialAsk: ask,
+              })
+            }
           />
         ) : null}
 
@@ -317,6 +367,22 @@ export function TrainerShell() {
             key={refreshNonce}
             onOpenClient={openClientFromRow}
             initialSegment={clientsSegment}
+            onOpenAsk={(askId, relationshipId, displayName) =>
+              startAt({
+                kind: "ask",
+                askId,
+                relationshipId,
+                displayName,
+              })
+            }
+            onOpenSession={(executionId, relationshipId, displayName) =>
+              startAt({
+                kind: "session",
+                executionId,
+                relationshipId,
+                displayName,
+              })
+            }
           />
         ) : null}
 

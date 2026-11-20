@@ -83,6 +83,16 @@ const FILTERS: Array<{ id: ClientListFilter; label: string }> = [
 type Props = {
   onOpenClient: (row: ClientDirectoryRow) => void;
   initialSegment?: Segment;
+  onOpenAsk?: (
+    askId: string,
+    relationshipId: string,
+    displayName: string,
+  ) => void;
+  onOpenSession?: (
+    executionId: string,
+    relationshipId: string,
+    displayName: string,
+  ) => void;
 };
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
@@ -299,7 +309,12 @@ const EMPTY_COUNTS: Counts = {
   ended: 0,
 };
 
-export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) {
+export function ClientsTab({
+  onOpenClient,
+  initialSegment = "clients",
+  onOpenAsk,
+  onOpenSession,
+}: Props) {
   const { api, me } = useAuth();
   const trainerZone = deviceTimeZone();
   const [segment, setSegment] = useState<Segment>(initialSegment);
@@ -482,6 +497,8 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
         <ActivityFeedScreen
           clients={activityClients}
           refreshToken={activityRefresh}
+          onOpenAsk={onOpenAsk}
+          onOpenSession={onOpenSession}
           onOpenClient={(relationshipId, displayName) => {
             const found = items.find(
               (item) => item.relationshipId === relationshipId,
