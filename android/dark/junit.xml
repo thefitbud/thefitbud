@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="3" failures="1" time="221.13" timestamp="2026-11-20T04:14:50">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="105.271" timestamp="2026-11-20T04:14:50" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|This week|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="57.06" timestamp="2026-11-20T04:16:35" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F28 Settings, in-person meal log, sign out (Z12-52 meal steps)" name="F28 Settings, in-person meal log, sign out (Z12-52 meal steps)" classname="F28 Settings, in-person meal log, sign out (Z12-52 meal steps)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F28-settings-inperson-signout.yaml" time="58.757" timestamp="2026-11-20T04:17:33" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-52"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

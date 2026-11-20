@@ -1,0 +1,42 @@
+{
+  "result": "mean screenshot luminance: light 0.924 (3), dark 0.389 (3)",
+  "light": 0.924,
+  "dark": 0.389,
+  "count": {
+    "light": 3,
+    "dark": 3
+  },
+  "shots": [
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-004-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "step-004-runFlow-light-android.png",
+      "theme": "light",
+      "luma": 0.923
+    },
+    {
+      "file": "step-017-assertCondition-Today_s_workout.This_wee-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "step-017-assertCondition-Today_s_workout.This_wee-light-android.png",
+      "theme": "light",
+      "luma": 0.923
+    }
+  ],
+  "w03DarkTooBright": []
+}

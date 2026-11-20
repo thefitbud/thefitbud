@@ -1,0 +1,169 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 3 flows failed",
+    "dark: 1 of 3 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F28-settings-inperson-signout.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 10s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)",
+        "retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 10s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen); retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 56 s",
+      "mode": "cache-hit",
+      "seconds": 56,
+      "cacheKey": "device-native-android-03ec2a4f47a683601a9cfac3a536c35d78867e18"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 730 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.924 (3), dark 0.389 (3)",
+      "light": 0.924,
+      "dark": 0.389,
+      "count": {
+        "light": 3,
+        "dark": 3
+      },
+      "shots": [
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        },
+        {
+          "file": "step-004-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "step-004-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.923
+        },
+        {
+          "file": "step-017-assertCondition-Today_s_workout.This_wee-dark-android.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "step-017-assertCondition-Today_s_workout.This_wee-light-android.png",
+          "theme": "light",
+          "luma": 0.923
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}
