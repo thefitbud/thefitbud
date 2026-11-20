@@ -55,6 +55,14 @@ vi.mock("./support", () => ({
   openSupportEmail: vi.fn(),
   DEFAULT_SUPPORT_EMAIL: "",
 }));
+vi.mock("expo-constants", () => ({
+  default: {
+    expoConfig: {
+      version: "1.0.0",
+      ios: { buildNumber: "214" },
+    },
+  },
+}));
 
 import {
   DEFAULT_TRAINER_WEB_URL,
@@ -85,6 +93,19 @@ function find(
   if ("props" in node) {
     const element = node as Element;
     if (match(element)) return element;
+    // Expand FooterLink only (no hooks) so its Pressable a11y label is
+    // searchable. Calling HelpSheet / SignOutConfirm would trip hooks.
+    const typeName =
+      typeof element.type === "function"
+        ? (element.type as { name?: string }).name
+        : undefined;
+    if (typeName === "FooterLink") {
+      const rendered = (element.type as (props: unknown) => unknown)(
+        element.props,
+      );
+      const hit = find(rendered, match);
+      if (hit) return hit;
+    }
     return find(element.props.children, match);
   }
   return null;
@@ -92,6 +113,10 @@ function find(
 
 function byLabelProp(label: string) {
   return (element: Element) => element.props.label === label;
+}
+
+function byA11y(label: string) {
+  return (element: Element) => element.props.accessibilityLabel === label;
 }
 
 function press(tree: unknown, match: (element: Element) => boolean): void {
@@ -183,21 +208,22 @@ describe("trainer More legal rows", () => {
     });
   }
 
+  // Z12-53: Legal group is gone; Terms/Privacy live in the footer as short
+  // labels with the full browser a11y name. Credits stays on the web only.
   it.each([
-    ["Privacy policy", "https://app.thefitbud.com/privacy"],
-    ["Terms of use", "https://app.thefitbud.com/terms"],
-    ["Credits and licences", "https://app.thefitbud.com/credits"],
-  ])("%s opens %s", (label, url) => {
+    ["Privacy policy, opens in your browser", "https://app.thefitbud.com/privacy"],
+    ["Terms of use, opens in your browser", "https://app.thefitbud.com/terms"],
+  ])("%s opens %s", (a11y, url) => {
     vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
-    press(trainerMore(), byLabelProp(label));
+    press(trainerMore(), byA11y(a11y));
     expect(Linking.openURL).toHaveBeenCalledWith(url);
   });
 
-  it("follows the env var on staging builds", () => {
+  it("follows the env var on staging builds for footer Privacy", () => {
     vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", "https://app-staging.thefitbud.com");
-    press(trainerMore(), byLabelProp("Credits and licences"));
+    press(trainerMore(), byA11y("Privacy policy, opens in your browser"));
     expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://app-staging.thefitbud.com/credits",
+      "https://app-staging.thefitbud.com/privacy",
     );
   });
 
@@ -207,25 +233,17 @@ describe("trainer More legal rows", () => {
     expect(Linking.openURL).toHaveBeenCalledWith("https://app.thefitbud.com");
   });
 
-  // These three buttons are visually identical to Notifications, Profile and
-  // Help, which navigate in the app. There is no frame for a trainer Legal
-  // group (BT3d), so until there is, the accessible name is the only thing
-  // telling a screen-reader user that the browser opens. Same wording as the
-  // trainee rows and the sign-in footer.
   it.each([
-    ["Privacy policy", "Privacy policy, opens in your browser"],
-    ["Terms of use", "Terms of use, opens in your browser"],
-    ["Credits and licences", "Credits and licences, opens in your browser"],
-  ])("%s says it leaves the app", (label, accessibilityLabel) => {
-    const found = find(trainerMore(), byLabelProp(label));
-    expect(found).toBeTruthy();
-    expect(found!.props.accessibilityLabel).toBe(accessibilityLabel);
+    "Privacy policy, opens in your browser",
+    "Terms of use, opens in your browser",
+    "Open FitBud on web, opens in your browser",
+  ])("%s is announced as leaving the app", (a11y) => {
+    expect(find(trainerMore(), byA11y(a11y))).toBeTruthy();
   });
 
-  it("leaves the in-app trainer destinations announced as themselves", () => {
-    // Guards against blanket-applying the browser wording: Help navigates
-    // inside the app and must not claim otherwise.
-    const help = find(trainerMore(), byLabelProp("Email FitBud support"));
+  it("leaves the in-app Help row announced as itself", () => {
+    // Help opens an in-app sheet and must not claim the browser opens.
+    const help = find(trainerMore(), byLabelProp("Help"));
     expect(help).toBeTruthy();
     expect(help!.props.accessibilityLabel).toBeUndefined();
   });
