@@ -13,10 +13,9 @@ import {
 } from "./liveActivity";
 
 /**
- * ContentState JS sends today, plus Z12-48's advance flag. Native ignores
- * `moreExercisesRemain` until Z12-57 adds it to the Codable struct
- * (docs/qa/Z12-48/swift-spec.md). Keeping the extra key on the JS object is
- * the payload that lets LogSetIntent log one set without finishing.
+ * ContentState JS sends to native. `moreExercisesRemain` is required here so
+ * LogSetIntent / Android logSet never finish the workout on the last set of a
+ * non-final exercise (Z12-48 / Z12-57; docs/qa/Z12-48/swift-spec.md).
  */
 export type LiveActivityNativePayload = NativeWorkoutContentState & {
   moreExercisesRemain: boolean;
