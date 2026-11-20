@@ -1,0 +1,132 @@
+{
+  "result": "mean screenshot luminance: light 0.932 (13), dark 0.204 (11)",
+  "light": 0.932,
+  "dark": 0.204,
+  "count": {
+    "light": 13,
+    "dark": 11
+  },
+  "shots": [
+    {
+      "file": "TR-10a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.099
+    },
+    {
+      "file": "TR-10a-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "TR-10b-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    },
+    {
+      "file": "TR-10c-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "W-01b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.148
+    },
+    {
+      "file": "W-01b-light-ios.png",
+      "theme": "light",
+      "luma": 0.913
+    },
+    {
+      "file": "W-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "W-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "W-03-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.144
+    },
+    {
+      "file": "W-03-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "W-17a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "W-17a-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "W-17b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.138
+    },
+    {
+      "file": "W-17b-light-ios.png",
+      "theme": "light",
+      "luma": 0.9
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.113
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.947
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-011-assertCondition-Diet-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.138
+    },
+    {
+      "file": "step-073-tapOnElement-Open-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-074-assertCondition-Large_title_30-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "step-077-tapOnElement-Open-light-ios.png",
+      "theme": "light",
+      "luma": 0.853
+    },
+    {
+      "file": "z12-44-finished-day-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.102
+    },
+    {
+      "file": "z12-44-finished-day-light-ios.png",
+      "theme": "light",
+      "luma": 0.945
+    }
+  ],
+  "w03DarkTooBright": []
+}

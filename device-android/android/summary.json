@@ -1,0 +1,236 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 4 of 6 flows failed",
+    "dark: 4 of 6 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-36/3-trainee-workout.yaml",
+    "device/z12-44/1-workout-tab.yaml",
+    "device/z12-44/2-finish-workout.yaml",
+    "device/z12-44/3-no-plan.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 6,
+      "passed": 2,
+      "failed": 4,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-36 trainee active workout mid-session (W-03)",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-36 trainee active workout mid-session (W-03)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 6,
+      "passed": 2,
+      "failed": 4,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-36 trainee active workout mid-session (W-03)",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)",
+          "message": "Assertion is false: \"Today's workout.*|This week|Needs you.*|Choose mode\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-36 trainee active workout mid-session (W-03)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Workout tab v3 (done day, summary, future, rest, relaunch)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "Z12-44 Finish a workout (in progress, relaunch, summary, View summary only)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 10s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 7s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)",
+        "retry (dark): steady for 8 checks after 7s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 10s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 7s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen); retry (dark): steady for 8 checks after 7s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 44 s",
+      "mode": "cache-hit",
+      "seconds": 44,
+      "cacheKey": "device-native-android-20f1a3cf5661b83c3689751e454f254afdba2054"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 730 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.929 (4), dark 0.313 (4)",
+      "light": 0.929,
+      "dark": 0.313,
+      "count": {
+        "light": 4,
+        "dark": 4
+      },
+      "shots": [
+        {
+          "file": "TR-10b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "TR-10b-light-android.png",
+          "theme": "light",
+          "luma": 0.934
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        },
+        {
+          "file": "step-004-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.115
+        },
+        {
+          "file": "step-004-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.927
+        },
+        {
+          "file": "step-017-assertCondition-Today_s_workout.This_wee-dark-android.png",
+          "theme": "dark",
+          "luma": 0.115
+        },
+        {
+          "file": "step-017-assertCondition-Today_s_workout.This_wee-light-android.png",
+          "theme": "light",
+          "luma": 0.927
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}
