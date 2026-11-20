@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Linking, Platform, Pressable, View } from "react-native";
 import { BellOff, PauseCircle } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { NotificationPreferences, ReminderStatus } from "@fitbud/contracts";
 import { formatCivilDate, formatHhMmTime, formatLocalDate } from "@fitbud/core";
 import { Text } from "../../components/Text";
@@ -95,11 +95,11 @@ function ReminderSettingsScreenBody({
     } catch (err) {
       reportError("ReminderSettings.load", err);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : browserOffline()
-            ? "You're offline. Pull to try again."
-            : "Couldn't load reminder settings (REM-LOAD). Pull to try again.",
+        browserOffline()
+          ? "You're offline. Pull to try again."
+          : userFacingMessage(err, {
+              fallback: "Couldn't load reminder settings. Pull to try again.",
+            }),
       );
     } finally {
       setLoading(false);
@@ -152,9 +152,7 @@ function ReminderSettingsScreenBody({
       reportError("ReminderSettings.save", err);
       setPrefs(previous);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't save that (REM-SAVE). Try again.",
+        userFacingMessage(err, { fallback: "Couldn't save that. Try again." }),
       );
     }
   }
@@ -266,9 +264,7 @@ function ReminderSettingsScreenBody({
                 .catch((err: unknown) => {
                   reportError("ReminderSettings.resume", err);
                   setError(
-                    err instanceof ApiClientError
-                      ? err.message
-                      : "Couldn't turn them back on (REM-RESUME). Try again.",
+                    userFacingMessage(err, { fallback: "Couldn't turn them back on. Try again." }),
                   );
                 });
             }}

@@ -1,7 +1,25 @@
 import { z } from "zod";
 import { queryString } from "./query-string.js";
 import {
-  apiErrorBodySchema,
+  ApiClientError,
+  toApiClientError,
+} from "./errors.js";
+export {
+  ApiClientError,
+  toApiClientError,
+  userFacingError,
+  userFacingMessage,
+  isTechnicalErrorMessage,
+  isNetworkFailure,
+  API_CLIENT_UNKNOWN_MESSAGE,
+  USER_FACING_OFFLINE,
+  USER_FACING_SERVER,
+  USER_FACING_GENERIC,
+  type UserFacingError,
+  type UserFacingErrorAction,
+  type UserFacingErrorOptions,
+} from "./errors.js";
+import {
   acceptInvitationRequestSchema,
   authOtpStartRequestSchema,
   authOtpStartResponseSchema,
@@ -317,47 +335,6 @@ export type ApiClientOptions = {
    */
   refreshAccessToken?: () => Promise<string | null>;
 };
-
-export class ApiClientError extends Error {
-  readonly code: string;
-  readonly requestId: string;
-  readonly status: number;
-  readonly details?: Record<string, unknown>;
-
-  constructor(input: {
-    code: string;
-    message: string;
-    requestId: string;
-    status: number;
-    details?: Record<string, unknown>;
-  }) {
-    super(input.message);
-    this.name = "ApiClientError";
-    this.code = input.code;
-    this.requestId = input.requestId;
-    this.status = input.status;
-    this.details = input.details;
-  }
-}
-
-function toApiClientError(status: number, json: unknown): ApiClientError {
-  const parsedError = apiErrorBodySchema.safeParse(json);
-  if (parsedError.success) {
-    return new ApiClientError({
-      code: parsedError.data.error.code,
-      message: parsedError.data.error.message,
-      requestId: parsedError.data.error.requestId,
-      status,
-      details: parsedError.data.error.details,
-    });
-  }
-  return new ApiClientError({
-    code: "UNKNOWN_ERROR",
-    message: `Request failed with status ${status}`,
-    requestId: "unknown",
-    status,
-  });
-}
 
 export class FitBudApiClient {
   private readonly baseUrl: string;

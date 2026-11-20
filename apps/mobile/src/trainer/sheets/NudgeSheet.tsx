@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Bell, BellOff, Clock, Dumbbell, Moon, X } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   NudgeActivityRequest,
   NudgeActivityResponse,
@@ -196,7 +196,7 @@ function NudgeSheetBody({
           setLimit(nudgeLimitLine(first, null));
         } else {
           // The API's own curated message (static text).
-          setError(err.message);
+          setError(userFacingMessage(err));
         }
       } else if (isNetworkFailure(err)) {
         setError("No connection. Try again when you're back online.");

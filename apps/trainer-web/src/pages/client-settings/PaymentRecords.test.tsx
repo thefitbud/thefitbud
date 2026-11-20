@@ -546,7 +546,9 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     });
     fireEvent.click(within(dialog).getByRole("radio", { name: "UPI" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
-    await within(dialog).findByText("Coaching with this client has ended.");
+    await within(dialog).findByText(
+      "This client has ended, so that action isn't available.",
+    );
     api.getClientSettings.mockResolvedValue(
       settings({
         relationshipStatus: "ended",

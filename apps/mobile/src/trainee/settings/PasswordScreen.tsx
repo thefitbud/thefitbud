@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";
@@ -31,7 +31,7 @@ export function passwordChangeError(err: unknown): { field: "current" | null; co
     if (err.code === "CURRENT_PASSWORD_REQUIRED") {
       return { field: "current", copy: CURRENT_REQUIRED_COPY };
     }
-    if (err.code.startsWith("PASSWORD_")) return { field: null, copy: err.message };
+    if (err.code.startsWith("PASSWORD_")) return { field: null, copy: userFacingMessage(err) };
   }
   return { field: null, copy: authFailure(err, "general", "PasswordScreen.save").copy };
 }

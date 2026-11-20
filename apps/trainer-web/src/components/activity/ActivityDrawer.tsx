@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { MealAssignment, WorkoutAssignment, WorkoutExecution } from "@fitbud/contracts";
 import { apiClient } from "../../lib/api";
 import { LoadingBlock } from "../StatePanels";
@@ -57,9 +57,7 @@ export function ActivityDrawer({
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load details.",
+            userFacingMessage(err, { fallback: "Could not load details." }),
           );
         }
       } finally {

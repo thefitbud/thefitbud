@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { apiClient, resolveApiUrl } from "../lib/api";
 
 type MediaState =
@@ -41,9 +41,7 @@ export function LinkedMedia({
         setState({
           status: "error",
           message:
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load this photo.",
+            userFacingMessage(err, { fallback: "Could not load this photo." }),
         });
       },
     );

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { Check, ChevronRight, ClipboardCheck, Info, Plus } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   Checkin,
   CheckinCadence,
@@ -262,9 +262,7 @@ export function ClientCheckinsPage() {
         setNowMs(Date.now());
       } catch (err) {
         setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load check-ins.",
+          userFacingMessage(err, { fallback: "Could not load check-ins." }),
         );
       } finally {
         setLoading(false);
@@ -526,9 +524,7 @@ export function ClientCheckinsPage() {
       await load();
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not schedule check-in.",
+        userFacingMessage(err, { fallback: "Could not schedule check-in." }),
       );
     } finally {
       setScheduling(false);

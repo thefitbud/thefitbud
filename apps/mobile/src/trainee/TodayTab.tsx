@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
@@ -50,7 +51,7 @@ import {
   TraineeDateNavigator,
   WEEK_UNAVAILABLE_MESSAGE,
 } from "./TraineeDateNavigator";
-import { confirmMealAssignment, MealSyncError } from "./mealActions";
+import { confirmMealAssignment } from "./mealActions";
 import {
   canShowMealLogActions,
   cleanFoodLabel,
@@ -659,9 +660,9 @@ function TodayTabInner({
       await refreshDay();
     } catch (err) {
       setActionError(
-        err instanceof MealSyncError
-          ? err.message
-          : "Couldn't save that meal. Try again when you're online.",
+        userFacingMessage(err, {
+          fallback: "Couldn't save that meal. Try again when you're online.",
+        }),
       );
     } finally {
       setMealActingId(null);

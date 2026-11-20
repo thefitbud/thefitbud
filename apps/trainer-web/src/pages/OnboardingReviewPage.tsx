@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   OnboardingFieldDefinition,
   OnboardingFormResponse,
@@ -210,9 +210,7 @@ export function OnboardingReviewPage() {
         }
       } catch (err) {
         setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load onboarding review.",
+          userFacingMessage(err, { fallback: "Could not load onboarding review." }),
         );
       } finally {
         setLoading(false);
@@ -330,9 +328,7 @@ export function OnboardingReviewPage() {
       navigate(`/clients/${relationshipId}/configure`);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not complete onboarding review.",
+        userFacingMessage(err, { fallback: "Could not complete onboarding review." }),
       );
     } finally {
       setActing(false);

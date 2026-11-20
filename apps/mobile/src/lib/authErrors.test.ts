@@ -141,7 +141,7 @@ describe("classifyAuthError", () => {
     );
     expect(classifyAuthError(apiError(410, "GONE"), "invite-accept").copy).toContain("expired");
     expect(classifyAuthError(apiError(404, "NOT_FOUND", "Invitation not found."), "invite-accept").copy).toBe(
-      "Invitation not found.",
+      "We couldn't find that.",
     );
   });
 

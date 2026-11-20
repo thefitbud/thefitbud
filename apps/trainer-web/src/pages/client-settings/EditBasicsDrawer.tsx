@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { X } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import {
   CLIENT_DISPLAY_NAME_MAX_LENGTH,
   type ClientSettingsResponse,
@@ -158,9 +158,7 @@ export function EditBasicsDrawer({
     } catch (err) {
       // Only the API's own curated message is shown verbatim (AGENTS.md).
       setSaveError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't save. Try again. (CS-SAVE)",
+        userFacingMessage(err, { fallback: "Couldn't save. Try again. (CS-SAVE)" }),
       );
     } finally {
       savingRef.current = false;

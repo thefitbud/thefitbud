@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import {
   PROGRESS_METRICS_MAX_KEYS,
   type ProgressMetricKey,
@@ -103,9 +103,7 @@ export function useProgressMetrics(input: {
           data: null,
           loading: false,
           error:
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load progress.",
+            userFacingMessage(err, { fallback: "Could not load progress." }),
         });
       });
     return () => {

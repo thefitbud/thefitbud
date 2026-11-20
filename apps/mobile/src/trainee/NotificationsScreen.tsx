@@ -24,7 +24,7 @@ import {
   Utensils,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { Notification, NotificationType } from "@fitbud/contracts";
 import { formatCivilDate, formatClockTime } from "@fitbud/core";
 import type { ColorToken } from "@fitbud/tokens";
@@ -197,7 +197,7 @@ export const INBOX_PARSE_ERROR =
  * check. The caller has already sent the error through `reportError`.
  */
 export function inboxErrorCopy(err: unknown, action: "load" | "read"): string {
-  if (err instanceof ApiClientError && err.message) return err.message;
+  if (err instanceof ApiClientError && err.message) return userFacingMessage(err);
   if (isZodError(err)) return INBOX_PARSE_ERROR;
   return action === "load" ? INBOX_LOAD_ERROR : INBOX_READ_ERROR;
 }

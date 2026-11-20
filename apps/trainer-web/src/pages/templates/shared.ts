@@ -1,4 +1,4 @@
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   ClientDirectoryItem,
   PlanContent,
@@ -16,7 +16,7 @@ export type TemplateFamily =
   | "libraries";
 
 export function errorText(err: unknown, fallback: string): string {
-  return err instanceof ApiClientError ? err.message : fallback;
+  return userFacingMessage(err, { fallback });
 }
 
 export function matchesName(name: string, query: string): boolean {

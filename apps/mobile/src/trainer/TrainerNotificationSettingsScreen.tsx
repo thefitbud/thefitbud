@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Linking, Pressable, StyleSheet, Switch, View } from "react-native";
 import { Text } from "../components/Text";
 import { CircleAlert, WifiOff } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { NotificationPreferences } from "@fitbud/contracts";
 import { semantic } from "@fitbud/tokens";
 import { colors, spacing } from "@fitbud/ui-mobile";
@@ -111,9 +111,7 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
       setPrefs(await api.getNotificationPreferences());
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load notification settings.",
+        userFacingMessage(err, { fallback: "Could not load notification settings." }),
       );
     } finally {
       setLoading(false);

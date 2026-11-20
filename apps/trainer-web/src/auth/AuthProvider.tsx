@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { MeResponse } from "@fitbud/contracts";
 import {
   accountDeletionCopy,
@@ -153,9 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           return;
         }
         setSessionError(
-          err instanceof Error
-            ? err.message
-            : "Can't reach FitBud. Check your connection and try again.",
+          userFacingMessage(err, { fallback: "Can't reach FitBud. Check your connection and try again." }),
         );
         setMe(null);
       } finally {
@@ -272,14 +270,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // RequireAuth navigates there when no token remains.
         reactivateRunningRef.current = false;
         await signOut();
-        setSessionError(error.message);
+        setSessionError(userFacingMessage(error));
         setReactivating(false);
         return;
       }
       setReactivateError(
-        error instanceof ApiClientError
-          ? error.message
-          : "Something went wrong. Try again.",
+        userFacingMessage(error, { fallback: "Something went wrong. Try again." }),
       );
       reactivateRunningRef.current = false;
       setReactivating(false);
@@ -293,7 +289,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       setArchivedAccount(null);
       setSessionError(
-        error instanceof Error ? error.message : "Something went wrong. Try again.",
+        userFacingMessage(error, { fallback: "Something went wrong. Try again." }),
       );
     } finally {
       reactivateRunningRef.current = false;

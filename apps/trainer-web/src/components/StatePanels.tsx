@@ -1,4 +1,10 @@
 import type { ReactNode } from "react";
+import {
+  USER_FACING_OFFLINE,
+  USER_FACING_SERVER,
+  isTechnicalErrorMessage,
+  userFacingMessage,
+} from "@fitbud/api-client";
 import { CloudAlert, Lock, Mail, SearchX } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "./Button";
@@ -16,7 +22,7 @@ export type ErrorKind =
 const ERROR_COPY: Record<ErrorKind, { title: string; message: string }> = {
   network: {
     title: "Couldn't load this page",
-    message: "Check your network and try again. Your session is still signed in.",
+    message: USER_FACING_OFFLINE,
   },
   unauthorized: {
     title: "Please sign in again",
@@ -37,8 +43,7 @@ const ERROR_COPY: Record<ErrorKind, { title: string; message: string }> = {
   },
   server: {
     title: "Couldn't load this page",
-    message:
-      "Something went wrong on our side. Your data is safe. Try again in a moment.",
+    message: USER_FACING_SERVER,
   },
 };
 
@@ -64,10 +69,10 @@ export function errorKindFromFailure(input: {
 }
 
 function sanitizeMessage(message: string | undefined, kind: ErrorKind): string {
-  if (!message || /Request failed with status/i.test(message)) {
+  if (!message || isTechnicalErrorMessage(message)) {
     return ERROR_COPY[kind].message;
   }
-  return message;
+  return userFacingMessage(message, { fallback: ERROR_COPY[kind].message });
 }
 
 function supportMailto(input: {

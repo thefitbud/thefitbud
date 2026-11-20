@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { TrainerNote } from "@fitbud/contracts";
 import {
   formatCivilDate,
@@ -268,7 +268,7 @@ export function NoteComposer({
       onSaved?.(message);
     } catch (err) {
       setError(
-        err instanceof ApiClientError ? err.message : "Could not save note.",
+        userFacingMessage(err, { fallback: "Could not save note." }),
       );
     } finally {
       setSubmitting(false);
@@ -307,7 +307,7 @@ export function NoteComposer({
       await reloadEarlier();
     } catch (err) {
       setError(
-        err instanceof ApiClientError ? err.message : "Could not delete note.",
+        userFacingMessage(err, { fallback: "Could not delete note." }),
       );
     } finally {
       setBusyId(null);

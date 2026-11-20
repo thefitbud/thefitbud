@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   OnboardingFormTemplateSummary,
   OnboardingFormVersion,
@@ -244,7 +244,7 @@ export function WelcomePage() {
       setStep(2);
     } catch (err) {
       setError(
-        err instanceof ApiClientError ? err.message : "Could not save profile.",
+        userFacingMessage(err, { fallback: "Could not save profile." }),
       );
     } finally {
       setSaving(false);
@@ -288,9 +288,7 @@ export function WelcomePage() {
       finish();
     } catch (err) {
       setInviteError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not create invitation.",
+        userFacingMessage(err, { fallback: "Could not create invitation." }),
       );
     } finally {
       setInviteSubmitting(false);

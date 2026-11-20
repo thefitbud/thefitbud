@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Info, MessageCircle } from "lucide-react";
@@ -234,7 +235,7 @@ export function AsksViewPage() {
       {error ? (
         <ErrorState
           title="Couldn't load asked-coach items"
-          message={error.message}
+          message={userFacingMessage(error)}
           kind={error.kind}
           requestId={error.requestId}
           onRetry={() => void load()}

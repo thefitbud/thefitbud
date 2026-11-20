@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { formatCivilDate, formatLocalDate } from "@fitbud/core";
 import type {
   AttentionGroupsResponse,
@@ -131,14 +131,12 @@ function pageErrorFrom(err: unknown): HomeLoadError {
       ? errorKindFromFailure({
           status: err.status,
           code: err.code,
-          message: err.message,
+          message: userFacingMessage(err),
         })
       : "server";
   return {
     message:
-      err instanceof ApiClientError
-        ? err.message
-        : "Could not load your home feed.",
+      userFacingMessage(err, { fallback: "Could not load your home feed." }),
     requestId: err instanceof ApiClientError ? err.requestId : null,
     kind,
   };

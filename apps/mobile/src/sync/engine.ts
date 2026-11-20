@@ -1,4 +1,4 @@
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   SyncChangeRecord,
   SyncEntityType,
@@ -493,7 +493,7 @@ export function classifyPushError(error: unknown): PushFailure {
       return { kind: "waiting", reason: "AUTH" };
     }
     if (error.status === 400 || error.status === 413 || error.status === 422) {
-      return { kind: "invalid", code: error.code, message: error.message };
+      return { kind: "invalid", code: error.code, message: userFacingMessage(error) };
     }
     return { kind: "waiting", reason: "SERVER" };
   }

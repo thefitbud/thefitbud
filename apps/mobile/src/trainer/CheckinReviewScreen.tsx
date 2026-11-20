@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, StyleSheet, Switch, TextInput, View } from "react-native";
 import { Eye } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { CheckinReviewContext, CheckinReviewOutcome } from "@fitbud/contracts";
 import {
   canRecordCheckinReview,
@@ -163,7 +163,7 @@ export function CheckinReviewScreen({
       } else if (err instanceof ApiClientError && err.status === 409) {
         setError(`${first}'s check-in changed. Pull to reload.`);
       } else if (err instanceof ApiClientError) {
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else {
         reportError("checkinReview.save", err);
         setError("Couldn't save the review. Try again.");

@@ -1,4 +1,4 @@
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   CheckinDraftAnswers,
   CheckinFieldDefinition,
@@ -185,29 +185,31 @@ export function hasBodyWeightField(
 export type CheckinFormLoadFailure = { code: string; message: string };
 
 /**
- * Why the pinned form did not load (AGENTS.md "No misleading catch"). Only an
- * `ApiClientError` message is shown as the API wrote it; everything else shows
- * a short code and the caller passes the error to `reportError`.
+ * Why the pinned form did not load (AGENTS.md "No misleading catch", Z12-64).
+ * Internal `code` is for logs; `message` is always user-safe copy (never a
+ * raw status, stack, or short error code in the UI string).
  */
 export function checkinFormLoadFailure(err: unknown): CheckinFormLoadFailure {
   if (err instanceof ApiClientError) {
-    return { code: err.code, message: err.message };
+    return { code: err.code, message: userFacingMessage(err) };
   }
   if (err instanceof Error && err.name === "ZodError") {
     return {
       code: "CHK-PARSE",
-      message: "Couldn't open the check-in (CHK-PARSE). Try again.",
+      message: "Couldn't open the check-in. Try again.",
     };
   }
   if (isNetworkFailure(err)) {
     return {
       code: "CHK-NET",
-      message: "Couldn't reach FitBud (CHK-NET). Check your connection and try again.",
+      message: userFacingMessage(err),
     };
   }
   return {
     code: "CHK-UNK",
-    message: "Couldn't open the check-in (CHK-UNK). Try again.",
+    message: userFacingMessage(err, {
+      fallback: "Couldn't open the check-in. Try again.",
+    }),
   };
 }
 

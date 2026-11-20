@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { formatHhMmTime } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { useOnlineStatus } from "../../components/OfflineBanner";
@@ -118,7 +118,9 @@ export function NotificationSettingsPage() {
       const apiErr = err instanceof ApiClientError ? err : null;
       setError({
         message:
-          apiErr?.message ?? "Could not load notification settings.",
+          userFacingMessage(err, {
+            fallback: "Could not load notification settings.",
+          }),
         kind: errorKindFromFailure({
           status: apiErr?.status,
           code: apiErr?.code,
@@ -167,9 +169,7 @@ export function NotificationSettingsPage() {
         if (gen === saveGen.current) {
           setSaveStatus("idle");
           setSaveError(
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not save notification settings.",
+            userFacingMessage(err, { fallback: "Could not save notification settings." }),
           );
         }
       }
@@ -219,7 +219,7 @@ export function NotificationSettingsPage() {
     return (
       <div data-testid="screen-TW-29">
         <ErrorState
-          message={error.message}
+          message={userFacingMessage(error)}
           kind={error.kind}
           requestId={error.requestId}
           screenId="TW-29"

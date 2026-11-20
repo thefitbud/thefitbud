@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { formatPersonName } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -74,9 +74,7 @@ function ProfileScreenBody({ onBack, coachName }: Props) {
     } catch (err) {
       reportError("ProfileScreen.load", err);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load your profile (PROF-LOAD). Go back and try again.",
+        userFacingMessage(err, { fallback: "Couldn't load your profile (PROF-LOAD). Go back and try again." }),
       );
     }
   }, [api]);
@@ -101,9 +99,7 @@ function ProfileScreenBody({ onBack, coachName }: Props) {
     } catch (err) {
       reportError("ProfileScreen.save", err);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't save your profile (PROF-SAVE). Try again.",
+        userFacingMessage(err, { fallback: "Couldn't save your profile (PROF-SAVE). Try again." }),
       );
     } finally {
       setSaving(false);

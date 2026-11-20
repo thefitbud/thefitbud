@@ -4,7 +4,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   ClientWorkspace,
   MealAssignment,
@@ -200,9 +200,7 @@ export function ClientActivityPage() {
       } catch (err) {
         if (requestId.current !== id) return;
         setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load activity.",
+          userFacingMessage(err, { fallback: "Could not load activity." }),
         );
       } finally {
         if (requestId.current === id) {
@@ -286,7 +284,7 @@ export function ClientActivityPage() {
         }));
       }
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Could not nudge.");
+      setError(userFacingMessage(err, { fallback: "Could not nudge." }));
     } finally {
       setNudgingId(null);
     }

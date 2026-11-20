@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type Ref } from "react";
 import { AlertCircle, CalendarDays, X } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import {
   CLIENT_SETTINGS_MAX_AMOUNT_PAISE,
   type ClientSettingsSubscription,
@@ -301,7 +301,7 @@ export function SubscriptionDrawer({
     } catch (err) {
       // Only the API's own curated message is shown verbatim (AGENTS.md).
       if (err instanceof ApiClientError) {
-        setSaveError({ message: err.message, stale: STALE_CODES.has(err.code) });
+        setSaveError({ message: userFacingMessage(err), stale: STALE_CODES.has(err.code) });
       } else {
         setSaveError({ message: "Couldn't save. Try again. (CS-SUB-SAVE)", stale: false });
       }

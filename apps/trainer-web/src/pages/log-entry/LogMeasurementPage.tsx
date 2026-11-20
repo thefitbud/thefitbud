@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   CoachEditMeasurementRequest,
   CreateMeasurementRequest,
@@ -101,7 +101,7 @@ export function LogMeasurementPage({ mode }: { mode: Mode }) {
     } catch (err) {
       if (seq !== loadSeq.current) return;
       setLoadError(
-        err instanceof ApiClientError ? err.message : "Could not load this measurement.",
+        userFacingMessage(err, { fallback: "Could not load this measurement." }),
       );
     } finally {
       if (seq === loadSeq.current) setLoading(false);
