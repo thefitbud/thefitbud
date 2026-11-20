@@ -1,0 +1,17 @@
+{
+  "result": "mean screenshot luminance: light — (0), dark 0.095 (1)",
+  "light": null,
+  "dark": 0.095,
+  "count": {
+    "light": 0,
+    "dark": 1
+  },
+  "shots": [
+    {
+      "file": "TR-10b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.095
+    }
+  ],
+  "w03DarkTooBright": []
+}
