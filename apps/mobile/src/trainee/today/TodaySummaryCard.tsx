@@ -280,7 +280,8 @@ export function stepsChipText(steps: StepsChipState): {
         a11y: `Steps ${formatNumber(steps.steps)} of ${formatNumber(steps.target)}`,
       };
     case "not_synced":
-      // Short chip label — "Set up steps" truncates on Android (FitBud batch 2).
+      // Short copy so the chip fits at 360 dp (Z12-46fu; was "Set up st…").
+      // Same "Set up" label as main (#515 FitBud batch 2).
       return { value: "Set up", a11y: "Steps: set up steps" };
     case "unavailable":
       return { value: "—", a11y: "Steps unavailable" };
