@@ -101,6 +101,7 @@ describe("http-api", () => {
             recordVersion: 0,
             createdAt: "2026-10-01T00:00:00.000Z",
             updatedAt: "2026-10-01T00:00:00.000Z",
+            usedBy: { count: 0, clientIds: [] },
           },
         ],
         nextCursor: null,

@@ -27,6 +27,7 @@ import {
   planVersions,
 } from "../db/schema";
 import { prepareWritablePlanContent } from "../domain/library-snapshots";
+import { loadTemplateUsedBy, usedByFor } from "../domain/template-used-by";
 import {
   mapPlanTemplate,
   mapPlanTemplateSummary,
@@ -147,8 +148,16 @@ templateRoutes.get(
       .orderBy(desc(planTemplates.updatedAt), desc(planTemplates.id))
       .limit(limit + 1);
 
+    const usage = await loadTemplateUsedBy(
+      db,
+      actor.userId,
+      rows.map((row) => row.id),
+    );
     const page = buildPage(
-      rows.map((row) => mapPlanTemplateSummary(row)),
+      rows.map((row) => ({
+        ...mapPlanTemplateSummary(row),
+        usedBy: usedByFor(usage, row.id),
+      })),
       limit,
       (item) => item.updatedAt,
     );
