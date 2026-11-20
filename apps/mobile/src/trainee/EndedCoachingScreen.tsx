@@ -31,6 +31,8 @@ import {
 } from "../providers/ThemeProvider";
 import { androidTopInset } from "../screens/auth/authParts";
 import { initials } from "./MoreScreen";
+import { TodayHeader } from "./today/TodayHeader";
+import { dayEyebrow } from "./useDayState";
 
 type Props = {
   relationship: CoachingRelationship;
@@ -39,11 +41,15 @@ type Props = {
   onSignOut: () => void;
   onCoachingResumed: (relationship: CoachingRelationship) => void;
   /**
-   * Rendered inside the Today tab under the shell's own header and tab bar
-   * (TR-22a). Standalone (no tab bar) it draws the Today title itself and
-   * keeps a Sign out link, since More is out of reach.
+   * Rendered inside the Today tab under the shell tab bar (TR-22a). With the
+   * chrome callbacks it draws TodayHeader; without them (unit tests) it
+   * leaves the header to the caller. Standalone (no tab bar) it draws the
+   * Today title itself and keeps a Sign out link, since More is out of reach.
    */
   embedded?: boolean;
+  unreadNotifications?: number;
+  onOpenSync?: () => void;
+  onOpenNotifications?: () => void;
 };
 
 function endedOn(iso: string | null | undefined, zone: string): string | null {
@@ -82,6 +88,9 @@ function EndedBody({
   onSignOut,
   onCoachingResumed,
   embedded = false,
+  unreadNotifications = 0,
+  onOpenSync,
+  onOpenNotifications,
 }: Props) {
   const { api, me } = useAuth();
   const theme = useTheme();
@@ -89,6 +98,7 @@ function EndedBody({
   const zone = me?.timezone || "Asia/Kolkata";
   const coach = formatPersonName(coachName.trim() || "your coach");
   const coachFirst = coach.split(/\s+/)[0] || coach;
+  const showEmbeddedChrome = embedded && onOpenNotifications != null;
   const [pending, setPending] = useState<
     PendingReactivation | null | undefined
   >(relationship.pendingReactivation);
@@ -305,7 +315,22 @@ function EndedBody({
     </ScrollView>
   );
 
-  if (embedded) return body;
+  if (embedded) {
+    if (!showEmbeddedChrome) return body;
+    return (
+      <SafeAreaView style={styles.safe} testID="ended-coaching-embedded">
+        <View style={styles.embeddedHead}>
+          <TodayHeader
+            eyebrow={dayEyebrow(localDateInTimezone(zone), "today")}
+            unreadNotifications={unreadNotifications}
+            onOpenSync={onOpenSync ?? (() => {})}
+            onOpenNotifications={onOpenNotifications}
+          />
+        </View>
+        {body}
+      </SafeAreaView>
+    );
+  }
   return <SafeAreaView style={styles.safe}>{body}</SafeAreaView>;
 }
 
@@ -382,6 +407,11 @@ function RestartSheet({
 
 const useStyles = createThemedStyles((t) => ({
   safe: { flex: 1, backgroundColor: t.colors.bg, paddingTop: androidTopInset },
+  embeddedHead: {
+    paddingBottom: 4,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+  },
   scroll: { flex: 1, backgroundColor: t.colors.bg },
   content: { gap: 16, paddingBottom: 32, paddingHorizontal: 20, paddingTop: 8 },
   head: { gap: 2, marginBottom: 4 },
