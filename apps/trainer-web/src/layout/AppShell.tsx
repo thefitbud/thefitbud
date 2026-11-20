@@ -1,4 +1,5 @@
 import {
+  Link,
   NavLink,
   useLocation,
   useNavigate,
@@ -16,14 +17,20 @@ import {
 } from "react";
 import {
   Bell,
+  ChevronRight,
+  ChevronsUpDown,
   ClipboardCheck,
   Dumbbell,
   HelpCircle,
   Home,
   LayoutGrid,
+  Library,
+  LogOut,
   Menu,
-  MoreHorizontal,
   Search,
+  Settings,
+  Smartphone,
+  User,
   Users,
 } from "lucide-react";
 import {
@@ -110,10 +117,22 @@ const PALETTE_PAGES: Array<Omit<PalettePageHit, "kind">> = [
     href: "/clients/add",
   },
   {
+    id: "page-library",
+    name: "Library",
+    meta: "Exercises and foods",
+    href: "/templates/libraries/exercises",
+  },
+  {
     id: "page-settings",
     name: "Settings",
-    meta: "More",
+    meta: "Account",
     href: "/settings",
+  },
+  {
+    id: "page-help",
+    name: "Help",
+    meta: "Support",
+    href: "/settings/help",
   },
 ];
 
@@ -158,8 +177,9 @@ const PAGE_TITLES: Array<{ match: (path: string) => boolean; title: string }> = 
   { match: (p) => p.startsWith("/clients/"), title: "Clients" },
   { match: (p) => p.startsWith("/clients"), title: "Clients" },
   { match: (p) => p.startsWith("/checkins"), title: "Check-ins" },
+  { match: (p) => p.startsWith("/templates/libraries"), title: "Library" },
   { match: (p) => p.startsWith("/templates"), title: "Templates" },
-  { match: (p) => p.startsWith("/settings"), title: "More" },
+  { match: (p) => p.startsWith("/settings"), title: "Settings" },
   { match: (p) => p.startsWith("/invitations"), title: "Invitation" },
 ];
 
@@ -180,10 +200,6 @@ function initials(name: string): string {
   );
 }
 
-function navClass({ isActive }: { isActive: boolean }): string {
-  return isActive ? "shell-nav-link is-active" : "shell-nav-link";
-}
-
 function supportMailto(screenId: string, supportEmail: string): string {
   const subject = encodeURIComponent(
     `FitBud support · Trainer web · ${screenId}`,
@@ -195,7 +211,7 @@ function supportMailto(screenId: string, supportEmail: string): string {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { email, me } = useAuth();
+  const { email, me, signOut } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
   const navigate = useNavigate();
@@ -224,6 +240,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   >([]);
   const [helpOpen, setHelpOpen] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [acctOpen, setAcctOpen] = useState(false);
+  const acctRef = useRef<HTMLDivElement>(null);
   const paletteInputRef = useRef<HTMLInputElement>(null);
   const goChordRef = useRef(false);
   const paletteListId = useId();
@@ -261,7 +279,24 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     setNavOpen(false);
+    setAcctOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    if (!acctOpen) return;
+    function onPointer(ev: PointerEvent) {
+      if (!acctRef.current?.contains(ev.target as Node)) setAcctOpen(false);
+    }
+    function onKey(ev: KeyboardEvent) {
+      if (ev.key === "Escape") setAcctOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointer);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [acctOpen]);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -466,6 +501,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         if (k === "c") navigate("/clients");
         if (k === "k") navigate("/checkins");
         if (k === "t") navigate("/templates");
+        if (k === "l") navigate("/templates/libraries/exercises");
+        if (k === "s") navigate("/settings");
       }
     }
     window.addEventListener("keydown", onKey);
@@ -521,65 +558,80 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   const helpHref = supportMailto("TW-03", supportEmail);
+  const onLibrary = location.pathname.startsWith("/templates/libraries");
+  const onTemplates = location.pathname.startsWith("/templates") && !onLibrary;
+  const onHelp = location.pathname.startsWith("/settings/help");
+  const onSettings = location.pathname.startsWith("/settings") && !onHelp;
+  const settingsCrumb = (
+    [
+      ["/settings/notifications", "Notifications"],
+      ["/settings/business", "Business and packages"],
+      ["/settings/units", "Units and language"],
+      ["/settings/ended", "Ended clients"],
+      ["/settings/privacy", "Privacy and data"],
+      ["/settings/help", "Help"],
+    ] as const
+  ).find(([path]) => location.pathname.startsWith(path))?.[1];
 
-  const navItems = (
-    <>
-      <NavLink to="/" end className={navClass} onClick={() => setNavOpen(false)}>
-        <Home size={20} strokeWidth={1.75} aria-hidden />
-        <span className="shell-nav-label">Home</span>
-        {attentionCount !== null && attentionCount > 0 ? (
-          <span className="shell-nav-badge">{attentionCount}</span>
+  function primaryLinks(withTestId: boolean) {
+    const item = (
+      to: string,
+      label: string,
+      icon: ReactNode,
+      active: boolean,
+      testId: string,
+      badge?: number | null,
+    ) => (
+      <Link
+        key={to}
+        to={to}
+        className={active ? "shell-nav-link is-active" : "shell-nav-link"}
+        aria-current={active ? "page" : undefined}
+        aria-label={badge && badge > 0 ? `${label}, ${badge}` : label}
+        title={label}
+        data-testid={withTestId ? testId : undefined}
+        onClick={() => setNavOpen(false)}
+      >
+        {icon}
+        <span className="shell-nav-label">{label}</span>
+        {badge !== null && badge !== undefined && badge > 0 ? (
+          <span className="shell-nav-badge">{badge}</span>
         ) : null}
-      </NavLink>
-      <NavLink
-        to="/clients"
-        className={navClass}
-        onClick={() => setNavOpen(false)}
-      >
-        <Users size={20} strokeWidth={1.75} aria-hidden />
-        <span className="shell-nav-label">Clients</span>
-      </NavLink>
-      <NavLink
-        to="/checkins"
-        className={navClass}
-        onClick={() => setNavOpen(false)}
-      >
-        <ClipboardCheck size={20} strokeWidth={1.75} aria-hidden />
-        <span className="shell-nav-label">Check-ins</span>
-        {checkinBadge !== null && checkinBadge > 0 ? (
-          <span className="shell-nav-badge">{checkinBadge}</span>
-        ) : null}
-      </NavLink>
-      <NavLink
-        to="/templates"
-        className={navClass}
-        onClick={() => setNavOpen(false)}
-      >
-        <LayoutGrid size={20} strokeWidth={1.75} aria-hidden />
-        <span className="shell-nav-label">Templates</span>
-      </NavLink>
-      <NavLink
-        to="/settings"
-        className={navClass}
-        onClick={() => setNavOpen(false)}
-      >
-        <MoreHorizontal size={20} strokeWidth={1.75} aria-hidden />
-        <span className="shell-nav-label">More</span>
-      </NavLink>
-    </>
-  );
+      </Link>
+    );
+    return (
+      <>
+        {item("/", "Home", <Home size={20} strokeWidth={1.75} aria-hidden />, location.pathname === "/", "nav-home", attentionCount)}
+        {item("/clients", "Clients", <Users size={20} strokeWidth={1.75} aria-hidden />, location.pathname.startsWith("/clients"), "nav-clients")}
+        {item("/checkins", "Check-ins", <ClipboardCheck size={20} strokeWidth={1.75} aria-hidden />, location.pathname.startsWith("/checkins"), "nav-checkins", checkinBadge)}
+        {item("/templates", "Templates", <LayoutGrid size={20} strokeWidth={1.75} aria-hidden />, onTemplates, "nav-templates")}
+        {item("/templates/libraries/exercises", "Library", <Library size={20} strokeWidth={1.75} aria-hidden />, onLibrary, "nav-library")}
+      </>
+    );
+  }
 
-  const crumb =
-    location.pathname.startsWith("/clients/add") ? (
+  const crumb = location.pathname.startsWith("/clients/add") ? (
       <>
         <NavLink to="/clients" className="shell-crumb-link">
           Clients
         </NavLink>
-        <span aria-hidden="true"> › </span>
-        <span>Add client</span>
+        <ChevronRight size={14} aria-hidden />
+        <b>Add client</b>
       </>
+    ) : location.pathname.startsWith("/settings") ? (
+      settingsCrumb ? (
+        <>
+          <NavLink to="/settings" className="shell-crumb-link">
+            Settings
+          </NavLink>
+          <ChevronRight size={14} aria-hidden />
+          <b>{settingsCrumb}</b>
+        </>
+      ) : (
+        <b>Settings</b>
+      )
     ) : (
-      pageTitle
+      <b>{pageTitle}</b>
     );
 
   return (
@@ -605,27 +657,107 @@ export function AppShell({ children }: { children: ReactNode }) {
           <LogoLockup />
         </div>
         <nav className="shell-nav" aria-label="Primary">
-          {navItems}
+          {primaryLinks(true)}
         </nav>
         <div className="shell-side-grow" />
         <div className="shell-side-foot">
-          <a className="shell-nav-link shell-help" href={helpHref}>
-            <HelpCircle size={20} strokeWidth={1.75} aria-hidden />
-            <span className="shell-nav-label">Help</span>
-          </a>
-          <NavLink
-            to="/settings/profile"
-            className="shell-me"
+          <Link
+            to="/settings/help"
+            className={onHelp ? "shell-nav-link is-active" : "shell-nav-link"}
+            aria-current={onHelp ? "page" : undefined}
+            aria-label="Help"
+            title="Help"
+            data-testid="nav-help"
             onClick={() => setNavOpen(false)}
           >
-            <span className="shell-av" aria-hidden>
-              {initials(displayName)}
-            </span>
-            <span className="shell-me-text">
-              <b>{displayName}</b>
-              <span>Trainer</span>
-            </span>
-          </NavLink>
+            <HelpCircle size={20} strokeWidth={1.75} aria-hidden />
+            <span className="shell-nav-label">Help</span>
+          </Link>
+          <Link
+            to="/settings"
+            className={onSettings ? "shell-nav-link is-active" : "shell-nav-link"}
+            aria-current={onSettings ? "page" : undefined}
+            aria-label="Settings"
+            title="Settings"
+            data-testid="nav-settings"
+            onClick={() => setNavOpen(false)}
+          >
+            <Settings size={20} strokeWidth={1.75} aria-hidden />
+            <span className="shell-nav-label">Settings</span>
+          </Link>
+          <div className="shell-acct-wrap" ref={acctRef}>
+            {acctOpen ? (
+              <div
+                className="shell-acct-menu"
+                role="menu"
+                aria-label="Account"
+                data-testid="account-menu"
+              >
+                <div className="shell-acct-menu-who">
+                  <span className="shell-av" aria-hidden>
+                    {initials(displayName)}
+                  </span>
+                  <span>
+                    <b>{displayName}</b>
+                    <span>{me?.email ?? email}</span>
+                  </span>
+                </div>
+                <Link role="menuitem" className="shell-menu-item" to="/settings/profile" onClick={() => setAcctOpen(false)}>
+                  <User size={16} aria-hidden />
+                  Profile
+                </Link>
+                <Link
+                  role="menuitem"
+                  className={onSettings ? "shell-menu-item is-on" : "shell-menu-item"}
+                  to="/settings"
+                  onClick={() => setAcctOpen(false)}
+                >
+                  <Settings size={16} aria-hidden />
+                  Settings
+                </Link>
+                <a
+                  role="menuitem"
+                  className="shell-menu-item"
+                  href="https://apps.apple.com/app/fitbud"
+                  data-testid="account-coach-app"
+                >
+                  <Smartphone size={16} aria-hidden />
+                  Get the coach app
+                </a>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="shell-menu-item is-signout"
+                  data-testid="account-sign-out"
+                  onClick={() => {
+                    setAcctOpen(false);
+                    void signOut();
+                  }}
+                >
+                  <LogOut size={16} aria-hidden />
+                  Sign out
+                </button>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              className="shell-acct"
+              aria-haspopup="menu"
+              aria-expanded={acctOpen}
+              aria-label={`${displayName}, Coach`}
+              data-testid="account-menu-button"
+              onClick={() => setAcctOpen((open) => !open)}
+            >
+              <span className="shell-av" aria-hidden>
+                {initials(displayName)}
+              </span>
+              <span className="shell-acct-who">
+                <b>{displayName}</b>
+                <span>Coach</span>
+              </span>
+              <ChevronsUpDown className="shell-acct-chev" size={16} aria-hidden />
+            </button>
+          </div>
         </div>
       </aside>
 
@@ -692,13 +824,13 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main id="main" className="page-main">
+        <main id="main" className="page-main main">
           {children}
         </main>
       </div>
 
       <nav className="shell-bottom-nav" aria-label="Primary mobile">
-        {navItems}
+        {primaryLinks(false)}
       </nav>
 
       {paletteOpen ? (
@@ -909,6 +1041,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               </li>
               <li>
                 <kbd>G</kbd> then <kbd>T</kbd> Templates
+              </li>
+              <li>
+                <kbd>G</kbd> then <kbd>L</kbd> Library
+              </li>
+              <li>
+                <kbd>G</kbd> then <kbd>S</kbd> Settings
               </li>
               <li>
                 <kbd>/</kbd> or <kbd>⌘K</kbd> Search

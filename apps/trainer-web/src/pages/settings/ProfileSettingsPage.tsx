@@ -1,21 +1,33 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { ChevronDown, Upload } from "lucide-react";
 import { ApiClientError } from "@fitbud/api-client";
-import { normalizeWhatsappE164 } from "@fitbud/core";
+import { formatCivilDate, normalizeWhatsappE164 } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { stage1Api } from "../../lib/stage1-api";
+import { Button } from "../../components/ui/Button";
 import { ErrorState, LoadingBlock } from "../../components/StatePanels";
 import { useOnlineStatus } from "../../components/OfflineBanner";
 import {
   parsePhoneInput,
   phoneInputValue,
 } from "../client-settings/clientSettingsFormat";
+import { SettingsCard, SettingsRow } from "./SettingsLayout";
 import "./settings.css";
 
-/** Frame 176: "India (IST)" — never raw IANA in the control. */
+/** Frame W-176: "India Standard Time (IST)" — never raw IANA in the control. */
 function timezoneOptionLabel(iana: string): string {
-  if (iana === "Asia/Kolkata" || iana === "Asia/Calcutta") return "India (IST)";
+  if (iana === "Asia/Kolkata" || iana === "Asia/Calcutta") {
+    return "India Standard Time (IST)";
+  }
   return iana;
+}
+
+function todayCivil(): string {
+  const now = new Date();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 function initialsOf(name: string): string {
@@ -38,6 +50,8 @@ export function ProfileSettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [toast, setToast] = useState<string | null>(null);
+  const [savedOn, setSavedOn] = useState<string | null>(null);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -96,6 +110,7 @@ export function ProfileSettingsPage() {
         timezone,
       });
       await refreshMe();
+      setSavedOn(todayCivil());
       setToast("Profile saved.");
     } catch (err) {
       setError(
@@ -132,6 +147,21 @@ export function ProfileSettingsPage() {
     }
   }
 
+  function resetProfile() {
+    if (!me) return;
+    setDisplayName(me.trainerProfile?.displayName ?? "");
+    setWhatsappLocal(phoneInputValue(me.trainerProfile?.whatsappE164 ?? null));
+    setTimezone(me.timezone ?? "Asia/Kolkata");
+    setFieldError(null);
+    setError(null);
+  }
+
+  function removePhoto() {
+    if (photoPreview) URL.revokeObjectURL(photoPreview);
+    setPhotoPreview(null);
+    setPhotoNote(null);
+  }
+
   function onPhotoPicked(file: File | null) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -159,28 +189,45 @@ export function ProfileSettingsPage() {
   }
 
   const initials = initialsOf(displayName || me.trainerProfile?.displayName || "");
+  const reminderName = displayName.trim().split(/\s+/)[0] || "Your name";
 
   return (
-    <>
-      <div className="settings-panel stack-lg" data-testid="screen-TW-28">
-        {!online ? (
-          <p className="form-error" role="status">
-            You&apos;re offline. You can view settings but saves are disabled.
-          </p>
-        ) : null}
+    <div className="settings-stack" data-testid="screen-TW-28">
+      {!online ? (
+        <p className="form-error settings-banner" role="status">
+          You&apos;re offline. You can view settings but saves are disabled.
+        </p>
+      ) : null}
 
-        <form className="stack-form" onSubmit={saveProfile}>
-          <h2>Profile</h2>
-
-          <div className="settings-profile-avatar-row">
-            <span className="settings-profile-avatar" aria-hidden="true">
-              {photoPreview ? (
-                <img src={photoPreview} alt="" />
-              ) : (
-                initials
-              )}
+      <SettingsCard
+        title="Profile"
+        aside="Clients see your name and photo in the FitBud app"
+        footer={
+          <>
+            <span className="settings-saved">
+              {savedOn ? `Last saved ${formatCivilDate(savedOn)}` : ""}
             </span>
-            <div>
+            <span className="sp" />
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={saving}
+              onClick={resetProfile}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" form="profile-settings-form" disabled={saving || !online}>
+              Save changes
+            </Button>
+          </>
+        }
+      >
+        <form id="profile-settings-form" onSubmit={saveProfile}>
+          <SettingsRow label="Photo" help="Square, at least 400 px" inline>
+            <div className="settings-photo">
+              <span className="settings-avatar" aria-hidden="true">
+                {photoPreview ? <img src={photoPreview} alt="" /> : initials}
+              </span>
               <input
                 ref={photoInputRef}
                 id={photoInputId}
@@ -192,143 +239,164 @@ export function ProfileSettingsPage() {
                   e.target.value = "";
                 }}
               />
-              <button
+              <Button
                 type="button"
-                className="settings-change-photo"
+                variant="secondary"
+                size="sm"
                 disabled={!online}
                 onClick={() => photoInputRef.current?.click()}
               >
+                <Upload className="ui-i" aria-hidden />
                 Change photo
-              </button>
-              {photoNote ? (
-                <p className="muted" role="status">
-                  {photoNote}
-                </p>
-              ) : null}
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={removePhoto}>
+                Remove
+              </Button>
             </div>
-          </div>
-
-          <label className="field">
-            <span>Display name</span>
-            <input
-              required
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              autoComplete="name"
-            />
-            <span className="muted">
-              Clients see this in the app and in reminders.
-            </span>
-          </label>
-
-          <label className="field">
-            <span>Email</span>
-            <input
-              value={me.email ?? ""}
-              readOnly
-              aria-readonly="true"
-              autoComplete="email"
-            />
-          </label>
-
-          <label className="field">
-            <span>WhatsApp number</span>
-            <span className="input-shell">
-              <span className="phone-prefix" aria-hidden="true">
-                +91
-              </span>
-              <input
-                value={whatsappLocal}
-                onChange={(e) => setWhatsappLocal(e.target.value)}
-                inputMode="numeric"
-                autoComplete="tel-national"
-                placeholder="98200 41736"
-              />
-            </span>
-          </label>
-
-          <label className="field">
-            <span>Timezone</span>
-            <select
-              required
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-            >
-              {timezoneChoices.map((z) => (
-                <option key={z} value={z}>
-                  {timezoneOptionLabel(z)}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {fieldError ? (
-            <p className="form-error" role="alert">
-              {fieldError}
+          </SettingsRow>
+          {photoNote ? (
+            <p className="settings-note" role="status" style={{ padding: "0 20px 8px" }}>
+              {photoNote}
             </p>
           ) : null}
 
-          <div className="settings-profile-actions">
-            <button
-              type="submit"
-              className="button-primary"
-              disabled={saving || !online}
-            >
-              Save changes
-            </button>
-          </div>
-        </form>
-
-        {toast ? (
-          <p className="form-success" role="status">
-            {toast}
-          </p>
-        ) : null}
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-      </div>
-
-      <div className="settings-panel stack-lg settings-password-panel">
-        <form className="stack-form" onSubmit={changePassword}>
-          <h2>Change password</h2>
-          <label className="field">
-            <span>Current password</span>
-            <input
-              type="password"
-              autoComplete="current-password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            <span>New password</span>
-            <input
-              type="password"
-              minLength={8}
-              required
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </label>
-          <p className="muted">
-            <Link className="profile-forgot-link" to="/forgot-password">
-              Forgot it?
-            </Link>{" "}
-            Use the email code flow to set a new password.
-          </p>
-          <button
-            type="submit"
-            className="button-secondary"
-            disabled={saving || !online}
+          <SettingsRow
+            label="Display name"
+            help={`Used in reminders: “${reminderName} nudged you”`}
           >
-            Update password
-          </button>
+            <label className="ui-input">
+              <input
+                required
+                aria-label="Display name"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                autoComplete="name"
+              />
+            </label>
+          </SettingsRow>
+
+          <SettingsRow label="Email" help="For sign-in and receipts">
+            <label className="ui-input">
+              <input
+                aria-label="Email"
+                value={me.email ?? ""}
+                readOnly
+                aria-readonly="true"
+                autoComplete="email"
+              />
+            </label>
+          </SettingsRow>
+
+          <SettingsRow
+            label="WhatsApp number"
+            help="Clients tap WhatsApp to reach you here"
+          >
+            <div className="settings-phone">
+              <div className="ui-select settings-phone-code">
+                <span>+91</span>
+              </div>
+              <label className="ui-input">
+                <input
+                  aria-label="WhatsApp number"
+                  value={whatsappLocal}
+                  onChange={(e) => setWhatsappLocal(e.target.value)}
+                  inputMode="numeric"
+                  autoComplete="tel-national"
+                  placeholder="98200 41736"
+                />
+              </label>
+            </div>
+          </SettingsRow>
+
+          <SettingsRow label="Time zone" help="Your day and quiet hours follow this">
+            <div className="ui-select settings-select">
+              <select
+                className="settings-native-select"
+                required
+                aria-label="Time zone"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+              >
+                {timezoneChoices.map((z) => (
+                  <option key={z} value={z}>
+                    {timezoneOptionLabel(z)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="ui-i" strokeWidth={1.75} aria-hidden />
+            </div>
+          </SettingsRow>
+
+          {fieldError ? (
+            <p className="form-error settings-banner" role="alert">
+              {fieldError}
+            </p>
+          ) : null}
+          {toast ? (
+            <p className="form-success settings-banner" role="status">
+              {toast}
+            </p>
+          ) : null}
+          {error ? (
+            <p className="form-error settings-banner" role="alert">
+              {error}
+            </p>
+          ) : null}
         </form>
-      </div>
-    </>
+      </SettingsCard>
+
+      <SettingsCard>
+        <form onSubmit={changePassword}>
+          <SettingsRow
+            label="Password"
+            help="At least 8 characters. Use the email code if you forgot it."
+            inline={!passwordOpen}
+          >
+            {passwordOpen ? (
+              <>
+                <label className="ui-input">
+                  <input
+                    type="password"
+                    aria-label="Current password"
+                    autoComplete="current-password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                  />
+                </label>
+                <label className="ui-input">
+                  <input
+                    type="password"
+                    aria-label="New password"
+                    minLength={8}
+                    required
+                    autoComplete="new-password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                  />
+                </label>
+                <p className="settings-note">
+                  <Link className="profile-forgot-link" to="/forgot-password">
+                    Forgot it?
+                  </Link>{" "}
+                  Use the email code
+                  flow to set a new password.
+                </p>
+                <Button type="submit" variant="secondary" disabled={saving || !online}>
+                  Update password
+                </Button>
+              </>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setPasswordOpen(true)}
+              >
+                Change password…
+              </Button>
+            )}
+          </SettingsRow>
+        </form>
+      </SettingsCard>
+    </div>
   );
 }
