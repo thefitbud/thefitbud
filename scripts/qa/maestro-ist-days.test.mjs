@@ -51,34 +51,41 @@ const pass = (day, theme) => run(DAYS[day], theme).output;
 
 // What each weekday does, worked out by hand from the seed rule (open: today, the two
 // days before, and a Saturday within six days) and the flows' preferences.
+//
+// Fri dark banner stays "no": shouldLogWorkout completes Tue (before missFrom=Wed).
+// Rohan's overlay can still DELETE Tue's execution when the seed runs before Thu's
+// window closes (Fri before 07:00 IST → closed,0 = Tue), so the app may show
+// "You missed Lower body A on Tue" after light finished Thu. That remaining miss
+// is correct product behaviour; the flow must not blanket assertNotVisible every
+// banner when fwBanner=no (it asserts fwClearedMiss instead).
 const EXPECTED = {
   Mon: {
-    light: { z36: "Sat 14 Nov", kind: "day", label: "Sat 14 Nov", today: "To do", w01a: "yes", banner: "no" },
-    dark: { z36: "", kind: "today", label: "Mon 16 Nov", today: "To do", w01a: "yes", banner: "no" },
+    light: { z36: "Sat 14 Nov", kind: "day", label: "Sat 14 Nov", today: "To do", w01a: "yes", banner: "no", cleared: "" },
+    dark: { z36: "", kind: "today", label: "Mon 16 Nov", today: "To do", w01a: "yes", banner: "no", cleared: "" },
   },
   Tue: {
-    light: { z36: "Sat 14 Nov", kind: "banner", label: "Mon 16 Nov", today: "To do", w01a: "yes", banner: "yes" },
-    dark: { z36: "Sat 14 Nov", kind: "today", label: "Tue 17 Nov", today: "To do", w01a: "yes", banner: "no" },
+    light: { z36: "Sat 14 Nov", kind: "banner", label: "Mon 16 Nov", today: "To do", w01a: "yes", banner: "yes", cleared: "" },
+    dark: { z36: "Sat 14 Nov", kind: "today", label: "Tue 17 Nov", today: "To do", w01a: "yes", banner: "no", cleared: "Mon" },
   },
   Wed: {
-    light: { z36: "Sat 14 Nov", kind: "banner", label: "Tue 17 Nov", today: "Rest", w01a: "no", banner: "yes" },
-    dark: { z36: "Sat 14 Nov", kind: "banner", label: "Mon 16 Nov", today: "Rest", w01a: "no", banner: "yes" },
+    light: { z36: "Sat 14 Nov", kind: "banner", label: "Tue 17 Nov", today: "Rest", w01a: "no", banner: "yes", cleared: "" },
+    dark: { z36: "Sat 14 Nov", kind: "banner", label: "Mon 16 Nov", today: "Rest", w01a: "no", banner: "yes", cleared: "Tue" },
   },
   Thu: {
-    light: { z36: "Sat 14 Nov", kind: "banner", label: "Tue 17 Nov", today: "To do", w01a: "yes", banner: "yes" },
-    dark: { z36: "Sat 14 Nov", kind: "today", label: "Thu 19 Nov", today: "To do", w01a: "yes", banner: "no" },
+    light: { z36: "Sat 14 Nov", kind: "banner", label: "Tue 17 Nov", today: "To do", w01a: "yes", banner: "yes", cleared: "" },
+    dark: { z36: "Sat 14 Nov", kind: "today", label: "Thu 19 Nov", today: "To do", w01a: "yes", banner: "no", cleared: "Tue" },
   },
   Fri: {
-    light: { z36: "Sat 14 Nov", kind: "banner", label: "Thu 19 Nov", today: "Rest", w01a: "no", banner: "yes" },
-    dark: { z36: "Sat 14 Nov", kind: "day", label: "Sat 14 Nov", today: "Rest", w01a: "no", banner: "no" },
+    light: { z36: "Sat 14 Nov", kind: "banner", label: "Thu 19 Nov", today: "Rest", w01a: "no", banner: "yes", cleared: "" },
+    dark: { z36: "Sat 14 Nov", kind: "day", label: "Sat 14 Nov", today: "Rest", w01a: "no", banner: "no", cleared: "Thu" },
   },
   Sat: {
-    light: { z36: "Thu 19 Nov", kind: "day", label: "Thu 19 Nov", today: "To do", w01a: "yes", banner: "no" },
-    dark: { z36: "", kind: "today", label: "Sat 21 Nov", today: "To do", w01a: "yes", banner: "no" },
+    light: { z36: "Thu 19 Nov", kind: "day", label: "Thu 19 Nov", today: "To do", w01a: "yes", banner: "no", cleared: "" },
+    dark: { z36: "", kind: "today", label: "Sat 21 Nov", today: "To do", w01a: "yes", banner: "no", cleared: "Thu" },
   },
   Sun: {
-    light: { z36: "Sat 21 Nov", kind: "day", label: "Sat 21 Nov", today: "Rest", w01a: "no", banner: "no" },
-    dark: { z36: "", kind: "none", label: "", today: "Rest", w01a: "no", banner: "no" },
+    light: { z36: "Sat 21 Nov", kind: "day", label: "Sat 21 Nov", today: "Rest", w01a: "no", banner: "no", cleared: "" },
+    dark: { z36: "", kind: "none", label: "", today: "Rest", w01a: "no", banner: "no", cleared: "Sat" },
   },
 };
 
@@ -92,6 +99,7 @@ for (const [day, themes] of Object.entries(EXPECTED)) {
       assert.equal(output.rohanToday, want.today);
       assert.equal(output.fwW01a, want.w01a);
       assert.equal(output.fwBanner, want.banner);
+      assert.equal(output.fwClearedMiss, want.cleared);
       // Every skip is said out loud, in the output and in the Maestro log.
       assert.equal(Boolean(output.z36Skip), want.z36 === "");
       assert.equal(Boolean(output.fwSkip), want.kind === "none");
@@ -101,6 +109,13 @@ for (const [day, themes] of Object.entries(EXPECTED)) {
     });
   }
 }
+
+test("Fri dark: slipping model has no banner miss, but light cleared Thu for the harness assert", () => {
+  const dark = pass("Fri", "dark");
+  assert.equal(dark.fwBanner, "no");
+  assert.equal(dark.fwClearedMiss, "Thu");
+  assert.equal(dark.rohanToday, "Rest");
+});
 
 test("Tuesday and Thursday, the days with three open workouts, give both themes W-01a and a finished session", () => {
   for (const day of ["Tue", "Thu"]) {

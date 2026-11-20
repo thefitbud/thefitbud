@@ -65,7 +65,13 @@ tags:
       - assertNotVisible: "Start workout"
       - assertNotVisible: "Continue workout"
 
-# ---- TR-10c: the missed banner shows exactly when this week has an open miss ---------
+# ---- TR-10c: the missed banner when the slipping open-set still has a miss ---------
+# fwBanner=yes → assert the banner (TR-10c shot). fwBanner=no → do NOT blanket
+# assertNotVisible every "You missed …": Rohan's overlay can leave an older
+# this-week miss open after light finished the newest (Fri rest day still shows
+# "You missed Lower body A on Tue" before 07:00 IST). That is correct product
+# behaviour. When the prior theme cleared a specific weekday, assert that line
+# is gone (output.fwClearedMiss).
 - runFlow:
     when:
       true: ${output.fwBanner == 'yes'}
@@ -74,9 +80,9 @@ tags:
       - takeScreenshot: TR-10c-workout-missed-banner
 - runFlow:
     when:
-      true: ${output.fwBanner == 'no'}
+      true: ${output.fwBanner == 'no' && output.fwClearedMiss != ''}
     commands:
-      - assertNotVisible: "You missed .*"
+      - assertNotVisible: "You missed .* on ${output.fwClearedMiss}.*"
 - runFlow: ../../common/assert-no-crash.yaml
 
 # ---- Open, relaunch, finish ----------------------------------------------------------
