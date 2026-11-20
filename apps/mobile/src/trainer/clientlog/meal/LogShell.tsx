@@ -62,7 +62,15 @@ export function useLogSave(scope: string) {
       }
     }
   }
-  return { save, setSave, newEntry, run };
+  /** Same key as `run` — for coach Something-different saves that rethrow to the sheet. */
+  function idempotencyKey() {
+    return key.current;
+  }
+  /** Rotate after a definite 4xx refusal (same rule as `run`). */
+  function rotateKeyAfterClientError() {
+    key.current = createIdempotencyKey();
+  }
+  return { save, setSave, newEntry, run, idempotencyKey, rotateKeyAfterClientError };
 }
 
 export function LogHeader({ title, name, onBack }: { title: string; name: string; onBack: () => void }) {

@@ -115,7 +115,7 @@ const badgeStyle: CSSProperties = {
   fontWeight: 600,
   whiteSpace: "nowrap",
   background: "var(--pale-lavender)",
-  color: "var(--indigo)",
+  color: "var(--brand)",
 };
 const mutedBadgeStyle: CSSProperties = {
   ...badgeStyle,
@@ -216,7 +216,7 @@ function StandardKeyPicker({
           minHeight: 44,
           width: "100%",
           padding: "0.35rem 2rem 0.35rem 0.5rem",
-          border: `1px solid ${open ? "var(--indigo)" : "#e7e9f2"}`,
+          border: `1px solid ${open ? "var(--brand)" : "#e7e9f2"}`,
           borderRadius: 12,
           background: "#fff",
           textAlign: "left",
@@ -467,7 +467,7 @@ export function CheckinTemplateBuilderPage() {
         key={group.id}
         className="form-question-card"
         data-testid={`standard-question-${group.id}`}
-        style={isOpen ? { borderColor: "var(--indigo)" } : undefined}
+        style={isOpen ? { borderColor: "var(--brand)" } : undefined}
       >
         <div style={rowHeadStyle}>
           <span className="drag-handle" aria-hidden>
@@ -591,7 +591,7 @@ export function CheckinTemplateBuilderPage() {
       <li
         key={draft.id}
         className="form-question-card"
-        style={isOpen ? { borderColor: "var(--indigo)" } : undefined}
+        style={isOpen ? { borderColor: "var(--brand)" } : undefined}
       >
         <div style={rowHeadStyle}>
           <span className="drag-handle" aria-hidden>

@@ -25,7 +25,9 @@ import {
   notificationPreferencesSchema,
   realtimeEventSchema,
   SAFE_REALTIME_EVENT_KEYS,
+  planTemplateListResponseSchema,
   planTemplateSchema,
+  templateUsedBySchema,
   createExerciseLibraryItemRequestSchema,
   createFoodLibraryItemRequestSchema,
   exerciseLibraryItemSchema,
@@ -643,6 +645,50 @@ describe("contracts", () => {
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
     ).toMatchObject({ ownership: "global", trainerUserId: null });
+    expect(
+      planTemplateListResponseSchema.parse({
+        items: [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            ownership: "global",
+            trainerUserId: null,
+            title: "Base full-body workout",
+            templateType: "workout",
+            recordVersion: 1,
+            createdAt: "2026-09-26T00:00:00.000Z",
+            updatedAt: "2026-09-26T00:00:00.000Z",
+            usedBy: {
+              count: 5,
+              clientIds: [
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+              ],
+            },
+          },
+        ],
+        nextCursor: null,
+      }).items[0]?.usedBy,
+    ).toEqual({
+      count: 5,
+      clientIds: [
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+      ],
+    });
+    expect(() =>
+      templateUsedBySchema.parse({
+        count: 1,
+        clientIds: [
+          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1",
+          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2",
+          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3",
+          "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4",
+        ],
+      }),
+    ).toThrow();
+
     expect(() =>
       planTemplateSchema.parse({
         id: "11111111-1111-4111-8111-111111111111",

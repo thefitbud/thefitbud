@@ -53,6 +53,11 @@ import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
 import { openActiveWorkout } from "./workoutSession";
 import {
+  updateActiveSession,
+  useActiveSession,
+} from "./workout/activeSession";
+import { MinimisedWorkoutBar } from "./workout/MinimisedWorkoutBar";
+import {
   isCaptureModeEnabled,
   registerTraineeCaptureNav,
 } from "../dev/captureBridge";
@@ -270,6 +275,11 @@ export function TraineeShell({
   } | null>(null);
   const captureWorkoutRef = useRef<WorkoutExecution | null>(null);
   captureWorkoutRef.current = captureWorkout;
+
+  // W-14: open session tucked into the bar above the tab bar (Z12-45).
+  const activeWorkoutSession = useActiveSession(relationship.id);
+  const showMinimisedBar =
+    activeWorkoutSession != null && activeWorkoutSession.minimised;
 
   // Z12-38: the in-app banner queue skips a banner for the screen already open
   // (a meal, a workout, a check-in). Tabs never suppress one (TR-06h is over Today).
@@ -1113,6 +1123,23 @@ export function TraineeShell({
         </View>
       ) : null}
 
+      {/*
+        W-14: the minimised bar sits above the tab bar on every tab except
+        Workout. On Workout the hero's Continue workout / Finish now is the
+        only resume CTA (two resume CTAs on one screen look broken).
+      */}
+      {!hideTabBar && tab !== "workout" && showMinimisedBar ? (
+        <View style={styles.minimisedBarSlot}>
+          <MinimisedWorkoutBar
+            relationshipId={relationship.id}
+            onResume={() => {
+              updateActiveSession(relationship.id, { minimised: false });
+              setTab("workout");
+            }}
+          />
+        </View>
+      ) : null}
+
       {!hideTabBar ? <TraineeTabBar active={tab} onSelect={setTab} /> : null}
     </View>
   );
@@ -1225,6 +1252,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  /** Same inset as Screen's toast footer: the bar floats above the tab bar. */
+  minimisedBarSlot: {
+    backgroundColor: "transparent",
+    paddingBottom: spacing.md,
+    paddingHorizontal: 16,
+    paddingTop: 0,
   },
   tabbedOverlay: {
     backgroundColor: colors.white,

@@ -40,7 +40,7 @@
 .cs-back:hover,
 .cs-back:focus-visible {
   background: var(--hover, #f7f8fc);
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -104,13 +104,13 @@
 }
 
 .cs-nav-link:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
 .cs-nav-link.is-active {
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
   font-weight: 500;
 }
 
@@ -126,7 +126,7 @@
 }
 
 .cs-coaching-note a {
-  color: var(--indigo);
+  color: var(--brand);
   text-decoration: none;
 }
 
@@ -193,7 +193,7 @@
 .cs-edit-button:hover,
 .cs-edit-button:focus-visible {
   background: var(--hover, #f7f8fc);
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -400,7 +400,7 @@
 .cs-icon-button:hover,
 .cs-icon-button:focus-visible {
   background: var(--hover, #f7f8fc);
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -445,7 +445,7 @@
 }
 
 .cs-field input:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -462,7 +462,7 @@
 }
 
 .cs-phone-input:focus-within {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -567,7 +567,7 @@
 }
 
 .cs-segment:has(input:focus-visible) {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -583,7 +583,7 @@
 }
 
 .cs-date:focus-within {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -623,7 +623,7 @@
 }
 
 .cs-money-input:focus-within {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -676,7 +676,7 @@
 }
 
 .cs-drawer-note a {
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .cs-drawer-foot {
@@ -723,7 +723,7 @@
   background: transparent;
   border: 0;
   border-radius: 8px;
-  color: var(--indigo);
+  color: var(--brand);
   font: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -736,7 +736,7 @@
 
 .cs-link-button:focus-visible,
 .cs-row-button:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -816,7 +816,7 @@
 }
 
 .cs-textarea:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 

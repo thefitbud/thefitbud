@@ -1,11 +1,12 @@
 /**
- * Trainer log and edit of a client's meal (Z10-19). Pure rules; the API
+ * Trainer log and edit of a client's meal (Z10-19, Z12-52). Pure rules; the API
  * enforces R1 to R5 and the client only avoids asking for what it would refuse.
  */
 import {
   coachLogMealRequestSchema,
   mealComplianceSchema,
   type CoachLogMealRequest,
+  type LoggedFoodItem,
   type MealAssignment,
   type MealCompliance,
   type MealComplianceOutcome,
@@ -15,17 +16,27 @@ import type { FitBudApiClient } from "@fitbud/api-client";
 
 export const OUTCOMES: MealComplianceOutcome[] = ["confirmed", "modified", "skipped"];
 
-/** The kinds a trainer can author. `logged_foods` only keeps the client's own list. */
+/**
+ * TR-08a choices a coach authors in person (Z12-52). Other kinds stay readable
+ * on existing entries but are no longer offered as chips.
+ */
 export const AUTHORABLE_KINDS: MealDeviationKind[] = [
   "portion_adjustment",
-  "substitute",
   "restaurant",
-  "repeat_recent",
-  "manual",
-  "other",
+  "logged_foods",
 ];
 
 export const NOTE_MAX = 500;
+
+/** Body the Something different editors post when the coach authors the log. */
+export type CoachDeviateBody = {
+  deviationKind: Extract<
+    MealDeviationKind,
+    "portion_adjustment" | "restaurant" | "logged_foods"
+  >;
+  notes: string | null;
+  items: LoggedFoodItem[];
+};
 
 /** Scheduled, current meals on `date`, in plan order. */
 export function mealsOn(items: MealAssignment[], date: string): MealAssignment[] {
@@ -50,7 +61,7 @@ export function startDraft(c: MealCompliance | null): MealDraft {
 
 /** The client's own food list is kept as is: only the note is editable (D-W6-40). */
 export function isFoodListEntry(c: MealCompliance | null): boolean {
-  return c?.deviationKind === "logged_foods";
+  return c?.deviationKind === "logged_foods" && c.loggedByRole === "trainee";
 }
 
 export function setOutcome(d: MealDraft, outcome: MealComplianceOutcome): MealDraft {
@@ -65,6 +76,8 @@ export function isChanged(d: MealDraft, c: MealCompliance | null): boolean {
 
 export function isComplete(d: MealDraft): boolean {
   if (d.outcome == null) return false;
+  // Modified opens TR-08a editors (Z12-52); the main Save is for confirmed/skipped
+  // and for note-only edits of a trainee food list.
   if (d.outcome === "modified" && !d.deviationKind) return false;
   return d.notes.trim().length <= NOTE_MAX;
 }
@@ -76,6 +89,20 @@ export function buildMealBody(d: MealDraft, existing: MealCompliance | null): Co
     outcome: d.outcome,
     ...(d.outcome === "modified" ? { deviationKind: d.deviationKind } : {}),
     notes: notes === "" ? null : notes,
+    ...(existing ? { recordVersion: existing.recordVersion } : {}),
+  });
+}
+
+/** Coach-authored Something different → PUT body with items (Z12-52). */
+export function buildCoachDeviateBody(
+  deviate: CoachDeviateBody,
+  existing: MealCompliance | null,
+): CoachLogMealRequest {
+  return coachLogMealRequestSchema.parse({
+    outcome: "modified",
+    deviationKind: deviate.deviationKind,
+    notes: deviate.notes,
+    items: deviate.items,
     ...(existing ? { recordVersion: existing.recordVersion } : {}),
   });
 }

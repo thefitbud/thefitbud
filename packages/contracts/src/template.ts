@@ -61,8 +61,27 @@ export const planTemplateSummarySchema = planTemplateObjectSchema
   .superRefine(refinePlanTemplateOwnership);
 export type PlanTemplateSummary = z.infer<typeof planTemplateSummarySchema>;
 
+/**
+ * Clients whose current effective plan came from this template.
+ * `clientIds` are coaching relationship ids, sorted ascending, at most three.
+ * `count` is the full number, which may be larger than `clientIds`.
+ */
+export const templateUsedBySchema = z.object({
+  count: z.number().int().nonnegative(),
+  clientIds: z.array(uuidSchema).max(3),
+});
+export type TemplateUsedBy = z.infer<typeof templateUsedBySchema>;
+
+export const planTemplateListItemSchema = planTemplateObjectSchema
+  .omit({ content: true })
+  .extend({
+    usedBy: templateUsedBySchema,
+  })
+  .superRefine(refinePlanTemplateOwnership);
+export type PlanTemplateListItem = z.infer<typeof planTemplateListItemSchema>;
+
 export const planTemplateListResponseSchema = cursorPageSchema(
-  planTemplateSummarySchema,
+  planTemplateListItemSchema,
 );
 export type PlanTemplateListResponse = z.infer<
   typeof planTemplateListResponseSchema

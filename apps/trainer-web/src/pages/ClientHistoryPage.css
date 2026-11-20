@@ -44,7 +44,7 @@
 }
 
 .history-kind-select:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -81,8 +81,8 @@
 }
 
 .history-civil-date-control:focus-within {
-  border-color: var(--indigo, var(--coach-ink));
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  border-color: var(--brand);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -156,13 +156,13 @@
   margin-top: 0.4rem;
   margin-left: 0.2rem;
   border-radius: 999px;
-  background: var(--indigo, var(--coach-ink));
+  background: var(--brand);
   opacity: 0.55;
 }
 
 .history-timeline-dot.is-accent {
   opacity: 1;
-  background: var(--lavender-400, var(--indigo, var(--coach-ink)));
+  background: var(--lavender-400, var(--brand));
 }
 
 .history-timeline-body {

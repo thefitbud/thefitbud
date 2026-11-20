@@ -24,13 +24,13 @@
 }
 
 .le-choice[aria-pressed="true"] {
-  background: var(--indigo);
-  border-color: var(--indigo);
+  background: var(--brand);
+  border-color: var(--brand);
   color: var(--white);
 }
 
 .le-choice:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -68,7 +68,7 @@
 
 .le-field input:focus-visible,
 .le-field textarea:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
