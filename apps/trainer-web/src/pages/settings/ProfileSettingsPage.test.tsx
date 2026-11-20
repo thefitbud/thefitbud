@@ -59,15 +59,13 @@ describe("ProfileSettingsPage", () => {
   it("shows India (IST), +91 WhatsApp field, avatar and Save changes", () => {
     renderPage();
     expect(screen.getByTestId("screen-TW-28")).toBeTruthy();
-    expect(screen.getByRole("option", { name: "India (IST)" })).toBeTruthy();
+    expect(screen.getByRole("option", { name: "India Standard Time (IST)" })).toBeTruthy();
     expect(screen.getByText("+91")).toBeTruthy();
     expect(screen.getByDisplayValue("90000 00001")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Change photo" })).toBeTruthy();
     expect(screen.getByText("RV")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
-    expect(
-      screen.getByText("Clients see this in the app and in reminders."),
-    ).toBeTruthy();
+    expect(screen.getByText("Used in reminders: “Rahul nudged you”")).toBeTruthy();
   });
 
   it("saves seeded profile as India E.164 and IST timezone", async () => {
