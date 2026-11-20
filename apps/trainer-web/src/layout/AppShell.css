@@ -84,9 +84,11 @@
   .app-shell.is-nav-open .shell-side .shell-brand b,
   .app-shell.is-nav-open .shell-side .ui-lockup-words,
   .app-shell.is-nav-open .shell-side .shell-nav-label,
-  .app-shell.is-nav-open .shell-side .shell-me-text,
+  .app-shell.is-nav-open .shell-side .shell-acct-who,
+  .app-shell.is-nav-open .shell-side .shell-acct-chev,
   .app-shell.is-nav-open .shell-side .shell-nav-badge {
     display: initial;
+    position: static;
   }
 
   .app-shell.is-nav-open .shell-side .shell-brand {
@@ -102,8 +104,11 @@
     min-width: 0;
   }
 
-  .app-shell.is-nav-open .shell-side .shell-me {
+  .app-shell.is-nav-open .shell-side .shell-acct {
     justify-content: flex-start;
+    width: 100%;
+    min-width: 0;
+    padding: 10px 8px;
   }
 
   .app-shell.is-nav-open .shell-nav-backdrop {

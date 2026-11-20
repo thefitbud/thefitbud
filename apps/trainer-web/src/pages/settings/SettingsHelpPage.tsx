@@ -20,8 +20,11 @@ export function SettingsHelpPage() {
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? "tech@thefitbud.com";
   return (
-    <div className="settings-panel">
-      <h2>Help</h2>
+    <div className="settings-card" data-testid="screen-settings-help">
+      <header className="settings-card-h">
+        <h2>Help</h2>
+      </header>
+      <div className="settings-card-pad">
       <a
         className="settings-help-row button-secondary"
         href={supportMailto(supportEmail)}
@@ -46,6 +49,7 @@ export function SettingsHelpPage() {
           </Link>
         ))}
       </nav>
+      </div>
     </div>
   );
 }
