@@ -32,6 +32,7 @@ import { OnboardingReviewPage } from "./pages/OnboardingReviewPage";
 import { PendingInvitationPage } from "./pages/PendingInvitationPage";
 import { TemplatesHub } from "./pages/TemplatesHub";
 import { WelcomePage } from "./pages/WelcomePage";
+import { BusinessPackagesPage } from "./pages/settings/BusinessPackagesPage";
 import { EndedClientsSettingsPage } from "./pages/settings/EndedClientsSettingsPage";
 import { NotificationSettingsPage } from "./pages/settings/NotificationSettingsPage";
 import { ProfileSettingsPage } from "./pages/settings/ProfileSettingsPage";
@@ -78,6 +79,7 @@ export function App() {
             <Route index element={<Navigate to="profile" replace />} />
             <Route path="profile" element={<ProfileSettingsPage />} />
             <Route path="notifications" element={<NotificationSettingsPage />} />
+            <Route path="business" element={<BusinessPackagesPage />} />
             <Route path="ended" element={<EndedClientsSettingsPage />} />
             <Route path="units" element={<UnitsLanguagePage />} />
             <Route path="help" element={<SettingsHelpPage />} />

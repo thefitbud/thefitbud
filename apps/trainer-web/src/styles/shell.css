@@ -1,26 +1,31 @@
-/* TW-03 App shell — light sidebar (D-WEB-1), top bar, bottom nav. */
+/* TW-03 App shell — light sidebar (D-WEB-1). The window never scrolls. */
+
+html:has(.app-shell),
+html:has(.app-shell) body {
+  height: 100%;
+  overflow: hidden;
+}
 
 .app-shell {
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
   display: grid;
   grid-template-columns: var(--nav-w) 1fr;
   background: var(--page-bg, var(--bg));
 }
 
 .shell-side {
-  position: sticky;
-  top: 0;
   align-self: stretch;
-  min-height: 100vh;
-  min-height: 100dvh;
-  height: 100vh;
-  height: 100dvh;
+  min-height: 0;
+  height: 100%;
+  overflow: visible;
   background: var(--bg-plain);
   color: var(--ink);
   display: flex;
   flex-direction: column;
-  padding: 20px 14px 16px;
+  padding: 16px 12px;
   border-right: 1px solid var(--line);
   z-index: 20;
 }
@@ -28,22 +33,9 @@
 .shell-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 4px 10px 22px;
-}
-
-.shell-brand b,
-.shell-brand .ui-lockup-words {
-  color: var(--ink);
-}
-
-.shell-brand .ui-lockup {
-  align-items: center;
   height: 40px;
-}
-
-.shell-brand .ui-lockup-mark {
-  margin-top: 0;
+  padding: 0 8px;
+  margin-bottom: 16px;
 }
 
 .shell-nav {
@@ -121,62 +113,159 @@
 .shell-side-foot {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding-top: 12px;
+  gap: 2px;
+  padding-top: 8px;
+  margin-top: 8px;
   border-top: 1px solid var(--line);
 }
 
-.shell-me {
+.shell-acct-wrap {
+  position: relative;
+}
+
+.shell-acct {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
-  border-radius: 12px;
-  text-decoration: none;
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
   color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
-.shell-me:hover {
+.shell-acct:hover,
+.shell-acct[aria-expanded="true"] {
   background: var(--fill);
 }
 
 .shell-av {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
-  background: var(--coach-tint);
-  color: var(--coach-ink);
+  background: var(--coach);
+  color: var(--on-brand);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   flex: none;
 }
 
-.shell-me-text {
+.shell-acct-who {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  flex: 1;
 }
 
-.shell-me-text b {
-  font-size: 14px;
-  font-weight: 600;
+.shell-acct-who b {
+  font: var(--t-h3);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.shell-me-text span {
-  font-size: 12px;
+.shell-acct-who span {
+  font: var(--t-meta);
   color: var(--ink3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shell-acct-chev {
+  color: var(--ink3);
+  flex: none;
+}
+
+.shell-acct-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  width: 300px;
+  z-index: 40;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--e2);
+  padding: 6px;
+}
+
+.shell-acct-menu-who {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px 10px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+
+.shell-acct-menu-who > span {
+  min-width: 0;
+}
+
+.shell-acct-menu-who b {
+  display: block;
+  font: var(--t-h3);
+}
+
+.shell-acct-menu-who > span > span {
+  display: block;
+  font: var(--t-meta);
+  color: var(--ink3);
+  white-space: nowrap;
+}
+
+.shell-menu-item.is-signout {
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 8px 8px;
+  height: 44px;
+}
+
+.shell-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: var(--t-body);
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.shell-menu-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--ink3);
+  flex: none;
+}
+
+.shell-menu-item:hover,
+.shell-menu-item.is-on {
+  background: var(--row-sel);
 }
 
 .shell-main {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
   background: var(--page-bg, var(--bg));
 }
 
@@ -184,19 +273,33 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 14px 32px;
-  background: transparent;
+  height: var(--top-h);
+  flex: none;
+  padding: 0 var(--gutter);
+  background: var(--bg-plain);
   border-bottom: 1px solid var(--line);
-  position: sticky;
-  top: 0;
+  position: static;
   z-index: 15;
 }
 
 .shell-crumb {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--ink-500, var(--ink3));
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 4rem;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.shell-crumb b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.shell-crumb svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
 }
 
 .shell-search {
@@ -206,14 +309,13 @@
   gap: 8px;
   height: 36px;
   padding: 0 12px;
-  min-width: 320px;
-  width: min(420px, 42vw);
-  border-radius: 10px;
+  width: 300px;
+  min-width: 0;
+  border-radius: var(--r-ctl);
   border: 1px solid var(--line2);
-  background: var(--white);
-  color: var(--ink-500, var(--ink3));
-  font-size: 14px;
-  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+  background: var(--card);
+  color: var(--ink3);
+  font: var(--t-body);
   cursor: pointer;
 }
 
@@ -242,26 +344,32 @@
 .shell-bell {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  border: 1px solid var(--line2);
-  background: var(--white);
+  border-radius: var(--r-ctl);
+  border: 0;
+  background: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ink-500, var(--ink3));
+  color: var(--ink2);
   cursor: pointer;
   position: relative;
-  box-shadow: 0 1px 2px rgb(26 18 72 / 6%);
+}
+
+.shell-bell:hover {
+  background: var(--fill);
+  color: var(--ink);
 }
 
 .shell-bell-dot {
   position: absolute;
   top: 8px;
-  right: 8px;
+  right: 9px;
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--coral-strong);
+  border: 2px solid var(--bg-plain);
+  box-sizing: content-box;
 }
 
 .shell-bell-popover {
@@ -302,10 +410,14 @@
 
 .app-shell > .page-main,
 .shell-main > .page-main {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 8px 32px 40px;
+  max-width: none;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: var(--s6) var(--gutter) var(--s12);
 }
 
 .shell-bottom-nav {
@@ -395,44 +507,67 @@
 
 @media (max-width: 1100px) {
   .shell-search {
-    min-width: 220px;
-    width: min(360px, 36vw);
+    width: min(220px, 40vw);
+    min-width: 0;
   }
 }
 
-/* Icon rail 768–1279 (tablet + narrow desktop) */
+/* Icon rail under 1280 (D-WEB-5): mark only, 48 px targets. */
 @media (max-width: 1279px) and (min-width: 768px) {
   .app-shell {
-    grid-template-columns: 72px 1fr;
+    grid-template-columns: var(--nav-rail) 1fr;
   }
 
   .shell-side {
-    padding: 16px 8px;
-  }
-
-  .shell-brand b,
-  .shell-brand .ui-lockup-words,
-  .shell-nav-label,
-  .shell-me-text,
-  .shell-nav-badge {
-    display: none;
+    padding: 16px 12px;
+    align-items: center;
   }
 
   .shell-brand {
     justify-content: center;
-    padding: 4px 0 16px;
+    padding: 0;
+  }
+
+  .shell-brand .ui-lockup-words,
+  .shell-nav-label,
+  .shell-acct-who,
+  .shell-acct-chev {
+    display: none;
   }
 
   .shell-nav-link {
+    width: 48px;
+    height: 48px;
+    min-width: 48px;
+    min-height: 48px;
     justify-content: center;
     padding: 0;
-    min-width: 44px;
+    position: relative;
+  }
+
+  .shell-nav-badge {
+    position: absolute;
+    top: 4px;
+    right: 2px;
+    margin: 0;
+    min-width: 20px;
+    height: 20px;
+  }
+
+  .shell-acct {
+    justify-content: center;
+    width: 48px;
+    min-width: 48px;
+    padding: 0;
+  }
+
+  .shell-menu-item {
     min-height: 44px;
     height: 44px;
   }
 
-  .shell-me {
-    justify-content: center;
+  .shell-acct-menu {
+    left: 0;
   }
 }
 
