@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { ScrollView, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
 import { userFacingMessage } from "@fitbud/api-client";
-import type { MealAssignment } from "@fitbud/contracts";
+import type { LoggedFoodItem, MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatNumber } from "@fitbud/core";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Text } from "../../components/Text";
 import { reportError } from "../../lib/reportError";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { useSyncEngine } from "../../sync/SyncProvider";
-import { deviateMealAssignment } from "../mealActions";
+import { deviateMealAssignment, MealSyncError } from "../mealActions";
 import { cleanFoodLabel } from "../mealHelpers";
 import { nutrientsFromMealPrescription } from "../nutrition";
 import { FoodNavHeader } from "./FoodNavHeader";
@@ -30,6 +30,12 @@ function parseKcal(text: string): number | null {
   return Math.min(20000, Number(digits));
 }
 
+export type CoachDeviateSave = (body: {
+  deviationKind: "restaurant" | "portion_adjustment" | "logged_foods";
+  notes: string | null;
+  items: LoggedFoodItem[];
+}) => Promise<void>;
+
 type Props = {
   assignment: MealAssignment;
   relationshipId: string;
@@ -38,6 +44,14 @@ type Props = {
   onCancel: () => void;
   onSaved: () => void;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Z12-52 coach-author mode: save via the trainer PUT instead of the
+   * trainee sync deviate, and soften the "Note for {coach}" copy.
+   */
+  authorMode?: "trainee" | "coach";
+  /** Client first name when authorMode is coach (plan / note copy). */
+  clientName?: string;
+  onCoachSave?: CoachDeviateSave;
 };
 
 /**
@@ -54,11 +68,14 @@ export function AteOutForm({
   onCancel,
   onSaved,
   style,
+  authorMode = "trainee",
+  onCoachSave,
 }: Props) {
   const styles = useStyles();
   const theme = useTheme();
   const sync = useSyncEngine();
   const coachShort = coachName.split(/\s+/)[0] ?? coachName;
+  const isCoach = authorMode === "coach";
   const [kcalText, setKcalText] = useState("");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
@@ -69,34 +86,40 @@ export function AteOutForm({
 
   async function save() {
     if (kcal == null && !note.trim()) {
-      setError("Enter the kcal, or a short note about what you had.");
+      setError(
+        isCoach
+          ? "Enter the kcal, or a short note about what they had."
+          : "Enter the kcal, or a short note about what you had.",
+      );
       return;
     }
     setSaving(true);
     setError(null);
+    const body = ateOutBody(kcal, note);
     try {
-      await deviateMealAssignment(
-        sync,
-        assignment,
-        ateOutBody(kcal, note),
-        coachName,
-        relationshipId,
-      );
-      announceMealSaved({
-        relationshipId,
-        assignmentId: assignment.id,
-        localDate: assignment.localDate,
-        mealName,
-        kcal,
-        kind: "restaurant",
-      });
+      if (isCoach) {
+        if (!onCoachSave) throw new Error("Coach save is not wired.");
+        await onCoachSave({
+          deviationKind: "restaurant",
+          notes: body.notes,
+          items: body.items,
+        });
+      } else {
+        await deviateMealAssignment(sync, assignment, body, coachName, relationshipId);
+        announceMealSaved({
+          relationshipId,
+          assignmentId: assignment.id,
+          localDate: assignment.localDate,
+          mealName,
+          kcal,
+          kind: "restaurant",
+        });
+      }
       onSaved();
     } catch (err) {
       reportError("AteOutForm.save", err);
       setError(
-        userFacingMessage(err, {
-          fallback: "Couldn’t save that meal. Try again.",
-        }),
+        userFacingMessage(err, { fallback: "Couldn’t save that meal. Try again." }),
       );
     } finally {
       setSaving(false);
@@ -134,18 +157,20 @@ export function AteOutForm({
         </View>
         {planKcal > 0 ? (
           <Text variant="caption" tone="ink2" style={styles.center}>
-            {coachShort}’s plan for {mealName.toLowerCase()}: {formatNumber(planKcal)} kcal
+            {isCoach
+              ? `Plan for ${mealName.toLowerCase()}: ${formatNumber(planKcal)} kcal`
+              : `${coachShort}’s plan for ${mealName.toLowerCase()}: ${formatNumber(planKcal)} kcal`}
           </Text>
         ) : null}
         <Text variant="bodyStrong" style={styles.noteLabel}>
-          Note for {coachShort} (optional)
+          {isCoach ? "Note (optional)" : `Note for ${coachShort} (optional)`}
         </Text>
         <TextInput
           value={note}
           onChangeText={setNote}
-          placeholder="Where, and what you had"
+          placeholder={isCoach ? "Where, and what they had" : "Where, and what you had"}
           placeholderTextColor={theme.colors.ink4}
-          accessibilityLabel={`Note for ${coachShort}`}
+          accessibilityLabel={isCoach ? "Note" : `Note for ${coachShort}`}
           maxLength={500}
           style={styles.noteInput}
           testID="ate-out-note"

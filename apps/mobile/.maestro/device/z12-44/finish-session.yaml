@@ -43,34 +43,62 @@ appId: com.thefitbud.mobile.staging
     when:
       true: ${output.fwKind == 'day'}
     commands:
-      - runFlow:
-          file: select-day.yaml
-          env:
-            LABEL: ${output.fwLabel}
-      - extendedWaitUntil:
-          visible: "Log workout|Continue workout"
-          timeout: 30000
+      # Same order as z12-36/3: pick-up (W-18) can cover the CTA when the day
+      # already has an open session from z12-36/3. Handle Resume before scroll.
       - waitForAnimationToEnd:
           timeout: 2000
-      # Past-day cards put the CTA below the exercise list (same as z12-36/3);
-      # centre it so the tab bar cannot take the tap.
-      - scrollUntilVisible:
-          element:
-            id: "workout-day-cta"
-          direction: DOWN
-          centerElement: true
-          visibilityPercentage: 100
-          timeout: 60000
-      - tapOn:
-          id: "workout-day-cta"
-          waitToSettleTimeoutMs: 2000
-      - extendedWaitUntil:
-          visible: "Log set [0-9]+ ·.*"
-          timeout: 60000
+      - runFlow:
+          when:
+            visible: "Pick up where you left off\\?"
+          commands:
+            - tapOn: "Resume workout"
+            - extendedWaitUntil:
+                visible: "Log set [0-9]+ ·.*"
+                timeout: 60000
+      - runFlow:
+          when:
+            notVisible: "Log set [0-9]+ ·.*"
+          commands:
+            - runFlow:
+                file: select-day.yaml
+                env:
+                  LABEL: ${output.fwLabel}
+            - waitForAnimationToEnd:
+                timeout: 2000
+            - runFlow:
+                when:
+                  visible: "Pick up where you left off\\?"
+                commands:
+                  - tapOn: "Resume workout"
+                  - extendedWaitUntil:
+                      visible: "Log set [0-9]+ ·.*"
+                      timeout: 60000
+            - runFlow:
+                when:
+                  notVisible: "Log set [0-9]+ ·.*"
+                commands:
+                  - extendedWaitUntil:
+                      visible: "Log workout|Continue workout"
+                      timeout: 30000
+                  # Past-day cards put the CTA below the exercise list (same as
+                  # z12-36/3); centre it so the tab bar cannot take the tap.
+                  - scrollUntilVisible:
+                      element:
+                        id: "workout-day-cta"
+                      direction: DOWN
+                      centerElement: true
+                      visibilityPercentage: 100
+                      timeout: 60000
+                  - tapOn:
+                      id: "workout-day-cta"
+                      waitToSettleTimeoutMs: 2000
+                  - extendedWaitUntil:
+                      visible: "Log set [0-9]+ ·.*"
+                      timeout: 60000
 - tapOn: "Log set [0-9]+ ·.*"
 - runFlow:
     when:
-      visible: "REST"
+      visible: "Skip rest"
     commands:
       - tapOn: "Skip rest"
 - launchApp:
@@ -83,16 +111,46 @@ appId: com.thefitbud.mobile.staging
     notVisible: ".*Loading your day.*"
     timeout: 60000
 - runFlow: open-workout-tab.yaml
-# Back on the session's own day (the relaunch lands on today).
+# Back on the session's own day (the relaunch lands on today). Handle pick-up
+# before or after select-day — never scroll to the CTA under the modal.
+- waitForAnimationToEnd:
+    timeout: 2000
+- runFlow:
+    when:
+      visible: "Pick up where you left off\\?"
+    commands:
+      - tapOn: "Resume workout"
+      - extendedWaitUntil:
+          visible: "Minimise workout"
+          timeout: 30000
 - runFlow:
     when:
       true: ${output.fwKind != 'today'}
+      notVisible: "Minimise workout"
     commands:
       - runFlow:
           file: select-day.yaml
           env:
             LABEL: ${output.fwLabel}
-- assertVisible: "Continue workout"
+      - waitForAnimationToEnd:
+          timeout: 2000
+# Z12-45 (W-18): reopened mid-workout, the tab asks "Pick up where you left off?".
+# Resume, then minimise (W-14), so the card behind is what this flow checks.
+- runFlow:
+    when:
+      notVisible: "Minimise workout"
+    commands:
+      - extendedWaitUntil:
+          visible: "Pick up where you left off\\?"
+          timeout: 30000
+      - tapOn: "Resume workout"
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 30000
+- tapOn: "Minimise workout"
+- extendedWaitUntil:
+    visible: "Continue workout"
+    timeout: 30000
 - assertVisible: "(In progress|Paused) · [0-9:]+"
 # The set count comes from the full execution, read after the card paints.
 - extendedWaitUntil:

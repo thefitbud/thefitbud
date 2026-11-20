@@ -111,6 +111,11 @@ export function SignInScreen({
         textContentType="password"
         placeholder="Your password"
         invalid={wrongPassword}
+        // Maestro cannot read secureTextEntry value; expose filled vs empty
+        // so the device harness can retype when the password never landed
+        // (FitBud #484 iOS dark TR-10b: email filled, password empty).
+        accessibilityLabel={password.length > 0 ? "Password, entered" : "Password"}
+        testID="sign-in-password"
       />
       {wrongPassword ? (
         <InlineError message={wrongPasswordCopy(identifier)} testID="sign-in-wrong-password" />

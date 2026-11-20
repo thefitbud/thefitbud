@@ -18,7 +18,7 @@ import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProv
 import { useSyncEngine } from "../sync/SyncProvider";
 import { isNetworkFailure } from "../trainer/attention/offline";
 import { CustomFoodScreen } from "./CustomFoodScreen";
-import { AteOutForm } from "./food/AteOutForm";
+import { AteOutForm, type CoachDeviateSave } from "./food/AteOutForm";
 import { FoodAmountPicker } from "./food/FoodAmountPicker";
 import { FoodNavHeader } from "./food/FoodNavHeader";
 import {
@@ -54,6 +54,10 @@ type Props = {
   coachName?: string;
   onBack: () => void;
   onSaved: () => void;
+  /** Z12-52: coach logs foods in person via the trainer PUT. */
+  authorMode?: "trainee" | "coach";
+  clientName?: string;
+  onCoachSave?: CoachDeviateSave;
 };
 
 type Mode =
@@ -134,7 +138,17 @@ export function FoodSearchScreen(props: Props) {
   );
 }
 
-function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved }: Props) {
+function FoodSearchBody({
+  assignment,
+  relationshipId,
+  coachName,
+  onBack,
+  onSaved,
+  authorMode = "trainee",
+  clientName,
+  onCoachSave,
+}: Props) {
+  const isCoach = authorMode === "coach";
   const styles = useStyles();
   const theme = useTheme();
   const { api, me } = useAuth();
@@ -301,27 +315,37 @@ function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved
     setSaving(true);
     setError(null);
     const saved = logTotals(toSave);
+    const items = toSave.map(toLoggedItem);
     try {
-      await deviateMealAssignment(
-        sync,
-        assignment,
-        {
+      if (isCoach) {
+        if (!onCoachSave) throw new Error("Coach save is not wired.");
+        await onCoachSave({
           deviationKind: "logged_foods",
           notes: null,
-          photoIntent: null,
-          items: toSave.map(toLoggedItem),
-        },
-        coachName,
-        relationshipId,
-      );
-      announceMealSaved({
-        relationshipId,
-        assignmentId: assignment.id,
-        localDate: assignment.localDate,
-        mealName,
-        kcal: saved.unknown && saved.kcal === 0 ? null : saved.kcal,
-        kind: "logged_foods",
-      });
+          items,
+        });
+      } else {
+        await deviateMealAssignment(
+          sync,
+          assignment,
+          {
+            deviationKind: "logged_foods",
+            notes: null,
+            photoIntent: null,
+            items,
+          },
+          coachName,
+          relationshipId,
+        );
+        announceMealSaved({
+          relationshipId,
+          assignmentId: assignment.id,
+          localDate: assignment.localDate,
+          mealName,
+          kcal: saved.unknown && saved.kcal === 0 ? null : saved.kcal,
+          kind: "logged_foods",
+        });
+      }
       onSaved();
     } catch (err) {
       reportError("FoodSearchScreen.save", err);
@@ -387,6 +411,9 @@ function FoodSearchBody({ assignment, relationshipId, coachName, onBack, onSaved
           timeZone={timeZone}
           onCancel={() => setMode({ kind: "search" })}
           onSaved={onSaved}
+          authorMode={authorMode}
+          clientName={clientName}
+          onCoachSave={onCoachSave}
         />
       </Screen>
     );

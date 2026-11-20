@@ -4,6 +4,7 @@ import type {
   WorkoutExecution,
   WorkoutExecutionSummary,
 } from "@fitbud/contracts";
+import { formatClockTime } from "@fitbud/core";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
 import type { SyncEngine } from "../sync/engine";
@@ -316,4 +317,330 @@ export function nextUpSet(
     };
   }
   return null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* The open session: what the trainee can do to it (Z12-45)                    */
+/* -------------------------------------------------------------------------- */
+/*
+ * Pure reducers over the execution snapshot the active workout screen holds.
+ * Each one mirrors a server transition (routes/workouts.ts), so the screen can
+ * show the result at once and the outbox or the API carries it:
+ *
+ * - log a set, again too: POST …/sets/:id/complete (`workout.complete_set`).
+ *   While the workout is open the latest log stands, so a correction and a
+ *   log of a skipped set are the same call.
+ * - skip a set, or mark a logged set not done: POST …/sets/:id/skip.
+ * - finish, early or not: POST …/complete (`workout.complete`).
+ * - discard: POST /assignments/:id/skip (`workout.skip`); the coach sees the
+ *   workout as skipped.
+ *
+ * Undo (W-09b) puts back the sets as they were before a skip. It never needs
+ * the server: the screen sends a skip only once its Undo has gone.
+ */
+
+type ExecutionSet = WorkoutExecution["exercises"][number]["sets"][number];
+type ExecutionExercise = WorkoutExecution["exercises"][number];
+
+/** "40 kg", "40", " 40kg " all read as the same load; "" is bodyweight. */
+function comparableLoad(label: string | null | undefined): string {
+  const raw = (label ?? "").trim().toLowerCase();
+  if (raw === "" || /^(body\s*weight|bw)$/.test(raw)) return "bw";
+  const kg = raw.match(/^(\d{1,3}(?:[.,]\d{1,2})?)\s*(?:kg|kgs)?$/);
+  return kg ? String(Number(kg[1]!.replace(",", "."))) : raw;
+}
+
+function mapSets(
+  execution: WorkoutExecution,
+  now: string,
+  change: (set: ExecutionSet) => ExecutionSet,
+): WorkoutExecution {
+  let touched = false;
+  const exercises = execution.exercises.map((exercise) => {
+    let exerciseTouched = false;
+    const sets = exercise.sets.map((set) => {
+      const next = change(set);
+      if (next !== set) exerciseTouched = true;
+      return next;
+    });
+    if (!exerciseTouched) return exercise;
+    touched = true;
+    // The server's rule: an exercise is done once no set of it is pending.
+    const allRecorded = sets.every((set) => set.status !== "pending");
+    return {
+      ...exercise,
+      sets,
+      status: allRecorded ? ("completed" as const) : ("pending" as const),
+      updatedAt: now,
+    };
+  });
+  return touched ? { ...execution, exercises, updatedAt: now } : execution;
+}
+
+export function findSessionSet(
+  execution: Pick<WorkoutExecution, "exercises">,
+  setId: string,
+): { exercise: ExecutionExercise; set: ExecutionSet } | null {
+  for (const exercise of execution.exercises) {
+    const set = exercise.sets.find((item) => item.id === setId);
+    if (set) return { exercise, set };
+  }
+  return null;
+}
+
+/**
+ * Log a set with what the trainee did; null keeps the plan's value. Logging a
+ * set that is already logged corrects it and keeps the time it was first
+ * logged, as the server does.
+ */
+export function logSetLocally(
+  execution: WorkoutExecution,
+  setId: string,
+  values: { actualReps: number | null; actualLoadLabel: string | null },
+  now: string = new Date().toISOString(),
+): WorkoutExecution {
+  return mapSets(execution, now, (set) => {
+    if (set.id !== setId) return set;
+    const actualReps = values.actualReps ?? set.prescribedReps;
+    const actualLoadLabel = values.actualLoadLabel ?? set.prescribedLoadLabel;
+    const modified =
+      (actualReps != null &&
+        set.prescribedReps != null &&
+        actualReps !== set.prescribedReps) ||
+      (actualReps != null && set.prescribedReps == null) ||
+      comparableLoad(actualLoadLabel) !== comparableLoad(set.prescribedLoadLabel);
+    return {
+      ...set,
+      status: modified ? ("modified" as const) : ("completed" as const),
+      actualReps,
+      actualLoadLabel,
+      completedAt: isLoggedSet(set) ? (set.completedAt ?? now) : now,
+      updatedAt: now,
+    };
+  });
+}
+
+/** Skip sets: nothing of what was logged is kept (W-08, W-13 "Mark not done"). */
+export function skipSetsLocally(
+  execution: WorkoutExecution,
+  setIds: readonly string[],
+  now: string = new Date().toISOString(),
+): WorkoutExecution {
+  const ids = new Set(setIds);
+  return mapSets(execution, now, (set) =>
+    ids.has(set.id) && set.status !== "skipped"
+      ? {
+          ...set,
+          status: "skipped" as const,
+          actualReps: null,
+          actualLoadLabel: null,
+          completedAt: now,
+          updatedAt: now,
+        }
+      : set,
+  );
+}
+
+/** The sets of an exercise that "Skip exercise" skips: the ones not logged. */
+export function skippableSetIds(
+  execution: Pick<WorkoutExecution, "exercises">,
+  exerciseExecutionId: string,
+): string[] {
+  const exercise = execution.exercises.find(
+    (item) => item.id === exerciseExecutionId,
+  );
+  return (exercise?.sets ?? [])
+    .filter((set) => set.status === "pending")
+    .map((set) => set.id);
+}
+
+/** Undo: put sets back exactly as `previous` had them. */
+export function restoreSetsLocally(
+  execution: WorkoutExecution,
+  previous: readonly ExecutionSet[],
+  now: string = new Date().toISOString(),
+): WorkoutExecution {
+  const byId = new Map(previous.map((set) => [set.id, set]));
+  return mapSets(execution, now, (set) => byId.get(set.id) ?? set);
+}
+
+/** Finish now, with whatever is logged (W-16). Unlogged sets stay unlogged. */
+export function finishLocally(
+  execution: WorkoutExecution,
+  sessionRpe: number | null,
+  now: string = new Date().toISOString(),
+): WorkoutExecution {
+  const changed = execution.exercises.some((exercise) =>
+    exercise.sets.some(
+      (set) => set.status === "modified" || set.status === "skipped",
+    ),
+  );
+  return {
+    ...execution,
+    status: changed ? "modified" : "completed",
+    completedAt: now,
+    pausedAt: null,
+    sessionRpe,
+    updatedAt: now,
+  };
+}
+
+/** Discard (W-15): the workout is recorded as skipped. */
+export function discardLocally(
+  execution: WorkoutExecution,
+  now: string = new Date().toISOString(),
+): WorkoutExecution {
+  return { ...execution, status: "skipped", pausedAt: null, updatedAt: now };
+}
+
+export type UnloggedExercise = {
+  exerciseExecutionId: string;
+  name: string;
+  /** "Set 3", "Sets 2, 3", "3 sets", "3 sets · skipped". */
+  detail: string;
+  /** Where "Go to" lands: the first set still to log, else the first skipped. */
+  setId: string;
+};
+
+/** What is not logged, by exercise, for "Finish early?" (W-16). */
+export function unloggedExercises(
+  execution: Pick<WorkoutExecution, "exercises">,
+): UnloggedExercise[] {
+  const rows: UnloggedExercise[] = [];
+  for (const exercise of [...execution.exercises].sort(
+    (a, b) => a.order - b.order,
+  )) {
+    const sets = [...exercise.sets].sort((a, b) => a.order - b.order);
+    const open = sets.filter((set) => !isLoggedSet(set));
+    if (open.length === 0) continue;
+    const pending = open.filter((set) => set.status === "pending");
+    const allSkipped = pending.length === 0;
+    let detail: string;
+    if (open.length === sets.length) {
+      detail = `${open.length} ${open.length === 1 ? "set" : "sets"}`;
+    } else if (open.length === 1) {
+      detail = `Set ${sets.indexOf(open[0]!) + 1}`;
+    } else {
+      detail = `Sets ${open.map((set) => sets.indexOf(set) + 1).join(", ")}`;
+    }
+    if (allSkipped) detail += " · skipped";
+    rows.push({
+      exerciseExecutionId: exercise.id,
+      name: exercise.name,
+      detail,
+      setId: (pending[0] ?? open[0]!).id,
+    });
+  }
+  return rows;
+}
+
+/** When the last set was logged (W-18 "the last at 6:52 pm"), or null. */
+export function lastLoggedAt(
+  execution: Pick<WorkoutExecution, "exercises">,
+): string | null {
+  let latest: string | null = null;
+  for (const exercise of execution.exercises) {
+    for (const set of exercise.sets) {
+      if (!isLoggedSet(set) || !set.completedAt) continue;
+      if (latest == null || set.completedAt > latest) latest = set.completedAt;
+    }
+  }
+  return latest;
+}
+
+/**
+ * The set the log acts on (W-03): the one the trainee picked while it is
+ * still to do; else the next pending set of the same exercise; else the next
+ * pending set further down; else the first pending set of the session. Null
+ * when nothing is pending.
+ */
+export function currentSetId(
+  execution: Pick<WorkoutExecution, "exercises">,
+  pickedSetId: string | null,
+): string | null {
+  const exercises = [...execution.exercises].sort((a, b) => a.order - b.order);
+  const firstPending = (exercise: ExecutionExercise) =>
+    [...exercise.sets]
+      .sort((a, b) => a.order - b.order)
+      .find((set) => set.status === "pending");
+  if (pickedSetId) {
+    const picked = findSessionSet(execution, pickedSetId);
+    if (picked) {
+      if (picked.set.status === "pending") return picked.set.id;
+      const sets = [...picked.exercise.sets].sort((a, b) => a.order - b.order);
+      const after =
+        sets.find(
+          (set) => set.order > picked.set.order && set.status === "pending",
+        ) ?? sets.find((set) => set.status === "pending");
+      if (after) return after.id;
+      // That exercise is finished: carry on with the next one down the list.
+      for (const exercise of exercises) {
+        if (exercise.order <= picked.exercise.order) continue;
+        const next = firstPending(exercise);
+        if (next) return next.id;
+      }
+    }
+  }
+  for (const exercise of exercises) {
+    const next = firstPending(exercise);
+    if (next) return next.id;
+  }
+  return null;
+}
+
+/** "bulgarian  Split squat" and "Bulgarian split squat" are one lift. */
+export function exerciseNameKey(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * The personal records of this session (W-12): per exercise, the heaviest
+ * logged set, when it is heavier than every load logged for that exercise
+ * before today (`bestKgByName`, from the strength read model). An exercise
+ * with no earlier kg load has no record to beat, so it marks none.
+ */
+export function sessionRecordSetIds(
+  execution: Pick<WorkoutExecution, "exercises">,
+  bestKgByName: Readonly<Record<string, number>>,
+): Set<string> {
+  const records = new Set<string>();
+  for (const exercise of execution.exercises) {
+    const best = bestKgByName[exerciseNameKey(exercise.name)];
+    if (best == null) continue;
+    let top: { id: string; kg: number } | null = null;
+    for (const set of [...exercise.sets].sort((a, b) => a.order - b.order)) {
+      if (!isLoggedSet(set)) continue;
+      const kg = kgFromLoadLabel(set.actualLoadLabel ?? set.prescribedLoadLabel);
+      if (kg == null || kg <= best) continue;
+      if (top == null || kg > top.kg) top = { id: set.id, kg };
+    }
+    if (top) records.add(top.id);
+  }
+  return records;
+}
+
+/** "Lower body B was in progress. 7 sets were logged, the last at 6:52 pm." (W-18) */
+export function resumeBody(
+  name: string,
+  execution: Pick<WorkoutExecution, "exercises">,
+  timeZone: string,
+): string {
+  const { done } = sessionSetCounts(execution);
+  const last = lastLoggedAt(execution);
+  if (done === 0) return `${name} was in progress. No sets were logged yet.`;
+  const sets = done === 1 ? "1 set was logged" : `${done} sets were logged`;
+  return `${name} was in progress. ${sets}${
+    last ? `, the last at ${formatClockTime(last, timeZone)}` : ""
+  }.`;
+}
+
+/** "Romanian deadlift · set 3 of 3", or "All sets logged": the minimised bar (W-14). */
+export function minimisedLine(
+  execution: Pick<WorkoutExecution, "exercises">,
+): string {
+  const id = currentSetId(execution, null);
+  const found = id ? findSessionSet(execution, id) : null;
+  if (!found) return "All sets logged";
+  const sets = [...found.exercise.sets].sort((a, b) => a.order - b.order);
+  return `${found.exercise.name} · set ${sets.indexOf(found.set) + 1} of ${sets.length}`;
 }

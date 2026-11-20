@@ -125,25 +125,20 @@ export function formatInstant(
 ): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
+  // Date parts only via formatToParts. Hour/minute parts are empty on some
+  // Hermes iOS builds (Z12-46fu: "Read · 8 Oct, :" with no time); use the
+  // shared clock formatter instead.
   const parts = zonedDateTimeFormat("en-GB", {
     timeZone,
     day: "numeric",
     month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
   }).formatToParts(date);
   const day = parts.find((p) => p.type === "day")?.value ?? "";
   // Intl may yield "Sept"; product copy uses the shared 3-letter months ("Sep").
   const month = canonicalShortMonth(
     parts.find((p) => p.type === "month")?.value ?? "",
   );
-  const hour = parts.find((p) => p.type === "hour")?.value ?? "";
-  const minute = parts.find((p) => p.type === "minute")?.value ?? "";
-  const dayPeriod = (
-    parts.find((p) => p.type === "dayPeriod")?.value ?? ""
-  ).toLowerCase();
-  const time = `${hour}:${minute} ${dayPeriod}`.replace(/\s+/g, " ").trim();
+  const time = formatClockTime(date, timeZone);
   let out = `${day} ${month}, ${time}`;
   const viewerTz = options?.viewerTz;
   if (viewerTz && viewerTz !== timeZone) {

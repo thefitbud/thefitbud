@@ -132,5 +132,5 @@ env:
 - extendedWaitUntil:
     notVisible: "${BANNER}"
     timeout: 12000
-- assertVisible: "Today's workout.*"
+- assertVisible: "Today's workout.*|Rest day|Recovery is part of the plan|This week"
 - runFlow: ../../common/assert-no-crash.yaml

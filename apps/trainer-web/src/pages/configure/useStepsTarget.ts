@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { STEPS_TARGET_MAX, STEPS_TARGET_MIN } from "@fitbud/contracts";
 import { apiClient } from "../../lib/api";
@@ -56,18 +56,22 @@ export function useStepsTarget(
   const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A load that started before a save must not write the old target back.
+  const epoch = useRef(0);
 
   useEffect(() => {
     if (!relationshipId) return;
+    const epochAtStart = epoch.current;
     let cancelled = false;
     setLoadFailed(false);
     apiClient
       .getClientSteps(relationshipId, "7d")
       .then((result) => {
-        if (!cancelled) setTarget(result.target);
+        if (cancelled || epochAtStart !== epoch.current) return;
+        setTarget(result.target);
       })
       .catch(() => {
-        if (cancelled) return;
+        if (cancelled || epochAtStart !== epoch.current) return;
         setTarget(null);
         setLoadFailed(true);
       });
@@ -80,6 +84,7 @@ export function useStepsTarget(
     async (next: number) => {
       if (!relationshipId) return false;
       const previous = target;
+      epoch.current += 1;
       setTarget(next);
       setSaving(true);
       setError(null);

@@ -746,7 +746,7 @@ export function ClientOverviewPage() {
                         (nutrition.assigned?.kcal ?? nutrition.logged.kcal) ||
                         1
                       }
-                      color="var(--brand-indigo, #4527C6)"
+                      color="var(--brand)"
                       label="kcal"
                       unit=""
                     />

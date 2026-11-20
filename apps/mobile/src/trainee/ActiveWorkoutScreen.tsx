@@ -1,189 +1,142 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
-import { useEffect, useMemo, useState } from "react";
-import { Pressable, View } from "react-native";
 import {
-  Check,
-  ChevronDown,
-  CirclePlay,
-  Pause,
-  Play,
-} from "lucide-react-native";
-import { Text } from "../components/Text";
-import { userFacingMessage } from "@fitbud/api-client";
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import {
+  BackHandler,
+  Platform,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  View,
+} from "react-native";
+import { Trash2 } from "lucide-react-native";
+import { ApiClientError } from "@fitbud/api-client";
 import type {
   ExerciseExecution,
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
-import { BottomSheet } from "../components/BottomSheet";
+import { formatClockTime } from "@fitbud/core";
+import { Button } from "../components/Button";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
+import { Snackbar } from "../components/Snackbar";
+import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
 import { localDateInTimezone } from "../lib/dates";
+import { reportError } from "../lib/reportError";
 import type { RestWindow } from "../notifications/liveActivity";
 import { useWorkoutLiveActivity } from "../notifications/liveActivitySession";
 import {
+  adjustRest,
+  formatRestClock,
+  restCountdownRender,
+  restElapsedFraction,
+  restSecondsShown,
+} from "../notifications/restCountdown";
+import {
   ThemeScope,
   createThemedStyles,
-  shadowColor,
   useTheme,
-  withAlpha,
 } from "../providers/ThemeProvider";
 import { enqueueAndPush } from "../sync/actions";
 import { useSyncEngine } from "../sync/SyncProvider";
+import { useApiReachable } from "../sync/useSyncStatus";
 import {
-  SetEntryHeader,
-  SetEntryRow,
-  SetKeypad,
   backspace,
-  displayLoad,
   draftForSet,
+  initialDraft,
+  isBodyweightLabel,
   isDraftModified,
   loadBody,
-  loadCellIsKg,
-  loadCellText,
   loadLabelForDraft,
+  plainKgFromLabel,
   pressKey,
-  prescribedLoadText,
   stepValue,
   type KeypadField,
   type SetDraft,
 } from "../workout/shared";
 import {
+  ExerciseDetailScreen,
+  exerciseHasHowTo,
+  historyWhen,
+  type ExerciseDetailSession,
+  type ExerciseDetailTab,
+} from "./workout/ExerciseDetailScreen";
+import { restEndHaptic } from "./workout/haptics";
+import { LogKeypad } from "./workout/log/LogKeypad";
+import {
+  CollapsedExercise,
+  ExerciseHead,
+  ExercisePad,
+  ExerciseSeparator,
+  LogNav,
+  LogSetRow,
+  LogStats,
+  PausedBanner,
+  RecordBanner,
+  RestBar,
+  RestDoneBar,
+  SetTableHead,
+  TargetLegend,
+  type SetRowState,
+} from "./workout/log/LogParts";
+import {
+  ConfirmDialog,
+  ExerciseMenuSheet,
+  FinishSheet,
+  SetSheet,
+  useModalCloseGate,
+  type SetSheetMode,
+} from "./workout/log/LogSheets";
+import {
+  EMPTY_WORKOUT_HISTORY,
+  coachInitials,
+  exerciseDoneLine,
   exerciseInstructionsFor,
-  loadPreviousSetHistory,
+  exercisePlanLine,
+  formatRestLength,
+  historySetLabel,
+  historySetsOf,
+  loadExerciseBests,
+  loadWorkoutHistory,
   previousSetLabel,
+  type ExerciseBest,
+  type WorkoutHistory,
 } from "./workoutDisplay";
-import { elapsedSeconds } from "./workoutDuration";
+import { elapsedSeconds, formatElapsedClock } from "./workoutDuration";
+import {
+  currentSetId,
+  discardLocally,
+  exerciseNameKey,
+  findSessionSet,
+  finishLocally,
+  logSetLocally,
+  restoreSetsLocally,
+  sessionRecordSetIds,
+  sessionSetCounts,
+  sessionVolumeKg,
+  skipSetsLocally,
+  skippableSetIds,
+  unloggedExercises,
+  type UnloggedExercise,
+} from "./workoutSession";
 
 const DEFAULT_REST_SECONDS = 90;
-const TARGET = 44;
-const LOGBAR_HEIGHT = 64;
-const KEYPAD_HEIGHT = 400;
+/** How long "skipped · Undo" stays before the skip is sent (W-09b). */
+export const SKIP_UNDO_MS = 6000;
+/** A rest found already over by more than this was missed, not just ended. */
+const REST_DONE_GRACE_MS = 3000;
+/** How long the record banner stays (W-12). */
+const RECORD_NOTICE_MS = 8000;
 
-const RPE_ANCHORS: Record<number, string> = {
-  1: "Very easy",
-  5: "Hard",
-  10: "Max effort",
-};
-
-
-function firstPendingExerciseIndex(execution: WorkoutExecution): number {
-  return execution.exercises.findIndex((ex) =>
-    ex.sets.some((set) => set.status === "pending"),
-  );
-}
-
-function firstPendingSetIndex(
-  execution: WorkoutExecution,
-  exerciseIndex: number,
-): number {
-  const exercise = execution.exercises[exerciseIndex];
-  if (!exercise) return -1;
-  return exercise.sets.findIndex((set) => set.status === "pending");
-}
-
-function exerciseComplete(execution: WorkoutExecution, exerciseIndex: number) {
-  const exercise = execution.exercises[exerciseIndex];
-  if (!exercise) return false;
-  return exercise.sets.every((set) => set.status !== "pending");
-}
-
-function formatElapsedMinutes(totalSeconds: number): string {
-  const m = Math.max(0, Math.floor(totalSeconds / 60));
-  return `${m} min`;
-}
-
-function exercisePrescriptionLine(
-  exercise: ExerciseExecution,
-  restSecondsBySetTargetId: Record<string, number>,
-): string {
-  const sets = exercise.sets.length;
-  const first = exercise.sets[0];
-  const reps = first?.prescribedReps;
-  const load = first?.prescribedLoadLabel?.trim();
-  const repPart =
-    reps != null ? `${sets} × ${reps}` : `${sets} sets`;
-  const parts = [repPart];
-  if (load) parts.push(load);
-  else if (!load && sets > 0) parts.push("bodyweight");
-  const rest = first
-    ? restSecondsBySetTargetId[first.setTargetId]
-    : undefined;
-  if (rest != null && rest > 0) parts.push(`rest ${rest} s`);
-  return parts.join(" · ");
-}
-
-function summarizeDoneExercise(exercise: ExerciseExecution): string {
-  const total = exercise.sets.length;
-  const done = exercise.sets.filter((s) => s.status !== "pending").length;
-  const loads = exercise.sets
-    .map((s) => s.actualLoadLabel ?? s.prescribedLoadLabel)
-    .filter(Boolean) as string[];
-  const reps = exercise.sets
-    .map((s) => s.actualReps ?? s.prescribedReps)
-    .filter((r): r is number => r != null);
-  let detail = "";
-  if (loads.length > 0 && reps.length > 0) {
-    const maxLoad = loads
-      .map((l) => Number.parseFloat(l.match(/([\d.]+)/)?.[1] ?? "0"))
-      .filter(Number.isFinite)
-      .reduce((a, b) => Math.max(a, b), 0);
-    const maxReps = Math.max(...reps);
-    if (maxLoad > 0) {
-      const varied = new Set(loads.map(displayLoad)).size > 1;
-      detail = varied
-        ? `up to ${maxLoad} kg`
-        : `${maxReps} × ${displayLoad(loads[0])} kg`;
-    } else {
-      detail = `${maxReps} reps`;
-    }
-  }
-  const base = `Done · ${done} of ${total} sets`;
-  return detail ? `${base} · ${detail}` : base;
-}
-
-function applySetCompleteLocally(
-  execution: WorkoutExecution,
-  setId: string,
-  actualReps: number | null,
-  actualLoadLabel: string | null,
-): WorkoutExecution {
-  const now = new Date().toISOString();
-  return {
-    ...execution,
-    updatedAt: now,
-    exercises: execution.exercises.map((exercise) => {
-      const sets = exercise.sets.map((set) => {
-        if (set.id !== setId) return set;
-        const modified =
-          (actualReps != null &&
-            set.prescribedReps != null &&
-            actualReps !== set.prescribedReps) ||
-          (actualLoadLabel != null &&
-            displayLoad(actualLoadLabel) !==
-              displayLoad(set.prescribedLoadLabel)) ||
-          (actualReps != null && set.prescribedReps == null);
-        return {
-          ...set,
-          status: modified ? ("modified" as const) : ("completed" as const),
-          actualReps: actualReps ?? set.prescribedReps,
-          actualLoadLabel: actualLoadLabel ?? set.prescribedLoadLabel,
-          completedAt: now,
-          updatedAt: now,
-        };
-      });
-      const allDone = sets.every((set) => set.status !== "pending");
-      return {
-        ...exercise,
-        sets,
-        status: allDone ? ("completed" as const) : exercise.status,
-        updatedAt: now,
-      };
-    }),
-  };
-}
+type ExecutionSet = ExerciseExecution["sets"][number];
 
 const KEEP_AWAKE_TAG = "fitbud-active-workout";
 
@@ -224,48 +177,72 @@ export function activateWorkoutKeepAwake(): () => void {
   };
 }
 
-type ActiveWorkoutProps = {
-  execution: WorkoutExecution;
-  assignment?: WorkoutAssignment | null;
-  onChange: (execution: WorkoutExecution) => void;
-  onFinished: (execution: WorkoutExecution) => void;
-  onExit: () => void;
-  sessionName?: string;
-  coachName?: string;
-  restSecondsBySetTargetId?: Record<string, number>;
-  onAskCoach?: () => void;
+type PendingSkip = {
+  setIds: string[];
+  /** The sets as they were, for Undo. */
+  previous: ExecutionSet[];
+  message: string;
 };
 
-/**
- * Active workout (W-03). ThemeScope opts the body into system light/dark before
- * styles are built; `<Screen v3>` keeps the same opt-in for Screen chrome and
- * Z12-58 (MoreScreen / DietTab pattern).
- */
-export function ActiveWorkoutScreen(props: ActiveWorkoutProps) {
-  return (
-    <ThemeScope scheme="system">
-      <ActiveWorkoutBody {...props} />
-    </ThemeScope>
-  );
+function sortedSets(exercise: ExerciseExecution): ExecutionSet[] {
+  return [...exercise.sets].sort((a, b) => a.order - b.order);
 }
 
-function ActiveWorkoutBody({
+/** "set 3 · 40 kg × 10", "set 1 · 12 reps": what the rest bars point at. */
+function nextSetText(
+  exercise: ExerciseExecution,
+  set: ExecutionSet,
+  draft: SetDraft,
+): string {
+  const number = sortedSets(exercise).indexOf(set) + 1;
+  const reps = draft.reps.trim();
+  if (draft.bodyweight) return `set ${number}${reps ? ` · ${reps} reps` : ""}`;
+  const load = draft.load.trim()
+    ? `${draft.load} kg`
+    : (set.prescribedLoadLabel?.trim() ?? "");
+  const values = [load, reps].filter(Boolean).join(" × ");
+  return `set ${number}${values ? ` · ${values}` : ""}`;
+}
+
+export function ActiveWorkoutScreen({
   execution,
   assignment = null,
   onChange,
   onFinished,
   onExit,
+  onMinimise,
   sessionName,
   coachName = "Your coach",
   restSecondsBySetTargetId = {},
   onAskCoach,
-}: ActiveWorkoutProps) {
-  const styles = useStyles();
-  const theme = useTheme();
+  rest: restProp,
+  onRestChange,
+}: {
+  execution: WorkoutExecution;
+  assignment?: WorkoutAssignment | null;
+  onChange: (execution: WorkoutExecution) => void;
+  onFinished: (execution: WorkoutExecution) => void;
+  /** Leave the log for good: after a discard, or from the "already done" guard. */
+  onExit: () => void;
+  /** Tuck the log into the minimised bar (W-14). Defaults to `onExit`. */
+  onMinimise?: () => void;
+  sessionName?: string;
+  coachName?: string;
+  restSecondsBySetTargetId?: Record<string, number>;
+  /** Opens the coach message for the workout; given the exercise it is about. */
+  onAskCoach?: (exerciseName?: string) => void;
+  /** The running rest, when the caller keeps it across minimise (W-14). */
+  rest?: RestWindow | null;
+  onRestChange?: (rest: RestWindow | null) => void;
+}) {
   const sync = useSyncEngine();
   const { api, me } = useAuth();
+  const reachable = useApiReachable();
+  /** iOS: open the next sheet only after the closing Modal's onDismiss. */
+  const sheetGate = useModalCloseGate();
   const [error, setError] = useState<string | null>(null);
   const [finishOpen, setFinishOpen] = useState(false);
+  const [discardOpen, setDiscardOpen] = useState(false);
   const [sessionRpe, setSessionRpe] = useState<number | null>(
     execution.sessionRpe,
   );
@@ -274,1093 +251,1056 @@ function ActiveWorkoutBody({
     field: KeypadField;
     replace: boolean;
   } | null>(null);
-  const [restRemaining, setRestRemaining] = useState<number | null>(null);
-  const [restTotal, setRestTotal] = useState(DEFAULT_REST_SECONDS);
-  // Lock-screen rest (LA1c): when the current in-app rest ends, for the Live
-  // Activity's own countdown. Follows the in-app timer; it doesn't drive it.
-  const [restWindow, setRestWindow] = useState<RestWindow | null>(null);
-  const [elapsedSec, setElapsedSec] = useState(0);
-  const [previousByKey, setPreviousByKey] = useState<Record<string, string>>({});
+  /** The set the trainee chose to do next; null follows the plan's order. */
+  const [pickedSetId, setPickedSetId] = useState<string | null>(null);
+  /** Exercises the trainee opened or folded by hand. */
+  const [folded, setFolded] = useState<Record<string, boolean>>({});
+  const [menuExerciseId, setMenuExerciseId] = useState<string | null>(null);
+  const [sheetSetId, setSheetSetId] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{
+    exerciseExecutionId: string;
+    tab: ExerciseDetailTab;
+  } | null>(null);
+  const [pendingSkip, setPendingSkip] = useState<PendingSkip | null>(null);
+  const [restDone, setRestDone] = useState<string | null>(null);
+  const [recordNotice, setRecordNotice] = useState<string | null>(null);
+  const [history, setHistory] = useState<WorkoutHistory>(EMPTY_WORKOUT_HISTORY);
+  const [historyLoading, setHistoryLoading] = useState(assignment != null);
+  const [bests, setBests] = useState<Record<string, ExerciseBest>>({});
+  const [now, setNow] = useState(() => Date.now());
+  const [localRest, setLocalRest] = useState<RestWindow | null>(null);
 
+  // The rest is the caller's when it keeps one (so it survives minimise),
+  // else this screen's own.
+  const rest = restProp !== undefined ? restProp : localRest;
+  const setRest = (next: RestWindow | null) => {
+    if (onRestChange) onRestChange(next);
+    else setLocalRest(next);
+  };
+
+  const executionRef = useRef(execution);
+  executionRef.current = execution;
+  const pendingSkipRef = useRef<PendingSkip | null>(null);
+  pendingSkipRef.current = pendingSkip;
+  const scrollRef = useRef<ScrollView>(null);
+  const exerciseY = useRef<Record<string, number>>({});
+
+  const paused = execution.status === "paused";
   const emptyOrDone =
     execution.exercises.length === 0 ||
     execution.status === "completed" ||
     execution.status === "skipped" ||
     execution.status === "modified";
 
-  const currentExerciseIndex = useMemo(
-    () => firstPendingExerciseIndex(execution),
-    [execution],
+  const exercises = useMemo(
+    () => [...execution.exercises].sort((a, b) => a.order - b.order),
+    [execution.exercises],
   );
-
-  const exercise =
-    currentExerciseIndex >= 0
-      ? execution.exercises[currentExerciseIndex]
-      : null;
-  const setIndex =
-    exercise && currentExerciseIndex >= 0
-      ? firstPendingSetIndex(execution, currentExerciseIndex)
-      : -1;
-  const currentSet =
-    exercise && setIndex >= 0 ? exercise.sets[setIndex] : null;
-
-  const pendingSets = execution.exercises.reduce(
-    (count, ex) =>
-      count + ex.sets.filter((set) => set.status === "pending").length,
-    0,
+  const activeSetId = useMemo(
+    () => currentSetId(execution, pickedSetId),
+    [execution, pickedSetId],
   );
-  const allSetsDone = pendingSets === 0;
+  const active = activeSetId ? findSessionSet(execution, activeSetId) : null;
+  const activeDraft = active ? draftForSet(active.set, drafts) : null;
+
+  const counts = sessionSetCounts(execution);
+  const notLogged = counts.total - counts.done;
+  const bestKgByName = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [key, best] of Object.entries(bests)) map[key] = best.kg;
+    return map;
+  }, [bests]);
+  const recordSetIds = useMemo(
+    () => sessionRecordSetIds(execution, bestKgByName),
+    [execution, bestKgByName],
+  );
 
   const title = sessionName?.trim() || "Workout";
-  const exerciseOrdinal =
-    currentExerciseIndex >= 0 ? currentExerciseIndex + 1 : execution.exercises.length;
-  const exerciseTotal = execution.exercises.length;
+  const coachFirst =
+    coachName === "Your coach"
+      ? "your coach"
+      : (coachName.split(/\s+/)[0] ?? coachName);
+  const timeZone = me?.timezone ?? "UTC";
+  const today = localDateInTimezone(timeZone);
 
-  const upcoming = useMemo(() => {
-    if (currentExerciseIndex < 0) return [];
-    return execution.exercises.slice(currentExerciseIndex + 1);
-  }, [currentExerciseIndex, execution.exercises]);
+  // The rest as every surface reads it (restCountdown.ts): one end instant.
+  const restRender = restCountdownRender(
+    { restEndsAt: rest?.endsAt ?? null, restSeconds: rest?.seconds ?? null },
+    now,
+  );
+  const resting = rest != null && restRender.kind === "resting";
 
   // iOS Live Activity (LA1b): starts, updates per logged set, ends on finish,
   // skip or leaving. No-op on Android and web.
   useWorkoutLiveActivity({
     execution,
     workoutName: title,
-    historyByKey: previousByKey,
-    rest: restWindow,
+    historyByKey: history.previousByKey,
+    rest,
     // Skip on the lock screen ends the app's rest when the app comes back.
-    onRestSkipped: () => setRestRemaining(null),
+    onRestSkipped: () => setRest(null),
   });
-
-  // The in-app rest ended (expiry, Skip, or the next set): no lock-screen rest.
-  useEffect(() => {
-    if (restRemaining == null || restRemaining <= 0) setRestWindow(null);
-  }, [restRemaining]);
 
   useEffect(() => {
     return activateWorkoutKeepAwake();
   }, []);
 
   useEffect(() => {
-    if (!assignment) return;
-    const timeZone = me?.timezone ?? "UTC";
-    const today = localDateInTimezone(timeZone);
+    if (!assignment) {
+      setHistoryLoading(false);
+      return undefined;
+    }
     let cancelled = false;
-    void loadPreviousSetHistory(api, assignment, today).then((map) => {
-      if (!cancelled) setPreviousByKey(map);
+    setHistoryLoading(true);
+    void loadWorkoutHistory(api, assignment, today).then((loaded) => {
+      if (cancelled) return;
+      setHistory(loaded);
+      setHistoryLoading(false);
     });
+    // A late log is for an earlier day: what counts as "before" is that day,
+    // so the session's own sets are never the record it has to beat.
+    const before = assignment.localDate < today ? assignment.localDate : today;
+    void loadExerciseBests(api, assignment.coachingRelationshipId, before).then(
+      (loaded) => {
+        if (!cancelled) setBests(loaded);
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [api, assignment, me?.timezone]);
+  }, [api, assignment, today]);
 
+  // One clock for the session timer and the rest bar. It reads the wall clock
+  // at every tick, so a tick that comes late never makes either drift.
   useEffect(() => {
-    if (restRemaining == null || restRemaining <= 0) return;
-    const timer = setTimeout(() => {
-      setRestRemaining((value) => {
-        if (value == null || value <= 1) return null;
-        return value - 1;
-      });
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [restRemaining]);
-
-  // The session clock reads the execution's own timestamps (Z12-44,
-  // `elapsedSeconds`): it stands still while paused and survives a resume,
-  // a kill and a relaunch, and it is the same rule as the summary's Duration
-  // and the Workout tab's "In progress" clock. It used to keep the paused
-  // time in memory, so a relaunch made it jump.
-  const { startedAt, pausedAt, completedAt } = execution;
-  useEffect(() => {
-    const tick = () =>
-      setElapsedSec(
-        elapsedSeconds({ startedAt, pausedAt, completedAt }, Date.now()),
-      );
+    const tick = () => setNow(Date.now());
     tick();
-    if (execution.status === "paused") return undefined;
-    const timer = setInterval(tick, 1000);
+    if (paused && rest == null) return undefined;
+    const timer = setInterval(tick, rest != null ? 250 : 1000);
     return () => clearInterval(timer);
-  }, [execution.status, startedAt, pausedAt, completedAt]);
+  }, [paused, rest]);
+
+  // The rest reached its end (W-05b): say what is next, and buzz. A rest the
+  // trainee skipped, or ended by logging the next set, clears `rest` itself
+  // and never comes through here.
+  useEffect(() => {
+    if (rest == null || restRender.kind !== "ended") return;
+    // A rest that ended while the log was away (minimised) is simply over:
+    // "Rest done" and the buzz belong to the moment it ends.
+    if (Date.now() - rest.endsAt > REST_DONE_GRACE_MS) {
+      setRest(null);
+      return;
+    }
+    const current = executionRef.current;
+    const id = currentSetId(current, pickedSetId);
+    const found = id ? findSessionSet(current, id) : null;
+    setRest(null);
+    setRestDone(
+      found
+        ? `Next: ${nextSetText(found.exercise, found.set, draftForSet(found.set, drafts))}`
+        : "Next: finish workout",
+    );
+    restEndHaptic();
+    // `rest` and the render kind are the triggers; the rest is read at fire time.
+  }, [rest, restRender.kind]);
+
+  useEffect(() => {
+    if (!recordNotice) return undefined;
+    const timer = setTimeout(() => setRecordNotice(null), RECORD_NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [recordNotice]);
+
+  /** Send a skip whose Undo has gone. A failure leaves the sets unlogged, which is what a skip means for the count. */
+  function sendSkips(skip: PendingSkip) {
+    const executionId = executionRef.current.id;
+    void (async () => {
+      for (const setId of skip.setIds) {
+        try {
+          await api.skipWorkoutSet(executionId, setId);
+        } catch (err: unknown) {
+          reportError("workout.set.skip", err);
+          return;
+        }
+      }
+    })();
+  }
+
+  function settlePendingSkip() {
+    const skip = pendingSkipRef.current;
+    if (!skip) return;
+    pendingSkipRef.current = null;
+    setPendingSkip(null);
+    sendSkips(skip);
+  }
+
+  useEffect(() => {
+    if (!pendingSkip) return undefined;
+    const timer = setTimeout(settlePendingSkip, SKIP_UNDO_MS);
+    return () => clearTimeout(timer);
+  }, [pendingSkip]);
+
+  // Leaving the log (minimise, finish, discard) settles a skip still on show.
+  useEffect(() => {
+    return () => {
+      const skip = pendingSkipRef.current;
+      if (skip) sendSkips(skip);
+    };
+  }, []);
+
+  const minimise = onMinimise ?? onExit;
+  const minimiseRef = useRef(minimise);
+  minimiseRef.current = minimise;
+  const backState = useRef({ detail: false, keypad: false });
+  backState.current = { detail: detail != null, keypad: keypad != null };
+  // Android Back never throws the session away: it closes what is open, then
+  // minimises (W-14).
+  useEffect(() => {
+    // Only Android has a hardware Back (and react-native-web rejects the call).
+    if (Platform.OS !== "android") return undefined;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (backState.current.detail) setDetail(null);
+      else if (backState.current.keypad) setKeypad(null);
+      else minimiseRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
+
+  function workoutPayload(extra: Record<string, unknown> = {}) {
+    return {
+      executionId: execution.id,
+      // The plan's own id: a workout opened with no network has ids the
+      // server has never seen, and is found by this (Z12-41).
+      assignmentId: execution.assignmentId,
+      expectedVersion: execution.recordVersion,
+      // What the outbox list calls this row (Z12-41 hand-over).
+      workoutName: title,
+      ...extra,
+    };
+  }
+
+  function saveFailed(where: string, err: unknown, fallback: string) {
+    reportError(where, err);
+    setError(err instanceof ApiClientError ? err.message : fallback);
+  }
 
   function startRestForSet(setTargetId: string) {
     const prescribed = restSecondsBySetTargetId[setTargetId];
     const seconds =
-      prescribed != null && prescribed > 0
-        ? prescribed
-        : DEFAULT_REST_SECONDS;
-    setRestTotal(seconds);
-    setRestRemaining(seconds);
-    setRestWindow({ endsAt: Date.now() + seconds * 1000, seconds });
+      prescribed != null && prescribed > 0 ? prescribed : DEFAULT_REST_SECONDS;
+    setNow(Date.now());
+    setRest({ endsAt: Date.now() + seconds * 1000, seconds });
   }
 
-  function updateDraft(setId: string, patch: Partial<SetDraft>) {
-    setDrafts((prev) => {
-      const base =
-        prev[setId] ??
-        (() => {
-          for (const ex of execution.exercises) {
-            const match = ex.sets.find((s) => s.id === setId);
-            if (match) return draftForSet(match, prev);
-          }
-          return { load: "", reps: "", bodyweight: false };
-        })();
-      return { ...prev, [setId]: { ...base, ...patch } };
+  function updateDraft(set: ExecutionSet, patch: Partial<SetDraft>) {
+    setDrafts((prev) => ({
+      ...prev,
+      [set.id]: { ...draftForSet(set, prev), ...patch },
+    }));
+  }
+
+  /** Log a set, or log it again with new values (W-13). */
+  function commitLog(set: ExecutionSet, exercise: ExerciseExecution, draft: SetDraft) {
+    if (paused) return;
+    settlePendingSkip();
+    const repsRaw = draft.reps.trim();
+    const parsedReps = repsRaw === "" ? null : Number.parseInt(repsRaw, 10);
+    const actualReps =
+      parsedReps != null && Number.isFinite(parsedReps) ? parsedReps : null;
+    const loadPart = loadBody(draft, set.prescribedLoadLabel);
+    const actualLoadLabel = loadLabelForDraft(draft, set.prescribedLoadLabel);
+    const firstLog = set.status === "pending";
+
+    const optimistic = logSetLocally(execution, set.id, {
+      actualReps,
+      actualLoadLabel,
+    });
+    onChange(optimistic);
+    setKeypad(null);
+    setSheetSetId(null);
+    setError(null);
+    setRestDone(null);
+    if (firstLog) {
+      // The log moves on from the set just logged; a correction leaves the
+      // current set where it is and starts no rest.
+      setPickedSetId(set.id);
+      startRestForSet(set.setTargetId);
+    }
+
+    if (
+      sessionRecordSetIds(optimistic, bestKgByName).has(set.id) &&
+      !recordSetIds.has(set.id)
+    ) {
+      setRecordNotice(
+        `${exercise.name} · ${historySetLabel(
+          actualLoadLabel ?? set.prescribedLoadLabel,
+          actualReps ?? set.prescribedReps,
+        )}`,
+      );
+    }
+
+    void enqueueAndPush(sync, {
+      recordId: execution.id,
+      operation: "workout.complete_set",
+      expectedServerVersion: execution.recordVersion,
+      payload: workoutPayload({
+        setExecutionId: set.id,
+        setTargetId: set.setTargetId,
+        body: { actualReps, ...loadPart },
+      }),
+    }).catch((err: unknown) => {
+      saveFailed(
+        "workout.set.save",
+        err,
+        "That set couldn’t be saved on this phone (WO-SAVE). Log it again.",
+      );
     });
   }
 
-  function completeSet(setId: string) {
-    if (execution.status === "paused") return;
-    let targetSet: ExerciseExecution["sets"][number] | null = null;
-    for (const ex of execution.exercises) {
-      const found = ex.sets.find((s) => s.id === setId);
-      if (found) {
-        targetSet = found;
-        break;
-      }
-    }
-    if (!targetSet || targetSet.status !== "pending") return;
-
-    const draft = draftForSet(targetSet, drafts);
-    const repsRaw = draft.reps.trim();
-    const actualReps =
-      repsRaw === "" ? null : Number.parseInt(repsRaw, 10);
-    const loadPart = loadBody(draft, targetSet.prescribedLoadLabel);
-    const actualLoadLabel = loadLabelForDraft(draft, targetSet.prescribedLoadLabel);
+  /** Skip sets that are still to do, with Undo (W-08, W-09b). */
+  function skipWithUndo(setIds: string[], message: string) {
+    if (paused || setIds.length === 0) return;
+    settlePendingSkip();
+    const previous = setIds
+      .map((id) => findSessionSet(execution, id)?.set)
+      .filter((set): set is ExecutionSet => set != null);
+    onChange(skipSetsLocally(execution, setIds));
     setKeypad(null);
+    setSheetSetId(null);
+    setMenuExerciseId(null);
+    setPendingSkip({ setIds, previous, message });
+  }
 
-    setRestRemaining(null);
+  function undoSkip() {
+    const skip = pendingSkipRef.current;
+    if (!skip) return;
+    pendingSkipRef.current = null;
+    setPendingSkip(null);
+    onChange(restoreSetsLocally(executionRef.current, skip.previous));
+  }
 
-    const optimistic = applySetCompleteLocally(
-      execution,
-      setId,
-      actualReps != null && Number.isFinite(actualReps) ? actualReps : null,
-      actualLoadLabel,
-    );
-    onChange(optimistic);
-    startRestForSet(targetSet.setTargetId);
+  /**
+   * A logged set becomes not done (W-13). The server has the log, so this one
+   * has to reach it: queued logs go first, and if the change does not land the
+   * set stays logged here too.
+   */
+  function markNotDone(set: ExecutionSet) {
+    if (paused) return;
+    settlePendingSkip();
+    const previous = [set];
+    onChange(skipSetsLocally(execution, [set.id]));
+    setSheetSetId(null);
     setError(null);
-
     void (async () => {
       try {
-        await enqueueAndPush(sync, {
-          recordId: execution.id,
-          operation: "workout.complete_set",
-          expectedServerVersion: execution.recordVersion,
-          payload: {
-            executionId: execution.id,
-            setExecutionId: setId,
-            // The plan's own ids: a workout opened with no network has ids
-            // the server has never seen, and finds the set by these (Z12-41).
-            assignmentId: execution.assignmentId,
-            setTargetId: targetSet.setTargetId,
-            expectedVersion: execution.recordVersion,
-            body: {
-              actualReps:
-                actualReps != null && Number.isFinite(actualReps)
-                  ? actualReps
-                  : null,
-              ...loadPart,
-            },
-          },
-        });
+        await sync.pushPending();
+        await api.skipWorkoutSet(execution.id, set.id);
       } catch (err: unknown) {
-        setError(
-          userFacingMessage(err, {
-            fallback: "Saved on phone · will sync when online.",
-          }),
+        onChange(restoreSetsLocally(executionRef.current, previous));
+        saveFailed(
+          "workout.set.unlog",
+          err,
+          "That change didn’t go through, so the set is still logged (WO-UNLOG).",
         );
       }
     })();
   }
 
-  function pauseSession() {
-    const optimistic: WorkoutExecution = {
+  function setPaused(next: boolean) {
+    settlePendingSkip();
+    const at = new Date().toISOString();
+    onChange({
       ...execution,
-      status: "paused",
-      pausedAt: new Date().toISOString(),
-    };
-    onChange(optimistic);
+      status: next ? "paused" : "started",
+      pausedAt: next ? at : null,
+    });
+    if (next) {
+      setKeypad(null);
+      setRest(null);
+      setRestDone(null);
+    }
     void enqueueAndPush(sync, {
       recordId: execution.id,
-      operation: "workout.pause",
+      operation: next ? "workout.pause" : "workout.resume",
       expectedServerVersion: execution.recordVersion,
-      payload: {
-        executionId: execution.id,
-        assignmentId: execution.assignmentId,
-        expectedVersion: execution.recordVersion,
-      },
-    }).catch(() => {
-      setError("Saved on phone · will sync when online.");
+      payload: workoutPayload(),
+    }).catch((err: unknown) => {
+      saveFailed(
+        next ? "workout.pause" : "workout.resume",
+        err,
+        "That couldn’t be saved on this phone (WO-SAVE).",
+      );
     });
   }
 
-  function resumeSession() {
-    const optimistic: WorkoutExecution = {
-      ...execution,
-      status: "started",
-      pausedAt: null,
-    };
-    onChange(optimistic);
-    void enqueueAndPush(sync, {
-      recordId: execution.id,
-      operation: "workout.resume",
-      expectedServerVersion: execution.recordVersion,
-      payload: {
-        executionId: execution.id,
-        assignmentId: execution.assignmentId,
-        expectedVersion: execution.recordVersion,
-      },
-    }).catch(() => {
-      setError("Saved on phone · will sync when online.");
-    });
+  function requestFinish() {
+    if (!(notLogged > 0 || execution.requireSessionRpe)) {
+      finishWorkout();
+      return;
+    }
+    // Close keypad (not a Modal) at once. If a sheet or dialog is still up,
+    // wait for its Modal onDismiss before presenting "Finish early?" — opening
+    // in the same tick never shows on iOS (F06c run 44402973183).
+    const modalOpen =
+      menuExerciseId != null || sheetSetId != null || discardOpen;
+    setKeypad(null);
+    setMenuExerciseId(null);
+    setSheetSetId(null);
+    setDiscardOpen(false);
+    if (!modalOpen) {
+      setFinishOpen(true);
+      return;
+    }
+    sheetGate.afterClose(() => setFinishOpen(true));
   }
 
-  function finishWorkout(force = false) {
-    if (!force && pendingSets > 0) {
-      setFinishOpen(true);
-      return;
-    }
-    if (execution.requireSessionRpe && sessionRpe == null) {
-      setFinishOpen(true);
-      setError("Pick a session RPE before finishing.");
-      return;
-    }
-    const optimistic: WorkoutExecution = {
-      ...execution,
-      status: "completed",
-      completedAt: new Date().toISOString(),
-      sessionRpe,
-    };
+  function finishWorkout() {
+    if (execution.requireSessionRpe && sessionRpe == null) return;
+    settlePendingSkip();
+    const optimistic = finishLocally(executionRef.current, sessionRpe);
     onChange(optimistic);
     setFinishOpen(false);
+    setRest(null);
     void (async () => {
       try {
         await enqueueAndPush(sync, {
           recordId: execution.id,
           operation: "workout.complete",
           expectedServerVersion: execution.recordVersion,
-          payload: {
-            executionId: execution.id,
-            assignmentId: execution.assignmentId,
-            expectedVersion: execution.recordVersion,
-            body: { sessionRpe },
-          },
+          payload: workoutPayload({ body: { sessionRpe } }),
         });
-      } catch {
-        // Still show summary offline.
+      } catch (err: unknown) {
+        // The summary still opens; the sync status says what was not sent.
+        reportError("workout.complete", err);
       }
       onFinished(optimistic);
     })();
   }
 
+  function discardWorkout() {
+    settlePendingSkip();
+    setDiscardOpen(false);
+    setRest(null);
+    onChange(discardLocally(executionRef.current));
+    void (async () => {
+      try {
+        await enqueueAndPush(sync, {
+          recordId: execution.assignmentId,
+          operation: "workout.skip",
+          payload: { assignmentId: execution.assignmentId, workoutName: title },
+        });
+      } catch (err: unknown) {
+        reportError("workout.discard", err);
+      }
+      onExit();
+    })();
+  }
+
+  function goTo(row: UnloggedExercise) {
+    setFinishOpen(false);
+    setFolded((prev) => ({ ...prev, [row.exerciseExecutionId]: false }));
+    const found = findSessionSet(execution, row.setId);
+    if (found?.set.status === "pending") setPickedSetId(row.setId);
+    const y = exerciseY.current[row.exerciseExecutionId];
+    if (y != null) scrollRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+  }
+
   if (emptyOrDone) {
     return (
       <Screen v3 chrome="app" title={title}>
-        <View style={styles.guardCard}>
-          <Text style={styles.guardTitle} accessibilityRole="header">
-            This workout is already done
-          </Text>
-          <Text style={styles.guardBody}>View summary when you go back.</Text>
-          <PrimaryButton
-            label="View summary"
-            onPress={() => onFinished(execution)}
-          />
-          <PrimaryButton label="Back" variant="ghost" onPress={onExit} />
-        </View>
+        <DoneGuard onSummary={() => onFinished(execution)} onBack={onExit} />
       </Screen>
     );
   }
 
-  const currentDraft = currentSet ? draftForSet(currentSet, drafts) : null;
-  const restProgress =
-    restRemaining != null && restTotal > 0
-      ? Math.max(0, Math.min(1, restRemaining / restTotal))
-      : 0;
+  const planExercise = (exercise: ExerciseExecution) =>
+    assignment?.workoutDay.exercises.find((item) => item.id === exercise.exerciseId) ??
+    null;
 
-  const nextRestSeconds = currentSet
-    ? restSecondsBySetTargetId[currentSet.setTargetId] ?? DEFAULT_REST_SECONDS
-    : DEFAULT_REST_SECONDS;
+  if (detail) {
+    const exercise = exercises.find((item) => item.id === detail.exerciseExecutionId);
+    if (exercise) {
+      const key = exerciseNameKey(exercise.name);
+      const todaySets = historySetsOf(exercise);
+      const sessions: ExerciseDetailSession[] = [];
+      if (todaySets.length > 0) {
+        sessions.push({
+          key: "this-session",
+          workoutDayName: title,
+          when: historyWhen(assignment?.localDate ?? today, today),
+          sets: todaySets,
+          recordOrders: new Set(
+            exercise.sets
+              .filter((set) => recordSetIds.has(set.id))
+              .map((set) => set.order),
+          ),
+        });
+      }
+      for (const session of history.sessions) {
+        const sets = session.setsByExerciseName[key];
+        if (!sets || sets.length === 0) continue;
+        sessions.push({
+          key: session.assignmentId,
+          workoutDayName: session.workoutDayName,
+          when: historyWhen(session.localDate, today),
+          sets,
+        });
+      }
+      return (
+        <ExerciseDetailScreen
+          name={exercise.name}
+          tab={detail.tab}
+          onTabChange={(tab) => setDetail({ ...detail, tab })}
+          onBack={() => setDetail(null)}
+          exercise={planExercise(exercise)}
+          coachInitials={coachInitials(coachName)}
+          best={bests[key] ?? null}
+          sessions={sessions}
+          historyLoading={historyLoading}
+        />
+      );
+    }
+  }
 
-  const logLabel = currentSet && currentDraft
-    ? (() => {
-        const load = loadCellText(currentSet, currentDraft);
-        const reps =
-          currentDraft.reps.trim() ||
-          (currentSet.prescribedReps != null
-            ? String(currentSet.prescribedReps)
-            : "—");
-        if (load === "BW") {
-          return `Log set ${currentSet.order} · ${reps} reps`;
-        }
-        if (load === "Bodyweight") {
-          return `Log set ${currentSet.order} · Bodyweight × ${reps}`;
-        }
-        return loadCellIsKg(currentDraft)
-          ? `Log set ${currentSet.order} · ${load} kg × ${reps}`
-          : `Log set ${currentSet.order} · ${load} × ${reps}`;
-      })()
-    : "Finish workout";
+  const keypadOpen = keypad != null && active != null && activeDraft != null;
 
-  const logSub =
-    restRemaining != null && restRemaining > 0
-      ? "Ready early? Logging a set ends the rest."
-      : `Tap load or reps to change · rest ${nextRestSeconds} s starts after`;
-
-  const nextSetLoadText = (
-    set: ExerciseExecution["sets"][number],
-  ): string => {
-    const text = prescribedLoadText(set.prescribedLoadLabel);
-    return text ? ` · ${text}` : "";
-  };
-
-  // During a rest the current set is already the next one to do (frame 11b).
-  const nextAfterRest =
-    currentSet && exercise
-      ? `Next: ${exercise.name}, set ${currentSet.order}${nextSetLoadText(currentSet)}`
-      : "Next: finish workout";
-
-  const keypadOpen =
-    keypad != null && currentSet != null && currentDraft != null;
-
-  function openKeypad(field: KeypadField) {
-    if (execution.status === "paused") return;
-    setKeypad({ field, replace: true });
+  function openField(set: ExecutionSet, field: KeypadField) {
+    if (paused) return;
+    setPickedSetId(set.id);
+    setRestDone(null);
+    // Set sheet is a Modal; open the keypad only after it has left on iOS.
+    const sheetWasOpen = sheetSetId != null;
+    setSheetSetId(null);
+    const showKeypad = () => setKeypad({ field, replace: true });
+    if (sheetWasOpen) sheetGate.afterClose(showKeypad);
+    else showKeypad();
   }
 
   function keypadKey(key: string) {
-    if (!keypad || !currentSet || !currentDraft) return;
-    const next = pressKey(
-      currentDraft[keypad.field],
-      key,
-      keypad.field,
-      keypad.replace,
-    );
-    updateDraft(currentSet.id, { [keypad.field]: next });
+    if (!keypad || !active || !activeDraft) return;
+    updateDraft(active.set, {
+      [keypad.field]: pressKey(
+        activeDraft[keypad.field],
+        key,
+        keypad.field,
+        keypad.replace,
+      ),
+    });
     setKeypad({ ...keypad, replace: false });
   }
 
   function keypadBackspace() {
-    if (!keypad || !currentSet || !currentDraft) return;
-    updateDraft(currentSet.id, {
-      [keypad.field]: backspace(currentDraft[keypad.field], keypad.replace),
+    if (!keypad || !active || !activeDraft) return;
+    updateDraft(active.set, {
+      [keypad.field]: backspace(activeDraft[keypad.field], keypad.replace),
     });
     setKeypad({ ...keypad, replace: false });
   }
 
   function keypadStep(direction: 1 | -1) {
-    if (!keypad || !currentSet || !currentDraft) return;
+    if (!keypad || !active || !activeDraft) return;
     const base =
-      keypad.field === "load" && currentDraft.load.trim() === ""
+      keypad.field === "load" && activeDraft.load.trim() === ""
         ? "0"
-        : currentDraft[keypad.field];
-    updateDraft(currentSet.id, {
+        : activeDraft[keypad.field];
+    updateDraft(active.set, {
       [keypad.field]: stepValue(base, direction, keypad.field),
     });
     setKeypad({ ...keypad, replace: true });
   }
 
   function keypadBodyweight(bodyweight: boolean) {
-    if (!currentSet) return;
-    updateDraft(currentSet.id, { bodyweight });
-    // Switching to kg from the reps keypad goes to the load to type it.
-    if (!bodyweight && keypad?.field === "reps") {
-      setKeypad({ field: "load", replace: true });
-    }
+    if (!active) return;
+    updateDraft(active.set, { bodyweight });
+    // A bodyweight set has no kg to type; back on kg, the weight comes first.
+    setKeypad({ field: bodyweight ? "reps" : "load", replace: true });
   }
 
-  function keypadPrimary() {
-    if (!keypad || !currentSet) return;
-    if (keypad.field === "load") setKeypad({ field: "reps", replace: true });
-    else completeSet(currentSet.id);
-  }
+  const menuExercise = menuExerciseId
+    ? (exercises.find((item) => item.id === menuExerciseId) ?? null)
+    : null;
+  const sheet = sheetSetId ? findSessionSet(execution, sheetSetId) : null;
+  const sheetMode: SetSheetMode =
+    sheet?.set.status === "pending"
+      ? "pending"
+      : sheet?.set.status === "skipped"
+        ? "skipped"
+        : "logged";
+  const sheetNumber = sheet ? sortedSets(sheet.exercise).indexOf(sheet.set) + 1 : 0;
+  const sheetDetail = !sheet
+    ? ""
+    : sheetMode === "pending"
+      ? "Not logged yet"
+      : sheetMode === "skipped"
+        ? "Skipped"
+        : `Logged ${historySetLabel(
+            sheet.set.actualLoadLabel ?? sheet.set.prescribedLoadLabel,
+            sheet.set.actualReps ?? sheet.set.prescribedReps,
+          )}${
+            sheet.set.completedAt
+              ? ` at ${formatClockTime(sheet.set.completedAt, timeZone)}`
+              : ""
+          }${recordSetIds.has(sheet.set.id) ? " · PR" : ""}`;
 
-  const logFooter = keypadOpen && currentSet && keypad ? (
-    <SetKeypad
-      field={keypad.field}
-      setOrder={currentSet.order}
-      bodyweight={currentDraft!.bodyweight}
-      onBodyweightChange={keypadBodyweight}
-      onKey={keypadKey}
-      onBackspace={keypadBackspace}
-      onStep={keypadStep}
-      onPrimary={keypadPrimary}
-      onClose={() => setKeypad(null)}
-      disabled={execution.status === "paused"}
-    />
-  ) : currentSet ? (
-    <View style={styles.logbar}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={logLabel}
-        disabled={execution.status === "paused"}
-        onPress={() => completeSet(currentSet.id)}
-        style={[
-          styles.logBtn,
-          execution.status === "paused" ? styles.logBtnDisabled : null,
-        ]}
-      >
-        <Check color={theme.colors.onBrand} size={24} strokeWidth={2.6} />
-        <Text style={styles.logBtnText}>{logLabel}</Text>
-      </Pressable>
-      <Text style={styles.logSub}>{logSub}</Text>
-    </View>
-  ) : allSetsDone ? (
-    <View style={styles.logbar}>
-      <PrimaryButton label="Finish workout" onPress={() => finishWorkout(true)} />
-    </View>
-  ) : null;
+  const clock = formatElapsedClock(
+    elapsedSeconds(
+      {
+        startedAt: execution.startedAt,
+        pausedAt: execution.pausedAt,
+        completedAt: execution.completedAt,
+      },
+      now,
+    ),
+  );
+  const offline = reachable === false;
 
   return (
-    <Screen v3 chrome="app" title={title} showHeader={false} footer={logFooter}>
-      <View style={styles.awl}>
-        <View style={styles.hdr}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              execution.status === "paused" ? "Resume" : "Pause"
-            }
-            onPress={
-              execution.status === "paused" ? resumeSession : pauseSession
-            }
-            style={styles.ibtnFill}
-          >
-            {execution.status === "paused" ? (
-              <Play color={theme.colors.ink} size={22} />
-            ) : (
-              <Pause color={theme.colors.ink} size={22} />
-            )}
-          </Pressable>
-          <View style={styles.hdrTitle}>
-            <Text style={styles.hdrName} accessibilityRole="header">
-              {title}
-            </Text>
-            <View style={styles.hdrMetaRow}>
-              {execution.status !== "paused" ? (
-                <View style={styles.recDot} />
-              ) : null}
-              <Text style={styles.hdrMeta}>
-                {formatElapsedMinutes(elapsedSec)} · exercise {exerciseOrdinal}{" "}
-                of {exerciseTotal}
-              </Text>
-            </View>
-          </View>
-          {allSetsDone ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Finish workout"
-              onPress={() => finishWorkout()}
-              style={styles.fin}
-            >
-              <Text style={styles.finText}>Finish</Text>
-            </Pressable>
-          ) : (
-            <View style={styles.finPlaceholder} />
-          )}
-        </View>
-
-        {error ? <ErrorBanner message={error} /> : null}
-
-        {execution.status === "paused" ? (
-          <View style={styles.pauseBanner}>
-            <Text style={styles.pauseText}>Paused</Text>
-            <PrimaryButton
-              label="Resume"
-              variant="tinted"
-              onPress={resumeSession}
+    <ThemeScope scheme="system">
+      <LogFrame
+        header={
+          <>
+            <LogNav
+              title={title}
+              subtitle={
+                coachFirst === "your coach" ? null : `From ${coachFirst}’s plan`
+              }
+              offline={offline}
+              paused={paused}
+              onMinimise={minimise}
+              onPauseToggle={() => setPaused(!paused)}
+              onFinish={requestFinish}
             />
-          </View>
-        ) : null}
-
-        {restRemaining != null && restRemaining > 0 ? (
-          <View style={styles.restband}>
-            <View style={styles.restbandRow}>
-              <View style={styles.restMain}>
-                <Text style={styles.restK}>REST</Text>
-                <Text style={styles.restV}>
-                  {restRemaining}
-                  <Text style={styles.restVs}> s left</Text>
-                </Text>
+            <LogStats
+              clock={clock}
+              volumeKg={sessionVolumeKg(execution) ?? 0}
+              setsDone={counts.done}
+              setsTotal={counts.total}
+              paused={paused}
+            />
+          </>
+        }
+        scrollRef={scrollRef}
+        dock={
+          <>
+            {pendingSkip ? (
+              <View style={dockStyles.pad}>
+                <Snackbar
+                  message={pendingSkip.message}
+                  leadingCheck
+                  actionLabel="Undo"
+                  onAction={undoSkip}
+                  onDismiss={settlePendingSkip}
+                />
               </View>
-              <View style={styles.restCtl}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="15 seconds less"
-                onPress={() =>
-                  {
-                    setRestRemaining((v) => Math.max(0, (v ?? 0) - 15));
-                    setRestWindow((w) => (w ? { ...w, endsAt: w.endsAt - 15_000 } : w));
-                  }
-                }
-                style={styles.restCtlBtn}
-              >
-                <Text style={styles.restCtlText}>−15 s</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="15 seconds more"
-                onPress={() => {
-                  setRestRemaining((v) => (v ?? 0) + 15);
-                  setRestTotal((v) => v + 15);
-                  setRestWindow((w) =>
-                    w ? { endsAt: w.endsAt + 15_000, seconds: w.seconds + 15 } : w,
-                  );
-                }}
-                style={styles.restCtlBtn}
-              >
-                <Text style={styles.restCtlText}>+15 s</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Skip rest"
-                onPress={() => setRestRemaining(null)}
-                style={styles.restCtlBtn}
-              >
-                <Text style={styles.restCtlText}>Skip</Text>
-              </Pressable>
-              </View>
-            </View>
-            <View style={styles.restTrack}>
-              <View
-                style={[styles.restBar, { width: `${Math.round(restProgress * 100)}%` }]}
-              />
-            </View>
-            {nextAfterRest ? (
-              <Text style={styles.restNx}>{nextAfterRest}</Text>
             ) : null}
+            {resting ? (
+              <RestBar
+                clock={formatRestClock(restSecondsShown(restRender))}
+                fraction={restElapsedFraction(restRender)}
+                label={
+                  active
+                    ? `Rest · next set ${sortedSets(active.exercise).indexOf(active.set) + 1}`
+                    : "Rest"
+                }
+                onLess={() => rest && setRest(adjustRest(rest, -15, Date.now()))}
+                onMore={() => rest && setRest(adjustRest(rest, 15, Date.now()))}
+                onSkip={() => setRest(null)}
+              />
+            ) : restDone ? (
+              <RestDoneBar next={restDone} onOk={() => setRestDone(null)} />
+            ) : null}
+            {keypadOpen && active && activeDraft && keypad ? (
+              <LogKeypad
+                field={keypad.field}
+                setNumber={sortedSets(active.exercise).indexOf(active.set) + 1}
+                targetText={
+                  keypad.field === "load"
+                    ? plainKgFromLabel(active.set.prescribedLoadLabel)
+                      ? `${plainKgFromLabel(active.set.prescribedLoadLabel)} kg`
+                      : null
+                    : active.set.prescribedReps != null
+                      ? String(active.set.prescribedReps)
+                      : null
+                }
+                coachFirst={coachFirst}
+                bodyweight={activeDraft.bodyweight}
+                onBodyweightChange={keypadBodyweight}
+                onKey={keypadKey}
+                onBackspace={keypadBackspace}
+                onStep={keypadStep}
+                onNext={() =>
+                  setKeypad({
+                    field: keypad.field === "load" ? "reps" : "load",
+                    replace: true,
+                  })
+                }
+                onLog={() => commitLog(active.set, active.exercise, activeDraft)}
+                onDone={() => setKeypad(null)}
+              />
+            ) : null}
+          </>
+        }
+      >
+        {error ? (
+          <View style={dockStyles.pad}>
+            <ErrorBanner message={error} />
           </View>
         ) : null}
+        {paused ? (
+          <PausedBanner clock={clock} onResume={() => setPaused(false)} />
+        ) : null}
+        {recordNotice ? <RecordBanner detail={recordNotice} /> : null}
 
-        {execution.exercises.map((ex, idx) => {
-          if (idx > currentExerciseIndex && currentExerciseIndex >= 0) {
-            return null;
+        {exercises.map((exercise, index) => {
+          const sets = sortedSets(exercise);
+          const pendingCount = sets.filter((set) => set.status === "pending").length;
+          const loggedCount = sets.filter(
+            (set) => set.status === "completed" || set.status === "modified",
+          ).length;
+          const allRecorded = pendingCount === 0;
+          const isFolded = folded[exercise.id] ?? allRecorded;
+          const rememberY = (y: number) => {
+            exerciseY.current[exercise.id] = y;
+          };
+          if (isFolded) {
+            return (
+              <View
+                key={exercise.id}
+                onLayout={(event) => rememberY(event.nativeEvent.layout.y)}
+              >
+                <CollapsedExercise
+                  name={exercise.name}
+                  line={
+                    allRecorded
+                      ? exerciseDoneLine(exercise)
+                      : `${loggedCount} of ${sets.length} sets logged`
+                  }
+                  done={allRecorded}
+                  skipped={allRecorded && loggedCount === 0}
+                  onPress={() =>
+                    setFolded((prev) => ({ ...prev, [exercise.id]: false }))
+                  }
+                />
+              </View>
+            );
           }
-          const done = exerciseComplete(execution, idx);
-          const isCurrent = idx === currentExerciseIndex;
+          const restSeconds = sets
+            .map((set) => restSecondsBySetTargetId[set.setTargetId])
+            .find((value) => value != null && value > 0);
+          const allBodyweight = sets.every((set) =>
+            set.status === "pending"
+              ? draftForSet(set, drafts).bodyweight
+              : isBodyweightLabel(set.actualLoadLabel ?? set.prescribedLoadLabel),
+          );
+          const holdsActive = active?.exercise.id === exercise.id;
+          const activeIsTarget =
+            holdsActive &&
+            active != null &&
+            activeDraft != null &&
+            !isDraftModified(active.set, activeDraft) &&
+            (activeDraft.bodyweight || activeDraft.load.trim() !== "");
           return (
             <View
-              key={ex.id}
-              style={[
-                styles.acc,
-                done ? styles.accDone : null,
-                isCurrent ? styles.accCur : null,
-                idx > 0 ? styles.accGap : null,
-              ]}
+              key={exercise.id}
+              onLayout={(event) => rememberY(event.nativeEvent.layout.y)}
             >
-              <View style={styles.ah}>
-                <View style={[styles.exn, done ? styles.exnDone : null]}>
-                  {done ? (
-                    <Check
-                      color={theme.colors.onBrand}
-                      size={18}
-                      strokeWidth={2.6}
-                    />
-                  ) : (
-                    <Text style={styles.exnNum}>{idx + 1}</Text>
-                  )}
-                </View>
-                <View style={styles.ahTx}>
-                  <Text style={[styles.exName, done ? styles.exNameDone : null]}>
-                    {ex.name}
-                  </Text>
-                  <Text style={styles.exSub}>
-                    {done
-                      ? summarizeDoneExercise(ex)
-                      : exercisePrescriptionLine(ex, restSecondsBySetTargetId)}
-                  </Text>
-                </View>
-                {isCurrent ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="How to do it"
-                    onPress={onAskCoach}
-                    style={styles.coachVid}
-                  >
-                    <CirclePlay color={theme.colors.brand} size={22} />
-                  </Pressable>
-                ) : null}
-                {!isCurrent ? (
-                  <ChevronDown color={theme.colors.ink3} size={20} />
-                ) : (
-                  <ChevronDown
-                    color={theme.colors.ink3}
-                    size={20}
-                    style={{ transform: [{ rotate: "180deg" }] }}
-                  />
-                )}
-              </View>
-
-              {isCurrent ? (
-                <>
-                  {(() => {
-                    const cue = exerciseInstructionsFor(
-                      assignment,
-                      ex.exerciseId,
-                    );
-                    if (!cue) return null;
-                    const coachFirst = coachName.split(/\s+/)[0] ?? coachName;
-                    return (
-                      <View style={styles.note2}>
-                        <Text style={styles.note2Text}>
-                          <Text style={styles.note2Bold}>{coachFirst}:</Text>{" "}
-                          {cue}
-                        </Text>
-                      </View>
-                    );
-                  })()}
-                <View style={styles.stab}>
-                  <SetEntryHeader />
-                  {ex.sets.map((set) => {
-                    const isNow = currentSet?.id === set.id;
-                    const draft = draftForSet(set, drafts);
-                    return (
-                      <SetEntryRow
-                        key={set.id}
-                        set={set}
-                        isNow={isNow}
-                        draft={draft}
-                        modified={isNow && isDraftModified(set, draft)}
-                        activeField={keypad?.field ?? null}
-                        previousLabel={previousSetLabel(ex, set, previousByKey)}
-                        onOpenField={openKeypad}
-                        onComplete={() => completeSet(set.id)}
-                        completeDisabled={execution.status === "paused"}
-                      />
-                    );
-                  })}
-                </View>
-                </>
+              {index > 0 && !(folded[exercises[index - 1]!.id] ?? exercises[index - 1]!.sets.every((set) => set.status !== "pending")) ? (
+                <ExerciseSeparator />
               ) : null}
+              <ExercisePad>
+                <ExerciseHead
+                  name={exercise.name}
+                  planLine={exercisePlanLine(exercise)}
+                  restLine={restSeconds != null ? formatRestLength(restSeconds) : null}
+                  cue={exerciseInstructionsFor(assignment, exercise.exerciseId)}
+                  coachInitials={coachInitials(coachName)}
+                  canFold={allRecorded}
+                  onFold={() =>
+                    setFolded((prev) => ({ ...prev, [exercise.id]: true }))
+                  }
+                  onMenu={() => {
+                    setKeypad(null);
+                    setMenuExerciseId(exercise.id);
+                  }}
+                />
+                <SetTableHead bodyweight={allBodyweight} />
+                {sets.map((set, position) => {
+                  const draft = draftForSet(set, drafts);
+                  const state: SetRowState =
+                    set.status === "skipped"
+                      ? "skip"
+                      : set.status !== "pending"
+                        ? "done"
+                        : set.id === activeSetId
+                          ? "cur"
+                          : "up";
+                  return (
+                    <LogSetRow
+                      key={set.id}
+                      set={set}
+                      number={position + 1}
+                      state={state}
+                      draft={draft}
+                      target={
+                        !isDraftModified(set, draft) &&
+                        draft.reps ===
+                          initialDraft(set.prescribedLoadLabel, set.prescribedReps).reps
+                      }
+                      activeField={state === "cur" ? (keypad?.field ?? null) : null}
+                      previousLabel={previousSetLabel(
+                        exercise,
+                        set,
+                        history.previousByKey,
+                      )}
+                      record={recordSetIds.has(set.id)}
+                      disabled={paused}
+                      onOpenField={(field) => openField(set, field)}
+                      onLog={() => commitLog(set, exercise, draft)}
+                      onOpenSheet={() => {
+                        setKeypad(null);
+                        setSheetSetId(set.id);
+                      }}
+                      onSkip={() =>
+                        skipWithUndo([set.id], `Set ${position + 1} skipped`)
+                      }
+                    />
+                  );
+                })}
+                {activeIsTarget ? <TargetLegend coachFirst={coachFirst} /> : null}
+              </ExercisePad>
             </View>
           );
         })}
 
-        {upcoming.length > 0 ? (
-          <View style={styles.sh}>
-            <Text style={styles.shTitle} accessibilityRole="header">
-              Up next{" "}
-              <Text style={styles.shCnt}>{upcoming.length}</Text>
-            </Text>
-          </View>
-        ) : null}
+        <View style={dockStyles.end}>
+          <Button
+            label="Discard workout"
+            variant="dangerQuiet"
+            onPress={() => {
+              setKeypad(null);
+              setDiscardOpen(true);
+            }}
+          />
+        </View>
+      </LogFrame>
 
-        {upcoming.map((ex, i) => {
-          const idx = currentExerciseIndex + 1 + i;
-          return (
-            <View key={ex.id} style={[styles.acc, styles.accGap]}>
-              <View style={styles.ah}>
-                <View style={styles.exn}>
-                  <Text style={styles.exnNum}>{idx + 1}</Text>
-                </View>
-                <View style={styles.ahTx}>
-                  <Text style={styles.exName}>{ex.name}</Text>
-                  <Text style={styles.exSub}>
-                    {exercisePrescriptionLine(ex, restSecondsBySetTargetId)}
-                  </Text>
-                </View>
-                <ChevronDown color={theme.colors.ink3} size={20} />
-              </View>
-            </View>
-          );
-        })}
-
-        <View
-          style={{
-            height: keypadOpen
-              ? KEYPAD_HEIGHT
-              : LOGBAR_HEIGHT + theme.spacing.xl,
-          }}
-        />
-      </View>
-
-      <BottomSheet
-        visible={finishOpen}
-        title={allSetsDone ? "Finish workout?" : "Finish early?"}
-        subtitle={
-          !allSetsDone && pendingSets > 0
-            ? `${pendingSets} sets not logged. Finish anyway?`
-            : execution.requireSessionRpe
-              ? "How hard was the session?"
-              : undefined
+      <ExerciseMenuSheet
+        visible={menuExercise != null}
+        name={menuExercise?.name ?? ""}
+        planLine={menuExercise ? exercisePlanLine(menuExercise) : ""}
+        coachFirst={coachFirst}
+        canSkip={
+          !paused &&
+          menuExercise != null &&
+          skippableSetIds(execution, menuExercise.id).length > 0
         }
+        showHowTo={
+          menuExercise != null && exerciseHasHowTo(planExercise(menuExercise))
+        }
+        onHowTo={() => {
+          if (!menuExercise) return;
+          const id = menuExercise.id;
+          const tab: ExerciseDetailTab = exerciseHasHowTo(planExercise(menuExercise))
+            ? "how_to"
+            : "history";
+          setMenuExerciseId(null);
+          sheetGate.afterClose(() => setDetail({ exerciseExecutionId: id, tab }));
+        }}
+        onHistory={() => {
+          if (!menuExercise) return;
+          const id = menuExercise.id;
+          setMenuExerciseId(null);
+          sheetGate.afterClose(() =>
+            setDetail({ exerciseExecutionId: id, tab: "history" }),
+          );
+        }}
+        onAskCoach={
+          onAskCoach
+            ? () => {
+                const name = menuExercise?.name;
+                setMenuExerciseId(null);
+                sheetGate.afterClose(() => onAskCoach(name));
+              }
+            : undefined
+        }
+        onSkip={() => {
+          if (!menuExercise) return;
+          skipWithUndo(
+            skippableSetIds(execution, menuExercise.id),
+            `${menuExercise.name} skipped`,
+          );
+        }}
+        onDismiss={() => setMenuExerciseId(null)}
+        onClosed={sheetGate.notifyClosed}
+      />
+
+      <SetSheet
+        visible={sheet != null}
+        mode={sheetMode}
+        title={sheet ? `Set ${sheetNumber} · ${sheet.exercise.name}` : ""}
+        detail={sheetDetail}
+        set={sheet?.set ?? null}
+        coachFirst={coachFirst}
+        onSave={(draft) => {
+          if (sheet) commitLog(sheet.set, sheet.exercise, draft);
+        }}
+        onMarkNotDone={() => {
+          if (sheet) markNotDone(sheet.set);
+        }}
+        onSkip={() => {
+          if (sheet) skipWithUndo([sheet.set.id], `Set ${sheetNumber} skipped`);
+        }}
+        onDismiss={() => setSheetSetId(null)}
+        onClosed={sheetGate.notifyClosed}
+      />
+
+      <FinishSheet
+        visible={finishOpen}
+        unlogged={unloggedExercises(execution)}
+        notLogged={notLogged}
+        total={counts.total}
+        coachFirst={coachFirst}
+        requireRpe={execution.requireSessionRpe}
+        sessionRpe={sessionRpe}
+        onPickRpe={setSessionRpe}
+        onGoTo={goTo}
+        onFinish={finishWorkout}
         onDismiss={() => setFinishOpen(false)}
-      >
-        {execution.requireSessionRpe ? (
-          <>
-            <View style={styles.rpeRow}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((value) => (
-                <Pressable
-                  key={value}
-                  accessibilityRole="button"
-                  accessibilityLabel={`RPE ${value}${RPE_ANCHORS[value] ? ` · ${RPE_ANCHORS[value]}` : ""}`}
-                  style={[
-                    styles.rpeChip,
-                    sessionRpe === value ? styles.rpeChipActive : null,
-                  ]}
-                  onPress={() => setSessionRpe(value)}
-                >
-                  <Text
-                    style={
-                      sessionRpe === value
-                        ? styles.rpeChipTextActive
-                        : styles.rpeChipText
-                    }
-                  >
-                    {value}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text style={styles.rpeAnchors}>
-              1 · Very easy … 10 · Max effort
-            </Text>
-          </>
-        ) : null}
-        <PrimaryButton
-          label="Finish workout"
-          onPress={() => finishWorkout(true)}
-        />
-        <PrimaryButton
-          label="Keep going"
-          variant="ghost"
-          onPress={() => setFinishOpen(false)}
-        />
-      </BottomSheet>
-    </Screen>
+        onClosed={sheetGate.notifyClosed}
+      />
+
+      <DiscardDialog
+        visible={discardOpen}
+        logged={counts.done}
+        coachFirst={coachFirst}
+        onDiscard={discardWorkout}
+        onDismiss={() => setDiscardOpen(false)}
+        onClosed={sheetGate.notifyClosed}
+      />
+    </ThemeScope>
   );
 }
 
-const useStyles = createThemedStyles((t) => ({
-  awl: {
-    marginHorizontal: -t.spacing.xs,
-  },
-  hdr: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: t.spacing.sm,
-    height: 52,
-    marginBottom: t.spacing.sm,
-  },
-  ibtnFill: {
-    alignItems: "center",
-    backgroundColor: t.colors.brandTint,
-    borderRadius: 22,
-    height: TARGET,
-    justifyContent: "center",
-    width: TARGET,
-  },
-  hdrTitle: {
-    flex: 1,
-    minWidth: 0,
-  },
-  hdrName: {
-    color: t.colors.ink,
-    fontSize: 17,
-    fontWeight: "700",
-    lineHeight: 21,
-  },
-  hdrMetaRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 5,
-    marginTop: 2,
-  },
-  hdrMeta: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    fontWeight: "500",
-    lineHeight: 18,
-  },
-  recDot: {
-    backgroundColor: t.colors.brand,
-    borderRadius: 4,
-    height: 7,
-    width: 7,
-  },
-  fin: {
-    alignItems: "center",
-    backgroundColor: t.colors.brandTint,
-    borderRadius: 22,
-    height: 44,
-    justifyContent: "center",
-    paddingHorizontal: 14,
-  },
-  finPlaceholder: {
-    height: 44,
-    minWidth: 64,
-  },
-  finText: {
-    color: t.colors.brand,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  pauseBanner: {
-    alignItems: "center",
-    backgroundColor: t.colors.brandTint,
-    borderRadius: t.radii.card,
-    flexDirection: "row",
-    gap: t.spacing.md,
-    justifyContent: "space-between",
-    marginBottom: t.spacing.md,
-    padding: t.spacing.md,
-  },
-  pauseText: {
-    color: t.colors.ink,
-    fontWeight: "700",
-  },
-  restband: {
-    backgroundColor: t.colors.brandTint,
-    borderColor: t.colors.brandTint2,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: t.spacing.md,
-    marginTop: t.spacing.xs,
-    overflow: "hidden",
-    paddingBottom: t.spacing.md,
-    paddingHorizontal: t.spacing.md,
-    paddingTop: t.spacing.md,
-  },
-  restbandRow: {
-    alignItems: "flex-start",
-    flexDirection: "row",
-    gap: 10,
-    justifyContent: "space-between",
-  },
-  restMain: {
-    flex: 1,
-    minWidth: 0,
-    paddingRight: t.spacing.sm,
-  },
-  restK: {
-    color: t.colors.brand,
-    fontSize: 12,
-    fontWeight: "700",
-    letterSpacing: 0.6,
-  },
-  restV: {
-    color: t.colors.ink,
-    fontSize: 34,
-    fontWeight: "700",
-    letterSpacing: -0.5,
-    lineHeight: 38,
-  },
-  restVs: {
-    color: t.colors.ink,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  restNx: {
-    color: t.colors.ink,
-    fontSize: 14,
-    marginTop: t.spacing.sm,
-  },
-  restCtl: {
-    flexDirection: "row",
-    flexShrink: 0,
-    gap: 6,
-  },
-  restCtlBtn: {
-    alignItems: "center",
-    backgroundColor: t.colors.card,
-    borderColor: t.colors.brandTint2,
-    borderRadius: 22,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: "center",
-    minWidth: 52,
-    paddingHorizontal: 10,
-  },
-  restCtlText: {
-    color: t.colors.brand,
-    fontSize: 14,
-    fontWeight: "700",
-  },
-  restTrack: {
-    backgroundColor: t.colors.card,
-    borderRadius: 3,
-    height: 6,
-    marginTop: t.spacing.sm,
-    overflow: "hidden",
-  },
-  restBar: {
-    backgroundColor: t.colors.brand,
-    borderRadius: 3,
-    height: 6,
-  },
-  acc: {
-    backgroundColor: t.colors.card,
-    borderColor: t.colors.line,
-    borderRadius: 20,
-    borderWidth: 1,
-    shadowColor: shadowColor(t),
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-  },
-  accGap: {
-    marginTop: 10,
-  },
-  accDone: {},
-  accCur: {
-    borderColor: t.colors.brandTint2,
-    borderWidth: 1.5,
-  },
-  ah: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: t.spacing.md,
-    minHeight: 64,
-    paddingHorizontal: t.spacing.md,
-    paddingVertical: 10,
-  },
-  exn: {
-    alignItems: "center",
-    backgroundColor: t.colors.brandTint,
-    borderColor: t.colors.brandTint2,
-    borderRadius: 12,
-    borderWidth: 1,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  exnDone: {
-    backgroundColor: t.colors.ink,
-    borderColor: t.colors.ink,
-  },
-  exnNum: {
-    color: t.colors.brand,
-    fontSize: 15,
-    fontWeight: "700",
-  },
-  ahTx: {
-    flex: 1,
-    minWidth: 0,
-  },
-  exName: {
-    color: t.colors.ink,
-    fontSize: 16,
-    fontWeight: "700",
-    lineHeight: 21,
-  },
-  exNameDone: {
-    color: t.colors.ink2,
-  },
-  exSub: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 2,
-  },
-  coachVid: {
-    alignItems: "center",
-    height: TARGET,
-    justifyContent: "center",
-    width: 32,
-  },
-  note2: {
-    marginBottom: 6,
-    paddingHorizontal: t.spacing.md,
-  },
-  note2Text: {
-    color: t.colors.brand,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  note2Bold: {
-    fontWeight: "700",
-  },
-  stab: {
-    paddingBottom: t.spacing.sm,
-    paddingHorizontal: t.spacing.sm,
-  },
-  sh: {
-    marginBottom: 10,
-    marginTop: 18,
-    paddingHorizontal: 4,
-  },
-  shTitle: {
-    color: t.colors.ink,
-    fontSize: 17,
-    fontWeight: "700",
-  },
-  shCnt: {
-    color: t.colors.ink3,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  logbar: {
-    backgroundColor: withAlpha(t.colors.card, 0.94),
-    borderTopColor: t.colors.line,
-    borderTopWidth: 1,
-    paddingBottom: t.spacing.xl,
-    paddingHorizontal: t.spacing.lg,
-    paddingTop: 10,
-  },
-  logBtn: {
-    alignItems: "center",
-    backgroundColor: t.colors.brand,
-    borderRadius: 20,
-    flexDirection: "row",
-    gap: t.spacing.sm,
-    height: LOGBAR_HEIGHT,
-    justifyContent: "center",
-  },
-  logBtnDisabled: {
-    opacity: 0.5,
-  },
-  logBtnText: {
-    color: t.colors.onBrand,
-    fontSize: 18,
-    fontWeight: "700",
-  },
-  logSub: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    marginTop: 6,
-    textAlign: "center",
-  },
-  rpeRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: t.spacing.xs,
-    marginBottom: t.spacing.sm,
-  },
-  rpeChip: {
-    alignItems: "center",
-    backgroundColor: t.colors.brandTint,
-    borderRadius: t.radii.button,
-    height: TARGET,
-    justifyContent: "center",
-    minWidth: TARGET,
-  },
-  rpeChipActive: {
-    backgroundColor: t.colors.brand,
-  },
-  rpeChipText: {
-    color: t.colors.ink,
-    fontWeight: "600",
-  },
-  rpeChipTextActive: {
-    color: t.colors.onBrand,
-    fontWeight: "700",
-  },
-  rpeAnchors: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    marginBottom: t.spacing.md,
-  },
-  guardCard: {
+/** W-15. The server records a discarded workout as skipped, and the copy says so. */
+export function DiscardDialog({
+  visible,
+  logged,
+  coachFirst,
+  onDiscard,
+  onDismiss,
+  onClosed,
+}: {
+  visible: boolean;
+  logged: number;
+  coachFirst: string;
+  onDiscard: () => void;
+  onDismiss: () => void;
+  onClosed?: () => void;
+}) {
+  const theme = useTheme();
+  const coach = coachFirst === "your coach" ? "Your coach" : coachFirst;
+  const sets =
+    logged === 0
+      ? "Nothing is logged yet."
+      : `${logged} logged ${logged === 1 ? "set" : "sets"} won’t count.`;
+  return (
+    <ConfirmDialog
+      visible={visible}
+      tone="crit"
+      icon={<Trash2 color={theme.colors.crit} size={22} strokeWidth={2.2} />}
+      title="Discard this workout?"
+      body={`${sets} ${coach} will see this workout as skipped.`}
+      actions={[
+        { label: "Discard workout", variant: "danger", onPress: onDiscard },
+        { label: "Keep logging", variant: "secondary", onPress: onDismiss },
+      ]}
+      onDismiss={onDismiss}
+      onClosed={onClosed}
+    />
+  );
+}
+
+function DoneGuard({
+  onSummary,
+  onBack,
+}: {
+  onSummary: () => void;
+  onBack: () => void;
+}) {
+  const styles = useFrameStyles();
+  return (
+    <View style={styles.guard}>
+      <Text variant="title" accessibilityRole="header">
+        This workout is already done
+      </Text>
+      <Text variant="body" tone="ink2">
+        View summary when you go back.
+      </Text>
+      <Button label="View summary" onPress={onSummary} />
+      <Button label="Back" variant="text" onPress={onBack} />
+    </View>
+  );
+}
+
+/**
+ * The log's frame: a header that stays put, the list that scrolls under it,
+ * and a dock at the bottom for the Undo toast, the rest bar and the keypad.
+ * `Screen` scrolls everything as one, so the log lays itself out and opts in
+ * to the system theme the same way `<Screen v3>` does (`ThemeScope`).
+ */
+function LogFrame({
+  header,
+  dock,
+  scrollRef,
+  children,
+}: {
+  header: ReactNode;
+  dock: ReactNode;
+  scrollRef: RefObject<ScrollView>;
+  children: ReactNode;
+}) {
+  const styles = useFrameStyles();
+  return (
+    <SafeAreaView style={styles.safe} accessibilityRole="summary">
+      <View style={[styles.header, ANDROID_STATUS_BAR_PAD]}>{header}</View>
+      <ScrollView
+        ref={scrollRef}
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View role="main">{children}</View>
+      </ScrollView>
+      <View style={styles.dock}>{dock}</View>
+    </SafeAreaView>
+  );
+}
+
+/**
+ * Android draws the app under a translucent status bar and its SafeAreaView
+ * adds no inset, so the pinned header clears the bar itself (device run
+ * 44220623583: the minimise button sat under the clock).
+ */
+const ANDROID_STATUS_BAR_PAD =
+  Platform.OS === "android"
+    ? { paddingTop: 8 + (StatusBar.currentHeight ?? 24) }
+    : null;
+
+const dockStyles = {
+  pad: { paddingHorizontal: 12, paddingTop: 8 },
+  end: { marginTop: 24, paddingHorizontal: 16 },
+} as const;
+
+const useFrameStyles = createThemedStyles((t) => ({
+  safe: { backgroundColor: t.colors.card, flex: 1 },
+  header: { backgroundColor: t.colors.card, paddingTop: 8 },
+  scroll: { flex: 1 },
+  content: { paddingBottom: 40 },
+  dock: { gap: 8, paddingBottom: 8 },
+  guard: {
     backgroundColor: t.colors.card,
     borderRadius: t.radii.card,
-    gap: t.spacing.md,
-    padding: t.spacing.xl,
-  },
-  guardTitle: {
-    color: t.colors.ink,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  guardBody: {
-    color: t.colors.ink3,
-    fontSize: 15,
+    gap: 12,
+    padding: 24,
   },
 }));
