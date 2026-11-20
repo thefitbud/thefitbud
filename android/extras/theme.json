@@ -1,0 +1,107 @@
+{
+  "result": "mean screenshot luminance: light 0.908 (10), dark 0.123 (9)",
+  "light": 0.908,
+  "dark": 0.123,
+  "count": {
+    "light": 10,
+    "dark": 9
+  },
+  "shots": [
+    {
+      "file": "TR-10a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.094
+    },
+    {
+      "file": "TR-10a-light-android.png",
+      "theme": "light",
+      "luma": 0.932
+    },
+    {
+      "file": "TR-10b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.092
+    },
+    {
+      "file": "TR-10b-light-android.png",
+      "theme": "light",
+      "luma": 0.934
+    },
+    {
+      "file": "TR-10c-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "W-01b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.147
+    },
+    {
+      "file": "W-01b-light-android.png",
+      "theme": "light",
+      "luma": 0.896
+    },
+    {
+      "file": "W-01e-dark-android.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "W-01e-light-android.png",
+      "theme": "light",
+      "luma": 0.93
+    },
+    {
+      "file": "W-03-dark-android.png",
+      "theme": "dark",
+      "luma": 0.14
+    },
+    {
+      "file": "W-03-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "W-17a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.116
+    },
+    {
+      "file": "W-17a-light-android.png",
+      "theme": "light",
+      "luma": 0.884
+    },
+    {
+      "file": "W-17b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "W-17b-light-android.png",
+      "theme": "light",
+      "luma": 0.883
+    },
+    {
+      "file": "step-082-tapOnElement-Open-dark-android.png",
+      "theme": "dark",
+      "luma": 0.172
+    },
+    {
+      "file": "step-083-tapOnElement-Open-light-android.png",
+      "theme": "light",
+      "luma": 0.836
+    },
+    {
+      "file": "z12-44-finished-day-dark-android.png",
+      "theme": "dark",
+      "luma": 0.099
+    },
+    {
+      "file": "z12-44-finished-day-light-android.png",
+      "theme": "light",
+      "luma": 0.926
+    }
+  ],
+  "w03DarkTooBright": []
+}
