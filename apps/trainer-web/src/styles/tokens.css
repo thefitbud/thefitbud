@@ -1,0 +1,96 @@
+/*
+ * Trainer web v3 tokens (W13-1).
+ * Colour roles come from @fitbud/tokens/tokens-v3.css. This file adds the
+ * desktop layer that file never had, and overrides the two values that read
+ * wrong on a light desktop: the 9% alpha line, and the scrim.
+ * Later W13 tasks ask for token changes in their PR notes. Don't edit these
+ * values from a screen task.
+ */
+:root {
+  /* Solid lines. The mobile alpha line made cards disappear on desktop. */
+  --line: #e6e8ee;
+  --line2: #d5d8e0;
+  --line-strong: #c3c7d1;
+  --scrim: rgba(16, 12, 40, 0.44);
+  --row-hover: #f7f8fa;
+  --row-sel: #f1f0f8;
+  --focus: 0 0 0 3px rgba(26, 18, 72, 0.18);
+  --brand-hover: #2a2163;
+  --brand-press: #120c36;
+
+  /* Web avatar pairs (softer than the mobile set, assigned by id hash). */
+  --av1-bg: #fde7e4;
+  --av1-fg: #9e2a22;
+  --av2-bg: #fff1df;
+  --av2-fg: #7a3f05;
+  --av3-bg: #e3f4ec;
+  --av3-fg: #075f40;
+  --av4-bg: #e7f0ff;
+  --av4-fg: #1c3f80;
+  --av5-bg: #ecebfb;
+  --av5-fg: #3f35a8;
+  --av6-bg: #eceef3;
+  --av6-fg: #46445f;
+
+  /* Type scale. Eight steps. Caption 12px is the floor. */
+  --t-kpi: 600 28px/32px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --t-title: 600 24px/32px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --t-modal: 600 20px/28px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --t-h2: 600 17px/24px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --t-h3: 600 14px/20px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --t-body: 400 14px/20px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --t-meta: 400 13px/18px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  --t-cap: 500 12px/16px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+
+  /* 4pt spacing */
+  --s1: 4px;
+  --s2: 8px;
+  --s3: 12px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+  --s10: 40px;
+  --s12: 48px;
+
+  /* Radii */
+  --r-card: 14px;
+  --r-ctl: 10px;
+  --r-sm: 8px;
+  --r-modal: 16px;
+  --r-full: 999px;
+
+  /* Elevation. Primary buttons have no shadow. */
+  --e1: 0 1px 2px rgba(var(--sh), 0.05);
+  --e2: 0 4px 16px rgba(var(--sh), 0.08), 0 1px 3px rgba(var(--sh), 0.06);
+  --e3: 0 24px 64px rgba(var(--sh), 0.22), 0 2px 8px rgba(var(--sh), 0.08);
+
+  /* Layout */
+  --nav-w: 232px;
+  --nav-rail: 72px;
+  --top-h: 56px;
+  --gutter: 32px;
+  --content-max: 1280px;
+  --rail-w: 360px;
+  --panel-w: 540px;
+
+  /* Control heights. iPad (coarse pointer) lifts the 44px floor. */
+  --h-sm: 32px;
+  --h-md: 36px;
+  --h-lg: 44px;
+}
+
+@media (max-width: 1279px) {
+  :root {
+    --gutter: 24px;
+    --rail-w: 320px;
+  }
+}
+
+@media (pointer: coarse) {
+  :root {
+    --h-sm: 36px;
+    --h-md: 44px;
+    --h-lg: 48px;
+  }
+}
