@@ -1,4 +1,9 @@
 import { requireOptionalNativeModule } from "expo-modules-core";
+import {
+  activateKeepAwakeAsync,
+  deactivateKeepAwake,
+  useKeepAwake,
+} from "expo-keep-awake";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, View } from "react-native";
 import {
@@ -193,14 +198,26 @@ type KeepAwakeNative = {
 };
 
 /**
- * Keeps the screen on during a workout through the `ExpoKeepAwake` native
- * module that `expo` autolinks. `expo-keep-awake` is not a dependency of this
- * app, so `require("expo-keep-awake")` cannot be resolved under pnpm and Metro
- * reports it as a fatal error that a try/catch never sees (Z11b-3).
- * `requireOptionalNativeModule` returns null where the module is missing (web,
- * tests), and then this does nothing.
+ * Keeps the screen on during a workout (Z12-57).
+ *
+ * Primary path: `expo-keep-awake` (now a direct dependency). Z11b-3's
+ * `requireOptionalNativeModule("ExpoKeepAwake")` path stays the fallback when
+ * the package import throws (web tests that stub the module out, an old
+ * bundle). Neither path may fail the screen.
  */
 export function activateWorkoutKeepAwake(): () => void {
+  try {
+    void activateKeepAwakeAsync(KEEP_AWAKE_TAG).catch(() => undefined);
+    return () => {
+      try {
+        void deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => undefined);
+      } catch {
+        // ignore
+      }
+    };
+  } catch {
+    // Fall through to the Z11b-3 native-module lookup.
+  }
   let native: KeepAwakeNative | null = null;
   try {
     native = requireOptionalNativeModule<KeepAwakeNative>("ExpoKeepAwake");
@@ -209,7 +226,6 @@ export function activateWorkoutKeepAwake(): () => void {
   }
   if (!native) return () => undefined;
   const keepAwake = native;
-  // Keep-awake is best effort: neither call may fail the screen.
   try {
     void keepAwake.activate(KEEP_AWAKE_TAG)?.catch(() => undefined);
   } catch {
@@ -337,9 +353,8 @@ function ActiveWorkoutBody({
     if (restRemaining == null || restRemaining <= 0) setRestWindow(null);
   }, [restRemaining]);
 
-  useEffect(() => {
-    return activateWorkoutKeepAwake();
-  }, []);
+  // Screen stays awake for the whole active workout (Z12-57 / useKeepAwake).
+  useKeepAwake(KEEP_AWAKE_TAG);
 
   useEffect(() => {
     if (!assignment) return;

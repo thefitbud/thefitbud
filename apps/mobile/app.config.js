@@ -1,6 +1,7 @@
 const { execFileSync } = require("node:child_process");
 const { withAppBuildGradle, withXcodeProject } = require("expo/config-plugins");
 const withLiveActivity = require("./plugins/withLiveActivity");
+const withMailtoQueries = require("./plugins/withMailtoQueries");
 
 /**
  * Sentry org and project Firoz created (manual-steps step 15, 1 Nov 2026).
@@ -99,6 +100,8 @@ const HEALTHKIT_PLUGIN = [
 const BUILD_PROPERTIES_PLUGIN = ["expo-build-properties", { android: { minSdkVersion: 26 } }];
 
 const READ_STEPS_PERMISSION = "android.permission.health.READ_STEPS";
+/** Needed by expo-haptics and the Vibration fallback (Z12-45 / Z12-57). */
+const VIBRATE_PERMISSION = "android.permission.VIBRATE";
 
 function sentryPluginEntry() {
   return [
@@ -209,7 +212,11 @@ function createExpoConfig({ config }) {
       android: {
         ...config.android,
         package: variant.bundleIdentifier,
-        permissions: [...(config.android?.permissions ?? []), READ_STEPS_PERMISSION],
+        permissions: [
+          ...(config.android?.permissions ?? []),
+          READ_STEPS_PERMISSION,
+          VIBRATE_PERMISSION,
+        ],
         ...(googleServicesFile ? { googleServicesFile } : {}),
       },
       // No icon, color or sounds: Android notifications stay exactly as they were.
@@ -231,6 +238,8 @@ function createExpoConfig({ config }) {
     },
     { appGroup: variant.appGroup },
   );
+  // Android mailto package-visibility query (Z10-26); iOS uses LSApplicationQueriesSchemes above.
+  next = withMailtoQueries(next);
   // Production keeps the Sentry upload. Every other variant bakes it off.
   if (variantKey !== "production") next = withSentryUploadDisabled(next);
   return next;
@@ -239,3 +248,4 @@ function createExpoConfig({ config }) {
 module.exports = createExpoConfig;
 module.exports.disableSentryGradleUpload = disableSentryGradleUpload;
 module.exports.disableSentryXcodeShellScript = disableSentryXcodeShellScript;
+module.exports.VIBRATE_PERMISSION = VIBRATE_PERMISSION;

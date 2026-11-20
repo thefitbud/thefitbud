@@ -121,6 +121,40 @@ vi.mock("expo-font", () => ({
   isLoaded: vi.fn(() => true),
 }));
 
+vi.mock("expo-keep-awake", () => ({
+  useKeepAwake: vi.fn(),
+  activateKeepAwakeAsync: vi.fn(async () => undefined),
+  deactivateKeepAwake: vi.fn(async () => undefined),
+  isAvailableAsync: vi.fn(async () => true),
+}));
+
+vi.mock("expo-haptics", () => ({
+  notificationAsync: vi.fn(async () => undefined),
+  impactAsync: vi.fn(async () => undefined),
+  selectionAsync: vi.fn(async () => undefined),
+  NotificationFeedbackType: { Success: "success", Warning: "warning", Error: "error" },
+  ImpactFeedbackStyle: { Light: "light", Medium: "medium", Heavy: "heavy" },
+}));
+
+vi.mock("@react-native-community/netinfo", () => ({
+  default: {
+    addEventListener: vi.fn(() => () => undefined),
+    fetch: vi.fn(async () => ({
+      type: "wifi",
+      isConnected: true,
+      isInternetReachable: true,
+      details: null,
+    })),
+  },
+  addEventListener: vi.fn(() => () => undefined),
+  fetch: vi.fn(async () => ({
+    type: "wifi",
+    isConnected: true,
+    isInternetReachable: true,
+    details: null,
+  })),
+}));
+
 /*
  * react-native-svg and lucide-react-native ship CommonJS that `require`s
  * react-native directly, which Node executes outside vite's pipeline — so the
