@@ -26,11 +26,16 @@ struct FitBudWorkoutAttributes: ActivityAttributes {
     var restEndsAt: Date?
     /// Full rest length, for the progress bar.
     var restSeconds: Int?
+    /// From JS (`lastExercise === false`). While true, LogSetIntent must not
+    /// set `finished` (Z12-48 / Z12-57).
+    var moreExercisesRemain: Bool
   }
 
   var workoutName: String
   /// fitbud://workout/{assignmentId}. The host app sets this when it starts the activity.
   var openUrl: String
+  /// When the activity started; drives the TR-15d elapsed timer on the widget.
+  var startedAt: Date
 }
 
 /// JS → native shape of FitBudWorkoutAttributes (src/notifications/liveActivityNative.ts).
@@ -55,6 +60,8 @@ struct WorkoutStateRecord: Record {
   /// Epoch milliseconds from JS.
   @Field var restEndsAt: Double? = nil
   @Field var restSeconds: Int? = nil
+  /// From JS (`lastExercise === false`). Default false until Z12-48 payloads land.
+  @Field var moreExercisesRemain: Bool = false
 
   /// Rest end as a Date, only while it is in the future and the set isn't the last.
   var restEndDate: Date? {
@@ -78,7 +85,8 @@ struct WorkoutStateRecord: Record {
       loggedLine: loggedLine,
       finished: finished,
       restEndsAt: restEndDate,
-      restSeconds: restEndDate == nil ? nil : restSeconds
+      restSeconds: restEndDate == nil ? nil : restSeconds,
+      moreExercisesRemain: moreExercisesRemain
     )
   }
 
@@ -158,7 +166,8 @@ public class LiveActivityModule: Module {
       let activity = try Activity.request(
         attributes: FitBudWorkoutAttributes(
           workoutName: attributes.workoutName,
-          openUrl: attributes.openUrl
+          openUrl: attributes.openUrl,
+          startedAt: Date()
         ),
         content: content,
         pushType: nil

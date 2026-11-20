@@ -93,6 +93,11 @@ object WorkoutSetNotification {
         val restEndsAt: Long? = null,
         /** Full rest length in seconds, as the app set it. */
         val restSeconds: Int? = null,
+        /**
+         * From JS (`lastExercise === false`). While true, logSet must not set
+         * finished (Z12-48 / Z12-57).
+         */
+        val moreExercisesRemain: Boolean = false,
     )
 
     /** True while a rest countdown is still running at `now` (epoch ms). */
@@ -112,15 +117,22 @@ object WorkoutSetNotification {
 
     fun logSet(state: SetState): SetState {
         if (state.finished) return state
+        val effectiveReps = if (state.reps > 0) state.reps else state.planReps
         val logged =
-            "Set ${state.setIndex} logged · ${formatKg(state.kilograms)} kg × ${state.reps}"
+            if (effectiveReps > 0) {
+                "Set ${state.setIndex} logged · ${formatLoad(state.kilograms, effectiveReps)}"
+            } else {
+                state.loggedLine
+            }
         val next = state.setIndex + 1
-        val finished = next > state.setCount
+        val pastLastSet = next > state.setCount
+        // Never end the workout while more exercises remain; JS owns advance.
+        val finished = pastLastSet && !state.moreExercisesRemain
         return state.copy(
             loggedLine = logged,
-            lastKilograms = state.kilograms,
-            lastReps = state.reps,
-            setIndex = if (finished) state.setIndex else next,
+            lastKilograms = if (effectiveReps > 0) state.kilograms else state.lastKilograms,
+            lastReps = if (effectiveReps > 0) effectiveReps else state.lastReps,
+            setIndex = if (pastLastSet) state.setIndex else next,
             kilograms = state.planKilograms,
             reps = state.planReps,
             finished = finished,
@@ -151,12 +163,14 @@ object WorkoutSetNotification {
     fun lastLine(state: SetState): String? {
         val kilograms = state.lastKilograms ?: return null
         val reps = state.lastReps ?: return null
-        return "Last: ${formatKg(kilograms)} kg × $reps"
+        return "Last: ${formatLoad(kilograms, reps)}"
     }
 
-    /** "22.5 kg × 10" — what the collapsed template shows when there is no "Last". */
-    fun valuesLine(state: SetState): String =
-        "${formatKg(state.kilograms)} kg × ${state.reps}"
+    /** "22.5 kg × 10" or "12 reps" — collapsed template when there is no "Last". */
+    fun valuesLine(state: SetState): String {
+        val reps = if (state.reps > 0) state.reps else state.planReps
+        return formatLoad(state.kilograms, reps)
+    }
 
     /** "Next · Romanian deadlift · Set 3 of 3" (frame 27-android-rest). */
     fun nextLine(state: SetState): String = "Next · ${titleLine(state)}"
@@ -165,8 +179,11 @@ object WorkoutSetNotification {
     fun skipRestDescription(state: SetState): String =
         "Skip rest, next: ${titleLine(state)}, ${valuesLine(state)}"
 
-    /** "Log set 2" (the ✓ is drawn in the layout, so the label stays readable). */
-    fun logSetLabel(state: SetState): String = "Log set ${state.setIndex}"
+    /** "Log 40 kg × 10" / "Log 12 reps" (TR-15d / Z12-48 lines). */
+    fun logSetLabel(state: SetState): String {
+        val reps = if (state.reps > 0) state.reps else state.planReps
+        return "Log ${formatLoad(state.kilograms, reps)}"
+    }
 
     /**
      * The ongoing notification. Not dismissible while the workout runs, no
@@ -473,4 +490,8 @@ object WorkoutSetNotification {
         val rounded = kotlin.math.round(value * 10.0) / 10.0
         return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
     }
+
+    /** Bodyweight (kg ≤ 0) → "12 reps"; weighted → "40 kg × 10". Never "0 kg". */
+    private fun formatLoad(kilograms: Double, reps: Int): String =
+        if (kilograms <= 0.0) "$reps reps" else "${formatKg(kilograms)} kg × $reps"
 }
