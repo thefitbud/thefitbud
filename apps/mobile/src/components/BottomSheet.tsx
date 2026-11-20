@@ -19,6 +19,12 @@ type Props = {
   /** When true, only the grab handle and children are shown (child owns the title). */
   headerless?: boolean;
   onDismiss: () => void;
+  /**
+   * iOS: fires when the Modal has finished leaving (RN `onDismiss`). Use this
+   * to open the next sheet; opening in the same tick as `visible` goes false
+   * never shows there. No-op on Android/web.
+   */
+  onClosed?: () => void;
   children: ReactNode;
 };
 
@@ -28,6 +34,7 @@ export function BottomSheet({
   subtitle,
   headerless = false,
   onDismiss,
+  onClosed,
   children,
 }: Props) {
   const styles = useStyles();
@@ -40,6 +47,7 @@ export function BottomSheet({
       statusBarTranslucent={Platform.OS === "android"}
       visible={visible}
       onRequestClose={onDismiss}
+      onDismiss={onClosed}
     >
       {/* iOS does not resize a transparent modal for the keyboard, so pad the
           bottom-anchored sheet by the keyboard height (ate out, portion, resolve and note sheets). */}

@@ -32,7 +32,15 @@
 //   z36Label         the day z12-36/3 opens ("" = skip), z36Skip why
 //   fwKind           what z12-44/2 opens: "today" | "banner" | "day" | "none"
 //   fwLabel          its day (strip label), fwSkip why when none
-//   fwBanner         "yes" when the missed banner shows when z12-44/2 starts
+//   fwBanner         "yes" when the slipping open-set model still has a this-week
+//                    past miss when z12-44/2 starts (TR-10c shot). "no" does NOT
+//                    mean the screen must be banner-free: Rohan's overlay can
+//                    leave an older miss open (e.g. Tue on Fri before 07:00 IST
+//                    when closed,0 deletes Tue's execution). Remaining misses on
+//                    a rest day are correct product behaviour.
+//   fwClearedMiss    weekday short ("Thu") of a this-week past miss the prior
+//                    theme finished, else "" — used when fwBanner is "no" so the
+//                    flow asserts that cleared line is gone, not every banner
 //   fwW01a           "yes" when today is still to do when z12-44/2 starts
 //   plan             the whole plan for this theme, for the log
 (function () {
@@ -80,6 +88,7 @@ function newest(want, banner) {
 
 var result = {};
 var themes = ["light", "dark"];
+var priorClearedMiss = "";
 for (var t = 0; t < themes.length; t++) {
   var th = themes[t];
   var r = {};
@@ -99,6 +108,8 @@ for (var t = 0; t < themes.length; t++) {
   r.rohanToday = status[0] === "open" ? "To do" : status[0] === "done" ? "Done" : "Rest";
   r.fwW01a = status[0] === "open" ? "yes" : "no";
   r.fwBanner = newest("open", true) >= 0 ? "yes" : "no";
+  // What the earlier theme finished that this pass may still see as cleared.
+  r.fwClearedMiss = priorClearedMiss;
   var order = th === "dark" ? ["today", "banner", "progress", "open"] : ["banner", "progress", "open", "today"];
   var pick = -1;
   var kind = "none";
@@ -114,11 +125,15 @@ for (var t = 0; t < themes.length; t++) {
     r.fwKind = kind;
     r.fwLabel = labelFor(pick);
     r.fwSkip = "";
+    // A this-week past day this theme finishes is the miss the next theme
+    // must no longer show as "You missed … on <weekday>".
+    priorClearedMiss = pick >= 1 && pick <= sinceMonday ? NAMES[weekdayOf(pick)] : "";
     status[pick] = "done";
   } else {
     r.fwKind = "none";
     r.fwLabel = "";
     r.fwSkip = "no workout left for z12-44/2 on " + labelFor(0) + " (" + th + "): its finish steps are skipped";
+    priorClearedMiss = "";
   }
   result[th] = r;
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { restAlarmPlan, restCountdownRender } from "./restCountdown";
+import {
+  adjustRest,
+  formatRestClock,
+  restAlarmPlan,
+  restCountdownRender,
+  restElapsedFraction,
+  restSecondsShown,
+} from "./restCountdown";
 
 /**
  * The executable specification for the rest countdown, on both surfaces
@@ -166,5 +173,71 @@ describe("restAlarmPlan", () => {
     ]) {
       expect(restAlarmPlan(input, REST_START).cancelExisting).toBe(true);
     }
+  });
+});
+
+/**
+ * Z12-45: what the in-app rest bar reads. The bar keeps no counter: its text
+ * is derived from the same end instant the lock-screen countdown counts to,
+ * so the two agree to the second (Z12-48 builds its lines on these).
+ */
+describe("the in-app rest bar (W-05a)", () => {
+  const shown = (now: number) =>
+    formatRestClock(restSecondsShown(restCountdownRender(resting, now)));
+
+  it("opens on the full rest and shows the seconds still to go, rounded up", () => {
+    expect(shown(REST_START)).toBe("1:30");
+    expect(shown(REST_START + 1)).toBe("1:30");
+    expect(shown(REST_START + 1_000)).toBe("1:29");
+    expect(shown(REST_START + 31_500)).toBe("0:59");
+    expect(shown(REST_START + 32_000)).toBe("0:58");
+    expect(shown(REST_END - 1_000)).toBe("0:01");
+    expect(shown(REST_END - 1)).toBe("0:01");
+  });
+
+  it("never shows 0:00 for a running rest, and has no clock once it is over", () => {
+    for (let ms = 0; ms < REST_SECONDS * 1000; ms += 250) {
+      const render = restCountdownRender(resting, REST_START + ms);
+      expect(render.kind).toBe("resting");
+      expect(restSecondsShown(render)).toBeGreaterThanOrEqual(1);
+      expect(restSecondsShown(render)).toBeLessThanOrEqual(REST_SECONDS);
+    }
+    expect(restCountdownRender(resting, REST_END).kind).toBe("ended");
+    expect(restSecondsShown(restCountdownRender(resting, REST_END))).toBe(0);
+  });
+
+  it("a tick that comes late shows the right second, because nothing is counted", () => {
+    // 32 s in, read once after a long gap (the app was in the background).
+    expect(shown(REST_START + 32_000)).toBe("0:58");
+    expect(shown(REST_START + 75_300)).toBe("0:15");
+  });
+
+  it("the fill is the share of the rest already spent", () => {
+    expect(restElapsedFraction(restCountdownRender(resting, REST_START))).toBe(0);
+    expect(restElapsedFraction(restCountdownRender(resting, REST_START + 45_000))).toBe(0.5);
+    expect(restElapsedFraction(restCountdownRender(resting, REST_END))).toBe(1);
+  });
+
+  it("−15 and +15 move the end instant and the length together", () => {
+    const rest = { endsAt: REST_END, seconds: REST_SECONDS };
+    const more = adjustRest(rest, 15, REST_START + 32_000)!;
+    expect(more).toEqual({ endsAt: REST_END + 15_000, seconds: 105 });
+    expect(
+      formatRestClock(
+        restSecondsShown(
+          restCountdownRender(
+            { restEndsAt: more.endsAt, restSeconds: more.seconds },
+            REST_START + 32_000,
+          ),
+        ),
+      ),
+    ).toBe("1:13");
+    expect(adjustRest(rest, -15, REST_START + 32_000)).toEqual({
+      endsAt: REST_END - 15_000,
+      seconds: 75,
+    });
+    // Less than 15 s left: −15 ends the rest.
+    expect(adjustRest(rest, -15, REST_END - 15_000)).toBeNull();
+    expect(adjustRest(rest, -15, REST_END - 10_000)).toBeNull();
   });
 });
