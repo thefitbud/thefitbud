@@ -17,19 +17,21 @@ describe("attention states", () => {
     expect(screen.getByText(ATTENTION_EMPTY_BODY)).toBeTruthy();
   });
 
-  it("renders the error state and Retry refetches (TM-01g)", () => {
+  it("renders the error state and Try again refetches (TM-01g)", () => {
     const onRetry = vi.fn();
     render(<AttentionErrorState onRetry={onRetry} />);
     expect(screen.getByText("Couldn't load Needs you")).toBeTruthy();
     expect(screen.getByText(ATTENTION_ERROR_BODY)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  it("renders the offline line with the last update time (frame 44)", () => {
+  it("renders the offline line with the last update time (TM-01f)", () => {
     render(<AttentionOfflineBanner updatedAt="9:40 am" />);
     expect(
-      screen.getByText("You're offline. Showing the last update from 9:40 am."),
+      screen.getByText(
+        "You're offline. Showing the last update from 9:40 am. Actions come back when you're online.",
+      ),
     ).toBeTruthy();
   });
 });

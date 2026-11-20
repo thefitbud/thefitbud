@@ -9,7 +9,7 @@ export const ATTENTION_EMPTY_BODY =
   "Nobody needs you right now. We’ll notify you when a client misses something or asks.";
 export const ATTENTION_ERROR_TITLE = "Couldn't load Needs you";
 export const ATTENTION_ERROR_BODY =
-  "Pull down to try again. If it keeps happening, email support from More › Help.";
+  "Check your connection and try again. Pull down to refresh.";
 
 /** TM-01d: all clear. */
 export function AttentionEmptyState() {
@@ -41,11 +41,11 @@ export function AttentionErrorState({ onRetry }: { onRetry: () => void }) {
       <Text style={styles.body}>{ATTENTION_ERROR_BODY}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Retry"
+        accessibilityLabel="Try again"
         onPress={onRetry}
         style={styles.retry}
       >
-        <Text style={styles.retryText}>Retry</Text>
+        <Text style={styles.retryText}>Try again</Text>
       </Pressable>
     </View>
   );
@@ -57,7 +57,7 @@ export function AttentionOfflineBanner({ updatedAt }: { updatedAt: string }) {
     <View style={styles.offline} accessibilityRole="alert">
       <WifiOff color="#8A4B06" size={20} strokeWidth={1.75} />
       <Text style={styles.offlineText}>
-        {`You're offline. Showing the last update from ${updatedAt}.`}
+        {`You're offline. Showing the last update from ${updatedAt}. Actions come back when you're online.`}
       </Text>
     </View>
   );
