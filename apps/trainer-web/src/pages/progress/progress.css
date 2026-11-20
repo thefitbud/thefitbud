@@ -59,7 +59,7 @@
 .pg-outline-btn:focus-visible,
 .pg-apply:focus-visible,
 .pg-rail-link-row:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -174,7 +174,7 @@
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: var(--indigo, #4527c6);
+  accent-color: var(--brand);
   cursor: pointer;
 }
 
@@ -198,7 +198,7 @@
 }
 
 .pg-rail-tab.is-selected .pg-rail-label {
-  color: var(--indigo, #4527c6);
+  color: var(--brand);
 }
 
 .pg-rail-value {
@@ -511,7 +511,7 @@
 .pg-compare-list button:focus-visible,
 .pg-select select:focus-visible,
 .pg-link-btn:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -595,7 +595,7 @@
   padding: 0 0.25rem;
   border: 0;
   background: transparent;
-  color: var(--indigo, #4527c6);
+  color: var(--brand);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -649,7 +649,7 @@
 }
 
 .pg-bar-done {
-  fill: var(--indigo, #4527c6);
+  fill: var(--brand);
 }
 
 .pg-bars text.pg-bar-week {
@@ -719,7 +719,7 @@
   height: 64px;
   border-radius: 999px;
   background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
+  color: var(--brand);
 }
 
 .pg-panel .pg-empty-state h2 {
@@ -756,14 +756,14 @@
   padding: 0 16px;
   border-radius: 10px;
   background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
+  color: var(--brand);
   font-size: 14px;
   font-weight: 500;
 }
 
 .pg-soft-btn:focus-visible,
 .pg-photo-thumb:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -865,7 +865,7 @@
 }
 
 .pg-photo-thumb.is-picked {
-  border-color: var(--indigo, #4527c6);
+  border-color: var(--brand);
 }
 
 .pg-photo-thumb .pg-photo-chip {

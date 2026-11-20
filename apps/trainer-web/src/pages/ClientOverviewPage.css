@@ -50,9 +50,9 @@
 
 .ov-wnav-btn:hover:not(:disabled),
 .ov-wnav-btn:focus-visible:not(:disabled) {
-  border-color: var(--brand-indigo, var(--indigo, #4527c6));
-  color: var(--brand-indigo, var(--indigo, #4527c6));
-  outline: 2px solid var(--brand-indigo, var(--indigo, #4527c6));
+  border-color: var(--brand);
+  color: var(--brand);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -69,7 +69,7 @@
   border-radius: 8px;
   border: 0;
   background: var(--sel-bg, var(--lavender-50, #f7f5ff));
-  color: var(--brand-indigo, var(--indigo, #4527c6));
+  color: var(--brand);
   font-size: 0.8125rem;
   font-weight: 600;
   display: inline-flex;
@@ -79,7 +79,7 @@
 
 .ov-wnav-pill:hover,
 .ov-wnav-pill:focus-visible {
-  outline: 2px solid var(--brand-indigo, var(--indigo, #4527c6));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -106,24 +106,24 @@
 }
 
 .ov-day-btn:focus-visible {
-  outline: 2px solid var(--brand-indigo, var(--indigo, #4527c6));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: 12px;
 }
 
 .ov-day.is-selected {
-  outline: 2px solid var(--brand-indigo, var(--indigo, #4527c6));
+  outline: 2px solid var(--brand);
   outline-offset: -2px;
   border-radius: 12px;
 }
 
 .ov-day.is-today:not(.is-selected) {
-  background: var(--lavender-50, #f7f5ff);
-  border-color: #dcd5ff;
+  background: transparent;
+  border-color: transparent;
 }
 
 .ov-day.is-selected.is-today {
-  background: var(--lavender-50, #f7f5ff);
+  background: transparent;
 }
 
 .ov-dnav {
@@ -152,9 +152,9 @@
 
 .ov-dnav-btn:hover:not(:disabled),
 .ov-dnav-btn:focus-visible:not(:disabled) {
-  border-color: var(--brand-indigo, var(--indigo, #4527c6));
-  color: var(--brand-indigo, var(--indigo, #4527c6));
-  outline: 2px solid var(--brand-indigo, var(--indigo, #4527c6));
+  border-color: var(--brand);
+  color: var(--brand);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
