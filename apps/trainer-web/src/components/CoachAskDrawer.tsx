@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ClipboardCheck, Dumbbell, Heart, Utensils, X } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import {
   formatCivilDate,
   formatClockTime,
@@ -216,9 +216,7 @@ export function CoachAskDrawer({
       setAsk(found);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load this ask.",
+        userFacingMessage(err, { fallback: "Could not load this ask." }),
       );
       setAsk(null);
       setSource(null);
@@ -279,9 +277,7 @@ export function CoachAskDrawer({
       onClose();
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not mark done.",
+        userFacingMessage(err, { fallback: "Could not mark done." }),
       );
     } finally {
       setActing(false);

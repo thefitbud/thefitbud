@@ -234,13 +234,15 @@ describe("ClientSettingsPage overview (frame 209)", () => {
       new ApiClientError({ status: 404, code: "NOT_FOUND", message: "Client not found.", requestId: "req-1" }),
     );
     renderPage();
-    expect(await screen.findByText("Client not found.")).toBeTruthy();
+    expect(await screen.findByText("We couldn't find that.")).toBeTruthy();
   });
 
-  it("shows an error code, not a guessed cause, when loading fails otherwise", async () => {
+  it("shows offline copy, not a raw fetch error, when loading fails otherwise", async () => {
     api.getClientSettings.mockRejectedValue(new TypeError("Failed to fetch"));
     renderPage();
-    expect(await screen.findByText(/\(CS-LOAD\)/)).toBeTruthy();
+    expect(
+      await screen.findByText("You're offline. We'll retry when you're back."),
+    ).toBeTruthy();
     expect(screen.queryByText(/Failed to fetch/)).toBeNull();
   });
 });
@@ -371,7 +373,11 @@ describe("Edit basic details drawer (frame 210)", () => {
     const dialog = await openDrawer();
     fireEvent.change(within(dialog).getByLabelText("Name"), { target: { value: "Rohan" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    expect(await within(dialog).findByText("Coaching has ended for this client.")).toBeTruthy();
+    expect(
+      await within(dialog).findByText(
+        "This client has ended, so that action isn't available.",
+      ),
+    ).toBeTruthy();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
     await waitFor(() => expect(api.updateClientBasics).toHaveBeenCalledTimes(2));
     expect(api.updateClientBasics.mock.calls[1]![2]).toBe(api.updateClientBasics.mock.calls[0]![2]);

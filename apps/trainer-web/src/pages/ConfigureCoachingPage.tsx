@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { PencilLine } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   CheckinCadence,
   CheckinFormTemplateSummary,
@@ -368,9 +368,7 @@ export function ConfigureCoachingPage() {
     } catch (err) {
       if (!isLatest()) return;
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load coaching configuration.",
+        userFacingMessage(err, { fallback: "Could not load coaching configuration." }),
       );
     } finally {
       if (isLatest()) setLoading(false);
@@ -503,9 +501,7 @@ export function ConfigureCoachingPage() {
       setForm((current) => ({ ...current, formVersionId: previous }));
       if (noteEndedElsewhere(err)) return;
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not assign the check-in form.",
+        userFacingMessage(err, { fallback: "Could not assign the check-in form." }),
       );
     } finally {
       setFormAssigning(false);
@@ -622,9 +618,7 @@ export function ConfigureCoachingPage() {
     } catch (err) {
       if (noteEndedElsewhere(err)) return;
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not acknowledge the difference.",
+        userFacingMessage(err, { fallback: "Could not acknowledge the difference." }),
       );
     } finally {
       setActing(false);
@@ -692,9 +686,7 @@ export function ConfigureCoachingPage() {
         setForceGoalOpen(true);
       }
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not save configuration draft.",
+        userFacingMessage(err, { fallback: "Could not save configuration draft." }),
       );
     } finally {
       setActing(false);
@@ -710,7 +702,7 @@ export function ConfigureCoachingPage() {
     ) {
       return "This setup changed elsewhere. Reload the page and try again.";
     }
-    return err.message;
+    return userFacingMessage(err);
   }
 
   function openDialog(kind: "activate" | "save-version") {
@@ -923,9 +915,7 @@ export function ConfigureCoachingPage() {
       setReminders((current) => ({ ...current, [type]: previous ?? true }));
       if (noteEndedElsewhere(err)) return;
       showToast(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not update reminder.",
+        userFacingMessage(err, { fallback: "Could not update reminder." }),
       );
     } finally {
       setReminderSaving(null);

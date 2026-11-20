@@ -1,7 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, Upload } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { formatCivilDate, normalizeWhatsappE164 } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { stage1Api } from "../../lib/stage1-api";
@@ -114,7 +114,7 @@ export function ProfileSettingsPage() {
       setToast("Profile saved.");
     } catch (err) {
       setError(
-        err instanceof ApiClientError ? err.message : "Could not save profile.",
+        userFacingMessage(err, { fallback: "Could not save profile." }),
       );
     } finally {
       setSaving(false);
@@ -140,7 +140,7 @@ export function ProfileSettingsPage() {
       setToast("Password updated.");
     } catch (err) {
       setError(
-        err instanceof ApiClientError ? err.message : "Could not update password.",
+        userFacingMessage(err, { fallback: "Could not update password." }),
       );
     } finally {
       setSaving(false);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { STEPS_TARGET_MAX, STEPS_TARGET_MIN } from "@fitbud/contracts";
 import { apiClient } from "../../lib/api";
 
@@ -103,9 +103,7 @@ export function useStepsTarget(
           setError("Save the draft first. Then you can set the steps target.");
         } else {
           setError(
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not save the steps target.",
+            userFacingMessage(err, { fallback: "Could not save the steps target." }),
           );
         }
         return false;

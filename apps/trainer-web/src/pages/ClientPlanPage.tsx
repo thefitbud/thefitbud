@@ -11,7 +11,7 @@ import {
   Target,
   Utensils,
 } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import {
   planVersionStatusSchema,
   type DietAdjustmentScope,
@@ -370,7 +370,7 @@ function TemplatePicker({
         setSelected((current) => current || page.items[0]?.id || "");
       })
       .catch((err: unknown) =>
-        setError(err instanceof ApiClientError ? err.message : "Couldn't load templates."),
+        setError(userFacingMessage(err, { fallback: "Couldn't load templates." })),
       );
   }, []);
 
@@ -480,7 +480,7 @@ function VersionsTable({
           setTotalAll((prev) => (result.nextCursor ? Math.max(count, prev) : count));
         }
       } catch (err) {
-        setError(err instanceof ApiClientError ? err.message : "Couldn't load plan versions.");
+        setError(userFacingMessage(err, { fallback: "Couldn't load plan versions." }));
       } finally {
         setLoading(false);
       }
@@ -845,7 +845,7 @@ export function ClientPlanPage() {
   }, [effectivePlan, effectiveVersion, refreshEpoch, draftEpoch]);
 
   function fail(err: unknown, fallback: string) {
-    setError(err instanceof ApiClientError ? err.message : fallback);
+    setError(userFacingMessage(err, { fallback }));
   }
 
   async function adjustPlan() {

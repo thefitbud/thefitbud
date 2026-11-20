@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import type {
@@ -222,7 +223,7 @@ export function ResponsivenessPanel({
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load reminders data.");
+          setError(userFacingMessage(err, { fallback: "Could not load reminders data." }));
         }
       });
     return () => {

@@ -304,7 +304,11 @@ describe("SubscriptionDrawer (frames 211 / 211b)", () => {
     const dialog = await openDrawer();
     fireEvent.change(within(dialog).getByLabelText("Plan name"), { target: { value: "Hybrid" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    expect(await within(dialog).findByText("Coaching relationship has ended.")).toBeTruthy();
+    expect(
+      await within(dialog).findByText(
+        "This client has ended, so that action isn't available.",
+      ),
+    ).toBeTruthy();
     api.getClientSettings.mockResolvedValue(
       settings({ relationshipStatus: "ended", readOnly: true, endedAt: "2026-10-30T04:30:00.000Z" }),
     );

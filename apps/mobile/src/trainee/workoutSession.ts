@@ -1,4 +1,4 @@
-import { ApiClientError, type FitBudApiClient } from "@fitbud/api-client";
+import { type FitBudApiClient, userFacingMessage } from "@fitbud/api-client";
 import type {
   WorkoutAssignment,
   WorkoutExecution,
@@ -143,11 +143,7 @@ export async function openActiveWorkout(
 }
 
 export function workoutStartError(err: unknown): string {
-  return err instanceof ApiClientError
-    ? err.message
-    : err instanceof Error
-      ? err.message
-      : "Could not start workout.";
+  return userFacingMessage(err, { fallback: "Could not start workout." });
 }
 
 /**

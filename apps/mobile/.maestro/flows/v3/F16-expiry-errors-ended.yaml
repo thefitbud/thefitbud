@@ -70,6 +70,15 @@ env:
 - extendedWaitUntil:
     notVisible: "Use this code"
     timeout: 10000
+# Ended Today keeps the tab bar (TR-22a); Sign out lives under More.
+- tapOn: "More"
+- extendedWaitUntil:
+    notVisible: "Loading…"
+    timeout: 30000
+- scrollUntilVisible:
+    element: "Sign out"
+    direction: DOWN
+    timeout: 20000
 - tapOn: "Sign out"
 - extendedWaitUntil:
     visible: "Sign in with a code instead"

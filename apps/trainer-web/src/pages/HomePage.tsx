@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import {
   useCallback,
   useEffect,
@@ -953,7 +954,7 @@ export function HomePage() {
       {error ? (
         <ErrorState
           kind={error.kind}
-          message={error.message}
+          message={userFacingMessage(error)}
           requestId={error.requestId}
           onRetry={() => void refreshAll()}
         />

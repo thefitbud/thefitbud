@@ -17,7 +17,7 @@ import {
   Utensils,
   X,
 } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { labelFor } from "@fitbud/core";
 import type {
   BulkResolveItemResult,
@@ -301,7 +301,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
         // An expired key never replays: the next try needs a new one.
         if (err.code === "IDEMPOTENCY_KEY_EXPIRED")
           resolveKeyRef.current = null;
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else {
         // Nothing proves why it failed; the same key is reused on retry.
         setError("Could not resolve these items.");
@@ -348,7 +348,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
           onEnded();
           return;
         }
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else {
         setError("Could not undo.");
       }

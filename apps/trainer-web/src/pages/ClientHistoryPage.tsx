@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useOutletContext, useParams, useSearchParams } from "react-router-dom";
 import { CalendarDays } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
 import {
   formatCivilDate,
@@ -214,7 +214,9 @@ export function ClientHistoryPage() {
         if (requestId.current !== id) return;
         const apiErr = err instanceof ApiClientError ? err : null;
         setError({
-          message: apiErr?.message ?? "Could not load history.",
+          message: userFacingMessage(err, {
+            fallback: "Could not load history.",
+          }),
           kind: errorKindFromFailure({
             status: apiErr?.status,
             code: apiErr?.code,
@@ -360,7 +362,7 @@ export function ClientHistoryPage() {
 
         {error && !listReady ? (
           <ErrorState
-            message={error.message}
+            message={userFacingMessage(error)}
             kind={error.kind}
             requestId={error.requestId}
             screenId="TW-21"
@@ -372,7 +374,7 @@ export function ClientHistoryPage() {
 
         {listReady && error ? (
           <ErrorState
-            message={error.message}
+            message={userFacingMessage(error)}
             kind={error.kind}
             requestId={error.requestId}
             screenId="TW-21"

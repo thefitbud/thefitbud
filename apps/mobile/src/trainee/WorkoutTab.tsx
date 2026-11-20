@@ -14,7 +14,7 @@ import {
   Timer,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   CoachingRelationship,
   WorkoutAssignment,
@@ -351,9 +351,7 @@ export function WorkoutTab({
         cached ? workoutWeekStateFor(cached) : WORKOUT_WEEK_UNAVAILABLE,
       );
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't refresh workouts. Pull to try again.",
+        userFacingMessage(err, { fallback: "Couldn't refresh workouts. Pull to try again." }),
       );
     }
   }, [api, relationship.id, weekStart, rangeEnd, workoutsCacheKey]);
@@ -638,9 +636,7 @@ export function WorkoutTab({
     } catch (err) {
       reportError("workout.openLogged", err);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not open this workout. (WORKOUT-OPEN)",
+        userFacingMessage(err, { fallback: "Could not open this workout. (WORKOUT-OPEN)" }),
       );
     } finally {
       setActingId(null);
@@ -688,9 +684,7 @@ export function WorkoutTab({
       await load();
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not skip workout.",
+        userFacingMessage(err, { fallback: "Could not skip workout." }),
       );
     } finally {
       setActingId(null);

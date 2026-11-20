@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   CoachLogWorkoutRequest,
   WorkoutAssignment,
@@ -54,7 +54,7 @@ const RELOAD_CODES = new Set([
 
 function classifyFailure(err: unknown): SaveFailure {
   if (err instanceof ApiClientError) {
-    return { kind: "api", message: err.message, code: err.code };
+    return { kind: "api", message: userFacingMessage(err), code: err.code };
   }
   // A rejected fetch is a TypeError; anything else (a ZodError, say) is a
   // client/server disagreement and must not read as a connection problem.
@@ -203,7 +203,7 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
     } catch (err) {
       if (seq !== loadSeq.current) return;
       setLoadError(
-        err instanceof ApiClientError ? err.message : "Could not load this workout.",
+        userFacingMessage(err, { fallback: "Could not load this workout." }),
       );
     } finally {
       if (seq === loadSeq.current) setLoading(false);
@@ -440,8 +440,8 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
               ? "Not saved. We couldn’t reach FitBud, so nothing was saved. Your entries are still here. Check your connection and try again."
               : failure.kind === "api"
                 ? RELOAD_CODES.has(failure.code)
-                  ? `Not saved. ${failure.message} Reload to see what is saved.`
-                  : `Not saved. ${failure.message} Your entries are still here.`
+                  ? `Not saved. ${userFacingMessage(failure)} Reload to see what is saved.`
+                  : `Not saved. ${userFacingMessage(failure)} Your entries are still here.`
                 : "Not saved. Something went wrong on our side (LOG-WORKOUT). Your entries are still here. Try again."}
           </p>
         </div>

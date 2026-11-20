@@ -2,7 +2,7 @@ import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeP
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
 import { Utensils } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -74,9 +74,7 @@ function MealTimesScreenBody({ onBack, coachName = "Your coach" }: Props) {
       setPatterns(nextPatterns);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load meal times.",
+        userFacingMessage(err, { fallback: "Could not load meal times." }),
       );
     } finally {
       setLoading(false);
@@ -118,7 +116,7 @@ function MealTimesScreenBody({ onBack, coachName = "Your coach" }: Props) {
         setToast("Saved on this phone. We'll sync it when you're back online.");
       } else {
         setError(
-          err instanceof ApiClientError ? err.message : "Could not save times.",
+          userFacingMessage(err, { fallback: "Could not save times." }),
         );
       }
     } finally {

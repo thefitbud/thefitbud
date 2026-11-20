@@ -19,7 +19,7 @@ import {
   Ruler,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   Checkin,
   CoachingRelationship,
@@ -443,11 +443,9 @@ function ProgressTabInner({
             setCached(cacheKey, fallback);
           } else {
             setError(
-              err instanceof ApiClientError
-                ? err.message
-                : isNetworkFailure(err)
-                  ? "Couldn't reach FitBud (PRG-NET). Check your connection and try again."
-                  : "Couldn't load your progress (PRG-LOAD). Try again.",
+              userFacingMessage(err, {
+                fallback: "Couldn't load your progress. Try again.",
+              }),
             );
           }
         }
@@ -637,12 +635,12 @@ function ProgressTabInner({
     } catch (err) {
       reportError("ProgressTab.saveMeasurement", err);
       if (err instanceof ApiClientError) {
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else if (isNetworkFailure(err)) {
         setOffline(true);
         setError("Saved on phone · will sync when online.");
       } else {
-        setError("Couldn't save that (PRG-SAVE). Try again.");
+        setError("Couldn't save that. Try again.");
       }
       setLogOpen(false);
     } finally {

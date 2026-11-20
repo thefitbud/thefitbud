@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { Measurement } from "@fitbud/contracts";
 import { formatCivilDate, formatLocalDate, labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
@@ -46,7 +46,7 @@ export function ProgressPanel({
       } catch (err) {
         if (!cancelled) {
           setError(
-            err instanceof ApiClientError ? err.message : "Could not load measurements.",
+            userFacingMessage(err, { fallback: "Could not load measurements." }),
           );
         }
       }

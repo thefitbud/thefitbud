@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { ProgressEntry, ProgressMetricKey } from "@fitbud/contracts";
 import { ChartLine, Lock } from "lucide-react";
 import {
@@ -150,9 +150,7 @@ export function ClientProgressPage() {
       setEntries(page.items);
     } catch (err) {
       setEntriesError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load progress.",
+        userFacingMessage(err, { fallback: "Could not load progress." }),
       );
     } finally {
       setEntriesLoading(false);

@@ -20,7 +20,7 @@ import {
   View,
 } from "react-native";
 import { Trash2 } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   ExerciseExecution,
   WorkoutAssignment,
@@ -500,7 +500,7 @@ export function ActiveWorkoutScreen({
 
   function saveFailed(where: string, err: unknown, fallback: string) {
     reportError(where, err);
-    setError(err instanceof ApiClientError ? err.message : fallback);
+    setError(userFacingMessage(err, { fallback }));
   }
 
   function startRestForSet(setTargetId: string) {

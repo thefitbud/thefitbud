@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { Eye, EyeOff, Info, Lock, Mail } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
@@ -98,11 +99,11 @@ export function SignInPage() {
     } catch (err) {
       if (err instanceof AuthFlowError && err.code === "role") {
         setRoleGate(true);
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else if (err instanceof AuthFlowError) {
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else {
-        setError(err instanceof Error ? err.message : "Sign-in failed.");
+        setError(userFacingMessage(err, { fallback: "Sign-in failed." }));
       }
     } finally {
       setSubmitting(false);
@@ -265,7 +266,7 @@ export function SignInPage() {
                   setRoleGate(true);
                 }
                 setError(
-                  err instanceof Error ? err.message : "Test sign-in failed.",
+                  userFacingMessage(err, { fallback: "Test sign-in failed." }),
                 );
               });
             }}

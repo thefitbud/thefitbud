@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { AlertCircle, X } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   CreatePaymentRecordRequest,
   PaymentMethod,
@@ -318,7 +318,7 @@ export function PaymentDrawer({
       // Only the API's own curated message is shown verbatim (AGENTS.md).
       if (err instanceof ApiClientError) {
         setSaveError({
-          message: err.message,
+          message: userFacingMessage(err),
           stale: STALE_CODES.has(err.code),
         });
       } else {

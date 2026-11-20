@@ -21,7 +21,7 @@ import {
   type LucideIcon,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatCivilDate, formatNumber } from "@fitbud/core";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -46,7 +46,6 @@ import {
   attachMealPhotoBestEffort,
   confirmMealAssignment,
   isMealLogPending,
-  MealSyncError,
   pendingMealLogIds,
 } from "./mealActions";
 import {
@@ -729,9 +728,9 @@ function DietTabBody({
       // shown as fixed copy, never the raw error (AGENTS.md client errors).
       reportError("DietTab.confirmMeal", err);
       setActionError(
-        err instanceof MealSyncError
-          ? err.message
-          : "Couldn't save that meal. Try again.",
+        userFacingMessage(err, {
+          fallback: "Couldn't save that meal. Try again.",
+        }),
       );
       optimisticStatus.current.delete(assignment.id);
       setOptimisticVersion((n) => n + 1);
@@ -1124,9 +1123,7 @@ function DietTabBody({
   // stays neutral (AGENTS.md: no misleading catch).
   const loadErrorBody = loadFailedOffline
     ? "Check your connection. Anything you logged is saved on your phone."
-    : loadError instanceof ApiClientError
-      ? loadError.message
-      : "Something went wrong. Try again.";
+    : userFacingMessage(loadError, { fallback: "Something went wrong. Try again." });
   const staleError =
     loadError != null && bundle !== undefined && !loadFailedOffline;
   const sentCount = pendingSendIds.size;

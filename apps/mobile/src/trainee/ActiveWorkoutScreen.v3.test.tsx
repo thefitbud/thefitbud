@@ -11,6 +11,7 @@
 import { useState } from "react";
 import { Appearance } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { USER_FACING_OFFLINE } from "@fitbud/api-client";
 import {
   workoutExecutionSchema,
   completeSetRequestSchema,
@@ -638,7 +639,8 @@ describe("exercise menu and set actions (W-08, W-09, W-09b, W-13)", () => {
       tap("Mark not done");
     });
     expect(screen.getByRole("button", { name: /^Set 1, 20 kg × 10, logged/ })).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toContain("WO-UNLOG");
+    // Network failure → Z12-64 offline copy (not the WO-UNLOG fallback).
+    expect(screen.getByRole("alert").textContent).toBe(USER_FACING_OFFLINE);
   });
 });
 

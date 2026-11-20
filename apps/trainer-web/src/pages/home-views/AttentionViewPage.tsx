@@ -7,7 +7,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { Check, ChevronLeft, ChevronRight } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { formatRelative } from "@fitbud/core";
 import { ErrorState, errorKindFromFailure } from "../../components/StatePanels";
 import type { ErrorKind } from "../../components/StatePanels";
@@ -92,12 +92,12 @@ function avatarTone(name: string): number {
 function loadErrorFrom(err: unknown): LoadError {
   if (err instanceof ApiClientError) {
     return {
-      message: err.message,
+      message: userFacingMessage(err),
       requestId: err.requestId ?? null,
       kind: errorKindFromFailure({
         status: err.status,
         code: err.code,
-        message: err.message,
+        message: userFacingMessage(err),
       }),
     };
   }
@@ -342,7 +342,7 @@ export function AttentionViewPage() {
       {error ? (
         <ErrorState
           title="Couldn't load needs attention"
-          message={error.message}
+          message={userFacingMessage(error)}
           kind={error.kind}
           requestId={error.requestId}
           onRetry={() => void load()}
