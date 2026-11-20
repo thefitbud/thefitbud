@@ -1,9 +1,9 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import type { ResponsivenessResponse } from "@fitbud/contracts";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { quietHoursLine, reminderLine } from "./model";
-import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { createThemedStyles } from "../../providers/ThemeProvider";
 
 /** Read-only summary of how the client responds to reminders (TW-31 headline). */
 export function RemindersCard({

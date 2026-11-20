@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Linking, Pressable, StyleSheet, Switch, View } from "react-native";
+import { Linking, Pressable, Switch, View } from "react-native";
 import { Text } from "../components/Text";
 import { CircleAlert, WifiOff } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet } from "react-native";
+import { Platform } from "react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
-import {
-  addDaysToLocalDate,
+import { addDaysToLocalDate,
   deviceTimeZone,
   formatCivilDate,
   formatLocalDate,
@@ -19,8 +18,7 @@ import { localDateInTimezone } from "../lib/dates";
 import { reportError } from "../lib/reportError";
 import { scheduleUndoable, type UndoableAction } from "./attentionCards";
 import { CheckinsList } from "./checkinsList/List";
-import {
-  buildCheckinListModel,
+import { buildCheckinListModel,
   coachingWeekAt,
   inboxItemFromCheckin,
   type CheckinListRow,
@@ -28,7 +26,7 @@ import {
   type WeekLookup,
 } from "./checkinsList/model";
 import { openContextualWhatsApp } from "./whatsapp";
-import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { createThemedStyles } from "../providers/ThemeProvider";
 
 type Props = {
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;

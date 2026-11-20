@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Check, Minus, X } from "lucide-react-native";
 import { fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";

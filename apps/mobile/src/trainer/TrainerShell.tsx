@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Text } from "../components/Text";
 import type { CoachAsk, TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
@@ -11,8 +11,7 @@ import { TrainerNotificationSettingsScreen } from "./TrainerNotificationSettings
 import { TrainerProfileScreen } from "./TrainerProfileScreen";
 import { CheckinReviewScreen } from "./CheckinReviewScreen";
 import { CheckinsTab } from "./CheckinsTab";
-import {
-  onboardingStatusLabel,
+import { onboardingStatusLabel,
   type ClientDirectoryRow,
 } from "./clients";
 import { ClientsTab } from "./ClientsTab";
@@ -20,8 +19,7 @@ import { ClientStatusScreen } from "./ClientStatusScreen";
 import { ExceptionReviewScreen } from "./ExceptionReviewScreen";
 import { AskDetailScreen } from "./ask/AskDetailScreen";
 import { SessionDetailScreen } from "./session/SessionDetailScreen";
-import {
-  isCaptureModeEnabled,
+import { isCaptureModeEnabled,
   registerTrainerCaptureNav,
 } from "../dev/captureBridge";
 import { stage1Api } from "../lib/stage1Api";

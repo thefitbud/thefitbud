@@ -1,13 +1,10 @@
 import { useState } from "react";
-import {
-  Linking,
+import { Linking,
   Platform,
   Pressable,
-  StyleSheet,
   View,
 } from "react-native";
-import {
-  Bug,
+import { Bug,
   Check,
   ClipboardList,
   Copy,
@@ -21,8 +18,7 @@ import { BottomSheet } from "../components/BottomSheet";
 import { Text } from "../components/Text";
 import { buildSupportMailto } from "../lib/support";
 import { reportError } from "../lib/reportError";
-import {
-  ThemeScope,
+import { ThemeScope,
   createThemedStyles,
   useTheme,
 } from "../providers/ThemeProvider";

@@ -1,4 +1,4 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { Scale } from "lucide-react-native";
 import { formatCivilDate } from "@fitbud/core";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";

@@ -4,11 +4,9 @@
  * view labels only when at least two photos exist.
  */
 import { useMemo, useState } from "react";
-import {
-  Image,
+import { Image,
   Modal,
   Pressable,
-  StyleSheet,
   View,
 } from "react-native";
 import { X } from "lucide-react-native";

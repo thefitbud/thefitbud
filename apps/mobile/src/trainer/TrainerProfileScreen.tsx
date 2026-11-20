@@ -1,9 +1,7 @@
 import { useState } from "react";
-import {
-  Pressable,
+import { Pressable,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   TextInput,
   View,
 } from "react-native";

@@ -2,9 +2,8 @@
  * TM-11a/b: trainer view of a finished trainee workout (sets vs plan).
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import {
-  Check,
+import { Pressable, View } from "react-native";
+import { Check,
   Eye,
   HeartPulse,
   NotebookPen,
@@ -16,8 +15,7 @@ import type {
   WorkoutAssignment,
   WorkoutExecution,
 } from "@fitbud/contracts";
-import {
-  deviceTimeZone,
+import { deviceTimeZone,
   formatLocalDate,
   formatPersonName,
 } from "@fitbud/core";
@@ -33,8 +31,7 @@ import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
 import { NoteSheet, type NoteSaveInput } from "../sheets/NoteSheet";
 import { openContextualWhatsApp } from "../whatsapp";
-import {
-  changeChipLabel,
+import { changeChipLabel,
   changeChips,
   earlyFinishBanner,
   sessionExerciseCards,

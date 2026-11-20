@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, Pressable, StyleSheet, View } from "react-native";
+import { Image, Pressable, View } from "react-native";
 import type { CheckinReviewPhoto } from "@fitbud/contracts";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
@@ -7,7 +7,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { resolveApiBaseUrl } from "../../lib/api";
 import { reportError } from "../../lib/reportError";
 import { PhotoCompare } from "./PhotoCompare";
-import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { createThemedStyles } from "../../providers/ThemeProvider";
 
 /** Frame 19 shows three thumbnails. */
 const MAX_THUMBNAILS = 3;
