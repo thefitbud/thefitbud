@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   DEMO_LIVE_ACTIVITY,
+  activityLoggedLine,
   clearExpiredRest,
   clearRest,
+  crossingExerciseLine,
   currentValueLine,
   formatKg,
+  formatLoadReps,
   loggedSetLine,
   nextValueLine,
   reduceLiveActivity,
@@ -13,6 +16,7 @@ import {
   setProgressLine,
   stepWeight,
   withRest,
+  type LiveActivityState,
 } from "./liveActivity";
 
 describe("live activity set logging", () => {
@@ -74,6 +78,102 @@ describe("live activity set logging", () => {
     const nudged = reduceLiveActivity(third, { type: "weight", direction: 1 });
     expect(nudged.kilograms).toBe(22.5);
     expect(reduceLiveActivity(third, { type: "log_set" })).toEqual(third);
+  });
+});
+
+describe("Z12-48 live activity lines", () => {
+  it("prints bodyweight sets as reps only (never 0 kg)", () => {
+    const bodyweight: LiveActivityState = {
+      kilograms: 0,
+      reps: 12,
+      planKg: 0,
+      planReps: 12,
+      setIndex: 3,
+      setCount: 3,
+      lastKg: 0,
+      lastReps: 10,
+      loggedSet: { setIndex: 3, kilograms: 0, reps: 12 },
+      finished: false,
+      bodyweight: true,
+      lastExercise: true,
+    };
+    expect(formatLoadReps(0, 12, { bodyweight: true })).toBe("12 reps");
+    expect(currentValueLine(bodyweight)).toBe("12 reps");
+    expect(loggedSetLine(bodyweight)).toBe("Set 3 logged · 12 reps");
+    expect(setProgressLine(bodyweight)).toBe("Set 3 of 3 · Last: 10 reps");
+    expect(nextValueLine(bodyweight)).toBe("Next 12 reps");
+  });
+
+  it("never prints 0 reps (falls back to the plan, or omits the line)", () => {
+    const zeroReps: LiveActivityState = {
+      ...DEMO_LIVE_ACTIVITY,
+      reps: 0,
+      planReps: 10,
+      loggedSet: { setIndex: 1, kilograms: 22.5, reps: 0 },
+    };
+    expect(currentValueLine(zeroReps)).toBe("22.5 kg × 10");
+    expect(loggedSetLine(zeroReps)).toBe("Set 1 logged · 22.5 kg × 10");
+    expect(setLogFromState(zeroReps, "RDL").reps).toBe(10);
+
+    const noPlan: LiveActivityState = {
+      ...DEMO_LIVE_ACTIVITY,
+      reps: 0,
+      planReps: 0,
+      loggedSet: { setIndex: 1, kilograms: 22.5, reps: 0 },
+    };
+    expect(loggedSetLine(noPlan)).toBeNull();
+    expect(formatLoadReps(22.5, 0, { planReps: 0 })).toBeNull();
+  });
+
+  it("prints a crossing-exercise line", () => {
+    expect(crossingExerciseLine("Push-up", "Shoulder press", 1, 3)).toBe(
+      "Push-up done · Next: Shoulder press, set 1 of 3",
+    );
+    const crossed: LiveActivityState = {
+      kilograms: 16,
+      reps: 12,
+      planKg: 16,
+      planReps: 12,
+      setIndex: 1,
+      setCount: 3,
+      lastKg: 0,
+      lastReps: 12,
+      loggedSet: { setIndex: 3, kilograms: 0, reps: 12 },
+      finished: false,
+      bodyweight: false,
+      lastExercise: false,
+      crossedFromExercise: "Push-up",
+    };
+    expect(activityLoggedLine("Shoulder press", crossed)).toBe(
+      "Push-up done · Next: Shoulder press, set 1 of 3",
+    );
+    // Plain loggedSetLine stays the set form; the activity line prefers crossing.
+    expect(loggedSetLine(crossed)).toBe("Set 3 logged · 12 reps");
+  });
+
+  it("does not finish after the last set of exercise 1 when more remain", () => {
+    const lastOfFirst: LiveActivityState = {
+      kilograms: 22.5,
+      reps: 10,
+      planKg: 22.5,
+      planReps: 10,
+      setIndex: 3,
+      setCount: 3,
+      lastKg: 20,
+      lastReps: 10,
+      loggedSet: null,
+      finished: false,
+      lastExercise: false,
+    };
+    const logged = reduceLiveActivity(lastOfFirst, { type: "log_set" });
+    expect(logged.finished).toBe(false);
+    expect(logged.setIndex).toBe(3);
+    expect(logged.loggedSet).toEqual({ setIndex: 3, kilograms: 22.5, reps: 10 });
+    expect(loggedSetLine(logged)).toBe("Set 3 logged · 22.5 kg × 10");
+
+    // Same set on the last exercise does finish.
+    const lastOfWorkout = { ...lastOfFirst, lastExercise: true };
+    expect(reduceLiveActivity(lastOfWorkout, { type: "log_set" }).finished).toBe(true);
   });
 });
 

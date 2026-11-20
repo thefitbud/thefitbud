@@ -40,10 +40,11 @@ function planFromExercise(
   const kilograms = parseKg(first?.loadLabel);
   const reps = first?.reps ?? 8;
   const kg = kilograms ?? 0;
+  const bodyweight = kilograms == null;
   return {
     workoutName,
     exerciseName: exercise.name,
-    bodyweight: kilograms == null,
+    bodyweight,
     state: {
       kilograms: kg,
       reps,
@@ -55,6 +56,9 @@ function planFromExercise(
       lastReps: reps,
       loggedSet: null,
       finished: false,
+      bodyweight,
+      // Preview has no later exercises in scope; Log on the preview may finish.
+      lastExercise: true,
     },
   };
 }

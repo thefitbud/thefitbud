@@ -48,11 +48,25 @@ import {
   deepLinkFromNotification,
   type NotificationDeepLink,
 } from "../notifications/routing";
+import { androidTopInset } from "../screens/auth/authParts";
 import { getCached, setCached, subscribe } from "./dataCache";
 
 const CACHE_KEY = "notifications:inbox";
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_TZ = "Asia/Kolkata";
+
+/** Screen content top pad cancelled so the custom nav sits at the safe top. */
+export const NOTIFICATIONS_CONTENT_TOP_PAD = 24;
+
+/**
+ * Page `marginTop` for the inbox: cancel Screen's pad, then add Android's
+ * status-bar inset so Back is tappable under the clock (F13 device FAIL).
+ */
+export function notificationsPageMarginTop(
+  inset: number = androidTopInset,
+): number {
+  return -NOTIFICATIONS_CONTENT_TOP_PAD + inset;
+}
 
 type Props = {
   onBack: () => void;
@@ -520,10 +534,9 @@ type InboxStyles = ReturnType<typeof useStyles>;
 
 const useStyles = createThemedStyles((t) => ({
   page: {
-    // Screen pads 24 and 32; TR-15a's content sits 16 from the edges, its
-    // nav bar right under the status bar.
+    // Screen pads 24 and 32; TR-15a's content sits 16 from the edges.
     marginHorizontal: -8,
-    marginTop: -24,
+    marginTop: notificationsPageMarginTop(),
   },
   nav: {
     alignItems: "center",
