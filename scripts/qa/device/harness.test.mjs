@@ -353,7 +353,20 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   // Rest-day iOS label still needs Today's workout.*; This week is the above-the-fold
   // fallback when a check-in review banner covers the header (FitBud #485 / #502).
   assert.match(signIn, /visible: "Today's workout\.\*\|This week\|Needs you\.\*\|Choose mode"/);
-  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
+  // Exact email (no trailing .*): "…testntr" must not pass (FitBud #507 dark launch).
+  assert.match(signIn, /eraseText: 80/);
+  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}"/);
+  assert.doesNotMatch(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
+});
+
+test("F28 coach Something different path takes editor screenshots for Z12-58", () => {
+  const f28 = fs.readFileSync(
+    path.join(repo, "apps/mobile/.maestro/flows/v3/F28-settings-inperson-signout.yaml"),
+    "utf8",
+  );
+  assert.match(f28, /takeScreenshot: TR-08a-something-different/);
+  assert.match(f28, /takeScreenshot: TR-08b-changed-portion/);
+  assert.match(f28, /takeScreenshot: TR-08c-ate-out/);
 });
 
 test("trainee Today home-ready helper and F15 use it; gate clears auth rate limits per theme", () => {
