@@ -9,7 +9,7 @@
  * Z12-63: under system dark the screen opts into v3 tokens (not light-only).
  */
 import { useState } from "react";
-import { Appearance, Vibration } from "react-native";
+import { Appearance } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   workoutExecutionSchema,
@@ -30,11 +30,31 @@ import {
   stepValue,
 } from "./workout/setEntry";
 
+const haptics = vi.hoisted(() => ({
+  notificationAsync: vi.fn(async () => undefined),
+  impactAsync: vi.fn(async () => undefined),
+  NotificationFeedbackType: { Success: "success", Warning: "warning", Error: "error" },
+  ImpactFeedbackStyle: { Light: "light", Medium: "medium", Heavy: "heavy" },
+}));
+
+vi.mock("expo-haptics", () => ({
+  notificationAsync: haptics.notificationAsync,
+  impactAsync: haptics.impactAsync,
+  NotificationFeedbackType: haptics.NotificationFeedbackType,
+  ImpactFeedbackStyle: haptics.ImpactFeedbackStyle,
+}));
+
 vi.mock("expo-modules-core", () => ({
   requireOptionalNativeModule: () => null,
   requireNativeModule: () => null,
   NativeModulesProxy: {},
   EventEmitter: class {},
+}));
+
+vi.mock("expo-keep-awake", () => ({
+  activateKeepAwakeAsync: vi.fn(async () => undefined),
+  deactivateKeepAwake: vi.fn(async () => undefined),
+  useKeepAwake: vi.fn(),
 }));
 
 const uuid = (n: number) =>
@@ -427,11 +447,17 @@ describe("rest bar (W-05a, W-05b)", () => {
     expect(screen.queryByText("Rest done")).toBeNull();
   });
 
-  it("counts down from the end instant, moves by 15 s, and buzzes once at the end", () => {
+  it("counts down from the end instant, moves by 15 s, and buzzes once at the end", async () => {
     vi.useFakeTimers({ now: new Date("2026-11-11T06:10:00.000Z") });
-    const vibrate = vi.spyOn(Vibration, "vibrate").mockImplementation(() => undefined);
+    haptics.notificationAsync.mockClear();
+    haptics.impactAsync.mockClear();
     renderScreen("20 kg");
     tap(/^Log set 1/);
+    // setLoggedHaptic fires on the first log (Z12-57).
+    await act(async () => {
+      await Promise.resolve();
+    });
+    const impactAfterLog = haptics.impactAsync.mock.calls.length;
     expect(screen.getByRole("timer").textContent).toBe("1:30");
     act(() => {
       vi.advanceTimersByTime(32_000);
@@ -442,32 +468,36 @@ describe("rest bar (W-05a, W-05b)", () => {
     tap("15 seconds less");
     tap("15 seconds less");
     expect(screen.getByRole("timer").textContent).toBe("0:43");
-    expect(vibrate).not.toHaveBeenCalled();
-    act(() => {
+    expect(haptics.notificationAsync).not.toHaveBeenCalled();
+    await act(async () => {
       vi.advanceTimersByTime(43_000);
+      await Promise.resolve();
     });
     expect(screen.queryByRole("timer")).toBeNull();
     expect(screen.getByText("Rest done")).toBeTruthy();
     expect(screen.getByText("Next: set 2 · 20 kg × 10")).toBeTruthy();
-    expect(vibrate).toHaveBeenCalledTimes(1);
+    expect(haptics.notificationAsync).toHaveBeenCalledTimes(1);
+    expect(haptics.impactAsync.mock.calls.length).toBeGreaterThan(impactAfterLog);
     tap("OK");
     expect(screen.queryByText("Rest done")).toBeNull();
     act(() => {
       vi.advanceTimersByTime(5_000);
     });
-    expect(vibrate).toHaveBeenCalledTimes(1);
+    expect(haptics.notificationAsync).toHaveBeenCalledTimes(1);
   });
 
-  it("a skipped rest never buzzes", () => {
+  it("a skipped rest never buzzes", async () => {
     vi.useFakeTimers({ now: new Date("2026-11-11T06:10:00.000Z") });
-    const vibrate = vi.spyOn(Vibration, "vibrate").mockImplementation(() => undefined);
+    haptics.notificationAsync.mockClear();
+    haptics.impactAsync.mockClear();
     renderScreen("20 kg");
     tap(/^Log set 1/);
     tap("Skip rest");
-    act(() => {
+    await act(async () => {
       vi.advanceTimersByTime(120_000);
+      await Promise.resolve();
     });
-    expect(vibrate).not.toHaveBeenCalled();
+    expect(haptics.notificationAsync).not.toHaveBeenCalled();
   });
 });
 
