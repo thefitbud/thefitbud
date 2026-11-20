@@ -262,6 +262,15 @@ test("a skipped flow, or fewer results than selected flows, fails the gate", () 
   assert.deepEqual(buildGateSummary({ dir: short, platform: "ios" }).reasons, ["light: 1 flow results for 2 selected flows"]);
 });
 
+test("run-gate uninstalls the staging Android package before adb install", () => {
+  const gate = fs.readFileSync(path.join(here, "run-gate.sh"), "utf8");
+  const uninstall = gate.indexOf('adb uninstall "$DEVICE_APP_ID" || true');
+  const install = gate.indexOf("adb install -r -d");
+  assert.ok(uninstall >= 0, "uninstalls DEVICE_APP_ID before install");
+  assert.ok(install >= 0, "still runs adb install");
+  assert.ok(uninstall < install, "uninstall comes before the first adb install");
+});
+
 test("run-gate runs device-offline flows one at a time, offline, and the Z12-33 check is tagged for it", () => {
   const gate = fs.readFileSync(path.join(here, "run-gate.sh"), "utf8");
   assert.match(gate, /is_offline_flow "\$flow"/);
