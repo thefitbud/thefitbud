@@ -24,7 +24,7 @@ import { plannedRowsFromAssignment, type PlannedRow } from "../lib/plannedMealIt
 import { reportError } from "../lib/reportError";
 import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { AteOutForm } from "./food/AteOutForm";
+import { AteOutForm, type CoachDeviateSave } from "./food/AteOutForm";
 import { FoodNavHeader } from "./food/FoodNavHeader";
 import { amountWithUnit, formatAmount, unitNoun } from "./food/logLines";
 import { announceMealSaved } from "./food/mealSavedNotice";
@@ -49,6 +49,14 @@ type Props = {
   onCancel: () => void;
   onOpenFoodSearch?: () => void;
   onAskCoach?: () => void;
+  /**
+   * Z12-52: coach logs in person. Reuses TR-08a–c; saves through onCoachSave
+   * (trainer PUT) instead of the trainee sync deviate.
+   */
+  authorMode?: "trainee" | "coach";
+  /** Client display name when authorMode is coach (portion / ate-out copy). */
+  clientName?: string;
+  onCoachSave?: CoachDeviateSave;
 };
 
 function rowKcal(row: PortionRow): number | null {
@@ -103,6 +111,9 @@ function SomethingDifferentSheetBody({
   onCancel,
   onOpenFoodSearch,
   onAskCoach,
+  authorMode = "trainee",
+  clientName,
+  onCoachSave,
 }: Props) {
   const styles = useStyles();
   const theme = useTheme();
@@ -125,7 +136,9 @@ function SomethingDifferentSheetBody({
           },
         ]
       : styles.subScreen;
+  const isCoach = authorMode === "coach";
   const coachShort = coachName.split(/\s+/)[0] ?? coachName;
+  const clientShort = (clientName ?? "Client").split(/\s+/)[0] ?? "Client";
   const mealName = cleanFoodLabel(assignment.mealName);
 
   const [screen, setScreen] = useState<ScreenId>("menu");
@@ -172,27 +185,37 @@ function SomethingDifferentSheetBody({
     }
     setSaving(true);
     setError(null);
+    const items = kept.map(portionRowToLoggedItem);
     try {
-      await deviateMealAssignment(
-        sync,
-        assignment,
-        {
+      if (isCoach) {
+        if (!onCoachSave) throw new Error("Coach save is not wired.");
+        await onCoachSave({
           deviationKind: "portion_adjustment",
           notes: null,
-          photoIntent: null,
-          items: kept.map(portionRowToLoggedItem),
-        },
-        coachName,
-        relationshipId,
-      );
-      announceMealSaved({
-        relationshipId,
-        assignmentId: assignment.id,
-        localDate: assignment.localDate,
-        mealName,
-        kcal: portionTotal.unknown && portionTotal.kcal === 0 ? null : portionTotal.kcal,
-        kind: "portion_adjustment",
-      });
+          items,
+        });
+      } else {
+        await deviateMealAssignment(
+          sync,
+          assignment,
+          {
+            deviationKind: "portion_adjustment",
+            notes: null,
+            photoIntent: null,
+            items,
+          },
+          coachName,
+          relationshipId,
+        );
+        announceMealSaved({
+          relationshipId,
+          assignmentId: assignment.id,
+          localDate: assignment.localDate,
+          mealName,
+          kcal: portionTotal.unknown && portionTotal.kcal === 0 ? null : portionTotal.kcal,
+          kind: "portion_adjustment",
+        });
+      }
       onDone();
     } catch (err) {
       reportError("SomethingDifferentSheet.savePortion", err);
@@ -281,7 +304,7 @@ function SomethingDifferentSheetBody({
           },
         })}
       </View>
-      {onAskCoach ? (
+      {!isCoach && onAskCoach ? (
         <Pressable accessibilityRole="button" onPress={onAskCoach} style={styles.askCoach}>
           <MessageCircle size={16} strokeWidth={2.2} color={theme.colors.brand} />
           <Text variant="bodyStrong" tone="brand">
@@ -301,6 +324,9 @@ function SomethingDifferentSheetBody({
         timeZone={timeZone}
         onCancel={backToMenu}
         onSaved={onDone}
+        authorMode={authorMode}
+        clientName={clientName}
+        onCoachSave={onCoachSave}
       />
     </View>
   );
@@ -388,7 +414,9 @@ function SomethingDifferentSheetBody({
               Reset to plan
             </Text>
           </Pressable>
-          <Text variant="subhead">{coachShort} sees the difference</Text>
+          <Text variant="subhead">
+            {isCoach ? `${clientShort} sees this` : `${coachShort} sees the difference`}
+          </Text>
         </View>
         {error ? <ErrorBanner message={error} /> : null}
       </ScrollView>
