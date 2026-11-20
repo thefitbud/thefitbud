@@ -47,8 +47,19 @@ tags:
     repeat: 2
     delay: 100
     optional: true
+# Same date-independent home proof as common/sign-in-password.yaml (#515).
 - extendedWaitUntil:
-    visible: "Today's workout|Needs you|Choose mode"
+    visible:
+      id: "today-summary"
+    timeout: 3000
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "trainee-today"
+    timeout: 2000
+    optional: true
+- extendedWaitUntil:
+    visible: "Today's workout.*|This week|Rest day|Recovery is part of the plan|View summary|Needs you.*|Choose mode|preparing your plan"
     timeout: 30000
     optional: true
 - runFlow:
@@ -67,8 +78,18 @@ tags:
           text: "Sent to .*"
           optional: true
 - extendedWaitUntil:
-    visible: "Today's workout|Needs you|Choose mode"
-    timeout: 5000
+    visible:
+      id: "today-summary"
+    timeout: 3000
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "trainee-today"
+    timeout: 2000
+    optional: true
+- extendedWaitUntil:
+    visible: "Today's workout.*|This week|Rest day|Recovery is part of the plan|View summary|Needs you.*|Choose mode|preparing your plan"
+    timeout: 60000
 # --- signed in; screenshots allowed again ---
 
 # One sign-in, no error: none of the QT9 messages, and not bounced back to sign-in.
@@ -77,6 +98,6 @@ tags:
 - assertNotVisible: ".*Couldn't reach FitBud.*"
 - assertNotVisible: ".*we couldn't finish signing you in.*"
 - assertNotVisible: "Verify and sign in"
-- assertVisible: "Today's workout"
+- assertVisible: "Today's workout.*|This week|Rest day|Recovery is part of the plan|View summary|Needs you.*|Choose mode|preparing your plan"
 - takeScreenshot: auth-sign-in-code__signed-in
 - runFlow: ../../common/assert-no-crash.yaml

@@ -100,6 +100,9 @@ case "$PLATFORM" in
     # shellcheck source=../android-emulator-prep.sh
     source "$DEVICE_ROOT/scripts/qa/android-emulator-prep.sh"
     suppress_emulator_error_dialogs || device_warn "could not hide emulator error dialogs"
+    # Fresh install: a signature/version mismatch against a leftover staging APK
+    # yields INSTALL_FAILED_UPDATE_INCOMPATIBLE even with -r -d.
+    adb uninstall "$DEVICE_APP_ID" || true
     if ! adb install -r -d "$APP" >/dev/null; then
       device_warn "adb install failed once; waiting for a steady adb link and trying again"
       adb_wait "install retry"
