@@ -36,9 +36,10 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await expect(nav.getByRole("link", { name: "Profile" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Notifications" })).toBeVisible();
     await expect(nav.getByRole("link", { name: "Ended clients" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Units & language" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Help" })).toBeVisible();
-    await expect(nav.getByRole("link", { name: "Privacy & data" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Units and language" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Business and packages" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Privacy and data" })).toBeVisible();
+    await expect(nav.getByRole("link", { name: "Help" })).toHaveCount(0);
     await expect(page.getByTestId("screen-TW-28")).toBeVisible();
 
     await page.goto("/settings/help");

@@ -7,6 +7,7 @@ import { apiClient } from "../../lib/api";
 import { CoachingLifecycleModals } from "../../components/coaching/CoachingLifecycleModals";
 import { pageClientDirectory } from "../../lib/clients";
 import { ErrorState } from "../../components/StatePanels";
+import { SettingsCard } from "./SettingsLayout";
 
 export function EndedClientsSettingsPage() {
   const [items, setItems] = useState<ClientDirectoryItem[]>([]);
@@ -61,12 +62,12 @@ export function EndedClientsSettingsPage() {
   }, [load]);
 
   return (
-    <div className="settings-panel" data-testid="screen-TW-30">
-      <h2>Ended clients</h2>
-      <p className="muted">
-        Coaching you ended stays read-only until you reactivate with the same
-        client.
-      </p>
+    <SettingsCard
+      title="Ended clients"
+      aside="Read-only until you reactivate with the same client"
+      testId="screen-TW-30"
+    >
+      <div className="settings-card-pad">
       {loading ? <p className="muted">Loading…</p> : null}
       {error ? (
         <ErrorState
@@ -131,6 +132,7 @@ export function EndedClientsSettingsPage() {
           }}
         />
       ) : null}
-    </div>
+      </div>
+    </SettingsCard>
   );
 }

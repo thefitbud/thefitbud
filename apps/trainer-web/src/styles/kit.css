@@ -355,6 +355,7 @@
 .ui-cbx:focus-visible,
 .ui-rdo:focus-visible,
 .ui-tgl:focus-visible { outline: none; box-shadow: var(--focus); border-radius: 8px; }
+.ui-tgl:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .ui-stepper {
   display: inline-flex;
