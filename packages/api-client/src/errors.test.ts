@@ -52,6 +52,11 @@ describe("userFacingError", () => {
       action: "retry",
     });
     expect(isNetworkFailure(new TypeError("Network request failed"))).toBe(true);
+    // Plain Error("network down") must not leak as looksHumanCopy (Z12-64).
+    expect(isNetworkFailure(new Error("network down"))).toBe(true);
+    expect(
+      userFacingMessage(new Error("network down"), { fallback: "WO-UNLOG" }),
+    ).toBe(USER_FACING_OFFLINE);
   });
 
   it("maps 5xx and UNKNOWN_ERROR to the server copy", () => {

@@ -139,10 +139,10 @@ export function isNetworkFailure(err: unknown): boolean {
     err.name === "TimeoutError" ||
     err.name === "NetworkError" ||
     (err instanceof TypeError &&
-      /network request failed|failed to fetch|network error|load failed|fetch failed/i.test(
+      /network request failed|failed to fetch|network error|network down|load failed|fetch failed/i.test(
         err.message,
       )) ||
-    /offline|network request failed|failed to fetch|network error|load failed/i.test(
+    /offline|network request failed|failed to fetch|network error|network down|load failed/i.test(
       err.message,
     )
   );
