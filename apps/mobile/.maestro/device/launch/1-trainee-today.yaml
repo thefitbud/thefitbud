@@ -18,14 +18,16 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
-# Banner drain + above-the-fold home (FitBud #485). Then require the plan-gated
-# heading: "Today's workout" on a training day, "Today's workout: rest day" on a
-# rest day (iOS). Scroll if Z12-46 put it under This week / coach notes.
+# Banner drain + above-the-fold home (FitBud #485). Prefer today-summary
+# testID (date-independent). Rest day / Recovery / Today's workout cover
+# Android rest days where the srOnly heading is missing from the a11y tree.
 - runFlow: ../../common/wait-trainee-today-ready.yaml
 - scrollUntilVisible:
-    element: "Today's workout.*"
+    element:
+      id: "today-summary"
     timeout: 30000
 - assertVisible: "Today"
+- assertVisible: "Today's workout.*|Rest day|Recovery is part of the plan|View summary"
 # The heading also shows when the day's data failed to load (TodayTab's catch shows a
 # "Couldn't refresh" banner), so assert that banner is absent.
 - assertNotVisible: ".*Couldn't refresh.*"

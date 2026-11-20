@@ -1333,18 +1333,26 @@ mealRoutes.put(
     const before = loaded.compliance;
     const nextNotes = body.notes ?? null;
     const nextDeviationKind = body.outcome === "modified" ? (body.deviationKind ?? null) : null;
-    // A trainer can keep a client's food list but never author one.
+    const nextItems = body.items;
+    const itemKinds = new Set(["logged_foods", "portion_adjustment", "restaurant"]);
+    // Z12-52: a coach may author portion / ate-out / logged-foods with items.
+    // Without items, `logged_foods` is only valid when keeping a client's list.
     if (
       nextDeviationKind === "logged_foods" &&
-      before?.deviationKind !== "logged_foods"
+      before?.deviationKind !== "logged_foods" &&
+      !(nextItems && nextItems.length > 0)
     ) {
       return fail(c, 400, "INVALID_REQUEST", "There is no food list to keep.");
     }
     // D-W6-40: a client's logged food list is never erased. On such an entry the
-    // trainer may change only the note.
+    // trainer may change only the note (not the foods, outcome, or kind).
+    const traineeFoodList =
+      before?.deviationKind === "logged_foods" && before.loggedByRole === "trainee";
     if (
-      before?.deviationKind === "logged_foods" &&
-      (body.outcome !== "modified" || nextDeviationKind !== "logged_foods")
+      traineeFoodList &&
+      (body.outcome !== "modified" ||
+        nextDeviationKind !== "logged_foods" ||
+        (nextItems && nextItems.length > 0))
     ) {
       return fail(
         c,
@@ -1360,24 +1368,53 @@ mealRoutes.put(
       return coachMealVersionConflict(c);
     }
 
-    const macros =
-      body.outcome === "confirmed"
-        ? prescriptionMacros(assignment.mealPrescriptionJson)
-        : body.outcome === "modified" && nextDeviationKind === "logged_foods" && before
-          ? {
-              itemsJson: before.itemsJson,
-              kcalScaled: before.kcalScaled,
-              proteinScaled: before.proteinScaled,
-              carbsScaled: before.carbsScaled,
-              fatScaled: before.fatScaled,
-            }
-          : {
-              itemsJson: null,
-              kcalScaled: null,
-              proteinScaled: null,
-              carbsScaled: null,
-              fatScaled: null,
-            };
+    let macros: {
+      itemsJson: string | null;
+      kcalScaled: number | null;
+      proteinScaled: number | null;
+      carbsScaled: number | null;
+      fatScaled: number | null;
+    };
+    if (body.outcome === "confirmed") {
+      macros = prescriptionMacros(assignment.mealPrescriptionJson);
+    } else if (
+      body.outcome === "modified" &&
+      nextDeviationKind &&
+      itemKinds.has(nextDeviationKind) &&
+      nextItems &&
+      nextItems.length > 0
+    ) {
+      // In-person Something different: portion, ate out, or logged foods.
+      macros = await buildLoggedFoodsCompliance(db, {
+        traineeUserId: relationship.traineeUserId,
+        relationshipId: relationship.id,
+        items: nextItems,
+        allowSaveToMyFoods: nextDeviationKind === "logged_foods",
+      });
+    } else if (
+      body.outcome === "modified" &&
+      nextDeviationKind &&
+      itemKinds.has(nextDeviationKind) &&
+      before &&
+      before.deviationKind === nextDeviationKind
+    ) {
+      // Note-only edit of an entry that already carries items/macros.
+      macros = {
+        itemsJson: before.itemsJson,
+        kcalScaled: before.kcalScaled,
+        proteinScaled: before.proteinScaled,
+        carbsScaled: before.carbsScaled,
+        fatScaled: before.fatScaled,
+      };
+    } else {
+      macros = {
+        itemsJson: null,
+        kcalScaled: null,
+        proteinScaled: null,
+        carbsScaled: null,
+        fatScaled: null,
+      };
+    }
 
     let entryId: string;
     let status: 200 | 201;
@@ -1429,7 +1466,12 @@ mealRoutes.put(
       if (
         before.outcome === body.outcome &&
         before.deviationKind === nextDeviationKind &&
-        before.notes === nextNotes
+        before.notes === nextNotes &&
+        before.itemsJson === macros.itemsJson &&
+        before.kcalScaled === macros.kcalScaled &&
+        before.proteinScaled === macros.proteinScaled &&
+        before.carbsScaled === macros.carbsScaled &&
+        before.fatScaled === macros.fatScaled
       ) {
         // Nothing changed: no audit row, no notification, no new version.
         const unchanged = {

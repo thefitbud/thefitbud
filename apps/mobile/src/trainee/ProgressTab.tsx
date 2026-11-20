@@ -175,6 +175,16 @@ export function monthTickPoints<T extends { date: string }>(points: T[]): T[] {
  * the pill stays inside [0, chartWidth - pillWidth]. Before the pill has been
  * measured (pillWidth 0) it is only kept off the left edge.
  */
+/** Anchor for month labels so the first/last are not clipped at the chart edge. */
+export function monthTickTextAnchor(
+  index: number,
+  count: number,
+): "start" | "middle" | "end" {
+  if (index === 0) return "start";
+  if (index === count - 1) return "end";
+  return "middle";
+}
+
 export function clampMarkerLeft(
   markerX: number,
   pillWidth: number,
@@ -344,7 +354,7 @@ function WeightTrendChart({
             fontSize={11}
             fill={theme.colors.ink3}
             fontWeight="500"
-            textAnchor="middle"
+            textAnchor={monthTickTextAnchor(i, monthTicks.length)}
           >
             {monthLabel(p.date)}
           </SvgText>

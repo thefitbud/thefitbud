@@ -35,7 +35,7 @@
 }
 
 .assign-close:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -89,8 +89,8 @@
 }
 
 .plan-civil-date-control:focus-within {
-  border-color: var(--indigo, var(--coach-ink));
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  border-color: var(--brand);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -199,13 +199,13 @@
 }
 
 .pp-part-segment button:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
 .pp-status-filter select.is-filtered {
-  border-color: var(--indigo, var(--coach-ink));
-  color: var(--indigo, var(--coach-ink));
+  border-color: var(--brand);
+  color: var(--brand);
   font-weight: 600;
 }
 

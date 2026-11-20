@@ -11,8 +11,12 @@ vi.mock("expo-modules-core", () => ({
   EventEmitter: class {},
 }));
 
-const { clampMarkerLeft, monthTickPoints, weightSeriesLast12Weeks } =
-  await import("./ProgressTab");
+const {
+  clampMarkerLeft,
+  monthTickPoints,
+  monthTickTextAnchor,
+  weightSeriesLast12Weeks,
+} = await import("./ProgressTab");
 
 describe("clampMarkerLeft", () => {
   it("centres the pill on the marker when there is room", () => {
@@ -29,6 +33,17 @@ describe("clampMarkerLeft", () => {
   });
   it("before measuring, only keeps off the left edge", () => {
     expect(clampMarkerLeft(0, 0, 329)).toBe(0);
+  });
+});
+
+describe("monthTickTextAnchor", () => {
+  it("insets the first and last labels so Aug is not clipped as ug", () => {
+    expect(monthTickTextAnchor(0, 3)).toBe("start");
+    expect(monthTickTextAnchor(1, 3)).toBe("middle");
+    expect(monthTickTextAnchor(2, 3)).toBe("end");
+  });
+  it("a single label starts at the left edge", () => {
+    expect(monthTickTextAnchor(0, 1)).toBe("start");
   });
 });
 

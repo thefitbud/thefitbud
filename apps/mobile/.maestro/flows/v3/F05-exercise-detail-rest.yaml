@@ -1,0 +1,104 @@
+appId: com.thefitbud.mobile.staging
+name: F05 Exercise detail and rest (How to, History, rest +15 / −15 / Skip, rest ended)
+tags:
+  - device
+  - trainee
+  - z12-45
+---
+# F05 (Z12-45): "How to do it" opens the exercise's own detail (W-27), not the
+# coach message (13 Nov #9), with History beside it (W-26); and the rest bar's
+# every key (W-05a), then a rest that runs out (W-05b). Rohan, local demo seed,
+# in the session F03 left open.
+#
+# Screens: W-27, W-26, W-05a, W-05b.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+# The first load after a cold start can take over 30 s on the CI iOS simulator.
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 120000
+- runFlow: ../../device/z12-45/open-log.yaml
+
+# ---- W-05a: the rest bar's keys --------------------------------------------------------
+- tapOn:
+    text: "Log set [0-9]+ ·.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Rest, [0-9]+:[0-9]{2} left"
+    timeout: 10000
+- assertVisible: "Rest · next set [0-9]+|Rest"
+- tapOn: "15 seconds more"
+- tapOn: "15 seconds less"
+- takeScreenshot: W-05a-rest-running
+- tapOn: "Skip rest"
+- assertNotVisible: "Rest, .* left"
+# A skipped rest is over, not "done": no green bar.
+- assertNotVisible: "Rest done"
+
+# ---- W-27: How to ---------------------------------------------------------------
+# The exercise with logged sets, opened if it folded when its last set went in.
+- runFlow: ../../device/z12-45/show-logged-set.yaml
+- tapOn:
+    text: "More for .*"
+    index: 0
+- tapOn: "How to do it"
+- extendedWaitUntil:
+    visible: "Back to workout"
+    timeout: 15000
+- assertVisible: "How to"
+- assertVisible: "History"
+# The exercise's detail, not the coach message sheet.
+- assertNotVisible: "Message preview"
+- takeScreenshot: W-27-exercise-how-to
+
+# ---- W-26: History -----------------------------------------------------------------
+- tapOn: "History"
+# This session's logged sets of the exercise: the one logged just above.
+- assertVisible: ".*(kg × [0-9]+|[0-9]+ reps)"
+- takeScreenshot: W-26-exercise-history
+- tapOn: "How to"
+- tapOn: "Back to workout"
+- extendedWaitUntil:
+    visible: "Minimise workout"
+    timeout: 15000
+- runFlow: ../../common/assert-no-crash.yaml
+
+# The same two from the menu's second row.
+- tapOn:
+    text: "More for .*"
+    index: 0
+- tapOn: "History and records"
+- extendedWaitUntil:
+    visible: "Back to workout"
+    timeout: 15000
+- tapOn: "Back to workout"
+
+# ---- W-05b: a rest that runs out ----------------------------------------------------------
+- tapOn:
+    text: "Log set [0-9]+ ·.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Rest, [0-9]+:[0-9]{2} left"
+    timeout: 10000
+- repeat:
+    times: 14
+    while:
+      visible: "Rest, ([1-9][0-9]*:[0-9]{2}|0:[4-5][0-9]) left"
+    commands:
+      - tapOn: "15 seconds less"
+# Under 40 s are left: let it run out on its own.
+- extendedWaitUntil:
+    visible: "Rest done"
+    timeout: 60000
+- assertVisible: "Next: (set [0-9]+ · .*|finish workout)"
+- takeScreenshot: W-05b-rest-ended
+- tapOn: "OK"
+- assertNotVisible: "Rest done"
+- runFlow: ../../common/assert-no-crash.yaml

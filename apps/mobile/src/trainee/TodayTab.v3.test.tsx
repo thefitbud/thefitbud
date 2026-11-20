@@ -1093,6 +1093,25 @@ describe("Moving between days (Z12-40)", () => {
   });
 });
 
+describe("Z12-46fu coach note card", () => {
+  it("shows Read · 7:00 pm and marks the first note", async () => {
+    // 13:30 UTC = 7:00 pm Asia/Kolkata
+    coachNoteItems = [
+      {
+        id: "00000000-0000-4000-8000-0000000c0046",
+        body: "Try 42.5 kg on the RDLs today if set 2 feels easy.",
+        sharedAt: "2026-10-08T13:30:00.000Z",
+        createdAt: "2026-10-08T13:30:00.000Z",
+        seenAt: "2026-10-08T14:00:00.000Z",
+      },
+    ];
+    renderToday();
+    await screen.findByText("From your coach");
+    expect(screen.getByTestId("coach-note-first")).toBeTruthy();
+    expect(screen.getByText(/Read · .*7:00 pm/)).toBeTruthy();
+  });
+});
+
 // Each test starts with no cached day views (Z12-40's per-day cache).
 beforeEach(() => {
   clearDayViews();

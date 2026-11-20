@@ -663,6 +663,120 @@ describe("workout assignment and execution", () => {
     expect(withRpeBody.data.sessionRpe).toBe(8);
   });
 
+  it("lets the trainee correct, skip and re-log a set while the workout is open, and refuses it once finished (Z12-45)", async () => {
+    const { traineeToken, relationshipId, today, toDate } =
+      await reachEffectivePlan("relog", false, true);
+    const headers = {
+      Authorization: `Bearer ${traineeToken}`,
+      "x-fitbud-role": "trainee",
+      "Content-Type": "application/json",
+    };
+    const listed = await app.request(
+      `/workouts/relationships/${relationshipId}/assignments?fromDate=${today}&toDate=${toDate}`,
+      { headers },
+      testEnv(),
+    );
+    const listBody = (await listed.json()) as {
+      data: { items: Array<{ id: string; status: string; windowStartsAt: string }> };
+    };
+    const assignmentId = listBody.data.items.find(
+      (item) => item.status === "assigned" && windowOpen(item),
+    )!.id;
+    const started = await app.request(
+      `/workouts/assignments/${assignmentId}/start`,
+      { method: "POST", headers: { ...headers, "Idempotency-Key": "start-relog" } },
+      testEnv(),
+    );
+    type SetBody = {
+      id: string;
+      status: string;
+      prescribedReps: number | null;
+      actualReps: number | null;
+      actualLoadLabel: string | null;
+      completedAt: string | null;
+    };
+    type ExecutionBody = {
+      data: { id: string; status: string; exercises: Array<{ sets: SetBody[] }> };
+    };
+    const startedBody = (await started.json()) as ExecutionBody;
+    const executionId = startedBody.data.id;
+    const target = startedBody.data.exercises[0]!.sets[0]!;
+    const setPath = `/workouts/executions/${executionId}/sets/${target.id}`;
+    const post = async (path: string, body: unknown) => {
+      const res = await app.request(
+        path,
+        { method: "POST", headers, body: JSON.stringify(body) },
+        testEnv(),
+      );
+      return { status: res.status, body: (await res.json()) as ExecutionBody };
+    };
+    const setOf = (body: ExecutionBody) =>
+      body.data.exercises[0]!.sets.find((set) => set.id === target.id)!;
+
+    // First log.
+    const first = await post(`${setPath}/complete`, { actualReps: 3, actualLoadKg: 40 });
+    expect(first.status).toBe(200);
+    expect(setOf(first.body)).toMatchObject({
+      status: "modified",
+      actualReps: 3,
+      actualLoadLabel: "40 kg",
+    });
+    const firstLoggedAt = setOf(first.body).completedAt;
+
+    // A correction replaces the values and keeps the time it was logged.
+    const corrected = await post(`${setPath}/complete`, { actualReps: 4, actualLoadKg: 42.5 });
+    expect(corrected.status).toBe(200);
+    expect(setOf(corrected.body)).toMatchObject({
+      status: "modified",
+      actualReps: 4,
+      actualLoadLabel: "42.5 kg",
+      completedAt: firstLoggedAt,
+    });
+
+    // Marked not done: skipped, with nothing left of what was logged.
+    const skipped = await post(`${setPath}/skip`, {});
+    expect(skipped.status).toBe(200);
+    expect(setOf(skipped.body)).toMatchObject({
+      status: "skipped",
+      actualReps: null,
+      actualLoadLabel: null,
+    });
+
+    // A skipped set can still be logged, as planned this time.
+    const relogged = await post(`${setPath}/complete`, {});
+    expect(relogged.status).toBe(200);
+    expect(setOf(relogged.body)).toMatchObject({
+      status: "completed",
+      actualReps: target.prescribedReps,
+    });
+
+    const finished = await app.request(
+      `/workouts/executions/${executionId}/complete`,
+      {
+        method: "POST",
+        headers: { ...headers, "Idempotency-Key": "complete-relog" },
+        body: JSON.stringify({}),
+      },
+      testEnv(),
+    );
+    expect(finished.status).toBe(200);
+
+    // A finished workout does not change.
+    const late = await post(`${setPath}/complete`, { actualReps: 9 });
+    expect(late.status).toBe(409);
+    const lateSkip = await post(`${setPath}/skip`, {});
+    expect(lateSkip.status).toBe(409);
+    const read = await app.request(
+      `/workouts/executions/${executionId}`,
+      { headers },
+      testEnv(),
+    );
+    expect(setOf((await read.json()) as ExecutionBody)).toMatchObject({
+      status: "completed",
+      actualReps: target.prescribedReps,
+    });
+  });
+
   it("supports pause, resume, and skip assignment", async () => {
     const { traineeToken, relationshipId, today, toDate } =
       await reachEffectivePlan("pause", false, true);

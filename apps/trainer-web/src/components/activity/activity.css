@@ -51,7 +51,7 @@
 }
 
 .activity-page .segment-btn:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -90,11 +90,11 @@
 .activity-page .filter-pill.is-on {
   background: var(--pale-lavender, #edeaff);
   border-color: transparent;
-  color: var(--indigo, #4527c6);
+  color: var(--brand);
 }
 
 .activity-page .filter-pill:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -378,7 +378,7 @@
   font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--indigo, #4527c6);
+  color: var(--brand);
   background: none;
   border: 0;
   padding: 0.5rem 0;
@@ -387,7 +387,7 @@
 }
 
 .activity-panel-note-link:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: 4px;
 }

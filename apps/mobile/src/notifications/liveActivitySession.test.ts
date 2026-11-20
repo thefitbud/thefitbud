@@ -133,7 +133,7 @@ describe("parsing helpers", () => {
   it("reads previous-session labels", () => {
     expect(historyPair("22.5 × 10")).toEqual({ kg: 22.5, reps: 10 });
     expect(historyPair("12 reps")).toEqual({ kg: 0, reps: 12 });
-    expect(historyPair("— first time")).toBeNull();
+    expect(historyPair("— first")).toBeNull();
     expect(historyPair(undefined)).toBeNull();
   });
 
