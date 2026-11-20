@@ -284,6 +284,7 @@ export function CheckinReviewScreen({
 
   return (
     <Screen
+      v3
       title={name}
       chrome="app"
       showHeader={false}

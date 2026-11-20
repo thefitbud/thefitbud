@@ -107,7 +107,10 @@ export function ActivityFeedScreen({ relationshipId, header }: Props) {
 
   return (
     <Screen
+      v3
       title="Clients"
+      chrome="app"
+      showHeader={false}
       subtitle="Lookup and recent activity."
       refreshing={loading}
       onRefresh={() => {

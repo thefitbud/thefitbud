@@ -3,19 +3,22 @@ import { CircleCheck, CloudAlert, WifiOff } from "lucide-react-native";
 import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 
-export const ATTENTION_EMPTY_TITLE = "Nobody needs you right now";
+/** TM-01d: all clear. */
+export const ATTENTION_EMPTY_TITLE = "All caught up";
 export const ATTENTION_EMPTY_BODY =
-  "New items show up here as your clients log, or miss a log. Pull down to check again.";
-export const ATTENTION_ERROR_TITLE = "Couldn't load Attention";
+  "Nobody needs you right now. We’ll notify you when a client misses something or asks.";
+export const ATTENTION_ERROR_TITLE = "Couldn't load Needs you";
 export const ATTENTION_ERROR_BODY =
-  "Pull down to try again. If it keeps happening, email tech@thefitbud.com from More › Help.";
+  "Pull down to try again. If it keeps happening, email support from More › Help.";
 
-/** Frame 43: all clear. */
+/** TM-01d: all clear. */
 export function AttentionEmptyState() {
   return (
     <View style={styles.state}>
-      <View style={[styles.tile, { backgroundColor: "#EAFBF1" }]}>
-        <CircleCheck color="#0B7A4B" size={36} strokeWidth={1.75} />
+      <View style={[styles.tile, { backgroundColor: "#EDEAFF" }]}>
+        <View style={styles.checkRing}>
+          <CircleCheck color={colors.deepNavy} size={28} strokeWidth={1.75} />
+        </View>
       </View>
       <Text style={styles.title} accessibilityRole="header">
         {ATTENTION_EMPTY_TITLE}
@@ -68,6 +71,14 @@ const styles = StyleSheet.create({
     height: 72,
     justifyContent: "center",
     width: 72,
+  },
+  checkRing: {
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
   },
   title: {
     color: colors.deepNavy,

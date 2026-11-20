@@ -7,7 +7,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { ChevronLeft, ChevronRight, KeyRound } from "lucide-react-native";
+import { ChevronRight, KeyRound } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import { brand, ink, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
@@ -22,6 +22,7 @@ import type {
 import { Screen } from "../components/Screen";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { ThemeScope } from "../providers/ThemeProvider";
 import { stage1Api } from "../lib/stage1Api";
 
 /** `PUT /me/trainer-profile` is installed on the client at runtime (api-client stage1-augment) but is not in the typed wrappers. */
@@ -80,7 +81,12 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <Screen title="Change password" subtitle="Current password, then a new one">
+    <Screen
+      v3
+      title="Change password"
+      chrome="app"
+      subtitle="Current password, then a new one"
+    >
       {error ? <ErrorBanner message={error} /> : null}
       {done ? (
         <View style={styles.formStack}>
@@ -171,16 +177,16 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
   }
 
   return (
+    <ThemeScope scheme="system">
     <SafeAreaView style={styles.safe}>
       <View style={styles.bar}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Back to More"
+          accessibilityLabel="Cancel"
           onPress={onBack}
           style={styles.barSide}
         >
-          <ChevronLeft color={brand.indigo} size={22} strokeWidth={2} />
-          <Text style={styles.barLink}>More</Text>
+          <Text style={styles.barLink}>Cancel</Text>
         </Pressable>
         <Text style={styles.barTitle} accessibilityRole="header">
           Profile
@@ -257,6 +263,7 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+    </ThemeScope>
   );
 }
 

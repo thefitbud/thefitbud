@@ -749,6 +749,7 @@ export function AttentionTab({
 
   return (
     <Screen
+      v3
       title={ATTENTION_SCREEN_TITLE}
       showHeader={false}
       chrome="app"

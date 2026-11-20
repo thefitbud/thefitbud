@@ -182,7 +182,9 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
 
   return (
     <Screen
+      v3
       title="Notifications"
+      chrome="app"
       footerVariant="toast"
       footer={
         snack ? (

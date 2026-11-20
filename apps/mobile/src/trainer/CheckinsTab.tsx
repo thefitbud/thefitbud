@@ -76,6 +76,7 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
 
   return (
     <Screen
+      v3
       title="Check-ins"
       chrome="app"
       showHeader={false}

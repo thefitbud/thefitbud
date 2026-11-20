@@ -395,6 +395,7 @@ export function ClientStatusScreen({
 
   return (
     <Screen
+      v3
       title=""
       showHeader={false}
       chrome="app"

@@ -11,16 +11,16 @@ import {
 } from "./states";
 
 describe("attention states", () => {
-  it("renders the all-clear state (frame 43)", () => {
+  it("renders the all-clear state (TM-01d)", () => {
     render(<AttentionEmptyState />);
-    expect(screen.getByText("Nobody needs you right now")).toBeTruthy();
+    expect(screen.getByText("All caught up")).toBeTruthy();
     expect(screen.getByText(ATTENTION_EMPTY_BODY)).toBeTruthy();
   });
 
-  it("renders the error state and Retry refetches (frame 45)", () => {
+  it("renders the error state and Retry refetches (TM-01g)", () => {
     const onRetry = vi.fn();
     render(<AttentionErrorState onRetry={onRetry} />);
-    expect(screen.getByText("Couldn't load Attention")).toBeTruthy();
+    expect(screen.getByText("Couldn't load Needs you")).toBeTruthy();
     expect(screen.getByText(ATTENTION_ERROR_BODY)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledTimes(1);

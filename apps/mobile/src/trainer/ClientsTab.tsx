@@ -228,7 +228,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
 
   if (segment === "activity") {
     return (
-      <Screen title="Clients" chrome="app" showHeader>
+      <Screen v3 title="Clients" chrome="app" showHeader>
         <SegmentBar segment={segment} onChange={setSegment} />
         <ActivityFeedScreen />
       </Screen>
@@ -237,6 +237,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
 
   return (
     <Screen
+      v3
       title="Clients"
       chrome="app"
       refreshing={refreshing}

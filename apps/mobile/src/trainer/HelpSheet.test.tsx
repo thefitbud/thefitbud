@@ -11,9 +11,11 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
 vi.mock("lucide-react-native", () => ({
+  Bug: "Bug",
   Check: "Check",
   ClipboardList: "ClipboardList",
   Copy: "Copy",
+  Mail: "Mail",
   X: "X",
 }));
 vi.mock("expo-constants", () => ({

@@ -113,9 +113,9 @@ describe("AttentionTab load states", () => {
     api.getAttentionGroups.mockRejectedValue(new TypeError("Failed to fetch"));
     mount();
 
-    expect(await screen.findByText("Couldn't load Attention")).toBeTruthy();
+    expect(await screen.findByText("Couldn't load Needs you")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
-    expect(screen.queryByText("Nobody needs you right now")).toBeNull();
+    expect(screen.queryByText("All caught up")).toBeNull();
     expect(screen.queryByText(/You're offline/)).toBeNull();
     // The title and the chip both read "Needs you"; neither carries a count.
     expect(screen.getAllByText("Needs you")).toHaveLength(2);
@@ -134,7 +134,7 @@ describe("AttentionTab load states", () => {
       await screen.findByText(/You're offline\. Showing the last update from /),
     ).toBeTruthy();
     expect(screen.getByText("Rohan Mehta")).toBeTruthy();
-    expect(screen.queryByText("Couldn't load Attention")).toBeNull();
+    expect(screen.queryByText("Couldn't load Needs you")).toBeNull();
   });
 
   it("a server error with a cache is the error state, reported, with no offline line", async () => {
@@ -151,7 +151,7 @@ describe("AttentionTab load states", () => {
     });
     api.getAttentionGroups.mockRejectedValue(failure);
     mount();
-    expect(await screen.findByText("Couldn't load Attention")).toBeTruthy();
+    expect(await screen.findByText("Couldn't load Needs you")).toBeTruthy();
     expect(screen.queryByText(/You're offline/)).toBeNull();
     expect(reportError).toHaveBeenCalledWith("attention.load", failure);
   });
@@ -167,7 +167,7 @@ describe("AttentionTab load states", () => {
     expect(await screen.findByText("Rohan Mehta")).toBeTruthy();
     expect(api.getAttentionGroups).toHaveBeenCalledTimes(2);
     await waitFor(() =>
-      expect(screen.queryByText("Couldn't load Attention")).toBeNull(),
+      expect(screen.queryByText("Couldn't load Needs you")).toBeNull(),
     );
   });
   it("a load started for trainer A that resolves after B signs in writes nothing under B (Z12-33)", async () => {
