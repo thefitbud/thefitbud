@@ -1,6 +1,6 @@
 import { useRef, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ApiClientError, FitBudApiClient } from "@fitbud/api-client";
+import { ApiClientError, FitBudApiClient, userFacingMessage } from "@fitbud/api-client";
 import { accountArchivedErrorDetailsSchema } from "@fitbud/contracts";
 import {
   ACCOUNT_DELETION_CONFIRM_WORD,
@@ -56,7 +56,7 @@ async function activeClientsCopy(client: FitBudApiClient, err: ApiClientError): 
   } catch {
     // Fall through to the API's static message.
   }
-  return err.message;
+  return userFacingMessage(err);
 }
 
 export async function requestAccountDeletion(input: {
@@ -80,7 +80,7 @@ export async function requestAccountDeletion(input: {
           return { kind: "archived", purgeAfter: details.data.purgeAfter };
         }
       }
-      return { kind: "error", copy: err.message };
+      return { kind: "error", copy: userFacingMessage(err) };
     }
     return { kind: "error", copy: "Something went wrong. Try again." };
   }
@@ -170,9 +170,7 @@ export function PrivacyDataPage() {
           return;
         }
         setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Something went wrong. Try again.",
+          userFacingMessage(err, { fallback: "Something went wrong. Try again." }),
         );
         return;
       }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Outlet, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { ClientWorkspace } from "@fitbud/contracts";
 import {
   ErrorState,
@@ -123,7 +123,7 @@ export function ClientWorkspaceLayout() {
             errorKindFromFailure({
               status: apiError?.status,
               code: apiError?.code,
-              message: err instanceof Error ? err.message : undefined,
+              message: err instanceof Error ? userFacingMessage(err) : undefined,
             }),
           );
           const rid = apiError?.requestId;

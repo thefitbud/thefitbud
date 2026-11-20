@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { CircleAlert } from "lucide-react-native";
-import { ApiClientError, type FitBudApiClient } from "@fitbud/api-client";
+import { ApiClientError, type FitBudApiClient, userFacingMessage } from "@fitbud/api-client";
 import { accountArchivedErrorDetailsSchema, type Role } from "@fitbud/contracts";
 import {
   ACCOUNT_DELETION_CONFIRM_WORD,
@@ -96,7 +96,7 @@ async function activeClientsCopy(
     }
   }
   // The API's own static text ("End coaching with your clients first.").
-  return err.message;
+  return userFacingMessage(err);
 }
 
 type Step = "confirm" | "proof";

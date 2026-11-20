@@ -8,7 +8,7 @@ import {
   localDateTimeToUtcIso,
   nextCalendarWeekRange,
 } from "@fitbud/core";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { stage1Api } from "../../lib/stage1-api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import type { PublishIssues } from "../builder/validation";
@@ -141,7 +141,7 @@ export function AssignPlanModal({
         if (cancelled) return;
         setTodayMeals({
           status: "error",
-          message: err instanceof Error ? err.message : "Couldn't load today's meals.",
+          message: userFacingMessage(err, { fallback: "Couldn't load today's meals." }),
           onRetry: () => setTodayMealsEpoch((value) => value + 1),
         });
       });
@@ -202,7 +202,7 @@ export function AssignPlanModal({
       onAssigned(result);
     } catch (err) {
       setFailure(
-        err instanceof ApiClientError ? err.message : "Couldn't create this week's schedule",
+        userFacingMessage(err, { fallback: "Couldn't create this week's schedule" }),
       );
     } finally {
       setActing(false);

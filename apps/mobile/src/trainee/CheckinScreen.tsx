@@ -9,7 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   Checkin,
   CheckinFieldDefinition,
@@ -682,7 +682,7 @@ function CheckinScreenInner({
         reportError("checkin.loadForm", err);
         const failure = checkinFormLoadFailure(err);
         setForm(null);
-        setFormError(failure.message);
+        setFormError(userFacingMessage(failure));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -919,7 +919,7 @@ function CheckinScreenInner({
       reportError("checkin.submit", err);
       if (err instanceof ApiClientError) {
         // The API's own curated message, never a guess about the cause.
-        setError(err.message);
+        setError(userFacingMessage(err));
         setStep("done");
       } else if (isNetworkFailure(err)) {
         setOffline(true);
@@ -927,7 +927,7 @@ function CheckinScreenInner({
       } else {
         // A client/server disagreement is not "offline" and is not the
         // trainee's mistake: a short code, and the form stays open.
-        setError("Couldn't send the check-in (CHK-SUBMIT). Try again.");
+        setError("Couldn't send the check-in. Try again.");
       }
     } finally {
       setActing(false);
@@ -1365,11 +1365,9 @@ export function TodayCheckinCard({
       // Only the API's own curated message is shown as it is; anything else
       // (a client/server disagreement, no connection) is a short code.
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : isNetworkFailure(err)
-            ? "Couldn't reach FitBud (CHK-NET). Check your connection and try again."
-            : "Couldn't load your check-in (CHK-CARD). Try again.",
+        userFacingMessage(err, {
+          fallback: "Couldn't load your check-in. Try again.",
+        }),
       );
     } finally {
       setLoading(false);

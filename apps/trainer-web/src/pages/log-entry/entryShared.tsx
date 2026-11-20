@@ -1,6 +1,6 @@
 import { useRef, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { formatCivilDate } from "@fitbud/core";
 import { windowDates } from "../log-workout/logWorkoutModel";
 import "../log-workout/log-workout.css";
@@ -25,7 +25,7 @@ export const RELOAD_CODES = new Set([
 
 export function classifyFailure(err: unknown, screen: string): SaveFailure {
   if (err instanceof ApiClientError) {
-    return { kind: "api", message: err.message, code: err.code };
+    return { kind: "api", message: userFacingMessage(err), code: err.code };
   }
   // A rejected fetch is a TypeError; anything else (a ZodError, say) is a
   // client/server disagreement and must not read as a connection problem.
@@ -176,8 +176,8 @@ export function FailureBanner({
           : failure.kind === "api"
             ? RELOAD_CODES.has(failure.code)
               ? // The API's message already says what to do; the button reads Reload.
-                `Not saved. ${failure.message}`
-              : `Not saved. ${failure.message} Your entries are still here.`
+                `Not saved. ${userFacingMessage(failure)}`
+              : `Not saved. ${userFacingMessage(failure)} Your entries are still here.`
             : `Not saved. Something went wrong on our side (${screen}). Your entries are still here. Try again.`}
       </p>
     </div>

@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useState } from "react";
 import { possessivePronoun } from "@fitbud/core";
 import { stage1Api } from "../../lib/stage1-api";
@@ -54,9 +55,7 @@ export function CoachingLifecycleModals({
       onClose();
     } catch (err) {
       setError(
-        err instanceof Error
-          ? err.message
-          : "Couldn't end coaching. Nothing has changed.",
+        userFacingMessage(err, { fallback: "Couldn't end coaching. Nothing has changed." }),
       );
     } finally {
       setActing(false);
@@ -75,7 +74,7 @@ export function CoachingLifecycleModals({
       onChanged();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start reactivation.");
+      setError(userFacingMessage(err, { fallback: "Could not start reactivation." }));
     } finally {
       setActing(false);
     }

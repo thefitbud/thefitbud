@@ -8,7 +8,7 @@ import {
   View,
 } from "react-native";
 import { ChevronLeft, ChevronRight, KeyRound } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { brand, ink, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
@@ -69,7 +69,7 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
     } catch (err) {
       if (err instanceof ApiClientError) {
         // The API's own curated message (INVALID_CREDENTIALS says the current password is wrong).
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else {
         reportError("trainer-password-change", err);
         setError("PASSWORD-SAVE");
@@ -160,7 +160,7 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
       onBack();
     } catch (err) {
       if (err instanceof ApiClientError) {
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else {
         reportError("trainer-profile-save", err);
         setError("PROFILE-SAVE");

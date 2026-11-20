@@ -7,7 +7,7 @@ import {
   useSearchParams,
 } from "react-router-dom";
 import { ChevronLeft, ChevronRight, Wallet } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { SubscriptionAttentionItem } from "@fitbud/contracts";
 import { formatCivilDate, formatLocalDate, labelFor } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
@@ -34,12 +34,12 @@ export type ViewLoadError = {
 export function viewLoadError(err: unknown, fallback: string): ViewLoadError {
   if (err instanceof ApiClientError) {
     return {
-      message: err.message,
+      message: userFacingMessage(err),
       requestId: err.requestId ?? null,
       kind: errorKindFromFailure({
         status: err.status,
         code: err.code,
-        message: err.message,
+        message: userFacingMessage(err),
       }),
     };
   }
@@ -344,7 +344,7 @@ export function RenewalsViewPage() {
       {error ? (
         <ErrorState
           title="Couldn't load renewals"
-          message={error.message}
+          message={userFacingMessage(error)}
           kind={error.kind}
           requestId={error.requestId}
           onRetry={() => void load()}

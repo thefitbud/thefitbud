@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 /**
  * Shared trainee day/meal/workout query cache with invalidation.
  * Today and Diet (and overlays) read the same entries so logging updates both.
@@ -289,5 +290,7 @@ export function messageFromSyncResults(
   if (reason === "edit_window_closed") {
     return "This meal can't be changed anymore.";
   }
-  return bad.error?.message ?? "Couldn't save. Try again when you're online.";
+  return userFacingMessage(bad.error?.message, {
+    fallback: "Couldn't save. Try again when you're online.",
+  });
 }

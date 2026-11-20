@@ -7,7 +7,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AlertCircle, CalendarDays, ChevronLeft, Clock, Lock } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { formatCivilDate } from "@fitbud/core";
 import { colors, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../../components/Text";
@@ -50,7 +50,7 @@ export function useLogSave(scope: string) {
         if (err.status >= 400 && err.status < 500) key.current = createIdempotencyKey();
         setSave({
           state: "failed",
-          message: `Not saved. ${err.message} Your entries are still here.`,
+          message: `Not saved. ${userFacingMessage(err)} Your entries are still here.`,
           stale: err.code === "VERSION_CONFLICT",
         });
       } else {

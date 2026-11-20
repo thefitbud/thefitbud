@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { Invitation, OnboardingFormVersion } from "@fitbud/contracts";
 import {
   formatCivilDate,
@@ -130,7 +130,7 @@ export function PendingInvitationPage() {
       setPinnedForm(found);
     } catch (err) {
       setError(
-        err instanceof ApiClientError ? err.message : "Invitation not found.",
+        userFacingMessage(err, { fallback: "Invitation not found." }),
       );
     } finally {
       setLoading(false);
@@ -170,11 +170,7 @@ export function PendingInvitationPage() {
       navigate(`/invitations/${result.id}`, { replace: true });
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "Could not create a new link.",
+        userFacingMessage(err, { fallback: "Could not create a new link." }),
       );
     } finally {
       setActing(false);
@@ -192,11 +188,7 @@ export function PendingInvitationPage() {
       setInviteUrl(null);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "Could not revoke invite.",
+        userFacingMessage(err, { fallback: "Could not revoke invite." }),
       );
     } finally {
       setActing(false);

@@ -5,7 +5,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   CheckinFieldDefinition,
   CheckinReviewContext,
@@ -163,9 +163,7 @@ export function CheckinReviewPage() {
     } catch (err) {
       if (loadId !== latestLoad.current) return;
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load review context.",
+        userFacingMessage(err, { fallback: "Could not load review context." }),
       );
     } finally {
       // The newest load ends loading, whichever mode it is (it may supersede an initial one).
@@ -349,9 +347,7 @@ export function CheckinReviewPage() {
       }
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not save review.",
+        userFacingMessage(err, { fallback: "Could not save review." }),
       );
     } finally {
       setActing(false);
@@ -375,9 +371,7 @@ export function CheckinReviewPage() {
       );
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not schedule next check-in.",
+        userFacingMessage(err, { fallback: "Could not schedule next check-in." }),
       );
     } finally {
       setActing(false);

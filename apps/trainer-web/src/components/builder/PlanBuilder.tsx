@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type {
@@ -290,7 +291,7 @@ export function PlanBuilder({
       setContent(() => next);
       if (added) setSelectedExerciseId(added.id);
     } catch (err) {
-      setLibraryError(err instanceof Error ? err.message : "Couldn't add that exercise.");
+      setLibraryError(userFacingMessage(err, { fallback: "Couldn't add that exercise." }));
     }
   }
 
@@ -301,7 +302,7 @@ export function PlanBuilder({
       const next = addFoodItemFromLibrary(contentRef.current, activeMeal.id, item, servingId);
       setContent(() => next);
     } catch (err) {
-      setLibraryError(err instanceof Error ? err.message : "Couldn't add that food.");
+      setLibraryError(userFacingMessage(err, { fallback: "Couldn't add that food." }));
     }
   }
 

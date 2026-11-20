@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform, StyleSheet } from "react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { deviceTimeZone, formatCivilDate } from "@fitbud/core";
 import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
@@ -38,9 +38,7 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
       setItems(inbox.items);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load check-ins.",
+        userFacingMessage(err, { fallback: "Could not load check-ins." }),
       );
     } finally {
       setLoading(false);

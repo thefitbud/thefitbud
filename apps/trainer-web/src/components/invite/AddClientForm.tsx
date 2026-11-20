@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   CreateInvitationResponse,
   OnboardingFormTemplateSummary,
@@ -231,7 +231,7 @@ export function AddClientForm({
             );
           }
         } else {
-          setError(err.message);
+          setError(userFacingMessage(err));
         }
       } else {
         setError("Could not create invitation.");

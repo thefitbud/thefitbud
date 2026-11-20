@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import { Pause } from "lucide-react-native";
 import type { ReminderStatus } from "@fitbud/contracts";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { formatCivilDate, formatLocalDate } from "@fitbud/core";
 import { spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
@@ -72,9 +72,7 @@ export function RemindersPausedCard() {
     } catch (err) {
       reportError("RemindersPausedCard.resumeReminders", err);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't turn reminders back on. Try again. (REM-RESUME)",
+        userFacingMessage(err, { fallback: "Couldn't turn reminders back on. Try again." }),
       );
     } finally {
       setBusy(false);

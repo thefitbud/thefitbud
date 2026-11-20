@@ -9,7 +9,7 @@ import {
   Play,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type {
   ExerciseExecution,
   WorkoutAssignment,
@@ -464,13 +464,11 @@ function ActiveWorkoutBody({
           },
         });
       } catch (err: unknown) {
-        const message =
-          err instanceof ApiClientError
-            ? err.message
-            : err instanceof Error
-              ? err.message
-              : null;
-        setError(message ?? "Saved on phone · will sync when online.");
+        setError(
+          userFacingMessage(err, {
+            fallback: "Saved on phone · will sync when online.",
+          }),
+        );
       }
     })();
   }

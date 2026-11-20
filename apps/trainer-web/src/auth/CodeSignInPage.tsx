@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AuthFlowError, useAuth } from "./AuthProvider";
@@ -76,7 +77,7 @@ export function CodeSignInPage() {
       }
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Could not send a code. Try again.",
+        userFacingMessage(err, { fallback: "Could not send a code. Try again." }),
       );
     } finally {
       setSubmitting(false);
@@ -107,9 +108,9 @@ export function CodeSignInPage() {
     } catch (err) {
       if (err instanceof AuthFlowError && err.code === "role") {
         setRoleGate(true);
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else if (err instanceof AuthFlowError) {
-        setError(err.message);
+        setError(userFacingMessage(err));
       } else {
         setError("That code didn't work. Check the latest message or resend.");
       }

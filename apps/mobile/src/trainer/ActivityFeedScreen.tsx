@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 type ActivityFeedEvent = Awaited<
   ReturnType<ReturnType<typeof stage1Api>["getActivityFeed"]>
 >["events"][number];
@@ -53,9 +53,7 @@ export function ActivityFeedScreen({ relationshipId, header }: Props) {
       setCursor(page.nextCursor);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load activity.",
+        userFacingMessage(err, { fallback: "Could not load activity." }),
       );
     } finally {
       setLoading(false);
@@ -76,9 +74,7 @@ export function ActivityFeedScreen({ relationshipId, header }: Props) {
       setCursor(page.nextCursor);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load activity.",
+        userFacingMessage(err, { fallback: "Could not load activity." }),
       );
     } finally {
       setLoadingMore(false);

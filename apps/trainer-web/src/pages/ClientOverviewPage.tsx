@@ -32,7 +32,7 @@ import {
   Info,
   type LucideIcon,
 } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { useAuth } from "../auth/AuthProvider";
 import {
   chipValueForActivity,
@@ -316,7 +316,7 @@ export function ClientOverviewPage() {
       loadNotes();
     } catch (err) {
       setNoteError(
-        err instanceof ApiClientError ? err.message : "Could not update note.",
+        userFacingMessage(err, { fallback: "Could not update note." }),
       );
     } finally {
       setNoteBusyId(null);
@@ -334,7 +334,7 @@ export function ClientOverviewPage() {
       loadNotes();
     } catch (err) {
       setNoteError(
-        err instanceof ApiClientError ? err.message : "Could not delete note.",
+        userFacingMessage(err, { fallback: "Could not delete note." }),
       );
     } finally {
       setNoteBusyId(null);
@@ -1323,9 +1323,7 @@ function EndedOverviewBody({
         if (cancelled) return;
         setData(null);
         setLoadError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load the coaching summary.",
+          userFacingMessage(err, { fallback: "Could not load the coaching summary." }),
         );
       });
     return () => {

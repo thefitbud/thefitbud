@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Pressable } from "react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import {
   formatCivilDate,
   formatLocalDate,
@@ -92,9 +92,9 @@ export function AccountScreen({
     } catch (err) {
       reportError("AccountScreen.load", err);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load your account settings (ACCT-LOAD). Pull to try again.",
+        userFacingMessage(err, {
+          fallback: "Couldn't load your account settings. Pull to try again.",
+        }),
       );
     }
   }, [api, timeZone]);
@@ -113,9 +113,9 @@ export function AccountScreen({
       reportError("AccountScreen.saveZone", err);
       setZone(previous);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't save your time zone (ACCT-TZ). Try again.",
+        userFacingMessage(err, {
+          fallback: "Couldn't save your time zone. Try again.",
+        }),
       );
     }
   }

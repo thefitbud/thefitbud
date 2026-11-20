@@ -21,7 +21,7 @@ import {
   Moon,
   Utensils,
 } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import {
   DEFAULT_QUIET_HOURS_END,
   formatCivilDate,
@@ -535,9 +535,7 @@ export function ExceptionDrawer({
       setError(
         is404
           ? "This item no longer exists"
-          : err instanceof ApiClientError
-            ? err.message
-            : "Could not load this item.",
+          : userFacingMessage(err, { fallback: "Could not load this item." }),
       );
       setDetail(null);
     } finally {
@@ -583,9 +581,7 @@ export function ExceptionDrawer({
         setList({ items: [], moreCount: 0 });
         setLoading(false);
         setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load this client's items.",
+          userFacingMessage(err, { fallback: "Could not load this client's items." }),
         );
       }
     })();
@@ -704,7 +700,7 @@ export function ExceptionDrawer({
         setResolveUndoPending(false);
         await loadRef.current(p.id, { quiet: true });
         setError(
-          err instanceof ApiClientError ? err.message : "Could not resolve.",
+          userFacingMessage(err, { fallback: "Could not resolve." }),
         );
       } else {
         // The trainer already moved on: name the item instead of blaming
@@ -825,7 +821,7 @@ export function ExceptionDrawer({
       restoreFocusAfterReviewRef.current = false;
       if (handleWriteCode(err, id)) return;
       setError(
-        err instanceof ApiClientError ? err.message : "Could not mark reviewed.",
+        userFacingMessage(err, { fallback: "Could not mark reviewed." }),
       );
     } finally {
       setActing(false);
@@ -994,7 +990,7 @@ export function ExceptionDrawer({
           setNudgeNow(Date.now());
           return;
         }
-        setNudgeHint(err.message);
+        setNudgeHint(userFacingMessage(err));
         return;
       }
       setNudgeHint("Could not nudge");

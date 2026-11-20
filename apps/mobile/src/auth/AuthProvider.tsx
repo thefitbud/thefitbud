@@ -10,10 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ApiClientError,
-  type FitBudApiClient,
-} from "@fitbud/api-client";
+import { ApiClientError, type FitBudApiClient, userFacingMessage } from "@fitbud/api-client";
 import {
   accountArchivedErrorDetailsSchema,
   type CoachingRelationship,
@@ -950,7 +947,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ) {
         reactivateRunningRef.current = false;
         endSession("keep");
-        setErrorMessage(error.message);
+        setErrorMessage(userFacingMessage(error));
         return;
       }
       setReactivateError(authErrorCopy(error, "general", "reactivateAccount"));

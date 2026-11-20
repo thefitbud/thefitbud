@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { ClientDirectoryItem } from "@fitbud/contracts";
 import { formatCivilDate } from "@fitbud/core";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { apiClient } from "../../lib/api";
 import { CoachingLifecycleModals } from "../../components/coaching/CoachingLifecycleModals";
 import { pageClientDirectory } from "../../lib/clients";
@@ -47,9 +47,7 @@ export function EndedClientsSettingsPage() {
     } catch (err) {
       setItems([]);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load ended clients.",
+        userFacingMessage(err, { fallback: "Could not load ended clients." }),
       );
     } finally {
       setLoading(false);
