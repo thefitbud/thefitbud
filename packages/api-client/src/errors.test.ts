@@ -113,6 +113,33 @@ describe("userFacingError", () => {
     ).toBe("Meal times must be at least 2 hours apart.");
   });
 
+  it("keeps curated 403/409 bodies ahead of status generics", () => {
+    expect(
+      userFacingMessage(
+        new ApiClientError({
+          code: "RECENT_SIGN_IN_REQUIRED",
+          message: "Sign in again to bring your account back.",
+          requestId: "r",
+          status: 403,
+        }),
+      ),
+    ).toBe("Sign in again to bring your account back.");
+
+    expect(
+      userFacingMessage(
+        new ApiClientError({
+          code: "ACTIVE_CLIENTS",
+          message:
+            "End coaching with your active clients before deleting your account.",
+          requestId: "r",
+          status: 409,
+        }),
+      ),
+    ).toBe(
+      "End coaching with your active clients before deleting your account.",
+    );
+  });
+
   it("never surfaces Zod or plain Error messages", () => {
     const zodLike = Object.assign(new Error("Expected string, received number"), {
       name: "ZodError",
@@ -137,12 +164,23 @@ describe("userFacingError", () => {
     ).toBe(USER_FACING_GENERIC);
   });
 
-  it("maps 401 to sign-in", () => {
+  it("maps 401 to sign-in, keeping curated session copy", () => {
     expect(
       userFacingError(
         new ApiClientError({
           code: "SESSION_EXPIRED",
           message: "Session expired.",
+          requestId: "r",
+          status: 401,
+        }),
+      ),
+    ).toEqual({ message: "Session expired.", action: "sign_in" });
+
+    expect(
+      userFacingError(
+        new ApiClientError({
+          code: "UNKNOWN_AUTH",
+          message: "Request failed with status 401",
           requestId: "r",
           status: 401,
         }),

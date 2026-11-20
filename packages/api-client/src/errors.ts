@@ -180,6 +180,20 @@ export function userFacingError(
     const known = KNOWN_CODE_COPY[err.code];
     if (known) return { ...known };
 
+    // Curated API body (D-W3-12 / D-W3b-7) before status generics — codes
+    // like RECENT_SIGN_IN_REQUIRED (403) and ACTIVE_CLIENTS (409) carry
+    // actionable human copy the UI must keep.
+    if (
+      err.message &&
+      !isTechnicalErrorMessage(err.message) &&
+      looksHumanCopy(err.message)
+    ) {
+      return {
+        message: err.message,
+        action: err.status === 401 ? "sign_in" : "retry",
+      };
+    }
+
     if (err.status === 401) {
       return { message: "Please sign in again.", action: "sign_in" };
     }
@@ -203,11 +217,6 @@ export function userFacingError(
     }
     if (err.status >= 500) {
       return { message: USER_FACING_SERVER, action: "retry" };
-    }
-
-    // Curated API 4xx body (D-W3-12 / D-W3b-7): static human copy only.
-    if (err.message && !isTechnicalErrorMessage(err.message)) {
-      return { message: err.message, action: "retry" };
     }
 
     return { message: fallback, action: "retry" };
