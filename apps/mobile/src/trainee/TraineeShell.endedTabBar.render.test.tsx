@@ -2,6 +2,7 @@
  * Z12-49fu: ended coaching (TR-22a) keeps the trainee tab bar — the shell
  * must not replace itself with a fullscreen EndedCoaching overlay.
  */
+import React from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   coachingRelationshipSchema,
@@ -118,12 +119,8 @@ vi.mock("../realtime/useRealtimeHints", () => ({
 }));
 
 vi.mock("./notifications/ForegroundBanner", () => ({
-  ForegroundBanner: () => {
-    const React = require("react") as typeof import("react");
-    return React.createElement("Text", {
-      testID: "foreground-banner",
-    });
-  },
+  ForegroundBanner: () =>
+    React.createElement("Text", { testID: "foreground-banner" }),
 }));
 
 describe("TraineeShell when coaching has ended (TR-22a)", () => {
