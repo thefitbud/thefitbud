@@ -8,7 +8,7 @@ import { Text } from "../../components/Text";
 import { reportError } from "../../lib/reportError";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { useSyncEngine } from "../../sync/SyncProvider";
-import { deviateMealAssignment, MealSyncError } from "../mealActions";
+import { deviateMealAssignment } from "../mealActions";
 import { cleanFoodLabel } from "../mealHelpers";
 import { nutrientsFromMealPrescription } from "../nutrition";
 import { FoodNavHeader } from "./FoodNavHeader";
