@@ -56,7 +56,7 @@ describe("NotificationSettingsPage", () => {
     expect(screen.getByText("Intake submitted")).toBeTruthy();
     expect(screen.getByText("Renewals due")).toBeTruthy();
     expect(screen.getByText("Weekly summary email")).toBeTruthy();
-    expect(screen.getByText("Quiet hours")).toBeTruthy();
+    expect(screen.getAllByText("Quiet hours").length).toBeGreaterThan(0);
     expect(screen.getByTestId("quiet-hours-display").textContent).toMatch(
       /10:00 pm — 7:00 am • nothing during these hours/,
     );
@@ -68,8 +68,8 @@ describe("NotificationSettingsPage", () => {
     await screen.findByText("Weekly summary email");
     const weekly = screen.getByRole("switch", {
       name: /Weekly summary email/i,
-    }) as HTMLInputElement;
-    expect(weekly.checked).toBe(false);
+    });
+    expect(weekly.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(weekly);
     await waitFor(() =>
       expect(updateNotificationPreferences).toHaveBeenCalled(),
@@ -83,7 +83,7 @@ describe("NotificationSettingsPage", () => {
 
   it("turning quiet hours off sends null times", async () => {
     render(<NotificationSettingsPage />);
-    await screen.findByText("Quiet hours");
+    await screen.findByRole("switch", { name: /Quiet hours/i });
     fireEvent.click(screen.getByRole("switch", { name: /Quiet hours/i }));
     await waitFor(() =>
       expect(updateNotificationPreferences).toHaveBeenCalledWith(
