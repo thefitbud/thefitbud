@@ -89,7 +89,7 @@
 }
 
 .client-checkins-chip:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -198,7 +198,7 @@
 }
 
 .client-checkins-open:focus-visible::after {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: -2px;
 }
 
@@ -276,7 +276,7 @@
   height: 64px;
   border-radius: 32px;
   background: var(--pale-lavender, #edeaff);
-  color: var(--indigo, #4527c6);
+  color: var(--brand);
 }
 
 .client-checkins-empty h2 {

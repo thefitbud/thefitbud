@@ -117,7 +117,7 @@
   padding: 0.125rem 0.625rem;
   border-radius: 999px;
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
   font-size: 0.75rem;
   font-weight: 700;
 }
@@ -180,7 +180,7 @@
   justify-content: center;
   border-radius: 8px;
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
   font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -268,7 +268,7 @@
 .plan-split-day.is-selected {
   background: var(--pale-lavender);
   border-color: #c9c0f5;
-  box-shadow: inset 3px 0 0 var(--indigo);
+  box-shadow: inset 3px 0 0 var(--brand);
 }
 
 .plan-split-label {
@@ -340,11 +340,11 @@
 
 .plan-title-input:focus {
   outline: none;
-  border-bottom-color: var(--indigo);
+  border-bottom-color: var(--brand);
 }
 
 .plan-title-input:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -385,7 +385,7 @@
 }
 
 .plan-exercise-name input:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -430,7 +430,7 @@
 }
 
 .plan-sets-table input:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -438,7 +438,7 @@
   display: inline-flex;
   align-items: center;
   min-height: 2.5rem;
-  color: var(--indigo);
+  color: var(--brand);
   font-weight: 700;
 }
 
@@ -515,7 +515,7 @@
 .plan-config-page input:focus-visible,
 .plan-config-page select:focus-visible,
 .plan-config-page textarea:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -1004,7 +1004,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--indigo);
+  color: var(--brand);
   text-decoration: underline;
   display: inline;
 }
@@ -1044,19 +1044,19 @@
 }
 
 .radio-card.is-selected {
-  border-color: var(--indigo);
+  border-color: var(--brand);
   background: var(--pale-lavender, var(--coach-tint));
-  box-shadow: 0 0 0 1px var(--indigo);
+  box-shadow: 0 0 0 1px var(--brand);
 }
 
 .radio-card:focus-within {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
 .radio-card input {
   margin-top: 0.2rem;
-  accent-color: var(--indigo);
+  accent-color: var(--brand);
 }
 
 .radio-card-copy {
@@ -1118,7 +1118,7 @@
   gap: 0.5rem 1rem;
   padding: 0.75rem 1rem;
   border: 1px solid var(--border-strong, var(--line2));
-  border-left: 4px solid var(--indigo);
+  border-left: 4px solid var(--brand);
   border-radius: 12px;
   background: var(--white);
 }
@@ -1169,7 +1169,7 @@
 }
 
 .pp-segment-item:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 1px;
 }
 
@@ -1250,7 +1250,7 @@
 .pp-status:not(.pp-status-effective):not(.pp-status-published) {
   border-color: var(--border, var(--line));
   background: var(--pale-lavender);
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .pp-sub {
@@ -1268,7 +1268,7 @@
   border: 1px solid #d9d3fb;
   border-radius: 999px;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo);
+  color: var(--brand);
   font-size: 0.8125rem;
   font-weight: 600;
   white-space: nowrap;
@@ -1315,7 +1315,7 @@
   height: 2.5rem;
   border-radius: 10px;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .pp-part-copy {
@@ -1402,7 +1402,7 @@
 }
 
 .pp-cell.is-today {
-  border: 2px solid var(--indigo);
+  border: 2px solid var(--coral-strong);
   padding: calc(0.5rem - 1px) calc(0.625rem - 1px);
 }
 
@@ -1520,7 +1520,7 @@
   margin-bottom: 1.125rem;
   border-radius: 14px;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .pp-empty h2 {
@@ -1575,7 +1575,7 @@
   border: 0;
   background: none;
   cursor: pointer;
-  color: var(--indigo);
+  color: var(--brand);
   font-weight: 600;
 }
 
@@ -1702,7 +1702,7 @@
 .versions-table .status-pill.status-scheduled {
   border-color: #d9d3fb;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .versions-table .status-pill.status-effective,
@@ -1739,7 +1739,7 @@
   justify-content: flex-end;
   min-width: 44px;
   min-height: 44px;
-  color: var(--indigo);
+  color: var(--brand);
   font-weight: 600;
   text-decoration: none;
 }
@@ -1880,7 +1880,7 @@
   padding: 0.125rem 0.625rem;
   border-radius: 999px;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo);
+  color: var(--brand);
   font-size: 0.75rem;
   white-space: nowrap;
 }
@@ -1954,7 +1954,7 @@
 }
 
 .switch-row input[role="switch"]:checked {
-  background: var(--indigo);
+  background: var(--brand);
 }
 
 .switch-row input[role="switch"]:checked::after {
@@ -1962,7 +1962,7 @@
 }
 
 .switch-row input[role="switch"]:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -2078,7 +2078,7 @@
 
 .builder-tab.is-active {
   background: var(--white);
-  color: var(--indigo);
+  color: var(--brand);
   box-shadow: 0 1px 2px rgb(26 18 72 / 12%);
 }
 
@@ -2222,7 +2222,7 @@
 
 .day-row.is-drop-target {
   background: var(--pale-lavender, var(--coach-tint));
-  outline: 2px dashed var(--indigo);
+  outline: 2px dashed var(--brand);
 }
 
 .day-weekday {
@@ -2252,7 +2252,7 @@
 }
 
 .day-session.is-selected {
-  border-color: var(--indigo);
+  border-color: var(--brand);
   background: var(--pale-lavender, var(--coach-tint));
 }
 
@@ -2324,8 +2324,8 @@
 }
 
 .weekday-chip.is-on {
-  border-color: var(--indigo);
-  background: var(--indigo);
+  border-color: var(--brand);
+  background: var(--brand);
   color: var(--white);
 }
 
@@ -2392,7 +2392,7 @@
   padding: 0.125rem 0.5rem;
   border-radius: 999px;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo);
+  color: var(--brand);
   font-size: 0.75rem;
   font-weight: 600;
 }
@@ -2518,8 +2518,8 @@
 }
 
 .meal-card.is-selected {
-  border-color: var(--indigo);
-  box-shadow: 0 0 0 1px var(--indigo);
+  border-color: var(--brand);
+  box-shadow: 0 0 0 1px var(--brand);
   background: var(--white);
 }
 
@@ -2744,7 +2744,7 @@
   height: 2.25rem;
   border-radius: 8px;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo);
+  color: var(--brand);
   font-weight: 700;
 }
 
