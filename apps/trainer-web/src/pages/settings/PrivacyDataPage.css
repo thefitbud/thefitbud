@@ -75,7 +75,7 @@
 }
 
 .delete-account-header a {
-  color: var(--brand, var(--indigo, #5b4cdb));
+  color: var(--brand, var(--brand));
   font-weight: 600;
 }
 

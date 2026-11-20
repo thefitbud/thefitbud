@@ -5,7 +5,7 @@
 .clients-page .filter-dropdown-trigger.has-selection {
   background: var(--coach-tint, var(--pale-lavender));
   border-color: transparent;
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .clients-page .filter-dropdown-trigger.has-selection:hover {
@@ -40,7 +40,7 @@
   margin-bottom: 0.25rem;
   flex-shrink: 0;
   background: var(--coach-tint, var(--pale-lavender));
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .clients-state-panel h2 {

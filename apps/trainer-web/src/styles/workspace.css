@@ -47,11 +47,11 @@
 
 .workspace-back:hover,
 .workspace-back:focus-visible {
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .workspace-back:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -128,14 +128,14 @@
 }
 
 .workspace-tab:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: -2px;
 }
 
 .workspace-tab.is-active {
   background: transparent;
-  color: var(--indigo);
-  box-shadow: inset 0 -2px 0 var(--indigo);
+  color: var(--brand);
+  box-shadow: inset 0 -2px 0 var(--brand);
 }
 
 .workspace-page {
@@ -725,12 +725,12 @@
 
 .workspace-icon-btn:hover,
 .workspace-icon-btn:focus-visible {
-  border-color: var(--indigo);
-  color: var(--indigo);
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 .workspace-icon-btn:focus-visible {
-  outline: 2px solid var(--indigo);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -759,7 +759,7 @@
 
 .trend-chart {
   margin: 0;
-  color: var(--indigo);
+  color: var(--brand);
 }
 
 .trend-plot {
@@ -938,7 +938,7 @@
 
 .wsh-crumb a:hover,
 .wsh-crumb a:focus-visible {
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   text-decoration: none;
 }
 
@@ -1020,7 +1020,7 @@
 }
 
 .wsh-meta a {
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   font-weight: 600;
   text-decoration: none;
 }
@@ -1079,7 +1079,7 @@
   bottom: -1px;
   height: 2px;
   border-radius: 2px;
-  background: var(--indigo, var(--coach-ink));
+  background: var(--brand);
 }
 
 .wsh-tab .tab-badge {
@@ -1088,7 +1088,7 @@
   padding: 0 0.375rem;
   border-radius: 999px;
   background: var(--pale-lavender, var(--coach-tint));
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   font-size: 0.6875rem;
   font-weight: 700;
   display: inline-flex;
@@ -1231,8 +1231,8 @@
 }
 
 .ov-day.is-today {
-  background: #f7f5ff;
-  border-color: #dcd5ff;
+  background: transparent;
+  border-color: transparent;
 }
 
 .ov-dn {
@@ -1242,7 +1242,12 @@
 }
 
 .ov-day.is-today .ov-dn {
-  color: var(--indigo, var(--coach-ink));
+  color: var(--coral-ink);
+  font-weight: 600;
+}
+
+.ov-day.is-today .ov-wk {
+  box-shadow: 0 0 0 2.5px var(--coral-strong);
 }
 
 .ov-dd {
@@ -1403,7 +1408,7 @@
 .text-link,
 .overview-grid a:not([class*="button"]),
 .overview-grid .text-link {
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
   font: inherit;
   font-size: 0.8125rem;
   font-weight: 600;
@@ -1791,7 +1796,7 @@
 }
 
 .configure-switch-input:checked {
-  background: var(--indigo, var(--coach-ink));
+  background: var(--brand);
 }
 
 .configure-switch-input:checked::after {
@@ -1799,7 +1804,7 @@
 }
 
 .configure-switch-input:focus-visible {
-  outline: 2px solid var(--indigo, var(--coach-ink));
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 
@@ -1839,8 +1844,8 @@
 
 .filter-pill.is-on {
   background: rgb(69 39 198 / 10%);
-  border-color: var(--indigo);
-  color: var(--indigo);
+  border-color: var(--brand);
+  color: var(--brand);
 }
 
 .activity-day-group {
@@ -2089,7 +2094,7 @@
 
 .overflow-menu-list-wide .overflow-menu-item:hover,
 .overflow-menu-list-wide .overflow-menu-item:focus-visible {
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
 }
 
 .overflow-menu-list-wide .overflow-menu-item-destructive,
@@ -2161,7 +2166,7 @@
   border: 1px solid var(--border-default, var(--line));
   border-radius: 12px;
   background: var(--white);
-  color: var(--indigo, var(--coach-ink));
+  color: var(--brand);
 }
 
 .wsh-acts .overflow-menu-trigger[aria-expanded="true"] {

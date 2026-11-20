@@ -86,7 +86,7 @@
 }
 
 .cad-close:focus-visible {
-  outline: 2px solid var(--indigo, #4527c6);
+  outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
 

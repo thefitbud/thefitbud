@@ -202,7 +202,7 @@
 .templates-filter-trigger.has-selection {
   background: var(--coach-tint, var(--pale-lavender));
   border-color: transparent;
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .templates-filter-trigger:focus-visible {
@@ -259,7 +259,7 @@
   padding: 0 0.35rem;
   border: 0;
   background: transparent;
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
   font: inherit;
   font-size: 0.875rem;
   font-weight: 600;
@@ -351,7 +351,7 @@
   height: 2.25rem;
   border-radius: 0.65rem;
   background: var(--coach-tint, var(--pale-lavender));
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .templates-hub-type-icon[data-kind="nutrition"] {
@@ -407,7 +407,7 @@
 
 .templates-hub-chip.is-mine {
   background: var(--coach-tint, var(--pale-lavender));
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .templates-hub-chip.is-base {
@@ -481,7 +481,7 @@
   border-radius: 1rem;
   margin-bottom: 0.15rem;
   background: var(--coach-tint, var(--pale-lavender));
-  color: var(--coach-ink, var(--indigo));
+  color: var(--coach-ink);
 }
 
 .templates-hub-empty h2 {
