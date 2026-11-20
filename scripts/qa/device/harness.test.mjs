@@ -362,6 +362,11 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   assert.match(signIn, /eraseText: 80/);
   assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}"/);
   assert.doesNotMatch(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
+  // Password filled assert (secureTextEntry): "Password, entered" + one retype
+  // (FitBud #484 iOS dark TR-10b: email filled, password empty).
+  assert.match(signIn, /id: "sign-in-password"/);
+  assert.match(signIn, /assertVisible: "Password, entered"/);
+  assert.match(signIn, /notVisible: "Password, entered"/);
 });
 
 test("F28 coach Something different path takes editor screenshots for Z12-58", () => {
