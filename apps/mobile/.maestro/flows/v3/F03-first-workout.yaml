@@ -1,0 +1,170 @@
+appId: com.thefitbud.mobile.staging
+name: F03 First workout (start, keypad, log, record, rest, rest ended, finish early sheet)
+tags:
+  - device
+  - trainee
+  - z12-45
+---
+# F03 (Z12-45): the active log from its first set. Rohan Mehta (slipping, local
+# demo seed) opens the workout device/z12-45/open-log.yaml picks for this theme,
+# types a weight on the keypad (W-04) well above his heaviest on record, logs
+# it, and the rest runs (W-05a) to its end (W-05b). The log then shows the
+# session mid-way (W-03), its end of list (W-03b) and "Finish early?" (W-16),
+# which this flow leaves with "Keep going": F04 to F06 carry on in the same
+# session, and F06c finishes it. Finish, summary and "View summary only" are
+# device/z12-44/2-finish-workout.yaml's.
+#
+# The record banner (W-12) is asserted where the first exercise has an earlier
+# kg load to beat (the strength read model): the light pass's workout always
+# does (Lower body A / Upper body A / Upper body B: a barbell lift first).
+# Last Saturday's Lower body B starts with a lift the seed never logged with a
+# weight, so the dark pass shows the banner only if there is one to beat.
+#
+# Screens: W-02, W-04, W-12, W-05a, W-05b, W-03, W-03b, W-16.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+# The first load after a cold start can take over 30 s on the CI iOS simulator.
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 120000
+- runFlow: ../../device/z12-45/open-log.yaml
+
+# ---- W-02: start of session ----------------------------------------------------
+- assertVisible: "Minimise workout"
+- assertVisible: "Pause workout"
+- assertVisible: "Finish workout"
+- assertVisible: "Duration [0-9:]+"
+- assertVisible: "[0-9]+ of [0-9]+ sets"
+- assertVisible: "More for .*"
+- assertVisible: "Log set [0-9]+ ·.*"
+# No "How to" shortcut that opens the coach message (13 Nov #9).
+- assertNotVisible: "How to do it"
+- takeScreenshot: W-02-active-start
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- W-04: the keypad -----------------------------------------------------------
+- tapOn:
+    text: "Set [0-9]+ load: .*"
+    index: 0
+- assertVisible: "Close keypad"
+- assertVisible: "Minus 2\\.5"
+- assertVisible: "Plus 2\\.5"
+- assertVisible: "Next: reps"
+- tapOn:
+    text: "1"
+    below: "Close keypad"
+- tapOn:
+    text: "5"
+    below: "Close keypad"
+- tapOn:
+    text: "0"
+    below: "Close keypad"
+- assertVisible: "Set [0-9]+ load: 150 kg"
+- tapOn: "Plus 2\\.5"
+- assertVisible: "Set [0-9]+ load: 152\\.5 kg"
+- tapOn: "Minus 2\\.5"
+- tapOn: "Delete"
+- tapOn:
+    text: "1"
+    below: "Close keypad"
+- tapOn:
+    text: "5"
+    below: "Close keypad"
+- tapOn:
+    text: "0"
+    below: "Close keypad"
+- takeScreenshot: W-04-active-keypad
+- tapOn: "Next: reps"
+- assertVisible: "Next: weight"
+- tapOn: "Plus 1"
+- tapOn: "Minus 1"
+- tapOn: "Log set [0-9]+"
+
+# ---- W-05a / W-12: the rest runs, and the record shows ---------------------------
+- extendedWaitUntil:
+    visible: "Rest, [0-9]+:[0-9]{2} left"
+    timeout: 10000
+# The banner leaves on its own after 8 s: capture it before anything else
+# (Android run 44252528472 reached this step too late).
+- runFlow:
+    when:
+      visible: "New personal record"
+    commands:
+      - takeScreenshot: W-12-pr-moment
+- assertVisible: "Set [0-9]+, 150 kg × [0-9]+, logged.*"
+- assertNotVisible: "Close keypad"
+- runFlow:
+    when:
+      true: ${DEVICE_THEME != 'dark'}
+    commands:
+      # The row keeps the mark after the banner has left.
+      - assertVisible: "Set [0-9]+, 150 kg × [0-9]+, logged, personal record.*"
+- assertVisible: "15 seconds less"
+- assertVisible: "15 seconds more"
+- assertVisible: "Skip rest"
+- takeScreenshot: W-05a-rest-running
+
+# ---- W-05b: the rest reaches its end ----------------------------------------------
+# +15 then −15 until under 40 s are left, then wait: a −15 with less than 15 s left
+# ends the rest at once, like Skip, without "Rest done", and the taps take seconds.
+- tapOn: "15 seconds more"
+- repeat:
+    times: 14
+    while:
+      visible: "Rest, ([1-9][0-9]*:[0-9]{2}|0:[4-5][0-9]) left"
+    commands:
+      - tapOn: "15 seconds less"
+# Under 40 s are left: let it run out on its own.
+- extendedWaitUntil:
+    visible: "Rest done"
+    timeout: 60000
+- assertVisible: "Next: set [0-9]+ · .*"
+- assertNotVisible: "Rest, .* left"
+- takeScreenshot: W-05b-rest-ended
+- tapOn: "OK"
+- assertNotVisible: "Rest done"
+
+# ---- W-03: mid-session; the tick logs the coach's targets as they are ----------------
+- tapOn:
+    text: "Log set [0-9]+ ·.*"
+    index: 0
+- extendedWaitUntil:
+    visible: "Rest, [0-9]+:[0-9]{2} left"
+    timeout: 10000
+- tapOn: "Skip rest"
+- assertNotVisible: "Rest, .* left"
+- assertNotVisible: "Rest done"
+- takeScreenshot: W-03-active-mid
+- runFlow: ../../common/assert-no-crash.yaml
+
+# ---- W-16: finish early lists what is not logged ---------------------------------------
+- tapOn: "Finish workout"
+- assertVisible: "Finish early\\?"
+- assertVisible: "[0-9]+ of [0-9]+ sets aren’t logged\\..*"
+- assertVisible: "Go to .*"
+- assertVisible: "Finish anyway"
+- takeScreenshot: W-16-finish-early
+- tapOn:
+    text: "Go to .*"
+    index: 1
+- assertNotVisible: "Finish early\\?"
+- assertVisible: "Minimise workout"
+- tapOn: "Finish workout"
+- assertVisible: "Finish early\\?"
+- tapOn: "Keep going"
+- assertNotVisible: "Finish early\\?"
+
+# ---- W-03b: the end of the list -----------------------------------------------------------
+- scrollUntilVisible:
+    element: "Discard workout"
+    direction: DOWN
+    timeout: 30000
+- takeScreenshot: W-03b-active-end-of-list
+- runFlow: ../../common/assert-no-crash.yaml

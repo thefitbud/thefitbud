@@ -98,4 +98,15 @@ describe("BottomSheet Modal presentation", () => {
   it("marks the sheet as modal so VoiceOver cannot reach the screen behind it", () => {
     expect(avoidingView().props.accessibilityViewIsModal).toBe(true);
   });
+
+  it("forwards onClosed to Modal onDismiss for iOS sheet sequencing", () => {
+    const onClosed = () => undefined;
+    const el = BottomSheet({
+      visible: false,
+      onDismiss: () => {},
+      onClosed,
+      children: null,
+    }) as ReactElement<Record<string, unknown>>;
+    expect(el.props.onDismiss).toBe(onClosed);
+  });
 });

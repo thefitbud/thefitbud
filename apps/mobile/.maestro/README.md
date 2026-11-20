@@ -363,8 +363,9 @@ change. Known gaps, to be fixed in a follow-up (QT3b) that touches app code:
   (`trainer/attention.yaml`), or from the review sheet's "Resolve…" in the
   Attention tab (`v3/F21-review-resolve-notes.yaml`, Z12-51). "Mark reviewed"
   only moves a client to Reviewed.
-- **Rest timer** assertions use the visible countdown ("N s left"); the flow
-  checks that the number changes, not how long a second takes.
+- **Rest timer** assertions use the rest bar's timer label ("Rest, 1:30 left",
+  Z12-45). The countdown itself is specified in
+  `apps/mobile/src/notifications/restCountdown.test.ts`.
 - The flows first ran on 3 Nov 2026, in the `android` job of QA runs 41648846215
   and 41651787474 (CU18, which fixed the `common/` subflows the suite could not
   parse). **The suite runs. It is not green, nothing about why is settled, and the

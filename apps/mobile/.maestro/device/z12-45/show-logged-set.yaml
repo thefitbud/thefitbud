@@ -1,0 +1,18 @@
+appId: com.thefitbud.mobile.staging
+---
+# Subflow (no tags: never run on its own). On the active log, makes sure the
+# sets of the first exercise that has logged ones are on screen.
+#
+# An exercise folds to one line once none of its sets is still to do (W-03:
+# "Goblet squat · 4 sets · best 16 kg × 12"), so the set a flow just logged may
+# sit inside a folded exercise. Sets are logged from the top down in these
+# flows, so the first folded exercise is the one to open: its header reads
+# "<name>, <summary>. Show sets".
+- runFlow:
+    when:
+      visible: ".*\\. Show sets"
+    commands:
+      - tapOn:
+          text: ".*\\. Show sets"
+          index: 0
+- assertVisible: "Set [0-9]+, .* logged.*"

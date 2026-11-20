@@ -93,6 +93,13 @@ import {
 import { reportError } from "../lib/reportError";
 import { CoachLoggedWorkoutScreen } from "./workout/coach-logged/CoachLoggedWorkoutScreen";
 import { coachInitials } from "./workoutDisplay";
+import {
+  closeActiveSession,
+  openActiveSession,
+  updateActiveSession,
+  useActiveSession,
+} from "./workout/activeSession";
+import { OpenSessionPrompts } from "./workout/OpenSessionPrompts";
 
 /**
  * The week's workout assignments as an explicit load state (CU24, D-W3b-29).
@@ -246,8 +253,12 @@ export function WorkoutTab({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
-  const [activeExecution, setActiveExecution] =
-    useState<WorkoutExecution | null>(null);
+  // The open workout lives in the session store (Z12-45), so minimising the
+  // log (W-14) and leaving this tab both keep it.
+  const session = useActiveSession(relationship.id);
+  const activeExecution =
+    session && !session.minimised ? session.execution : null;
+  const [finishNowRequested, setFinishNowRequested] = useState(false);
   const [activeAssignment, setActiveAssignment] =
     useState<WorkoutAssignment | null>(null);
   const [summaryExecution, setSummaryExecution] =
@@ -426,13 +437,22 @@ export function WorkoutTab({
       onAutoStartConsumed?.();
       return;
     }
+    if (session && session.execution.assignmentId === todayAssignment.id) {
+      updateActiveSession(relationship.id, { minimised: false });
+      onAutoStartConsumed?.();
+      return;
+    }
     void (async () => {
       setActingId(todayAssignment.id);
       setError(null);
       try {
         const execution = await openActiveWorkout(api, sync, todayAssignment);
         setActiveAssignment(todayAssignment);
-        setActiveExecution(execution);
+        openActiveSession({
+          relationshipId: relationship.id,
+          execution,
+          assignment: todayAssignment,
+        });
       } catch (err) {
         setError(workoutStartError(err));
       } finally {
@@ -547,12 +567,22 @@ export function WorkoutTab({
       return;
     }
     setDayDetailAssignmentId(null);
+    // The session is still in memory (minimised, W-14): show it as it is,
+    // with what was logged since, instead of reading it again.
+    if (session && session.execution.assignmentId === assignment.id) {
+      updateActiveSession(relationship.id, { minimised: false });
+      return;
+    }
     setActingId(assignment.id);
     setError(null);
     try {
       const execution = await openActiveWorkout(api, sync, assignment);
       setActiveAssignment(assignment);
-      setActiveExecution(execution);
+      openActiveSession({
+        relationshipId: relationship.id,
+        execution,
+        assignment,
+      });
       invalidateRelationshipDayData(relationship.id);
     } catch (err) {
       const message = workoutStartError(err);
@@ -776,7 +806,8 @@ export function WorkoutTab({
   }
 
   if (activeExecution) {
-    const sessionAssignment = activeAssignment ?? focusAssignment;
+    const sessionAssignment =
+      session?.assignment ?? activeAssignment ?? focusAssignment;
     return (
       <ActiveWorkoutScreen
         execution={activeExecution}
@@ -786,25 +817,39 @@ export function WorkoutTab({
         restSecondsBySetTargetId={
           sessionAssignment ? restSecondsBySetTargetId(sessionAssignment) : {}
         }
-        onChange={setActiveExecution}
+        onChange={(execution) =>
+          updateActiveSession(relationship.id, { execution })
+        }
+        rest={session?.rest ?? null}
+        onRestChange={(rest) => updateActiveSession(relationship.id, { rest })}
+        onMinimise={() => {
+          updateActiveSession(relationship.id, { minimised: true });
+          // The card behind the log shows the session as the server has it.
+          invalidateRelationshipDayData(relationship.id);
+          void load();
+        }}
         onAskCoach={
-          onOpenOverlay && activeAssignment
-            ? () =>
+          onOpenOverlay && sessionAssignment
+            ? (exerciseName) =>
                 onOpenOverlay({
                   screen: "ask_coach",
                   itemType: "workout_assignment",
-                  itemId: activeAssignment.id,
-                  itemLabel: activeAssignment.workoutDayName,
-                  dateLabel: formatCivilDate(activeAssignment.localDate),
+                  itemId: sessionAssignment.id,
+                  // The message names the exercise it is about (W-09).
+                  itemLabel: exerciseName
+                    ? `${exerciseName} · ${sessionAssignment.workoutDayName}`
+                    : sessionAssignment.workoutDayName,
+                  dateLabel: formatCivilDate(sessionAssignment.localDate),
                 })
             : undefined
         }
         onFinished={(execution) => {
-          setActiveExecution(null);
+          setActiveAssignment(sessionAssignment ?? null);
+          closeActiveSession(relationship.id);
           setSummaryExecution(execution);
         }}
         onExit={() => {
-          setActiveExecution(null);
+          closeActiveSession(relationship.id);
           setActiveAssignment(null);
           invalidateRelationshipDayData(relationship.id);
           void load();
@@ -959,8 +1004,44 @@ export function WorkoutTab({
             }
           }}
           onOpenDetail={openDayDetail}
+          onFinishNow={
+            hero.kind === "in_progress" && heroExecution
+              ? () => setFinishNowRequested(true)
+              : undefined
+          }
           onRetry={() => {
             void onRefresh();
+          }}
+        />
+
+        <OpenSessionPrompts
+          assignment={hero.kind === "in_progress" ? (focusAssignment ?? null) : null}
+          execution={
+            heroExecution
+              ? enrichExecutionFromAssignmentDay(heroExecution, focusAssignment)
+              : null
+          }
+          canPrompt={session == null && actingId == null && !autoStartToday}
+          finishRequested={finishNowRequested}
+          onFinishRequestHandled={() => setFinishNowRequested(false)}
+          coachFirst={
+            coachName === "Your coach"
+              ? "your coach"
+              : (coachName.split(/\s+/)[0] ?? coachName)
+          }
+          timeZone={timeZone}
+          onResume={(assignment) => {
+            void startOrContinue(assignment);
+          }}
+          onFinished={(execution, assignment) => {
+            closeActiveSession(relationship.id);
+            setActiveAssignment(assignment);
+            setSummaryExecution(execution);
+          }}
+          onDiscarded={() => {
+            closeActiveSession(relationship.id);
+            invalidateRelationshipDayData(relationship.id);
+            void load();
           }}
         />
 
@@ -1059,6 +1140,7 @@ type DayViewProps = {
   focusAssignment: WorkoutAssignment | null;
   hero: WorkoutHeroState;
   heroExecution: WorkoutExecution | null;
+  onFinishNow?: () => void;
   timeZone: string;
   isToday: boolean;
   weekCompleted: number;
@@ -1151,6 +1233,7 @@ function WorkoutDayView(props: DayViewProps) {
           acting={props.actingId === focusAssignment.id}
           onAct={() => props.onAct(focusAssignment)}
           onOpenDetail={() => props.onOpenDetail(focusAssignment)}
+          onFinishNow={props.onFinishNow}
         />
       ) : weekState.status === "unavailable" ? (
         /*
@@ -1400,6 +1483,7 @@ function HeroCard({
   acting,
   onAct,
   onOpenDetail,
+  onFinishNow,
 }: {
   assignment: WorkoutAssignment;
   hero: WorkoutHeroState;
@@ -1411,6 +1495,8 @@ function HeroCard({
   acting: boolean;
   onAct: () => void;
   onOpenDetail: () => void;
+  /** W-01b "Finish now"; absent until the session's sets are read. */
+  onFinishNow?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -1522,6 +1608,9 @@ function HeroCard({
           onPress={onAct}
           style={styles.action}
         />
+        {onFinishNow ? (
+          <Button label="Finish now" variant="text" onPress={onFinishNow} />
+        ) : null}
       </View>
     );
   }
