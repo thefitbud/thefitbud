@@ -50,6 +50,7 @@ describe("toNativeContentState", () => {
       lastReps: 9,
       loggedLine: "Set 2 logged · 25 kg × 9",
       finished: false,
+      moreExercisesRemain: false,
       restEndsAt: null,
       restSeconds: null,
     });
@@ -80,9 +81,20 @@ describe("toNativeContentState", () => {
       lastReps: 7,
       loggedLine: "Set 1 logged · 25 kg × 7",
       finished: true,
+      moreExercisesRemain: false,
       restEndsAt: null,
       restSeconds: null,
     });
+  });
+
+  it("sends moreExercisesRemain when this is not the last exercise", () => {
+    const state: LiveActivityState = {
+      ...DEMO_LIVE_ACTIVITY,
+      lastExercise: false,
+    };
+    expect(toNativeContentState({ exerciseName: "Push-up", state }).moreExercisesRemain).toBe(
+      true,
+    );
   });
 
   it("sends a null logged line before any set is logged", () => {
@@ -101,6 +113,7 @@ describe("toNativeContentState", () => {
         "lastReps",
         "loggedLine",
         "finished",
+        "moreExercisesRemain",
         "restEndsAt",
         "restSeconds",
       ].sort(),

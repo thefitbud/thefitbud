@@ -62,11 +62,14 @@ const {
   NotificationsScreen,
   groupInbox,
   inboxTimeLabel,
+  notificationsPageMarginTop,
+  NOTIFICATIONS_CONTENT_TOP_PAD,
   INBOX_LOAD_ERROR,
   INBOX_PARSE_ERROR,
   INBOX_READ_ERROR,
 } = await import("./NotificationsScreen");
 const { setCached } = await import("./dataCache");
+const { androidTopInset } = await import("../screens/auth/authParts");
 
 let seq = 0;
 function row(
@@ -155,6 +158,17 @@ describe("inbox grouping by the trainee's civil day (Asia/Kolkata)", () => {
 });
 
 describe("NotificationsScreen (TR-15a, TR-15b)", () => {
+  it("offsets the custom nav by the Android status-bar inset", () => {
+    expect(notificationsPageMarginTop(0)).toBe(-NOTIFICATIONS_CONTENT_TOP_PAD);
+    expect(notificationsPageMarginTop(48)).toBe(
+      -NOTIFICATIONS_CONTENT_TOP_PAD + 48,
+    );
+    // Host Platform: web → 0; production Android uses StatusBar.currentHeight.
+    expect(notificationsPageMarginTop()).toBe(
+      -NOTIFICATIONS_CONTENT_TOP_PAD + androidTopInset,
+    );
+  });
+
   it("lists notifications once per mount", async () => {
     render(
       <NotificationsScreen
@@ -171,6 +185,19 @@ describe("NotificationsScreen (TR-15a, TR-15b)", () => {
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(listCalls).toBe(1);
+  });
+
+  it("keeps Back reachable after the top inset is applied", async () => {
+    const onBack = vi.fn();
+    render(
+      <NotificationsScreen
+        onBack={onBack}
+        onOpenSettings={() => undefined}
+        onNavigate={() => undefined}
+      />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Back" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
   });
 
   it("shows the empty state with the coach's name and no Read all", async () => {
