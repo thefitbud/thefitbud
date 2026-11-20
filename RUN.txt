@@ -1,0 +1,3 @@
+Device gate run 44679716909, attempt 1
+App ref: cursor/z12-46fu-pixel-db78
+Run: https://github.com/thefitbud/thefitbud/actions/runs/44679716909

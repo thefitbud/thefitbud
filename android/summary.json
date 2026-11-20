@@ -1,0 +1,277 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 5 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "device/z12-46/1-no-plan.yaml",
+    "flows/v3/F11-weekly-checkin.yaml",
+    "flows/v3/F12-progress-weight.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 5,
+      "passed": 4,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F11 Weekly check-in, sent, and a reviewed one (Z12-46)",
+          "message": "Assertion is false: \"meera.ack@demo.fitbud.test\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "F11 Weekly check-in, sent, and a reviewed one (Z12-46)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 10s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 7s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 8s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 10s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 7s (0 drop(s) seen); theme dark: steady for 8 checks after 8s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 43 s",
+      "mode": "cache-hit",
+      "seconds": 43,
+      "cacheKey": "device-native-android-c8bb2be2b97fdbf1382d9a27b671374f1c46a6c8"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 730 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.905 (14), dark 0.267 (16)",
+      "light": 0.905,
+      "dark": 0.267,
+      "count": {
+        "light": 14,
+        "dark": 16
+      },
+      "shots": [
+        {
+          "file": "TR-06a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "TR-06a-light-android.png",
+          "theme": "light",
+          "luma": 0.923
+        },
+        {
+          "file": "TR-07c-dark-android.png",
+          "theme": "dark",
+          "luma": 0.09
+        },
+        {
+          "file": "TR-07c-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "TR-10b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "TR-10b-light-android.png",
+          "theme": "light",
+          "luma": 0.934
+        },
+        {
+          "file": "TR-13a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.122
+        },
+        {
+          "file": "TR-13a-light-android.png",
+          "theme": "light",
+          "luma": 0.923
+        },
+        {
+          "file": "TR-13b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.122
+        },
+        {
+          "file": "TR-13b-light-android.png",
+          "theme": "light",
+          "luma": 0.893
+        },
+        {
+          "file": "TR-13c-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "TR-13c-light-android.png",
+          "theme": "light",
+          "luma": 0.703
+        },
+        {
+          "file": "TR-14a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.139
+        },
+        {
+          "file": "TR-14c-dark-android.png",
+          "theme": "dark",
+          "luma": 0.118
+        },
+        {
+          "file": "TR-14d-dark-android.png",
+          "theme": "dark",
+          "luma": 0.107
+        },
+        {
+          "file": "TR-14g-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "Today-no-plan-checkin-dark-android.png",
+          "theme": "dark",
+          "luma": 0.103
+        },
+        {
+          "file": "Today-no-plan-checkin-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "Today-no-plan-dark-android.png",
+          "theme": "dark",
+          "luma": 0.103
+        },
+        {
+          "file": "Today-no-plan-light-android.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.119
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.923
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.927
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        },
+        {
+          "file": "step-004-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.892
+        },
+        {
+          "file": "step-014-assertCondition-_SIGN_IN_EMAIL-light-android.png",
+          "theme": "light",
+          "luma": 0.892
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-dark-android.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.928
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.928
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

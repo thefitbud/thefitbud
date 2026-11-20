@@ -1,0 +1,162 @@
+{
+  "result": "mean screenshot luminance: light 0.905 (14), dark 0.267 (16)",
+  "light": 0.905,
+  "dark": 0.267,
+  "count": {
+    "light": 14,
+    "dark": 16
+  },
+  "shots": [
+    {
+      "file": "TR-06a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "TR-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.923
+    },
+    {
+      "file": "TR-07c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.09
+    },
+    {
+      "file": "TR-07c-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "TR-10b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.092
+    },
+    {
+      "file": "TR-10b-light-android.png",
+      "theme": "light",
+      "luma": 0.934
+    },
+    {
+      "file": "TR-13a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13a-light-android.png",
+      "theme": "light",
+      "luma": 0.923
+    },
+    {
+      "file": "TR-13b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TR-13b-light-android.png",
+      "theme": "light",
+      "luma": 0.893
+    },
+    {
+      "file": "TR-13c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-13c-light-android.png",
+      "theme": "light",
+      "luma": 0.703
+    },
+    {
+      "file": "TR-14a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "TR-14c-dark-android.png",
+      "theme": "dark",
+      "luma": 0.118
+    },
+    {
+      "file": "TR-14d-dark-android.png",
+      "theme": "dark",
+      "luma": 0.107
+    },
+    {
+      "file": "TR-14g-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "Today-no-plan-checkin-dark-android.png",
+      "theme": "dark",
+      "luma": 0.103
+    },
+    {
+      "file": "Today-no-plan-checkin-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "Today-no-plan-dark-android.png",
+      "theme": "dark",
+      "luma": 0.103
+    },
+    {
+      "file": "Today-no-plan-light-android.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.119
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.923
+    },
+    {
+      "file": "launch-trainer-attention-dark-android.png",
+      "theme": "dark",
+      "luma": 0.927
+    },
+    {
+      "file": "launch-trainer-attention-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-004-runFlow-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "step-014-assertCondition-_SIGN_IN_EMAIL-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.928
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.928
+    }
+  ],
+  "w03DarkTooBright": []
+}
