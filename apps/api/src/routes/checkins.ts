@@ -297,6 +297,11 @@ async function loadPinnedCheckinForm(db: Db, versionId: string) {
   return { version, fields: parsed.fields };
 }
 
+function isUniqueConstraintError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /UNIQUE constraint failed|SQLITE_CONSTRAINT_UNIQUE/i.test(message);
+}
+
 async function createCheckinForLocalDate(
   db: Db,
   input: {
@@ -348,8 +353,26 @@ async function createCheckinForLocalDate(
     createdAt: now,
     updatedAt: now,
   };
-  await db.insert(checkins).values(row);
-  return { row, created: true };
+  try {
+    await db.insert(checkins).values(row);
+    return { row, created: true };
+  } catch (err) {
+    // Concurrent ensure-due / schedule can race on the relationship+date unique
+    // index; re-read the winner instead of surfacing a 500.
+    if (!isUniqueConstraintError(err)) throw err;
+    const raced = await db
+      .select()
+      .from(checkins)
+      .where(
+        and(
+          eq(checkins.coachingRelationshipId, input.relationshipId),
+          eq(checkins.localDate, input.localDate),
+        ),
+      )
+      .limit(1);
+    if (raced[0]) return { row: raced[0], created: false };
+    throw err;
+  }
 }
 
 async function resolveScheduleLocalDate(
@@ -843,19 +866,19 @@ checkinRoutes.post(
       )
       .orderBy(desc(checkins.localDate))
       .limit(1);
-    const cadenceFloor = latestSubmitted[0]
-      ? nextCheckinLocalDate({
-          fromLocalDate: latestSubmitted[0].localDate,
-          cadence: config.schedule.cadence,
-        })
-      : null;
-    const cadenceDraft = openDrafts.find(
-      (row) => !cadenceFloor || row.localDate >= cadenceFloor,
+    // Prefer any open draft after the latest submission. A strict cadence
+    // floor (submitted + interval) skipped seeded mid-interval "-next" drafts
+    // (e.g. Meera's Thu after a Fri submit), then the old branch returned the
+    // submitted row when next > today instead of opening the next slot — which
+    // left Today without a "Next check-in" and could 500 under load (F11 dark).
+    const submittedLocalDate = latestSubmitted[0]?.localDate ?? null;
+    const nextOpenDraft = openDrafts.find(
+      (row) => !submittedLocalDate || row.localDate > submittedLocalDate,
     );
 
     let result: { row: typeof checkins.$inferSelect; created: boolean };
-    if (cadenceDraft) {
-      result = { row: cadenceDraft, created: false };
+    if (nextOpenDraft) {
+      result = { row: nextOpenDraft, created: false };
     } else {
       const latest = await db
         .select()
@@ -866,34 +889,10 @@ checkinRoutes.post(
 
       let dueLocalDate = today;
       if (latest[0]) {
-        const next = nextCheckinLocalDate({
+        dueLocalDate = nextCheckinLocalDate({
           fromLocalDate: latest[0].localDate,
           cadence: config.schedule.cadence,
         });
-        if (next > today) {
-          const reviewRows = await db
-            .select()
-            .from(checkinReviews)
-            .where(eq(checkinReviews.checkinId, latest[0].id))
-            .limit(1);
-          const responseBody = {
-            data: scheduleCheckinResponseSchema.parse({
-              checkin: mapCheckin(latest[0], reviewRows[0] ?? null, nowIso()),
-              created: false,
-            }),
-          };
-          await saveIdempotencyRecord(db, {
-            actorUserId: actor.userId,
-            operation: ENSURE_DUE_OPERATION,
-            idempotencyKey,
-            requestFingerprint: fingerprint,
-            responseStatus: 200,
-            responseBody,
-            expiresAt: addDaysIso(7),
-          });
-          return c.json(responseBody, 200);
-        }
-        dueLocalDate = next;
       }
 
       const formPin = await resolveCheckinFormPin(db, {
@@ -923,12 +922,19 @@ checkinRoutes.post(
       .where(eq(checkinReviews.checkinId, result.row.id))
       .limit(1);
 
-    const responseBody = {
-      data: scheduleCheckinResponseSchema.parse({
-        checkin: mapCheckin(result.row, reviewRows[0] ?? null, nowIso()),
-        created: result.created,
-      }),
-    };
+    const mapped = scheduleCheckinResponseSchema.safeParse({
+      checkin: mapCheckin(result.row, reviewRows[0] ?? null, nowIso()),
+      created: result.created,
+    });
+    if (!mapped.success) {
+      return fail(
+        c,
+        500,
+        "CHECKIN_RESPONSE_INVALID",
+        "Could not build the check-in response.",
+      );
+    }
+    const responseBody = { data: mapped.data };
     await saveIdempotencyRecord(db, {
       actorUserId: actor.userId,
       operation: ENSURE_DUE_OPERATION,

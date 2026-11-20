@@ -94,6 +94,10 @@ function addCoachingTouches(input: WorldInput, ctx: ActivityContext, items: Gene
   const span = Math.max(1, daysBetween(opts.fromDate, opts.toDate));
   const askCount = Math.max(1, Math.round((span / 30) * 1.5));
   const candidates = items.filter((item) => item.localDate >= opts.fromDate && item.localDate <= opts.toDate && item.localDate < addDaysFromLocalDate(input.refDate, -2));
+  // Canned ask answers are one phrase per topic. Reusing the same body on
+  // several answered asks made Today "From your coach" list the same note
+  // twice (Meera: 9 Oct and 20 Aug). Keep one client-visible copy per body.
+  const sharedNoteBodies = new Set<string>();
   for (let i = 0; i < askCount && candidates.length > 0; i += 1) {
     const item = candidates[rng.int(0, candidates.length - 1)]!;
     const topic = weightedPick(rng, ASK_TOPICS);
@@ -111,22 +115,26 @@ function addCoachingTouches(input: WorldInput, ctx: ActivityContext, items: Gene
     let answeredAt: string | null = null;
     if (!expired) {
       answeredAt = iso(Math.min(askedMs + rng.int(2, 8) * HOUR, nowMs));
-      noteId = demoUuid("note", ctx.relId, "ask", String(i));
-      rows.add("trainer_notes", {
-        id: noteId,
-        coaching_relationship_id: ctx.relId,
-        trainer_user_id: ctx.trainerId,
-        checkin_id: null,
-        body: ASK_ANSWERS[topic] ?? "Answered on WhatsApp.",
-        created_at: answeredAt,
-        updated_at: answeredAt,
-        visibility: "client",
-        subject_type: item.kind === "meal" ? "meal_assignment" : "workout_assignment",
-        subject_id: item.assignmentId,
-        shared_at: answeredAt,
-        unshared_at: null,
-        seen_at: iso(Math.min(Date.parse(answeredAt) + rng.int(1, 12) * HOUR, nowMs)),
-      });
+      const body = ASK_ANSWERS[topic] ?? "Answered on WhatsApp.";
+      if (!sharedNoteBodies.has(body)) {
+        sharedNoteBodies.add(body);
+        noteId = demoUuid("note", ctx.relId, "ask", String(i));
+        rows.add("trainer_notes", {
+          id: noteId,
+          coaching_relationship_id: ctx.relId,
+          trainer_user_id: ctx.trainerId,
+          checkin_id: null,
+          body,
+          created_at: answeredAt,
+          updated_at: answeredAt,
+          visibility: "client",
+          subject_type: item.kind === "meal" ? "meal_assignment" : "workout_assignment",
+          subject_id: item.assignmentId,
+          shared_at: answeredAt,
+          unshared_at: null,
+          seen_at: iso(Math.min(Date.parse(answeredAt) + rng.int(1, 12) * HOUR, nowMs)),
+        });
+      }
     }
     rows.add("coach_asks", {
       id: askId,
