@@ -347,12 +347,13 @@ describe("CheckinReviewScreen on the demo seed's form", () => {
     expect(screen.queryByText(/not submitted yet/)).toBeNull();
   });
 
-  it("the next, unsubmitted check-in says so and offers no review it cannot save", async () => {
+  it("the next, unsubmitted check-in says so and offers Nudge, not review", async () => {
     api.getCheckinReviewContext.mockImplementation(async () => seedContext("next"));
     api.recordCheckinReview.mockClear();
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
     expect(await screen.findByText("Due Mon 16 Nov · not submitted yet")).toBeTruthy();
     expect(screen.getByText(/has started but not sent it/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Nudge" })).toBeTruthy();
     expect(screen.queryByText("Mark reviewed")).toBeNull();
     expect(screen.queryByText("Reply")).toBeNull();
     expect(screen.queryByLabelText("Add a note for Rohan")).toBeNull();

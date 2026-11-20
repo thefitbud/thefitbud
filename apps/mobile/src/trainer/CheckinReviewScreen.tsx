@@ -8,11 +8,13 @@ import {
   View,
 } from "react-native";
 import {
+  Bell,
   Check,
   ClipboardCheck,
   Clock3,
   MessageCircle,
   MoreHorizontal,
+  WifiOff,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
@@ -40,6 +42,11 @@ import {
   reviewedAtLabel,
   signedDelta,
 } from "./checkinReview/savedReview";
+import { coachingWeekAt } from "./checkinsList/model";
+import { clientStatusApi } from "./clientStatus/api";
+import { NudgeSheet } from "./sheets/NudgeSheet";
+import type { NudgeTarget } from "./sheets/nudgeContent";
+import { openContextualWhatsApp } from "./whatsapp";
 
 type Props = {
   checkinId: string;
@@ -67,6 +74,9 @@ export function CheckinReviewScreen({
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [weekNumber, setWeekNumber] = useState<number | null>(null);
+  const [whatsapp, setWhatsapp] = useState<string | null>(null);
+  const [nudgeOpen, setNudgeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -78,6 +88,13 @@ export function CheckinReviewScreen({
         try {
           const workspace = await api.getClientWorkspace(rid);
           setName(formatPersonName(workspace.header.traineeDisplayName));
+          setWhatsapp(workspace.header.clientWhatsappE164 ?? null);
+          setWeekNumber(
+            coachingWeekAt(
+              workspace.header.startedAt,
+              Date.parse(result.checkin.localDate + "T12:00:00Z"),
+            ),
+          );
         } catch (workspaceError) {
           reportError("checkinReview.workspace", workspaceError);
           setName("Client");
@@ -213,14 +230,33 @@ export function CheckinReviewScreen({
   }
 
   const submitted = context?.checkin.submittedAt;
+  const weekPart =
+    weekNumber != null && weekNumber > 0 ? `Week ${weekNumber}` : "Week check-in";
   const subtitle = context
     ? [
-        "Week check-in",
+        weekPart,
         submitted
           ? `sent ${formatCivilDate(context.checkin.localDate)}, ${formatClockTime(submitted, zone)}`
-          : formatCivilDate(context.checkin.localDate),
+          : context.checkin.status === "overdue"
+            ? `was due ${formatCivilDate(context.checkin.localDate)}`
+            : formatCivilDate(context.checkin.localDate),
       ].join(" · ")
     : "";
+  const navTitle =
+    reviewed && weekNumber != null && weekNumber > 0
+      ? `Check-in · week ${weekNumber}`
+      : "Check-in";
+  const nudgeTarget: NudgeTarget | null = context
+    ? {
+        relationshipId:
+          relationshipId || context.checkin.coachingRelationshipId,
+        activityType: "checkin",
+        activityId: context.checkin.id,
+        kindLabel: "Check-in",
+        sourceName: null,
+        dayLabel: formatCivilDate(context.checkin.localDate).split(/\s+/)[0] ?? null,
+      }
+    : null;
 
   const workoutNow = context
     ? context.recentWorkoutAdherence.completed
@@ -232,7 +268,7 @@ export function CheckinReviewScreen({
     : 0;
 
   const footer =
-    !context || reviewed || !canReview || notSubmittedLine ? null : (
+    !context || reviewed || notSubmittedLine ? null : !canReview ? null : (
       <View style={styles.footer}>
         <Pressable
           accessibilityRole="button"
@@ -247,10 +283,25 @@ export function CheckinReviewScreen({
           accessibilityRole="button"
           disabled={offline || acting}
           onPress={() => void markReviewed(null)}
-          style={[styles.markBtn, offline ? styles.disabled : null]}
+          style={[
+            styles.markBtn,
+            offline ? styles.markBtnOffline : null,
+            offline || acting ? styles.disabled : null,
+          ]}
         >
-          <Check color={colors.white} size={18} strokeWidth={2.4} />
-          <Text style={styles.markBtnText}>Mark reviewed</Text>
+          <Check
+            color={offline ? v3LightColors.ink3 : colors.white}
+            size={18}
+            strokeWidth={2.4}
+          />
+          <Text
+            style={[
+              styles.markBtnText,
+              offline ? styles.markBtnTextOffline : null,
+            ]}
+          >
+            Mark reviewed
+          </Text>
         </Pressable>
       </View>
     );
@@ -279,7 +330,7 @@ export function CheckinReviewScreen({
           <Text style={styles.navChevron}>‹</Text>
         </Pressable>
         <Text style={styles.navTitle} accessibilityRole="header">
-          Check-in
+          {navTitle}
         </Text>
         <Pressable
           accessibilityRole="button"
@@ -297,9 +348,12 @@ export function CheckinReviewScreen({
         <Snackbar leadingCheck message={toast} onDismiss={() => setToast(null)} />
       ) : null}
       {offline ? (
-        <Text style={styles.offline}>
-          You're offline. Showing the last update from this phone.
-        </Text>
+        <View style={styles.offlineBanner} accessibilityRole="status">
+          <WifiOff color={v3LightColors.ink2} size={16} strokeWidth={2.2} />
+          <Text style={styles.offline}>
+            You’re offline. You can read this check-in, but replying and reviewing need a connection.
+          </Text>
+        </View>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
       {loading && !context ? (
@@ -352,6 +406,27 @@ export function CheckinReviewScreen({
             {`${first} has started but not sent it`}
           </Text>
           <Text style={styles.meta}>{notSubmittedLine}</Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={offline}
+            onPress={() => {
+              if (nudgeTarget) {
+                setNudgeOpen(true);
+                return;
+              }
+              void openContextualWhatsApp({
+                phoneE164: whatsapp,
+                draftText: `Hi ${first}, just a reminder to send your FitBud check-in when you can.`,
+              });
+            }}
+            style={[styles.nudgeBtn, offline ? styles.disabled : null]}
+          >
+            <Bell color={colors.white} size={18} strokeWidth={2.2} />
+            <Text style={styles.nudgeBtnText}>Nudge</Text>
+          </Pressable>
+          <Text style={styles.nudgeCaption}>
+            {`Sends ${first} a push notification.`}
+          </Text>
         </View>
       ) : null}
 
@@ -417,8 +492,26 @@ export function CheckinReviewScreen({
       ) : null}
 
       {context && !notSubmittedLine ? (
-        <Photos photos={context.photos} checkinId={checkinId} />
+        <Photos
+          photos={context.photos}
+          checkinId={checkinId}
+          firstName={first}
+        />
       ) : null}
+
+      <NudgeSheet
+        visible={nudgeOpen && nudgeTarget != null}
+        target={nudgeTarget}
+        traineeDisplayName={name}
+        clientTimeZone={null}
+        trainerDisplayName={null}
+        api={clientStatusApi(api)}
+        onDismiss={() => setNudgeOpen(false)}
+        onSent={(line) => {
+          setNudgeOpen(false);
+          setToast(line);
+        }}
+      />
 
       {/* Keep rating "of 5" strings findable for existing tests that pin tiles. */}
       {rows.ratings.map((item) => (
@@ -776,6 +869,49 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     height: 180,
   },
-  offline: { color: colors.deepNavy, fontSize: 14, marginBottom: 8 },
+  offlineBanner: {
+    alignItems: "flex-start",
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  offline: {
+    color: v3LightColors.ink2,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  nudgeBtn: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.brand,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 14,
+    minHeight: 48,
+  },
+  nudgeBtnText: {
+    color: colors.white,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  nudgeCaption: {
+    color: v3LightColors.ink3,
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  markBtnOffline: {
+    backgroundColor: v3LightColors.fill,
+  },
+  markBtnTextOffline: {
+    color: v3LightColors.ink3,
+  },
   srOnly: { height: 0, opacity: 0, overflow: "hidden" },
 });

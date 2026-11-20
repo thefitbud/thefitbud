@@ -7,15 +7,20 @@ import {
   View,
 } from "react-native";
 import {
+  Check,
   ChevronRight,
+  Circle,
   CircleAlert,
+  CloudOff,
   Copy,
   ExternalLink,
   FileText,
   Hand,
   NotebookPen,
   MoreHorizontal,
+  RefreshCw,
   UserCheck,
+  UserPlus,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
@@ -59,6 +64,13 @@ import { ClientLogMeasurementScreen } from "./clientlog/measurement/ClientLogMea
 import { dateStrip } from "./clientlog/model";
 import { formatAttentionAge } from "./attentionCards";
 import { clientStatusApi } from "./clientStatus/api";
+import { ClientInfoScreen } from "./clientStatus/ClientInfoScreen";
+import {
+  isOnboardingIncomplete,
+  onboardingChipLabel,
+  onboardingSteps,
+  onboardingWaitingCopy,
+} from "./clientStatus/infoModel";
 import { kcalTileValue, weekDayCells } from "./clientStatus/model";
 import { RemindersCard } from "./clientStatus/RemindersCard";
 import { WeekCard } from "./clientStatus/WeekCard";
@@ -134,6 +146,7 @@ export function ClientStatusScreen({
   const [acting, setActing] = useState(false);
   const [logging, setLogging] = useState<{ date?: string; assignmentId?: string } | null>(null);
   const [loggingOther, setLoggingOther] = useState<"meal" | "measurement" | null>(null);
+  const [infoOpen, setInfoOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logPickOpen, setLogPickOpen] = useState(false);
   const [reactivateOpen, setReactivateOpen] = useState(false);
@@ -194,6 +207,7 @@ export function ClientStatusScreen({
         setOfflineAt(cached.savedAt);
         setError(null);
       } else {
+        setData(null);
         setError("Couldn't load. Pull to try again.");
       }
     } finally {
@@ -246,6 +260,7 @@ export function ClientStatusScreen({
   const name = formatPersonName(header?.traineeDisplayName || displayName);
   const first = name.split(" ")[0] || "there";
   const ended = header?.onboardingStatus === "ended" || Boolean(header?.endedAt);
+  const onboardingIncomplete = isOnboardingIncomplete(header?.onboardingStatus);
   const offline = offlineAt != null;
   const open = data?.workspace.overview.openException ?? null;
   const weekNumber = coachingWeek(header?.startedAt);
@@ -264,12 +279,41 @@ export function ClientStatusScreen({
     weekNumber != null
       ? `week ${weekNumber}`
       : null;
+  const joinedLabel = startedAt
+    ? `Joined ${formatCivilDate(startedAt.slice(0, 10))}`
+    : null;
   const meta = ended
     ? [header?.goalShort, endDate ? `ended ${formatCivilDate(endDate)}` : null]
         .filter(Boolean)
         .join(" · ")
-    : [header?.goalShort, weekLabel].filter(Boolean).join(" · ") ||
-      "No plan assigned yet";
+    : onboardingIncomplete
+      ? [joinedLabel, "no plan yet"].filter(Boolean).join(" · ")
+      : [header?.goalShort, weekLabel].filter(Boolean).join(" · ") ||
+        "No plan assigned yet";
+  const gender = header?.traineeProfile?.gender?.toLowerCase() ?? "";
+  const possessive =
+    gender === "female" || gender === "f" || gender === "she/her"
+      ? ("her" as const)
+      : gender === "male" || gender === "m" || gender === "he/him"
+        ? ("his" as const)
+        : ("their" as const);
+  const subject =
+    possessive === "her" ? ("She" as const) : possessive === "his" ? ("He" as const) : ("They" as const);
+  const waiting = onboardingIncomplete
+    ? onboardingWaitingCopy({
+        firstName: first,
+        status: header?.onboardingStatus ?? "onboarding_pending",
+        startedAt,
+        possessive,
+        subject,
+      })
+    : null;
+  const steps = onboardingIncomplete
+    ? onboardingSteps({
+        status: header?.onboardingStatus ?? "onboarding_pending",
+        hasPlan: Boolean(header?.effectivePlan),
+      })
+    : [];
 
   const weekCells = useMemo(
     () => weekDayCells(zone, weekDatesFrom(weekStart), data?.workouts ?? []),
@@ -424,7 +468,61 @@ export function ClientStatusScreen({
     );
   }
 
+  if (infoOpen) {
+    return (
+      <ClientInfoScreen
+        relationshipId={relationshipId}
+        displayName={header?.traineeDisplayName || displayName}
+        workspace={data?.workspace ?? null}
+        onBack={() => setInfoOpen(false)}
+      />
+    );
+  }
+
   const actionsDisabled = ended || offline;
+  const loadFailed = !loading && !data && Boolean(error);
+
+  if (loadFailed) {
+    const failName = formatPersonName(displayName);
+    const failFirst = failName.split(" ")[0] || failName;
+    return (
+      <Screen v3 title="" showHeader={false} chrome="app">
+        <View style={styles.nav}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back"
+            onPress={onBack}
+            style={styles.navBtn}
+          >
+            <Text style={styles.navChevron}>‹</Text>
+          </Pressable>
+          <View style={styles.navBtn} />
+        </View>
+        <View style={styles.loadError}>
+          <View style={styles.loadErrorIcon}>
+            <CloudOff color={v3LightColors.ink} size={28} strokeWidth={1.8} />
+          </View>
+          <Text style={styles.loadErrorTitle}>
+            {`Couldn’t load ${failFirst}’s page`}
+          </Text>
+          <Text style={styles.loadErrorBody}>
+            Check your connection and pull down to try again.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setLoading(true);
+              void load();
+            }}
+            style={styles.tryAgain}
+          >
+            <RefreshCw color={v3LightColors.ink} size={16} strokeWidth={2.2} />
+            <Text style={styles.tryAgainText}>Try again</Text>
+          </Pressable>
+        </View>
+      </Screen>
+    );
+  }
 
   return (
     <Screen
@@ -462,7 +560,7 @@ export function ClientStatusScreen({
           {`You're offline. Showing the last update from ${formatClockTime(offlineAt!, zone)}.`}
         </Text>
       ) : null}
-      {error ? <ErrorBanner message={error} /> : null}
+      {error && data ? <ErrorBanner message={error} /> : null}
       {loading && !data ? (
         <View>
           <View style={styles.skeleton} />
@@ -480,6 +578,13 @@ export function ClientStatusScreen({
           <View style={styles.chipRow}>
             {ended ? (
               <StatusChip kind="lifecycle" value="ended" />
+            ) : onboardingIncomplete ? (
+              <View style={styles.onboardChip}>
+                <UserPlus color={v3LightColors.info} size={13} strokeWidth={2.2} />
+                <Text style={styles.onboardChipText}>
+                  {onboardingChipLabel(header?.onboardingStatus ?? "onboarding_pending")}
+                </Text>
+              </View>
             ) : header?.adherenceState === "needs_attention" || open ? (
               <View style={styles.needsChip}>
                 <CircleAlert color={v3LightColors.crit} size={13} strokeWidth={2.4} />
@@ -523,6 +628,58 @@ export function ClientStatusScreen({
         </View>
       ) : null}
 
+      {onboardingIncomplete && waiting ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{waiting.title}</Text>
+            <Text style={styles.waitingBody}>{waiting.body}</Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={offline}
+              onPress={() =>
+                void openContextualWhatsApp({
+                  phoneE164: header?.clientWhatsappE164,
+                  draftText: `Hi ${first}, just a reminder to send your FitBud intake when you can.`,
+                }).then(() => setToast("Opened WhatsApp"))
+              }
+              style={[styles.remindBtn, offline ? styles.disabled : null]}
+            >
+              <WhatsAppGlyph size={18} />
+              <Text style={styles.remindBtnText}>Remind on WhatsApp</Text>
+            </Pressable>
+          </View>
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Steps</Text>
+            {steps.map((step, index) => (
+              <View key={step.id}>
+                {index > 0 ? <View style={styles.stepDivider} /> : null}
+                <View style={styles.stepRow}>
+                  {step.done ? (
+                    <View style={styles.stepDone}>
+                      <Check color={colors.white} size={12} strokeWidth={2.6} />
+                    </View>
+                  ) : (
+                    <Circle
+                      color={v3LightColors.ink4}
+                      size={20}
+                      strokeWidth={1.8}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.stepLabel,
+                      step.done ? null : styles.stepLabelPending,
+                    ]}
+                  >
+                    {step.label}
+                  </Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        </>
+      ) : (
+        <>
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
@@ -833,6 +990,8 @@ export function ClientStatusScreen({
           </Pressable>
         </View>
       </View>
+        </>
+      )}
 
       <NudgeSheet
         visible={nudge != null}
@@ -877,7 +1036,7 @@ export function ClientStatusScreen({
             title="Goal, intake and limitations"
             onPress={() => {
               setMenuOpen(false);
-              setToast("Client info opens on FitBud web for now");
+              setInfoOpen(true);
             }}
           />
           <MenuRow
@@ -1280,6 +1439,120 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     height: 120,
     marginBottom: 12,
+  },
+  loadError: {
+    alignItems: "center",
+    flex: 1,
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    paddingBottom: 80,
+  },
+  loadErrorIcon: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.brandTint,
+    borderRadius: 18,
+    height: 64,
+    justifyContent: "center",
+    marginBottom: 18,
+    width: 64,
+  },
+  loadErrorTitle: {
+    color: v3LightColors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 20,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  loadErrorBody: {
+    color: v3LightColors.ink3,
+    fontSize: 15,
+    lineHeight: 22,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  tryAgain: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.brandTint,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 20,
+    minHeight: 48,
+    paddingHorizontal: 20,
+  },
+  tryAgainText: {
+    color: v3LightColors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  onboardChip: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: v3LightColors.infoTint,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 5,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  onboardChipText: {
+    color: v3LightColors.info,
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  waitingBody: {
+    color: v3LightColors.ink2,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 8,
+  },
+  remindBtn: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.brand,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 14,
+    minHeight: 48,
+  },
+  remindBtnText: {
+    color: colors.white,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  stepRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    paddingVertical: 12,
+  },
+  stepDivider: {
+    backgroundColor: v3LightColors.line,
+    height: StyleSheet.hairlineWidth,
+  },
+  stepDone: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.done,
+    borderRadius: 10,
+    height: 20,
+    justifyContent: "center",
+    width: 20,
+  },
+  stepLabel: {
+    color: v3LightColors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  stepLabelPending: {
+    color: v3LightColors.ink2,
+    fontFamily: undefined,
+    fontWeight: "500",
   },
   disabled: { opacity: 0.45 },
   srOnly: { height: 0, opacity: 0, overflow: "hidden" },
