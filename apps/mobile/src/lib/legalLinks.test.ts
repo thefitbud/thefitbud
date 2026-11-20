@@ -32,41 +32,49 @@ vi.mock("@fitbud/ui-mobile", async (importOriginal) => ({
 vi.mock("../components/Text", () => ({ Text: "Text" }));
 vi.mock("../components/PrimaryButton", () => ({ PrimaryButton: "PrimaryButton" }));
 vi.mock("../components/Screen", () => ({ Screen: "Screen" }));
+// Real m2 imports authParts → Button → createThemedStyles; stub like MoreScreen.test.
+vi.mock("../trainee/settings/m2", () => ({
+  M2Card: "M2Card",
+  M2Group: "M2Group",
+  M2Row: "M2Row",
+}));
 vi.mock("../providers/ConfigProvider", () => ({ useConfig: () => ({ config: null }) }));
 vi.mock("../auth/AuthProvider", () => ({
-  useAuth: () => ({ me: null, signOut: vi.fn(), selectRole: vi.fn() }),
+  useAuth: () => ({ me: null, signOut: vi.fn(), selectRole: vi.fn(), requestRoleSelect: vi.fn() }),
 }));
 // Z12-53 dark polish: TrainerMoreScreen calls useTheme / createThemedStyles.
 // Same stub as MoreScreen.test.ts so this plain-function call stays hook-free.
-vi.mock("../providers/ThemeProvider", () => ({
-  ThemeScope: ({ children }: { children: unknown }) => children,
-  useTheme: () => ({
-    scheme: "light",
-    colors: new Proxy(
-      {},
-      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
-    ),
-    radii: {},
-    spacing: {},
-    text: {},
+vi.mock("../providers/ThemeProvider", () => {
+  const token = new Proxy(
+    {},
+    {
+      get: (_t, prop) =>
+        prop === "style" ? {} : typeof prop === "string" ? prop : "token",
+    },
+  );
+  const nest = new Proxy(
+    {},
+    {
+      get: (_t, prop) => (prop === "style" ? {} : token),
+    },
+  );
+  const theme = {
+    scheme: "light" as const,
+    colors: token as Record<string, string>,
+    radii: nest,
+    spacing: nest,
+    text: nest,
     touchTarget: 44,
-  }),
-  createThemedStyles: (factory: (t: { colors: Record<string, string> }) => unknown) => {
-    const colors = new Proxy(
-      {},
-      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
-    );
-    const styles = factory({
-      colors: colors as Record<string, string>,
-      radii: {},
-      spacing: {},
-      text: {},
-      touchTarget: 44,
-      scheme: "light",
-    } as never);
-    return () => styles;
-  },
-}));
+  };
+  return {
+    ThemeScope: ({ children }: { children: unknown }) => children,
+    useTheme: () => theme,
+    createThemedStyles: (factory: (t: typeof theme) => unknown) => {
+      const styles = factory(theme);
+      return () => styles;
+    },
+  };
+});
 
 // vi.mock specifiers resolve relative to THIS file, and the module id is what is
 // keyed — so these also cover SignInScreen's deeper "../../components/..." imports.
