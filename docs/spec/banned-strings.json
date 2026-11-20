@@ -139,6 +139,14 @@
       "why": "Developer and internal copy leaking into the UI."
     },
     {
+      "id": "request-failed-status",
+      "regex": "Request failed with status",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "Z12-64: api-client fallback / technical HTTP status copy must never reach a user screen. Use userFacingMessage()."
+    },
+    {
       "id": "help-and-support",
       "regex": "Help\\s*&\\s*Support",
       "flags": "",

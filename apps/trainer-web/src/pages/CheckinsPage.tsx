@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Inbox } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
@@ -149,9 +149,7 @@ export function CheckinsPage() {
       setVisibleCount(PAGE_SIZE);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load check-ins.",
+        userFacingMessage(err, { fallback: "Could not load check-ins." }),
       );
     } finally {
       setLoading(false);

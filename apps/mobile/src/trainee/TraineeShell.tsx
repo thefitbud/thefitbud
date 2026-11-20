@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import {
   CalendarDays,
   CircleUserRound,
@@ -37,6 +37,7 @@ import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { CheckinScreen } from "./CheckinScreen";
 import { DietTab } from "./DietTab";
+import { EndedCoachingScreen } from "./EndedCoachingScreen";
 import { MoreScreen } from "./MoreScreen";
 import { ProgressTab } from "./ProgressTab";
 import {
@@ -68,7 +69,6 @@ import type { NotificationDeepLink } from "../notifications/routing";
 import { ForegroundBanner } from "./notifications/ForegroundBanner";
 import { useNoticeScreen } from "../components/notice/NoticeContext";
 import { reportError } from "../lib/reportError";
-import { isNetworkFailure } from "../trainer/attention/offline";
 import {
   ThemeScope,
   createThemedStyles,
@@ -78,10 +78,8 @@ import {
 
 /**
  * What the "unavailable" screen says when opening a notification's target
- * failed (AGENTS.md client error handling). "Isn't available anymore" is only
- * true when the server answered not-found; any other failure (offline, a 5xx,
- * a client/server disagreement) is reported and shown as a short code, and an
- * `ApiClientError`'s own curated message is the only server text shown.
+ * failed (AGENTS.md / Z12-64). "Isn't available anymore" only when the server
+ * answered not-found; everything else goes through `userFacingMessage`.
  */
 export function deepLinkFailureReason(
   where: string,
@@ -89,16 +87,12 @@ export function deepLinkFailureReason(
   noun: "meal" | "check-in",
 ): string {
   reportError(where, err);
-  const prefix = noun === "meal" ? "MEAL" : "CHECKIN";
-  if (err instanceof ApiClientError) {
-    if (err.status === 404) return `This ${noun} isn't available anymore.`;
-    return `${err.message} (${prefix}-${err.status})`;
+  if (err instanceof ApiClientError && err.status === 404) {
+    return `This ${noun} isn't available anymore.`;
   }
-  if (isNetworkFailure(err)) {
-    return `Couldn't open this ${noun}. Check your connection and try again. (${prefix}-NET)`;
-  }
-  // A ZodError or any other non-network failure: never blame the connection.
-  return `Couldn't open this ${noun}. (${prefix}-PARSE)`;
+  return userFacingMessage(err, {
+    fallback: `Couldn't open this ${noun}. Try again.`,
+  });
 }
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
@@ -867,24 +861,10 @@ export function TraineeShell({
     [refreshSession, setActiveRelationship],
   );
 
-  if (relationship.status === "ended" && overlay?.screen !== "past_coaching") {
-    return (
-      <TraineeOverlayHost
-        overlay={{ screen: "ended" }}
-        relationship={relationship}
-        effectivePlan={effectivePlan}
-        planState={planState}
-        onRetryPlan={() => {
-          void loadEffectivePlan();
-        }}
-        onClose={() => setOverlay({ screen: "past_coaching" })}
-        onOpen={openOverlay}
-        onSignOut={signOut}
-        onCoachingResumed={handleCoachingResumed}
-        onStartWorkout={handleStartWorkoutFromOverview}
-      />
-    );
-  }
+  // Ended coaching (TR-22a) stays in the shell with the tab bar: Today shows
+  // EndedCoachingScreen embedded; past_coaching and other overlays use the
+  // normal fullscreen path below. (Z12-49 follow-up after the standalone
+  // overlay landing shipped without the bar.)
 
   if (captureWorkoutSummary && isCaptureModeEnabled()) {
     const coach =
@@ -937,8 +917,13 @@ export function TraineeShell({
     overlay?.screen === "ask_coach";
   const tabbedOverlay =
     overlay?.screen === "meal_plan" || overlay?.screen === "deep_link";
+  // "ended" is the Today tab body when coaching has ended — never a
+  // fullscreen overlay that would hide the tab bar (TR-22a).
   const fullscreenOverlay =
-    overlay != null && !sheetOverlay && !tabbedOverlay;
+    overlay != null &&
+    !sheetOverlay &&
+    !tabbedOverlay &&
+    overlay.screen !== "ended";
   const hideTabBar =
     Boolean(activeCheckin) ||
     workoutImmersive ||
@@ -978,29 +963,47 @@ export function TraineeShell({
     <View style={styles.root}>
       <View style={styles.content}>
         {tab === "today" ? (
-          <TodayTab
-            relationship={relationship}
-            planState={planState}
-            planCacheError={planCacheError}
-            selectedDate={selectedDate}
-            onSelectDate={setSelectedDate}
-            onStartWorkout={() => {
-              setWorkoutAutostart(true);
-              setTab("workout");
-            }}
-            onOpenDiet={() => setTab("diet")}
-            onOpenCheckin={setActiveCheckin}
-            onRefreshPlan={() => {
-              void refreshSession();
-              void loadEffectivePlan();
-            }}
-            onOpenOverlay={openOverlay}
-            unreadNotifications={unreadNotifications}
-            onViewSummary={(executionId) => {
-              setPendingSummaryExecutionId(executionId);
-              setTab("workout");
-            }}
-          />
+          relationship.status === "ended" ? (
+            <EndedCoachingScreen
+              relationship={relationship}
+              coachName={
+                relationship.trainerDisplayName?.trim() || "Your coach"
+              }
+              onOpenHistory={() => openOverlay({ screen: "past_coaching" })}
+              onSignOut={signOut}
+              onCoachingResumed={handleCoachingResumed}
+              embedded
+              unreadNotifications={unreadNotifications}
+              onOpenSync={() => openOverlay({ screen: "sync" })}
+              onOpenNotifications={() =>
+                openOverlay({ screen: "notifications" })
+              }
+            />
+          ) : (
+            <TodayTab
+              relationship={relationship}
+              planState={planState}
+              planCacheError={planCacheError}
+              selectedDate={selectedDate}
+              onSelectDate={setSelectedDate}
+              onStartWorkout={() => {
+                setWorkoutAutostart(true);
+                setTab("workout");
+              }}
+              onOpenDiet={() => setTab("diet")}
+              onOpenCheckin={setActiveCheckin}
+              onRefreshPlan={() => {
+                void refreshSession();
+                void loadEffectivePlan();
+              }}
+              onOpenOverlay={openOverlay}
+              unreadNotifications={unreadNotifications}
+              onViewSummary={(executionId) => {
+                setPendingSummaryExecutionId(executionId);
+                setTab("workout");
+              }}
+            />
+          )
         ) : null}
 
         {tab === "workout" ? (
@@ -1075,7 +1078,7 @@ export function TraineeShell({
         />
       ) : null}
 
-      {tab === "today" ? (
+      {tab === "today" && relationship.status !== "ended" ? (
         <ForegroundBanner
           relationship={relationship}
           coachName={relationship.trainerDisplayName?.trim() || "Your coach"}

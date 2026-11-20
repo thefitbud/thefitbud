@@ -14,7 +14,7 @@ import {
   WifiOff,
   X,
 } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   ExceptionDetail,
   MealAssignment,
@@ -167,9 +167,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.load", err);
         }
         setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load exception. (EXC-LOAD)",
+          userFacingMessage(err, { fallback: "Could not load exception. (EXC-LOAD)" }),
         );
       }
       setLoading(false);
@@ -285,9 +283,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.acknowledge", err);
         }
         setError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not mark reviewed. (ACK-ERR)",
+          userFacingMessage(err, { fallback: "Could not mark reviewed. (ACK-ERR)" }),
         );
       }
     } finally {
@@ -335,9 +331,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.resolve", err);
         }
         setResolveError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not resolve. (RES-ERR)",
+          userFacingMessage(err, { fallback: "Could not resolve. (RES-ERR)" }),
         );
       }
     } finally {
@@ -372,9 +366,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.note", err);
         }
         setNoteError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not save note. (NOTE-ERR)",
+          userFacingMessage(err, { fallback: "Could not save note. (NOTE-ERR)" }),
         );
       }
     } finally {

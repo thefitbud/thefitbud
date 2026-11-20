@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { ChevronLeft, MessageSquare, Play, Timer } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { WorkoutAssignment } from "@fitbud/contracts";
 import { colors, radii, spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
@@ -107,9 +107,7 @@ export function WorkoutOverviewScreen({
     } catch (err) {
       setOffline(true);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load workout. Pull to try again.",
+        userFacingMessage(err, { fallback: "Couldn't load workout. Pull to try again." }),
       );
     } finally {
       setLoading(false);

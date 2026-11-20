@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { ClientWorkspace, PlanContent, PlanVersion } from "@fitbud/contracts";
 import { PlanBuilder, type BuilderTab } from "../../components/builder/PlanBuilder";
 import type { PublishIssues } from "../../components/builder/validation";
@@ -49,7 +49,7 @@ export function PlanBuilderPage() {
       recordVersion.current = version.recordVersion;
       setLoaded({ planTitle: plan.plan.title, version, workspace });
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Couldn't load this draft.");
+      setError(userFacingMessage(err, { fallback: "Couldn't load this draft." }));
     }
   }, [planId, versionId, relationshipId]);
 

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ScrollView, TextInput, View, type StyleProp, type ViewStyle } from "react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { LoggedFoodItem, MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatNumber } from "@fitbud/core";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -8,7 +8,7 @@ import { Text } from "../../components/Text";
 import { reportError } from "../../lib/reportError";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { useSyncEngine } from "../../sync/SyncProvider";
-import { deviateMealAssignment, MealSyncError } from "../mealActions";
+import { deviateMealAssignment } from "../mealActions";
 import { cleanFoodLabel } from "../mealHelpers";
 import { nutrientsFromMealPrescription } from "../nutrition";
 import { FoodNavHeader } from "./FoodNavHeader";
@@ -119,9 +119,7 @@ export function AteOutForm({
     } catch (err) {
       reportError("AteOutForm.save", err);
       setError(
-        err instanceof MealSyncError || err instanceof ApiClientError
-          ? err.message
-          : "Couldn’t save that meal. Try again.",
+        userFacingMessage(err, { fallback: "Couldn’t save that meal. Try again." }),
       );
     } finally {
       setSaving(false);

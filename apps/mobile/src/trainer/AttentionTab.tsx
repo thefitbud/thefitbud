@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AppState } from "react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   AttentionGroupsResponse,
   CoachAsk,
@@ -357,9 +357,7 @@ export function AttentionTab({
       setUndoTarget(null);
       setToast(null);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load. Pull to try again.",
+        userFacingMessage(err, { fallback: "Couldn't load. Pull to try again." }),
       );
     }
   }
@@ -387,9 +385,7 @@ export function AttentionTab({
         )?.traineeDisplayName ?? "Client";
       setToast(markReviewedToastMessage(name, prior.needsYou.length));
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load. Pull to try again.",
+        userFacingMessage(err, { fallback: "Couldn't load. Pull to try again." }),
       );
     }
   }
@@ -453,9 +449,7 @@ export function AttentionTab({
       setJustResolvedIds(priorJust);
       setReviewBrowsing(priorBrowsing);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load. Pull to try again.",
+        userFacingMessage(err, { fallback: "Couldn't load. Pull to try again." }),
       );
     } finally {
       setReviewActing(false);
@@ -500,9 +494,7 @@ export function AttentionTab({
         setJustResolvedIds(priorJust);
       }
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load. Pull to try again.",
+        userFacingMessage(err, { fallback: "Couldn't load. Pull to try again." }),
       );
     } finally {
       setReviewActing(false);
@@ -614,9 +606,7 @@ export function AttentionTab({
       } else {
         if (!(err instanceof ApiClientError)) reportError("attention.resolve", err);
         setSubSheetError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not resolve. (RES-ERR)",
+          userFacingMessage(err, { fallback: "Could not resolve. (RES-ERR)" }),
         );
       }
     } finally {
@@ -644,9 +634,7 @@ export function AttentionTab({
       } else {
         if (!(err instanceof ApiClientError)) reportError("attention.note", err);
         setSubSheetError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not save note. (NOTE-ERR)",
+          userFacingMessage(err, { fallback: "Could not save note. (NOTE-ERR)" }),
         );
       }
     } finally {
@@ -673,10 +661,8 @@ export function AttentionTab({
     }
     setAsks((current) => restoreAskAt(current, ask, index));
     setError(
-      err instanceof ApiClientError
-        ? err.message
-        : "Couldn't mark answered. Try again.",
-    );
+        userFacingMessage(err, { fallback: "Couldn't mark answered. Try again." }),
+      );
   }
 
   // Mark answered is held for 5 s so Undo needs no server call. A second

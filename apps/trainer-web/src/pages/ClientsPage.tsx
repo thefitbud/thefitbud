@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Plus, SearchX, UserPlus } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { ClientDirectoryItem, OnboardingStatus } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
 import { ClientRow } from "../components/ClientRow";
@@ -188,9 +188,7 @@ export function ClientsPage() {
       .catch((err: unknown) => {
         if (generation.current !== id) return;
         setLoadMoreError(
-          err instanceof ApiClientError
-            ? err.message
-            : "Could not load more clients.",
+          userFacingMessage(err, { fallback: "Could not load more clients." }),
         );
       })
       .finally(() => {

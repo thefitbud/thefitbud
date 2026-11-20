@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { AlertCircle, CalendarDays, ChevronDown, ChevronLeft, Clock, Lock } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { WorkoutAssignment, WorkoutExecution } from "@fitbud/contracts";
 import { formatCivilDate, formatPersonName } from "@fitbud/core";
 import { colors, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
@@ -237,7 +237,7 @@ export function ClientLogWorkoutScreen({
         if (err.status >= 400 && err.status < 500) idempotencyKey.current = createIdempotencyKey();
         setSave({
           state: "failed",
-          message: `Not saved. ${err.message} Your entries are still here.`,
+          message: `Not saved. ${userFacingMessage(err)} Your entries are still here.`,
           stale: err.code === "VERSION_CONFLICT",
         });
       } else {

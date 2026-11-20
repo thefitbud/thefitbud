@@ -1,4 +1,4 @@
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { MeResponse } from "@fitbud/contracts";
 import { archivedPurgeAfter } from "../auth/archivedAccount";
 import { apiClient, cancelTokenRefresh, scheduleTokenRefresh } from "./api";
@@ -70,7 +70,7 @@ function mapLoginError(err: unknown): AuthFlowError {
         "That mobile number or email and password don't match.",
       );
     }
-    return new AuthFlowError("generic", err.message);
+    return new AuthFlowError("generic", userFacingMessage(err));
   }
   return new AuthFlowError("generic", "Something went wrong. Try again.");
 }

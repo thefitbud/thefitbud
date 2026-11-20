@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { StrengthQuery, StrengthReadModel } from "@fitbud/contracts";
 import { apiClient } from "../../lib/api";
 import { rangeCacheKey, type MetricRange } from "./useProgressMetrics";
@@ -50,9 +50,7 @@ export function useStrength(input: {
           data: null,
           loading: false,
           error:
-            err instanceof ApiClientError
-              ? err.message
-              : "Could not load workouts.",
+            userFacingMessage(err, { fallback: "Could not load workouts." }),
         });
       });
     return () => {

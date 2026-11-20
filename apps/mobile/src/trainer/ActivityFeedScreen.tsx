@@ -14,7 +14,7 @@ import {
   UtensilsCrossed,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { deviceTimeZone, formatLocalDate, formatPersonName } from "@fitbud/core";
 import type { ColorTokens } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
@@ -133,9 +133,7 @@ export function ActivityFeedScreen({
       setCursor(page.nextCursor);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load activity.",
+        userFacingMessage(err, { fallback: "Could not load activity." }),
       );
     } finally {
       setLoading(false);
@@ -161,9 +159,7 @@ export function ActivityFeedScreen({
       setCursor(page.nextCursor);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load activity.",
+        userFacingMessage(err, { fallback: "Could not load activity." }),
       );
     } finally {
       setLoadingMore(false);
@@ -210,9 +206,9 @@ export function ActivityFeedScreen({
     } catch (err) {
       if (!(err instanceof ApiClientError)) reportError("activity.note", err);
       setNoteError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't save the note. Try again.",
+        userFacingMessage(err, {
+          fallback: "Couldn't save the note. Try again.",
+        }),
       );
     } finally {
       setNoteActing(false);

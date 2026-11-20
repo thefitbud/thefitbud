@@ -17,7 +17,7 @@ import {
   WifiOff,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { CheckinReviewContext } from "@fitbud/contracts";
 import {
   canRecordCheckinReview,
@@ -191,11 +191,13 @@ export function CheckinReviewScreen({
         setError("Review saved. The note wasn't shared.");
       } else if (err instanceof ApiClientError && err.status === 409) {
         setError(`${first}'s check-in changed. Pull to reload.`);
-      } else if (err instanceof ApiClientError) {
-        setError(err.message);
       } else {
-        reportError("checkinReview.save", err);
-        setError("Couldn't save the review. Try again.");
+        if (!(err instanceof ApiClientError)) reportError("checkinReview.save", err);
+        setError(
+          userFacingMessage(err, {
+            fallback: "Couldn't save the review. Try again.",
+          }),
+        );
       }
     } finally {
       setActing(false);
@@ -222,11 +224,12 @@ export function CheckinReviewScreen({
       setToast(`Reply sent · shared with ${first}`);
       await load();
     } catch (err) {
-      if (err instanceof ApiClientError) setError(err.message);
-      else {
-        reportError("checkinReview.reply", err);
-        setError("Couldn't send the reply. Try again.");
-      }
+      if (!(err instanceof ApiClientError)) reportError("checkinReview.reply", err);
+      setError(
+        userFacingMessage(err, {
+          fallback: "Couldn't send the reply. Try again.",
+        }),
+      );
     } finally {
       setActing(false);
     }

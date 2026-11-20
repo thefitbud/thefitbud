@@ -34,7 +34,7 @@ function openPasswordForm() {
 describe("trainer profile change password (frame 55)", () => {
   beforeEach(() => setPassword.mockReset());
 
-  it("shows the API's own message when the current password is wrong", async () => {
+  it("shows the current-password copy when INVALID_CREDENTIALS proves it", async () => {
     setPassword.mockRejectedValueOnce(
       new ApiClientError({
         code: "INVALID_CREDENTIALS",
@@ -45,7 +45,7 @@ describe("trainer profile change password (frame 55)", () => {
     );
     openPasswordForm();
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));
-    await screen.findByText("Current password is incorrect.");
+    await screen.findByText("That isn't your current password.");
     expect(setPassword).toHaveBeenCalledWith({
       currentPassword: "OldPassword-1",
       newPassword: "NewPassword-2",

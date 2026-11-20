@@ -1,4 +1,4 @@
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import {
   classifyAuthError,
   mismatchedResponseCopy,
@@ -48,7 +48,7 @@ export function resetSetError(err: unknown): string {
     err instanceof ApiClientError &&
     (err.code === "PASSWORD_LENGTH" || err.code === "PASSWORD_BREACHED")
   ) {
-    return err.message;
+    return userFacingMessage(err);
   }
   return failureCopy(err, "reset-set", "passwordReset.set");
 }

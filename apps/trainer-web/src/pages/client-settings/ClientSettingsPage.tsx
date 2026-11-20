@@ -10,7 +10,7 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { ClientSettingsResponse, PaymentRecord } from "@fitbud/contracts";
 import { formatCivilDate, labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
@@ -102,9 +102,7 @@ export function ClientSettingsPage() {
       setSettings(await apiClient.getClientSettings(relationshipId));
     } catch (err) {
       setLoadError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't load client settings. (CS-LOAD)",
+        userFacingMessage(err, { fallback: "Couldn't load client settings. (CS-LOAD)" }),
       );
     } finally {
       setLoading(false);

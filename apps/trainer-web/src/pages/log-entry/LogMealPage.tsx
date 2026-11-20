@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useOutletContext, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { CoachLogMealRequest, MealAssignment } from "@fitbud/contracts";
 import {
   addDaysToLocalDate,
@@ -86,7 +86,7 @@ export function LogMealPage() {
     } catch (err) {
       if (seq !== loadSeq.current) return;
       setLoadError(
-        err instanceof ApiClientError ? err.message : "Could not load this meal.",
+        userFacingMessage(err, { fallback: "Could not load this meal." }),
       );
     } finally {
       if (seq === loadSeq.current) setLoading(false);

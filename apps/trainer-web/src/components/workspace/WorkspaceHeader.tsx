@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useState, type ReactNode } from "react";
 import {
   Ban,
@@ -121,7 +122,7 @@ export function WorkspaceHeader({
       onWorkspaceChanged?.();
     } catch (err) {
       setCancelError(
-        err instanceof Error ? err.message : "Could not cancel the request.",
+        userFacingMessage(err, { fallback: "Could not cancel the request." }),
       );
     } finally {
       setCancelBusy(false);

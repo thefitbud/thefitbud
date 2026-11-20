@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "./AuthLayout";
@@ -46,7 +47,7 @@ export function SetPasswordPage() {
       await refreshMe();
       navigate(next, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not set password.");
+      setError(userFacingMessage(err, { fallback: "Could not set password." }));
     } finally {
       setSubmitting(false);
     }

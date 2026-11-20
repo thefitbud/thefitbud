@@ -12,7 +12,7 @@ import {
   whatsappHref,
 } from "@fitbud/core";
 import { spacing, touchTargetMin } from "@fitbud/ui-mobile";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
 import { useAuth } from "../../auth/AuthProvider";
@@ -191,9 +191,7 @@ function AskCoachSheetBody({
       // shown as-is; anything else gets a short code and is reported.
       reportError("AskCoachSheet.createAsk", err);
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Couldn't send your question (ASK-NET). Check your connection and try again.",
+        userFacingMessage(err, { fallback: "Couldn't send your question (ASK-NET). Check your connection and try again." }),
       );
     } finally {
       setLoading(false);

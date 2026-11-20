@@ -6,7 +6,7 @@
  * structure, not layout.
  */
 import { describe, expect, it, vi } from "vitest";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, USER_FACING_OFFLINE } from "@fitbud/api-client";
 import {
   checkinFormVersionSchema,
   checkinSchema,
@@ -191,7 +191,7 @@ describe("check-in card without a plan", () => {
       throw new Error("SQLITE_ERROR: no such column secret_internal_name");
     });
     render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} />);
-    await screen.findByText(/CHK-CARD/);
+    await screen.findByText("Couldn't load your check-in. Try again.");
     expect(screen.queryByText(/SQLITE|secret_internal_name/)).toBeNull();
     expect(screen.getByText("Try again")).toBeTruthy();
   });
@@ -327,12 +327,14 @@ describe("deep-link failures", () => {
     expect(deepLinkFailureReason("t", notFound, "meal")).toBe("This meal isn't available anymore.");
   });
   it("never blames a missing meal for a network or parse failure", () => {
-    expect(deepLinkFailureReason("t", new TypeError("Network request failed"), "meal")).toContain("MEAL-NET");
-    const reason = deepLinkFailureReason("t", new Error("boom: internal detail"), "check-in");
-    expect(reason).toContain("CHECKIN-PARSE");
-    expect(reason).not.toMatch(/isn't available|internal detail|connection|NET/);
+    expect(deepLinkFailureReason("t", new TypeError("Network request failed"), "meal")).toBe(
+      USER_FACING_OFFLINE,
+    );
+    const reason = deepLinkFailureReason("t", new Error("ENOENT: no such file"), "check-in");
+    expect(reason).toBe("Couldn't open this check-in. Try again.");
+    expect(reason).not.toMatch(/isn't available|ENOENT/);
     const zod = deepLinkFailureReason("t", checkinSchema.safeParse({}).error, "meal");
-    expect(zod).toContain("MEAL-PARSE");
+    expect(zod).toBe("Couldn't open this meal. Try again.");
     expect(zod).not.toContain("connection");
   });
   it("shows a 5xx ApiClientError's own message with its status", () => {
@@ -343,7 +345,7 @@ describe("deep-link failures", () => {
       status: 503,
     });
     expect(deepLinkFailureReason("t", err, "meal")).toBe(
-      "FitBud is busy. Try again in a moment. (MEAL-503)",
+      "FitBud is busy. Try again in a moment.",
     );
   });
 });

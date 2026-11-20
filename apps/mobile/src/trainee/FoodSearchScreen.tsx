@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, TextInput, View } from "react-native";
 import { Check, Plus, Search, WifiOff, X } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { formatNumber } from "@fitbud/core";
@@ -39,7 +39,7 @@ import {
 } from "./food/logLines";
 import { fetchTraineeFoodDetail } from "./food/foodServingsApi";
 import { announceMealSaved } from "./food/mealSavedNotice";
-import { deviateMealAssignment, MealSyncError } from "./mealActions";
+import { deviateMealAssignment } from "./mealActions";
 import { cleanFoodLabel } from "./mealHelpers";
 import { nutrientsFromMealPrescription } from "./nutrition";
 import { useDeviceOffline } from "./today/queuedLogs";
@@ -250,7 +250,7 @@ function FoodSearchBody({
           setSearch({
             kind: "error",
             message:
-              err instanceof ApiClientError ? err.message : "Search didn’t load. Try again.",
+              userFacingMessage(err, { fallback: "Search didn’t load. Try again." }),
           });
         });
     }, SEARCH_DEBOUNCE_MS);
@@ -351,9 +351,9 @@ function FoodSearchBody({
       reportError("FoodSearchScreen.save", err);
       if (mounted.current) {
         setError(
-          err instanceof MealSyncError || err instanceof ApiClientError
-            ? err.message
-            : "Couldn’t save that meal. Try again.",
+          userFacingMessage(err, {
+            fallback: "Couldn’t save that meal. Try again.",
+          }),
         );
       }
     } finally {

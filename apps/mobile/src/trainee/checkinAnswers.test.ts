@@ -161,13 +161,17 @@ describe("checkinFormLoadFailure", () => {
 
   it("never shows another error's message, and gives a code instead", () => {
     const zod = Object.assign(new Error("[{\"path\":[\"fields\"]}]"), { name: "ZodError" });
-    expect(checkinFormLoadFailure(zod).message).toContain("CHK-PARSE");
+    expect(checkinFormLoadFailure(zod).code).toBe("CHK-PARSE");
+    expect(checkinFormLoadFailure(zod).message).toBe(
+      "Couldn't open the check-in. Try again.",
+    );
     expect(checkinFormLoadFailure(zod).message).not.toContain("path");
     expect(checkinFormLoadFailure(new TypeError("Failed to fetch")).code).toBe("CHK-NET");
     expect(checkinFormLoadFailure(new TypeError("Network request failed")).code).toBe("CHK-NET");
     expect(checkinFormLoadFailure(Object.assign(new Error("x"), { name: "AbortError" })).code).toBe("CHK-NET");
-    const other = checkinFormLoadFailure(new Error("secret detail"));
+    const other = checkinFormLoadFailure(new Error("ENOENT: no such file"));
     expect(other.code).toBe("CHK-UNK");
-    expect(other.message).not.toContain("secret");
+    expect(other.message).toBe("Couldn't open the check-in. Try again.");
+    expect(other.message).not.toContain("ENOENT");
   });
 });

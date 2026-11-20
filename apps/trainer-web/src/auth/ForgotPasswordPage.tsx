@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthLayout } from "./AuthLayout";
@@ -72,7 +73,7 @@ export function ForgotPasswordPage() {
         if (devCode) setCode(devCode);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not send a code.");
+      setError(userFacingMessage(err, { fallback: "Could not send a code." }));
     } finally {
       setSubmitting(false);
     }
@@ -128,7 +129,7 @@ export function ForgotPasswordPage() {
       );
       navigate(next, { replace: true });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reset password.");
+      setError(userFacingMessage(err, { fallback: "Could not reset password." }));
     } finally {
       setSubmitting(false);
     }

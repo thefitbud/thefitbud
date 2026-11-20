@@ -23,7 +23,7 @@ import {
   UserPlus,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   ClientWorkspace,
   MealAssignment,
@@ -399,7 +399,7 @@ export function ClientStatusScreen({
       setToast("Note saved");
       await load();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : "Couldn't load. Pull to try again.");
+      setError(userFacingMessage(err, { fallback: "Couldn't load. Pull to try again." }));
     } finally {
       setActing(false);
     }

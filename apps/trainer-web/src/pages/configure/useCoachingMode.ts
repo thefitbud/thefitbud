@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   ClientSettingsSubscription,
   CoachingMode,
@@ -125,9 +125,7 @@ export function useCoachingMode(
         return false;
       }
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not save the coaching mode.",
+        userFacingMessage(err, { fallback: "Could not save the coaching mode." }),
       );
       return false;
     } finally {

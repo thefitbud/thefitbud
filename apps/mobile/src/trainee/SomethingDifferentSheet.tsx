@@ -12,7 +12,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { LoggedFoodItem, MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatNumber } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
@@ -28,7 +28,7 @@ import { AteOutForm, type CoachDeviateSave } from "./food/AteOutForm";
 import { FoodNavHeader } from "./food/FoodNavHeader";
 import { amountWithUnit, formatAmount, unitNoun } from "./food/logLines";
 import { announceMealSaved } from "./food/mealSavedNotice";
-import { deviateMealAssignment, MealSyncError } from "./mealActions";
+import { deviateMealAssignment } from "./mealActions";
 import { cleanFoodLabel } from "./mealHelpers";
 import { nutrientsFromMealPrescription } from "./nutrition";
 
@@ -220,9 +220,9 @@ function SomethingDifferentSheetBody({
     } catch (err) {
       reportError("SomethingDifferentSheet.savePortion", err);
       setError(
-        err instanceof MealSyncError || err instanceof ApiClientError
-          ? err.message
-          : "Couldn’t save that meal. Try again.",
+        userFacingMessage(err, {
+          fallback: "Couldn’t save that meal. Try again.",
+        }),
       );
     } finally {
       setSaving(false);

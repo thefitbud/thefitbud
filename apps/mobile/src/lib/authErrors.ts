@@ -1,4 +1,4 @@
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { isZodError, reportError } from "./reportError";
 
 /**
@@ -158,7 +158,7 @@ export function classifyAuthError(
     (context === "invite-accept" || context === "general") &&
     err.message
   ) {
-    return { code: null, copy: err.message };
+    return { code: null, copy: userFacingMessage(err) };
   }
   if (context === "session") return { code: "AUTH-SESSION", copy: SESSION_COPY };
   return { code: "AUTH-UNK", copy: UNK_COPY };

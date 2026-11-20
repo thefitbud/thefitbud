@@ -1,3 +1,4 @@
+import { userFacingMessage } from "@fitbud/api-client";
 import { useState } from "react";
 import { Pressable, StyleSheet, TextInput, View } from "react-native";
 import { Text } from "../components/Text";
@@ -116,9 +117,7 @@ export function MealDeviationScreen({
                 });
               } catch (err) {
                 setError(
-                  err instanceof Error
-                    ? err.message
-                    : "Could not save deviation.",
+                  userFacingMessage(err, { fallback: "Could not save deviation." }),
                 );
               }
             })();

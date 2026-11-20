@@ -160,6 +160,9 @@ describe("liveActivityContentFor", () => {
         lastReps: 10,
         loggedSet: { setIndex: 1, kilograms: 20, reps: 10 },
         finished: false,
+        bodyweight: false,
+        // Goblet squat remains after RDL — Log must not finish the workout.
+        lastExercise: false,
       },
     });
   });
@@ -185,13 +188,18 @@ describe("liveActivityContentFor", () => {
         setCount: 2,
         kilograms: 16,
         reps: 12,
-        lastKg: 16,
-        lastReps: 12,
-        // The logged line carries the previous exercise's last set (set 3).
+        lastKg: 25,
+        lastReps: 8,
+        // Crossing: previous exercise name + next set position (Z12-48).
         loggedSet: { setIndex: 3, kilograms: 25, reps: 8 },
+        crossedFromExercise: "Romanian deadlift",
         finished: false,
+        lastExercise: true,
       },
     });
+    expect(
+      toNativeContentState(liveActivityContentFor(ex)!).loggedLine,
+    ).toBe("Romanian deadlift done · Next: Goblet squat, set 1 of 2");
     ex = logNext(logNext(ex, { reps: 10 }), { load: "18 kg", reps: 11 });
     expect(liveActivityContentFor(ex)).toEqual({
       exerciseName: "Goblet squat",
@@ -206,8 +214,59 @@ describe("liveActivityContentFor", () => {
         lastReps: 11,
         loggedSet: { setIndex: 2, kilograms: 18, reps: 11 },
         finished: true,
+        bodyweight: false,
+        lastExercise: true,
       },
     });
+  });
+
+  it("flags bodyweight and keeps the last set of exercise 1 unfinished", () => {
+    const bw = execution([
+      exercise(RDL_ID, "Push-up", 1, [
+        set(1, "Bodyweight", 12, { reps: 12 }),
+        set(2, "Bodyweight", 12, { reps: 12 }),
+        set(3, "Bodyweight", 12, { reps: 12 }),
+      ]),
+      exercise(SQUAT_ID, "Shoulder press", 2, [
+        set(1, "16 kg", 10),
+        set(2, "16 kg", 10),
+        set(3, "16 kg", 10),
+      ]),
+    ]);
+    const content = liveActivityContentFor(bw)!;
+    expect(content).toMatchObject({
+      exerciseName: "Shoulder press",
+      state: {
+        setIndex: 1,
+        setCount: 3,
+        crossedFromExercise: "Push-up",
+        finished: false,
+        lastExercise: true,
+        bodyweight: false,
+      },
+    });
+    expect(toNativeContentState(content).loggedLine).toBe(
+      "Push-up done · Next: Shoulder press, set 1 of 3",
+    );
+    expect(toNativeContentState(content).moreExercisesRemain).toBe(false);
+
+    // Mid-first-exercise: more exercises remain → payload says so.
+    const midFirst = execution([
+      exercise(RDL_ID, "Push-up", 1, [
+        set(1, "Bodyweight", 12, { reps: 12 }),
+        set(2, "Bodyweight", 12),
+        set(3, "Bodyweight", 12),
+      ]),
+      exercise(SQUAT_ID, "Shoulder press", 2, [set(1, "Bodyweight", 10)]),
+    ]);
+    const mid = liveActivityContentFor(midFirst)!;
+    expect(mid.state).toMatchObject({
+      bodyweight: true,
+      lastExercise: false,
+      setIndex: 2,
+    });
+    expect(toNativeContentState(mid).moreExercisesRemain).toBe(true);
+    expect(toNativeContentState(mid).loggedLine).toBe("Set 1 logged · 12 reps");
   });
 
   it("returns null for a workout without sets", () => {
@@ -248,6 +307,8 @@ describe("createLiveActivitySession", () => {
         lastReps: 8,
         loggedSet: { setIndex: 2, kilograms: 25, reps: 8 },
         finished: false,
+        bodyweight: false,
+        lastExercise: false,
         restEndsAt: null,
         restSeconds: null,
       },

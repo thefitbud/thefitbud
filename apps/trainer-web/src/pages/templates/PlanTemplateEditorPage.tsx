@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import type { PlanContent, PlanTemplate, PlanTemplateType } from "@fitbud/contracts";
 import { PlanBuilder } from "../../components/builder/PlanBuilder";
 import { ErrorState, LoadingBlock } from "../../components/StatePanels";
@@ -52,7 +52,7 @@ function TemplateBuilder({
         setTemplate(loaded);
       })
       .catch((err: unknown) =>
-        setError(err instanceof ApiClientError ? err.message : "Couldn't load this template."),
+        setError(userFacingMessage(err, { fallback: "Couldn't load this template." })),
       );
   }, [templateId]);
 
@@ -82,7 +82,7 @@ function TemplateBuilder({
       );
       navigate(`${hubPath}/${copy.id}`);
     } catch (err) {
-      setForkError(err instanceof ApiClientError ? err.message : "Couldn't make a copy.");
+      setForkError(userFacingMessage(err, { fallback: "Couldn't make a copy." }));
     } finally {
       setForking(false);
     }

@@ -3,6 +3,7 @@ import config from "@fitbud/config/eslint/base";
 import fitbudTheme from "./eslint-rules/no-hard-coded-colour.mjs";
 import fitbudAccessibility from "./eslint-rules/no-invalid-accessibility-role.mjs";
 import fitbudDependencies from "./eslint-rules/no-undeclared-dependency.mjs";
+import fitbudErrors from "./eslint-rules/no-raw-error-message.mjs";
 
 export default [
   ...config,
@@ -37,5 +38,12 @@ export default [
     ignores: ["**/*.test.{ts,tsx}"],
     plugins: { "fitbud-theme": fitbudTheme },
     rules: { "fitbud-theme/no-hard-coded-colour": "error" },
+  },
+  {
+    // Z12-64: never feed err.message into UI setters / JSX.
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["**/*.test.{ts,tsx}", "src/test/**", "eslint-rules/**"],
+    plugins: { "fitbud-errors": fitbudErrors },
+    rules: { "fitbud-errors/no-raw-error-message": "error" },
   },
 ];

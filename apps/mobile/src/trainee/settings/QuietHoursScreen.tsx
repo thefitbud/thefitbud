@@ -1,7 +1,7 @@
 import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { userFacingMessage } from "@fitbud/api-client";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { ErrorBanner } from "../../components/ErrorBanner";
@@ -47,9 +47,7 @@ function QuietHoursScreenBody({ onBack }: Props) {
       setCustom(!match);
     } catch (err) {
       setError(
-        err instanceof ApiClientError
-          ? err.message
-          : "Could not load quiet hours.",
+        userFacingMessage(err, { fallback: "Could not load quiet hours." }),
       );
     } finally {
       setLoading(false);
@@ -82,7 +80,7 @@ function QuietHoursScreenBody({ onBack }: Props) {
         setToast("Saved on this phone. We'll sync it when you're back online.");
       } else {
         setError(
-          err instanceof ApiClientError ? err.message : "Could not save times.",
+          userFacingMessage(err, { fallback: "Could not save times." }),
         );
       }
     } finally {

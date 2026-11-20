@@ -6,7 +6,7 @@ import { Pressable,
   View,
 } from "react-native";
 import { ChevronRight, KeyRound } from "lucide-react-native";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
@@ -67,13 +67,12 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
       });
       setDone(true);
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        // The API's own curated message (INVALID_CREDENTIALS says the current password is wrong).
-        setError(err.message);
-      } else {
+      if (!(err instanceof ApiClientError)) {
         reportError("trainer-password-change", err);
-        setError("PASSWORD-SAVE");
       }
+      setError(
+        userFacingMessage(err, { fallback: "PASSWORD-SAVE" }),
+      );
     } finally {
       setSaving(false);
     }
@@ -167,12 +166,10 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
       await reloadMe();
       onBack();
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        setError(err.message);
-      } else {
+      if (!(err instanceof ApiClientError)) {
         reportError("trainer-profile-save", err);
-        setError("PROFILE-SAVE");
       }
+      setError(userFacingMessage(err, { fallback: "PROFILE-SAVE" }));
     } finally {
       setSaving(false);
     }
