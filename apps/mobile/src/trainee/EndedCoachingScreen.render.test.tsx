@@ -8,6 +8,20 @@ vi.mock("../auth/AuthProvider", async () => {
   return { ...actual, useAuth: () => auth };
 });
 
+vi.mock("../sync/useSyncStatus", () => ({
+  useSyncView: () => ({
+    rows: [],
+    status: {
+      waiting: 0,
+      sending: 0,
+      failed: 0,
+      waitingReason: null,
+      lastSentAt: null,
+    },
+  }),
+  useApiReachable: () => true,
+}));
+
 const { EndedCoachingScreen, reactivationOpen } = await import("./EndedCoachingScreen");
 
 const ended = {
@@ -53,9 +67,25 @@ describe("EndedCoachingScreen", () => {
     expect(screen.queryByText(/wants to coach you again/)).toBeNull();
   });
 
-  it("embedded in the Today tab it leaves the header and Sign out to the shell", () => {
+  it("embedded without chrome leaves the header and Sign out to the caller", () => {
     renderEnded({ ...ended, pendingReactivation: null }, { embedded: true });
     expect(screen.queryByText("Today")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+  });
+
+  it("embedded with chrome draws TodayHeader and hides Sign out (TR-22a)", () => {
+    renderEnded(
+      { ...ended, pendingReactivation: null },
+      {
+        embedded: true,
+        unreadNotifications: 0,
+        onOpenSync: vi.fn(),
+        onOpenNotifications: vi.fn(),
+      },
+    );
+    expect(screen.getByText("Today")).toBeTruthy();
+    expect(screen.getByTestId("ended-coaching-embedded")).toBeTruthy();
+    expect(screen.getByLabelText("Notifications")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
   });
 
