@@ -271,7 +271,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0041 in order after 0029, with 0041 last", async () => {
+  it("places 0030 to 0042 in order after 0029, with 0042 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -290,7 +290,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 10]).toBe("0039_log_authorship");
     expect(tags[previous + 11]).toBe("0040_client_basics");
     expect(tags[previous + 12]).toBe("0041_checkin_form_v2");
-    expect(tags.at(-1)).toBe("0041_checkin_form_v2");
+    expect(tags[previous + 13]).toBe("0042_template_used_by_index");
+    expect(tags.at(-1)).toBe("0042_template_used_by_index");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -304,6 +305,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 10]?.idx).toBe(39);
     expect(journal[previous + 11]?.idx).toBe(40);
     expect(journal[previous + 12]?.idx).toBe(41);
+    expect(journal[previous + 13]?.idx).toBe(42);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -319,7 +321,17 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 10]).toBe("0039_log_authorship.sql");
     expect(files[previousFile + 11]).toBe("0040_client_basics.sql");
     expect(files[previousFile + 12]).toBe("0041_checkin_form_v2.sql");
-    expect(files.at(-1)).toBe("0041_checkin_form_v2.sql");
+    expect(files[previousFile + 13]).toBe("0042_template_used_by_index.sql");
+    expect(files.at(-1)).toBe("0042_template_used_by_index.sql");
+    const usedByIndexSql = readFileSync(
+      join(drizzleDir, "0042_template_used_by_index.sql"),
+      "utf8",
+    );
+    expect(usedByIndexSql).toContain(
+      "CREATE INDEX `plan_versions_source_template_status_idx` ON `plan_versions` (`source_template_id`, `status`)",
+    );
+    expect(usedByIndexSql.toLowerCase()).not.toContain("drop ");
+    expect(usedByIndexSql.toLowerCase()).not.toContain("update ");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -1814,6 +1826,38 @@ describe("migration chain and seeds", () => {
     expect(snapshot.prevId).toBe(previous.id);
     expect(snapshot.id).not.toBe(previous.id);
     expect(snapshot.tables).toEqual(previous.tables);
+  });
+
+  it("records 0042 as an index-only change after 0041", () => {
+    const previous = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0041_snapshot.json"), "utf8"),
+    ) as {
+      id: string;
+      tables: {
+        plan_versions: { indexes: Record<string, unknown> };
+      };
+    };
+    const snapshot = JSON.parse(
+      readFileSync(join(drizzleDir, "meta/0042_snapshot.json"), "utf8"),
+    ) as {
+      id: string;
+      prevId: string;
+      tables: {
+        plan_versions: { indexes: Record<string, unknown> };
+      };
+    };
+    expect(snapshot.prevId).toBe(previous.id);
+    expect(snapshot.id).not.toBe(previous.id);
+    expect(
+      snapshot.tables.plan_versions.indexes.plan_versions_source_template_status_idx,
+    ).toEqual({
+      name: "plan_versions_source_template_status_idx",
+      columns: ["source_template_id", "status"],
+      isUnique: false,
+    });
+    const tables = structuredClone(snapshot.tables);
+    delete tables.plan_versions.indexes.plan_versions_source_template_status_idx;
+    expect(tables).toEqual(previous.tables);
   });
 
   it("inserts global check-in form v2 insert-only when 0041 applies (Z6-2)", async () => {
