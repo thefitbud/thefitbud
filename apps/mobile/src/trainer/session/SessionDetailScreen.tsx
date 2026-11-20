@@ -342,7 +342,7 @@ export function SessionDetailScreen({
           </View>
 
           {earlyBanner ? (
-            <View style={styles.warnBanner} accessibilityRole="status">
+            <View style={styles.warnBanner} accessibilityRole="summary">
               <TriangleAlert
                 color={v3LightColors.warn}
                 size={16}

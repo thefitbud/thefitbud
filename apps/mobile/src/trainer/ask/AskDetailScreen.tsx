@@ -300,7 +300,7 @@ export function AskDetailScreen({
       {error ? <ErrorBanner message={error} /> : null}
 
       {answered ? (
-        <View style={styles.answeredBanner} accessibilityRole="status">
+        <View style={styles.answeredBanner} accessibilityRole="summary">
           <Check color={v3LightColors.done} size={16} strokeWidth={2.4} />
           <Text style={styles.answeredText}>Answered on WhatsApp.</Text>
         </View>
@@ -372,7 +372,7 @@ export function AskDetailScreen({
           </View>
 
           {pain ? (
-            <View style={styles.painBanner} accessibilityRole="status">
+            <View style={styles.painBanner} accessibilityRole="summary">
               <HeartPulse
                 color={v3LightColors.crit}
                 size={16}

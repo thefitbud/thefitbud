@@ -348,7 +348,7 @@ export function CheckinReviewScreen({
         <Snackbar leadingCheck message={toast} onDismiss={() => setToast(null)} />
       ) : null}
       {offline ? (
-        <View style={styles.offlineBanner} accessibilityRole="status">
+        <View style={styles.offlineBanner} accessibilityRole="summary">
           <WifiOff color={v3LightColors.ink2} size={16} strokeWidth={2.2} />
           <Text style={styles.offline}>
             You’re offline. You can read this check-in, but replying and reviewing need a connection.
