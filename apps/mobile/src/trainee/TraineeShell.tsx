@@ -1075,7 +1075,7 @@ export function TraineeShell({
         />
       ) : null}
 
-      {tab === "today" ? (
+      {tab === "today" && relationship.status !== "ended" ? (
         <ForegroundBanner
           relationship={relationship}
           coachName={relationship.trainerDisplayName?.trim() || "Your coach"}

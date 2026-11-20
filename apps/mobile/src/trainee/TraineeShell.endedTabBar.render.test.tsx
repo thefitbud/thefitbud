@@ -117,6 +117,15 @@ vi.mock("../realtime/useRealtimeHints", () => ({
   useRealtimeHints: () => undefined,
 }));
 
+vi.mock("./notifications/ForegroundBanner", () => ({
+  ForegroundBanner: () => {
+    const React = require("react") as typeof import("react");
+    return React.createElement("Text", {
+      testID: "foreground-banner",
+    });
+  },
+}));
+
 describe("TraineeShell when coaching has ended (TR-22a)", () => {
   it("keeps the tab bar and embeds the ended landing on Today", async () => {
     const { render, screen, waitFor } = await import("../test/render");
@@ -135,5 +144,7 @@ describe("TraineeShell when coaching has ended (TR-22a)", () => {
     expect(
       screen.getByText(/Coaching with Rahul ended/),
     ).toBeTruthy();
+    // Meal / coach-note banners stay off — ended coaching is read-only (TR-22).
+    expect(screen.queryByTestId("foreground-banner")).toBeNull();
   });
 });
