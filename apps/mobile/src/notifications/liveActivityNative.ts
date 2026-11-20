@@ -7,10 +7,20 @@ import {
 } from "../../modules/live-activity";
 import {
   DEMO_LIVE_ACTIVITY,
-  loggedSetLine,
+  activityLoggedLine,
   reduceLiveActivity,
   type LiveActivityState,
 } from "./liveActivity";
+
+/**
+ * ContentState JS sends today, plus Z12-48's advance flag. Native ignores
+ * `moreExercisesRemain` until Z12-57 adds it to the Codable struct
+ * (docs/qa/Z12-48/swift-spec.md). Keeping the extra key on the JS object is
+ * the payload that lets LogSetIntent log one set without finishing.
+ */
+export type LiveActivityNativePayload = NativeWorkoutContentState & {
+  moreExercisesRemain: boolean;
+};
 
 /**
  * JS side of the workout activity bridge (LA1 on iOS, LA3 on Android). Local
@@ -105,7 +115,7 @@ export type LiveActivityModuleAccess = {
 export function toNativeContentState({
   exerciseName,
   state,
-}: LiveActivityContent): NativeWorkoutContentState {
+}: LiveActivityContent): LiveActivityNativePayload {
   return {
     exerciseName,
     setIndex: state.setIndex,
@@ -116,8 +126,13 @@ export function toNativeContentState({
     planReps: state.planReps,
     lastKilograms: state.lastKnown === false ? null : state.lastKg,
     lastReps: state.lastKnown === false ? null : state.lastReps,
-    loggedLine: loggedSetLine(state),
+    loggedLine: activityLoggedLine(exerciseName, state),
     finished: state.finished,
+    // Z12-48: JS owns the advance. Swift LogSetIntent (Z12-57) must not set
+    // finished while this is true — only write the outbox row and an
+    // optimistic logged line. Expo drops unknown fields until the native
+    // ContentState gains the field (see docs/qa/Z12-48/swift-spec.md).
+    moreExercisesRemain: state.lastExercise === false,
     restEndsAt: state.finished ? null : (state.restEndsAt ?? null),
     restSeconds: state.finished ? null : (state.restSeconds ?? null),
   };
