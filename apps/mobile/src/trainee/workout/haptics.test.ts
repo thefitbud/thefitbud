@@ -15,6 +15,10 @@ const rn = vi.hoisted(() => ({
 
 vi.mock("expo-haptics", () => haptics);
 
+vi.mock("./restEndSound", () => ({
+  restEndSound: vi.fn(),
+}));
+
 vi.mock("react-native", () => ({
   Platform: {
     get OS() {

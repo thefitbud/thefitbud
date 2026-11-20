@@ -5,8 +5,7 @@
  * React Native `Vibration` when the native module is missing (web, tests, an
  * old build) so Z12-45's rest-end call site never fails the screen.
  *
- * Rest-end sound needs a native audio module (`expo-av`); that stays a
- * follow-up once a rest-end asset is chosen — felt, not heard, until then.
+ * Rest-end also plays `assets/sounds/rest-end.wav` via expo-av (best effort).
  *
  * Android: both expo-haptics and Vibration need `android.permission.VIBRATE`
  * (declared in app.config.js). The Vibration fallback still checks the
@@ -15,6 +14,7 @@
  */
 import * as Haptics from "expo-haptics";
 import { PermissionsAndroid, Platform, Vibration } from "react-native";
+import { restEndSound } from "./restEndSound";
 
 /** Two short buzzes when a rest reaches its end (W-05b), Vibration fallback. */
 export const REST_END_PATTERN = [0, 220, 120, 220];
@@ -64,8 +64,9 @@ function fire(
   }
 }
 
-/** Two short pulses when a rest reaches its end (W-05b). */
+/** Two short pulses when a rest reaches its end (W-05b), plus the soft chime. */
 export function restEndHaptic(): void {
+  restEndSound();
   fire(async () => {
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
