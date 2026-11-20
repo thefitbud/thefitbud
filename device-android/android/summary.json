@@ -1,0 +1,148 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 1 of 1 flows failed"
+  ],
+  "flows": [
+    "flows/v3/F16-expiry-errors-ended.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 1,
+      "passed": 0,
+      "failed": 1,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F16 Ended coaching and the coach's restart request (Z12-49)",
+          "message": "Assertion is false: \"Your history is safe\" is visible",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "F16 Ended coaching and the coach's restart request (Z12-49)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 1,
+      "passed": 1,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 11s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 11s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 67 s",
+      "mode": "cache-hit",
+      "seconds": 67,
+      "cacheKey": "device-native-android-03ec2a4f47a683601a9cfac3a536c35d78867e18"
+    },
+    {
+      "file": "lockscreen-live-activity.json",
+      "platform": "android",
+      "target": "live-activity",
+      "match": "Log set [0-9]+|Skip rest|FitBud · ",
+      "outcome": "not-found",
+      "note": "no lock-screen element matches /Log set [0-9]+|Skip rest|FitBud · /i, on the lock screen or in the shade over it (dumps: lockscreen/android-live-activity-locked*.xml)"
+    },
+    {
+      "file": "lockscreen-notification.json",
+      "platform": "android",
+      "target": "notification",
+      "match": "FitBud",
+      "outcome": "tapped-no-app",
+      "note": "tapped at 588 730 twice; com.thefitbud.mobile.staging does not have the window focus (see lockscreen/android-notification-focus.txt)"
+    },
+    {
+      "file": "offline.json",
+      "result": "ok",
+      "method": "adb shell cmd connectivity airplane-mode enable/disable",
+      "note": "screenshots offline-app and online-app"
+    },
+    {
+      "file": "push.json",
+      "platform": "android",
+      "notificationType": "daily_summary",
+      "method": "shell-notification",
+      "note": "no Firebase config in this APK (google-services.json is an EAS secret), so a shell-owned notification with the same title and text was posted; it proves the lock-screen tap mechanics, not app routing"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.883 (1), dark 0.105 (4)",
+      "light": 0.883,
+      "dark": 0.105,
+      "count": {
+        "light": 1,
+        "dark": 4
+      },
+      "shots": [
+        {
+          "file": "TR-22a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "TR-22b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.126
+        },
+        {
+          "file": "step-015-assertCondition-Your_history_is_safe-light-android.png",
+          "theme": "light",
+          "luma": 0.883
+        },
+        {
+          "file": "z12-49-ended-code-dark-android.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "z12-49-past-coaching-dark-android.png",
+          "theme": "dark",
+          "luma": 0.068
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

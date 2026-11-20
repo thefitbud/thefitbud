@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="1" failures="1" time="117.572" timestamp="2026-11-20T11:51:04">
+    <testcase id="F16 Ended coaching and the coach's restart request (Z12-49)" name="F16 Ended coaching and the coach's restart request (Z12-49)" classname="F16 Ended coaching and the coach's restart request (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F16-expiry-errors-ended.yaml" time="117.493" timestamp="2026-11-20T11:51:04" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+      <failure>Assertion is false: "Your history is safe" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

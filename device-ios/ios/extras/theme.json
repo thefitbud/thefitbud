@@ -1,0 +1,52 @@
+{
+  "result": "mean screenshot luminance: light 0.83 (4), dark 0.109 (4)",
+  "light": 0.83,
+  "dark": 0.109,
+  "count": {
+    "light": 4,
+    "dark": 4
+  },
+  "shots": [
+    {
+      "file": "TR-22a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "TR-22a-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "TR-22b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.132
+    },
+    {
+      "file": "TR-22b-light-ios.png",
+      "theme": "light",
+      "luma": 0.699
+    },
+    {
+      "file": "z12-49-ended-code-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.121
+    },
+    {
+      "file": "z12-49-ended-code-light-ios.png",
+      "theme": "light",
+      "luma": 0.707
+    },
+    {
+      "file": "z12-49-past-coaching-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.067
+    },
+    {
+      "file": "z12-49-past-coaching-light-ios.png",
+      "theme": "light",
+      "luma": 0.964
+    }
+  ],
+  "w03DarkTooBright": []
+}

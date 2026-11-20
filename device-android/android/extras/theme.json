@@ -1,0 +1,37 @@
+{
+  "result": "mean screenshot luminance: light 0.883 (1), dark 0.105 (4)",
+  "light": 0.883,
+  "dark": 0.105,
+  "count": {
+    "light": 1,
+    "dark": 4
+  },
+  "shots": [
+    {
+      "file": "TR-22a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "TR-22b-dark-android.png",
+      "theme": "dark",
+      "luma": 0.126
+    },
+    {
+      "file": "step-015-assertCondition-Your_history_is_safe-light-android.png",
+      "theme": "light",
+      "luma": 0.883
+    },
+    {
+      "file": "z12-49-ended-code-dark-android.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "z12-49-past-coaching-dark-android.png",
+      "theme": "dark",
+      "luma": 0.068
+    }
+  ],
+  "w03DarkTooBright": []
+}
