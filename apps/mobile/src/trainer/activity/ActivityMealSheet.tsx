@@ -1,0 +1,236 @@
+import { useEffect, useState } from "react";
+import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { NotebookPen, RefreshCw } from "lucide-react-native";
+import type { FitBudApiClient } from "@fitbud/api-client";
+import type { MealAssignment } from "@fitbud/contracts";
+import { formatCivilDate, formatClockTime, formatPersonName } from "@fitbud/core";
+import { v3LightColors } from "@fitbud/tokens";
+import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { Text } from "../../components/Text";
+import { reportError } from "../../lib/reportError";
+import {
+  activityTag,
+  firstName,
+  parseMealComplianceId,
+  type ActivityEventLike,
+} from "./model";
+
+type Props = {
+  visible: boolean;
+  event: ActivityEventLike | null;
+  api: FitBudApiClient;
+  zone: string;
+  onDismiss: () => void;
+  onOpenClient: () => void;
+  onAddNote: () => void;
+};
+
+/**
+ * TM-09b: meal row sheet. Loads the assignment when the compliance id is on
+ * the event; food PLAN/ATE line items wait on richer feed payloads (recorded
+ * departure — mock shows a food table).
+ */
+export function ActivityMealSheet({
+  visible,
+  event,
+  api,
+  zone,
+  onDismiss,
+  onOpenClient,
+  onAddNote,
+}: Props) {
+  const [assignment, setAssignment] = useState<MealAssignment | null>(null);
+
+  useEffect(() => {
+    if (!visible || !event) {
+      setAssignment(null);
+      return;
+    }
+    const complianceId = parseMealComplianceId(event.id);
+    if (!complianceId) {
+      setAssignment(null);
+      return;
+    }
+    let cancelled = false;
+    void api
+      .listMealAssignments(event.relationshipId, {
+        fromDate: event.occurredAt.slice(0, 10),
+        toDate: event.occurredAt.slice(0, 10),
+      })
+      .then((page) => {
+        if (cancelled) return;
+        const match =
+          page.items.find((item) => item.compliance?.id === complianceId) ??
+          null;
+        setAssignment(match);
+      })
+      .catch((err: unknown) => {
+        reportError("activity.mealSheet", err);
+        if (!cancelled) setAssignment(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, event, visible]);
+
+  if (!event) return null;
+
+  const first = firstName(event.traineeDisplayName);
+  const tag = activityTag(event);
+  const mealName = assignment?.mealName ?? "Meal";
+  const when = `${formatCivilDate(event.occurredAt.slice(0, 10))} ${formatClockTime(event.occurredAt, zone)}`;
+  const ateKcal =
+    assignment?.compliance?.loggedTotals?.energyKcal ?? event.kcal ?? null;
+  const foodCount = assignment?.prescription?.items?.length ?? 0;
+  const changed =
+    tag.kind === "changed" ||
+    tag.kind === "ate_out" ||
+    assignment?.compliance?.outcome === "modified";
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="slide"
+      onRequestClose={onDismiss}
+    >
+      <Pressable
+        style={styles.scrim}
+        onPress={onDismiss}
+        accessibilityRole="button"
+        accessibilityLabel="Dismiss"
+      />
+      <View style={styles.sheet} accessibilityRole="summary">
+        <View style={styles.head}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title}>{`${first} · ${mealName}`}</Text>
+            <Text style={styles.sub}>
+              {`${when}${changed ? " · changed from the plan" : ""}`}
+            </Text>
+          </View>
+          <View style={styles.badge}>
+            <RefreshCw color={v3LightColors.ink2} size={13} strokeWidth={2.2} />
+            <Text style={styles.badgeText}>{tag.label}</Text>
+          </View>
+        </View>
+
+        <View style={styles.summaryBox}>
+          <Text style={styles.summary}>{event.summary}</Text>
+          {ateKcal != null ? (
+            <Text style={styles.kcal}>{`${ateKcal.toLocaleString("en-IN")} kcal logged`}</Text>
+          ) : null}
+          {foodCount > 0 ? (
+            <Text style={styles.meta}>
+              {`${foodCount} food${foodCount === 1 ? "" : "s"} on the plan`}
+            </Text>
+          ) : null}
+          <Text style={styles.meta}>
+            {`For ${formatPersonName(event.traineeDisplayName ?? "Client")}`}
+          </Text>
+        </View>
+
+        <View style={styles.actions}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onOpenClient}
+            style={styles.openBtn}
+          >
+            <Text style={styles.openText}>{`Open ${first}`}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onAddNote}
+            style={styles.noteBtn}
+          >
+            <NotebookPen color={v3LightColors.brand} size={16} strokeWidth={2.2} />
+            <Text style={styles.noteText}>Add note</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+const styles = StyleSheet.create({
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: v3LightColors.scrim,
+  },
+  sheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    bottom: 0,
+    left: 0,
+    paddingBottom: 28,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    position: "absolute",
+    right: 0,
+  },
+  head: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  title: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 20,
+  },
+  sub: { color: colors.midGrey, fontSize: 14, marginTop: 2 },
+  badge: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  badgeText: {
+    color: v3LightColors.ink2,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+  },
+  summaryBox: {
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 14,
+    marginBottom: 8,
+    padding: 14,
+  },
+  summary: { color: colors.deepNavy, fontSize: 15, lineHeight: 21 },
+  kcal: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
+    marginTop: 8,
+  },
+  meta: { color: colors.midGrey, fontSize: 13, marginTop: 4 },
+  actions: { flexDirection: "row", gap: 10, marginTop: 12 },
+  openBtn: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 14,
+    flex: 1,
+    height: 48,
+    justifyContent: "center",
+  },
+  openText: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+  },
+  noteBtn: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.brandTint,
+    borderRadius: 14,
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    height: 48,
+    justifyContent: "center",
+  },
+  noteText: {
+    color: v3LightColors.brand,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+  },
+});

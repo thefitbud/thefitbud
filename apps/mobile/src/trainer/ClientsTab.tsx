@@ -319,6 +319,7 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [activityRefresh, setActivityRefresh] = useState(0);
   const searchRef = useRef<TextInput>(null);
 
   const load = useCallback(async () => {
@@ -451,8 +452,25 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
   }
 
   if (segment === "activity") {
+    const activityClients = items
+      .filter((item) => item.relationshipId && !isEndedClient(item))
+      .map((item) => ({
+        relationshipId: item.relationshipId!,
+        displayName: item.traineeDisplayName ?? "Client",
+      }));
     return (
-      <Screen v3 title="Clients" chrome="app" showHeader={false}>
+      <Screen
+        v3
+        title="Clients"
+        chrome="app"
+        showHeader={false}
+        refreshing={refreshing}
+        onRefresh={() => {
+          setRefreshing(true);
+          setActivityRefresh((n) => n + 1);
+          void load().finally(() => setRefreshing(false));
+        }}
+      >
         <ClientsHeader
           eyebrow="Last 7 days"
           onSearch={() => {
@@ -461,7 +479,30 @@ export function ClientsTab({ onOpenClient, initialSegment = "clients" }: Props) 
           }}
         />
         <SegmentBar segment={segment} onChange={setSegment} />
-        <ActivityFeedScreen />
+        <ActivityFeedScreen
+          clients={activityClients}
+          refreshToken={activityRefresh}
+          onOpenClient={(relationshipId, displayName) => {
+            const found = items.find(
+              (item) => item.relationshipId === relationshipId,
+            );
+            if (found) {
+              onOpenClient(mapDirectoryItemToRow(found, trainerZone));
+              return;
+            }
+            onOpenClient({
+              key: `relationship:${relationshipId}`,
+              kind: "relationship",
+              name: displayName,
+              subtitle: "",
+              onboardingStatus: "coaching_ready",
+              relationshipId,
+              invitationId: null,
+              traineeUserId: null,
+              updatedAt: new Date().toISOString(),
+            });
+          }}
+        />
       </Screen>
     );
   }
