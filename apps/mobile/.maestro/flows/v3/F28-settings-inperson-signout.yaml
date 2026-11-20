@@ -33,67 +33,71 @@ tags:
     timeout: 60000
 - tapOn: "Clients"
 - extendedWaitUntil:
-    visible: "Meera|Clients"
+    visible: "Clients"
+    timeout: 30000
+# Clients is sorted by updatedAt; Meera can sit below the fold. Fail if she is
+# missing rather than silently skipping the meal screenshots (Bugbot #509).
+- scrollUntilVisible:
+    element: "Meera.*"
+    direction: DOWN
+    timeout: 60000
+- tapOn: "Meera.*"
+- extendedWaitUntil:
+    visible: "Log in person|Log meal|⋯|More"
     timeout: 30000
 - runFlow:
     when:
-      visible: "Meera"
+      visible: "Log in person"
     commands:
-      - tapOn: "Meera.*"
-      - extendedWaitUntil:
-          visible: "Log in person|Log meal|⋯|More"
-          timeout: 30000
-      - runFlow:
-          when:
-            visible: "Log in person"
-          commands:
-            - tapOn: "Log in person"
-      - runFlow:
-          when:
-            visible: "Log meal"
-          commands:
-            - tapOn: "Log meal"
-      - extendedWaitUntil:
-          visible: "Log meal|Outcome|Modified|Something different"
-          timeout: 30000
-      - takeScreenshot: TM-15a-coach-logs-meal
-      - runFlow: ../../common/assert-no-crash.yaml
-      - runFlow:
-          when:
-            visible: "Modified"
-          commands:
-            - tapOn: "Modified"
-      - extendedWaitUntil:
-          visible: "Changed the portion|What did you have instead"
-          timeout: 30000
-      - assertVisible: "Changed the portion"
-      - assertVisible: "Log it myself"
-      - assertVisible: "Ate out"
-      - takeScreenshot: TR-08a-something-different
-      - runFlow: ../../common/assert-no-crash.yaml
-      - tapOn: "Changed the portion"
-      - extendedWaitUntil:
-          visible: "Change how much|Save portion|Reset to plan"
-          timeout: 30000
-      - takeScreenshot: TR-08b-changed-portion
-      - runFlow: ../../common/assert-no-crash.yaml
-      - tapOn: "Cancel|Back"
-      - extendedWaitUntil:
-          visible: "Ate out"
-          timeout: 15000
-      - tapOn: "Ate out"
-      - extendedWaitUntil:
-          visible: "How many kcal"
-          timeout: 30000
-      - takeScreenshot: TR-08c-ate-out
-      - runFlow: ../../common/assert-no-crash.yaml
-      - tapOn: "Cancel|Back"
-      - extendedWaitUntil:
-          visible: "Log it myself"
-          timeout: 15000
-      - tapOn: "Log it myself"
-      - extendedWaitUntil:
-          visible: "Search Indian foods|Tap a food"
-          timeout: 30000
-      - takeScreenshot: TR-26a-food-search-default
-      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Log in person"
+- runFlow:
+    when:
+      visible: "Log meal"
+    commands:
+      - tapOn: "Log meal"
+- extendedWaitUntil:
+    visible: "Log meal|Outcome|Modified|Something different"
+    timeout: 30000
+- takeScreenshot: TM-15a-coach-logs-meal
+- runFlow: ../../common/assert-no-crash.yaml
+- runFlow:
+    when:
+      visible: "Modified"
+    commands:
+      - tapOn: "Modified"
+- extendedWaitUntil:
+    visible: "Changed the portion|What did you have instead"
+    timeout: 30000
+- assertVisible: "Changed the portion"
+- assertVisible: "Log it myself"
+- assertVisible: "Ate out"
+- takeScreenshot: TR-08a-something-different
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Changed the portion"
+- extendedWaitUntil:
+    visible: "Change how much|Save portion|Reset to plan"
+    timeout: 30000
+- takeScreenshot: TR-08b-changed-portion
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Cancel|Back"
+- extendedWaitUntil:
+    visible: "Ate out"
+    timeout: 15000
+- tapOn: "Ate out"
+- extendedWaitUntil:
+    visible: "How many kcal"
+    timeout: 30000
+- takeScreenshot: TR-08c-ate-out
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Cancel|Back"
+- extendedWaitUntil:
+    visible: "Log it myself"
+    timeout: 15000
+- tapOn: "Log it myself"
+# Full placeholder / hint strings (F08); shorthand does not match (Bugbot #509).
+- extendedWaitUntil:
+    visible: "Search Indian foods, brands"
+    timeout: 30000
+- assertVisible: "Tap a food to set katori, piece, cup or grams."
+- takeScreenshot: TR-26a-food-search-default
+- runFlow: ../../common/assert-no-crash.yaml

@@ -364,9 +364,12 @@ test("F28 coach Something different path takes editor screenshots for Z12-58", (
     path.join(repo, "apps/mobile/.maestro/flows/v3/F28-settings-inperson-signout.yaml"),
     "utf8",
   );
+  assert.match(f28, /scrollUntilVisible:[\s\S]*Meera/);
   assert.match(f28, /takeScreenshot: TR-08a-something-different/);
   assert.match(f28, /takeScreenshot: TR-08b-changed-portion/);
   assert.match(f28, /takeScreenshot: TR-08c-ate-out/);
+  assert.match(f28, /Search Indian foods, brands/);
+  assert.match(f28, /Tap a food to set katori, piece, cup or grams\./);
 });
 
 test("trainee Today home-ready helper and F15 use it; gate clears auth rate limits per theme", () => {
