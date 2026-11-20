@@ -1,0 +1,177 @@
+{
+  "result": "mean screenshot luminance: light 0.918 (16), dark 0.266 (17)",
+  "light": 0.918,
+  "dark": 0.266,
+  "count": {
+    "light": 16,
+    "dark": 17
+  },
+  "shots": [
+    {
+      "file": "TR-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TR-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.901
+    },
+    {
+      "file": "TR-01b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.121
+    },
+    {
+      "file": "TR-01b-light-ios.png",
+      "theme": "light",
+      "luma": 0.904
+    },
+    {
+      "file": "TR-01c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.162
+    },
+    {
+      "file": "TR-01c-light-ios.png",
+      "theme": "light",
+      "luma": 0.924
+    },
+    {
+      "file": "TR-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.137
+    },
+    {
+      "file": "TR-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.894
+    },
+    {
+      "file": "TR-14a-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "TR-14c-light-ios.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "TR-14d-light-ios.png",
+      "theme": "light",
+      "luma": 0.909
+    },
+    {
+      "file": "TR-14g-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.127
+    },
+    {
+      "file": "TR-14g-light-ios.png",
+      "theme": "light",
+      "luma": 0.905
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.937
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.948
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.948
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.951
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "step-024-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.957
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "step-039-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "step-046-assertCondition-Something_went_wrong-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "step-082-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.062
+    },
+    {
+      "file": "step-083-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.062
+    },
+    {
+      "file": "TR-14-card-next-checkin-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.11
+    },
+    {
+      "file": "z12-49-reset-request-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "z12-49-reset-request-light-ios.png",
+      "theme": "light",
+      "luma": 0.903
+    },
+    {
+      "file": "z12-49-wrong-code-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.211
+    },
+    {
+      "file": "z12-49-wrong-code-light-ios.png",
+      "theme": "light",
+      "luma": 0.875
+    }
+  ],
+  "w03DarkTooBright": []
+}

@@ -1,0 +1,30 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="5" failures="0" time="478.084" timestamp="2026-11-20T11:16:13">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="93.217" timestamp="2026-11-20T11:16:13" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="72.068" timestamp="2026-11-20T11:17:47" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F02 Sign in, wrong password, code request and code entry (Z12-49)" name="F02 Sign in, wrong password, code request and code entry (Z12-49)" classname="F02 Sign in, wrong password, code request and code entry (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02-sign-in.yaml" time="99.413" timestamp="2026-11-20T11:18:59" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F02b Auth errors on the code path and reset (Z12-49)" name="F02b Auth errors on the code path and reset (Z12-49)" classname="F02b Auth errors on the code path and reset (Z12-49)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F02b-auth-errors.yaml" time="62.025" timestamp="2026-11-20T11:20:38" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-49"/>
+      </properties>
+    </testcase>
+    <testcase id="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" name="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" classname="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F11-weekly-checkin.yaml" time="151.3" timestamp="2026-11-20T11:21:40" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>
