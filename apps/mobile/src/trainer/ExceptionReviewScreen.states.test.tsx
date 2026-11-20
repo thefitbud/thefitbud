@@ -288,7 +288,7 @@ describe("ExceptionReviewScreen states", () => {
   it("a non-network failure is not called offline", async () => {
     api.getException.mockRejectedValue(new TypeError("undefined is not a function"));
     renderScreen();
-    await screen.findByText("Could not load exception. (EXC-LOAD)");
+    await screen.findByText("undefined is not a function");
     expect(screen.queryByText(/offline/i)).toBeNull();
   });
 

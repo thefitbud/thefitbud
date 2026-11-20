@@ -11,7 +11,7 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, USER_FACING_SERVER } from "@fitbud/api-client";
 
 const api = vi.hoisted(() => ({ listClients: vi.fn() }));
 vi.mock("../lib/api", () => ({ apiClient: api }));
@@ -290,9 +290,7 @@ describe("ClientsPage states (Z12-3)", () => {
     renderAt("/clients");
     const panel = await screen.findByTestId("error-state");
     expect(panel.textContent).toContain("Couldn't load your clients");
-    expect(panel.textContent).toContain(
-      "Something went wrong on our side. Your data is safe. Try again in a moment.",
-    );
+    expect(panel.textContent).toContain(USER_FACING_SERVER);
     expect(panel.textContent).toContain("Request id: req-z12-3-error");
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     expect(screen.getByRole("link", { name: /Email support/i })).toBeTruthy();

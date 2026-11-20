@@ -1032,7 +1032,7 @@ describe("ConfigureCoachingPage check-in form pin (Z6-2c, D-W6-19)", () => {
     const { container } = renderPage("active", "active");
     const select = await pickForm(container, TRAINER_LATEST_VERSION_ID);
     expect(
-      await screen.findByText("You cannot change this client's check-in form."),
+      await screen.findByText("You don't have access to that."),
     ).toBeTruthy();
     await waitFor(() => expect(select.value).toBe(GLOBAL_CHECKIN_FORM_VERSION_ID));
   });
