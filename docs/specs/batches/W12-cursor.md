@@ -118,6 +118,11 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | **running** [44517473406](https://github.com/thefitbud/thefitbud/actions/runs/44517473406) on `7ebc8642` (FitBud, 19 Nov 2026 ~17:14 IST). Prior FAIL [44501381102](https://github.com/thefitbud/thefitbud/actions/runs/44501381102). Hold merge; no pushes unless main red. |
 | Z12-46fu #497 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-46fu-pixel-db78 -f flows=launch,z12-46` | 19 Nov 2026 ~14:05 IST (`7c0a4f37`, CI green) |
 | Z12-62 Logo #502 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-62-logo-db78 -f flows=launch,z12-49` | re-ready 19 Nov 2026 ~17:10 IST (`56045a9c`) after [44497557237](https://github.com/thefitbud/thefitbud/actions/runs/44497557237) logo PASS + size/harness must-fix |
+| Z12-49fu #511 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-49fu-ended-tab-db78 -f flows=launch,flows/v3/F16-expiry-errors-ended.yaml -f platforms=both -f themes=both -f extras=all` | **ready** 20 Nov 2026 ~09:35 IST on `e0881fc9` (combined batch on #511). After #484/#497/#507 re-run verdicts. |
+| Z12-48 #512 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-48-live-activity-db78 -f flows=launch,device/z12-36/3-trainee-workout.yaml,flows/v3/F13-notifications-deep-links.yaml -f platforms=both -f themes=both -f extras=all` | **ready** 20 Nov 2026 ~09:35 IST on `d6a7a763`. JS lines only; full Log/Open on #513. |
+| Z12-64 #514 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-64-error-copy-db78 -f flows=launch,flows/v3/F02-sign-in.yaml,flows/v3/F02b-auth-errors.yaml,flows/v3/F11-weekly-checkin.yaml -f platforms=both -f themes=both -f extras=all` | **ready** 20 Nov 2026 ~09:35 IST on `d89d4063`. |
+| Z12-53 #510 | — | **held**: draft; TM-12 after #507; no F22–F28 yet (`ddab7a18` CI green). |
+| Z12-57 #513 | — | **held**: draft; wire after #484; LA Log/Open after #512 (`a85528cc` CI green). |
 
 ## Done when (Cursor side)
 
