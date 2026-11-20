@@ -208,6 +208,29 @@ describe("check-in card without a plan", () => {
     render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} />);
     await screen.findByText("That check-in isn't open yet.");
   });
+
+  it("retries ensure-due once on a network failure before showing the card", async () => {
+    let calls = 0;
+    ensureDue = vi.fn(async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("Failed to fetch");
+    });
+    render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} />);
+    await waitFor(() => {
+      expect(ensureDue).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.queryByText(/CHK-NET|Try again/)).toBeNull();
+  });
+
+  it("shows CHK-NET when ensure-due still fails after one retry", async () => {
+    ensureDue = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} />);
+    await screen.findByText(/CHK-NET/);
+    expect(ensureDue).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Try again")).toBeTruthy();
+  });
 });
 
 describe("TR-14 submit while the push did not land", () => {

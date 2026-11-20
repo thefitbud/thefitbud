@@ -1349,7 +1349,16 @@ export function TodayCheckinCard({
     setLoading(true);
     setError(null);
     try {
-      await api.ensureDueCheckin(relationship.id, createIdempotencyKey());
+      // One idempotency key for ensure-due: a network blip on the CI wrangler
+      // proxy drops POSTs without retry (GETs retry). Retry once on network
+      // failure before showing the error card (FitBud device review).
+      const ensureKey = createIdempotencyKey();
+      try {
+        await api.ensureDueCheckin(relationship.id, ensureKey);
+      } catch (err) {
+        if (!isNetworkFailure(err)) throw err;
+        await api.ensureDueCheckin(relationship.id, ensureKey);
+      }
       const listed = await api.listCheckins(relationship.id);
       setCheckin(pickTodayCheckin(listed.items));
       setNextScheduled(pickNextScheduledCheckin(listed.items));
