@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import type { ExerciseExecution, SetExecution, WorkoutExecution } from "@fitbud/contracts";
+import { isBodyweightLabel } from "../workout/shared/setEntry";
 import { withRest, type LiveActivityState, type LoggedSet, type RestWindow } from "./liveActivity";
 import {
   liveActivityNative,
@@ -9,30 +10,39 @@ import {
 } from "./liveActivityNative";
 
 /**
- * Workout screen → Live Activity (task LA1b; frames 27 and 27b). Local
+ * Workout screen → Live Activity (task LA1b; frames 27 and 27b; Z12-48). Local
  * updates only. The screen calls `useWorkoutLiveActivity` once; everything
  * else lives here:
  * - an in-progress workout starts one activity (the native side reuses a
  *   running one for the same workout);
  * - each logged set updates exercise, set x of y, kg, reps, plan, last and
- *   the logged line;
+ *   the logged line (bodyweight / crossing / never 0 reps);
  * - finish, skip or leaving the screen ends it with `finished: true`;
  * - pause/resume change nothing (status is not part of the activity).
- * On Android and web the native bridge does nothing.
+ * On Android and web the native bridge does nothing (Android shows the same
+ * lines and rest timer via the ongoing notification once the payload lands).
  */
 
 const DONE_STATUSES = new Set<WorkoutExecution["status"]>(["completed", "skipped", "modified"]);
 
 /**
- * The activity's "Open" link. It must bring the trainee back to the active
- * workout, but the app has no route for that yet: `fitbud://workout/{id}`
- * opens the workout overview, which unmounts this screen and ends the
- * activity. So the link only opens the app (src/navigation/linking.ts parses
- * it to null and navigates nowhere), leaving the active workout on screen.
+ * The activity's "Open" / tile link (W-03).
+ *
+ * Intended URL: `fitbud://workout/{id}?active=1` → `workout_active` in
+ * linking.ts. TraineeShell still opens the overview for that route today, which
+ * would unmount the active log and end the activity — so until the shell routes
+ * `workout_active` to resume the running execution, this helper keeps the
+ * query-only form that foregrounds the app without navigating away, leaving
+ * W-03 on screen when the session is still mounted (JS fallback, D-W12-13).
  * The assignment id keeps it unique per workout for the native reuse check.
  */
 export function workoutOpenUrl(assignmentId: string): string {
   return `fitbud://?workout=${encodeURIComponent(assignmentId)}`;
+}
+
+/** Intended W-03 deep link once TraineeShell resumes on `workout_active`. */
+export function workoutActiveOpenUrl(assignmentId: string): string {
+  return `fitbud://workout/${encodeURIComponent(assignmentId)}?active=1`;
 }
 
 /** "22.5 kg" → 22.5; bodyweight, empty or unparseable → 0. */
@@ -84,23 +94,30 @@ export function liveActivityContentFor(
 
   const current = exercises.find((ex) => ex.sets.some((set) => !setDone(set)));
   const exercise = current ?? exercises[exercises.length - 1]!;
+  const exerciseIndex = exercises.indexOf(exercise);
   const sets = sortedSets(exercise);
   const finished = current === undefined;
   const position = finished ? sets.length - 1 : sets.findIndex((set) => !setDone(set));
   const set = sets[position]!;
   const prior = position > 0 ? sets[position - 1]! : null;
+  const previousExercise =
+    !finished && !prior ? exercises[exerciseIndex - 1] : undefined;
 
   // Logged line: the set logged just before this one, in workout order. When
   // finished, the "current" set is the last logged one. On a new exercise's
-  // first set, that is the previous exercise's last set.
+  // first set, that is the previous exercise's last set — and the visible
+  // line becomes "{prev} done · Next: {current}, set 1 of {n}" (Z12-48).
   let logged: { set: SetExecution; index: number } | null = null;
+  let crossedFromExercise: string | null = null;
   if (finished) logged = { set, index: position + 1 };
   else if (prior) logged = setDone(prior) ? { set: prior, index: position } : null;
   else {
-    const previousExercise = exercises[exercises.indexOf(exercise) - 1];
     const previousSets = previousExercise ? sortedSets(previousExercise) : [];
     const last = previousSets[previousSets.length - 1];
-    if (last && setDone(last)) logged = { set: last, index: previousSets.length };
+    if (last && setDone(last) && previousExercise) {
+      logged = { set: last, index: previousSets.length };
+      crossedFromExercise = previousExercise.name;
+    }
   }
   const loggedSet: LoggedSet | null = logged
     ? { setIndex: logged.index, kilograms: actualKg(logged.set), reps: actualReps(logged.set) }
@@ -108,6 +125,10 @@ export function liveActivityContentFor(
 
   const planKg = loadKg(set.prescribedLoadLabel);
   const planReps = set.prescribedReps ?? 0;
+  const bodyweight = isBodyweightLabel(set.prescribedLoadLabel);
+  // More exercises after this one: logging its last set must not finish.
+  const lastExercise =
+    finished || exerciseIndex >= exercises.length - 1 ? true : false;
 
   // Last: the set before this one (as logged, else as prescribed, like the
   // screen's "Previous" column), else the previous session's same set, else
@@ -119,6 +140,10 @@ export function liveActivityContentFor(
   if (lastSource) {
     lastKg = actualKg(lastSource);
     lastReps = actualReps(lastSource);
+  } else if (crossedFromExercise && logged) {
+    // Crossing: "Last" is the just-finished exercise's last set.
+    lastKg = actualKg(logged.set);
+    lastReps = actualReps(logged.set);
   } else {
     const history = historyPair(historyByKey[`${exercise.exerciseId}:${set.order}`]);
     if (history) {
@@ -140,6 +165,9 @@ export function liveActivityContentFor(
     lastReps,
     loggedSet,
     finished,
+    bodyweight,
+    lastExercise,
+    ...(crossedFromExercise ? { crossedFromExercise } : {}),
     ...(lastKnown ? {} : { lastKnown: false }),
   };
   return { exerciseName: exercise.name, state };
