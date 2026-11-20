@@ -1,0 +1,33 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="test" tests="5" failures="3" time="448.024" timestamp="2026-11-20T02:16:21">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="103.391" timestamp="2026-11-20T02:16:21" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|This week|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="57.694" timestamp="2026-11-20T02:18:04" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" name="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" classname="Z12-46 No-plan trainee, Today and Progress (calm states, no server text)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/z12-46/1-no-plan.yaml" time="84.464" timestamp="2026-11-20T02:19:02" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+    </testcase>
+    <testcase id="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" name="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" classname="F11 Weekly check-in, sent, and a reviewed one (Z12-46)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F11-weekly-checkin.yaml" time="100.049" timestamp="2026-11-20T02:20:26" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|This week|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+    <testcase id="F12 Progress and log weight (Z12-46)" name="F12 Progress and log weight (Z12-46)" classname="F12 Progress and log weight (Z12-46)" file="/home/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F12-progress-weight.yaml" time="102.37" timestamp="2026-11-20T02:22:06" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainee, z12-46"/>
+      </properties>
+      <failure>Assertion is false: "Today's workout.*|This week|Needs you.*|Choose mode" is visible</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
