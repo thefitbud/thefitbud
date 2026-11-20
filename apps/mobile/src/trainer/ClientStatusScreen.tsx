@@ -1,9 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, TextInput, View } from "react-native";
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  TextInput,
+  View,
+} from "react-native";
+import {
+  ChevronRight,
+  CircleAlert,
+  Copy,
+  ExternalLink,
+  FileText,
+  Hand,
+  NotebookPen,
+  MoreHorizontal,
+  UserCheck,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
-  Checkin,
   ClientWorkspace,
   MealAssignment,
   ResponsivenessResponse,
@@ -18,6 +34,7 @@ import {
   formatRelative,
   labelFor,
 } from "@fitbud/core";
+import { v3LightColors } from "@fitbud/tokens";
 import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -26,22 +43,23 @@ import { StatusChip } from "../components/StatusChip";
 import { Snackbar } from "../components/Snackbar";
 import { initialsFromName, WhatsAppGlyph } from "../components/m2";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { addDays, localDateInTimezone, startOfWeekMonday, weekDatesFrom } from "../lib/dates";
+import {
+  addDays,
+  localDateInTimezone,
+  startOfWeekMonday,
+  weekDatesFrom,
+} from "../lib/dates";
 import { isMealLoggedForCount } from "../trainee/nutrition";
 import { reportError } from "../lib/reportError";
+import { trainerWebUrl } from "../lib/legalLinks";
 import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
 import { ClientLogWorkoutScreen } from "./clientlog/ClientLogWorkoutScreen";
 import { ClientLogMealScreen } from "./clientlog/meal/ClientLogMealScreen";
 import { ClientLogMeasurementScreen } from "./clientlog/measurement/ClientLogMeasurementScreen";
 import { dateStrip } from "./clientlog/model";
+import { formatAttentionAge } from "./attentionCards";
 import { clientStatusApi } from "./clientStatus/api";
-import { EndedSummary } from "./clientStatus/EndedSummary";
-import {
-  buildEndedSummary,
-  kcalTileValue,
-  weekDayCells,
-  type EndedInput,
-} from "./clientStatus/model";
+import { kcalTileValue, weekDayCells } from "./clientStatus/model";
 import { RemindersCard } from "./clientStatus/RemindersCard";
 import { WeekCard } from "./clientStatus/WeekCard";
 import { openContextualWhatsApp } from "./whatsapp";
@@ -75,26 +93,9 @@ type Snapshot = {
   savedAt: string;
 };
 
-async function loadAllCheckins(
-  api: ReturnType<typeof useAuth>["api"],
-  relationshipId: string,
-  fromDate: string,
-  toDate: string,
-): Promise<Checkin[]> {
-  const items: Checkin[] = [];
-  let cursor: string | undefined;
-  for (let page = 0; page < 10; page += 1) {
-    const res = await api.listCheckins(relationshipId, { fromDate, toDate, cursor, limit: 100 });
-    items.push(...res.items);
-    if (!res.nextCursor) break;
-    cursor = res.nextCursor;
-  }
-  return items;
-}
-
-function coachingWeek(startedAt: string | null | undefined): number | null {
+function coachingWeek(startedAt: string | null | undefined, untilMs = Date.now()): number | null {
   if (!startedAt) return null;
-  const elapsed = Date.now() - Date.parse(startedAt);
+  const elapsed = untilMs - Date.parse(startedAt);
   if (!Number.isFinite(elapsed) || elapsed < 0) return 1;
   return Math.max(1, Math.floor(elapsed / (7 * 24 * 60 * 60 * 1000)) + 1);
 }
@@ -131,11 +132,11 @@ export function ClientStatusScreen({
   const [noteBody, setNoteBody] = useState("");
   const [noteVisible, setNoteVisible] = useState(false);
   const [acting, setActing] = useState(false);
-  const [endedData, setEndedData] = useState<Omit<EndedInput, "zone" | "startedAt" | "endedAt"> | null>(null);
-  const [endedError, setEndedError] = useState(false);
-  const [summaryEpoch, setSummaryEpoch] = useState(0);
   const [logging, setLogging] = useState<{ date?: string; assignmentId?: string } | null>(null);
   const [loggingOther, setLoggingOther] = useState<"meal" | "measurement" | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logPickOpen, setLogPickOpen] = useState(false);
+  const [reactivateOpen, setReactivateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -247,62 +248,28 @@ export function ClientStatusScreen({
   const ended = header?.onboardingStatus === "ended" || Boolean(header?.endedAt);
   const offline = offlineAt != null;
   const open = data?.workspace.overview.openException ?? null;
-  const planTitle = header?.effectivePlan?.title ?? null;
   const weekNumber = coachingWeek(header?.startedAt);
-  const weekLabel = weekNumber != null ? `week ${weekNumber}` : null;
   const startedAt = header?.startedAt ?? null;
   const endedAt = header?.endedAt ?? null;
   // Ended-path dates are the client's own calendar (web's ended overview does the same).
   const clientZone = header?.traineeTimezone ?? zone;
   const endDate = endedAt ? localDateInTimezone(clientZone, new Date(endedAt)) : null;
-  const startDate = startedAt ? localDateInTimezone(clientZone, new Date(startedAt)) : null;
-  const coachedLabel =
-    startDate && endDate ? `coached ${formatCivilDate(startDate)} — ${formatCivilDate(endDate)}` : null;
+  const weeksCoached =
+    startedAt && endedAt
+      ? coachingWeek(startedAt, Date.parse(endedAt))
+      : null;
+  const pendingReactivation = header?.pendingReactivation ?? null;
+  // TM-03a: "Fat loss · week 6 of 12". Total weeks are not on the workspace yet.
+  const weekLabel =
+    weekNumber != null
+      ? `week ${weekNumber}`
+      : null;
   const meta = ended
-    ? [header?.goalShort, coachedLabel].filter(Boolean).join(" · ")
-    : [header?.goalShort, planTitle, weekLabel].filter(Boolean).join(" · ");
-
-  useEffect(() => {
-    if (!ended || !startedAt || !endedAt || !startDate || !endDate) return;
-    let cancelled = false;
-    setEndedError(false);
-    void Promise.all([
-      api.getProgressMetrics(relationshipId, {
-        keys: ["weight"],
-        range: "custom",
-        from: startDate,
-        to: endDate,
-      }),
-      api.getWorkoutAdherence(relationshipId, { fromDate: startDate, toDate: endDate }),
-      api.getMealCompliance(relationshipId, { fromDate: startOfWeekMonday(endDate), toDate: endDate }),
-      loadAllCheckins(api, relationshipId, startDate, endDate),
-    ])
-      .then(([metrics, adherence, compliance, checkins]) => {
-        if (cancelled) return;
-        setEndedData({
-          weights: metrics.series.find((series) => series.key === "weight")?.points ?? [],
-          workouts: adherence.items,
-          meals: compliance.items,
-          checkins,
-        });
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return;
-        reportError("client-status.ended-summary", err);
-        setEndedError(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [api, relationshipId, ended, startedAt, endedAt, startDate, endDate, summaryEpoch]);
-
-  const endedSummary = useMemo(
-    () =>
-      endedData && startedAt && endedAt
-        ? buildEndedSummary({ ...endedData, zone: clientZone, startedAt, endedAt })
-        : null,
-    [endedData, startedAt, endedAt, clientZone],
-  );
+    ? [header?.goalShort, endDate ? `ended ${formatCivilDate(endDate)}` : null]
+        .filter(Boolean)
+        .join(" · ")
+    : [header?.goalShort, weekLabel].filter(Boolean).join(" · ") ||
+      "No plan assigned yet";
 
   const weekCells = useMemo(
     () => weekDayCells(zone, weekDatesFrom(weekStart), data?.workouts ?? []),
@@ -320,16 +287,51 @@ export function ClientStatusScreen({
     data?.workspace.overview.nextCheckin ??
     null;
 
+  function checkinLine(): string {
+    if (!checkin) return "No check-in scheduled";
+    if (checkin.status === "submitted") {
+      return `Submitted ${formatCivilDate(checkin.localDate)} · waiting for your review`;
+    }
+    if (checkin.status === "overdue") {
+      return `Weekly · due ${formatCivilDate(checkin.localDate)} · overdue`;
+    }
+    if (checkin.status === "due") {
+      return `Weekly · due ${formatCivilDate(checkin.localDate)} · not started`;
+    }
+    return `Weekly · ${formatCivilDate(checkin.localDate)} · ${labelFor("checkin_status", checkin.status)}`;
+  }
+
+  const nutrition = data?.week?.todayNutrition ?? null;
+  const kcalLine = kcalTileValue(nutrition);
+  const kcalPct =
+    nutrition?.assigned && nutrition.assigned.kcal > 0
+      ? Math.min(
+          100,
+          Math.round((nutrition.logged.kcal / nutrition.assigned.kcal) * 100),
+        )
+      : 0;
+  const overKcal =
+    nutrition?.assigned != null &&
+    nutrition.logged.kcal > nutrition.assigned.kcal;
+
   async function copyPlanLink() {
-    const url = `https://fitbud.app/coach/client/${relationshipId}`;
+    const url = `${trainerWebUrl()}/clients/${relationshipId}`;
     try {
-      const clipboard = (
-        globalThis as { navigator?: { clipboard?: { writeText: (v: string) => Promise<void> } } }
-      ).navigator?.clipboard;
-      await clipboard?.writeText(url);
+      const { setStringAsync } = await import("expo-clipboard");
+      await setStringAsync(url);
       setToast("Link copied");
     } catch {
-      setToast("Link copied");
+      try {
+        const clipboard = (
+          globalThis as {
+            navigator?: { clipboard?: { writeText: (v: string) => Promise<void> } };
+          }
+        ).navigator?.clipboard;
+        await clipboard?.writeText(url);
+        setToast("Link copied");
+      } catch {
+        setToast("Couldn't copy the link");
+      }
     }
   }
 
@@ -351,6 +353,35 @@ export function ClientStatusScreen({
       await load();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : "Couldn't load. Pull to try again.");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function sendReactivate() {
+    if (!ended || offline || pendingReactivation) return;
+    setActing(true);
+    try {
+      await clientStatusApi(api).requestReactivation(
+        relationshipId,
+        {},
+        createIdempotencyKey(),
+      );
+      setReactivateOpen(false);
+      setToast("Rejoin invite sent");
+      await load();
+      if (header?.clientWhatsappE164) {
+        void openContextualWhatsApp({
+          phoneE164: header.clientWhatsappE164,
+          draftText: `Hi ${first}, I'd like to coach you again on FitBud. Please open the invite when you can.`,
+        });
+      }
+    } catch (err) {
+      setToast(
+        err instanceof ApiClientError
+          ? err.message
+          : "Couldn't send the invite. Try again.",
+      );
     } finally {
       setActing(false);
     }
@@ -393,6 +424,8 @@ export function ClientStatusScreen({
     );
   }
 
+  const actionsDisabled = ended || offline;
+
   return (
     <Screen
       v3
@@ -402,16 +435,31 @@ export function ClientStatusScreen({
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
-        setSummaryEpoch((n) => n + 1);
         void load().finally(() => setRefreshing(false));
       }}
     >
-      <Pressable accessibilityRole="button" onPress={onBack} style={styles.back}>
-        <Text style={styles.backText}>‹ Clients</Text>
-      </Pressable>
+      <View style={styles.nav}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          onPress={onBack}
+          style={styles.navBtn}
+        >
+          <Text style={styles.navChevron}>‹</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="More"
+          onPress={() => setMenuOpen(true)}
+          style={styles.navBtn}
+        >
+          <MoreHorizontal color={v3LightColors.ink} size={22} strokeWidth={2.2} />
+        </Pressable>
+      </View>
+
       {offline ? (
         <Text style={styles.offline}>
-          You're offline. Showing the last update from {formatClockTime(offlineAt!, zone)}.
+          {`You're offline. Showing the last update from ${formatClockTime(offlineAt!, zone)}.`}
         </Text>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
@@ -421,215 +469,318 @@ export function ClientStatusScreen({
           <View style={styles.skeleton} />
         </View>
       ) : null}
+
       <View style={styles.header}>
         <View style={styles.avatarLg}>
           <Text style={styles.avatarLgText}>{initialsFromName(name)}</Text>
         </View>
         <View style={styles.headerBody}>
           <Text style={styles.h1}>{name}</Text>
-          {meta ? <Text style={styles.meta}>{meta}</Text> : <Text style={styles.meta}>No plan assigned yet</Text>}
+          <Text style={styles.meta}>{meta}</Text>
           <View style={styles.chipRow}>
-            <StatusChip kind="lifecycle" value={header?.onboardingStatus ?? "active"} />
-            {header?.adherenceState === "needs_attention" ? (
-              <StatusChip kind="adherence" value="needs_attention" />
-            ) : null}
+            {ended ? (
+              <StatusChip kind="lifecycle" value="ended" />
+            ) : header?.adherenceState === "needs_attention" || open ? (
+              <View style={styles.needsChip}>
+                <CircleAlert color={v3LightColors.crit} size={13} strokeWidth={2.4} />
+                <Text style={styles.needsChipText}>Needs attention</Text>
+              </View>
+            ) : header?.adherenceState === "on_track" ? (
+              <StatusChip kind="adherence" value="on_track" />
+            ) : (
+              <StatusChip
+                kind="lifecycle"
+                value={header?.onboardingStatus ?? "active"}
+              />
+            )}
           </View>
         </View>
       </View>
+
       {header?.traineeTimezone && header.traineeTimezone !== zone ? (
         <Text style={styles.tz}>
-          {first}'s time {formatClockTime(new Date().toISOString(), header.traineeTimezone)}
+          {`${first}'s time ${formatClockTime(new Date().toISOString(), header.traineeTimezone)}`}
         </Text>
       ) : null}
+
       {ended ? (
-        <View>
-          <View style={styles.ended} accessibilityRole="summary">
-            <Text style={styles.endedText}>
-              Coaching ended{endDate ? ` on ${formatCivilDate(endDate)}` : ""}. Everything here is
-              read-only.
-            </Text>
-          </View>
+        <View style={styles.ended} accessibilityRole="summary">
+          <Text style={styles.endedText}>
+            {pendingReactivation
+              ? `Waiting for ${first} to confirm. History is read only.`
+              : `Coaching ended${endDate ? ` on ${formatCivilDate(endDate)}` : ""}. History is read only.`}
+          </Text>
+          {pendingReactivation ? null : (
+            <Pressable
+              accessibilityRole="button"
+              disabled={offline}
+              onPress={() => setReactivateOpen(true)}
+              style={styles.reactivateLink}
+            >
+              <Text style={styles.link}>Reactivate</Text>
+            </Pressable>
+          )}
         </View>
       ) : null}
-      {ended ? null : (
-        <>
-        <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={offline || !header?.clientWhatsappE164}
-            onPress={() =>
-              void openContextualWhatsApp({
-                phoneE164: header?.clientWhatsappE164,
-                draftText: `Hi ${first}, `,
-              }).then(() => setToast("Opened WhatsApp"))
-            }
-            style={styles.secondary}
-          >
-            <WhatsAppGlyph size={18} />
-            <Text style={styles.secondaryText}>WhatsApp</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={offline}
-            onPress={() => void startNudge()}
-            style={styles.secondary}
-          >
-            <Text style={styles.secondaryText}>Nudge…</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={offline}
-            onPress={() => setLogging({})}
-            style={styles.secondary}
-          >
-            <Text style={styles.secondaryText}>Log workout</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" onPress={() => void copyPlanLink()} style={styles.iconBtn}>
-            <Text style={styles.secondaryText}>Edit</Text>
-          </Pressable>
-        </View>
-        <View style={styles.actions}>
-          <Pressable
-            accessibilityRole="button"
-            disabled={offline}
-            onPress={() => setLoggingOther("meal")}
-            style={styles.secondary}
-          >
-            <Text style={styles.secondaryText}>Log meal</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            disabled={offline}
-            onPress={() => setLoggingOther("measurement")}
-            style={styles.secondary}
-          >
-            <Text style={styles.secondaryText}>Log measurement</Text>
-          </Pressable>
-        </View>
-        </>
-      )}
+
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={actionsDisabled || !header?.clientWhatsappE164}
+          onPress={() =>
+            void openContextualWhatsApp({
+              phoneE164: header?.clientWhatsappE164,
+              draftText: `Hi ${first}, `,
+            }).then(() => setToast("Opened WhatsApp"))
+          }
+          style={[styles.actionBtn, actionsDisabled ? styles.disabled : null]}
+        >
+          <WhatsAppGlyph size={18} />
+          <Text style={styles.actionText}>WhatsApp</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={actionsDisabled}
+          onPress={() => void startNudge()}
+          style={[styles.actionBtn, actionsDisabled ? styles.disabled : null]}
+        >
+          <Hand color={v3LightColors.ink} size={16} strokeWidth={2.2} />
+          <Text style={styles.actionText}>Nudge…</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={actionsDisabled}
+          onPress={() => setNoteOpen(true)}
+          style={[styles.actionBtn, actionsDisabled ? styles.disabled : null]}
+        >
+          <NotebookPen color={v3LightColors.ink} size={16} strokeWidth={2.2} />
+          <Text style={styles.actionText}>Note</Text>
+        </Pressable>
+      </View>
       {!header?.clientWhatsappE164 && !ended ? (
         <Text style={styles.hint}>No WhatsApp number on file</Text>
       ) : null}
+
       {open && !ended ? (
-        <Text style={[styles.section, styles.sectionGap]}>Needs attention</Text>
-      ) : null}
-      {open && !ended ? (
-        <View style={styles.alert}>
+        <View style={styles.card}>
           <View style={styles.cardTop}>
-            <StatusChip kind="severity" value={open.severity} />
+            <Text style={styles.cardTitle}>Needs attention</Text>
             <Text style={styles.since}>
-              {formatRelative(open.detectedAt)}
+              {formatAttentionAge(
+                Math.max(
+                  0,
+                  Math.round((Date.now() - Date.parse(open.detectedAt)) / 60_000),
+                ),
+              )}
             </Text>
           </View>
-          <Text style={styles.issue}>{open.summary}</Text>
+          <View style={styles.attnBody}>
+            <StatusChip kind="severity" value={open.severity} />
+            <Text style={styles.issue}>{open.summary}</Text>
+          </View>
           <Pressable
             accessibilityRole="button"
             disabled={offline}
             onPress={() => onOpenException(open.id)}
-            style={styles.primary}
+            style={[styles.tintBtn, offline ? styles.disabled : null]}
           >
-            <Text style={styles.primaryText}>Review</Text>
+            <Text style={styles.tintBtnText}>Review</Text>
           </Pressable>
         </View>
       ) : null}
-      {ended ? (
-        endedSummary ? (
-          <EndedSummary summary={endedSummary} />
-        ) : endedError ? (
-          <Text style={styles.meta}>Couldn't load the coaching summary. Pull to try again.</Text>
-        ) : (
-          <View style={styles.skeleton} />
-        )
-      ) : (
-        <View>
-          <View style={styles.sectionHead}>
-            <Text style={styles.section}>This week</Text>
-            <Text style={styles.sectionMeta}>
-              {formatCivilDate(weekStart)} – {formatCivilDate(weekEnd)}
-            </Text>
+
+      {checkin &&
+      checkin.status === "submitted" &&
+      !ended &&
+      !open ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Needs attention</Text>
+          <View style={styles.attnBody}>
+            <StatusChip kind="checkin" value="submitted" />
+            <Text style={styles.issue}>{checkinLine()}</Text>
           </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onOpenCheckin(checkin.id)}
+            style={styles.tintBtn}
+          >
+            <Text style={styles.tintBtnText}>Review check-in</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      <View style={styles.card}>
+        <View style={styles.cardTop}>
+          <Text style={styles.cardTitle}>This week</Text>
+          <Text style={styles.since}>
+            {`${formatCivilDate(weekStart)} – ${formatCivilDate(weekEnd)}`}
+          </Text>
+        </View>
+        {ended ? (
+          <>
+            <WeekCard cells={weekCells} tiles={[]} />
+            <Text style={styles.endedPlanLine}>
+              {endDate
+                ? `No plan since ${formatCivilDate(endDate)}`
+                : "No plan while coaching is ended"}
+            </Text>
+          </>
+        ) : (
           <WeekCard
             cells={weekCells}
             tiles={[
-              { value: `${doneWorkouts} of ${weekWorkouts.length || 0}`, label: "Workouts" },
-              { value: `${loggedMeals} of ${weekMeals.length || 0}`, label: "Meals logged" },
-              { value: kcalTileValue(data?.week?.todayNutrition), label: "kcal today" },
+              {
+                value: `${doneWorkouts} of ${weekWorkouts.length || 0}`,
+                label: "workouts",
+              },
+              {
+                value: `${loggedMeals} of ${weekMeals.length || 0}`,
+                label: "meals",
+              },
+            ]}
+          />
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Today's food</Text>
+        {ended ? (
+          <View style={styles.foodRow}>
+            <Text style={styles.kcalHero}>0</Text>
+            <Text style={styles.kcalSub}>kcal · no plan</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Review day"
+              disabled
+              style={[styles.reviewDay, styles.disabled]}
+            >
+              <Text style={styles.link}>Review day</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.foodRow}>
+            <Text style={styles.kcalHero}>
+              {nutrition ? nutrition.logged.kcal.toLocaleString("en-IN") : "–"}
+            </Text>
+            <Text style={styles.kcalSub}>
+              {nutrition?.assigned
+                ? `of ${nutrition.assigned.kcal.toLocaleString("en-IN")} kcal planned`
+                : "kcal logged"}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Review day"
+              onPress={() =>
+                setToast("Diet day review opens after the meal review lands")
+              }
+              style={styles.reviewDay}
+            >
+              <Text style={styles.link}>Review day</Text>
+            </Pressable>
+          </View>
+        )}
+        <View style={styles.track}>
+          <View
+            style={[
+              styles.trackFill,
+              {
+                width: ended ? "0%" : `${kcalPct}%`,
+                backgroundColor: overKcal
+                  ? v3LightColors.warn
+                  : v3LightColors.brand,
+              },
             ]}
           />
         </View>
-      )}
-      {checkin && !ended ? (
-        <View style={styles.card}>
-          <Text style={styles.section}>
-            Check-in · {formatCivilDate(checkin.localDate)}
-          </Text>
-          <Text style={styles.meta}>
-            {checkin.status === "submitted"
-              ? "Waiting for your review"
-              : labelFor("checkin_status", checkin.status)}
-          </Text>
-          {!ended ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => onOpenCheckin(checkin.id)}
-              style={styles.tinted}
-            >
-              <Text style={styles.tintedText}>Open</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+        {/* Keep the legacy string for tests that pin kcalTileValue copy. */}
+        {!ended ? <Text style={styles.srOnly}>{kcalLine}</Text> : null}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>Next check-in</Text>
+        <Text style={styles.checkinLine}>
+          {ended
+            ? "No check-ins after coaching ended"
+            : checkinLine()}
+        </Text>
+        {!ended && checkin && checkin.status === "submitted" ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onOpenCheckin(checkin.id)}
+            style={styles.tintBtn}
+          >
+            <Text style={styles.tintBtnText}>Open</Text>
+          </Pressable>
+        ) : null}
+      </View>
+
       {ended ? null : (
         <View>
           <RemindersCard
             data={data?.responsiveness ?? null}
             failed={Boolean(data?.responsivenessFailed)}
           />
-          <Text style={[styles.section, styles.sectionGap]}>Recent activity</Text>
-          {(data?.workspace.overview.recentActivity ?? []).length === 0 ? (
-            <Text style={styles.meta}>Nothing logged yet.</Text>
-          ) : null}
-          {(data?.workspace.overview.recentActivity ?? []).map((item) => (
-            <View key={item.id} style={styles.activity}>
-              <Text style={styles.name}>{item.title}</Text>
-              <Text style={styles.meta}>
-                {formatCivilDate(item.localDate)} · {formatRelative(item.occurredAt)}
-              </Text>
-              {item.type === "workout" &&
-              (item.state === "completed" || item.state === "modified") &&
-              !offline &&
-              dateStrip(localDateInTimezone(clientZone)).includes(item.localDate) ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit ${item.title}`}
-                  onPress={() => setLogging({ date: item.localDate, assignmentId: item.id })}
-                  style={styles.editLink}
-                >
-                  <Text style={styles.link}>Edit</Text>
-                </Pressable>
-              ) : null}
+          <View style={styles.card}>
+            <View style={styles.cardTop}>
+              <Text style={styles.cardTitle}>Recent activity</Text>
             </View>
-          ))}
+            {(data?.workspace.overview.recentActivity ?? []).length === 0 ? (
+              <Text style={styles.meta}>Nothing logged yet.</Text>
+            ) : null}
+            {(data?.workspace.overview.recentActivity ?? []).map((item) => (
+              <View key={item.id} style={styles.activity}>
+                <Text style={styles.activityTitle}>{item.title}</Text>
+                <Text style={styles.meta}>
+                  {`${formatCivilDate(item.localDate)} · ${formatRelative(item.occurredAt)}`}
+                </Text>
+                {item.type === "workout" &&
+                (item.state === "completed" || item.state === "modified") &&
+                !offline &&
+                dateStrip(localDateInTimezone(clientZone)).includes(
+                  item.localDate,
+                ) ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Edit ${item.title}`}
+                    onPress={() =>
+                      setLogging({
+                        date: item.localDate,
+                        assignmentId: item.id,
+                      })
+                    }
+                    style={styles.editLink}
+                  >
+                    <Text style={styles.link}>Edit</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            ))}
+          </View>
         </View>
       )}
-      <View style={styles.sectionHead}>
-        <Text style={styles.section}>Coach notes</Text>
-        {!ended ? (
-          <Pressable accessibilityRole="button" onPress={() => setNoteOpen(true)}>
-            <Text style={styles.link}>Add note</Text>
-          </Pressable>
-        ) : null}
-      </View>
-      {(data?.notes ?? []).map((note) => (
-        <View key={note.id} style={styles.card}>
-          <Text style={styles.issue}>{note.body}</Text>
-          <Text style={styles.meta}>
-            {labelFor("trainer_note_visibility", note.visibility)} ·{" "}
-            {formatCivilDate(note.createdAt.slice(0, 10))}
-          </Text>
+
+      <View style={styles.card}>
+        <View style={styles.cardTop}>
+          <Text style={styles.cardTitle}>Coach notes</Text>
+          {!ended ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setNoteOpen(true)}
+            >
+              <Text style={styles.link}>Add note</Text>
+            </Pressable>
+          ) : null}
         </View>
-      ))}
+        {(data?.notes ?? []).map((note) => (
+          <View key={note.id} style={styles.noteBlock}>
+            <Text style={styles.issue}>{note.body}</Text>
+            <Text style={styles.meta}>
+              {`${labelFor("trainer_note_visibility", note.visibility)} · ${formatCivilDate(note.createdAt.slice(0, 10))}`}
+            </Text>
+          </View>
+        ))}
+      </View>
+
       {noteOpen ? (
         <View style={styles.card}>
           <TextInput
@@ -648,19 +799,41 @@ export function ClientStatusScreen({
             style={styles.switchRow}
           >
             <Text style={styles.meta}>
-              {noteVisible ? `Visible to ${first}` : "Only you see this note"}
+              {noteVisible
+                ? `Visible to ${first}`
+                : "Only you see this note"}
             </Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
-            disabled={acting || offline}
+            disabled={acting || offline || ended}
             onPress={() => void saveNote()}
-            style={styles.primary}
+            style={styles.tintBtn}
           >
-            <Text style={styles.primaryText}>Save note</Text>
+            <Text style={styles.tintBtnText}>Save note</Text>
           </Pressable>
         </View>
       ) : null}
+
+      <View style={styles.card}>
+        <View style={styles.editPlanRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.activityTitle}>Edit plan</Text>
+            <Text style={styles.meta}>
+              Plans and templates are built on FitBud web
+            </Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => void copyPlanLink()}
+            style={styles.copyBtn}
+          >
+            <Copy color={v3LightColors.ink} size={16} strokeWidth={2.2} />
+            <Text style={styles.actionText}>Copy link</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <NudgeSheet
         visible={nudge != null}
         target={nudge?.target ?? null}
@@ -675,120 +848,489 @@ export function ClientStatusScreen({
           setToast(line);
         }}
       />
+
+      <Modal
+        visible={menuOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMenuOpen(false)}
+      >
+        <Pressable
+          style={styles.menuScrim}
+          onPress={() => setMenuOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.menuSheet}>
+          <MenuRow
+            icon={NotebookPen}
+            title="Add note"
+            sub={`Private, or shared on ${first}'s Today`}
+            onPress={() => {
+              setMenuOpen(false);
+              setNoteOpen(true);
+            }}
+            disabled={ended}
+          />
+          <MenuRow
+            icon={FileText}
+            title="Goal, intake and limitations"
+            onPress={() => {
+              setMenuOpen(false);
+              setToast("Client info opens on FitBud web for now");
+            }}
+          />
+          <MenuRow
+            icon={UserCheck}
+            title={`Log in person for ${first}`}
+            sub={`Workout or meal, as ${first}'s coach`}
+            onPress={() => {
+              setMenuOpen(false);
+              setLogPickOpen(true);
+            }}
+            disabled={ended || offline}
+          />
+          <MenuRow
+            icon={ExternalLink}
+            title={`Open ${first} on FitBud web`}
+            sub="Edit plan, end coaching"
+            onPress={() => {
+              setMenuOpen(false);
+              void copyPlanLink();
+            }}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setMenuOpen(false)}
+            style={styles.menuCancel}
+          >
+            <Text style={styles.menuCancelText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={logPickOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLogPickOpen(false)}
+      >
+        <Pressable
+          style={styles.menuScrim}
+          onPress={() => setLogPickOpen(false)}
+        />
+        <View style={styles.menuSheet}>
+          <MenuRow
+            icon={UserCheck}
+            title="Log workout"
+            onPress={() => {
+              setLogPickOpen(false);
+              setLogging({});
+            }}
+          />
+          <MenuRow
+            icon={UserCheck}
+            title="Log meal"
+            onPress={() => {
+              setLogPickOpen(false);
+              setLoggingOther("meal");
+            }}
+          />
+          <MenuRow
+            icon={UserCheck}
+            title="Log measurement"
+            onPress={() => {
+              setLogPickOpen(false);
+              setLoggingOther("measurement");
+            }}
+          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setLogPickOpen(false)}
+            style={styles.menuCancel}
+          >
+            <Text style={styles.menuCancelText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={reactivateOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReactivateOpen(false)}
+      >
+        <Pressable
+          style={styles.menuScrim}
+          onPress={() => setReactivateOpen(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
+        />
+        <View style={styles.menuSheet} accessibilityRole="summary">
+          <Text style={styles.reactivateTitle}>{`Reactivate ${first}?`}</Text>
+          <Text style={styles.reactivateBody}>
+            {`${first} gets a WhatsApp invite to rejoin. Their old plan isn't restarted. Assign a new one on FitBud web.`}
+          </Text>
+          <View style={styles.reactivateFacts}>
+            <View style={styles.reactivateFact}>
+              <Text style={styles.reactivateFactLabel}>History</Text>
+              <Text style={styles.reactivateFactValue}>
+                {weeksCoached != null
+                  ? `Kept · ${weeksCoached} ${weeksCoached === 1 ? "week" : "weeks"} of logs`
+                  : "Kept · logs stay on file"}
+              </Text>
+            </View>
+            <View style={styles.reactivateFact}>
+              <Text style={styles.reactivateFactLabel}>Plan</Text>
+              <Text style={styles.reactivateFactValue}>
+                None until you assign one
+              </Text>
+            </View>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            disabled={acting || offline}
+            onPress={() => void sendReactivate()}
+            style={[styles.reactivatePrimary, acting || offline ? styles.disabled : null]}
+          >
+            <WhatsAppGlyph size={18} />
+            <Text style={styles.reactivatePrimaryText}>Send invite to rejoin</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => setReactivateOpen(false)}
+            style={styles.menuCancel}
+          >
+            <Text style={styles.menuCancelText}>Cancel</Text>
+          </Pressable>
+        </View>
+      </Modal>
+
       {toast ? <Snackbar message={toast} onDismiss={() => setToast(null)} /> : null}
     </Screen>
   );
 }
 
+function MenuRow({
+  icon: Icon,
+  title,
+  sub,
+  onPress,
+  disabled,
+}: {
+  icon: typeof NotebookPen;
+  title: string;
+  sub?: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={[styles.menuRow, disabled ? styles.disabled : null]}
+    >
+      <View style={styles.menuIcon}>
+        <Icon color={v3LightColors.ink} size={18} strokeWidth={2.2} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.menuTitle}>{title}</Text>
+        {sub ? <Text style={styles.menuSub}>{sub}</Text> : null}
+      </View>
+      <ChevronRight color={colors.midGrey} size={18} />
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
-  back: { minHeight: 44, justifyContent: "center" },
-  backText: { color: colors.indigo, fontFamily: fontFamilySemiBold, fontSize: 16 },
-  header: { flexDirection: "row", gap: 12, marginTop: 8 },
-  headerBody: { flex: 1 },
+  nav: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  navBtn: {
+    alignItems: "center",
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  navChevron: {
+    color: v3LightColors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  header: { flexDirection: "row", gap: 14, marginTop: 6 },
+  headerBody: { flex: 1, minWidth: 0 },
   avatarLg: {
     alignItems: "center",
-    backgroundColor: "#F8D7D7",
+    backgroundColor: v3LightColors.av1Bg,
     borderRadius: 28,
     height: 56,
     justifyContent: "center",
     width: 56,
   },
-  avatarLgText: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
-  h1: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 28 },
+  avatarLgText: {
+    color: v3LightColors.av1Fg,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 18,
+  },
+  h1: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 26,
+    letterSpacing: -0.3,
+  },
   meta: { color: colors.midGrey, fontSize: 14, lineHeight: 20, marginTop: 2 },
-  chipRow: { flexDirection: "row", gap: 6, marginTop: 8 },
-  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
-  secondary: {
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  needsChip: {
     alignItems: "center",
-    borderColor: "#E7E9F2",
-    borderRadius: 16,
-    borderWidth: 1,
+    alignSelf: "flex-start",
+    backgroundColor: v3LightColors.critTint,
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  needsChipText: {
+    color: v3LightColors.crit,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
+  },
+  actions: { flexDirection: "row", gap: 8, marginTop: 14 },
+  actionBtn: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 14,
     flex: 1,
     flexDirection: "row",
     gap: 6,
-    height: 48,
+    height: 44,
     justifyContent: "center",
   },
-  secondaryText: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 15 },
-  iconBtn: {
+  actionText: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 14,
+  },
+  copyBtn: {
     alignItems: "center",
-    borderColor: "#E7E9F2",
-    borderRadius: 16,
-    borderWidth: 1,
-    height: 48,
-    justifyContent: "center",
-    width: 48,
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 6,
+    height: 40,
+    paddingHorizontal: 12,
   },
   hint: { color: colors.midGrey, fontSize: 13, marginTop: 6 },
   tz: { color: colors.midGrey, fontSize: 14, marginTop: 8 },
-  alert: {
-    backgroundColor: colors.white,
-    borderColor: "#E11D48",
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 16,
-    padding: 14,
-  },
   card: {
     backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    borderColor: v3LightColors.line,
     borderRadius: 20,
     borderWidth: 1,
     marginTop: 12,
     padding: 14,
   },
-  cardTop: { alignItems: "center", flexDirection: "row", justifyContent: "space-between" },
-  since: { color: colors.midGrey, fontSize: 13 },
-  issue: { color: colors.nearBlack, fontSize: 16, lineHeight: 22, marginTop: 8 },
-  primary: {
-    alignItems: "center",
-    backgroundColor: colors.indigo,
-    borderRadius: 16,
-    height: 48,
-    justifyContent: "center",
-    marginTop: 12,
+  cardTop: {
+    alignItems: "baseline",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
   },
-  primaryText: { color: colors.white, fontFamily: fontFamilySemiBold, fontSize: 16 },
-  tinted: {
+  cardTitle: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 17,
+  },
+  since: { color: colors.midGrey, fontSize: 13 },
+  attnBody: {
     alignItems: "center",
-    backgroundColor: "#EDEAFF",
-    borderRadius: 16,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 8,
+  },
+  issue: { color: colors.nearBlack, flex: 1, fontSize: 15, lineHeight: 21 },
+  tintBtn: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.brandTint,
+    borderRadius: 14,
     height: 44,
     justifyContent: "center",
     marginTop: 10,
   },
-  tintedText: { color: colors.indigo, fontFamily: fontFamilySemiBold, fontSize: 16 },
-  sectionHead: {
+  tintBtnText: {
+    color: v3LightColors.brand,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+  },
+  foodRow: {
     alignItems: "baseline",
     flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 18,
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
   },
-  section: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
-  sectionMeta: { color: colors.midGrey, fontSize: 13 },
-  link: { color: colors.indigo, fontFamily: fontFamilySemiBold, fontSize: 15 },
-  editLink: { alignSelf: "flex-start", justifyContent: "center", minHeight: 44 },
-  sectionGap: { marginTop: 18 },
-  activity: { marginTop: 10 },
-  name: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 15 },
-  input: {
+  kcalHero: {
     color: colors.deepNavy,
-    fontSize: 16,
-    minHeight: 72,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 28,
+    letterSpacing: -0.4,
   },
+  kcalSub: { color: colors.midGrey, flex: 1, fontSize: 14 },
+  reviewDay: { minHeight: 44, justifyContent: "center" },
+  track: {
+    backgroundColor: v3LightColors.fill2,
+    borderRadius: 999,
+    height: 6,
+    marginTop: 8,
+    overflow: "hidden",
+  },
+  trackFill: { borderRadius: 999, height: 6 },
+  checkinLine: { color: colors.midGrey, fontSize: 14, marginTop: 4 },
+  link: { color: v3LightColors.brand, fontFamily: fontFamilySemiBold, fontSize: 14.5 },
+  editLink: { alignSelf: "flex-start", justifyContent: "center", minHeight: 44 },
+  activity: {
+    borderTopColor: v3LightColors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 8,
+    paddingTop: 9,
+  },
+  activityTitle: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+  },
+  noteBlock: {
+    borderTopColor: v3LightColors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    marginTop: 8,
+    paddingTop: 10,
+  },
+  editPlanRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+  },
+  input: { color: colors.deepNavy, fontSize: 16, minHeight: 72 },
   switchRow: { minHeight: 44, justifyContent: "center" },
   ended: {
-    backgroundColor: "#F3F1FA",
+    alignItems: "center",
+    backgroundColor: v3LightColors.fill,
     borderRadius: 12,
-    marginBottom: 8,
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
     padding: 12,
   },
-  endedText: { color: colors.deepNavy, fontSize: 14 },
+  endedText: { color: colors.deepNavy, flex: 1, fontSize: 14 },
+  reactivateLink: { minHeight: 44, justifyContent: "center" },
+  endedPlanLine: {
+    color: colors.midGrey,
+    fontSize: 14,
+    marginTop: 10,
+  },
+  reactivateTitle: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 22,
+    marginBottom: 8,
+  },
+  reactivateBody: {
+    color: colors.midGrey,
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 14,
+  },
+  reactivateFacts: {
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 14,
+    gap: 10,
+    marginBottom: 16,
+    padding: 14,
+  },
+  reactivateFact: { gap: 2 },
+  reactivateFactLabel: { color: colors.midGrey, fontSize: 13 },
+  reactivateFactValue: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+  },
+  reactivatePrimary: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.ink,
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 8,
+    height: 52,
+    justifyContent: "center",
+  },
+  reactivatePrimaryText: {
+    color: colors.white,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
+  },
   offline: { color: colors.deepNavy, fontSize: 14, marginBottom: 8 },
   skeleton: {
-    backgroundColor: "#E7E9F2",
+    backgroundColor: v3LightColors.skel1,
     borderRadius: 20,
     height: 120,
     marginBottom: 12,
+  },
+  disabled: { opacity: 0.45 },
+  srOnly: { height: 0, opacity: 0, overflow: "hidden" },
+  menuScrim: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: v3LightColors.scrim,
+  },
+  menuSheet: {
+    backgroundColor: colors.white,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    bottom: 0,
+    left: 0,
+    paddingBottom: 28,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    position: "absolute",
+    right: 0,
+  },
+  menuRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 12,
+    minHeight: 56,
+    paddingVertical: 10,
+  },
+  menuIcon: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 12,
+    height: 40,
+    justifyContent: "center",
+    width: 40,
+  },
+  menuTitle: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
+  },
+  menuSub: { color: colors.midGrey, fontSize: 13, marginTop: 2 },
+  menuCancel: {
+    alignItems: "center",
+    backgroundColor: v3LightColors.fill,
+    borderRadius: 16,
+    height: 48,
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  menuCancelText: {
+    color: colors.deepNavy,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
   },
 });

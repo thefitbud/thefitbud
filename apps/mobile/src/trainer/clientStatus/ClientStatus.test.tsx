@@ -1,6 +1,6 @@
 /**
- * Client status (Z10-9, frames 18 and 74): kcal from the week read model, the
- * Reminders card, and the ended summary with Reactivate. DOM-shaped harness:
+ * Client status (Z12-53 TM-03*, frames TM-03a–i): kcal from the week read
+ * model, Reminders card, ended overview with Reactivate. DOM-shaped harness:
  * proves copy and behaviour, not layout; the visual check is the authority there.
  */
 import { describe, expect, it, vi } from "vitest";
@@ -95,6 +95,10 @@ const api = {
   })),
   getMealCompliance: vi.fn(async () => ({ items: [], totals: {} })),
   listCheckins: vi.fn(async () => ({ items: [], nextCursor: null })),
+  requestReactivation: vi.fn(async () => ({
+    requestId: "b2c3d4e5-f6a7-4890-b123-456789abcdef",
+    status: "pending" as const,
+  })),
 };
 const auth = mockAuth({ api, me: { timezone: "Asia/Kolkata" } });
 vi.mock("../../auth/AuthProvider", () => ({ useAuth: () => auth }));
@@ -205,6 +209,8 @@ describe("ClientStatusScreen", () => {
     expect(screen.getByText(/Responds to reminders/)).toBeTruthy();
     expect(screen.getByText("Recent activity")).toBeTruthy();
     expect(screen.getByText("Lower body A")).toBeTruthy();
+    expect(screen.getByText("This week")).toBeTruthy();
+    expect(screen.getByText("Today's food")).toBeTruthy();
     expect(screen.queryByText("Reactivate")).toBeNull();
   });
 
@@ -247,17 +253,20 @@ describe("ClientStatusScreen", () => {
     ).toBeTruthy();
   });
 
-  it("ended client: read-only summary, no Reactivate, no live reads", async () => {
+  it("ended client: read-only banner, Reactivate, no live week/responsiveness", async () => {
     api.getClientWorkspace.mockResolvedValue(workspace({ ended: true }));
     api.getWorkspaceWeek.mockClear();
     api.getResponsiveness.mockClear();
     renderScreen();
-    await screen.findByText("Coaching summary");
-    expect(screen.getByText(/Everything here is read-only/)).toBeTruthy();
-    expect(screen.getByText("Last week")).toBeTruthy();
-    expect(screen.queryByText("Reactivate")).toBeNull();
-    expect(screen.queryByText("WhatsApp")).toBeNull();
-    expect(screen.queryByText("Add note")).toBeNull();
+    await screen.findByText(/Coaching ended on Sat 3 Oct/);
+    expect(screen.getByText(/History is read only/)).toBeTruthy();
+    expect(screen.getByText("Reactivate")).toBeTruthy();
+    expect(screen.getByText("No plan since Sat 3 Oct")).toBeTruthy();
+    expect(screen.getByText("No check-ins after coaching ended")).toBeTruthy();
+    expect(screen.getByText(/kcal · no plan/)).toBeTruthy();
+    // Actions stay visible but disabled (TM-03d).
+    expect(screen.getByText("WhatsApp")).toBeTruthy();
+    expect(screen.getByText("Nudge…")).toBeTruthy();
     expect(screen.queryByText("Reminders")).toBeNull();
     expect(api.getWorkspaceWeek).not.toHaveBeenCalled();
     expect(api.getResponsiveness).not.toHaveBeenCalled();
@@ -270,25 +279,28 @@ describe("ClientStatusScreen", () => {
       workspace({ ended: true, traineeTz: "America/Los_Angeles", endedAt: "2026-10-03T19:00:00.000Z" }),
     );
     renderScreen();
-    await screen.findByText("Coaching summary");
-    expect(screen.getByText(/Coaching ended on Sat 3 Oct/)).toBeTruthy();
-    expect(api.getWorkoutAdherence).toHaveBeenLastCalledWith(RID, {
-      fromDate: "2026-07-05",
-      toDate: "2026-10-03",
-    });
+    await screen.findByText(/Coaching ended on Sat 3 Oct/);
+    expect(screen.getByText("No plan since Sat 3 Oct")).toBeTruthy();
   });
 
-  it("ended client: a failed summary retries on refresh", async () => {
+  it("ended client: Reactivate sheet sends the rejoin invite", async () => {
     api.getClientWorkspace.mockResolvedValue(workspace({ ended: true }));
-    api.getWorkoutAdherence.mockClear();
-    api.getWorkoutAdherence.mockRejectedValueOnce(new Error("boom"));
+    api.requestReactivation.mockClear();
     renderScreen();
-    await screen.findByText(/Couldn't load the coaching summary/);
-    const callsBefore = api.getWorkoutAdherence.mock.calls.length;
-    fireEvent.click(screen.getByText("Pull to refresh"));
-    await screen.findByText("Coaching summary");
-    expect(api.getWorkoutAdherence.mock.calls.length).toBeGreaterThan(callsBefore);
+    await screen.findByText("Reactivate");
+    fireEvent.click(screen.getByText("Reactivate"));
+    await screen.findByText("Reactivate Kavya?");
+    expect(screen.getByText(/gets a WhatsApp invite to rejoin/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Send invite to rejoin"));
+    await waitFor(() => expect(api.requestReactivation).toHaveBeenCalled());
+    expect(api.requestReactivation).toHaveBeenCalledWith(
+      RID,
+      {},
+      expect.any(String),
+    );
+    await screen.findByText("Rejoin invite sent");
   });
+
   it("a load started for trainer A that resolves after B signs in writes nothing under B (Z12-33)", async () => {
     clearTrainerCache();
     setTrainerCacheOwner(null);

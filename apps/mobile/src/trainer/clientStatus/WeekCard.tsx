@@ -6,8 +6,17 @@ import type { WeekDayCell } from "./model";
 
 export type WeekTile = { value: string; label: string };
 
-/** Frames 18 and 74: seven day marks over a row of three figures. */
-export function WeekCard({ cells, tiles }: { cells: WeekDayCell[]; tiles: WeekTile[] }) {
+/** Frames 18 / TM-03a: seven day marks, then workout/meal counts. */
+export function WeekCard({
+  cells,
+  tiles,
+  showCounts = false,
+}: {
+  cells: WeekDayCell[];
+  tiles: WeekTile[];
+  /** Per-day "1/1" under the dots — off in v3 (TM-03a). */
+  showCounts?: boolean;
+}) {
   return (
     <View style={styles.card}>
       <View style={styles.week}>
@@ -34,18 +43,20 @@ export function WeekCard({ cells, tiles }: { cells: WeekDayCell[]; tiles: WeekTi
                 <Minus size={14} color={colors.midGrey} />
               )}
             </View>
-            <Text style={styles.dayCount}>{cell.count}</Text>
+            {showCounts ? <Text style={styles.dayCount}>{cell.count}</Text> : null}
           </View>
         ))}
       </View>
-      <View style={styles.tiles}>
-        {tiles.map((tile, index) => (
-          <View key={tile.label} style={[styles.tile, index > 0 ? styles.tileDivider : null]}>
-            <Text style={styles.tileValue}>{tile.value}</Text>
-            <Text style={styles.tileLabel}>{tile.label}</Text>
-          </View>
-        ))}
-      </View>
+      {tiles.length > 0 ? (
+        <View style={styles.stats}>
+          {tiles.map((tile) => (
+            <Text key={tile.label} style={styles.stat}>
+              <Text style={styles.statValue}>{tile.value}</Text>
+              {` ${tile.label}`}
+            </Text>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -81,14 +92,19 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     marginTop: 6,
   },
-  tiles: { borderColor: "#E7E9F2", borderTopWidth: 1, flexDirection: "row" },
-  tile: { flex: 1, padding: 12 },
-  tileDivider: { borderColor: "#E7E9F2", borderLeftWidth: 1 },
-  tileValue: {
+  stats: {
+    borderColor: "#E7E9F2",
+    borderTopWidth: 1,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  stat: { color: colors.midGrey, fontSize: 14 },
+  statValue: {
     color: colors.deepNavy,
     fontFamily: fontFamilySemiBold,
-    fontSize: 15,
     fontVariant: ["tabular-nums"],
   },
-  tileLabel: { color: colors.midGrey, fontSize: 12, marginTop: 4 },
 });
