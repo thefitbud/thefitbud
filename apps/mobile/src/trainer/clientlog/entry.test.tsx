@@ -82,10 +82,18 @@ function renderScreen() {
   );
 }
 
+async function openLogPick() {
+  fireEvent.click(await screen.findByRole("button", { name: "More" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Log in person for Kavya/ }),
+  );
+}
+
 describe("Log workout entry", () => {
   it("opens the log form from an active client", async () => {
     api.getClientWorkspace.mockResolvedValue(workspace(false));
     renderScreen();
+    await openLogPick();
     fireEvent.click(await screen.findByRole("button", { name: "Log workout" }));
     expect(await screen.findByText("Date · up to 7 days back")).toBeTruthy();
   });
@@ -94,6 +102,11 @@ describe("Log workout entry", () => {
     api.getClientWorkspace.mockResolvedValue(workspace(true));
     renderScreen();
     await screen.findByText(/Coaching ended/);
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    // Ended: Log in person is disabled — clicking must not open the pick sheet.
+    fireEvent.click(
+      screen.getByRole("button", { name: /Log in person for Kavya/ }),
+    );
     expect(screen.queryByRole("button", { name: "Log workout" })).toBeNull();
   });
 

@@ -83,13 +83,22 @@ function renderScreen() {
   );
 }
 
+async function openLogPick() {
+  fireEvent.click(await screen.findByRole("button", { name: "More" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /Log in person for / }),
+  );
+}
+
 describe("Log meal and Log measurement entries", () => {
   it("opens each form from an active client", async () => {
     api.getClientWorkspace.mockResolvedValue(workspace(false));
     renderScreen();
+    await openLogPick();
     fireEvent.click(await screen.findByRole("button", { name: "Log meal" }));
     expect(await screen.findByRole("heading", { name: "Log meal" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    await openLogPick();
     fireEvent.click(await screen.findByRole("button", { name: "Log measurement" }));
     expect(await screen.findByRole("heading", { name: "Log measurement" })).toBeTruthy();
   });
@@ -98,6 +107,8 @@ describe("Log meal and Log measurement entries", () => {
     api.getClientWorkspace.mockResolvedValue(workspace(true));
     renderScreen();
     await screen.findByText(/Coaching ended/);
+    fireEvent.click(await screen.findByRole("button", { name: "More" }));
+    fireEvent.click(screen.getByRole("button", { name: /Log in person for / }));
     expect(screen.queryByRole("button", { name: "Log meal" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Log measurement" })).toBeNull();
   });
