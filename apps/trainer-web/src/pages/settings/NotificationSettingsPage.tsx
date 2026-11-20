@@ -3,6 +3,7 @@ import { ApiClientError } from "@fitbud/api-client";
 import { formatHhMmTime } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { useOnlineStatus } from "../../components/OfflineBanner";
+import { Toggle } from "../../components/ui/Toggle";
 import {
   ErrorState,
   LoadingBlock,
@@ -14,6 +15,7 @@ import {
   type TrainerNotificationKey,
   type TrainerNotificationPrefs,
 } from "../../lib/trainer-notification-prefs";
+import { SettingsCard, SettingsRow } from "./SettingsLayout";
 import "./settings.css";
 
 /** Frame 177 rows mapped onto existing trainerCategories keys. */
@@ -230,59 +232,74 @@ export function NotificationSettingsPage() {
   const quietDesc = quietOn
     ? `${quietHoursLabel(quietStart, quietEnd)} • nothing during these hours.`
     : "Off — alerts can arrive any time.";
+  const pushRows = FRAME_ROWS.filter((item) => item.key !== "morningSummary");
+  const emailRows = FRAME_ROWS.filter((item) => item.key === "morningSummary");
 
   return (
-    <div className="settings-panel stack-lg" data-testid="screen-TW-29">
-      <h2>Notifications</h2>
-      <p className="muted settings-notif-lede">
-        Push to your phone and this browser.
-      </p>
-
+    <div data-testid="screen-TW-29">
       {!online ? (
-        <p className="form-error" role="status">
+        <p className="form-error settings-banner" role="status">
           You&apos;re offline. Changes will save when you reconnect.
         </p>
       ) : null}
 
-      <ul className="settings-notif-list">
-        {FRAME_ROWS.map((item) => (
-          <li key={item.key} className="settings-notif-row">
-            <span className="settings-notif-copy">
-              <strong id={`notif-label-${item.key}`}>{item.label}</strong>
-              <span className="muted">{item.description}</span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              className="settings-switch"
+      <SettingsCard title="Push to your phone" aside="Push to your phone and this browser.">
+        {pushRows.map((item) => (
+          <SettingsRow
+            key={item.key}
+            label={item.label}
+            labelId={`notif-label-${item.key}`}
+            help={item.description}
+            inline
+          >
+            <Toggle
               checked={categories[item.key]}
               disabled={!online}
-              aria-labelledby={`notif-label-${item.key}`}
+              labelledBy={`notif-label-${item.key}`}
               onChange={() => toggleCategory(item.key)}
             />
-          </li>
+          </SettingsRow>
         ))}
-        <li className="settings-notif-row">
-          <span className="settings-notif-copy">
-            <strong id="notif-label-quiet">Quiet hours</strong>
-            <span className="muted" data-testid="quiet-hours-display">
-              {quietDesc}
-            </span>
-          </span>
-          <input
-            type="checkbox"
-            role="switch"
-            className="settings-switch"
+      </SettingsCard>
+
+      <SettingsCard title="Email digest">
+        {emailRows.map((item) => (
+          <SettingsRow
+            key={item.key}
+            label={item.label}
+            labelId={`notif-label-${item.key}`}
+            help={item.description}
+            inline
+          >
+            <Toggle
+              checked={categories[item.key]}
+              disabled={!online}
+              labelledBy={`notif-label-${item.key}`}
+              onChange={() => toggleCategory(item.key)}
+            />
+          </SettingsRow>
+        ))}
+      </SettingsCard>
+
+      <SettingsCard title="Quiet hours" aside="No pushes to you or your clients">
+        <SettingsRow
+          label="Quiet hours"
+          labelId="notif-label-quiet"
+          help={quietDesc}
+          helpTestId="quiet-hours-display"
+          inline
+        >
+          <Toggle
             checked={quietOn}
             disabled={!online}
-            aria-labelledby="notif-label-quiet"
+            labelledBy="notif-label-quiet"
             onChange={() => toggleQuietHours()}
           />
-        </li>
-      </ul>
+        </SettingsRow>
+      </SettingsCard>
 
       {saveStatus === "saved" && !saveError ? (
-        <p className="muted" role="status" data-testid="notification-prefs-saved">
+        <p className="settings-note" role="status" data-testid="notification-prefs-saved">
           Saved
         </p>
       ) : null}

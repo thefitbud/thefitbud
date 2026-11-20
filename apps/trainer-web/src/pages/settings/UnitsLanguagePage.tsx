@@ -1,5 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../../auth/AuthProvider";
+import { Button } from "../../components/ui/Button";
+import { Radio } from "../../components/ui/Field";
+import { SettingsCard, SettingsRow } from "./SettingsLayout";
 
 export type UnitPrefs = {
   weight: "kg" | "lb";
@@ -54,71 +57,40 @@ export function UnitsLanguagePage() {
   }
 
   return (
-    <div className="settings-panel stack-lg">
-      <h2>Units &amp; language</h2>
-      <p className="muted">
-        Progress and measurements use these units on your screen. Stored values
-        stay in metric on the server.
-      </p>
-      <form className="stack-form" onSubmit={save}>
-        <fieldset className="field">
-          <legend>Weight</legend>
-          <label className="switch-row">
-            <input
-              type="radio"
-              name="weight"
-              checked={weight === "kg"}
-              onChange={() => setWeight("kg")}
-            />
+    <form onSubmit={save} data-testid="screen-settings-units">
+      <SettingsCard
+        title="Units and language"
+        aside="Stored values stay in metric on the server"
+        footer={
+          <>
+            <span className="settings-saved">{toast ?? "Progress on your screen uses these units."}</span>
+            <span className="sp" />
+            <Button type="submit">Save</Button>
+          </>
+        }
+      >
+        <SettingsRow label="Weight" help="Kilograms or pounds">
+          <Radio checked={weight === "kg"} onChange={() => setWeight("kg")}>
             Kilograms (kg)
-          </label>
-          <label className="switch-row">
-            <input
-              type="radio"
-              name="weight"
-              checked={weight === "lb"}
-              onChange={() => setWeight("lb")}
-            />
+          </Radio>
+          <Radio checked={weight === "lb"} onChange={() => setWeight("lb")}>
             Pounds (lb)
-          </label>
-        </fieldset>
-        <fieldset className="field">
-          <legend>Length</legend>
-          <label className="switch-row">
-            <input
-              type="radio"
-              name="length"
-              checked={length === "cm"}
-              onChange={() => setLength("cm")}
-            />
+          </Radio>
+        </SettingsRow>
+        <SettingsRow label="Length" help="Centimetres or inches">
+          <Radio checked={length === "cm"} onChange={() => setLength("cm")}>
             Centimetres (cm)
-          </label>
-          <label className="switch-row">
-            <input
-              type="radio"
-              name="length"
-              checked={length === "in"}
-              onChange={() => setLength("in")}
-            />
+          </Radio>
+          <Radio checked={length === "in"} onChange={() => setLength("in")}>
             Inches (in)
-          </label>
-        </fieldset>
-        <label className="field">
-          <span>Interface language</span>
-          <select value="en" disabled aria-readonly="true">
-            <option value="en">English</option>
-          </select>
-          <span className="muted">More languages coming later.</span>
-        </label>
-        <button type="submit" className="button-primary">
-          Save
-        </button>
-      </form>
-      {toast ? (
-        <p className="form-success" role="status">
-          {toast}
-        </p>
-      ) : null}
-    </div>
+          </Radio>
+        </SettingsRow>
+        <SettingsRow label="Interface language" help="More languages coming later.">
+          <div className="ui-select settings-native-select" aria-disabled="true">
+            English
+          </div>
+        </SettingsRow>
+      </SettingsCard>
+    </form>
   );
 }

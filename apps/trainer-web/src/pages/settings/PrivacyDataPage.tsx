@@ -195,8 +195,11 @@ export function PrivacyDataPage() {
   }
 
   return (
-    <div className="settings-panel stack-lg" data-testid="privacy-data-page">
-      <h2>Privacy &amp; data</h2>
+    <div className="settings-card" data-testid="privacy-data-page">
+      <header className="settings-card-h">
+        <h2>Privacy and data</h2>
+      </header>
+      <div className="settings-card-pad">
       <section className="settings-copy-block">
         <h3>What FitBud stores</h3>
         <ul className="settings-bullet-list">
@@ -406,6 +409,7 @@ export function PrivacyDataPage() {
           </div>
         </div>
       ) : null}
+      </div>
     </div>
   );
 }
