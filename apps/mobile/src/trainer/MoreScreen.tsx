@@ -17,13 +17,7 @@ import {
   Monitor,
 } from "lucide-react-native";
 import { ApiClientError } from "@fitbud/api-client";
-import { brand, ink, semantic } from "@fitbud/tokens";
-import {
-  colors,
-  fontFamilyBold,
-  fontFamilySemiBold,
-  spacing,
-} from "@fitbud/ui-mobile";
+import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { useConfig } from "../providers/ConfigProvider";
 import { useAuth } from "../auth/AuthProvider";
@@ -39,6 +33,11 @@ import {
 import { M2Card, M2Group, M2Row } from "../trainee/settings/m2";
 import { mobilePermittedRoles } from "../navigation/resolveRoute";
 import { isEndedClient } from "./clients";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 
 /**
  * The trainer-web base URL now lives in `lib/legalLinks.ts`, which the legal rows
@@ -92,6 +91,9 @@ export function TrainerMoreScreen({
   onOpenNotifications,
   onOpenProfile,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api, me, signOut, requestRoleSelect } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
@@ -154,7 +156,7 @@ export function TrainerMoreScreen({
       <View style={styles.stack}>
         {offline ? (
           <View style={styles.offline} accessibilityRole="alert">
-            <CloudOff color={ink[500]} size={18} strokeWidth={1.75} />
+            <CloudOff color={theme.colors.ink3} size={18} strokeWidth={1.75} />
             <Text style={styles.offlineText}>
               You’re offline. Settings changes need a connection.
             </Text>
@@ -175,7 +177,7 @@ export function TrainerMoreScreen({
               <Text style={styles.profName}>{displayName}</Text>
               <Text style={styles.profSub}>{coachLine}</Text>
             </View>
-            <ChevronRight color={ink[500]} size={18} strokeWidth={2} />
+            <ChevronRight color={theme.colors.ink3} size={18} strokeWidth={2} />
           </Pressable>
         </M2Card>
 
@@ -186,19 +188,19 @@ export function TrainerMoreScreen({
           <M2Group>
             <M2Row
               tile="neutral"
-              icon={<Bell color={ink[500]} size={17} strokeWidth={1.75} />}
+              icon={<Bell color={theme.colors.ink3} size={17} strokeWidth={1.75} />}
               label="Notifications"
               hint="Needs you, check-ins, asks"
               onPress={onOpenNotifications}
             />
             <M2Row
               tile="neutral"
-              icon={<Monitor color={ink[500]} size={17} strokeWidth={1.75} />}
+              icon={<Monitor color={theme.colors.ink3} size={17} strokeWidth={1.75} />}
               label="Open FitBud on web"
               hint="Plans, templates, invites"
               showChevron={false}
               trailing={
-                <ExternalLink color={ink[500]} size={18} strokeWidth={1.75} />
+                <ExternalLink color={theme.colors.ink3} size={18} strokeWidth={1.75} />
               }
               accessibilityLabel="Open FitBud on web, opens in your browser"
               onPress={() => {
@@ -210,7 +212,7 @@ export function TrainerMoreScreen({
                 tile="neutral"
                 icon={
                   <ArrowLeftRight
-                    color={ink[500]}
+                    color={theme.colors.ink3}
                     size={17}
                     strokeWidth={1.75}
                   />
@@ -223,7 +225,7 @@ export function TrainerMoreScreen({
             <M2Row
               tile="neutral"
               icon={
-                <CircleHelp color={ink[500]} size={17} strokeWidth={1.75} />
+                <CircleHelp color={theme.colors.ink3} size={17} strokeWidth={1.75} />
               }
               label="Help"
               hint="Email the FitBud team"
@@ -283,6 +285,8 @@ function FooterLink({
   a11y: string;
   path: Parameters<typeof legalUrl>[0];
 }) {
+
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="link"
@@ -309,6 +313,28 @@ export function SignOutConfirm({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <SignOutConfirmBody
+        visible={visible}
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+      />
+    </ThemeScope>
+  );
+}
+
+function SignOutConfirmBody({
+  visible,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <Modal
       transparent
@@ -339,7 +365,7 @@ export function SignOutConfirm({
             style={styles.confirmBtn}
           >
             <Text
-              style={[styles.confirmBtnText, { color: semantic.critical.text }]}
+              style={[styles.confirmBtnText, { color: theme.colors.crit }]}
             >
               Sign out
             </Text>
@@ -351,7 +377,7 @@ export function SignOutConfirm({
           onPress={onCancel}
           style={[styles.confirmGroup, styles.confirmCancel]}
         >
-          <Text style={[styles.confirmBtnText, { color: brand.indigo }]}>
+          <Text style={[styles.confirmBtnText, { color: theme.colors.brand }]}>
             Cancel
           </Text>
         </Pressable>
@@ -360,7 +386,7 @@ export function SignOutConfirm({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   confirmRoot: {
     flex: 1,
     gap: 8,
@@ -373,25 +399,25 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(15, 17, 21, 0.45)",
   },
   confirmGroup: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: t.colors.card,
     borderRadius: 14,
     overflow: "hidden",
   },
   confirmHead: {
-    borderBottomColor: ink[200],
+    borderBottomColor: t.colors.line,
     borderBottomWidth: 1,
     gap: 4,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
   confirmTitle: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     textAlign: "center",
   },
   confirmMsg: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontSize: 15,
     lineHeight: 21,
     textAlign: "center",
@@ -411,7 +437,7 @@ const styles = StyleSheet.create({
     fontSize: 20,
   },
   heading: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilyBold,
     fontSize: 30,
     fontWeight: "700",
@@ -425,7 +451,7 @@ const styles = StyleSheet.create({
   },
   offline: {
     alignItems: "center",
-    backgroundColor: "#F1F2F6",
+    backgroundColor: t.colors.fill,
     borderRadius: 12,
     flexDirection: "row",
     gap: 10,
@@ -433,13 +459,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   offlineText: {
-    color: ink[500],
+    color: t.colors.ink3,
     flex: 1,
     fontSize: 15,
     lineHeight: 20,
   },
   groupLabel: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 12,
     letterSpacing: 0.6,
@@ -457,26 +483,26 @@ const styles = StyleSheet.create({
   },
   avatarLg: {
     alignItems: "center",
-    backgroundColor: brand.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 28,
     height: 56,
     justifyContent: "center",
     width: 56,
   },
   avatarLgText: {
-    color: brand.indigo,
+    color: t.colors.brand,
     fontFamily: fontFamilyBold,
     fontSize: 19,
   },
   profName: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilyBold,
     fontSize: 20,
     letterSpacing: -0.2,
     lineHeight: 26,
   },
   profSub: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 19,
   },
@@ -484,14 +510,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   signOut: {
-    backgroundColor: "#FFFFFF",
+    backgroundColor: t.colors.card,
     borderRadius: 16,
     minHeight: 52,
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   signOutText: {
-    color: semantic.critical.text,
+    color: t.colors.crit,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
@@ -504,12 +530,12 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
   },
   footerText: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontSize: 13,
   },
   footerLink: {
-    color: ink[500],
+    color: t.colors.ink3,
     fontSize: 13,
     textDecorationLine: "underline",
   },
-});
+}));

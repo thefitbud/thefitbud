@@ -14,8 +14,7 @@ import type {
   OnboardingFormResponse,
 } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Screen } from "../../components/Screen";
@@ -31,6 +30,7 @@ import {
   limitationBlock,
   type InfoRow,
 } from "./infoModel";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 type Props = {
   relationshipId: string;
@@ -45,6 +45,9 @@ export function ClientInfoScreen({
   workspace: workspaceProp = null,
   onBack,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api } = useAuth();
   const [workspace, setWorkspace] = useState<ClientWorkspace | null>(
     workspaceProp,
@@ -73,7 +76,10 @@ export function ClientInfoScreen({
 
       let start: number | null = null;
       try {
-        const metrics = await api.getProgressMetrics(relationshipId);
+        const metrics = await api.getProgressMetrics(relationshipId, {
+          keys: ["weight"],
+          range: "all",
+        });
         const weight = metrics.series.find((s) => s.key === "weight");
         const first = weight?.points
           ?.slice()
@@ -163,7 +169,7 @@ export function ClientInfoScreen({
             <Section title="Limitations and injuries">
               <View style={styles.limitChip}>
                 <TriangleAlert
-                  color={v3LightColors.warn}
+                  color={theme.colors.warn}
                   size={12}
                   strokeWidth={2.2}
                 />
@@ -190,7 +196,7 @@ export function ClientInfoScreen({
             >
               <View style={styles.intakeIcon}>
                 <FileText
-                  color={v3LightColors.ink2}
+                  color={theme.colors.ink2}
                   size={18}
                   strokeWidth={2}
                 />
@@ -202,7 +208,7 @@ export function ClientInfoScreen({
                 </Text>
               </View>
               <ChevronRight
-                color={v3LightColors.ink3}
+                color={theme.colors.ink3}
                 size={18}
                 strokeWidth={2}
               />
@@ -227,6 +233,8 @@ function Section({
   title: string;
   children: ReactNode;
 }) {
+
+  const styles = useStyles();
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title.toUpperCase()}</Text>
@@ -236,6 +244,8 @@ function Section({
 }
 
 function InfoLine({ row }: { row: InfoRow }) {
+
+  const styles = useStyles();
   return (
     <View style={styles.line}>
       <Text style={styles.lineLabel}>{row.label}</Text>
@@ -244,7 +254,7 @@ function InfoLine({ row }: { row: InfoRow }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   nav: {
     alignItems: "center",
     flexDirection: "row",
@@ -258,21 +268,21 @@ const styles = StyleSheet.create({
     width: 44,
   },
   navChevron: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 28,
     lineHeight: 32,
     marginTop: -2,
   },
   navTitle: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
     fontWeight: "600",
   },
   section: { marginBottom: 16 },
   sectionTitle: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.6,
@@ -280,14 +290,14 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 16,
     overflow: "hidden",
     paddingHorizontal: 14,
     paddingVertical: 4,
   },
   line: {
-    borderBottomColor: v3LightColors.line,
+    borderBottomColor: t.colors.line,
     borderBottomWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 12,
@@ -295,14 +305,14 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
   },
   lineLabel: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     fontWeight: "600",
     maxWidth: "42%",
   },
   lineValue: {
-    color: v3LightColors.ink2,
+    color: t.colors.ink2,
     flex: 1,
     fontSize: 15,
     textAlign: "right",
@@ -310,7 +320,7 @@ const styles = StyleSheet.create({
   limitChip: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: v3LightColors.warnTint,
+    backgroundColor: t.colors.warnTint,
     borderRadius: 999,
     flexDirection: "row",
     gap: 5,
@@ -319,19 +329,19 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   limitChipText: {
-    color: v3LightColors.warnInk,
+    color: t.colors.warnInk,
     fontSize: 12,
     fontWeight: "600",
   },
   limitBody: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontSize: 16,
     lineHeight: 22,
     marginTop: 10,
     paddingBottom: 6,
   },
   limitFooter: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     fontSize: 12,
     marginBottom: 12,
   },
@@ -343,7 +353,7 @@ const styles = StyleSheet.create({
   },
   intakeIcon: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 10,
     height: 36,
     justifyContent: "center",
@@ -351,16 +361,16 @@ const styles = StyleSheet.create({
   },
   intakeBody: { flex: 1, minWidth: 0 },
   intakeTitle: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     fontWeight: "600",
   },
-  intakeSub: { color: v3LightColors.ink3, fontSize: 13, marginTop: 2 },
+  intakeSub: { color: t.colors.ink3, fontSize: 13, marginTop: 2 },
   skel: { gap: 10, marginTop: 12 },
   skelBar: {
-    backgroundColor: v3LightColors.skel1,
+    backgroundColor: t.colors.skel1,
     borderRadius: 8,
     height: 48,
   },
-});
+}));

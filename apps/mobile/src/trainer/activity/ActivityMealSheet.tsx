@@ -4,8 +4,7 @@ import { NotebookPen, RefreshCw } from "lucide-react-native";
 import type { FitBudApiClient } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import { formatCivilDate, formatClockTime, formatPersonName } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { reportError } from "../../lib/reportError";
 import {
@@ -14,6 +13,7 @@ import {
   parseMealComplianceId,
   type ActivityEventLike,
 } from "./model";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 type Props = {
   visible: boolean;
@@ -30,7 +30,15 @@ type Props = {
  * the event; food PLAN/ATE line items wait on richer feed payloads (recorded
  * departure — mock shows a food table).
  */
-export function ActivityMealSheet({
+export function ActivityMealSheet(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <ActivityMealSheetBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function ActivityMealSheetBody({
   visible,
   event,
   api,
@@ -39,6 +47,9 @@ export function ActivityMealSheet({
   onOpenClient,
   onAddNote,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const [assignment, setAssignment] = useState<MealAssignment | null>(null);
 
   useEffect(() => {
@@ -109,7 +120,7 @@ export function ActivityMealSheet({
             </Text>
           </View>
           <View style={styles.badge}>
-            <RefreshCw color={v3LightColors.ink2} size={13} strokeWidth={2.2} />
+            <RefreshCw color={theme.colors.ink2} size={13} strokeWidth={2.2} />
             <Text style={styles.badgeText}>{tag.label}</Text>
           </View>
         </View>
@@ -142,7 +153,7 @@ export function ActivityMealSheet({
             onPress={onAddNote}
             style={styles.noteBtn}
           >
-            <NotebookPen color={v3LightColors.brand} size={16} strokeWidth={2.2} />
+            <NotebookPen color={theme.colors.brand} size={16} strokeWidth={2.2} />
             <Text style={styles.noteText}>Add note</Text>
           </Pressable>
         </View>
@@ -151,13 +162,13 @@ export function ActivityMealSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   scrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: v3LightColors.scrim,
+    backgroundColor: t.colors.scrim,
   },
   sheet: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     bottom: 0,
@@ -170,15 +181,15 @@ const styles = StyleSheet.create({
   },
   head: { flexDirection: "row", gap: 12, marginBottom: 14 },
   title: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 20,
   },
-  sub: { color: colors.midGrey, fontSize: 14, marginTop: 2 },
+  sub: { color: t.colors.ink3, fontSize: 14, marginTop: 2 },
   badge: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 999,
     flexDirection: "row",
     gap: 4,
@@ -186,41 +197,41 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   badgeText: {
-    color: v3LightColors.ink2,
+    color: t.colors.ink2,
     fontFamily: fontFamilySemiBold,
     fontSize: 12,
   },
   summaryBox: {
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     marginBottom: 8,
     padding: 14,
   },
-  summary: { color: colors.deepNavy, fontSize: 15, lineHeight: 21 },
+  summary: { color: t.colors.ink, fontSize: 15, lineHeight: 21 },
   kcal: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
     marginTop: 8,
   },
-  meta: { color: colors.midGrey, fontSize: 13, marginTop: 4 },
+  meta: { color: t.colors.ink3, fontSize: 13, marginTop: 4 },
   actions: { flexDirection: "row", gap: 10, marginTop: 12 },
   openBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     flex: 1,
     height: 48,
     justifyContent: "center",
   },
   openText: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
   },
   noteBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.brandTint,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 14,
     flex: 1,
     flexDirection: "row",
@@ -229,8 +240,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   noteText: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
   },
-});
+}));

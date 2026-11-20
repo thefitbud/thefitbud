@@ -15,6 +15,7 @@ import { requestPushPermission } from "../notifications/register";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type CategoryKey = keyof NotificationPreferences["trainerCategories"];
 
@@ -92,6 +93,9 @@ type Props = {
 };
 
 export function TrainerNotificationSettingsScreen({ onBack }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api } = useAuth();
   const [prefs, setPrefs] = useState<NotificationPreferences | null>(null);
   const [loading, setLoading] = useState(true);
@@ -190,7 +194,7 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
         snack ? (
           <Snackbar
             message={snack}
-            leading={<CircleAlert color={colors.white} size={18} strokeWidth={2} />}
+            leading={<CircleAlert color={theme.colors.card} size={18} strokeWidth={2} />}
           />
         ) : undefined
       }
@@ -245,8 +249,8 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
                 </View>
                 <Switch
                   accessibilityLabel={row.label}
-                  trackColor={{ true: colors.indigo, false: "#E5E7EB" }}
-                  thumbColor={colors.white}
+                  trackColor={{ true: theme.colors.brand, false: "#E5E7EB" }}
+                  thumbColor={theme.colors.card}
                   value={prefs.trainerCategories[row.key]}
                   disabled={saving}
                   onValueChange={(value) => {
@@ -277,12 +281,12 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   stack: {
     gap: spacing.md,
   },
   muted: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
   },
   statusCard: {
@@ -292,7 +296,7 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
   },
   statusTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     fontWeight: "700",
   },
@@ -301,7 +305,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   backText: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontSize: 17,
     fontWeight: "600",
   },
@@ -323,12 +327,12 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   section: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     marginTop: spacing.sm,
   },
   group: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 16,
     overflow: "hidden",
   },
@@ -350,12 +354,12 @@ const styles = StyleSheet.create({
     paddingRight: spacing.md,
   },
   rowLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     fontWeight: "600",
   },
   hint: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 19,
   },
@@ -366,4 +370,4 @@ const styles = StyleSheet.create({
     minHeight: 56,
     paddingHorizontal: spacing.lg,
   },
-});
+}));

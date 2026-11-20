@@ -9,7 +9,7 @@ import {
   formatCivilDate,
   formatLocalDate,
 } from "@fitbud/core";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
@@ -28,12 +28,15 @@ import {
   type WeekLookup,
 } from "./checkinsList/model";
 import { openContextualWhatsApp } from "./whatsapp";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type Props = {
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
 };
 
 export function CheckinsTab({ onReviewCheckin }: Props) {
+
+  const styles = useStyles();
   const { api, refreshSession } = useAuth();
   const trainerZone = deviceTimeZone();
   const [inboxItems, setInboxItems] = useState<TrainerCheckinInboxItem[]>([]);
@@ -257,13 +260,13 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
   );
 }
 
-const styles = StyleSheet.create({
-  eyebrow: { color: colors.midGrey, fontSize: 15, lineHeight: 20 },
+const useStyles = createThemedStyles((t) => ({
+  eyebrow: { color: t.colors.ink3, fontSize: 15, lineHeight: 20 },
   title: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 30,
     letterSpacing: -0.4,
     marginTop: 2,
   },
-});
+}));

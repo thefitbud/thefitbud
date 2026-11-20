@@ -44,12 +44,8 @@ import {
   formatPersonName,
   formatRelative,
 } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
-import {
-  colors,
-  fontFamilyMedium,
-  fontFamilySemiBold,
-} from "@fitbud/ui-mobile";
+import type { ColorTokens } from "@fitbud/tokens";
+import { fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { stage1Api } from "../lib/stage1Api";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -68,6 +64,7 @@ import {
   type ClientDirectoryRow,
   type ClientListFilter,
 } from "./clients";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type Segment = "clients" | "activity";
 
@@ -105,24 +102,28 @@ type RosterChip = {
   fg: string;
 };
 
-const AVATARS = [
-  { backgroundColor: v3LightColors.av1Bg, color: v3LightColors.av1Fg },
-  { backgroundColor: v3LightColors.av2Bg, color: v3LightColors.av2Fg },
-  { backgroundColor: v3LightColors.av3Bg, color: v3LightColors.av3Fg },
-  { backgroundColor: v3LightColors.av4Bg, color: v3LightColors.av4Fg },
-  { backgroundColor: v3LightColors.av5Bg, color: v3LightColors.av5Fg },
-  { backgroundColor: v3LightColors.av6Bg, color: v3LightColors.av6Fg },
-] as const;
+function avatars(c: ColorTokens) {
+  return [
+    { backgroundColor: c.av1Bg, color: c.av1Fg },
+    { backgroundColor: c.av2Bg, color: c.av2Fg },
+    { backgroundColor: c.av3Bg, color: c.av3Fg },
+    { backgroundColor: c.av4Bg, color: c.av4Fg },
+    { backgroundColor: c.av5Bg, color: c.av5Fg },
+    { backgroundColor: c.av6Bg, color: c.av6Fg },
+  ] as const;
+}
 
-function avatarTone(name: string): (typeof AVATARS)[number] {
+function avatarTone(name: string, c: ColorTokens) {
+  const list = avatars(c);
   const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATARS[code % AVATARS.length] ?? AVATARS[0];
+  return list[code % list.length] ?? list[0];
 }
 
 function rowChips(
   item: ClientDirectoryItem,
   group: AttentionGroup | undefined,
   hasOpenAsk: boolean,
+  c: ColorTokens,
 ): RosterChip[] {
   if (isEndedClient(item)) {
     return [
@@ -130,8 +131,8 @@ function rowChips(
         key: "ended",
         label: "Ended",
         Icon: Ban,
-        bg: v3LightColors.fill,
-        fg: v3LightColors.ink3,
+        bg: c.fill,
+        fg: c.ink3,
       },
     ];
   }
@@ -141,8 +142,8 @@ function rowChips(
         key: "pend",
         label: "Invite pending",
         Icon: Mail,
-        bg: v3LightColors.fill,
-        fg: v3LightColors.ink2,
+        bg: c.fill,
+        fg: c.ink2,
       },
     ];
   }
@@ -155,8 +156,8 @@ function rowChips(
         key: "onb",
         label: "Onboarding",
         Icon: UserRoundPlus,
-        bg: v3LightColors.infoTint,
-        fg: v3LightColors.info,
+        bg: c.infoTint,
+        fg: c.info,
       },
     ];
   }
@@ -182,8 +183,8 @@ function rowChips(
       key: "rev",
       label: "Reviewed",
       Icon: Eye,
-      bg: v3LightColors.fill,
-      fg: v3LightColors.ink2,
+      bg: c.fill,
+      fg: c.ink2,
     });
   } else if (group?.mostSevere === "critical" || openMissed) {
     chips.push({
@@ -192,28 +193,28 @@ function rowChips(
       Icon: group?.mostSevere === "critical" ? CircleAlert : TriangleAlert,
       bg:
         group?.mostSevere === "critical"
-          ? v3LightColors.critTint
-          : v3LightColors.warnTint,
+          ? c.critTint
+          : c.warnTint,
       fg:
         group?.mostSevere === "critical"
-          ? v3LightColors.crit
-          : v3LightColors.warn,
+          ? c.crit
+          : c.warn,
     });
   } else if (item.adherenceState === "needs_attention") {
     chips.push({
       key: "needs",
       label: "Needs attention",
       Icon: TriangleAlert,
-      bg: v3LightColors.warnTint,
-      fg: v3LightColors.warn,
+      bg: c.warnTint,
+      fg: c.warn,
     });
   } else if (item.adherenceState === "on_track") {
     chips.push({
       key: "ok",
       label: "On track",
       Icon: CircleCheck,
-      bg: v3LightColors.doneTint,
-      fg: v3LightColors.done,
+      bg: c.doneTint,
+      fg: c.done,
     });
   }
 
@@ -222,8 +223,8 @@ function rowChips(
       key: "ask",
       label: "Asked you",
       Icon: MessageCircleQuestionMark,
-      bg: v3LightColors.brandTint,
-      fg: v3LightColors.brandInk,
+      bg: c.brandTint,
+      fg: c.brandInk,
     });
   }
 
@@ -232,8 +233,8 @@ function rowChips(
       key: "off",
       label: "Off plan",
       Icon: UtensilsCrossed,
-      bg: v3LightColors.warnTint,
-      fg: v3LightColors.warn,
+      bg: c.warnTint,
+      fg: c.warn,
     });
   }
 
@@ -243,32 +244,32 @@ function rowChips(
       key: "ci",
       label: "Check-in to review",
       Icon: ClipboardCheck,
-      bg: v3LightColors.infoTint,
-      fg: v3LightColors.info,
+      bg: c.infoTint,
+      fg: c.info,
     });
   } else if (checkin === "overdue") {
     chips.push({
       key: "over",
       label: "Check-in overdue",
       Icon: Clock,
-      bg: v3LightColors.warnTint,
-      fg: v3LightColors.warn,
+      bg: c.warnTint,
+      fg: c.warn,
     });
   } else if (checkin === "due") {
     chips.push({
       key: "due",
       label: "Check-in due",
       Icon: Clock,
-      bg: v3LightColors.warnTint,
-      fg: v3LightColors.warn,
+      bg: c.warnTint,
+      fg: c.warn,
     });
   } else if (item.renewalState === "due" || item.renewalState === "expired") {
     chips.push({
       key: "renewal",
       label: "Renewal due",
       Icon: CalendarClock,
-      bg: v3LightColors.warnTint,
-      fg: v3LightColors.warn,
+      bg: c.warnTint,
+      fg: c.warn,
     });
   }
 
@@ -277,6 +278,8 @@ function rowChips(
 }
 
 function RosterChipView({ chip }: { chip: RosterChip }) {
+
+  const styles = useStyles();
   return (
     <View style={[styles.chip, { backgroundColor: chip.bg }]}>
       <chip.Icon size={13} color={chip.fg} strokeWidth={2.4} />
@@ -315,6 +318,9 @@ export function ClientsTab({
   onOpenAsk,
   onOpenSession,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api, me } = useAuth();
   const trainerZone = deviceTimeZone();
   const [segment, setSegment] = useState<Segment>(initialSegment);
@@ -623,7 +629,7 @@ export function ClientsTab({
       {rows.length > 0 ? (
         <View style={styles.list}>
           {rows.map(({ item, row }, index) => {
-            const tone = avatarTone(row.name);
+            const tone = avatarTone(row.name, theme.colors);
             const age = formatRelative(item.updatedAt);
             const chips = rowChips(
               item,
@@ -633,6 +639,7 @@ export function ClientsTab({
               item.relationshipId
                 ? askByRelationship.has(item.relationshipId)
                 : false,
+              theme.colors,
             );
             // Invites without a relationship are not tappable into overview.
             const canOpen = Boolean(row.relationshipId);
@@ -655,7 +662,7 @@ export function ClientsTab({
                     styles.avatar,
                     {
                       backgroundColor: isEndedClient(item) || item.status === "invited"
-                        ? v3LightColors.fill
+                        ? theme.colors.fill
                         : tone.backgroundColor,
                     },
                   ]}
@@ -666,7 +673,7 @@ export function ClientsTab({
                       {
                         color:
                           isEndedClient(item) || item.status === "invited"
-                            ? v3LightColors.ink3
+                            ? theme.colors.ink3
                             : tone.color,
                       },
                     ]}
@@ -720,6 +727,9 @@ function ClientsHeader({
   eyebrow: string;
   onSearch: () => void;
 }) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.titleRow}>
       <View style={styles.titleBlock}>
@@ -734,7 +744,7 @@ function ClientsHeader({
         onPress={onSearch}
         style={styles.searchBtn}
       >
-        <Search color={v3LightColors.ink} size={20} strokeWidth={2.2} />
+        <Search color={theme.colors.ink} size={20} strokeWidth={2.2} />
       </Pressable>
     </View>
   );
@@ -751,17 +761,20 @@ function SearchBar({
   onChange: (next: string) => void;
   onCancel: () => void;
 }) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.searchRow}>
       <View style={styles.searchField}>
-        <Search color={v3LightColors.ink3} size={18} strokeWidth={2} />
+        <Search color={theme.colors.ink3} size={18} strokeWidth={2} />
         <TextInput
           ref={inputRef as RefObject<TextInput>}
           accessibilityLabel="Search clients"
           value={value}
           onChangeText={onChange}
           placeholder="Search"
-          placeholderTextColor={v3LightColors.ink3}
+          placeholderTextColor={theme.colors.ink3}
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
@@ -787,6 +800,8 @@ function SegmentBar({
   segment: Segment;
   onChange: (segment: Segment) => void;
 }) {
+
+  const styles = useStyles();
   return (
     <View style={styles.segment}>
       {(["clients", "activity"] as const).map((id) => {
@@ -821,10 +836,13 @@ function EmptyState({
   copied: boolean;
   onCopy: () => void;
 }) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.emptyCard}>
       <View style={styles.emptyIcon}>
-        <Users color={v3LightColors.brand} size={28} strokeWidth={1.75} />
+        <Users color={theme.colors.brand} size={28} strokeWidth={1.75} />
       </View>
       <Text style={styles.emptyTitle} accessibilityRole="header">
         No clients yet
@@ -839,7 +857,7 @@ function EmptyState({
         onPress={onCopy}
         style={styles.copyBtn}
       >
-        <Copy color={v3LightColors.brand} size={16} strokeWidth={2.2} />
+        <Copy color={theme.colors.brand} size={16} strokeWidth={2.2} />
         <Text style={styles.copyText}>
           {copied ? "Copied" : "Copy web link"}
         </Text>
@@ -849,6 +867,8 @@ function EmptyState({
 }
 
 function LoadingSkeleton() {
+
+  const styles = useStyles();
   return (
     <View style={styles.list} accessibilityLabel="Loading clients">
       {[0, 1, 2, 3, 4, 5, 6].map((i) => (
@@ -868,7 +888,7 @@ function LoadingSkeleton() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   titleRow: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -876,9 +896,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   titleBlock: { flex: 1, minWidth: 0 },
-  eyebrow: { color: colors.midGrey, fontSize: 15, lineHeight: 20 },
+  eyebrow: { color: t.colors.ink3, fontSize: 15, lineHeight: 20 },
   screenTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 30,
     letterSpacing: -0.4,
@@ -886,7 +906,7 @@ const styles = StyleSheet.create({
   },
   searchBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 20,
     height: 40,
     justifyContent: "center",
@@ -902,7 +922,7 @@ const styles = StyleSheet.create({
   },
   searchField: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     flex: 1,
     flexDirection: "row",
@@ -911,19 +931,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   searchInput: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     flex: 1,
     fontSize: 16,
     minHeight: 44,
   },
   cancelBtn: { minHeight: 44, justifyContent: "center" },
   cancelText: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
   segment: {
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     flexDirection: "row",
     marginBottom: 12,
@@ -936,21 +956,21 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 40,
   },
-  segmentOn: { backgroundColor: colors.white },
+  segmentOn: { backgroundColor: t.colors.card },
   segmentText: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontFamily: fontFamilyMedium,
     fontSize: 15,
   },
   segmentTextOn: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
   },
   filtersScroll: { flexGrow: 0, marginBottom: 8, marginHorizontal: -4 },
   filters: { flexDirection: "row", gap: 8, paddingHorizontal: 4 },
   filter: {
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line2,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
     borderRadius: 999,
     borderWidth: 1,
     justifyContent: "center",
@@ -958,25 +978,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   filterOn: {
-    backgroundColor: v3LightColors.ink,
-    borderColor: v3LightColors.ink,
+    backgroundColor: t.colors.ink,
+    borderColor: t.colors.ink,
   },
   filterText: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilyMedium,
     fontSize: 14,
   },
-  filterTextOn: { color: colors.white },
+  filterTextOn: { color: t.colors.card },
   offlineBanner: {
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     marginBottom: 10,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
-  offlineText: { color: v3LightColors.ink2, fontSize: 14, lineHeight: 20 },
+  offlineText: { color: t.colors.ink2, fontSize: 14, lineHeight: 20 },
   resultLabel: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 12,
     letterSpacing: 0.6,
@@ -985,8 +1005,8 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   list: {
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     marginTop: 4,
@@ -999,9 +1019,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
   },
-  rowBorder: { borderTopColor: v3LightColors.line, borderTopWidth: StyleSheet.hairlineWidth },
+  rowBorder: { borderTopColor: t.colors.line, borderTopWidth: StyleSheet.hairlineWidth },
   rowBorderLine: {
-    backgroundColor: v3LightColors.line,
+    backgroundColor: t.colors.line,
     height: StyleSheet.hairlineWidth,
     marginLeft: 70,
   },
@@ -1022,13 +1042,13 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   name: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     flex: 1,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
-  age: { color: colors.midGrey, fontSize: 13 },
-  sub: { color: colors.midGrey, fontSize: 13.5, marginTop: 1 },
+  age: { color: t.colors.ink3, fontSize: 13 },
+  sub: { color: t.colors.ink3, fontSize: 13.5, marginTop: 1 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 5 },
   chip: {
     alignItems: "center",
@@ -1041,21 +1061,21 @@ const styles = StyleSheet.create({
   },
   chipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
   endedNote: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 10,
   },
   emptyMatch: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     lineHeight: 22,
     marginTop: 24,
   },
   emptyCard: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     marginTop: 14,
@@ -1064,20 +1084,20 @@ const styles = StyleSheet.create({
   },
   emptyIcon: {
     alignItems: "center",
-    backgroundColor: v3LightColors.brandTint,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 16,
     height: 56,
     justifyContent: "center",
     width: 56,
   },
   emptyTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 20,
     marginTop: 16,
   },
   emptyBody: {
-    color: v3LightColors.ink2,
+    color: t.colors.ink2,
     fontSize: 15,
     lineHeight: 22,
     marginTop: 8,
@@ -1085,7 +1105,7 @@ const styles = StyleSheet.create({
   },
   copyBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.brandTint,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 14,
     flexDirection: "row",
     gap: 8,
@@ -1095,7 +1115,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
   },
   copyText: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
@@ -1105,5 +1125,5 @@ const styles = StyleSheet.create({
     gap: 12,
     padding: 14,
   },
-  skelBlock: { backgroundColor: v3LightColors.skel1, borderRadius: 8 },
-});
+  skelBlock: { backgroundColor: t.colors.skel1, borderRadius: 8 },
+}));

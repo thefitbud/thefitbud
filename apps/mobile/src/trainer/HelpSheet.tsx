@@ -16,12 +16,16 @@ import {
 } from "lucide-react-native";
 import { setStringAsync } from "expo-clipboard";
 import Constants from "expo-constants";
-import { brand, ink, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { BottomSheet } from "../components/BottomSheet";
 import { Text } from "../components/Text";
 import { buildSupportMailto } from "../lib/support";
 import { reportError } from "../lib/reportError";
+import {
+  ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 
 /** Frame 56 / TM-07e: "App version 1.4.0 • iPhone • More". */
 export function buildHelpDetails(input: {
@@ -96,13 +100,23 @@ type Props = {
  * TM-07e Help sheet: Email the FitBud team and Report a problem. Falls back to
  * the copy-address sheet when no mail app is available.
  */
-export function HelpSheet({
+export function HelpSheet(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <HelpSheetBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function HelpSheetBody({
   visible,
   onDismiss,
   supportEmail,
   screen,
   copy = copyText,
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const [copied, setCopied] = useState<"address" | "details" | null>(null);
   const [noMail, setNoMail] = useState(false);
   const version = Constants.expoConfig?.version ?? "0.0.0";
@@ -151,7 +165,7 @@ export function HelpSheet({
             onPress={close}
             style={styles.close}
           >
-            <X color={ink[700]} size={18} strokeWidth={2} />
+            <X color={theme.colors.ink2} size={18} strokeWidth={2} />
           </Pressable>
         </View>
         <Text style={styles.body}>
@@ -169,9 +183,9 @@ export function HelpSheet({
           >
             <View style={styles.tile}>
               {copied === "address" ? (
-                <Check color={brand.indigo} size={20} strokeWidth={1.75} />
+                <Check color={theme.colors.brand} size={20} strokeWidth={1.75} />
               ) : (
-                <Copy color={brand.indigo} size={20} strokeWidth={1.75} />
+                <Copy color={theme.colors.brand} size={20} strokeWidth={1.75} />
               )}
             </View>
             <View style={styles.flex}>
@@ -190,10 +204,10 @@ export function HelpSheet({
           >
             <View style={styles.tile}>
               {copied === "details" ? (
-                <Check color={brand.indigo} size={20} strokeWidth={1.75} />
+                <Check color={theme.colors.brand} size={20} strokeWidth={1.75} />
               ) : (
                 <ClipboardList
-                  color={brand.indigo}
+                  color={theme.colors.brand}
                   size={20}
                   strokeWidth={1.75}
                 />
@@ -226,7 +240,7 @@ export function HelpSheet({
           style={styles.row}
         >
           <View style={styles.tile}>
-            <Mail color={brand.indigo} size={20} strokeWidth={1.75} />
+            <Mail color={theme.colors.brand} size={20} strokeWidth={1.75} />
           </View>
           <View style={styles.flex}>
             <Text style={styles.rowLabel}>Email the FitBud team</Text>
@@ -243,7 +257,7 @@ export function HelpSheet({
           style={styles.row}
         >
           <View style={styles.tile}>
-            <Bug color={brand.indigo} size={20} strokeWidth={1.75} />
+            <Bug color={theme.colors.brand} size={20} strokeWidth={1.75} />
           </View>
           <View style={styles.flex}>
             <Text style={styles.rowLabel}>Report a problem</Text>
@@ -263,11 +277,11 @@ export function HelpSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   flex: { flex: 1 },
   handle: {
     alignSelf: "center",
-    backgroundColor: ink[200],
+    backgroundColor: t.colors.line,
     borderRadius: 2,
     height: 4,
     marginBottom: 12,
@@ -275,24 +289,24 @@ const styles = StyleSheet.create({
   },
   head: { alignItems: "flex-start", flexDirection: "row", gap: spacing.md },
   title: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilyBold,
     fontSize: 26,
     letterSpacing: -0.3,
   },
-  sub: { color: ink[500], fontSize: 17, marginTop: 4 },
+  sub: { color: t.colors.ink3, fontSize: 17, marginTop: 4 },
   close: {
     alignItems: "center",
-    backgroundColor: surface.pageMobile,
+    backgroundColor: t.colors.bg,
     borderRadius: 22,
     height: 44,
     justifyContent: "center",
     width: 44,
   },
-  body: { color: brand.deepNavy, fontSize: 18, lineHeight: 28 },
+  body: { color: t.colors.ink, fontSize: 18, lineHeight: 28 },
   group: {
-    backgroundColor: surface.card,
-    borderColor: ink[200],
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
@@ -306,32 +320,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  sep: { backgroundColor: ink[200], height: 1 },
+  sep: { backgroundColor: t.colors.line, height: 1 },
   tile: {
     alignItems: "center",
-    backgroundColor: brand.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 12,
     height: 40,
     justifyContent: "center",
     width: 40,
   },
   rowLabel: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
   },
-  rowHint: { color: ink[500], fontSize: 15 },
+  rowHint: { color: t.colors.ink3, fontSize: 15 },
   closeBtn: {
     alignItems: "center",
-    backgroundColor: surface.pageMobile,
+    backgroundColor: t.colors.bg,
     borderRadius: 16,
     justifyContent: "center",
     marginTop: 16,
     minHeight: 52,
   },
   closeBtnText: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
-});
+}));

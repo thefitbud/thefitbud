@@ -37,6 +37,39 @@ vi.mock("@fitbud/tokens", () => ({
 vi.mock("@fitbud/ui-mobile", () => ({
   colors: {},
   spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
+  themes: {
+    light: { scheme: "light", colors: {}, radii: {}, spacing: {}, text: {}, touchTarget: 44 },
+    dark: { scheme: "dark", colors: {}, radii: {}, spacing: {}, text: {}, touchTarget: 44 },
+  },
+}));
+vi.mock("../providers/ThemeProvider", () => ({
+  ThemeScope: ({ children }: { children: unknown }) => children,
+  useTheme: () => ({
+    scheme: "light",
+    colors: new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    ),
+    radii: {},
+    spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
+    text: {},
+    touchTarget: 44,
+  }),
+  createThemedStyles: (factory: (t: { colors: Record<string, string> }) => unknown) => {
+    const colors = new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    );
+    const styles = factory({
+      colors: colors as Record<string, string>,
+      radii: {},
+      spacing: { xs: 4, sm: 8, md: 12, lg: 16, xl: 24 },
+      text: {},
+      touchTarget: 44,
+      scheme: "light",
+    } as never);
+    return () => styles;
+  },
 }));
 vi.mock("expo-notifications", () => ({ getPermissionsAsync: vi.fn() }));
 vi.mock("../components/Text", () => ({ Text: "Text" }));

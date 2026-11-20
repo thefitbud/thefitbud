@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import type { CheckinReviewPhoto } from "@fitbud/contracts";
-import { v3LightColors } from "@fitbud/tokens";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { useAuth } from "../../auth/AuthProvider";
 import { resolveApiBaseUrl } from "../../lib/api";
 import { reportError } from "../../lib/reportError";
 import { PhotoCompare } from "./PhotoCompare";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 /** Frame 19 shows three thumbnails. */
 const MAX_THUMBNAILS = 3;
@@ -35,6 +35,8 @@ export function Photos({
   checkinId: string;
   firstName: string;
 }) {
+
+  const styles = useStyles();
   const { api } = useAuth();
   const own = checkinPhotos(photos, checkinId);
   const shown = own.slice(0, MAX_THUMBNAILS);
@@ -102,7 +104,7 @@ export function Photos({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   wrap: { marginTop: 16 },
   headRow: {
     alignItems: "baseline",
@@ -110,23 +112,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   head: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
   count: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
-  compareHint: { color: v3LightColors.ink3, fontSize: 13 },
+  compareHint: { color: t.colors.ink3, fontSize: 13 },
   row: { flexDirection: "row", gap: 8, marginTop: 8 },
   tile: {
     aspectRatio: 3 / 4,
-    backgroundColor: "#E7E9F2",
+    backgroundColor: t.colors.fill2,
     borderRadius: 14,
     flex: 1,
     overflow: "hidden",
   },
   image: { height: "100%", width: "100%" },
-});
+}));

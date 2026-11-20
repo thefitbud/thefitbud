@@ -2,28 +2,32 @@ import { useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Check, Search } from "lucide-react-native";
 import { formatPersonName } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import type { ColorTokens } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { initialsFromName } from "../../components/m2";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 export type ActivityClientOption = {
   relationshipId: string;
   displayName: string;
 };
 
-const AVATARS = [
-  { backgroundColor: v3LightColors.av1Bg, color: v3LightColors.av1Fg },
-  { backgroundColor: v3LightColors.av2Bg, color: v3LightColors.av2Fg },
-  { backgroundColor: v3LightColors.av3Bg, color: v3LightColors.av3Fg },
-  { backgroundColor: v3LightColors.av4Bg, color: v3LightColors.av4Fg },
-  { backgroundColor: v3LightColors.av5Bg, color: v3LightColors.av5Fg },
-  { backgroundColor: v3LightColors.av6Bg, color: v3LightColors.av6Fg },
-] as const;
+function avatars(c: ColorTokens) {
+  return [
+    { backgroundColor: c.av1Bg, color: c.av1Fg },
+    { backgroundColor: c.av2Bg, color: c.av2Fg },
+    { backgroundColor: c.av3Bg, color: c.av3Fg },
+    { backgroundColor: c.av4Bg, color: c.av4Fg },
+    { backgroundColor: c.av5Bg, color: c.av5Fg },
+    { backgroundColor: c.av6Bg, color: c.av6Fg },
+  ] as const;
+}
 
-function avatarTone(name: string) {
+function avatarTone(name: string, c: ColorTokens) {
+  const list = avatars(c);
   const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATARS[code % AVATARS.length] ?? AVATARS[0]!;
+  return list[code % list.length] ?? list[0]!;
 }
 
 type Props = {
@@ -35,13 +39,24 @@ type Props = {
 };
 
 /** TM-09d: pick one client to scope the activity feed. */
-export function ClientPickerSheet({
+export function ClientPickerSheet(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <ClientPickerSheetBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function ClientPickerSheetBody({
   visible,
   clients,
   selectedId,
   onSelect,
   onDismiss,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const [query, setQuery] = useState("");
   const [draftId, setDraftId] = useState<string | null>(selectedId);
 
@@ -96,13 +111,13 @@ export function ClientPickerSheet({
           </Pressable>
         </View>
         <View style={styles.search}>
-          <Search color={v3LightColors.ink3} size={18} strokeWidth={2} />
+          <Search color={theme.colors.ink3} size={18} strokeWidth={2} />
           <TextInput
             accessibilityLabel="Search clients"
             value={query}
             onChangeText={setQuery}
             placeholder="Search clients"
-            placeholderTextColor={v3LightColors.ink3}
+            placeholderTextColor={theme.colors.ink3}
             style={styles.searchInput}
             autoCorrect={false}
             autoCapitalize="none"
@@ -111,7 +126,7 @@ export function ClientPickerSheet({
         <ScrollView style={styles.list}>
           {filtered.map((client) => {
             const name = formatPersonName(client.displayName);
-            const tone = avatarTone(name);
+            const tone = avatarTone(name, theme.colors);
             const selected = draftId === client.relationshipId;
             return (
               <Pressable
@@ -131,7 +146,7 @@ export function ClientPickerSheet({
                 <Text style={styles.name}>{name}</Text>
                 {selected ? (
                   <View style={styles.check}>
-                    <Check color={colors.white} size={16} strokeWidth={2.6} />
+                    <Check color={theme.colors.card} size={16} strokeWidth={2.6} />
                   </View>
                 ) : (
                   <View style={styles.checkOff} />
@@ -145,13 +160,13 @@ export function ClientPickerSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   scrim: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: v3LightColors.scrim,
+    backgroundColor: t.colors.scrim,
   },
   sheet: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     bottom: 0,
@@ -170,19 +185,19 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   title: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
   link: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
     minWidth: 48,
   },
   search: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 12,
     flexDirection: "row",
     gap: 8,
@@ -190,7 +205,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     paddingHorizontal: 12,
   },
-  searchInput: { color: colors.deepNavy, flex: 1, fontSize: 16 },
+  searchInput: { color: t.colors.ink, flex: 1, fontSize: 16 },
   list: { marginTop: 8 },
   row: {
     alignItems: "center",
@@ -208,24 +223,24 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontFamily: fontFamilySemiBold, fontSize: 13 },
   name: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     flex: 1,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
   check: {
     alignItems: "center",
-    backgroundColor: v3LightColors.ink,
+    backgroundColor: t.colors.ink,
     borderRadius: 14,
     height: 28,
     justifyContent: "center",
     width: 28,
   },
   checkOff: {
-    borderColor: v3LightColors.line,
+    borderColor: t.colors.line,
     borderRadius: 14,
     borderWidth: 1.5,
     height: 28,
     width: 28,
   },
-});
+}));

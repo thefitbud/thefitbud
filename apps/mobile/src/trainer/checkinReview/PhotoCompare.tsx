@@ -14,9 +14,9 @@ import {
 import { X } from "lucide-react-native";
 import type { CheckinReviewPhoto } from "@fitbud/contracts";
 import { formatCivilDate } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 type Angle = "front" | "side" | "back";
 
@@ -37,13 +37,23 @@ type Props = {
   onClose: () => void;
 };
 
-export function PhotoCompare({
+export function PhotoCompare(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <PhotoCompareBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function PhotoCompareBody({
   visible,
   firstName,
   photos,
   uris,
   onClose,
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const [angle, setAngle] = useState<Angle>("front");
   const ordered = useMemo(
     () =>
@@ -72,7 +82,7 @@ export function PhotoCompare({
             onPress={onClose}
             style={styles.close}
           >
-            <X color="#FFFFFF" size={20} strokeWidth={2.2} />
+            <X color={theme.colors.white} size={20} strokeWidth={2.2} />
           </Pressable>
           <Text style={styles.title}>{`${firstName} · ${angle}`}</Text>
           <View style={styles.close} />
@@ -123,6 +133,8 @@ function CompareSlot({
   uri?: string;
   caption: string;
 }) {
+
+  const styles = useStyles();
   return (
     <View style={styles.slot}>
       <View style={styles.frame}>
@@ -142,9 +154,9 @@ function CompareSlot({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   root: {
-    backgroundColor: "#0B0A12",
+    backgroundColor: t.colors.mediaBg,
     flex: 1,
     paddingBottom: 28,
     paddingTop: 54,
@@ -164,7 +176,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   title: {
-    color: "#FFFFFF",
+    color: t.colors.white,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
     fontWeight: "600",
@@ -179,17 +191,17 @@ const styles = StyleSheet.create({
   slot: { flex: 1 },
   frame: {
     aspectRatio: 3 / 4,
-    backgroundColor: "#2A2A33",
+    backgroundColor: t.colors.navy,
     borderRadius: 16,
     overflow: "hidden",
   },
   image: { height: "100%", width: "100%" },
   placeholder: {
-    backgroundColor: v3LightColors.phA,
+    backgroundColor: t.colors.phA,
     flex: 1,
   },
   caption: {
-    color: "#FFFFFF",
+    color: t.colors.white,
     fontSize: 13,
     marginTop: 10,
     textAlign: "center",
@@ -207,13 +219,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
-  angleOn: { backgroundColor: "#FFFFFF" },
+  angleOn: { backgroundColor: t.colors.white },
   angleText: {
-    color: "#FFFFFF",
+    color: t.colors.white,
     fontFamily: fontFamilySemiBold,
     fontSize: 14,
     fontWeight: "600",
     textAlign: "center",
   },
   angleTextOn: { color: "#0B0A12" },
-});
+}));

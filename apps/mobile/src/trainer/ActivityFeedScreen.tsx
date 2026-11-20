@@ -16,8 +16,8 @@ import {
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import { deviceTimeZone, formatLocalDate, formatPersonName } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import type { ColorTokens } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -43,23 +43,27 @@ import {
   type ActivityFilter,
   type ActivityTagKind,
 } from "./activity/model";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type ActivityFeedEvent = Awaited<
   ReturnType<ReturnType<typeof stage1Api>["getActivityFeed"]>
 >["events"][number];
 
-const AVATARS = [
-  { backgroundColor: v3LightColors.av1Bg, color: v3LightColors.av1Fg },
-  { backgroundColor: v3LightColors.av2Bg, color: v3LightColors.av2Fg },
-  { backgroundColor: v3LightColors.av3Bg, color: v3LightColors.av3Fg },
-  { backgroundColor: v3LightColors.av4Bg, color: v3LightColors.av4Fg },
-  { backgroundColor: v3LightColors.av5Bg, color: v3LightColors.av5Fg },
-  { backgroundColor: v3LightColors.av6Bg, color: v3LightColors.av6Fg },
-] as const;
+function avatars(c: ColorTokens) {
+  return [
+    { backgroundColor: c.av1Bg, color: c.av1Fg },
+    { backgroundColor: c.av2Bg, color: c.av2Fg },
+    { backgroundColor: c.av3Bg, color: c.av3Fg },
+    { backgroundColor: c.av4Bg, color: c.av4Fg },
+    { backgroundColor: c.av5Bg, color: c.av5Fg },
+    { backgroundColor: c.av6Bg, color: c.av6Fg },
+  ] as const;
+}
 
-function avatarTone(name: string) {
+function avatarTone(name: string, c: ColorTokens) {
+  const list = avatars(c);
   const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATARS[code % AVATARS.length] ?? AVATARS[0]!;
+  return list[code % list.length] ?? list[0]!;
 }
 
 type Props = {
@@ -89,6 +93,9 @@ export function ActivityFeedScreen({
   onOpenSession,
   refreshToken = 0,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api } = useAuth();
   const s1 = stage1Api(api);
   const zone = deviceTimeZone();
@@ -309,7 +316,7 @@ export function ActivityFeedScreen({
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIcon}>
-            <ClipboardCheck color={v3LightColors.ink} size={26} strokeWidth={2} />
+            <ClipboardCheck color={theme.colors.ink} size={26} strokeWidth={2} />
           </View>
           <Text style={styles.emptyTitle}>{empty.title}</Text>
           {empty.body ? <Text style={styles.emptyBody}>{empty.body}</Text> : null}
@@ -411,8 +418,11 @@ function EventRow({
   event: ActivityFeedEvent;
   onPress: () => void;
 }) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const name = formatPersonName(event.traineeDisplayName ?? "Client");
-  const tone = avatarTone(name);
+  const tone = avatarTone(name, theme.colors);
   const tag = activityTag(event);
   return (
     <Pressable
@@ -441,7 +451,10 @@ function EventRow({
 }
 
 function TagPill({ kind, label }: { kind: ActivityTagKind; label: string }) {
-  const tone = tagTone(kind);
+
+  const theme = useTheme();
+  const styles = useStyles();
+  const tone = tagTone(kind, theme.colors);
   const Icon = tone.Icon;
   return (
     <View style={[styles.tag, { backgroundColor: tone.bg }]}>
@@ -451,55 +464,58 @@ function TagPill({ kind, label }: { kind: ActivityTagKind; label: string }) {
   );
 }
 
-function tagTone(kind: ActivityTagKind): {
+function tagTone(
+  kind: ActivityTagKind,
+  c: ColorTokens,
+): {
   bg: string;
   fg: string;
   Icon: typeof Trophy;
 } {
   switch (kind) {
     case "new_best":
-      return { bg: "#FFF1DB", fg: "#8A4B06", Icon: Trophy };
+      return { bg: c.prTint, fg: c.pr, Icon: Trophy };
     case "ate_out":
-      return { bg: v3LightColors.warnTint, fg: v3LightColors.warn, Icon: UtensilsCrossed };
+      return { bg: c.warnTint, fg: c.warn, Icon: UtensilsCrossed };
     case "as_planned":
-      return { bg: v3LightColors.doneTint, fg: v3LightColors.done, Icon: UtensilsCrossed };
+      return { bg: c.doneTint, fg: c.done, Icon: UtensilsCrossed };
     case "changed":
-      return { bg: v3LightColors.fill, fg: v3LightColors.ink2, Icon: RefreshCw };
+      return { bg: c.fill, fg: c.ink2, Icon: RefreshCw };
     case "checkin":
-      return { bg: v3LightColors.infoTint, fg: v3LightColors.info, Icon: ClipboardCheck };
+      return { bg: c.infoTint, fg: c.info, Icon: ClipboardCheck };
     case "note_seen":
-      return { bg: v3LightColors.fill, fg: v3LightColors.ink2, Icon: Eye };
+      return { bg: c.fill, fg: c.ink2, Icon: Eye };
     case "change":
-      return { bg: v3LightColors.fill, fg: v3LightColors.ink2, Icon: RefreshCw };
+      return { bg: c.fill, fg: c.ink2, Icon: RefreshCw };
     case "ask":
-      return { bg: v3LightColors.brandTint, fg: v3LightColors.brand, Icon: Check };
+      return { bg: c.brandTint, fg: c.brand, Icon: Check };
     default:
-      return { bg: v3LightColors.fill, fg: v3LightColors.ink2, Icon: Check };
+      return { bg: c.fill, fg: c.ink2, Icon: Check };
   }
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   wrap: { gap: 10, marginTop: 4 },
   chips: { gap: 8, paddingVertical: 4 },
   chip: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 999,
     height: 36,
     justifyContent: "center",
     paddingHorizontal: 14,
   },
-  chipOn: { backgroundColor: v3LightColors.ink },
+  chipOn: { backgroundColor: t.colors.ink },
   chipText: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 14,
   },
-  chipTextOn: { color: colors.white },
+  chipTextOn: { color: t.colors.card },
   clientChipRow: { flexDirection: "row" },
   clientChip: {
     alignItems: "center",
-    backgroundColor: v3LightColors.brandTint,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 999,
     flexDirection: "row",
     gap: 6,
@@ -507,12 +523,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   clientChipText: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 13,
   },
   clientChipX: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
     lineHeight: 20,
@@ -520,20 +536,20 @@ const styles = StyleSheet.create({
   feed: { gap: 16 },
   group: { gap: 8 },
   day: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 12,
     letterSpacing: 0.6,
   },
   card: {
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
   },
   divider: {
-    backgroundColor: v3LightColors.line,
+    backgroundColor: t.colors.line,
     height: StyleSheet.hairlineWidth,
   },
   row: {
@@ -551,7 +567,7 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontFamily: fontFamilySemiBold, fontSize: 13 },
   body: { flex: 1, minWidth: 0 },
-  summary: { color: colors.deepNavy, fontSize: 15, lineHeight: 21 },
+  summary: { color: t.colors.ink, fontSize: 15, lineHeight: 21 },
   who: { fontFamily: fontFamilySemiBold },
   foot: {
     alignItems: "center",
@@ -569,11 +585,11 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   tagText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
-  time: { color: colors.midGrey, flex: 1, fontSize: 13 },
+  time: { color: t.colors.ink3, flex: 1, fontSize: 13 },
   empty: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     gap: 8,
@@ -582,7 +598,7 @@ const styles = StyleSheet.create({
   },
   emptyIcon: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 16,
     height: 56,
     justifyContent: "center",
@@ -590,20 +606,20 @@ const styles = StyleSheet.create({
     width: 56,
   },
   emptyTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
     textAlign: "center",
   },
   emptyBody: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
     textAlign: "center",
   },
   clearBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.brandTint,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 14,
     height: 44,
     justifyContent: "center",
@@ -612,7 +628,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   clearText: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
   },
@@ -622,13 +638,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   moreText: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
   },
   skel: {
-    backgroundColor: v3LightColors.skel1,
+    backgroundColor: t.colors.skel1,
     height: 64,
     marginBottom: 1,
   },
-});
+}));

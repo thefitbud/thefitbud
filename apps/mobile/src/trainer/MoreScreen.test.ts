@@ -68,6 +68,39 @@ vi.mock("@fitbud/ui-mobile", async () => ({
     .spacing,
   fontFamilyBold: "",
   fontFamilySemiBold: "",
+  themes: {
+    light: { scheme: "light", colors: {}, radii: {}, spacing: {}, text: {}, touchTarget: 44 },
+    dark: { scheme: "dark", colors: {}, radii: {}, spacing: {}, text: {}, touchTarget: 44 },
+  },
+}));
+vi.mock("../providers/ThemeProvider", () => ({
+  ThemeScope: ({ children }: { children: unknown }) => children,
+  useTheme: () => ({
+    scheme: "light",
+    colors: new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    ),
+    radii: {},
+    spacing: {},
+    text: {},
+    touchTarget: 44,
+  }),
+  createThemedStyles: (factory: (t: { colors: Record<string, string> }) => unknown) => {
+    const colors = new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    );
+    const styles = factory({
+      colors: colors as Record<string, string>,
+      radii: {},
+      spacing: {},
+      text: {},
+      touchTarget: 44,
+      scheme: "light",
+    } as never);
+    return () => styles;
+  },
 }));
 vi.mock("../components/Text", () => ({ Text: "Text" }));
 vi.mock("../components/Screen", () => ({ Screen: "Screen" }));

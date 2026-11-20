@@ -1,5 +1,6 @@
 /**
  * Needs you v3 chrome (TM-01*): summary grid, section headers, and cards.
+ * Follows system light/dark via ThemeScope on `<Screen v3>` (D-W12-12).
  */
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
@@ -16,15 +17,15 @@ import {
   UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react-native";
-import { v3LightColors } from "@fitbud/tokens";
-import {
-  colors,
-  fontFamilyMedium,
-  fontFamilySemiBold,
-} from "@fitbud/ui-mobile";
+import type { ColorTokens } from "@fitbud/tokens";
+import { fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { initialsFromName } from "../../components/m2";
 import { SwipeActionRow } from "../../components/SwipeActionRow";
+import {
+  createThemedStyles,
+  useTheme,
+} from "../../providers/ThemeProvider";
 import type {
   NeedsYouCardModel,
   NeedsYouChipKind,
@@ -34,101 +35,108 @@ import type {
   NeedsYouTileId,
 } from "./needsYouModel";
 
-const AVATARS = [
-  { backgroundColor: v3LightColors.av1Bg, color: v3LightColors.av1Fg },
-  { backgroundColor: v3LightColors.av2Bg, color: v3LightColors.av2Fg },
-  { backgroundColor: v3LightColors.av3Bg, color: v3LightColors.av3Fg },
-  { backgroundColor: v3LightColors.av4Bg, color: v3LightColors.av4Fg },
-  { backgroundColor: v3LightColors.av5Bg, color: v3LightColors.av5Fg },
-  { backgroundColor: v3LightColors.av6Bg, color: v3LightColors.av6Fg },
-] as const;
-
-function avatarTone(name: string): (typeof AVATARS)[number] {
-  const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATARS[code % AVATARS.length] ?? AVATARS[0];
+function avatars(c: ColorTokens) {
+  return [
+    { backgroundColor: c.av1Bg, color: c.av1Fg },
+    { backgroundColor: c.av2Bg, color: c.av2Fg },
+    { backgroundColor: c.av3Bg, color: c.av3Fg },
+    { backgroundColor: c.av4Bg, color: c.av4Fg },
+    { backgroundColor: c.av5Bg, color: c.av5Fg },
+    { backgroundColor: c.av6Bg, color: c.av6Fg },
+  ] as const;
 }
 
-const TILE_ICON: Record<
-  NeedsYouTileId,
-  { Icon: LucideIcon; bg: string; fg: string }
-> = {
-  missed: {
-    Icon: CalendarX,
-    bg: v3LightColors.critTint,
-    fg: v3LightColors.crit,
-  },
-  asked: {
-    Icon: MessageCircleQuestionMark,
-    bg: v3LightColors.brandTint,
-    fg: v3LightColors.brand,
-  },
-  checkins: {
-    Icon: ClipboardCheck,
-    bg: v3LightColors.infoTint,
-    fg: v3LightColors.info,
-  },
-  off: {
-    Icon: UtensilsCrossed,
-    bg: v3LightColors.warnTint,
-    fg: v3LightColors.warn,
-  },
-};
+function avatarTone(name: string, c: ColorTokens) {
+  const list = avatars(c);
+  const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return list[code % list.length] ?? list[0];
+}
 
-const SECTION_ICON: Record<
-  NeedsYouSection["id"],
-  { Icon: LucideIcon; bg: string; fg: string }
-> = {
-  missed: TILE_ICON.missed,
-  asked: TILE_ICON.asked,
-  checkins: TILE_ICON.checkins,
-  off: TILE_ICON.off,
-  reviewed: {
-    Icon: Eye,
-    bg: v3LightColors.fill,
-    fg: v3LightColors.ink2,
-  },
-};
+function tileIcon(
+  c: ColorTokens,
+): Record<NeedsYouTileId, { Icon: LucideIcon; bg: string; fg: string }> {
+  return {
+    missed: {
+      Icon: CalendarX,
+      bg: c.critTint,
+      fg: c.crit,
+    },
+    asked: {
+      Icon: MessageCircleQuestionMark,
+      bg: c.brandTint,
+      fg: c.brand,
+    },
+    checkins: {
+      Icon: ClipboardCheck,
+      bg: c.infoTint,
+      fg: c.info,
+    },
+    off: {
+      Icon: UtensilsCrossed,
+      bg: c.warnTint,
+      fg: c.warn,
+    },
+  };
+}
 
-const CHIP: Record<
-  NeedsYouChipKind,
-  { Icon: LucideIcon; bg: string; fg: string }
-> = {
-  critical: {
-    Icon: CircleAlert,
-    bg: v3LightColors.critTint,
-    fg: v3LightColors.crit,
-  },
-  attention: {
-    Icon: TriangleAlert,
-    bg: v3LightColors.warnTint,
-    fg: v3LightColors.warn,
-  },
-  pain: {
-    Icon: HeartPulse,
-    bg: v3LightColors.critTint,
-    fg: v3LightColors.crit,
-  },
-  ask: {
-    Icon: MessageCircleQuestionMark,
-    bg: v3LightColors.brandTint,
-    fg: v3LightColors.brandInk,
-  },
-  checkin: {
-    Icon: ClipboardCheck,
-    bg: v3LightColors.infoTint,
-    fg: v3LightColors.info,
-  },
-  off: {
-    Icon: UtensilsCrossed,
-    bg: v3LightColors.warnTint,
-    fg: v3LightColors.warn,
-  },
-  reviewed: {
-    Icon: Eye,
-    bg: v3LightColors.fill,
-    fg: v3LightColors.ink2,
-  },
-};
+function sectionIcon(
+  c: ColorTokens,
+): Record<NeedsYouSection["id"], { Icon: LucideIcon; bg: string; fg: string }> {
+  const tiles = tileIcon(c);
+  return {
+    missed: tiles.missed,
+    asked: tiles.asked,
+    checkins: tiles.checkins,
+    off: tiles.off,
+    reviewed: {
+      Icon: Eye,
+      bg: c.fill,
+      fg: c.ink2,
+    },
+  };
+}
+
+function chipSpec(
+  c: ColorTokens,
+): Record<NeedsYouChipKind, { Icon: LucideIcon; bg: string; fg: string }> {
+  return {
+    critical: {
+      Icon: CircleAlert,
+      bg: c.critTint,
+      fg: c.crit,
+    },
+    attention: {
+      Icon: TriangleAlert,
+      bg: c.warnTint,
+      fg: c.warn,
+    },
+    pain: {
+      Icon: HeartPulse,
+      bg: c.critTint,
+      fg: c.crit,
+    },
+    ask: {
+      Icon: MessageCircleQuestionMark,
+      bg: c.brandTint,
+      fg: c.brandInk,
+    },
+    checkin: {
+      Icon: ClipboardCheck,
+      bg: c.infoTint,
+      fg: c.info,
+    },
+    off: {
+      Icon: UtensilsCrossed,
+      bg: c.warnTint,
+      fg: c.warn,
+    },
+    reviewed: {
+      Icon: Eye,
+      bg: c.fill,
+      fg: c.ink2,
+    },
+  };
+}
 
 type Props = {
   model: NeedsYouScreenModel;
@@ -147,6 +155,8 @@ export function NeedsYouHeader({
   eyebrow: string;
   onSearch?: () => void;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.titleRow}>
       <View style={styles.titleBlock}>
@@ -162,7 +172,7 @@ export function NeedsYouHeader({
           onPress={onSearch}
           style={styles.searchBtn}
         >
-          <Search color={v3LightColors.ink} size={20} strokeWidth={2.2} />
+          <Search color={theme.colors.ink} size={20} strokeWidth={2.2} />
         </Pressable>
       ) : null}
     </View>
@@ -176,6 +186,9 @@ export function NeedsYouSummaryGrid({
   tiles: NeedsYouTile[];
   loading?: boolean;
 }) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const icons = tileIcon(theme.colors);
   if (loading) {
     return (
       <View style={styles.grid} accessibilityLabel="Loading summary">
@@ -194,7 +207,7 @@ export function NeedsYouSummaryGrid({
   return (
     <View style={styles.grid}>
       {tiles.map((tile) => {
-        const spec = TILE_ICON[tile.id];
+        const spec = icons[tile.id];
         const zero = tile.count === 0;
         return (
           <View
@@ -203,9 +216,7 @@ export function NeedsYouSummaryGrid({
             accessibilityRole="summary"
             accessibilityLabel={`${tile.count} ${tile.label}, ${tile.sub}`}
           >
-            <View
-              style={[styles.tileIcon, { backgroundColor: spec.bg }]}
-            >
+            <View style={[styles.tileIcon, { backgroundColor: spec.bg }]}>
               <spec.Icon color={spec.fg} size={17} strokeWidth={2.2} />
             </View>
             <View style={styles.tileBody}>
@@ -233,6 +244,7 @@ export function NeedsYouSections({
   onCardAction,
   onMarkReviewed,
 }: Omit<Props, "loading" | "onSearch">) {
+  const styles = useStyles();
   if (model.allCaughtUp) {
     return <>{emptySlot}</>;
   }
@@ -262,7 +274,9 @@ function Section({
   onCardAction: (card: NeedsYouCardModel) => void;
   onMarkReviewed: (card: NeedsYouCardModel) => void;
 }) {
-  const spec = SECTION_ICON[section.id];
+  const theme = useTheme();
+  const styles = useStyles();
+  const spec = sectionIcon(theme.colors)[section.id];
   return (
     <View style={styles.section}>
       <View style={styles.sectionHead} accessibilityRole="header">
@@ -318,14 +332,13 @@ function NeedsYouCard({
   dim?: boolean;
   onAction: () => void;
 }) {
-  const tone = avatarTone(card.name);
-  const chip = card.chip ? CHIP[card.chip.kind] : null;
+  const theme = useTheme();
+  const styles = useStyles();
+  const tone = avatarTone(card.name, theme.colors);
+  const chip = card.chip ? chipSpec(theme.colors)[card.chip.kind] : null;
   return (
     <View
-      style={[
-        styles.card,
-        offline || dim ? styles.disabled : null,
-      ]}
+      style={[styles.card, offline || dim ? styles.disabled : null]}
     >
       <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
         <Text style={[styles.avatarText, { color: tone.color }]}>
@@ -365,7 +378,7 @@ function NeedsYouCard({
           onPress={onAction}
           hitSlop={8}
         >
-          <ChevronRight color={colors.midGrey} size={18} />
+          <ChevronRight color={theme.colors.ink3} size={18} />
         </Pressable>
       )}
     </View>
@@ -374,12 +387,17 @@ function NeedsYouCard({
 
 /** TM-01e skeleton list under the grid. */
 export function NeedsYouListSkeleton() {
+  const styles = useStyles();
   return (
     <View style={styles.sections} accessibilityLabel="Loading">
-      <View style={[styles.skelBlock, { width: "40%", height: 16, marginBottom: 10 }]} />
+      <View
+        style={[styles.skelBlock, { width: "40%", height: 16, marginBottom: 10 }]}
+      />
       {[0, 1, 2, 3].map((i) => (
         <View key={i} style={styles.skelCard}>
-          <View style={[styles.skelBlock, { width: 40, height: 40, borderRadius: 20 }]} />
+          <View
+            style={[styles.skelBlock, { width: 40, height: 40, borderRadius: 20 }]}
+          />
           <View style={styles.tileBody}>
             <View style={[styles.skelBlock, { width: "55%", height: 14 }]} />
             <View style={[styles.skelBlock, { width: "85%", height: 12 }]} />
@@ -391,7 +409,7 @@ export function NeedsYouListSkeleton() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   titleRow: {
     alignItems: "flex-start",
     flexDirection: "row",
@@ -400,12 +418,12 @@ const styles = StyleSheet.create({
   },
   titleBlock: { flex: 1, minWidth: 0 },
   eyebrow: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 15,
     lineHeight: 20,
   },
   screenTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 30,
     letterSpacing: -0.4,
@@ -413,7 +431,7 @@ const styles = StyleSheet.create({
   },
   searchBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 20,
     height: 40,
     justifyContent: "center",
@@ -428,8 +446,8 @@ const styles = StyleSheet.create({
   },
   tile: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -455,22 +473,22 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   tileCount: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 20,
     letterSpacing: -0.3,
   },
   tileLabel: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilyMedium,
     fontSize: 14.5,
   },
   tileSub: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     fontSize: 12,
     lineHeight: 16,
   },
-  tileMuted: { color: v3LightColors.ink3 },
+  tileMuted: { color: t.colors.ink3 },
   sections: { gap: 18 },
   section: { gap: 8 },
   sectionHead: {
@@ -487,31 +505,31 @@ const styles = StyleSheet.create({
     width: 26,
   },
   sectionTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
   sectionCount: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontFamily: fontFamilyMedium,
     fontSize: 15,
   },
   sectionHint: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
     textAlign: "right",
   },
   listCard: {
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
   },
   divider: {
-    backgroundColor: v3LightColors.line,
+    backgroundColor: t.colors.line,
     height: StyleSheet.hairlineWidth,
     marginLeft: 66,
   },
@@ -538,14 +556,14 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   name: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     flex: 1,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
-  age: { color: colors.midGrey, fontSize: 13 },
+  age: { color: t.colors.ink3, fontSize: 13 },
   issue: {
-    color: v3LightColors.ink2,
+    color: t.colors.ink2,
     fontSize: 14,
     lineHeight: 19,
     marginTop: 1,
@@ -563,14 +581,14 @@ const styles = StyleSheet.create({
   chipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
   action: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 12,
     justifyContent: "center",
     minHeight: 36,
     paddingHorizontal: 12,
   },
   actionText: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 14,
   },
@@ -578,8 +596,8 @@ const styles = StyleSheet.create({
   skelTile: { minHeight: 64 },
   skelCard: {
     alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -588,7 +606,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   skelBlock: {
-    backgroundColor: v3LightColors.skel1,
+    backgroundColor: t.colors.skel1,
     borderRadius: 8,
   },
-});
+}));

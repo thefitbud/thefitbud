@@ -26,8 +26,7 @@ import {
   formatClockTime,
   formatPersonName,
 } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
@@ -47,6 +46,7 @@ import { clientStatusApi } from "./clientStatus/api";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import type { NudgeTarget } from "./sheets/nudgeContent";
 import { openContextualWhatsApp } from "./whatsapp";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type Props = {
   checkinId: string;
@@ -60,6 +60,9 @@ export function CheckinReviewScreen({
   relationshipId,
   onBack,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api } = useAuth();
   // D-W3b-11 (b): trainer screens display in the device zone (resolver).
   const zone = deviceTimeZone();
@@ -276,7 +279,7 @@ export function CheckinReviewScreen({
           onPress={() => setReplyOpen(true)}
           style={[styles.replyBtn, offline ? styles.disabled : null]}
         >
-          <MessageCircle color={v3LightColors.ink} size={18} strokeWidth={2.2} />
+          <MessageCircle color={theme.colors.ink} size={18} strokeWidth={2.2} />
           <Text style={styles.replyBtnText}>Reply</Text>
         </Pressable>
         <Pressable
@@ -290,7 +293,7 @@ export function CheckinReviewScreen({
           ]}
         >
           <Check
-            color={offline ? v3LightColors.ink3 : colors.white}
+            color={offline ? theme.colors.ink3 : theme.colors.card}
             size={18}
             strokeWidth={2.4}
           />
@@ -340,7 +343,7 @@ export function CheckinReviewScreen({
           }
           style={styles.navBtn}
         >
-          <MoreHorizontal color={v3LightColors.ink} size={22} strokeWidth={2.2} />
+          <MoreHorizontal color={theme.colors.ink} size={22} strokeWidth={2.2} />
         </Pressable>
       </View>
 
@@ -349,7 +352,7 @@ export function CheckinReviewScreen({
       ) : null}
       {offline ? (
         <View style={styles.offlineBanner} accessibilityRole="summary">
-          <WifiOff color={v3LightColors.ink2} size={16} strokeWidth={2.2} />
+          <WifiOff color={theme.colors.ink2} size={16} strokeWidth={2.2} />
           <Text style={styles.offline}>
             You’re offline. You can read this check-in, but replying and reviewing need a connection.
           </Text>
@@ -370,8 +373,8 @@ export function CheckinReviewScreen({
           <View style={styles.chipRow}>
             {reviewed ? (
               <View style={[styles.chip, styles.chipReviewed]}>
-                <Check color={v3LightColors.done} size={13} strokeWidth={2.6} />
-                <Text style={[styles.chipText, { color: v3LightColors.done }]}>
+                <Check color={theme.colors.done} size={13} strokeWidth={2.6} />
+                <Text style={[styles.chipText, { color: theme.colors.done }]}>
                   {savedReview
                     ? `Reviewed ${formatCivilDate(savedReview.createdAt.slice(0, 10))}`
                     : "Reviewed"}
@@ -379,19 +382,19 @@ export function CheckinReviewScreen({
               </View>
             ) : context?.checkin.status === "overdue" ? (
               <View style={[styles.chip, styles.chipOverdue]}>
-                <Clock3 color={v3LightColors.warn} size={13} strokeWidth={2.2} />
-                <Text style={[styles.chipText, { color: v3LightColors.warn }]}>
+                <Clock3 color={theme.colors.warn} size={13} strokeWidth={2.2} />
+                <Text style={[styles.chipText, { color: theme.colors.warn }]}>
                   Overdue
                 </Text>
               </View>
             ) : canReview ? (
               <View style={[styles.chip, styles.chipReview]}>
                 <ClipboardCheck
-                  color={v3LightColors.info}
+                  color={theme.colors.info}
                   size={13}
                   strokeWidth={2.2}
                 />
-                <Text style={[styles.chipText, { color: v3LightColors.info }]}>
+                <Text style={[styles.chipText, { color: theme.colors.info }]}>
                   To review
                 </Text>
               </View>
@@ -421,7 +424,7 @@ export function CheckinReviewScreen({
             }}
             style={[styles.nudgeBtn, offline ? styles.disabled : null]}
           >
-            <Bell color={colors.white} size={18} strokeWidth={2.2} />
+            <Bell color={theme.colors.card} size={18} strokeWidth={2.2} />
             <Text style={styles.nudgeBtnText}>Nudge</Text>
           </Pressable>
           <Text style={styles.nudgeCaption}>
@@ -567,7 +570,7 @@ export function CheckinReviewScreen({
           <TextInput
             accessibilityLabel={`Add a note for ${first}`}
             placeholder={`Write to ${first}…`}
-            placeholderTextColor={colors.midGrey}
+            placeholderTextColor={theme.colors.ink3}
             value={note}
             onChangeText={setNote}
             multiline
@@ -584,8 +587,8 @@ export function CheckinReviewScreen({
             <View pointerEvents="none">
               <Switch
                 value={alsoMarkReviewed}
-                trackColor={{ false: "#E7E9F2", true: v3LightColors.done }}
-                thumbColor={colors.white}
+                trackColor={{ false: "#E7E9F2", true: theme.colors.done }}
+                thumbColor={theme.colors.card}
               />
             </View>
           </Pressable>
@@ -599,6 +602,8 @@ export function CheckinReviewScreen({
 }
 
 function MeasureRow({ item }: { item: ReviewMeasureTile }) {
+
+  const styles = useStyles();
   const last =
     item.since != null
       ? `${Number((item.value - item.since.delta).toFixed(1))} ${item.unit}`
@@ -630,7 +635,7 @@ function notSubmittedText(checkin: CheckinReviewContext["checkin"]): string {
   return `Due ${formatCivilDate(checkin.localDate)} · not submitted yet`;
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   nav: {
     alignItems: "center",
     flexDirection: "row",
@@ -644,13 +649,13 @@ const styles = StyleSheet.create({
     width: 44,
   },
   navChevron: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 28,
     lineHeight: 32,
   },
   navTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
@@ -658,24 +663,24 @@ const styles = StyleSheet.create({
   headerBody: { flex: 1, minWidth: 0 },
   avatar: {
     alignItems: "center",
-    backgroundColor: v3LightColors.av1Bg,
+    backgroundColor: t.colors.av1Bg,
     borderRadius: 28,
     height: 56,
     justifyContent: "center",
     width: 56,
   },
   avatarText: {
-    color: v3LightColors.av1Fg,
+    color: t.colors.av1Fg,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
   },
   h1: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 24,
     letterSpacing: -0.3,
   },
-  meta: { color: colors.midGrey, fontSize: 14, lineHeight: 20, marginTop: 2 },
+  meta: { color: t.colors.ink3, fontSize: 14, lineHeight: 20, marginTop: 2 },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
   chip: {
     alignItems: "center",
@@ -685,13 +690,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  chipReview: { backgroundColor: v3LightColors.infoTint },
-  chipOverdue: { backgroundColor: v3LightColors.warnTint },
-  chipReviewed: { backgroundColor: v3LightColors.doneTint },
+  chipReview: { backgroundColor: t.colors.infoTint },
+  chipOverdue: { backgroundColor: t.colors.warnTint },
+  chipReviewed: { backgroundColor: t.colors.doneTint },
   chipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
   card: {
-    backgroundColor: colors.white,
-    borderColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     marginTop: 12,
@@ -703,7 +708,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   tableHeadLabel: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     flex: 1,
     fontFamily: fontFamilySemiBold,
     fontSize: 11,
@@ -711,7 +716,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   tableCol: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,
     fontSize: 11,
     letterSpacing: 0.6,
@@ -721,21 +726,21 @@ const styles = StyleSheet.create({
   },
   tableRow: {
     alignItems: "center",
-    borderTopColor: v3LightColors.line,
+    borderTopColor: t.colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     minHeight: 44,
     paddingVertical: 8,
   },
-  tableLabel: { color: colors.deepNavy, flex: 1, fontSize: 15 },
+  tableLabel: { color: t.colors.ink, flex: 1, fontSize: 15 },
   tableLast: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     textAlign: "right",
     width: 72,
   },
   tableNow: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     textAlign: "right",
@@ -746,42 +751,42 @@ const styles = StyleSheet.create({
     width: 72,
   },
   delta: { fontFamily: fontFamilySemiBold, fontSize: 12 },
-  deltaGood: { color: v3LightColors.done },
-  deltaWarn: { color: v3LightColors.warn },
-  wroteLabel: { color: colors.midGrey, fontSize: 13, marginBottom: 6 },
+  deltaGood: { color: t.colors.done },
+  deltaWarn: { color: t.colors.warn },
+  wroteLabel: { color: t.colors.ink3, fontSize: 13, marginBottom: 6 },
   wroteBlock: { marginTop: 8 },
-  wroteQ: { color: colors.midGrey, fontSize: 13, marginBottom: 2 },
+  wroteQ: { color: t.colors.ink3, fontSize: 13, marginBottom: 2 },
   wroteBody: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     lineHeight: 22,
   },
   replyCard: {
-    backgroundColor: v3LightColors.brandTint,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 16,
     marginTop: 12,
     padding: 14,
   },
   replyCardTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     marginBottom: 6,
   },
   replyCardBody: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 16,
     lineHeight: 22,
   },
   notSubmittedTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
     marginBottom: 4,
   },
   footer: {
-    backgroundColor: colors.white,
-    borderTopColor: v3LightColors.line,
+    backgroundColor: t.colors.card,
+    borderTopColor: t.colors.line,
     borderTopWidth: StyleSheet.hairlineWidth,
     flexDirection: "row",
     gap: 10,
@@ -791,7 +796,7 @@ const styles = StyleSheet.create({
   },
   replyBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 16,
     flex: 1,
     flexDirection: "row",
@@ -800,13 +805,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   replyBtnText: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
   markBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.ink,
+    backgroundColor: t.colors.ink,
     borderRadius: 16,
     flex: 1.3,
     flexDirection: "row",
@@ -815,12 +820,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   markBtnText: {
-    color: colors.white,
+    color: t.colors.card,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
   replySheet: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     flex: 1,
     paddingHorizontal: 16,
     paddingTop: 12,
@@ -832,13 +837,13 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   replyTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
   },
-  link: { color: v3LightColors.brand, fontFamily: fontFamilySemiBold, fontSize: 16 },
+  link: { color: t.colors.brand, fontFamily: fontFamilySemiBold, fontSize: 16 },
   replyInput: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 17,
     lineHeight: 24,
     marginTop: 16,
@@ -853,25 +858,25 @@ const styles = StyleSheet.create({
     minHeight: 44,
   },
   switchLabel: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
   replyHint: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     marginTop: 10,
   },
   disabled: { opacity: 0.45 },
   skeleton: {
-    backgroundColor: v3LightColors.skel1,
+    backgroundColor: t.colors.skel1,
     borderRadius: 20,
     height: 180,
   },
   offlineBanner: {
     alignItems: "flex-start",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 12,
     flexDirection: "row",
     gap: 10,
@@ -880,14 +885,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   offline: {
-    color: v3LightColors.ink2,
+    color: t.colors.ink2,
     flex: 1,
     fontSize: 14,
     lineHeight: 20,
   },
   nudgeBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.brand,
+    backgroundColor: t.colors.brand,
     borderRadius: 14,
     flexDirection: "row",
     gap: 8,
@@ -896,22 +901,22 @@ const styles = StyleSheet.create({
     minHeight: 48,
   },
   nudgeBtnText: {
-    color: colors.white,
+    color: t.colors.card,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     fontWeight: "600",
   },
   nudgeCaption: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     fontSize: 12,
     marginTop: 8,
     textAlign: "center",
   },
   markBtnOffline: {
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
   },
   markBtnTextOffline: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
   },
   srOnly: { height: 0, opacity: 0, overflow: "hidden" },
-});
+}));

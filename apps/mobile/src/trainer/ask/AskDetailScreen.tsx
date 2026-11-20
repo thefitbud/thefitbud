@@ -16,8 +16,8 @@ import type {
   WorkoutExecution,
 } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
-import { v3LightColors } from "@fitbud/tokens";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import type { ColorTokens } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Screen } from "../../components/Screen";
@@ -35,6 +35,7 @@ import {
   buildAskContext,
   coachingWeekNumber,
 } from "./model";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 type Props = {
   askId: string;
@@ -46,18 +47,21 @@ type Props = {
   onAnswered?: () => void;
 };
 
-const AVATARS = [
-  { backgroundColor: v3LightColors.av1Bg, color: v3LightColors.av1Fg },
-  { backgroundColor: v3LightColors.av2Bg, color: v3LightColors.av2Fg },
-  { backgroundColor: v3LightColors.av3Bg, color: v3LightColors.av3Fg },
-  { backgroundColor: v3LightColors.av4Bg, color: v3LightColors.av4Fg },
-  { backgroundColor: v3LightColors.av5Bg, color: v3LightColors.av5Fg },
-  { backgroundColor: v3LightColors.av6Bg, color: v3LightColors.av6Fg },
-] as const;
+function avatars(c: ColorTokens) {
+  return [
+    { backgroundColor: c.av1Bg, color: c.av1Fg },
+    { backgroundColor: c.av2Bg, color: c.av2Fg },
+    { backgroundColor: c.av3Bg, color: c.av3Fg },
+    { backgroundColor: c.av4Bg, color: c.av4Fg },
+    { backgroundColor: c.av5Bg, color: c.av5Fg },
+    { backgroundColor: c.av6Bg, color: c.av6Fg },
+  ] as const;
+}
 
-function avatarTone(name: string) {
+function avatarTone(name: string, c: ColorTokens) {
+  const list = avatars(c);
   const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATARS[code % AVATARS.length] ?? AVATARS[0]!;
+  return list[code % list.length] ?? list[0]!;
 }
 
 export function AskDetailScreen({
@@ -68,6 +72,9 @@ export function AskDetailScreen({
   onBack,
   onAnswered,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api } = useAuth();
   const s1 = stage1Api(api);
   const [ask, setAsk] = useState<CoachAsk | null>(initialAsk);
@@ -198,7 +205,7 @@ export function AskDetailScreen({
   const answered = ask?.status === "answered";
   const pain = ask ? askMentionsPain(ask) : false;
   const first = name.split(" ")[0] || name;
-  const tone = avatarTone(name);
+  const tone = avatarTone(name, theme.colors);
   const context = useMemo(
     () =>
       ask
@@ -301,7 +308,7 @@ export function AskDetailScreen({
 
       {answered ? (
         <View style={styles.answeredBanner} accessibilityRole="summary">
-          <Check color={v3LightColors.done} size={16} strokeWidth={2.4} />
+          <Check color={theme.colors.done} size={16} strokeWidth={2.4} />
           <Text style={styles.answeredText}>Answered on WhatsApp.</Text>
         </View>
       ) : null}
@@ -328,7 +335,7 @@ export function AskDetailScreen({
                 {pain ? (
                   <View style={[styles.chip, styles.chipPain]}>
                     <HeartPulse
-                      color={v3LightColors.crit}
+                      color={theme.colors.crit}
                       size={12}
                       strokeWidth={2.2}
                     />
@@ -338,7 +345,7 @@ export function AskDetailScreen({
                 {answered ? (
                   <View style={[styles.chip, styles.chipDone]}>
                     <Check
-                      color={v3LightColors.done}
+                      color={theme.colors.done}
                       size={12}
                       strokeWidth={2.4}
                     />
@@ -347,7 +354,7 @@ export function AskDetailScreen({
                 ) : (
                   <View style={[styles.chip, styles.chipAsk]}>
                     <MessageCircleQuestionMark
-                      color={v3LightColors.brand}
+                      color={theme.colors.brand}
                       size={12}
                       strokeWidth={2.2}
                     />
@@ -374,7 +381,7 @@ export function AskDetailScreen({
           {pain ? (
             <View style={styles.painBanner} accessibilityRole="summary">
               <HeartPulse
-                color={v3LightColors.crit}
+                color={theme.colors.crit}
                 size={16}
                 strokeWidth={2.2}
               />
@@ -388,6 +395,8 @@ export function AskDetailScreen({
 }
 
 function ContextRow({ label, value }: { label: string; value: string }) {
+
+  const styles = useStyles();
   return (
     <View style={styles.row}>
       <Text style={styles.rowLabel}>{label}</Text>
@@ -396,7 +405,7 @@ function ContextRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   nav: {
     alignItems: "center",
     flexDirection: "row",
@@ -410,21 +419,21 @@ const styles = StyleSheet.create({
     width: 44,
   },
   navChevron: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 28,
     lineHeight: 32,
     marginTop: -2,
   },
   navTitle: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 17,
     fontWeight: "600",
   },
   answeredBanner: {
     alignItems: "center",
-    backgroundColor: v3LightColors.doneTint,
+    backgroundColor: t.colors.doneTint,
     borderRadius: 12,
     flexDirection: "row",
     gap: 8,
@@ -433,7 +442,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   answeredText: {
-    color: v3LightColors.doneInk,
+    color: t.colors.doneInk,
     flex: 1,
     fontSize: 14,
     fontWeight: "600",
@@ -458,13 +467,13 @@ const styles = StyleSheet.create({
   },
   whoBody: { flex: 1, minWidth: 0 },
   name: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
     fontWeight: "700",
   },
   meta: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     fontSize: 13,
     marginTop: 2,
   },
@@ -482,45 +491,45 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  chipPain: { backgroundColor: v3LightColors.critTint },
+  chipPain: { backgroundColor: t.colors.critTint },
   chipPainText: {
-    color: v3LightColors.crit,
+    color: t.colors.crit,
     fontSize: 12,
     fontWeight: "600",
   },
-  chipAsk: { backgroundColor: v3LightColors.brandTint },
+  chipAsk: { backgroundColor: t.colors.brandTint },
   chipAskText: {
-    color: v3LightColors.brand,
+    color: t.colors.brand,
     fontSize: 12,
     fontWeight: "600",
   },
-  chipDone: { backgroundColor: v3LightColors.doneTint },
+  chipDone: { backgroundColor: t.colors.doneTint },
   chipDoneText: {
-    color: v3LightColors.done,
+    color: t.colors.done,
     fontSize: 12,
     fontWeight: "600",
   },
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 16,
     padding: 16,
   },
   askedLabel: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     fontSize: 11,
     fontWeight: "700",
     letterSpacing: 0.6,
     marginBottom: 8,
   },
   quote: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
     fontWeight: "700",
     lineHeight: 26,
   },
   divider: {
-    backgroundColor: v3LightColors.line,
+    backgroundColor: t.colors.line,
     height: StyleSheet.hairlineWidth,
     marginVertical: 14,
   },
@@ -531,12 +540,12 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   rowLabel: {
-    color: v3LightColors.ink3,
+    color: t.colors.ink3,
     flexShrink: 0,
     fontSize: 14,
   },
   rowValue: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     flex: 1,
     fontFamily: fontFamilySemiBold,
     fontSize: 14,
@@ -545,7 +554,7 @@ const styles = StyleSheet.create({
   },
   painBanner: {
     alignItems: "flex-start",
-    backgroundColor: v3LightColors.critTint,
+    backgroundColor: t.colors.critTint,
     borderRadius: 12,
     flexDirection: "row",
     gap: 10,
@@ -554,7 +563,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
   },
   painText: {
-    color: v3LightColors.critInk,
+    color: t.colors.critInk,
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
@@ -567,7 +576,7 @@ const styles = StyleSheet.create({
   },
   secondaryBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.fill,
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     flex: 1,
     justifyContent: "center",
@@ -575,14 +584,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   secondaryText: {
-    color: v3LightColors.ink,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     fontWeight: "600",
   },
   primaryBtn: {
     alignItems: "center",
-    backgroundColor: v3LightColors.brand,
+    backgroundColor: t.colors.brand,
     borderRadius: 14,
     flex: 1.2,
     justifyContent: "center",
@@ -590,21 +599,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   primaryText: {
-    color: colors.white,
+    color: t.colors.card,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     fontWeight: "600",
   },
   disabled: { opacity: 0.45 },
   skelCard: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderRadius: 16,
     gap: 10,
     padding: 16,
   },
   skel: {
-    backgroundColor: v3LightColors.skel1,
+    backgroundColor: t.colors.skel1,
     borderRadius: 8,
     height: 16,
   },
-});
+}));

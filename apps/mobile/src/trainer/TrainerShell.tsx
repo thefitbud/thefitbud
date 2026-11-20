@@ -3,7 +3,7 @@ import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import type { CoachAsk, TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { AttentionTab } from "./AttentionTab";
 import { TrainerMoreScreen } from "./MoreScreen";
@@ -27,6 +27,7 @@ import {
 import { stage1Api } from "../lib/stage1Api";
 import { roleForLinkKind } from "../navigation/resolveRoute";
 import { backOverlays, pushOverlay, startOverlays } from "./overlayStack";
+import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
 
 type TrainerTab = "attention" | "clients" | "checkins" | "more";
 
@@ -69,6 +70,15 @@ const TABS: Array<{ id: TrainerTab; label: string }> = [
 ];
 
 export function TrainerShell() {
+  return (
+    <ThemeScope scheme="system">
+      <TrainerShellBody />
+    </ThemeScope>
+  );
+}
+
+function TrainerShellBody() {
+  const styles = useStyles();
   const {
     relationships,
     api,
@@ -427,36 +437,36 @@ export function TrainerShell() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: t.colors.bg,
   },
   content: {
     flex: 1,
   },
   banner: {
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 12,
     padding: spacing.lg,
     marginBottom: spacing.lg,
     gap: spacing.sm,
   },
   bannerTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
   },
   bannerBody: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
   },
   tabBar: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: colors.lightGrey,
-    backgroundColor: colors.white,
+    borderTopColor: t.colors.line,
+    backgroundColor: t.colors.card,
     paddingBottom: spacing.sm,
     paddingTop: spacing.sm,
   },
@@ -468,18 +478,18 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   tabLabel: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
     fontWeight: "500",
   },
   tabLabelSelected: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontWeight: "600",
   },
   tabIndicator: {
     width: 16,
     height: 3,
     borderRadius: 999,
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
   },
-});
+}));

@@ -1,8 +1,9 @@
 import { StyleSheet, View } from "react-native";
 import { Check, Minus, X } from "lucide-react-native";
-import { colors, fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import type { WeekDayCell } from "./model";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
 export type WeekTile = { value: string; label: string };
 
@@ -17,6 +18,9 @@ export function WeekCard({
   /** Per-day "1/1" under the dots — off in v3 (TM-03a). */
   showCounts?: boolean;
 }) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.card}>
       <View style={styles.week}>
@@ -36,11 +40,11 @@ export function WeekCard({
               ]}
             >
               {cell.mark === "done" ? (
-                <Check size={16} color={colors.white} />
+                <Check size={16} color={theme.colors.card} />
               ) : cell.mark === "missed" ? (
-                <X size={16} color="#B91C1C" />
+                <X size={16} color={theme.colors.crit} />
               ) : (
-                <Minus size={14} color={colors.midGrey} />
+                <Minus size={14} color={theme.colors.ink3} />
               )}
             </View>
             {showCounts ? <Text style={styles.dayCount}>{cell.count}</Text> : null}
@@ -61,9 +65,9 @@ export function WeekCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderColor: "#E7E9F2",
     borderRadius: 20,
     borderWidth: 1,
@@ -72,7 +76,7 @@ const styles = StyleSheet.create({
   },
   week: { flexDirection: "row", paddingVertical: 12 },
   day: { alignItems: "center", flex: 1 },
-  dayLabel: { color: colors.midGrey, fontSize: 12 },
+  dayLabel: { color: t.colors.ink3, fontSize: 12 },
   mark: {
     alignItems: "center",
     borderColor: "transparent",
@@ -83,10 +87,10 @@ const styles = StyleSheet.create({
     marginTop: 6,
     width: 28,
   },
-  markDone: { backgroundColor: colors.deepNavy },
+  markDone: { backgroundColor: t.colors.ink },
   markMissed: { borderColor: "#B91C1C" },
   dayCount: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilyMedium,
     fontSize: 12,
     fontVariant: ["tabular-nums"],
@@ -101,10 +105,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  stat: { color: colors.midGrey, fontSize: 14 },
+  stat: { color: t.colors.ink3, fontSize: 14 },
   statValue: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontVariant: ["tabular-nums"],
   },
-});
+}));
