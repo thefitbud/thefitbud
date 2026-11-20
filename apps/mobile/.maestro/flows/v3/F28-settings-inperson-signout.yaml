@@ -1,0 +1,99 @@
+appId: com.thefitbud.mobile.staging
+name: F28 Settings, in-person meal log, sign out (Z12-52 meal steps)
+tags:
+  - device
+  - trainer
+  - z12-52
+---
+# F28 in-person meal steps (Z12-52). Full F28 (settings, sign out) is owned by
+# Z12-53; this file covers the meal "Something different" editors only so the
+# device harness can run them scoped (D-W12-34). Account: rahul.coach on the
+# local demo seed. Env: QA_TRAINER_EMAIL, QA_PASSWORD.
+#
+# Screens:
+#   TM-15a  Coach logs a meal (entry)
+#   TR-08a  Something different
+#   TR-08b  Changed the portion
+#   TR-08c  Ate out
+#   TR-26a  Food search
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading.*"
+    timeout: 30000
+- extendedWaitUntil:
+    visible: "Needs you|Clients|More"
+    timeout: 60000
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: "Meera|Clients"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Meera"
+    commands:
+      - tapOn: "Meera.*"
+      - extendedWaitUntil:
+          visible: "Log in person|Log meal|⋯|More"
+          timeout: 30000
+      - runFlow:
+          when:
+            visible: "Log in person"
+          commands:
+            - tapOn: "Log in person"
+      - runFlow:
+          when:
+            visible: "Log meal"
+          commands:
+            - tapOn: "Log meal"
+      - extendedWaitUntil:
+          visible: "Log meal|Outcome|Modified|Something different"
+          timeout: 30000
+      - takeScreenshot: TM-15a-coach-logs-meal
+      - runFlow: ../../common/assert-no-crash.yaml
+      - runFlow:
+          when:
+            visible: "Modified"
+          commands:
+            - tapOn: "Modified"
+      - extendedWaitUntil:
+          visible: "Changed the portion|What did you have instead"
+          timeout: 30000
+      - assertVisible: "Changed the portion"
+      - assertVisible: "Log it myself"
+      - assertVisible: "Ate out"
+      - takeScreenshot: TR-08a-something-different
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Changed the portion"
+      - extendedWaitUntil:
+          visible: "Change how much|Save portion|Reset to plan"
+          timeout: 30000
+      - takeScreenshot: TR-08b-changed-portion
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Cancel|Back"
+      - extendedWaitUntil:
+          visible: "Ate out"
+          timeout: 15000
+      - tapOn: "Ate out"
+      - extendedWaitUntil:
+          visible: "How many kcal"
+          timeout: 30000
+      - takeScreenshot: TR-08c-ate-out
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Cancel|Back"
+      - extendedWaitUntil:
+          visible: "Log it myself"
+          timeout: 15000
+      - tapOn: "Log it myself"
+      - extendedWaitUntil:
+          visible: "Search Indian foods|Tap a food"
+          timeout: 30000
+      - takeScreenshot: TR-26a-food-search-default
+      - runFlow: ../../common/assert-no-crash.yaml

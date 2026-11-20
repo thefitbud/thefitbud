@@ -353,7 +353,10 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   // Rest-day iOS label still needs Today's workout.*; This week is the above-the-fold
   // fallback when a check-in review banner covers the header (FitBud #485 / #502).
   assert.match(signIn, /visible: "Today's workout\.\*\|This week\|Needs you\.\*\|Choose mode"/);
-  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
+  // Exact email (no trailing .*) so a garbage suffix like …testntr fails and retypes.
+  assert.match(signIn, /- eraseText: 80\n- inputText: \$\{SIGN_IN_EMAIL\}/);
+  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}"/);
+  assert.doesNotMatch(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
 });
 
 test("trainee Today home-ready helper and F15 use it; gate clears auth rate limits per theme", () => {
