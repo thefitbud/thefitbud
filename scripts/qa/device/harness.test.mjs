@@ -350,9 +350,14 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   const files = selectFlows({ flows: "launch" }).map((f) => path.relative(path.join(repo, "apps/mobile/.maestro"), f));
   assert.deepEqual(files, ["device/launch/1-trainee-today.yaml", "device/launch/2-trainer-attention.yaml"]);
   const signIn = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/sign-in-password.yaml"), "utf8");
-  // Rest-day iOS label still needs Today's workout.*; This week is the above-the-fold
-  // fallback when a check-in review banner covers the header (FitBud #485 / #502).
-  assert.match(signIn, /visible: "Today's workout\.\*\|This week\|Needs you\.\*\|Choose mode"/);
+  // Date-independent Today home (FitBud batch 2): testIDs + Rest day / Recovery
+  // so Android Friday rest days pass; trainer / role markers stay.
+  assert.match(signIn, /id: "today-summary"/);
+  assert.match(signIn, /id: "trainee-today"/);
+  assert.match(
+    signIn,
+    /visible: "Today's workout\.\*\|This week\|Rest day\|Recovery is part of the plan\|View summary\|Needs you\.\*\|Choose mode\|preparing your plan"/,
+  );
   // Exact email (no trailing .*): "…testntr" must not pass (FitBud #507 dark launch).
   assert.match(signIn, /eraseText: 80/);
   assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}"/);
@@ -374,7 +379,11 @@ test("F28 coach Something different path takes editor screenshots for Z12-58", (
 
 test("trainee Today home-ready helper and F15 use it; gate clears auth rate limits per theme", () => {
   const ready = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/wait-trainee-today-ready.yaml"), "utf8");
-  assert.match(ready, /visible: "This week\|Today's workout\.\*\|View summary"/);
+  assert.match(ready, /id: "today-summary"/);
+  assert.match(
+    ready,
+    /visible: "This week\|Today's workout\.\*\|View summary\|Rest day\|Recovery is part of the plan\|preparing your plan"/,
+  );
   const f02 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F02-sign-in.yaml"), "utf8");
   assert.match(f02, /wait-trainee-today-ready\.yaml/);
   const f15 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F15-settings-account.yaml"), "utf8");
