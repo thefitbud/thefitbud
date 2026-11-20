@@ -36,6 +36,37 @@ vi.mock("../providers/ConfigProvider", () => ({ useConfig: () => ({ config: null
 vi.mock("../auth/AuthProvider", () => ({
   useAuth: () => ({ me: null, signOut: vi.fn(), selectRole: vi.fn() }),
 }));
+// Z12-53 dark polish: TrainerMoreScreen calls useTheme / createThemedStyles.
+// Same stub as MoreScreen.test.ts so this plain-function call stays hook-free.
+vi.mock("../providers/ThemeProvider", () => ({
+  ThemeScope: ({ children }: { children: unknown }) => children,
+  useTheme: () => ({
+    scheme: "light",
+    colors: new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    ),
+    radii: {},
+    spacing: {},
+    text: {},
+    touchTarget: 44,
+  }),
+  createThemedStyles: (factory: (t: { colors: Record<string, string> }) => unknown) => {
+    const colors = new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    );
+    const styles = factory({
+      colors: colors as Record<string, string>,
+      radii: {},
+      spacing: {},
+      text: {},
+      touchTarget: 44,
+      scheme: "light",
+    } as never);
+    return () => styles;
+  },
+}));
 
 // vi.mock specifiers resolve relative to THIS file, and the module id is what is
 // keyed — so these also cover SignInScreen's deeper "../../components/..." imports.
