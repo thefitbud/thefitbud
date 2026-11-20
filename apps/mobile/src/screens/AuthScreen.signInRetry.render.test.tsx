@@ -61,11 +61,17 @@ function isDisabled(el: HTMLElement): boolean {
   return el.getAttribute("aria-disabled") === "true" || el.hasAttribute("disabled");
 }
 
+function passwordField(): HTMLElement {
+  // Filled state uses accessibilityLabel "Password, entered" for Maestro;
+  // testID stays stable across empty and filled.
+  return screen.getByTestId("sign-in-password");
+}
+
 function fillAndSubmit(password: string) {
   fireEvent.change(screen.getByLabelText("Mobile number or email"), {
     target: { value: EMAIL },
   });
-  fireEvent.change(screen.getByLabelText("Password"), { target: { value: password } });
+  fireEvent.change(passwordField(), { target: { value: password } });
   fireEvent.click(signInButton());
 }
 
@@ -85,7 +91,7 @@ describe("password sign-in after a failure", () => {
     fireEvent.click(signInButton());
     expect(login).toHaveBeenCalledTimes(1);
 
-    fireEvent.change(screen.getByLabelText("Password"), {
+    fireEvent.change(passwordField(), {
       target: { value: "FitBud-demo-2026" },
     });
     expect(screen.queryByText(LOGIN_RATE_COPY)).toBeNull();
@@ -120,7 +126,7 @@ describe("password sign-in after a failure", () => {
       expect(screen.getByText("That email and password don't match.")).toBeTruthy(),
     );
 
-    fireEvent.change(screen.getByLabelText("Password"), { target: { value: "FitBud" } });
+    fireEvent.change(passwordField(), { target: { value: "FitBud" } });
     expect(screen.queryByText("That email and password don't match.")).toBeNull();
   });
 });

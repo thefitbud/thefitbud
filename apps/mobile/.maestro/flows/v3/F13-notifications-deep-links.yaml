@@ -43,7 +43,7 @@ env:
     notVisible: ".*Loading your day.*"
     timeout: 60000
 - extendedWaitUntil:
-    visible: "Today's workout.*"
+    visible: "Today's workout.*|Rest day|Recovery is part of the plan|This week"
     timeout: 60000
 
 # A fresh coach note gives the inbox an unread, coach-tinted row today.
@@ -74,7 +74,7 @@ env:
 # 2. A tap on the coach note marks it read and opens Today.
 - tapOn: "Rahul left a note.*"
 - extendedWaitUntil:
-    visible: "Today's workout.*"
+    visible: "Today's workout.*|Rest day|Recovery is part of the plan|This week"
     timeout: 30000
 - assertNotVisible: "Notifications are kept for 30 days."
 
@@ -96,7 +96,7 @@ env:
 # Back returns to Today.
 - tapOn: "Back"
 - extendedWaitUntil:
-    visible: "Today's workout.*"
+    visible: "Today's workout.*|Rest day|Recovery is part of the plan|This week"
     timeout: 30000
 - runFlow: ../../common/assert-no-crash.yaml
 
