@@ -695,7 +695,7 @@ function TodayTabInner({
         void onRefresh();
       }}
     >
-      <View style={styles.stack}>
+      <View style={styles.stack} testID="trainee-today">
         <TodayHeader
           eyebrow={dayEyebrow(selectedDate, dayState.kind)}
           unreadNotifications={unreadNotifications}
@@ -961,6 +961,7 @@ function TodayTabInner({
         {restDay ? (
           <View
             style={styles.restCard}
+            testID="today-rest-day"
             accessibilityLabel="Rest day. Recovery is part of the plan"
           >
             <View style={styles.restChip}>

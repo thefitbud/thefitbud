@@ -12,7 +12,9 @@
 # optional here, and a failed sign-in wipes the field before the real
 # assertion at the end can fail and trigger that screenshot.
 #
-# Ends on the signed-in home: trainee Today, trainer "Needs you", or role select.
+# Ends on the signed-in home. Same date-independent anchor as
+# common/sign-in-password.yaml (today-summary / trainee-today + rest-day copy;
+# FitBud Android re-run after #515).
 # Maestro parses every file reached by `runFlow:` as a flow in its own right, so
 # this subflow needs a config section and the `---` separator even though it only
 # ever runs from a caller, and `appId` in that section is required rather than
@@ -33,7 +35,17 @@ appId: com.thefitbud.mobile.staging
     text: "Verify and sign in"
     optional: true
 - extendedWaitUntil:
-    visible: "Today's workout|Needs you|Choose mode"
+    visible:
+      id: "today-summary"
+    timeout: 3000
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "trainee-today"
+    timeout: 2000
+    optional: true
+- extendedWaitUntil:
+    visible: "Today's workout.*|This week|Rest day|Recovery is part of the plan|View summary|Needs you.*|Choose mode|preparing your plan"
     timeout: 30000
     optional: true
 - runFlow:
@@ -51,4 +63,14 @@ appId: com.thefitbud.mobile.staging
       - tapOn:
           text: "Sent to .*"
           optional: true
-- assertVisible: "Today's workout|Needs you|Choose mode"
+- extendedWaitUntil:
+    visible:
+      id: "today-summary"
+    timeout: 3000
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "trainee-today"
+    timeout: 2000
+    optional: true
+- assertVisible: "Today's workout.*|This week|Rest day|Recovery is part of the plan|View summary|Needs you.*|Choose mode|preparing your plan"

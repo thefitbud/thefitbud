@@ -83,4 +83,12 @@ describe("SignInScreen (TR-01a)", () => {
     fireEvent.click(button);
     expect(onSignIn).not.toHaveBeenCalled();
   });
+
+  it("password a11y label flips to Password, entered when non-empty (Maestro)", () => {
+    renderSignIn();
+    const field = screen.getByTestId("sign-in-password");
+    expect(field.getAttribute("aria-label")).toBe("Password");
+    fireEvent.change(field, { target: { value: "FitBud-demo-2026" } });
+    expect(screen.getByLabelText("Password, entered")).toBeTruthy();
+  });
 });

@@ -262,6 +262,15 @@ test("a skipped flow, or fewer results than selected flows, fails the gate", () 
   assert.deepEqual(buildGateSummary({ dir: short, platform: "ios" }).reasons, ["light: 1 flow results for 2 selected flows"]);
 });
 
+test("run-gate uninstalls the staging Android package before adb install", () => {
+  const gate = fs.readFileSync(path.join(here, "run-gate.sh"), "utf8");
+  const uninstall = gate.indexOf('adb uninstall "$DEVICE_APP_ID" || true');
+  const install = gate.indexOf("adb install -r -d");
+  assert.ok(uninstall >= 0, "uninstalls DEVICE_APP_ID before install");
+  assert.ok(install >= 0, "still runs adb install");
+  assert.ok(uninstall < install, "uninstall comes before the first adb install");
+});
+
 test("run-gate runs device-offline flows one at a time, offline, and the Z12-33 check is tagged for it", () => {
   const gate = fs.readFileSync(path.join(here, "run-gate.sh"), "utf8");
   assert.match(gate, /is_offline_flow "\$flow"/);
@@ -341,15 +350,45 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   const files = selectFlows({ flows: "launch" }).map((f) => path.relative(path.join(repo, "apps/mobile/.maestro"), f));
   assert.deepEqual(files, ["device/launch/1-trainee-today.yaml", "device/launch/2-trainer-attention.yaml"]);
   const signIn = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/sign-in-password.yaml"), "utf8");
-  // Rest-day iOS label still needs Today's workout.*; This week is the above-the-fold
-  // fallback when a check-in review banner covers the header (FitBud #485 / #502).
-  assert.match(signIn, /visible: "Today's workout\.\*\|This week\|Needs you\.\*\|Choose mode"/);
-  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
+  // Date-independent Today home (FitBud batch 2): testIDs + Rest day / Recovery
+  // so Android Friday rest days pass; trainer / role markers stay.
+  assert.match(signIn, /id: "today-summary"/);
+  assert.match(signIn, /id: "trainee-today"/);
+  assert.match(
+    signIn,
+    /visible: "Today's workout\.\*\|This week\|Rest day\|Recovery is part of the plan\|View summary\|Needs you\.\*\|Choose mode\|preparing your plan"/,
+  );
+  // Exact email (no trailing .*): "…testntr" must not pass (FitBud #507 dark launch).
+  assert.match(signIn, /eraseText: 80/);
+  assert.match(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}"/);
+  assert.doesNotMatch(signIn, /assertVisible: "\$\{SIGN_IN_EMAIL\}\.\*"/);
+  // Password filled assert (secureTextEntry): "Password, entered" + one retype
+  // (FitBud #484 iOS dark TR-10b: email filled, password empty).
+  assert.match(signIn, /id: "sign-in-password"/);
+  assert.match(signIn, /assertVisible: "Password, entered"/);
+  assert.match(signIn, /notVisible: "Password, entered"/);
+});
+
+test("F28 coach Something different path takes editor screenshots for Z12-58", () => {
+  const f28 = fs.readFileSync(
+    path.join(repo, "apps/mobile/.maestro/flows/v3/F28-settings-inperson-signout.yaml"),
+    "utf8",
+  );
+  assert.match(f28, /scrollUntilVisible:[\s\S]*Meera/);
+  assert.match(f28, /takeScreenshot: TR-08a-something-different/);
+  assert.match(f28, /takeScreenshot: TR-08b-changed-portion/);
+  assert.match(f28, /takeScreenshot: TR-08c-ate-out/);
+  assert.match(f28, /Search Indian foods, brands/);
+  assert.match(f28, /Tap a food to set katori, piece, cup or grams\./);
 });
 
 test("trainee Today home-ready helper and F15 use it; gate clears auth rate limits per theme", () => {
   const ready = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/common/wait-trainee-today-ready.yaml"), "utf8");
-  assert.match(ready, /visible: "This week\|Today's workout\.\*\|View summary"/);
+  assert.match(ready, /id: "today-summary"/);
+  assert.match(
+    ready,
+    /visible: "This week\|Today's workout\.\*\|View summary\|Rest day\|Recovery is part of the plan\|preparing your plan"/,
+  );
   const f02 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F02-sign-in.yaml"), "utf8");
   assert.match(f02, /wait-trainee-today-ready\.yaml/);
   const f15 = fs.readFileSync(path.join(repo, "apps/mobile/.maestro/flows/v3/F15-settings-account.yaml"), "utf8");
