@@ -559,6 +559,7 @@ export function ClientStatusScreen({
       <View testID="client-status">
       <View style={styles.nav}>
         <Pressable
+          testID="client-back"
           accessibilityRole="button"
           accessibilityLabel="Back"
           onPress={onBack}

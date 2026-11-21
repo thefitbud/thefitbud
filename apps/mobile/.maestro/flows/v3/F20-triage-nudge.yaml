@@ -5,17 +5,9 @@ tags:
   - trainer
   - z12-50
 env:
-  # Slug for client-row-* testIDs (ClientsTab). Must match the seeded display name.
   CLIENT_SLUG: rohan-mehta
 ---
-# F20 (D-W12-9, D-W12-10, D-W12-22, Z12-50 part 2). Account: the demo trainer rahul.coach
-# on the local seed. Env from the device harness: QA_TRAINER_EMAIL, QA_PASSWORD,
-# DEVICE_THEME. One local DB per job and one nudge per item per client day, so only the
-# first theme of a job really sends (TM-04m); the second shows TM-04n at once. A repeat
-# about the same item is then sent again to show the TM-04n state in both.
-#
-# Screens: TM-03j, TM-04b/c, TM-04m/n, TM-04o. Selectors are testIDs (v3 client detail
-# has Review on the Needs attention card, not Mark reviewed/Resolve).
+# F20. Selectors are full-match or ids (nudge-preview, not bare PREVIEW text).
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -35,49 +27,51 @@ env:
 - takeScreenshot: TM-04b
 - runFlow:
     when:
-      visible: "It's .* inside their quiet hours.*"
+      visible: ".*quiet hours.*"
     commands:
       - takeScreenshot: TM-04c
 - runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Send nudge"
+- tapOn: ".*Send nudge.*"
 - extendedWaitUntil:
-    visible: "Nudge sent.*"
+    visible: ".*Nudge sent.*"
     timeout: 8000
     optional: true
 - runFlow:
     when:
-      visible: "Nudge sent.*"
+      visible: ".*Nudge sent.*"
     commands:
       - takeScreenshot: TM-04m
 - extendedWaitUntil:
-    visible: "You nudged .* again tomorrow.*"
+    visible: ".*You nudged .* again tomorrow.*"
     timeout: 6000
     optional: true
 - runFlow:
     when:
-      visible: "You nudged .* again tomorrow.*"
+      visible: ".*You nudged .* again tomorrow.*"
     commands:
       - takeScreenshot: TM-04n
-      - tapOn: "Close"
+      - tapOn: ".*Close.*"
 - extendedWaitUntil:
-    notVisible: "PREVIEW · TAP TO EDIT"
+    notVisible:
+      id: "nudge-preview"
     timeout: 20000
 - runFlow: ../../common/assert-no-crash.yaml
 
 - extendedWaitUntil:
-    notVisible: "Nudge sent.*"
+    notVisible: ".*Nudge sent.*"
     timeout: 15000
 - runFlow: ../../device/z12-50/to-nudge.yaml
 - runFlow: ../../device/z12-50/open-sheet.yaml
-- tapOn: "Send nudge"
+- tapOn: ".*Send nudge.*"
 - extendedWaitUntil:
-    visible: "You nudged .* again tomorrow.*"
+    visible: ".*You nudged .* again tomorrow.*"
     timeout: 20000
 - takeScreenshot: TM-04n
 - runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Close"
+- tapOn: ".*Close.*"
 - extendedWaitUntil:
-    notVisible: "PREVIEW · TAP TO EDIT"
+    notVisible:
+      id: "nudge-preview"
     timeout: 10000
 
 - runFlow:
@@ -91,14 +85,16 @@ env:
     timeout: 20000
 - takeScreenshot: TM-04o
 - runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Send nudge"
+- tapOn: ".*Send nudge.*"
 - extendedWaitUntil:
-    notVisible: "PREVIEW · TAP TO EDIT"
+    notVisible:
+      id: "nudge-preview"
     timeout: 10000
     optional: true
 - runFlow:
     when:
-      visible: "PREVIEW · TAP TO EDIT"
+      visible:
+        id: "nudge-preview"
     commands:
-      - tapOn: "Close"
+      - tapOn: ".*Close.*"
 - runFlow: ../../common/assert-no-crash.yaml

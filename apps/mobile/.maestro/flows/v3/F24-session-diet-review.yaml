@@ -7,8 +7,7 @@ tags:
 env:
   CLIENT_SLUG: priya-nair
 ---
-# F24 (Z12-53): session detail when present; diet day from Priya Nair (TM-12).
-# iOS wraps roster names — open by client-row-* id after scrollUntilVisible.
+# F24: diet day via diet-day-summary id (not "Food|Meals ·" partial match).
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -24,16 +23,16 @@ env:
 
 - runFlow:
     when:
-      visible: "PR|finished|sets"
+      visible: ".*PR.*|.*finished.*|.*sets.*"
     commands:
-      - tapOn: "PR|finished|sets"
+      - tapOn: ".*PR.*|.*finished.*|.*sets.*"
       - extendedWaitUntil:
-          visible: "Workout|Add note|Reply on WhatsApp|sets"
+          visible: ".*Workout.*|.*Add note.*|.*Reply on WhatsApp.*|.*sets.*"
           timeout: 20000
           optional: true
       - takeScreenshot: TM-11a
       - runFlow: ../../common/assert-no-crash.yaml
-      - tapOn: "Back|‹"
+      - tapOn: ".*Back.*|.*‹.*"
       - extendedWaitUntil:
           visible:
             id: "attention-screen"
@@ -52,28 +51,29 @@ env:
     visible:
       id: "client-status"
     timeout: 30000
-- tapOn: "Review day"
+- tapOn: ".*Review day.*"
 - extendedWaitUntil:
-    visible: "Food|Meals ·"
+    visible:
+      id: "diet-day-summary"
     timeout: 30000
 - takeScreenshot: TM-12a
 - runFlow: ../../common/assert-no-crash.yaml
 
 - runFlow:
     when:
-      visible: "Ate out"
+      visible: ".*Ate out.*"
     commands:
       - tapOn: ".*Ate out.*"
 - runFlow:
     when:
-      notVisible: "Plan|Logged|WhatsApp"
+      notVisible: ".*Plan.*|.*Logged.*|.*WhatsApp.*"
     commands:
-      - tapOn: "Breakfast.*|Lunch.*|Dinner.*|Snack.*|Early morning.*"
+      - tapOn: ".*Breakfast.*|.*Lunch.*|.*Dinner.*|.*Snack.*|.*Early morning.*"
 - extendedWaitUntil:
-    visible: "Plan|Logged|WhatsApp|Add note"
+    visible: ".*Plan.*|.*Logged.*|.*WhatsApp.*|.*Add note.*"
     timeout: 20000
 - takeScreenshot: TM-12b
 - runFlow: ../../common/assert-no-crash.yaml
-- assertVisible: "WhatsApp"
-- tapOn: "Dismiss|Close"
+- assertVisible: ".*WhatsApp.*"
+- tapOn: ".*Dismiss.*|.*Close.*"
 - runFlow: ../../common/assert-no-crash.yaml

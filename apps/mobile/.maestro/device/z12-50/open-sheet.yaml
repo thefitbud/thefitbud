@@ -1,13 +1,15 @@
 appId: com.thefitbud.mobile.staging
 ---
-# Subflow of F20 (Z12-50). No tags. After `nudge-client.yaml`: through the TM-03j picker if
-# it is up (a client with one open item goes straight to the sheet), to the nudge sheet.
+# Subflow of F20 (Z12-50). Through TM-03j picker when present, then the nudge sheet.
+# Prefer nudge-preview id — PREVIEW label case can differ by platform a11y.
 - runFlow:
     when:
-      visible: "Nudge .* about…"
+      visible: ".*Nudge .* about.*"
     commands:
       - takeScreenshot: TM-03j
-      - tapOn: "Next"
+      - tapOn:
+          id: "nudge-pick-next"
 - extendedWaitUntil:
-    visible: "PREVIEW · TAP TO EDIT"
+    visible:
+      id: "nudge-preview"
     timeout: 20000

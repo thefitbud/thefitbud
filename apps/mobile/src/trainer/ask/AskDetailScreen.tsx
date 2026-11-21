@@ -251,6 +251,7 @@ export function AskDetailScreen({
     ask && !answered ? (
       <View style={styles.footer}>
         <Pressable
+          testID="ask-mark-answered"
           accessibilityRole="button"
           disabled={acting || offline}
           onPress={() => void markAnswered()}
@@ -286,6 +287,7 @@ export function AskDetailScreen({
         void load().finally(() => setRefreshing(false));
       }}
     >
+      <View testID="ask-detail">
       <View style={styles.nav}>
         <Pressable
           accessibilityRole="button"
@@ -390,6 +392,7 @@ export function AskDetailScreen({
           ) : null}
         </>
       ) : null}
+      </View>
     </Screen>
   );
 }

@@ -7,8 +7,8 @@ tags:
 env:
   CLIENT_SLUG: rohan-mehta
 ---
-# F25 (Z12-53): Clients → Rohan → menu / activity. Use tab-clients and client-row
-# ids (Android lost a bare "Clients" tap; iOS wraps names).
+# F25: client overlay hides the tab bar — leave via client-back before tab-clients.
+# Nudge picker title is the full string "Nudge Rohan about…" (not bare "about").
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -22,7 +22,7 @@ env:
 - tapOn:
     id: "tab-clients"
 - extendedWaitUntil:
-    visible: "Clients"
+    visible: ".*Clients.*"
     timeout: 30000
 - takeScreenshot: TM-02a
 - runFlow: ../../common/assert-no-crash.yaml
@@ -49,10 +49,15 @@ env:
       - tapOn:
           id: "client-nudge"
       - extendedWaitUntil:
-          visible: "about|Send nudge|Close|Cancel"
+          visible: ".*Nudge .* about.*|.*Send nudge.*|.*Close.*|.*Cancel.*|.*nudge-pick.*"
           timeout: 15000
+      - extendedWaitUntil:
+          visible:
+            id: "nudge-pick-next"
+          timeout: 5000
+          optional: true
       - takeScreenshot: TM-03j
-      - tapOn: "Close|Cancel|Dismiss"
+      - tapOn: ".*Close.*|.*Cancel.*|.*Dismiss.*"
       - extendedWaitUntil:
           visible:
             id: "client-status"
@@ -60,40 +65,52 @@ env:
 
 - runFlow:
     when:
-      visible: "More|⋯"
+      visible: ".*More.*"
     commands:
-      - tapOn: "More|⋯"
+      - tapOn: ".*More.*"
 - runFlow:
     when:
-      visible: "Goal, intake and limitations"
+      visible: ".*Goal, intake and limitations.*"
     commands:
       - takeScreenshot: TM-03i
-      - tapOn: "Goal, intake and limitations"
+      - tapOn: ".*Goal, intake and limitations.*"
       - extendedWaitUntil:
-          visible: "Goal|intake|limitations|Back"
+          visible: ".*Goal.*|.*intake.*|.*limitations.*|.*Back.*"
           timeout: 20000
       - takeScreenshot: TM-03f
       - runFlow: ../../common/assert-no-crash.yaml
-      - tapOn: "Back|‹"
+      - tapOn: ".*Back.*|.*‹.*"
 
+# Leave the client overlay so the tab bar is in the hierarchy again.
+- runFlow:
+    when:
+      visible:
+        id: "client-back"
+    commands:
+      - tapOn:
+          id: "client-back"
+- extendedWaitUntil:
+    visible:
+      id: "tab-clients"
+    timeout: 20000
 - tapOn:
     id: "tab-clients"
 - extendedWaitUntil:
-    visible: "Clients"
+    visible: ".*Clients.*"
     timeout: 20000
 - runFlow:
     when:
-      visible: "Activity"
+      visible: ".*Activity.*"
     commands:
-      - tapOn: "Activity"
+      - tapOn: ".*Activity.*"
       - extendedWaitUntil:
-          visible: "Activity|All|Meals|Workouts"
+          visible: ".*Activity.*|.*All.*|.*Meals.*|.*Workouts.*"
           timeout: 30000
       - takeScreenshot: TM-09a
       - runFlow: ../../common/assert-no-crash.yaml
       - runFlow:
           when:
-            visible: "All clients|Filter|Client"
+            visible: ".*All clients.*|.*Filter.*|.*Client.*"
           commands:
-            - tapOn: "All clients|Filter|Client"
+            - tapOn: ".*All clients.*|.*Filter.*|.*Client.*"
             - takeScreenshot: TM-09d

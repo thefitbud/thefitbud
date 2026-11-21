@@ -8,17 +8,9 @@ env:
   CLIENT: Rohan Mehta
   CLIENT_SLUG: rohan-mehta
 ---
-# F21 (Z12-51). Demo trainer on the local seed. Env: QA_TRAINER_EMAIL, QA_PASSWORD,
-# DEVICE_THEME.
-#
-# Resolve finding (device run 44898344946): NOT a product regression. TM-04a open
-# item shows Mark reviewed + Nudge + ⋯ only; Resolve appears after Mark reviewed
-# (TM-04e) per Z12-51 and the ExceptionReviewScreen states tests. Open profile
-# is in the ⋯ menu (more-profile). Assert menu rows by testID — Android splits
-# "Open Rohan's profile" so "Open .*profile" never matches one node.
-#
-# Screens: TM-04a, TM-04j, TM-04k, TM-04e, TM-04d, TM-04f; then Needs you
-# review-sheet-* when Rohan still has open items.
+# F21 (Z12-51). Resolve appears after Mark reviewed (TM-04e), not on TM-04a.
+# ⋯ opens MoreSheet (BottomSheet) → more-profile / more-add-note by id.
+# Maestro text is FULL-string regex — never assert bare substrings.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -66,8 +58,10 @@ env:
     id: "exception-more"
 - extendedWaitUntil:
     visible:
-      id: "more-profile"
-    timeout: 10000
+      id: "more-sheet"
+    timeout: 15000
+- assertVisible:
+    id: "more-profile"
 - assertVisible:
     id: "more-whatsapp"
 - assertVisible:
@@ -76,15 +70,15 @@ env:
 - tapOn:
     id: "more-add-note"
 - extendedWaitUntil:
-    visible: "Note for .*"
+    visible: ".*Note for .*"
     timeout: 10000
 - inputText: "Two shorter sessions this week."
-- assertVisible: "Show on .*Today"
+- assertVisible: ".*Show on .*Today.*"
 - takeScreenshot: TM-04k
 - tapOn:
     id: "note-save"
 - extendedWaitUntil:
-    notVisible: "Note for .*"
+    notVisible: ".*Note for .*"
     timeout: 15000
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -107,15 +101,15 @@ env:
 - tapOn:
     id: "exception-resolve"
 - extendedWaitUntil:
-    visible: "Note \\(only you\\)"
+    visible: ".*Note \\(only you\\).*"
     timeout: 10000
-- tapOn: "Talked to .*"
-- assertVisible: "Resolving locks this item.*"
+- tapOn: ".*Talked to .*"
+- assertVisible: ".*Resolving locks this item.*"
 - takeScreenshot: TM-04d
 - tapOn:
     id: "resolve-confirm"
 - extendedWaitUntil:
-    visible: "Resolved by you.*Talked to .*"
+    visible: ".*Resolved by you.*Talked to .*"
     timeout: 20000
 - assertNotVisible:
     id: "exception-resolve"
@@ -124,7 +118,6 @@ env:
 - takeScreenshot: TM-04f
 - runFlow: ../../common/assert-no-crash.yaml
 
-# Needs you: open Rohan's Review (needs-you-action) → multi-item review sheet.
 - tapOn:
     id: "exception-back"
 - extendedWaitUntil:
@@ -141,7 +134,7 @@ env:
       id: "needs-you-action"
     direction: DOWN
     timeout: 60000
-- tapOn: "Review ${CLIENT}|Review Rohan.*"
+- tapOn: ".*Review ${CLIENT}.*"
 - extendedWaitUntil:
     visible:
       id: "review-sheet-resolve"
@@ -169,22 +162,22 @@ env:
             - tapOn:
                 id: "review-sheet-nudge"
             - extendedWaitUntil:
-                visible: "PREVIEW · TAP TO EDIT"
+                visible: ".*PREVIEW.*"
                 timeout: 20000
             - takeScreenshot: review-sheet-nudge
-            - tapOn: "Close"
+            - tapOn: ".*Close.*"
             - extendedWaitUntil:
-                notVisible: "PREVIEW · TAP TO EDIT"
+                notVisible: ".*PREVIEW.*"
                 timeout: 10000
       - tapOn:
           id: "review-sheet-resolve"
       - extendedWaitUntil:
-          visible: "Note \\(only you\\)"
+          visible: ".*Note \\(only you\\).*"
           timeout: 10000
       - tapOn:
           id: "resolve-confirm"
       - extendedWaitUntil:
-          visible: "Resolved by you · just now.*"
+          visible: ".*Resolved by you.*"
           timeout: 20000
       - takeScreenshot: review-sheet-resolved
       - runFlow: ../../common/assert-no-crash.yaml
@@ -202,7 +195,7 @@ env:
       - tapOn:
           id: "exception-resolve"
       - extendedWaitUntil:
-          visible: "Note \\(only you\\)"
+          visible: ".*Note \\(only you\\).*"
           timeout: 10000
       - tapOn:
           id: "resolve-confirm"
@@ -216,7 +209,7 @@ env:
       - tapOn:
           id: "exception-resolve"
       - extendedWaitUntil:
-          visible: "Note \\(only you\\)"
+          visible: ".*Note \\(only you\\).*"
           timeout: 10000
       - tapOn:
           id: "resolve-confirm"

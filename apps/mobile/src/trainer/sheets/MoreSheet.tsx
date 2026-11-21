@@ -1,6 +1,7 @@
 import { useRef, type ReactNode } from "react";
-import { Modal, Platform, Pressable, View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
 import { ChevronRight, MessageCircle, NotebookPen, User } from "lucide-react-native";
+import { BottomSheet } from "../../components/BottomSheet";
 import { Text } from "../../components/Text";
 import {
   ThemeScope,
@@ -24,6 +25,10 @@ type Props = {
  * with no template) and the client's profile, then Cancel. Choosing a row
  * closes the menu (`onDismiss`) and then calls that row's handler, so the
  * parent only opens what comes next.
+ *
+ * Uses BottomSheet (same as Note/Nudge/Resolve) so Android presents the menu
+ * reliably — a bare Modal left Maestro able to tap ··· while nothing opened
+ * (device run 44908820584).
  */
 export function MoreSheet(props: Props) {
   return (
@@ -46,7 +51,7 @@ function MoreSheetBody({
   const first = firstNameOf(traineeDisplayName);
   const icon = (node: (color: string) => ReactNode) => node(theme.colors.ink);
   // iOS cannot present the next sheet while this one is still leaving, so the
-  // chosen action runs from the Modal's onDismiss there; elsewhere at once.
+  // chosen action runs from BottomSheet's onClosed there; elsewhere at once.
   const pending = useRef<(() => void) | null>(null);
   const choose = (action: () => void) => {
     onDismiss();
@@ -55,7 +60,6 @@ function MoreSheetBody({
       return;
     }
     pending.current = action;
-    // A fallback in case onDismiss does not fire: the fade lasts about 300 ms.
     setTimeout(() => {
       if (pending.current !== action) return;
       pending.current = null;
@@ -63,60 +67,57 @@ function MoreSheetBody({
     }, 600);
   };
   return (
-    <Modal
-      animationType="fade"
-      transparent
+    <BottomSheet
       visible={visible}
-      onRequestClose={onDismiss}
-      onDismiss={() => {
+      headerless
+      onDismiss={onDismiss}
+      onClosed={() => {
         const next = pending.current;
         pending.current = null;
         next?.();
       }}
     >
-      <View style={styles.root}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss menu"
-          style={styles.scrim}
-          onPress={onDismiss}
+      <View testID="more-sheet" style={styles.group}>
+        <MenuRow
+          title="Add note"
+          subtitle={
+            first
+              ? `Private, or shared on ${first}'s Today`
+              : "Private, or shared on their Today"
+          }
+          icon={icon((c) => (
+            <NotebookPen size={22} color={c} strokeWidth={1.75} />
+          ))}
+          onPress={() => choose(onAddNote)}
+          testID="more-add-note"
         />
-        <View style={styles.sheet}>
-          <View style={styles.grabber} />
-          <View style={styles.group}>
-            <MenuRow
-              title="Add note"
-              subtitle={first ? `Private, or shared on ${first}'s Today` : "Private, or shared on their Today"}
-              icon={icon((c) => <NotebookPen size={22} color={c} strokeWidth={1.75} />)}
-              onPress={() => choose(onAddNote)}
-              testID="more-add-note"
-            />
-            <MenuRow
-              title="Message on WhatsApp"
-              subtitle="Opens a chat without a template"
-              icon={icon((c) => <MessageCircle size={22} color={c} strokeWidth={1.75} />)}
-              onPress={() => choose(onMessageOnWhatsApp)}
-              divider
-              testID="more-whatsapp"
-            />
-            <MenuRow
-              title={first ? `Open ${first}'s profile` : "Open profile"}
-              icon={icon((c) => <User size={22} color={c} strokeWidth={1.75} />)}
-              onPress={() => choose(onOpenProfile)}
-              divider
-              testID="more-profile"
-            />
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={onDismiss}
-            style={styles.cancel}
-          >
-            <Text variant="bodyStrong">Cancel</Text>
-          </Pressable>
-        </View>
+        <MenuRow
+          title="Message on WhatsApp"
+          subtitle="Opens a chat without a template"
+          icon={icon((c) => (
+            <MessageCircle size={22} color={c} strokeWidth={1.75} />
+          ))}
+          onPress={() => choose(onMessageOnWhatsApp)}
+          divider
+          testID="more-whatsapp"
+        />
+        <MenuRow
+          title={first ? `Open ${first}'s profile` : "Open profile"}
+          icon={icon((c) => <User size={22} color={c} strokeWidth={1.75} />)}
+          onPress={() => choose(onOpenProfile)}
+          divider
+          testID="more-profile"
+        />
       </View>
-    </Modal>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onDismiss}
+        style={styles.cancel}
+        testID="more-cancel"
+      >
+        <Text variant="bodyStrong">Cancel</Text>
+      </Pressable>
+    </BottomSheet>
   );
 }
 
@@ -158,32 +159,6 @@ function MenuRow({
 }
 
 const useStyles = createThemedStyles((t) => ({
-  root: { flex: 1, justifyContent: "flex-end" },
-  scrim: {
-    position: "absolute",
-    top: 0,
-    right: 0,
-    bottom: 0,
-    left: 0,
-    backgroundColor: "rgba(15, 17, 21, 0.45)",
-  },
-  sheet: {
-    backgroundColor: t.colors.card,
-    borderTopLeftRadius: t.radii.sheet,
-    borderTopRightRadius: t.radii.sheet,
-    gap: t.spacing.md,
-    paddingBottom: t.spacing.xxl,
-    paddingHorizontal: t.spacing.lg,
-    paddingTop: t.spacing.sm,
-  },
-  grabber: {
-    alignSelf: "center",
-    backgroundColor: t.colors.line2,
-    borderRadius: 3,
-    height: 5,
-    marginBottom: t.spacing.xs,
-    width: 36,
-  },
   group: {
     backgroundColor: t.colors.bg,
     borderRadius: t.radii.group,
@@ -221,5 +196,6 @@ const useStyles = createThemedStyles((t) => ({
     borderRadius: t.radii.button,
     justifyContent: "center",
     minHeight: 56,
+    marginTop: t.spacing.md,
   },
 }));

@@ -362,7 +362,9 @@ function NeedsYouCard({
       </View>
       {card.action ? (
         <Pressable
-          testID="needs-you-action"
+          testID={
+            card.action === "Reply" ? "needs-you-reply" : "needs-you-action"
+          }
           accessibilityRole="button"
           accessibilityLabel={`${card.action} ${card.name}`}
           disabled={offline}

@@ -5,8 +5,9 @@ tags:
   - trainer
   - z12-53
 ---
-# F22 (Z12-53): Asked-you card → Reply (TM-10). iOS merges "Reply {Name}" into one
-# a11y node, so tap needs-you-action by id after scrolling to it.
+# F22: Asked-you Reply → ask-detail → Mark answered by id.
+# Do not wait for bare "Asked you" — that matches the Attention section title
+# (full-string regex would need .*, and Attention always has it).
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -22,31 +23,24 @@ tags:
 
 - scrollUntilVisible:
     element:
-      id: "needs-you-action"
+      id: "needs-you-reply"
     direction: DOWN
     timeout: 60000
-# Prefer an Asked-you Reply label when present; else first needs-you-action.
-- runFlow:
-    when:
-      visible: "Reply .*"
-    commands:
-      - tapOn: "Reply .*"
-- runFlow:
-    when:
-      notVisible: "Asked you|Mark answered|Reply on WhatsApp"
-    commands:
-      - tapOn:
-          id: "needs-you-action"
+- tapOn:
+    id: "needs-you-reply"
 - extendedWaitUntil:
-    visible: "Asked you|Mark answered|Reply on WhatsApp"
+    visible:
+      id: "ask-detail"
     timeout: 30000
+- assertVisible:
+    id: "ask-mark-answered"
 - takeScreenshot: TM-10a
 - runFlow: ../../common/assert-no-crash.yaml
-- assertVisible: "Mark answered"
-- assertVisible: "Reply on WhatsApp"
-- tapOn: "Mark answered"
+- assertVisible: ".*Reply on WhatsApp.*"
+- tapOn:
+    id: "ask-mark-answered"
 - extendedWaitUntil:
-    visible: "Answered|Undo|Needs you"
+    visible: ".*Answered.*|.*Undo.*"
     timeout: 15000
 - takeScreenshot: TM-10b
 - runFlow: ../../common/assert-no-crash.yaml

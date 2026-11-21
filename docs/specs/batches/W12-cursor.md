@@ -13,7 +13,7 @@
 
 ## Task list and status
 
-Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parallel with #484) → Z12-48 + Z12-49fu → Z12-52 → Z12-53 → Z12-57 → Z12-58 → Z12-59 prep → Z12-60.
+Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parallel with #484) → Z12-48 + Z12-49fu → Z12-52 → Z12-53 → Z12-57 → **Z12-61** → Z12-58 → Z12-59 prep → Z12-60.
 
 | Task | Wait | Status | PR | Merge SHA | Grades / notes | Model |
 |---|---|---|---|---|---|---|
@@ -28,8 +28,9 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
 | Z12-52 Coach logs a meal | Z12-43 ✅ + #486 ✅ | ready after #483/#485/#484 lane or when a slot frees | — | — | each What-changed option = own screen; sheet theme partly fixed in Z12-43 (D-W12C-15) | Cursor Auto (planned) |
-| Z12-53 Trainer mobile v3 | Z12-52 + #486; Z12-56/38/47 already on main | blocked | — | — | TM-01a–TM-10b; WorkspaceHeader (D-W12-26); F22–F28; expo-push title/body (D-W12-38); grade TM-13a/b | Cursor Auto (planned); review Auto |
-| Z12-57 Native | every other mobile JS task | blocked | — (branch `cursor/z12-57-native-db78` when started) | — | expo-haptics / keep-awake / rest-end sound; EAS builds = Firoz manual | Cursor Auto (planned) |
+| Z12-53 Trainer mobile v3 | Z12-52 + #486; Z12-56/38/47 already on main | **merged** | [#510](https://github.com/thefitbud/thefitbud/pull/510) | `8d21cb6c` | Device [44908820584](https://github.com/thefitbud/thefitbud/actions/runs/44908820584) pixels PASS; flow follow-up → Z12-61 | Cursor Auto |
+| Z12-57 Native | every other mobile JS task | **merged** | [#513](https://github.com/thefitbud/thefitbud/pull/513) | `6515907e` | Launch device green; EAS/device gate remain Firoz | Cursor Auto |
+| Z12-61 v3 Maestro flows | after #510 | **in progress** | — `cursor/z12-61-v3-flows-db78` | — | Full-string Maestro selectors; MoreSheet→BottomSheet (F21 Android); F20–F26 from run 44908820584 | Cursor Auto |
 | Z12-58 Full device pass | Z12-57 | blocked | — | — | F01–F29 + parity matrix + device checklist | Cursor Auto (planned) |
 | Z12-59 prep | after Z12-58 | blocked | — | — | SHA, migrations, commands, smoke in `docs/tasks/manual-steps.md`; then mark ready for Z12-60 and stop | Cursor Auto (planned) |
 | Z12-60 Report | after Z12-59 | blocked | — (branch `cursor/z12-60-report-db78` when started) | — | fresh whole-batch review + Report in `W12.md` | Cursor Auto (planned) |
@@ -48,6 +49,8 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | 19 Nov 2026 ~12:40 IST | `df709196` | #494 (ledger) | D-W12C-22 Claude lane → Cursor |
 | 19 Nov 2026 ~13:15 IST | `1272b972` | #486 (Z12-51) | unblocks Z12-52 / Z12-53; review PASS |
 | 19 Nov 2026 ~13:40 IST | `ab0e015b` | #483 (Z12-46) | frees TraineeShell for #484; device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) |
+| 21 Nov 2026 ~18:50 IST | `6515907e` | #513 (Z12-57) | native deps + Live Activity; launch device PASS |
+| 21 Nov 2026 ~20:58 IST | `8d21cb6c` | #510 (Z12-53) | trainer v3 + TM-12; pixels PASS; flows → Z12-61 |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 

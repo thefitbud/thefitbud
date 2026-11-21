@@ -561,6 +561,7 @@ export function ClientsTab({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          removeClippedSubviews={false}
           style={styles.filtersScroll}
           contentContainerStyle={styles.filters}
         >

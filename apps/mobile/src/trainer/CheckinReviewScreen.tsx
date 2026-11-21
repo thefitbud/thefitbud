@@ -375,7 +375,10 @@ export function CheckinReviewScreen({
           {subtitle ? <Text style={styles.meta}>{subtitle}</Text> : null}
           <View style={styles.chipRow}>
             {reviewed ? (
-              <View style={[styles.chip, styles.chipReviewed]}>
+              <View
+                testID="checkin-reviewed"
+                style={[styles.chip, styles.chipReviewed]}
+              >
                 <Check color={theme.colors.done} size={13} strokeWidth={2.6} />
                 <Text style={[styles.chipText, { color: theme.colors.done }]}>
                   {savedReview
