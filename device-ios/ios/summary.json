@@ -1,0 +1,431 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 8 of 10 flows failed",
+    "dark: 8 of 10 flows failed",
+    "no device-log scan"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml",
+    "flows/v3/F21-review-resolve-notes.yaml",
+    "flows/v3/F22-reply-question.yaml",
+    "flows/v3/F23-review-checkin.yaml",
+    "flows/v3/F24-session-diet-review.yaml",
+    "flows/v3/F25-clients-activity.yaml",
+    "flows/v3/F26-ended-reactivation.yaml",
+    "flows/v3/F27-offline-loading-errors.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 2,
+      "failed": 8,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F20 Trainer nudges a client as a FitBud push (Z12-50)",
+          "message": "Assertion is false: \"Log measurement|Mark reviewed|Resolve\" is visible"
+        },
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "message": "Assertion is false: id: review-sheet-resolve is visible"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "No visible element found: \"Reply\""
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Assertion is false: \"Undo|Check-ins|Reviewed\" is visible"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "No visible element found: \"Priya Nair.*\""
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*\""
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Element not found: Text matching regex: Ended"
+        },
+        {
+          "flow": "F27 Offline, loading, errors (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*|Aarav.*\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 2,
+      "failed": 8,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F20 Trainer nudges a client as a FitBud push (Z12-50)",
+          "message": "Assertion is false: \"Log measurement|Mark reviewed|Resolve\" is visible"
+        },
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "message": "Assertion is false: id: review-sheet-resolve is visible"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "No visible element found: \"Reply\""
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Assertion is false: \"Undo|Check-ins|Reviewed\" is visible"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "No visible element found: \"Priya Nair.*\""
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*\""
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Element not found: Text matching regex: Ended"
+        },
+        {
+          "flow": "F27 Offline, loading, errors (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*|Aarav.*\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": null,
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 134 s",
+      "mode": "cache-hit",
+      "seconds": 134,
+      "cacheKey": "device-native-ios-c30787716725700d8fa2cdb48f53f503dbf3f34b"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.921 (29), dark 0.123 (30)",
+      "light": 0.921,
+      "dark": 0.123,
+      "count": {
+        "light": 29,
+        "dark": 30
+      },
+      "shots": [
+        {
+          "file": "TM-01a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-01a-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "TM-01a2-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-01a2-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "TM-01e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "TM-02a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.105
+        },
+        {
+          "file": "TM-02a-light-ios.png",
+          "theme": "light",
+          "luma": 0.962
+        },
+        {
+          "file": "TM-04a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.128
+        },
+        {
+          "file": "TM-04a-light-ios.png",
+          "theme": "light",
+          "luma": 0.926
+        },
+        {
+          "file": "TM-04d-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.145
+        },
+        {
+          "file": "TM-04d-light-ios.png",
+          "theme": "light",
+          "luma": 0.744
+        },
+        {
+          "file": "TM-04e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.138
+        },
+        {
+          "file": "TM-04e-light-ios.png",
+          "theme": "light",
+          "luma": 0.94
+        },
+        {
+          "file": "TM-04f-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.098
+        },
+        {
+          "file": "TM-04f-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "TM-04j-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.1
+        },
+        {
+          "file": "TM-04j-light-ios.png",
+          "theme": "light",
+          "luma": 0.699
+        },
+        {
+          "file": "TM-04k-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.182
+        },
+        {
+          "file": "TM-04k-light-ios.png",
+          "theme": "light",
+          "luma": 0.877
+        },
+        {
+          "file": "TM-05a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.088
+        },
+        {
+          "file": "TM-05a-light-ios.png",
+          "theme": "light",
+          "luma": 0.955
+        },
+        {
+          "file": "TM-05b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.098
+        },
+        {
+          "file": "TM-05b-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "TM-06a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "TM-06a-light-ios.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "TM-06b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.184
+        },
+        {
+          "file": "TM-06b-light-ios.png",
+          "theme": "light",
+          "luma": 0.858
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.162
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.801
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "step-026-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-026-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "step-027-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-027-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "step-027-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-027-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "step-028-assertCondition-attention-screen-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.162
+        },
+        {
+          "file": "step-028-assertCondition-attention-screen-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "step-028-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-028-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "step-034-tapOnElement-Ended-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.105
+        },
+        {
+          "file": "step-034-tapOnElement-Ended-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "step-036-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.116
+        },
+        {
+          "file": "step-036-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "step-048-assertCondition-Log_measurementMark_revi-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.116
+        },
+        {
+          "file": "step-048-assertCondition-Log_measurementMark_revi-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "step-049-scrollUntilVisible-Rohan_Mehta-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.124
+        },
+        {
+          "file": "step-049-scrollUntilVisible-Rohan_Mehta-light-ios.png",
+          "theme": "light",
+          "luma": 0.956
+        },
+        {
+          "file": "step-051-scrollUntilVisible-Reply-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.118
+        },
+        {
+          "file": "step-051-scrollUntilVisible-Reply-light-ios.png",
+          "theme": "light",
+          "luma": 0.958
+        },
+        {
+          "file": "step-054-scrollUntilVisible-Priya_Nair-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.124
+        },
+        {
+          "file": "step-054-scrollUntilVisible-Priya_Nair-light-ios.png",
+          "theme": "light",
+          "luma": 0.956
+        },
+        {
+          "file": "step-067-scrollUntilVisible-Rohan_Mehta.Aarav-light-ios.png",
+          "theme": "light",
+          "luma": 0.956
+        },
+        {
+          "file": "step-068-scrollUntilVisible-Rohan_Mehta.Aarav-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.124
+        },
+        {
+          "file": "step-096-assertCondition-UndoCheck-insReviewed-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.184
+        },
+        {
+          "file": "step-096-assertCondition-UndoCheck-insReviewed-light-ios.png",
+          "theme": "light",
+          "luma": 0.858
+        },
+        {
+          "file": "step-140-assertCondition-review-sheet-resolve-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-140-assertCondition-review-sheet-resolve-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

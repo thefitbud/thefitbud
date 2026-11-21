@@ -1,0 +1,63 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - B91893E6-CFEB-4BA7-A2D2-7B91DD4573D1" tests="10" failures="8" time="1439.759" timestamp="2026-11-21T17:27:49">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="119.714" timestamp="2026-11-21T17:27:49" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="90.529" timestamp="2026-11-21T17:29:49" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F20 Trainer nudges a client as a FitBud push (Z12-50)" name="F20 Trainer nudges a client as a FitBud push (Z12-50)" classname="F20 Trainer nudges a client as a FitBud push (Z12-50)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F20-triage-nudge.yaml" time="126.235" timestamp="2026-11-21T17:31:19" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-50"/>
+      </properties>
+      <failure>Assertion is false: "Log measurement|Mark reviewed|Resolve" is visible</failure>
+    </testcase>
+    <testcase id="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" name="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" classname="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F21-review-resolve-notes.yaml" time="224.429" timestamp="2026-11-21T17:33:26" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-51"/>
+      </properties>
+      <failure>Assertion is false: id: review-sheet-resolve is visible</failure>
+    </testcase>
+    <testcase id="F22 Coach replies to a question (Z12-53)" name="F22 Coach replies to a question (Z12-53)" classname="F22 Coach replies to a question (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F22-reply-question.yaml" time="156.4" timestamp="2026-11-21T17:37:10" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>No visible element found: "Reply"</failure>
+    </testcase>
+    <testcase id="F23 Coach reviews a check-in (Z12-53)" name="F23 Coach reviews a check-in (Z12-53)" classname="F23 Coach reviews a check-in (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F23-review-checkin.yaml" time="139.175" timestamp="2026-11-21T17:39:46" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>Assertion is false: "Undo|Check-ins|Reviewed" is visible</failure>
+    </testcase>
+    <testcase id="F24 Coach reviews a session and a diet day (Z12-53)" name="F24 Coach reviews a session and a diet day (Z12-53)" classname="F24 Coach reviews a session and a diet day (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F24-session-diet-review.yaml" time="153.918" timestamp="2026-11-21T17:42:06" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>No visible element found: "Priya Nair.*"</failure>
+    </testcase>
+    <testcase id="F25 Clients, activity and client detail (Z12-53)" name="F25 Clients, activity and client detail (Z12-53)" classname="F25 Clients, activity and client detail (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F25-clients-activity.yaml" time="156.818" timestamp="2026-11-21T17:44:40" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>No visible element found: "Rohan Mehta.*"</failure>
+    </testcase>
+    <testcase id="F26 Ended client and reactivation (Z12-53)" name="F26 Ended client and reactivation (Z12-53)" classname="F26 Ended client and reactivation (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F26-ended-reactivation.yaml" time="95.256" timestamp="2026-11-21T17:47:17" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>Element not found: Text matching regex: Ended</failure>
+    </testcase>
+    <testcase id="F27 Offline, loading, errors (Z12-53)" name="F27 Offline, loading, errors (Z12-53)" classname="F27 Offline, loading, errors (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F27-offline-loading-errors.yaml" time="176.629" timestamp="2026-11-21T17:48:52" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>No visible element found: "Rohan Mehta.*|Aarav.*"</failure>
+    </testcase>
+  </testsuite>
+</testsuites>
