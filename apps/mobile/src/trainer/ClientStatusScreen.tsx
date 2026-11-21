@@ -584,12 +584,12 @@ export function ClientStatusScreen({
       ) : null}
       {error && data ? <ErrorBanner message={error} /> : null}
       {loading && !data ? (
-        <View>
+        <View testID="client-status-loading">
           <View style={styles.skeleton} />
           <View style={styles.skeleton} />
         </View>
-      ) : null}
-
+      ) : (
+      <View testID="client-status-loaded">
       <View style={styles.header}>
         <View style={styles.avatarLg}>
           <Text style={styles.avatarLgText}>{initialsFromName(name)}</Text>
@@ -1013,6 +1013,8 @@ export function ClientStatusScreen({
         </View>
       </View>
         </>
+      )}
+      </View>
       )}
 
       <NudgeSheet

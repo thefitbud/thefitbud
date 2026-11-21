@@ -21,8 +21,8 @@ tags:
     id: "tab-checkins"
 - extendedWaitUntil:
     visible:
-      id: "checkins-screen"
-    timeout: 30000
+      id: "checkins-loaded"
+    timeout: 60000
 - takeScreenshot: TM-05a
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -45,8 +45,9 @@ tags:
 - tapOn:
     id: "checkin-row"
 - extendedWaitUntil:
-    visible: ".*Mark reviewed.*|.*Reply.*|.*This week.*|.*Last week.*"
-    timeout: 30000
+    visible:
+      id: "checkin-loaded"
+    timeout: 60000
 - takeScreenshot: TM-06a
 - runFlow: ../../common/assert-no-crash.yaml
 

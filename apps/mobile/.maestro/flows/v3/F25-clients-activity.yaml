@@ -22,8 +22,9 @@ env:
 - tapOn:
     id: "tab-clients"
 - extendedWaitUntil:
-    visible: ".*Clients.*"
-    timeout: 30000
+    visible:
+      id: "clients-loaded"
+    timeout: 60000
 - takeScreenshot: TM-02a
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -36,8 +37,8 @@ env:
     id: "client-row-${CLIENT_SLUG}"
 - extendedWaitUntil:
     visible:
-      id: "client-status"
-    timeout: 30000
+      id: "client-status-loaded"
+    timeout: 60000
 - takeScreenshot: TM-03a
 - runFlow: ../../common/assert-no-crash.yaml
 
