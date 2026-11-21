@@ -1,0 +1,192 @@
+{
+  "result": "mean screenshot luminance: light 0.908 (20), dark 0.128 (16)",
+  "light": 0.908,
+  "dark": 0.128,
+  "count": {
+    "light": 20,
+    "dark": 16
+  },
+  "shots": [
+    {
+      "file": "TM-01a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "TM-01a-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "TM-02a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.131
+    },
+    {
+      "file": "TM-02a-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "TM-03a-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "TM-03f-light-android.png",
+      "theme": "light",
+      "luma": 0.939
+    },
+    {
+      "file": "TM-03i-light-android.png",
+      "theme": "light",
+      "luma": 0.738
+    },
+    {
+      "file": "TM-05a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "TM-05a-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "TM-06a-dark-android.png",
+      "theme": "dark",
+      "luma": 0.122
+    },
+    {
+      "file": "TM-06a-light-android.png",
+      "theme": "light",
+      "luma": 0.937
+    },
+    {
+      "file": "launch-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.161
+    },
+    {
+      "file": "launch-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.782
+    },
+    {
+      "file": "step-004-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-004-runFlow-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "step-014-assertCondition-_SIGN_IN_EMAIL-dark-android.png",
+      "theme": "dark",
+      "luma": 0.174
+    },
+    {
+      "file": "step-014-assertCondition-_SIGN_IN_EMAIL-light-android.png",
+      "theme": "light",
+      "luma": 0.892
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "step-024-assertCondition-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "step-024-assertCondition-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "step-027-assertCondition-Needs_you__0-9-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "step-027-assertCondition-Needs_you__0-9-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "step-028-assertCondition-_ATTENTION_LOADED-dark-android.png",
+      "theme": "dark",
+      "luma": 0.12
+    },
+    {
+      "file": "step-028-assertCondition-_ATTENTION_LOADED-light-android.png",
+      "theme": "light",
+      "luma": 0.931
+    },
+    {
+      "file": "step-030-tapOnElement-Ended-dark-android.png",
+      "theme": "dark",
+      "luma": 0.13
+    },
+    {
+      "file": "step-030-tapOnElement-Ended-light-android.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "step-064-runFlow-dark-android.png",
+      "theme": "dark",
+      "luma": 0.097
+    },
+    {
+      "file": "step-064-runFlow-light-android.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "step-066-assertCondition-SaveMark_reviewedSend-dark-android.png",
+      "theme": "dark",
+      "luma": 0.097
+    },
+    {
+      "file": "step-066-assertCondition-SaveMark_reviewedSend-light-android.png",
+      "theme": "light",
+      "luma": 0.91
+    },
+    {
+      "file": "step-086-tapOnElement-Clients-light-android.png",
+      "theme": "light",
+      "luma": 0.929
+    }
+  ],
+  "w03DarkTooBright": []
+}

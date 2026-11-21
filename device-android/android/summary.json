@@ -1,0 +1,385 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 6 of 8 flows failed",
+    "dark: 6 of 8 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F22-reply-question.yaml",
+    "flows/v3/F23-review-checkin.yaml",
+    "flows/v3/F24-session-diet-review.yaml",
+    "flows/v3/F25-clients-activity.yaml",
+    "flows/v3/F26-ended-reactivation.yaml",
+    "flows/v3/F27-offline-loading-errors.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 2,
+      "failed": 6,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Assertion is false: \"Save|Mark reviewed|Send\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Assertion is false: \"rahul.coach@demo.fitbud.test\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "Element not found: Text matching regex: Clients",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Element not found: Text matching regex: Ended",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 2,
+      "failed": 6,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Assertion is false: \"Save|Mark reviewed|Send\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "Assertion is false: \"rahul.coach@demo.fitbud.test\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Element not found: Text matching regex: Ended",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 10s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)",
+        "retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 10s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen); retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 47 s",
+      "mode": "cache-hit",
+      "seconds": 47,
+      "cacheKey": "device-native-android-9a9eb257e1e3b8bb8f901894fb66821a37ae9b3b"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.908 (20), dark 0.128 (16)",
+      "light": 0.908,
+      "dark": 0.128,
+      "count": {
+        "light": 20,
+        "dark": 16
+      },
+      "shots": [
+        {
+          "file": "TM-01a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "TM-01a-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "TM-02a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.131
+        },
+        {
+          "file": "TM-02a-light-android.png",
+          "theme": "light",
+          "luma": 0.925
+        },
+        {
+          "file": "TM-03a-light-android.png",
+          "theme": "light",
+          "luma": 0.925
+        },
+        {
+          "file": "TM-03f-light-android.png",
+          "theme": "light",
+          "luma": 0.939
+        },
+        {
+          "file": "TM-03i-light-android.png",
+          "theme": "light",
+          "luma": 0.738
+        },
+        {
+          "file": "TM-05a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "TM-05a-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "TM-06a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.122
+        },
+        {
+          "file": "TM-06a-light-android.png",
+          "theme": "light",
+          "luma": 0.937
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.161
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.782
+        },
+        {
+          "file": "step-004-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-004-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.892
+        },
+        {
+          "file": "step-014-assertCondition-_SIGN_IN_EMAIL-dark-android.png",
+          "theme": "dark",
+          "luma": 0.174
+        },
+        {
+          "file": "step-014-assertCondition-_SIGN_IN_EMAIL-light-android.png",
+          "theme": "light",
+          "luma": 0.892
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-024-assertCondition-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-024-assertCondition-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-027-assertCondition-Needs_you__0-9-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-027-assertCondition-Needs_you__0-9-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-028-assertCondition-_ATTENTION_LOADED-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-028-assertCondition-_ATTENTION_LOADED-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-030-tapOnElement-Ended-dark-android.png",
+          "theme": "dark",
+          "luma": 0.13
+        },
+        {
+          "file": "step-030-tapOnElement-Ended-light-android.png",
+          "theme": "light",
+          "luma": 0.925
+        },
+        {
+          "file": "step-064-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.097
+        },
+        {
+          "file": "step-064-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.91
+        },
+        {
+          "file": "step-066-assertCondition-SaveMark_reviewedSend-dark-android.png",
+          "theme": "dark",
+          "luma": 0.097
+        },
+        {
+          "file": "step-066-assertCondition-SaveMark_reviewedSend-light-android.png",
+          "theme": "light",
+          "luma": 0.91
+        },
+        {
+          "file": "step-086-tapOnElement-Clients-light-android.png",
+          "theme": "light",
+          "luma": 0.929
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

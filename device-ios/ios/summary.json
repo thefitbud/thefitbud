@@ -1,0 +1,286 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 7 of 8 flows failed",
+    "dark: 7 of 8 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F22-reply-question.yaml",
+    "flows/v3/F23-review-checkin.yaml",
+    "flows/v3/F24-session-diet-review.yaml",
+    "flows/v3/F25-clients-activity.yaml",
+    "flows/v3/F26-ended-reactivation.yaml",
+    "flows/v3/F27-offline-loading-errors.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 1,
+      "failed": 7,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Assertion is false: \"Mark reviewed|Reply|Save|This week|Last week\" is visible"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*\""
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Element not found: Text matching regex: Ended"
+        },
+        {
+          "flow": "F27 Offline, loading, errors (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*|Aarav.*\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 8,
+      "passed": 1,
+      "failed": 7,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "No visible element found: \"Submitted|to review|Open\""
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Assertion is false: \"Needs you [0-9]+\" is visible"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*\""
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Element not found: Text matching regex: Ended"
+        },
+        {
+          "flow": "F27 Offline, loading, errors (Z12-53)",
+          "message": "No visible element found: \"Rohan Mehta.*|Aarav.*\""
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 140 s",
+      "mode": "cache-hit",
+      "seconds": 140,
+      "cacheKey": "device-native-ios-c30787716725700d8fa2cdb48f53f503dbf3f34b"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.937 (15), dark 0.109 (15)",
+      "light": 0.937,
+      "dark": 0.109,
+      "count": {
+        "light": 15,
+        "dark": 15
+      },
+      "shots": [
+        {
+          "file": "TM-01a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-01a-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "TM-01e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "TM-01e-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "TM-02a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.105
+        },
+        {
+          "file": "TM-02a-light-ios.png",
+          "theme": "light",
+          "luma": 0.962
+        },
+        {
+          "file": "TM-05a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.088
+        },
+        {
+          "file": "TM-05a-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.161
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.801
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.098
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.801
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "step-024-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-024-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "step-027-assertCondition-Needs_you__0-9-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-027-assertCondition-Needs_you__0-9-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "step-028-assertCondition-_ATTENTION_LOADED-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-028-assertCondition-_ATTENTION_LOADED-light-ios.png",
+          "theme": "light",
+          "luma": 0.952
+        },
+        {
+          "file": "step-030-tapOnElement-Ended-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.105
+        },
+        {
+          "file": "step-030-tapOnElement-Ended-light-ios.png",
+          "theme": "light",
+          "luma": 0.962
+        },
+        {
+          "file": "step-045-scrollUntilVisible-Rohan_Mehta-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "step-045-scrollUntilVisible-Rohan_Mehta-light-ios.png",
+          "theme": "light",
+          "luma": 0.956
+        },
+        {
+          "file": "step-046-scrollUntilVisible-Submittedto_reviewOpe-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-048-assertCondition-Mark_reviewedReplySaveTh-light-ios.png",
+          "theme": "light",
+          "luma": 0.957
+        },
+        {
+          "file": "step-064-scrollUntilVisible-Rohan_Mehta.Aarav-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "step-064-scrollUntilVisible-Rohan_Mehta.Aarav-light-ios.png",
+          "theme": "light",
+          "luma": 0.956
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

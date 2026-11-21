@@ -1,0 +1,162 @@
+{
+  "result": "mean screenshot luminance: light 0.937 (15), dark 0.109 (15)",
+  "light": 0.937,
+  "dark": 0.109,
+  "count": {
+    "light": 15,
+    "dark": 15
+  },
+  "shots": [
+    {
+      "file": "TM-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "TM-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "TM-01e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.092
+    },
+    {
+      "file": "TM-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.963
+    },
+    {
+      "file": "TM-02a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.105
+    },
+    {
+      "file": "TM-02a-light-ios.png",
+      "theme": "light",
+      "luma": 0.962
+    },
+    {
+      "file": "TM-05a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.088
+    },
+    {
+      "file": "TM-05a-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.161
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.801
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.801
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.092
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.963
+    },
+    {
+      "file": "step-024-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.092
+    },
+    {
+      "file": "step-024-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.963
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.092
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.963
+    },
+    {
+      "file": "step-027-assertCondition-Needs_you__0-9-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-027-assertCondition-Needs_you__0-9-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "step-028-assertCondition-_ATTENTION_LOADED-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-028-assertCondition-_ATTENTION_LOADED-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "step-030-tapOnElement-Ended-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.105
+    },
+    {
+      "file": "step-030-tapOnElement-Ended-light-ios.png",
+      "theme": "light",
+      "luma": 0.962
+    },
+    {
+      "file": "step-045-scrollUntilVisible-Rohan_Mehta-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.123
+    },
+    {
+      "file": "step-045-scrollUntilVisible-Rohan_Mehta-light-ios.png",
+      "theme": "light",
+      "luma": 0.956
+    },
+    {
+      "file": "step-046-scrollUntilVisible-Submittedto_reviewOpe-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-048-assertCondition-Mark_reviewedReplySaveTh-light-ios.png",
+      "theme": "light",
+      "luma": 0.957
+    },
+    {
+      "file": "step-064-scrollUntilVisible-Rohan_Mehta.Aarav-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.123
+    },
+    {
+      "file": "step-064-scrollUntilVisible-Rohan_Mehta.Aarav-light-ios.png",
+      "theme": "light",
+      "luma": 0.956
+    }
+  ],
+  "w03DarkTooBright": []
+}
