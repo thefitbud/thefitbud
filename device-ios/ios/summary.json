@@ -1,0 +1,495 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 5 of 10 flows failed",
+    "dark: 7 of 10 flows failed",
+    "no device-log scan"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml",
+    "flows/v3/F21-review-resolve-notes.yaml",
+    "flows/v3/F22-reply-question.yaml",
+    "flows/v3/F23-review-checkin.yaml",
+    "flows/v3/F24-session-diet-review.yaml",
+    "flows/v3/F25-clients-activity.yaml",
+    "flows/v3/F26-ended-reactivation.yaml",
+    "flows/v3/F27-offline-loading-errors.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 5,
+      "failed": 5,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "Assertion is false: \"Mark answered\" is visible"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Assertion is false: \"Reply sent|Undo|Mark reviewed|Check-ins\" is visible"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Assertion is false: \"Food|Meals ·\" is visible"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "Element not found: Id matching regex: tab-clients"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Assertion is false: id: clients-filter-ended is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 3,
+      "failed": 7,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F20 Trainer nudges a client as a FitBud push (Z12-50)",
+          "message": "Assertion is false: \"PREVIEW · TAP TO EDIT\" is visible"
+        },
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "message": "Element not found: Text matching regex: Review Rohan Mehta|Review Rohan.*"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "Assertion is false: \"Mark answered\" is visible"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Element not found: Text matching regex: Mark reviewed"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Assertion is false: \"Food|Meals ·\" is visible"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "Element not found: Id matching regex: tab-clients"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "Assertion is false: id: clients-filter-ended is visible"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": null,
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "cache-hit in 158 s",
+      "mode": "cache-hit",
+      "seconds": 158,
+      "cacheKey": "device-native-ios-8c704f4e3598db2e884238da353790cc45baefb0"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.874 (40), dark 0.116 (35)",
+      "light": 0.874,
+      "dark": 0.116,
+      "count": {
+        "light": 40,
+        "dark": 35
+      },
+      "shots": [
+        {
+          "file": "TM-01a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.118
+        },
+        {
+          "file": "TM-01a-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "TM-01a2-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-01a2-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "TM-01e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "TM-02a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.105
+        },
+        {
+          "file": "TM-02a-light-ios.png",
+          "theme": "light",
+          "luma": 0.962
+        },
+        {
+          "file": "TM-03a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.104
+        },
+        {
+          "file": "TM-03a-light-ios.png",
+          "theme": "light",
+          "luma": 0.942
+        },
+        {
+          "file": "TM-03f-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.087
+        },
+        {
+          "file": "TM-03f-light-ios.png",
+          "theme": "light",
+          "luma": 0.959
+        },
+        {
+          "file": "TM-03i-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.083
+        },
+        {
+          "file": "TM-03i-light-ios.png",
+          "theme": "light",
+          "luma": 0.731
+        },
+        {
+          "file": "TM-03j-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.14
+        },
+        {
+          "file": "TM-03j-light-ios.png",
+          "theme": "light",
+          "luma": 0.694
+        },
+        {
+          "file": "TM-04a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.126
+        },
+        {
+          "file": "TM-04a-light-ios.png",
+          "theme": "light",
+          "luma": 0.925
+        },
+        {
+          "file": "TM-04b-light-ios.png",
+          "theme": "light",
+          "luma": 0.696
+        },
+        {
+          "file": "TM-04d-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.146
+        },
+        {
+          "file": "TM-04d-light-ios.png",
+          "theme": "light",
+          "luma": 0.744
+        },
+        {
+          "file": "TM-04e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.118
+        },
+        {
+          "file": "TM-04e-light-ios.png",
+          "theme": "light",
+          "luma": 0.94
+        },
+        {
+          "file": "TM-04f-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.096
+        },
+        {
+          "file": "TM-04f-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "TM-04j-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.1
+        },
+        {
+          "file": "TM-04j-light-ios.png",
+          "theme": "light",
+          "luma": 0.699
+        },
+        {
+          "file": "TM-04k-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.181
+        },
+        {
+          "file": "TM-04k-light-ios.png",
+          "theme": "light",
+          "luma": 0.877
+        },
+        {
+          "file": "TM-04n-light-ios.png",
+          "theme": "light",
+          "luma": 0.765
+        },
+        {
+          "file": "TM-04o-light-ios.png",
+          "theme": "light",
+          "luma": 0.734
+        },
+        {
+          "file": "TM-05a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.088
+        },
+        {
+          "file": "TM-05a-light-ios.png",
+          "theme": "light",
+          "luma": 0.959
+        },
+        {
+          "file": "TM-05b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.098
+        },
+        {
+          "file": "TM-05b-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "TM-06a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "TM-06a-light-ios.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "TM-06b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.187
+        },
+        {
+          "file": "TM-06b-light-ios.png",
+          "theme": "light",
+          "luma": 0.856
+        },
+        {
+          "file": "TM-10a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-10a-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.162
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.801
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "review-sheet-light-ios.png",
+          "theme": "light",
+          "luma": 0.805
+        },
+        {
+          "file": "review-sheet-nudge-light-ios.png",
+          "theme": "light",
+          "luma": 0.634
+        },
+        {
+          "file": "review-sheet-resolved-light-ios.png",
+          "theme": "light",
+          "luma": 0.781
+        },
+        {
+          "file": "step-026-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-026-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "step-027-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-027-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "step-027-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-027-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.963
+        },
+        {
+          "file": "step-028-assertCondition-attention-screen-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.162
+        },
+        {
+          "file": "step-028-assertCondition-attention-screen-light-ios.png",
+          "theme": "light",
+          "luma": 0.801
+        },
+        {
+          "file": "step-028-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-028-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "step-040-assertCondition-clients-filter-ended-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.127
+        },
+        {
+          "file": "step-040-assertCondition-clients-filter-ended-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "step-056-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-058-assertCondition-FoodMeals-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "step-058-assertCondition-FoodMeals-light-ios.png",
+          "theme": "light",
+          "luma": 0.939
+        },
+        {
+          "file": "step-059-assertCondition-PREVIEW___TAP_TO_EDIT-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-070-assertCondition-Mark_answered-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-070-assertCondition-Mark_answered-light-ios.png",
+          "theme": "light",
+          "luma": 0.953
+        },
+        {
+          "file": "step-079-assertCondition-Nudge_sent-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "step-081-assertCondition-You_nudged_._again_tomor-light-ios.png",
+          "theme": "light",
+          "luma": 0.946
+        },
+        {
+          "file": "step-090-runFlow-light-ios.png",
+          "theme": "light",
+          "luma": 0.856
+        },
+        {
+          "file": "step-097-assertCondition-Reply_sentUndoMark_revie-light-ios.png",
+          "theme": "light",
+          "luma": 0.856
+        },
+        {
+          "file": "step-098-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.096
+        },
+        {
+          "file": "step-099-tapOnElement-Mark_reviewed-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.096
+        },
+        {
+          "file": "step-100-tapOnElement-tab-clients-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.115
+        },
+        {
+          "file": "step-100-tapOnElement-tab-clients-light-ios.png",
+          "theme": "light",
+          "luma": 0.947
+        },
+        {
+          "file": "step-138-tapOnElement-Review__CLIENT_Review_Roha-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-140-assertCondition-exception-review-light-ios.png",
+          "theme": "light",
+          "luma": 0.805
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}
