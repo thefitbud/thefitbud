@@ -2,6 +2,8 @@
 
 How Firoz builds the production app and submits it for the closed beta: TestFlight (internal, then external) and Google Play closed testing (D-W4-2, D-W4-3). The production variant is `com.thefitbud.mobile`. Agents never run `eas build` or `eas submit`.
 
+For the **staging** app on TestFlight / Play internal (`staging-store` profile), see [`mobile-distribution.md`](mobile-distribution.md).
+
 This runbook is written in W4 and used in W13 (D-W4-13). W13 (D-W13-4) changes the store answers before submission: in-app account deletion, and HealthKit / Health Connect because steps ship in that beta. Until that update, this cut declares neither HealthKit nor Health Connect, and account deletion is by email.
 
 No secret values belong in this file, the repo, a PR or a chat. Names only.
