@@ -8,7 +8,6 @@ env:
   PRIYA_CLIENT: Lakshmi Iyer
   PRIYA_OTHER_CLIENT: Karan Mehra
   RAHUL_CLIENT: Rohan Mehta
-  ATTENTION_LOADED: "Needs you [0-9]+"
 ---
 # Z12-33 step 8, online part: back online, Priya signs out, Rahul signs in again on
 # the same install. Continues from 2-offline-priya.yaml.
@@ -38,14 +37,7 @@ env:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
-- extendedWaitUntil:
-    visible: "${ATTENTION_LOADED}"
-    timeout: 30000
-# "Needs you 0" already shows over the skeleton, so also wait for the "Loading"
-# skeleton cards to go before asserting what is (not) on screen.
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 30000
+- runFlow: ../../common/wait-attention-loaded.yaml
 - assertNotVisible: ".*${PRIYA_CLIENT}.*"
 - assertNotVisible: ".*${PRIYA_OTHER_CLIENT}.*"
 - takeScreenshot: rahul-again-attention

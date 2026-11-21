@@ -71,16 +71,19 @@ export function CheckinsList({
     <View>
       <View accessibilityRole="tablist" style={styles.tabs}>
         <Tab
+          testID="checkins-segment-to-review"
           label={`To review${count(model.toReview.length)}`}
           selected={segment === "to_review"}
           onPress={() => onSegmentChange("to_review")}
         />
         <Tab
+          testID="checkins-segment-overdue"
           label={`Overdue${count(model.overdue.length)}`}
           selected={segment === "overdue"}
           onPress={() => onSegmentChange("overdue")}
         />
         <Tab
+          testID="checkins-segment-reviewed"
           label="Reviewed"
           selected={segment === "reviewed"}
           onPress={() => onSegmentChange("reviewed")}
@@ -125,15 +128,18 @@ function Tab({
   label,
   selected,
   onPress,
+  testID,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
+  testID?: string;
 }) {
 
   const styles = useStyles();
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
@@ -224,6 +230,7 @@ function Row({
 
   const openableRow = openable ? (
     <Pressable
+      testID="checkin-row"
       accessibilityRole="button"
       accessibilityLabel={
         reviewed
@@ -235,7 +242,7 @@ function Row({
       {body}
     </Pressable>
   ) : (
-    body
+    <View testID="checkin-row">{body}</View>
   );
 
   if (segment === "to_review" && onMarkReviewed) {

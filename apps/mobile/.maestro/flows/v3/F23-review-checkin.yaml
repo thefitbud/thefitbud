@@ -10,6 +10,8 @@ tags:
 # QA_PASSWORD. Writes one review on the job's local DB (D-W12-34).
 #
 # Screens: TM-05a, TM-06a, TM-06b, TM-06c; overdue/reviewed when seeded.
+# Tap bottom tabs and inbox rows by testID — Attention's "N Check-ins" summary
+# tile and "To review" pills are non-interactive Views and used to steal taps.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -19,31 +21,36 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- runFlow: ../../common/wait-attention-loaded.yaml
+- tapOn:
+    id: "tab-checkins"
 - extendedWaitUntil:
-    visible: "Needs you|Clients|Check-ins"
-    timeout: 60000
-- tapOn: "Check-ins"
-- extendedWaitUntil:
-    visible: "Check-ins|To review|Overdue|Reviewed"
+    visible:
+      id: "checkins-screen"
     timeout: 30000
+- assertVisible: "Check-ins"
 - takeScreenshot: TM-05a
 - runFlow: ../../common/assert-no-crash.yaml
 
 - runFlow:
     when:
-      visible: "Overdue"
+      visible:
+        id: "checkins-segment-overdue"
     commands:
-      - tapOn: "Overdue"
+      - tapOn:
+          id: "checkins-segment-overdue"
       - takeScreenshot: TM-05b
       - runFlow: ../../common/assert-no-crash.yaml
-      - tapOn: "To review|Check-ins"
+      - tapOn:
+          id: "checkins-segment-to-review"
 
-# Open a submitted row (label varies by client).
-- scrollUntilVisible:
-    element: "Submitted|to review|Open"
-    direction: DOWN
+# Open the first inbox row by stable testID (not "to review" / "Submitted" text).
+- extendedWaitUntil:
+    visible:
+      id: "checkin-row"
     timeout: 60000
-- tapOn: "Submitted.*|.*to review.*|Open"
+- tapOn:
+    id: "checkin-row"
 - extendedWaitUntil:
     visible: "Mark reviewed|Reply|Save|This week|Last week"
     timeout: 30000
@@ -79,8 +86,10 @@ tags:
 
 - runFlow:
     when:
-      visible: "Reviewed"
+      visible:
+        id: "checkins-segment-reviewed"
     commands:
-      - tapOn: "Reviewed"
+      - tapOn:
+          id: "checkins-segment-reviewed"
       - takeScreenshot: TM-05e
       - runFlow: ../../common/assert-no-crash.yaml

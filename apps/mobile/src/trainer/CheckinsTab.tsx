@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform } from "react-native";
+import { Platform, View } from "react-native";
 import { Text } from "../components/Text";
 import { userFacingMessage } from "@fitbud/api-client";
 import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
@@ -224,6 +224,7 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
       {Platform.OS === "android" ? null : (
         <Text style={styles.eyebrow}>{formatCivilDate(today)}</Text>
       )}
+      <View testID="checkins-screen">
       <Text style={styles.title} accessibilityRole="header">
         Check-ins
       </Text>
@@ -252,6 +253,7 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
           }}
         />
       ) : null}
+      </View>
     </Screen>
   );
 }

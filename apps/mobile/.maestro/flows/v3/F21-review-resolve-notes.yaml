@@ -37,12 +37,7 @@ env:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
-- extendedWaitUntil:
-    visible: "Needs you [0-9]+"
-    timeout: 60000
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 90000
+- runFlow: ../../common/wait-attention-loaded.yaml
 
 # ---- Clients -> Rohan -> Review: the exception review ------------------------------------
 - tapOn: "Clients"
@@ -150,12 +145,7 @@ env:
     stopApp: true
     permissions:
       all: allow
-- extendedWaitUntil:
-    visible: "Needs you [0-9]+"
-    timeout: 60000
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 90000
+- runFlow: ../../common/wait-attention-loaded.yaml
 - scrollUntilVisible:
     element: "${CLIENT}.*"
     timeout: 30000

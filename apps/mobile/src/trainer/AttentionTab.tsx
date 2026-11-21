@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState } from "react-native";
+import { AppState, View } from "react-native";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   AttentionGroupsResponse,
@@ -784,6 +784,7 @@ export function AttentionTab({
         ) : undefined
       }
     >
+      <View testID="attention-screen">
       {offline ? (
         <AttentionOfflineBanner
           updatedAt={formatClockTime(offlineAt!, trainerZone)}
@@ -822,6 +823,7 @@ export function AttentionTab({
           ) : null}
         </>
       ) : null}
+      </View>
 
       <ReviewSheet
         visible={reviewSheet != null && reviewItems.length > 0}

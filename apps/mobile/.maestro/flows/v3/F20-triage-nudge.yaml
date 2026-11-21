@@ -31,12 +31,7 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
-- extendedWaitUntil:
-    visible: "Needs you [0-9]+"
-    timeout: 60000
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 90000
+- runFlow: ../../common/wait-attention-loaded.yaml
 # ---- A push-on client: sheet, send, sent toast ------------------------------------------
 # Rohan Mehta in both themes (his open items are stable; other clients' differ with the
 # clock). One local DB per job and one nudge per item per client day, so the first theme of

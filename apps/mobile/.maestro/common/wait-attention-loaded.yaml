@@ -1,0 +1,13 @@
+# Subflow: Attention (Needs you) has settled — title + screen root, not the
+# old "Needs you N" chip. Empty state (all caught up) still exposes the same
+# testID and title. Caller already signed in.
+appId: com.thefitbud.mobile.staging
+---
+- extendedWaitUntil:
+    visible:
+      id: "attention-screen"
+    timeout: 60000
+- assertVisible: "Needs you"
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000

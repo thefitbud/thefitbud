@@ -8,12 +8,7 @@ appId: com.thefitbud.mobile.staging
     stopApp: true
     permissions:
       all: allow
-- extendedWaitUntil:
-    visible: "Needs you [0-9]+"
-    timeout: 60000
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 90000
+- runFlow: ../../common/wait-attention-loaded.yaml
 - tapOn: "Clients"
 - scrollUntilVisible:
     element: "[A-Z]{2},? ${CLIENT}.*|${CLIENT}"

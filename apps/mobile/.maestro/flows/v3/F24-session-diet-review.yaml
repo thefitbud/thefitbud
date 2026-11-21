@@ -19,12 +19,7 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
-- extendedWaitUntil:
-    visible: "Needs you [0-9]+"
-    timeout: 60000
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 90000
+- runFlow: ../../common/wait-attention-loaded.yaml
 - takeScreenshot: TM-01a2
 - runFlow: ../../common/assert-no-crash.yaml
 

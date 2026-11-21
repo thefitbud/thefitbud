@@ -13,9 +13,7 @@ env:
   RAHUL_THIRD_CLIENT: Meera Iyer
   RAHUL_FOURTH_CLIENT: Ishita Banerjee
   PRIYA_CLIENT: Lakshmi Iyer
-  # "Needs you <n>" is the Attention chip; it shows "Needs you 0" over the skeleton
-  # too (AttentionTab.tsx), so each wait on it is followed by a wait for "Loading" to go.
-  ATTENTION_LOADED: "Needs you [0-9]+"
+  # Attention loaded: common/wait-attention-loaded.yaml (attention-screen + title).
 ---
 # Z12-33 device check (docs/qa/Z12-33/README.md), steps 1-6, through the Z12-35 harness.
 # Run by dispatch: flows=device/z12-33/*.yaml. The files run in order, one Maestro
@@ -41,14 +39,7 @@ env:
 # whole list container, whose label holds every row, so the tap lands on the container
 # and nothing opens (run 43634854529).
 # Attention's order varies, so its loaded state is the anchor, not one client's card.
-- extendedWaitUntil:
-    visible: "${ATTENTION_LOADED}"
-    timeout: 30000
-# "Needs you 0" already shows over the skeleton, so also wait for the "Loading"
-# skeleton cards to go before asserting what is (not) on screen.
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 30000
+- runFlow: ../../common/wait-attention-loaded.yaml
 - takeScreenshot: rahul-attention
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Clients"
@@ -99,14 +90,7 @@ env:
       SIGN_IN_EMAIL: ${SECOND_TRAINER_EMAIL}
 # Step 6: nothing of Rahul's on Attention, Clients or a client. Each screen is first
 # seen to render Priya's own data, so "not visible" cannot pass on a half-loaded screen.
-- extendedWaitUntil:
-    visible: "${ATTENTION_LOADED}"
-    timeout: 30000
-# "Needs you 0" already shows over the skeleton, so also wait for the "Loading"
-# skeleton cards to go before asserting what is (not) on screen.
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 30000
+- runFlow: ../../common/wait-attention-loaded.yaml
 - assertNotVisible: ".*${RAHUL_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_OTHER_CLIENT}.*"
 - assertNotVisible: ".*${RAHUL_THIRD_CLIENT}.*"
