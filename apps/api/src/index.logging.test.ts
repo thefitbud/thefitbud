@@ -64,6 +64,15 @@ app.get("/__ob2/clients/:clientId/fail-as-actor", (c) => {
   throw new DomainFailure();
 });
 
+// D1 refuses queries while an import runs; Drizzle wraps that as the cause of its own error.
+const D1_BUSY = "D1_ERROR: Currently processing a long-running import. Cannot start another import until that completes or times out.";
+function d1BusyError(): Error {
+  return new Error(`Failed query: select 1\nparams: ${EMAIL}`, { cause: new Error(D1_BUSY) });
+}
+app.get("/__ob2/clients/:clientId/d1-busy", () => {
+  throw d1BusyError();
+});
+
 app.post("/__ob2/email-send-failed", () => {
   throw new EmailSendError(503);
 });
@@ -149,6 +158,22 @@ describe("onError: email provider failures", () => {
     expect(body.error.message).not.toMatch(/HTTP|503|zepto/i);
     const [line] = logLines().filter((l) => l.message === "Unhandled API error");
     expect(line).toMatchObject({ status, errorName, path });
+  });
+});
+
+describe("onError: D1 import busy (FITBUD-API-J/K/M/N/R)", () => {
+  it("answers 503 DATABASE_BUSY with Retry-After and logs a warning, not an error", async () => {
+    const response = await app.request(`/__ob2/clients/${CLIENT_ID}/d1-busy`, {}, env("staging"));
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("30");
+    const body = (await response.json()) as { error: { code: string; message: string; requestId: string } };
+    expect(body.error.code).toBe("DATABASE_BUSY");
+    expect(body.error.requestId).toBeTruthy();
+    expect(body.error.message).not.toMatch(/D1|import|query/i);
+    expect(logLines().filter((l) => l.message === "Unhandled API error")).toEqual([]);
+    const [line] = logLines().filter((l) => l.message === "d1.import_busy");
+    expect(line).toMatchObject({ level: "warn", status: 503, method: "GET", path: "/__ob2/clients/:clientId/d1-busy" });
+    expectNothingSensitive();
   });
 });
 
@@ -271,6 +296,28 @@ describe("scheduled() (OB2)", () => {
       expect.objectContaining({ message: "cron.completed", operation: "cron.push_receipts" }),
     ]);
     expectNothingSensitive();
+  });
+});
+
+describe("scheduled(): D1 import busy", () => {
+  const controller = { scheduledTime: Date.parse("2026-11-17T03:07:00.000Z"), cron: "*/5 * * * *" } as ScheduledController;
+
+  it("skips a job refused by a running D1 import with a warning, runs the rest and does not throw", async () => {
+    jobs.reminders.mockRejectedValueOnce(d1BusyError());
+    await expect(worker.scheduled(controller, env("staging"))).resolves.toBeUndefined();
+    expect(jobs.replenishment).toHaveBeenCalledTimes(1);
+    expect(jobs.pushReceipts).toHaveBeenCalledTimes(1);
+    const cron = logLines().filter((l) => String(l.message).startsWith("cron."));
+    expect(cron[0]).toMatchObject({ level: "warn", message: "cron.skipped_d1_import_busy", operation: "cron.reminders" });
+    expect(cron.filter((l) => l.message === "cron.failed")).toEqual([]);
+    expectNothingSensitive();
+  });
+
+  it("still rethrows a real failure in the same run", async () => {
+    const failure = new DomainFailure();
+    jobs.reminders.mockRejectedValueOnce(d1BusyError());
+    jobs.coachAsk.mockRejectedValueOnce(failure);
+    await expect(worker.scheduled(controller, env("staging"))).rejects.toBe(failure);
   });
 });
 

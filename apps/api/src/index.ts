@@ -15,6 +15,7 @@ import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
 import { fail, ok } from "./lib/envelope";
 import { wrapWithSentry } from "./lib/sentry";
+import { D1_IMPORT_BUSY_RETRY_AFTER_SECONDS, isD1ImportBusyError } from "./lib/d1-busy";
 import { EmailNotConfiguredError, EmailSendError } from "./lib/email";
 import { writeStructuredLog, type SafeLogFields } from "./lib/log";
 import { errorLogFields } from "./domain/reminders";
@@ -219,6 +220,22 @@ function knownProviderFailure(err: unknown): { status: 502 | 503; code: string; 
 app.onError((err, c) => {
   // Safe fields only: never err.message, stacks, bodies or the raw URL.
   const actor = c.get("actor");
+  if (isD1ImportBusyError(err)) {
+    // A D1 import (the nightly QA seed on staging) is running: the query never
+    // ran and the database is back within about a minute. See lib/d1-busy.ts.
+    writeStructuredLog({
+      level: "warn",
+      message: "d1.import_busy",
+      requestId: c.get("requestId"),
+      method: c.req.method,
+      path: routePattern(c),
+      status: 503,
+      ...(actor?.userId ? { actorUserId: actor.userId } : {}),
+      ...errorLogFields(err),
+    });
+    c.header("Retry-After", String(D1_IMPORT_BUSY_RETRY_AFTER_SECONDS));
+    return fail(c, 503, "DATABASE_BUSY", "The service is busy for a moment. Try again shortly.");
+  }
   const known = knownProviderFailure(err);
   writeStructuredLog({
     level: "error",
@@ -261,7 +278,8 @@ app.onError((err, c) => {
 /**
  * Runs every cron job even when an earlier one throws, logging one line per job
  * (operation, latencyMs, errorName on failure). Rethrows the first failure at the
- * end so the platform still records the run as failed.
+ * end so the platform still records the run as failed. A job refused because a
+ * D1 import holds the database is logged as a warning and not rethrown.
  */
 async function runScheduledJobs(jobs: Array<[operation: string, run: () => Promise<unknown>]>): Promise<void> {
   let firstFailure: unknown;
@@ -272,6 +290,17 @@ async function runScheduledJobs(jobs: Array<[operation: string, run: () => Promi
       await run();
       writeStructuredLog({ level: "info", message: "cron.completed", operation, latencyMs: Date.now() - started });
     } catch (error) {
+      if (isD1ImportBusyError(error)) {
+        // A D1 import holds the database; the next tick (5 minutes) runs this job again.
+        writeStructuredLog({
+          level: "warn",
+          message: "cron.skipped_d1_import_busy",
+          operation,
+          latencyMs: Date.now() - started,
+          ...errorLogFields(error),
+        });
+        continue;
+      }
       writeStructuredLog({
         level: "error",
         message: "cron.failed",

@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/cloudflare";
 import type { CloudflareOptions, ErrorEvent } from "@sentry/cloudflare";
 import type { Env } from "../types";
+import { isD1ImportBusyText } from "./d1-busy";
 
 /**
  * Worker crash reporting (BT2).
@@ -257,6 +258,22 @@ export function scrubSentryEvent<T extends SentryScrubTarget>(event: T): T {
 }
 
 /**
+ * D1's "Currently processing a long-running import" refusal (see d1-busy.ts) is
+ * transient and answered with a 503. File every occurrence, whatever the route,
+ * as ONE warning issue so it stays visible without an error issue per route.
+ */
+export function markD1ImportBusy<T extends { exception?: SentryScrubTarget["exception"]; level?: unknown; fingerprint?: unknown }>(
+  event: T,
+): T {
+  const values = event.exception?.values ?? [];
+  if (values.some((value) => isD1ImportBusyText(value?.value))) {
+    event.level = "warning";
+    event.fingerprint = ["d1-import-busy"];
+  }
+  return event;
+}
+
+/**
  * SDK options for one request. No DSN means the client does not send.
  * `enabled: false` is required when reporting is off: `@sentry/cloudflare`
  * fills `dsn` back in from `env.SENTRY_DSN` when our value is undefined, and
@@ -273,7 +290,7 @@ export function sentryOptions(env: Env): CloudflareOptions {
     tracesSampleRate: 0,
     sendDefaultPii: false,
     beforeSend(event: ErrorEvent) {
-      return scrubSentryEvent(event as SentryScrubTarget) as ErrorEvent;
+      return markD1ImportBusy(scrubSentryEvent(event as SentryScrubTarget) as ErrorEvent);
     },
     beforeBreadcrumb(breadcrumb) {
       return scrubBreadcrumb(breadcrumb);
