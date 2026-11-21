@@ -73,11 +73,13 @@ describe("packageNameOf", () => {
 });
 
 describe("mobile package.json", () => {
-  it("lists expo-modules-core and not expo-keep-awake (native, held for the Expo upgrade)", () => {
+  it("lists expo-modules-core and the Z12-57 native direct deps", () => {
     const pkg = JSON.parse(
       readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), "../package.json"), "utf8"),
     );
     expect(pkg.dependencies["expo-modules-core"]).toBeDefined();
-    expect(pkg.dependencies["expo-keep-awake"]).toBeUndefined();
+    expect(pkg.dependencies["expo-keep-awake"]).toBeDefined();
+    expect(pkg.dependencies["expo-haptics"]).toBeDefined();
+    expect(pkg.dependencies["@react-native-community/netinfo"]).toBeDefined();
   });
 });

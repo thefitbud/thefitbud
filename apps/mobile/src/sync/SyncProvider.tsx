@@ -10,9 +10,17 @@ import { useAuth } from "../auth/AuthProvider";
 import { isForegroundAppState, onApiActivity } from "../lib/api";
 import { reportError } from "../lib/reportError";
 import { createSyncEngine, type SyncEngine } from "./engine";
-import { createReachability, type Reachability } from "./reachability";
+import { installNetInfoReachability } from "./netInfoReachability";
+import {
+  createReachability,
+  setReachabilityFactory,
+  type Reachability,
+} from "./reachability";
 import { startSyncTriggers } from "./triggers";
 import { syncStoreForUser } from "./userStore";
+
+// Z12-57: NetInfo drives reconnect; the /health probe still has the last word.
+installNetInfoReachability(setReachabilityFactory);
 
 const SyncContext = createContext<SyncEngine | null>(null);
 const ReachabilityContext = createContext<Reachability | null>(null);
