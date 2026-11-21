@@ -57,7 +57,14 @@ describe("steps native config (D-W9-6)", () => {
     ]);
     expect(config.plugins.find((p) => pluginName(p) === "expo-build-properties")).toEqual([
       "expo-build-properties",
-      { android: { minSdkVersion: 26 } },
+      {
+        android: {
+          minSdkVersion: 26,
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
+          buildToolsVersion: "36.0.0",
+        },
+      },
     ]);
     expect(config.android.permissions).toContain("android.permission.health.READ_STEPS");
   });
