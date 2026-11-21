@@ -61,6 +61,7 @@ import { ClientLogWorkoutScreen } from "./clientlog/ClientLogWorkoutScreen";
 import { ClientLogMealScreen } from "./clientlog/meal/ClientLogMealScreen";
 import { ClientLogMeasurementScreen } from "./clientlog/measurement/ClientLogMeasurementScreen";
 import { dateStrip } from "./clientlog/model";
+import { DietDayReviewScreen } from "./diet/DietDayReviewScreen";
 import { formatAttentionAge } from "./attentionCards";
 import { clientStatusApi } from "./clientStatus/api";
 import { ClientInfoScreen } from "./clientStatus/ClientInfoScreen";
@@ -149,6 +150,7 @@ export function ClientStatusScreen({
   const [acting, setActing] = useState(false);
   const [logging, setLogging] = useState<{ date?: string; assignmentId?: string } | null>(null);
   const [loggingOther, setLoggingOther] = useState<"meal" | "measurement" | null>(null);
+  const [dietDayOpen, setDietDayOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logPickOpen, setLogPickOpen] = useState(false);
@@ -446,6 +448,21 @@ export function ClientStatusScreen({
         onSaved={(message) => {
           setLoggingOther(null);
           setToast(message);
+          void load();
+        }}
+      />
+    );
+  }
+
+  if (dietDayOpen) {
+    return (
+      <DietDayReviewScreen
+        relationshipId={relationshipId}
+        displayName={header?.traineeDisplayName || displayName}
+        clientZone={clientZone}
+        whatsappE164={header?.clientWhatsappE164}
+        onBack={() => {
+          setDietDayOpen(false);
           void load();
         }}
       />
@@ -830,9 +847,7 @@ export function ClientStatusScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Review day"
-              onPress={() =>
-                setToast("Diet day review opens after the meal review lands")
-              }
+              onPress={() => setDietDayOpen(true)}
               style={styles.reviewDay}
             >
               <Text style={styles.link}>Review day</Text>

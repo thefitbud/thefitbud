@@ -1,0 +1,86 @@
+appId: com.thefitbud.mobile.staging
+name: F23 Coach reviews a check-in (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+---
+# F23 (Z12-53): Check-ins inbox → open a submitted check-in → reply/mark
+# reviewed. Overdue/reviewed filters when present. Env: QA_TRAINER_EMAIL,
+# QA_PASSWORD. Writes one review on the job's local DB (D-W12-34).
+#
+# Screens: TM-05a, TM-06a, TM-06b, TM-06c; overdue/reviewed when seeded.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- extendedWaitUntil:
+    visible: "Needs you|Clients|Check-ins"
+    timeout: 60000
+- tapOn: "Check-ins"
+- extendedWaitUntil:
+    visible: "Check-ins|To review|Overdue|Reviewed"
+    timeout: 30000
+- takeScreenshot: TM-05a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "Overdue"
+    commands:
+      - tapOn: "Overdue"
+      - takeScreenshot: TM-05b
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "To review|Check-ins"
+
+# Open a submitted row (label varies by client).
+- scrollUntilVisible:
+    element: "Submitted|to review|Open"
+    direction: DOWN
+    timeout: 60000
+- tapOn: "Submitted.*|.*to review.*|Open"
+- extendedWaitUntil:
+    visible: "Mark reviewed|Reply|Save|This week|Last week"
+    timeout: 30000
+- takeScreenshot: TM-06a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "Reply"
+    commands:
+      - tapOn: "Reply"
+      - extendedWaitUntil:
+          visible: "Save|Mark reviewed|Send"
+          timeout: 15000
+      - takeScreenshot: TM-06b
+
+- runFlow:
+    when:
+      visible: "Mark reviewed"
+    commands:
+      - tapOn: "Mark reviewed"
+- runFlow:
+    when:
+      visible: "Save review|Save"
+    commands:
+      - tapOn: "Save review|Save"
+
+- extendedWaitUntil:
+    visible: "Undo|Check-ins|Reviewed"
+    timeout: 15000
+- takeScreenshot: TM-06c
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "Reviewed"
+    commands:
+      - tapOn: "Reviewed"
+      - takeScreenshot: TM-05e
+      - runFlow: ../../common/assert-no-crash.yaml

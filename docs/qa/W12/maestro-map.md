@@ -33,12 +33,12 @@ Created by Z12-32 (planning, 14 Nov 2026). Source of the flows: `docs/design/v3/
 | F17 | Dual | `flows/v3/F17-role-switch.yaml` | `auth/role-select.yaml` (the demo seed has `karan.dual`, so role select is reachable) | planned |
 | F20 | Trainer | `flows/v3/F20-triage-nudge.yaml` | `trainer/attention.yaml` (inbox and review sheet) | planned |
 | F21 | Trainer | `flows/v3/F21-review-resolve-notes.yaml` | `trainer/attention.yaml` (resolve), `trainer/notes-more.yaml` (note) | planned |
-| F22 | Trainer | `flows/v3/F22-reply-question.yaml` | none (new) | planned |
-| F23 | Trainer | `flows/v3/F23-review-checkin.yaml` | `trainer/checkin-review.yaml` | planned |
-| F24 | Trainer | `flows/v3/F24-session-diet-review.yaml` | none (new) | planned |
-| F25 | Trainer | `flows/v3/F25-clients-activity.yaml` | `trainer/clients.yaml` | planned |
-| F26 | Trainer | `flows/v3/F26-ended-reactivation.yaml` | `trainer/clients.yaml` (client status) | planned |
-| F27 | Trainer | `flows/v3/F27-offline-loading-errors.yaml` | none (new) | planned |
+| F22 | Trainer | `flows/v3/F22-reply-question.yaml` | none (new) | written (Z12-53) |
+| F23 | Trainer | `flows/v3/F23-review-checkin.yaml` | `trainer/checkin-review.yaml` | written (Z12-53) |
+| F24 | Trainer | `flows/v3/F24-session-diet-review.yaml` | none (new) | written (Z12-53) |
+| F25 | Trainer | `flows/v3/F25-clients-activity.yaml` | `trainer/clients.yaml` | written (Z12-53) |
+| F26 | Trainer | `flows/v3/F26-ended-reactivation.yaml` | `trainer/clients.yaml` (client status) | written (Z12-53) |
+| F27 | Trainer | `flows/v3/F27-offline-loading-errors.yaml` | none (new) | written (Z12-53) |
 | F28 | Trainer | `flows/v3/F28-settings-inperson-signout.yaml` | `trainer/notes-more.yaml` (More) | planned |
 | F29 | Trainee | `flows/v3/F29-future-days.yaml` | `trainee/today.yaml` (day navigation) | written (Z12-39) |
 

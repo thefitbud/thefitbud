@@ -1,0 +1,69 @@
+appId: com.thefitbud.mobile.staging
+name: F27 Offline, loading, errors (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+---
+# F27 (Z12-53): loading / empty paths that the device can hit without a cut
+# network. Offline (TM-01f, TM-02f, TM-04h, TM-06e) and hard load errors
+# (TM-01g, TM-03h) need a stubbed API or airplane mode and are covered by the
+# render tests + Expo-web check; Z12-58's phone checklist owns the real-device
+# offline pass. Env: QA_TRAINER_EMAIL, QA_PASSWORD.
+#
+# Screens captured when present: TM-01e (brief), TM-01d (all caught up if the
+# list is empty after reviews), Clients list load.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+
+# Capture Needs you as it settles (loading may flash TM-01e).
+- extendedWaitUntil:
+    visible: "Needs you|Loading|All caught up"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Loading"
+    commands:
+      - takeScreenshot: TM-01e
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
+- takeScreenshot: TM-01a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "All caught up"
+    commands:
+      - takeScreenshot: TM-01d
+      - runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: "Clients|Loading"
+    timeout: 30000
+- takeScreenshot: TM-02a
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Open a live client; a forced error state is not simulated here.
+- scrollUntilVisible:
+    element: "Rohan Mehta.*|Aarav.*"
+    direction: DOWN
+    timeout: 60000
+- tapOn: "Rohan Mehta.*|Aarav.*"
+- extendedWaitUntil:
+    visible: "This week|Couldn't load|Retry|Review day"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Couldn't load|Retry"
+    commands:
+      - takeScreenshot: TM-03h
+- runFlow: ../../common/assert-no-crash.yaml

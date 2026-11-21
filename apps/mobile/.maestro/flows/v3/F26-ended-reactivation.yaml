@@ -1,0 +1,63 @@
+appId: com.thefitbud.mobile.staging
+name: F26 Ended client and reactivation (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+---
+# F26 (Z12-53): Ended filter → Kavya (ended) → Reactivate sheet. Sending the
+# invite writes on the job's local DB. Env: QA_TRAINER_EMAIL, QA_PASSWORD.
+#
+# Screens: TM-02c, TM-03d, TM-03e.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- extendedWaitUntil:
+    visible: "Needs you|Clients"
+    timeout: 60000
+- tapOn: "Clients"
+- extendedWaitUntil:
+    visible: "Clients|Ended"
+    timeout: 30000
+- tapOn: "Ended"
+- extendedWaitUntil:
+    visible: "Ended|Kavya|read only"
+    timeout: 30000
+- takeScreenshot: TM-02c
+- runFlow: ../../common/assert-no-crash.yaml
+
+- scrollUntilVisible:
+    element: "Kavya.*"
+    direction: DOWN
+    timeout: 60000
+- tapOn: "Kavya.*"
+- extendedWaitUntil:
+    visible: "Reactivate|ended|Coaching ended"
+    timeout: 30000
+- takeScreenshot: TM-03d
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "Reactivate.*"
+- extendedWaitUntil:
+    visible: "Send invite|Reactivate|Cancel"
+    timeout: 20000
+- takeScreenshot: TM-03e
+- runFlow: ../../common/assert-no-crash.yaml
+# Leave the sheet without sending when a prior theme already invited.
+- runFlow:
+    when:
+      visible: "Cancel"
+    commands:
+      - tapOn: "Cancel"
+- runFlow:
+    when:
+      visible: "Dismiss|Close"
+    commands:
+      - tapOn: "Dismiss|Close"
+- runFlow: ../../common/assert-no-crash.yaml
