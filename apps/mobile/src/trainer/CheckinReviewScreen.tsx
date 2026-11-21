@@ -51,6 +51,8 @@ import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 type Props = {
   checkinId: string;
   relationshipId: string;
+  /** Inbox/list name so the header does not flash "Client" / CL (iOS TM-06a). */
+  displayName?: string;
   onBack: (relationshipId?: string) => void;
   onOpenClient: (relationshipId: string) => void;
 };
@@ -58,6 +60,7 @@ type Props = {
 export function CheckinReviewScreen({
   checkinId,
   relationshipId,
+  displayName,
   onBack,
 }: Props) {
 
@@ -67,7 +70,9 @@ export function CheckinReviewScreen({
   // D-W3b-11 (b): trainer screens display in the device zone (resolver).
   const zone = deviceTimeZone();
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
-  const [name, setName] = useState("Client");
+  const [name, setName] = useState(
+    displayName ? formatPersonName(displayName) : "Client",
+  );
   const [note, setNote] = useState("");
   const [alsoMarkReviewed, setAlsoMarkReviewed] = useState(true);
   const [replyOpen, setReplyOpen] = useState(false);
@@ -100,7 +105,10 @@ export function CheckinReviewScreen({
           );
         } catch (workspaceError) {
           reportError("checkinReview.workspace", workspaceError);
-          setName("Client");
+          // Keep inbox/list name if workspace fails — do not wipe to "Client".
+          if (displayName) {
+            setName(formatPersonName(displayName));
+          }
         }
       }
       setOffline(false);
@@ -120,7 +128,7 @@ export function CheckinReviewScreen({
     } finally {
       setLoading(false);
     }
-  }, [api, checkinId, relationshipId, name]);
+  }, [api, checkinId, relationshipId, displayName, name]);
 
   useEffect(() => {
     void load();
@@ -326,6 +334,7 @@ export function CheckinReviewScreen({
       }}
       footer={footer}
     >
+      <View testID={loading ? "checkin-loading" : "checkin-loaded"} />
       <View style={styles.nav}>
         <Pressable
           accessibilityRole="button"
@@ -375,7 +384,10 @@ export function CheckinReviewScreen({
           {subtitle ? <Text style={styles.meta}>{subtitle}</Text> : null}
           <View style={styles.chipRow}>
             {reviewed ? (
-              <View style={[styles.chip, styles.chipReviewed]}>
+              <View
+                testID="checkin-reviewed"
+                style={[styles.chip, styles.chipReviewed]}
+              >
                 <Check color={theme.colors.done} size={13} strokeWidth={2.6} />
                 <Text style={[styles.chipText, { color: theme.colors.done }]}>
                   {savedReview
@@ -460,8 +472,8 @@ export function CheckinReviewScreen({
         <View style={styles.card}>
           <View style={styles.tableHead}>
             <Text style={styles.tableHeadLabel}>This week</Text>
-            <Text style={styles.tableCol}>Last</Text>
-            <Text style={styles.tableCol}>Now</Text>
+            <Text style={[styles.tableCol, styles.tableLast]}>Last</Text>
+            <Text style={[styles.tableCol, styles.tableNow]}>Now</Text>
           </View>
           {rows.measures.map((item) => (
             <MeasureRow key={item.fieldId} item={item} />
@@ -469,14 +481,14 @@ export function CheckinReviewScreen({
           {rows.ratings.map((item) => (
             <View key={item.fieldId} style={styles.tableRow}>
               <Text style={styles.tableLabel}>{item.label}</Text>
-              <Text style={styles.tableLast}>–</Text>
+              <Text style={styles.tableLast}>—</Text>
               <Text style={styles.tableNow}>{`${item.value} / 5`}</Text>
             </View>
           ))}
           {context ? (
             <View style={styles.tableRow}>
               <Text style={styles.tableLabel}>Workouts</Text>
-              <Text style={styles.tableLast}>–</Text>
+              <Text style={styles.tableLast}>—</Text>
               <Text style={styles.tableNow}>
                 {`${workoutNow} of ${workoutTotal}`}
               </Text>
@@ -593,8 +605,12 @@ export function CheckinReviewScreen({
             <View pointerEvents="none">
               <Switch
                 value={alsoMarkReviewed}
-                trackColor={{ false: "#E7E9F2", true: theme.colors.done }}
+                trackColor={{
+                  false: theme.colors.fill2,
+                  true: theme.colors.done,
+                }}
                 thumbColor={theme.colors.card}
+                ios_backgroundColor={theme.colors.fill2}
               />
             </View>
           </Pressable>
@@ -613,7 +629,7 @@ function MeasureRow({ item }: { item: ReviewMeasureTile }) {
   const last =
     item.since != null
       ? `${Number((item.value - item.since.delta).toFixed(1))} ${item.unit}`
-      : "–";
+      : "—";
   const delta =
     item.since != null ? (
       <Text
@@ -728,7 +744,6 @@ const useStyles = createThemedStyles((t) => ({
     letterSpacing: 0.6,
     textAlign: "right",
     textTransform: "uppercase",
-    width: 72,
   },
   tableRow: {
     alignItems: "center",
@@ -743,18 +758,19 @@ const useStyles = createThemedStyles((t) => ({
     color: t.colors.ink3,
     fontSize: 14,
     textAlign: "right",
-    width: 72,
+    width: 56,
   },
   tableNow: {
     color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 15,
     textAlign: "right",
+    width: 88,
   },
   nowCell: {
     alignItems: "flex-end",
     gap: 2,
-    width: 72,
+    width: 88,
   },
   delta: { fontFamily: fontFamilySemiBold, fontSize: 12 },
   deltaGood: { color: t.colors.done },

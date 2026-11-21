@@ -274,6 +274,9 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
     try {
       await api.acknowledgeException(exceptionId, {}, ackKey.current);
       ackKey.current = null;
+      // Clear acting before reload so TM-04e Resolve/Nudge are not left disabled
+      // while the reviewed banner is already visible (device capture 44908820584).
+      setActing(false);
       await load();
     } catch (err) {
       if (isNetworkFailure(err)) {
@@ -286,7 +289,6 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           userFacingMessage(err, { fallback: "Could not mark reviewed. (ACK-ERR)" }),
         );
       }
-    } finally {
       setActing(false);
     }
   }

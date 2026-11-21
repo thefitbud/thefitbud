@@ -41,6 +41,8 @@ type Overlay =
       kind: "checkin";
       checkinId: string;
       relationshipId: string;
+      /** Inbox/list name so TM-06a does not flash "Client" / CL before workspace loads. */
+      displayName?: string;
       // Opened from a push with no screen below it: Back goes to the client page.
       cold?: boolean;
     }
@@ -161,6 +163,9 @@ function TrainerShellBody() {
       kind: "checkin",
       checkinId: item.checkin.id,
       relationshipId: item.coachingRelationshipId,
+      displayName: item.traineeDisplayName
+        ? formatPersonName(item.traineeDisplayName)
+        : undefined,
     });
   }
 
@@ -290,6 +295,7 @@ function TrainerShellBody() {
             kind: "checkin",
             checkinId,
             relationshipId: overlay.relationshipId,
+            displayName: overlay.displayName,
           })
         }
       />
@@ -302,6 +308,7 @@ function TrainerShellBody() {
         key={refreshNonce}
         checkinId={overlay.checkinId}
         relationshipId={overlay.relationshipId}
+        displayName={overlay.displayName}
         onBack={goBack}
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />

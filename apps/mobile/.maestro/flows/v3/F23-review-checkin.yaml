@@ -5,9 +5,8 @@ tags:
   - trainer
   - z12-53
 ---
-# F23 (Z12-53): Check-ins inbox → open row → reply (type text) → Send by id →
-# mark reviewed. Device run 44898344946: composer opened but Send stayed disabled
-# because the flow never typed.
+# F23: type a reply, Send by id, then assert checkin-reviewed (not partial
+# "Reply sent|Undo|…" — Maestro matches the full string).
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -22,9 +21,8 @@ tags:
     id: "tab-checkins"
 - extendedWaitUntil:
     visible:
-      id: "checkins-screen"
-    timeout: 30000
-- assertVisible: "Check-ins"
+      id: "checkins-loaded"
+    timeout: 60000
 - takeScreenshot: TM-05a
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -47,16 +45,17 @@ tags:
 - tapOn:
     id: "checkin-row"
 - extendedWaitUntil:
-    visible: "Mark reviewed|Reply|Save|This week|Last week"
-    timeout: 30000
+    visible:
+      id: "checkin-loaded"
+    timeout: 60000
 - takeScreenshot: TM-06a
 - runFlow: ../../common/assert-no-crash.yaml
 
 - runFlow:
     when:
-      visible: "Reply"
+      visible: ".*Reply.*"
     commands:
-      - tapOn: "Reply"
+      - tapOn: ".*Reply.*"
       - extendedWaitUntil:
           visible:
             id: "checkin-reply-input"
@@ -67,24 +66,23 @@ tags:
       - takeScreenshot: TM-06b
       - tapOn:
           id: "checkin-reply-send"
-      - extendedWaitUntil:
-          visible: "Reply sent|Undo|Mark reviewed|Check-ins"
-          timeout: 20000
 
 - runFlow:
     when:
-      visible: "Mark reviewed"
+      visible: ".*Mark reviewed.*"
     commands:
-      - tapOn: "Mark reviewed"
+      - tapOn: ".*Mark reviewed.*"
 - runFlow:
     when:
-      visible: "Save review|Save"
+      visible: ".*Save review.*|.*^Save$"
     commands:
-      - tapOn: "Save review|Save"
+      - tapOn: ".*Save review.*|.*^Save$"
 
 - extendedWaitUntil:
-    visible: "Undo|Check-ins|Reviewed|Reply sent"
-    timeout: 15000
+    visible:
+      id: "checkin-reviewed"
+    timeout: 20000
+- assertVisible: ".*Your reply.*|.*Reviewed.*"
 - takeScreenshot: TM-06c
 - runFlow: ../../common/assert-no-crash.yaml
 

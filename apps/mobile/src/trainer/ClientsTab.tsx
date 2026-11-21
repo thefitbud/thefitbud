@@ -542,6 +542,7 @@ export function ClientsTab({
         void load().finally(() => setRefreshing(false));
       }}
     >
+      <View testID={loading ? "clients-loading" : "clients-loaded"}>
       {searchOpen ? (
         <SearchBar
           inputRef={searchRef}
@@ -561,13 +562,15 @@ export function ClientsTab({
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
+          removeClippedSubviews={false}
           style={styles.filtersScroll}
           contentContainerStyle={styles.filters}
         >
           {FILTERS.map((item) => {
             const count = countFor(item.id);
+            // No count while loading — "All 0" reads as empty roster (iOS TM-02a).
             const label =
-              count == null ? item.label : `${item.label} ${count}`;
+              loading || count == null ? item.label : `${item.label} ${count}`;
             const selected = chip === item.id;
             return (
               <Pressable
@@ -722,6 +725,7 @@ export function ClientsTab({
           Invite new clients on FitBud web.
         </Text>
       ) : null}
+      </View>
     </Screen>
   );
 }

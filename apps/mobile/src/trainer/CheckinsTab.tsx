@@ -225,6 +225,7 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
         <Text style={styles.eyebrow}>{formatCivilDate(today)}</Text>
       )}
       <View testID="checkins-screen">
+      <View testID={loading ? "checkins-loading" : "checkins-loaded"} />
       <Text style={styles.title} accessibilityRole="header">
         Check-ins
       </Text>
