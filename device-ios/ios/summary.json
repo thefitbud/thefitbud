@@ -1,0 +1,119 @@
+{
+  "platform": "ios",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "full in 1728 s",
+      "mode": "full",
+      "seconds": 1728,
+      "cacheKey": "device-native-ios-8c704f4e3598db2e884238da353790cc45baefb0"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.914 (5), dark 0.628 (5)",
+      "light": 0.914,
+      "dark": 0.628,
+      "count": {
+        "light": 5,
+        "dark": 5
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.162
+        },
+        {
+          "file": "launch-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.801
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.949
+        },
+        {
+          "file": "launch-trainer-attention-light-ios.png",
+          "theme": "light",
+          "luma": 0.949
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.161
+        },
+        {
+          "file": "step-023-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.954
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.933
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-light-ios.png",
+          "theme": "light",
+          "luma": 0.933
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.933
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-light-ios.png",
+          "theme": "light",
+          "luma": 0.933
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

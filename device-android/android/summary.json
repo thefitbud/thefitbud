@@ -1,0 +1,120 @@
+{
+  "platform": "android",
+  "status": "pass",
+  "reasons": [],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 0,
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 0,
+      "total": 2,
+      "passed": 2,
+      "failed": 0,
+      "skipped": 0,
+      "failures": [],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 11s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 11s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "full in 500 s",
+      "mode": "full",
+      "seconds": 500,
+      "cacheKey": "device-native-android-db89a438ed071741fff2bacfedf5090be8dc282e"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.893 (4), dark 0.738 (4)",
+      "light": 0.893,
+      "dark": 0.738,
+      "count": {
+        "light": 4,
+        "dark": 4
+      },
+      "shots": [
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.161
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.782
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.93
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.93
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-dark-android.png",
+          "theme": "dark",
+          "luma": 0.93
+        },
+        {
+          "file": "step-024-assertCondition-today-summary-light-android.png",
+          "theme": "light",
+          "luma": 0.93
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.93
+        },
+        {
+          "file": "step-025-assertCondition-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.93
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

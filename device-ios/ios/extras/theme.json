@@ -1,0 +1,62 @@
+{
+  "result": "mean screenshot luminance: light 0.914 (5), dark 0.628 (5)",
+  "light": 0.914,
+  "dark": 0.628,
+  "count": {
+    "light": 5,
+    "dark": 5
+  },
+  "shots": [
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.162
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.801
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.949
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.949
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.161
+    },
+    {
+      "file": "step-023-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.954
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-024-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.933
+    },
+    {
+      "file": "step-025-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    }
+  ],
+  "w03DarkTooBright": []
+}
