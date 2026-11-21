@@ -25,6 +25,8 @@ Workspace packages export `./dist`, which is gitignored. EAS runs `eas-build-pos
 
 **iOS build image (Z12-62d):** Apple requires the iOS 26 SDK (Xcode 26+) for App Store Connect uploads (ITMS-90725). Expo SDK 52’s default EAS image is still Xcode 16.2. Every profile `extends` `base`, which sets `ios.image` to `macos-sequoia-15.6-xcode-26.2` (Xcode 26.2). We stayed on SDK 52 rather than upgrading to SDK 54+; if that image fails to compile native modules, the next step is the smallest Expo SDK bump that defaults to Xcode 26.
 
+**Android target API (Z12-62e):** Play requires `targetSdkVersion` ≥ 36. `expo-build-properties` sets `compileSdkVersion` / `targetSdkVersion` 36 and `buildToolsVersion` `36.0.0` (minSdk stays 26 for Health Connect). Still on Expo SDK 52 — no SDK upgrade. Targeting 35+ enables Android edge-to-edge; most screens use `SafeAreaView` / `StatusBar.currentHeight`, but custom header screens need a device check after the next staging-store build.
+
 **HealthKit / other purpose strings (Z12-62d):** both `NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescription` are set (runtime stays read-only; omitting update fails ITMS-90683). `expo-av` sets `microphonePermission: false` (playback only for rest-end sound). `expo-secure-store` sets `faceIDPermission: false` (session tokens, no Face ID).
 
 ## One-time console setup

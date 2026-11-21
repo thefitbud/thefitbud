@@ -98,10 +98,20 @@ const HEALTHKIT_PLUGIN = [
 ];
 
 /**
- * Health Connect needs Android API 26; SDK 52 defaults to 24. Compile and
- * target SDK stay SDK 52's.
+ * Health Connect needs Android API 26; SDK 52 defaults to minSdk 24.
+ * Play requires target/compile ≥ 36 (Z12-62e); keep minSdk 26 for Health Connect.
  */
-const BUILD_PROPERTIES_PLUGIN = ["expo-build-properties", { android: { minSdkVersion: 26 } }];
+const BUILD_PROPERTIES_PLUGIN = [
+  "expo-build-properties",
+  {
+    android: {
+      minSdkVersion: 26,
+      compileSdkVersion: 36,
+      targetSdkVersion: 36,
+      buildToolsVersion: "36.0.0",
+    },
+  },
+];
 
 const READ_STEPS_PERMISSION = "android.permission.health.READ_STEPS";
 /** Needed by expo-haptics and the Vibration fallback (Z12-45 / Z12-57). */
