@@ -125,6 +125,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-46 #483 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-46-today-progress -f flows=launch,z12-46,z12-38` | **PASS** [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) on `fcbdcd52` (FitBud UI, 71 shots) |
 | Z12-44fu #485 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=claude/Z12-44-flows-weekday -f flows=launch,z12-44,device/z12-36/3-trainee-workout.yaml` | **running** [44517473406](https://github.com/thefitbud/thefitbud/actions/runs/44517473406) on `7ebc8642` (FitBud, 19 Nov 2026 ~17:14 IST). Prior FAIL [44501381102](https://github.com/thefitbud/thefitbud/actions/runs/44501381102). Hold merge; no pushes unless main red. |
 | Z12-46fu #497 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-46fu-pixel-db78 -f flows=launch,z12-46` | 19 Nov 2026 ~14:05 IST (`7c0a4f37`, CI green) |
+| Z12-61 #521 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-61-v3-flows-db78 -f flows=v3` | tip `c615e1dc`; product findings 1–5; wait FitBud device run |
 | Z12-62 Logo #502 | `gh workflow run device.yml -R thefitbud/thefitbud --ref main -f ref=cursor/z12-62-logo-db78 -f flows=launch,z12-49` | merging main to clear DIRTY (19 Nov ~18:58 IST); post new tip when CI green. Prior [44497557237](https://github.com/thefitbud/thefitbud/actions/runs/44497557237) logo PASS + size/harness must-fix on `56045a9c` |
 ## Done when (Cursor side)
 
