@@ -1,0 +1,58 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 233AA42C-3A91-4EB5-B98E-AD4C2519F46E" tests="10" failures="3" time="1373.446" timestamp="2026-11-21T21:13:30">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="91.663" timestamp="2026-11-21T21:13:30" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="82.106" timestamp="2026-11-21T21:15:02" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+    </testcase>
+    <testcase id="F20 Trainer nudges a client as a FitBud push (Z12-50)" name="F20 Trainer nudges a client as a FitBud push (Z12-50)" classname="F20 Trainer nudges a client as a FitBud push (Z12-50)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F20-triage-nudge.yaml" time="249.164" timestamp="2026-11-21T21:16:24" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-50"/>
+      </properties>
+    </testcase>
+    <testcase id="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" name="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" classname="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F21-review-resolve-notes.yaml" time="218.246" timestamp="2026-11-21T21:20:33" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-51"/>
+      </properties>
+    </testcase>
+    <testcase id="F22 Coach replies to a question (Z12-53)" name="F22 Coach replies to a question (Z12-53)" classname="F22 Coach replies to a question (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F22-reply-question.yaml" time="119.206" timestamp="2026-11-21T21:24:12" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>Assertion is false: id: ask-detail is visible</failure>
+    </testcase>
+    <testcase id="F23 Coach reviews a check-in (Z12-53)" name="F23 Coach reviews a check-in (Z12-53)" classname="F23 Coach reviews a check-in (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F23-review-checkin.yaml" time="137.223" timestamp="2026-11-21T21:26:11" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+    </testcase>
+    <testcase id="F24 Coach reviews a session and a diet day (Z12-53)" name="F24 Coach reviews a session and a diet day (Z12-53)" classname="F24 Coach reviews a session and a diet day (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F24-session-diet-review.yaml" time="102.97" timestamp="2026-11-21T21:28:28" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>Element not found: Text matching regex: .*Back.*|.*‹.*</failure>
+    </testcase>
+    <testcase id="F25 Clients, activity and client detail (Z12-53)" name="F25 Clients, activity and client detail (Z12-53)" classname="F25 Clients, activity and client detail (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F25-clients-activity.yaml" time="143.487" timestamp="2026-11-21T21:30:11" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+    </testcase>
+    <testcase id="F26 Ended client and reactivation (Z12-53)" name="F26 Ended client and reactivation (Z12-53)" classname="F26 Ended client and reactivation (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F26-ended-reactivation.yaml" time="98.91" timestamp="2026-11-21T21:32:35" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>No visible element found: id: clients-filter-ended</failure>
+    </testcase>
+    <testcase id="F27 Offline, loading, errors (Z12-53)" name="F27 Offline, loading, errors (Z12-53)" classname="F27 Offline, loading, errors (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F27-offline-loading-errors.yaml" time="130.159" timestamp="2026-11-21T21:34:14" status="SUCCESS">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+    </testcase>
+  </testsuite>
+</testsuites>

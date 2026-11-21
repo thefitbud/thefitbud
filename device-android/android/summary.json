@@ -1,0 +1,483 @@
+{
+  "platform": "android",
+  "status": "fail",
+  "reasons": [
+    "light: 3 of 10 flows failed",
+    "dark: 3 of 10 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml",
+    "flows/v3/F21-review-resolve-notes.yaml",
+    "flows/v3/F22-reply-question.yaml",
+    "flows/v3/F23-review-checkin.yaml",
+    "flows/v3/F24-session-diet-review.yaml",
+    "flows/v3/F25-clients-activity.yaml",
+    "flows/v3/F26-ended-reactivation.yaml",
+    "flows/v3/F27-offline-loading-errors.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 7,
+      "failed": 3,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "message": "Assertion is false: id: more-sheet is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Assertion is false: \"rahul.coach@demo.fitbud.test\" is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "No visible element found: id: clients-filter-ended",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 7,
+      "failed": 3,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "message": "Assertion is false: id: more-sheet is visible",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Element not found: Text matching regex: .*Back.*|.*‹.*",
+          "notRetried": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "No visible element found: id: clients-filter-ended",
+          "notRetried": "not an infrastructure failure"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": [
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "reason": "not an infrastructure failure"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "reason": "not an infrastructure failure"
+        }
+      ],
+      "recoveredByRetry": false
+    }
+  ],
+  "scan": {
+    "platform": "android",
+    "files": [
+      "android-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "adb.json",
+      "outcome": "steady",
+      "logcatReconnects": 0,
+      "waits": [
+        "boot: steady for 8 checks after 9s (0 drop(s) seen)",
+        "theme light: steady for 8 checks after 8s (0 drop(s) seen)",
+        "retry (light): steady for 8 checks after 7s (0 drop(s) seen)",
+        "theme dark: steady for 8 checks after 7s (0 drop(s) seen)",
+        "retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+      ],
+      "note": "logcat stream restarted 0 time(s); boot: steady for 8 checks after 9s (0 drop(s) seen); theme light: steady for 8 checks after 8s (0 drop(s) seen); retry (light): steady for 8 checks after 7s (0 drop(s) seen); theme dark: steady for 8 checks after 7s (0 drop(s) seen); retry (dark): steady for 8 checks after 8s (0 drop(s) seen)"
+    },
+    {
+      "file": "build.json",
+      "result": "cache-hit in 57 s",
+      "mode": "cache-hit",
+      "seconds": 57,
+      "cacheKey": "device-native-android-db89a438ed071741fff2bacfedf5090be8dc282e"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light 0.882 (32), dark 0.119 (34)",
+      "light": 0.882,
+      "dark": 0.119,
+      "count": {
+        "light": 32,
+        "dark": 34
+      },
+      "shots": [
+        {
+          "file": "TM-01a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "TM-01a-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "TM-01a2-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "TM-02a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.109
+        },
+        {
+          "file": "TM-02a-light-android.png",
+          "theme": "light",
+          "luma": 0.925
+        },
+        {
+          "file": "TM-03a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.121
+        },
+        {
+          "file": "TM-03a-light-android.png",
+          "theme": "light",
+          "luma": 0.926
+        },
+        {
+          "file": "TM-03f-dark-android.png",
+          "theme": "dark",
+          "luma": 0.086
+        },
+        {
+          "file": "TM-03f-light-android.png",
+          "theme": "light",
+          "luma": 0.939
+        },
+        {
+          "file": "TM-03i-dark-android.png",
+          "theme": "dark",
+          "luma": 0.084
+        },
+        {
+          "file": "TM-03i-light-android.png",
+          "theme": "light",
+          "luma": 0.738
+        },
+        {
+          "file": "TM-03j-dark-android.png",
+          "theme": "dark",
+          "luma": 0.13
+        },
+        {
+          "file": "TM-03j-light-android.png",
+          "theme": "light",
+          "luma": 0.682
+        },
+        {
+          "file": "TM-04a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "TM-04a-light-android.png",
+          "theme": "light",
+          "luma": 0.909
+        },
+        {
+          "file": "TM-04b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.135
+        },
+        {
+          "file": "TM-04b-light-android.png",
+          "theme": "light",
+          "luma": 0.675
+        },
+        {
+          "file": "TM-04n-dark-android.png",
+          "theme": "dark",
+          "luma": 0.109
+        },
+        {
+          "file": "TM-04n-light-android.png",
+          "theme": "light",
+          "luma": 0.74
+        },
+        {
+          "file": "TM-04o-dark-android.png",
+          "theme": "dark",
+          "luma": 0.149
+        },
+        {
+          "file": "TM-04o-light-android.png",
+          "theme": "light",
+          "luma": 0.711
+        },
+        {
+          "file": "TM-05a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.111
+        },
+        {
+          "file": "TM-05a-light-android.png",
+          "theme": "light",
+          "luma": 0.935
+        },
+        {
+          "file": "TM-05b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.093
+        },
+        {
+          "file": "TM-05b-light-android.png",
+          "theme": "light",
+          "luma": 0.935
+        },
+        {
+          "file": "TM-06a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.106
+        },
+        {
+          "file": "TM-06a-light-android.png",
+          "theme": "light",
+          "luma": 0.914
+        },
+        {
+          "file": "TM-06b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.108
+        },
+        {
+          "file": "TM-06b-light-android.png",
+          "theme": "light",
+          "luma": 0.937
+        },
+        {
+          "file": "TM-06c-dark-android.png",
+          "theme": "dark",
+          "luma": 0.094
+        },
+        {
+          "file": "TM-06c-light-android.png",
+          "theme": "light",
+          "luma": 0.926
+        },
+        {
+          "file": "TM-09a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.126
+        },
+        {
+          "file": "TM-09a-light-android.png",
+          "theme": "light",
+          "luma": 0.927
+        },
+        {
+          "file": "TM-09d-dark-android.png",
+          "theme": "dark",
+          "luma": 0.149
+        },
+        {
+          "file": "TM-09d-light-android.png",
+          "theme": "light",
+          "luma": 0.945
+        },
+        {
+          "file": "TM-10a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.112
+        },
+        {
+          "file": "TM-10a-light-android.png",
+          "theme": "light",
+          "luma": 0.917
+        },
+        {
+          "file": "TM-10b-dark-android.png",
+          "theme": "dark",
+          "luma": 0.11
+        },
+        {
+          "file": "TM-10b-light-android.png",
+          "theme": "light",
+          "luma": 0.918
+        },
+        {
+          "file": "TM-11a-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "launch-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.166
+        },
+        {
+          "file": "launch-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.777
+        },
+        {
+          "file": "launch-trainer-attention-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "launch-trainer-attention-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-005-runFlow-light-android.png",
+          "theme": "light",
+          "luma": 0.892
+        },
+        {
+          "file": "step-016-assertCondition-_SIGN_IN_EMAIL-light-android.png",
+          "theme": "light",
+          "luma": 0.892
+        },
+        {
+          "file": "step-026-assertCondition-today-summary-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-026-assertCondition-today-summary-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-027-assertCondition-today-summary-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-027-assertCondition-today-summary-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-027-assertCondition-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-027-assertCondition-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-028-assertCondition-attention-screen-dark-android.png",
+          "theme": "dark",
+          "luma": 0.166
+        },
+        {
+          "file": "step-028-assertCondition-attention-screen-light-android.png",
+          "theme": "light",
+          "luma": 0.777
+        },
+        {
+          "file": "step-028-assertCondition-trainee-today-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-028-assertCondition-trainee-today-light-android.png",
+          "theme": "light",
+          "luma": 0.931
+        },
+        {
+          "file": "step-038-scrollUntilVisible-clients-filter-ended-dark-android.png",
+          "theme": "dark",
+          "luma": 0.116
+        },
+        {
+          "file": "step-038-scrollUntilVisible-clients-filter-ended-light-android.png",
+          "theme": "light",
+          "luma": 0.932
+        },
+        {
+          "file": "step-052-runFlow-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-061-assertCondition-more-sheet-dark-android.png",
+          "theme": "dark",
+          "luma": 0.123
+        },
+        {
+          "file": "step-061-assertCondition-more-sheet-light-android.png",
+          "theme": "light",
+          "luma": 0.909
+        },
+        {
+          "file": "step-070-tapOnElement-Back..-dark-android.png",
+          "theme": "dark",
+          "luma": 0.12
+        },
+        {
+          "file": "step-079-assertCondition-Nudge_sent-dark-android.png",
+          "theme": "dark",
+          "luma": 0.109
+        },
+        {
+          "file": "step-079-assertCondition-Nudge_sent-light-android.png",
+          "theme": "light",
+          "luma": 0.926
+        },
+        {
+          "file": "step-081-assertCondition-You_nudged_._again_tomor-light-android.png",
+          "theme": "light",
+          "luma": 0.926
+        },
+        {
+          "file": "step-170-assertCondition-nudge-preview-dark-android.png",
+          "theme": "dark",
+          "luma": 0.109
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}

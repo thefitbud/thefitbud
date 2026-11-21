@@ -1,0 +1,402 @@
+{
+  "result": "mean screenshot luminance: light 0.878 (43), dark 0.123 (35)",
+  "light": 0.878,
+  "dark": 0.123,
+  "count": {
+    "light": 43,
+    "dark": 35
+  },
+  "shots": [
+    {
+      "file": "TM-01a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "TM-01a-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "TM-01a2-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "TM-01a2-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "TM-01e-light-ios.png",
+      "theme": "light",
+      "luma": 0.963
+    },
+    {
+      "file": "TM-02a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.105
+    },
+    {
+      "file": "TM-02a-light-ios.png",
+      "theme": "light",
+      "luma": 0.962
+    },
+    {
+      "file": "TM-03a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "TM-03a-light-ios.png",
+      "theme": "light",
+      "luma": 0.942
+    },
+    {
+      "file": "TM-03f-light-ios.png",
+      "theme": "light",
+      "luma": 0.959
+    },
+    {
+      "file": "TM-03i-light-ios.png",
+      "theme": "light",
+      "luma": 0.731
+    },
+    {
+      "file": "TM-03j-light-ios.png",
+      "theme": "light",
+      "luma": 0.694
+    },
+    {
+      "file": "TM-04a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.126
+    },
+    {
+      "file": "TM-04a-light-ios.png",
+      "theme": "light",
+      "luma": 0.925
+    },
+    {
+      "file": "TM-04b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.139
+    },
+    {
+      "file": "TM-04b-light-ios.png",
+      "theme": "light",
+      "luma": 0.695
+    },
+    {
+      "file": "TM-04d-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.146
+    },
+    {
+      "file": "TM-04d-light-ios.png",
+      "theme": "light",
+      "luma": 0.744
+    },
+    {
+      "file": "TM-04e-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.137
+    },
+    {
+      "file": "TM-04e-light-ios.png",
+      "theme": "light",
+      "luma": 0.94
+    },
+    {
+      "file": "TM-04f-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.096
+    },
+    {
+      "file": "TM-04f-light-ios.png",
+      "theme": "light",
+      "luma": 0.945
+    },
+    {
+      "file": "TM-04j-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.074
+    },
+    {
+      "file": "TM-04j-light-ios.png",
+      "theme": "light",
+      "luma": 0.74
+    },
+    {
+      "file": "TM-04k-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.182
+    },
+    {
+      "file": "TM-04k-light-ios.png",
+      "theme": "light",
+      "luma": 0.878
+    },
+    {
+      "file": "TM-04m-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "TM-04n-light-ios.png",
+      "theme": "light",
+      "luma": 0.766
+    },
+    {
+      "file": "TM-04o-light-ios.png",
+      "theme": "light",
+      "luma": 0.734
+    },
+    {
+      "file": "TM-05a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.115
+    },
+    {
+      "file": "TM-05a-light-ios.png",
+      "theme": "light",
+      "luma": 0.955
+    },
+    {
+      "file": "TM-05b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.098
+    },
+    {
+      "file": "TM-05b-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "TM-06a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.108
+    },
+    {
+      "file": "TM-06a-light-ios.png",
+      "theme": "light",
+      "luma": 0.933
+    },
+    {
+      "file": "TM-06b-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.187
+    },
+    {
+      "file": "TM-06b-light-ios.png",
+      "theme": "light",
+      "luma": 0.856
+    },
+    {
+      "file": "TM-06c-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.096
+    },
+    {
+      "file": "TM-06c-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "TM-09a-light-ios.png",
+      "theme": "light",
+      "luma": 0.942
+    },
+    {
+      "file": "TM-09d-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "TM-11a-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "TM-11a-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "launch-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.167
+    },
+    {
+      "file": "launch-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.796
+    },
+    {
+      "file": "launch-trainer-attention-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "launch-trainer-attention-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "review-sheet-light-ios.png",
+      "theme": "light",
+      "luma": 0.805
+    },
+    {
+      "file": "review-sheet-nudge-light-ios.png",
+      "theme": "light",
+      "luma": 0.634
+    },
+    {
+      "file": "review-sheet-resolved-light-ios.png",
+      "theme": "light",
+      "luma": 0.781
+    },
+    {
+      "file": "step-026-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-026-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "step-027-assertCondition-today-summary-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-027-assertCondition-today-summary-light-ios.png",
+      "theme": "light",
+      "luma": 0.963
+    },
+    {
+      "file": "step-027-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-027-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.952
+    },
+    {
+      "file": "step-028-assertCondition-attention-screen-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.091
+    },
+    {
+      "file": "step-028-assertCondition-attention-screen-light-ios.png",
+      "theme": "light",
+      "luma": 0.796
+    },
+    {
+      "file": "step-028-assertCondition-trainee-today-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-028-assertCondition-trainee-today-light-ios.png",
+      "theme": "light",
+      "luma": 0.963
+    },
+    {
+      "file": "step-038-scrollUntilVisible-clients-filter-ended-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.149
+    },
+    {
+      "file": "step-038-scrollUntilVisible-clients-filter-ended-light-ios.png",
+      "theme": "light",
+      "luma": 0.907
+    },
+    {
+      "file": "step-052-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-052-runFlow-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "step-053-assertCondition-ask-detail-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.096
+    },
+    {
+      "file": "step-053-assertCondition-ask-detail-light-ios.png",
+      "theme": "light",
+      "luma": 0.957
+    },
+    {
+      "file": "step-070-tapOnElement-Back..-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-070-tapOnElement-Back..-light-ios.png",
+      "theme": "light",
+      "luma": 0.953
+    },
+    {
+      "file": "step-072-runFlow-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-074-assertCondition-Nudge_._about..Send_nudg-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-075-assertCondition-nudge-pick-next-light-ios.png",
+      "theme": "light",
+      "luma": 0.694
+    },
+    {
+      "file": "step-077-assertCondition-Nudge_sent-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.142
+    },
+    {
+      "file": "step-079-assertCondition-You_nudged_._again_tomor-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.142
+    },
+    {
+      "file": "step-081-assertCondition-nudge-preview-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.142
+    },
+    {
+      "file": "step-082-assertCondition-You_nudged_._again_tomor-light-ios.png",
+      "theme": "light",
+      "luma": 0.946
+    },
+    {
+      "file": "step-140-assertCondition-review-sheet-resolve-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-141-assertCondition-exception-review-dark-ios.png",
+      "theme": "dark",
+      "luma": 0.117
+    },
+    {
+      "file": "step-141-assertCondition-exception-review-light-ios.png",
+      "theme": "light",
+      "luma": 0.805
+    }
+  ],
+  "w03DarkTooBright": []
+}
