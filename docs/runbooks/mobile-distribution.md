@@ -23,6 +23,10 @@ Workspace packages export `./dist`, which is gitignored. EAS runs `eas-build-pos
 
 **ASC app ids (Z12-62c):** `eas.json` `submit.*.ios.ascAppId` must be digit literals — EAS does not interpolate `$VARS` there. Staging (FitBud Coach Staging) is `6837745310`; production (FitBud Coach) is `6830533558`. They are not secrets.
 
+**iOS build image (Z12-62d):** Apple requires the iOS 26 SDK (Xcode 26+) for App Store Connect uploads (ITMS-90725). Expo SDK 52’s default EAS image is still Xcode 16.2. Every profile `extends` `base`, which sets `ios.image` to `macos-sequoia-15.6-xcode-26.2` (Xcode 26.2). We stayed on SDK 52 rather than upgrading to SDK 54+; if that image fails to compile native modules, the next step is the smallest Expo SDK bump that defaults to Xcode 26.
+
+**HealthKit / other purpose strings (Z12-62d):** both `NSHealthShareUsageDescription` and `NSHealthUpdateUsageDescription` are set (runtime stays read-only; omitting update fails ITMS-90683). `expo-av` sets `microphonePermission: false` (playback only for rest-end sound). `expo-secure-store` sets `faceIDPermission: false` (session tokens, no Face ID).
+
 ## One-time console setup
 
 1. **App Store Connect:** confirm the app whose bundle id is `com.thefitbud.mobile.staging` (FitBud Coach Staging). Submit uses `ascAppId` `6837745310` in `eas.json`. Team ID `26257QDTHP` is already public in `apps/mobile/app.json`.

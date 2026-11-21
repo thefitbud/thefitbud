@@ -26,7 +26,8 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | Z12-62 Logo fix (mobile) | after #485 fix list | **merging main → CI** | [#502](https://github.com/thefitbud/thefitbud/pull/502) `cursor/z12-62-logo-db78` | — | was DIRTY vs main (ledger); merge `origin/main` then ready-for-device with new tip. Do not merge product until FitBud pixel verdict | Cursor Auto |
 | Z12-62 EAS staging-store | urgent (preview Bundle JS fail on `8d21cb6c`) | **merged** | [#522](https://github.com/thefitbud/thefitbud/pull/522) | `1945b25d` | post-install `build:packages` + `staging-store`; Firoz queues EAS | Cursor Auto |
 | Z12-62b EAS Node 22 pin | after #522 POST_INSTALL_HOOK fail | **merged** | [#523](https://github.com/thefitbud/thefitbud/pull/523) | `6a05378d` | `eas.json` base: node 22.23.3 + pnpm 9.15.4 | Cursor Auto |
-| Z12-62c EAS ascAppId + version | after TestFlight 0.0.0 / `$ASC_*` reject | **in progress** | `cursor/z12-62c-eas-asc-version-db78` | — | literal ascAppIds; app.json `0.1.0`. Self-merge; no EAS; leave #521 | Cursor Auto |
+| Z12-62c EAS ascAppId + version | after TestFlight 0.0.0 / `$ASC_*` reject | **merged** | [#524](https://github.com/thefitbud/thefitbud/pull/524) | `1c1658a4` | literal ascAppIds; app.json `0.1.0` | Cursor Auto |
+| Z12-62d HealthKit plist + Xcode 26 | ITMS-90683 / ITMS-90725 on staging-store | **in progress** | `cursor/z12-62d-healthkit-xcode26-db78` | — | HealthKit update string; drop unused mic/Face ID; EAS `macos-sequoia-15.6-xcode-26.2` (stay SDK 52). Self-merge; no EAS; leave #521 | Cursor Auto |
 | Z12-44 follow-up weekday flows | after #483 | **device running** | [#485](https://github.com/thefitbud/thefitbud/pull/485) `claude/Z12-44-flows-weekday` | — | tip `7ebc8642`; FitBud run [44517473406](https://github.com/thefitbud/thefitbud/actions/runs/44517473406) (Android passing, iOS running). Hold merge | Cursor Auto || Z12-45 Active workout | after #485+#483 ✅ | **must-fixes 1–7 done** | [#484](https://github.com/thefitbud/thefitbud/pull/484) `claude/Z12-45-active-workout` | — | tip `d043c4b3`: #1 sheet-seq, #2 W-14 bar, #3/#4 offline+How to, #5–7 evidence/parity/scope-cut (Z12-45fu). Wait #485 → merge main (mf8) → one device run (mf9) | Cursor Auto |
 | Z12-48 Live Activity (JS) | #484 | blocked | — | — | rest to the second; finding 1 JS side | Cursor Auto (planned) |
 | Z12-49 follow-up Ended-coaching tab bar | #484 | blocked | — | — | small; tab bar must show on ended screen | Cursor Auto (planned) |
@@ -53,6 +54,7 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | 19 Nov 2026 ~13:40 IST | `ab0e015b` | #483 (Z12-46) | frees TraineeShell for #484; device [44478196249](https://github.com/thefitbud/thefitbud/actions/runs/44478196249) |
 | 21 Nov 2026 ~21:20 IST | `1945b25d` | #522 (Z12-62 EAS) | post-install `build:packages` + `staging-store` |
 | 21 Nov 2026 ~21:34 IST | `6a05378d` | #523 (Z12-62b) | EAS Node 22.23.3 + pnpm 9.15.4 |
+| 21 Nov 2026 ~22:28 IST | `1c1658a4` | #524 (Z12-62c) | literal ASC ids; app version 0.1.0 |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 

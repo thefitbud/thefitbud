@@ -29,7 +29,18 @@
   },
   "plugins": [
     "expo-dev-client",
-    "expo-secure-store"
+    [
+      "expo-secure-store",
+      {
+        "faceIDPermission": false
+      }
+    ],
+    [
+      "expo-av",
+      {
+        "microphonePermission": false
+      }
+    ]
   ],
   "updates": {
     "url": "https://u.expo.dev/ae19f5e7-c839-48a3-8e62-ae9ba2fc86d7"
