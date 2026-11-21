@@ -136,6 +136,22 @@ vi.mock("expo-haptics", () => ({
   ImpactFeedbackStyle: { Light: "light", Medium: "medium", Heavy: "heavy" },
 }));
 
+/** expo-av ships ESM `export` in a CJS entry; mock before any rest-end import. */
+vi.mock("expo-av", () => ({
+  Audio: {
+    setAudioModeAsync: vi.fn(async () => undefined),
+    Sound: {
+      createAsync: vi.fn(async () => ({
+        sound: {
+          setPositionAsync: vi.fn(async () => undefined),
+          playAsync: vi.fn(async () => undefined),
+          unloadAsync: vi.fn(async () => undefined),
+        },
+      })),
+    },
+  },
+}));
+
 vi.mock("@react-native-community/netinfo", () => ({
   default: {
     addEventListener: vi.fn(() => () => undefined),
