@@ -12,6 +12,7 @@ How to put a FitBud development build on your own phone and point it at the loca
 |---|---|---|---|---|---|---|
 | `development` | `development` | FitBud Staging | `com.thefitbud.mobile.staging` | `group.com.thefitbud.mobile.staging` | `https://api-staging.thefitbud.com` (see "Pointing the dev build at an API") | internal, dev client |
 | `preview` | `staging` | FitBud Staging | `com.thefitbud.mobile.staging` | `group.com.thefitbud.mobile.staging` | `https://api-staging.thefitbud.com` | internal |
+| `staging-store` | `staging` | FitBud Staging | `com.thefitbud.mobile.staging` | `group.com.thefitbud.mobile.staging` | `https://api-staging.thefitbud.com` | store (TestFlight / Play internal — [`mobile-distribution.md`](mobile-distribution.md)) |
 | `production` | `production` | FitBud | `com.thefitbud.mobile` | `group.com.thefitbud.mobile` | `https://api.thefitbud.com` | store |
 
 - Staging and production have different bundle ids, so both can be installed side by side.
@@ -49,7 +50,8 @@ eas build --profile development --platform android
 
 - iOS: the first build asks to sign in to Apple and to create the certificate, provisioning profile and App Group. Say yes.
 - Android: the build is an `.apk` for internal distribution.
-- `preview` builds (`--profile preview`) are standalone staging builds with the JS bundle embedded. `production` is for store builds (task BT1), not for X3.
+- `preview` builds (`--profile preview`) are standalone staging builds with the JS bundle embedded. `staging-store` is the same staging app as a store binary (TestFlight / Play internal — [`mobile-distribution.md`](mobile-distribution.md)). `production` is for the production store builds (task BT1), not for X3.
+- EAS workers run `eas-build-post-install` (`pnpm -w run build:packages`) so workspace `packages/*/dist` exists before Bundle JavaScript.
 
 ## Install on the phone
 
