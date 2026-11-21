@@ -198,6 +198,18 @@ echo "fake ok"
 }
 
 const BUSY_LINE = `${BUSY}. Cannot start another import until that completes or times out.`;
+// No suite job sends traffic to staging while a seed import still runs (Sentry
+// FITBUD-API-J/K/M/N/R): each waits for the last link, and its `always()` gate means a
+// skipped or failed seed-ios never takes the suite with it.
+test("every suite job waits for the last seed import, seed-ios", () => {
+  for (const name of ["api-smoke", "web-staging", "android", "ios"]) {
+    const job = jobs.get(name);
+    assert.ok(job, `${name} exists`);
+    assert.ok(needsOf(job).includes("seed-ios"), `${name} needs seed-ios`);
+    assert.match(job, /^ {4}if: >-\n {6}\$\{\{ always\(\)/m, `${name} is gated with always()`);
+  }
+});
+
 const oneImport = () => `${retrySnippet("seed-ios")}\nd1_execute --file x.sql\n`;
 
 test("retries an import refused because another is running, with backoff, then succeeds", () => {
