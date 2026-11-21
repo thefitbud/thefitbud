@@ -56,6 +56,8 @@ Order (D-W12C-22): **#486 → #483 → #485 → #484** (+ **Z12-46fu** in parall
 | 21 Nov 2026 ~21:20 IST | `1945b25d` | #522 (Z12-62 EAS) | post-install `build:packages` + `staging-store` |
 | 21 Nov 2026 ~21:34 IST | `6a05378d` | #523 (Z12-62b) | EAS Node 22.23.3 + pnpm 9.15.4 |
 | 21 Nov 2026 ~22:28 IST | `1c1658a4` | #524 (Z12-62c) | literal ASC ids; app version 0.1.0 |
+| 22 Nov 2026 ~00:49 IST | `e2c1968d` | #525 (Z12-62d) | HealthKit update string; EAS Xcode 26.2 image |
+| 22 Nov 2026 ~00:56 IST | `ce0ef60b` | #526 (Z12-62e) | Android compile/target SDK 36 via expo-build-properties |
 
 *(Append each Cursor merge and each Claude merge that unblocks a Cursor task.)*
 
