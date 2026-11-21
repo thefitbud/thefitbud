@@ -1,7 +1,7 @@
 {
   "owner": "tech-fitbuds-team",
   "slug": "thefitbud",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "orientation": "portrait",
   "userInterfaceStyle": "light",
   "scheme": "fitbud",

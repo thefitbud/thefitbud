@@ -26,13 +26,14 @@ No secret values belong in this file, the repo, a PR or a chat. Names only.
 
 ## Submit environment variables
 
-`eas.json` `submit.production` reads these from the environment of the machine that runs `eas submit`. No store ids or key files are in the repo.
+`eas.json` `submit.production` reads these from the environment of the machine that runs `eas submit`. The App Store Connect Apple ID for production (FitBud Coach) is the literal `ascAppId` `6830533558` in `eas.json` (EAS does not interpolate `$VARS` for that field; it is not a secret). Staging’s id is in [`mobile-distribution.md`](mobile-distribution.md).
 
 | Name | Where the value lives |
 |---|---|
-| `ASC_APP_ID` | App Store Connect → the app → App Information → Apple ID (a number). Copy it into the password vault. |
-| `APPLE_TEAM_ID` | Apple Developer → Membership → Team ID. Same vault. |
+| `APPLE_TEAM_ID` | Apple Developer → Membership → Team ID. Same vault. (Team ID `26257QDTHP` is also public in `apps/mobile/app.json`.) |
 | `GOOGLE_SERVICE_ACCOUNT_KEY_PATH` | Absolute path **outside the repo** to the Play Console service-account JSON, for example a file you keep in the vault and write to `~/.config/fitbud/google-play-service-account.json`. Do not commit the JSON. |
+
+**App version:** `apps/mobile/app.json` `version` is `"0.1.0"` for the closed beta (Apple rejects `0.0.0` as CFBundleShortVersionString). Bump it per beta series; build numbers stay on EAS remote `autoIncrement`.
 
 Play first receives the build on the **internal** track (`releaseStatus` `completed`). Promote that release to closed testing in Play Console. Do not point `eas.json` at the production track.
 

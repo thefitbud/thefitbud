@@ -19,9 +19,13 @@ Workspace packages export `./dist`, which is gitignored. EAS runs `eas-build-pos
 
 **Node / pnpm on the worker (Z12-62b):** every build profile `extends` a shared `base` that sets `node: "22.23.3"` (matches `.nvmrc` / `engines.node`) and `pnpm: "9.15.4"` (matches root `packageManager`). Without that, EAS defaults to Node 20 and `@fitbud/tokens` fails in `POST_INSTALL_HOOK` (`node: bad option: --experimental-strip-types`).
 
+**App version (Z12-62c):** `apps/mobile/app.json` `version` is the CFBundleShortVersionString / Play versionName. It is `"0.1.0"` for the closed beta. Apple rejects `0.0.0`. Bump it (for example `0.1.1`, then `0.2.0`) when you cut a new beta series; leave build numbers to EAS `autoIncrement` / remote `appVersionSource`. About screens and Sentry release strings read this value from Expo config (fallbacks of `"0.0.0"` in code are only for a missing config, not the shipped version).
+
+**ASC app ids (Z12-62c):** `eas.json` `submit.*.ios.ascAppId` must be digit literals — EAS does not interpolate `$VARS` there. Staging (FitBud Coach Staging) is `6837745310`; production (FitBud Coach) is `6830533558`. They are not secrets.
+
 ## One-time console setup
 
-1. **App Store Connect:** create (or confirm) an app whose bundle id is `com.thefitbud.mobile.staging`. Copy its Apple ID into the vault as `ASC_STAGING_APP_ID` (submit profile reads `$ASC_STAGING_APP_ID`). Team ID `26257QDTHP` is already public in `apps/mobile/app.json`.
+1. **App Store Connect:** confirm the app whose bundle id is `com.thefitbud.mobile.staging` (FitBud Coach Staging). Submit uses `ascAppId` `6837745310` in `eas.json`. Team ID `26257QDTHP` is already public in `apps/mobile/app.json`.
 2. **Expo credentials:** the Admin App Store Connect API key is already linked on the Expo account (`tech-fitbuds-team`). Submit uses that stored key — do not put `.p8` paths or key ids in the repo. Confirm with `eas credentials` for the staging bundle id if a submit fails auth.
 3. **Play Console:** create (or confirm) an app with package `com.thefitbud.mobile.staging`. **The first Android App Bundle for a new Play app must be uploaded manually** in Play Console (Create app → Internal testing → Create new release → upload the `.aab`). After that first manual upload, `eas submit --profile staging-store --platform android` can push later drafts to the internal track (`releaseStatus: draft`). Omit a local service-account path so Expo Submit uses the Play key already assigned on Expo servers.
 
@@ -37,8 +41,6 @@ eas build --profile staging-store --platform android
 Do not start these from an agent session. Wait for each build to finish on expo.dev before submit.
 
 ## Submit (Firoz)
-
-Export `ASC_STAGING_APP_ID` in the shell that runs submit (vault only). Then:
 
 ```bash
 eas submit --profile staging-store --platform ios --latest

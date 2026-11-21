@@ -54,7 +54,7 @@
       "ios": {
         "appleTeamId": "26257QDTHP",
         "bundleIdentifier": "com.thefitbud.mobile.staging",
-        "ascAppId": "$ASC_STAGING_APP_ID"
+        "ascAppId": "6837745310"
       },
       "android": {
         "applicationId": "com.thefitbud.mobile.staging",
@@ -64,7 +64,7 @@
     },
     "production": {
       "ios": {
-        "ascAppId": "$ASC_APP_ID",
+        "ascAppId": "6830533558",
         "appleTeamId": "$APPLE_TEAM_ID"
       },
       "android": {
