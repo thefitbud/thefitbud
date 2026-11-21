@@ -222,12 +222,12 @@ describe("check-in card without a plan", () => {
     expect(screen.queryByText(/CHK-NET|Try again/)).toBeNull();
   });
 
-  it("shows CHK-NET when ensure-due still fails after one retry", async () => {
+  it("shows offline copy when ensure-due still fails after one retry", async () => {
     ensureDue = vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     });
     render(<TodayCheckinCard relationship={relationship} onOpen={() => {}} />);
-    await screen.findByText(/CHK-NET/);
+    await screen.findByText(USER_FACING_OFFLINE);
     expect(ensureDue).toHaveBeenCalledTimes(2);
     expect(screen.getByText("Try again")).toBeTruthy();
   });

@@ -12,6 +12,7 @@ import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { reportError } from "../lib/reportError";
+import { CURRENT_WRONG_COPY } from "../trainee/settings/PasswordScreen";
 import type {
   TrainerProfile,
   UpdateTrainerProfileRequest,
@@ -67,12 +68,19 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
       });
       setDone(true);
     } catch (err) {
-      if (!(err instanceof ApiClientError)) {
-        reportError("trainer-password-change", err);
+      if (err instanceof ApiClientError && err.code === "INVALID_CREDENTIALS") {
+        // Password-change context: not the sign-in INVALID_CREDENTIALS line.
+        setError(CURRENT_WRONG_COPY);
+      } else {
+        if (!(err instanceof ApiClientError)) {
+          reportError("trainer-password-change", err);
+        }
+        setError(
+          userFacingMessage(err, {
+            fallback: "Couldn't update the password. Try again.",
+          }),
+        );
       }
-      setError(
-        userFacingMessage(err, { fallback: "PASSWORD-SAVE" }),
-      );
     } finally {
       setSaving(false);
     }
@@ -169,7 +177,11 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
       if (!(err instanceof ApiClientError)) {
         reportError("trainer-profile-save", err);
       }
-      setError(userFacingMessage(err, { fallback: "PROFILE-SAVE" }));
+      setError(
+        userFacingMessage(err, {
+          fallback: "Couldn't save your profile. Try again.",
+        }),
+      );
     } finally {
       setSaving(false);
     }

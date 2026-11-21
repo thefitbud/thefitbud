@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, USER_FACING_OFFLINE } from "@fitbud/api-client";
 import { fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 
 const setPassword = vi.fn();
@@ -52,11 +52,11 @@ describe("trainer profile change password (frame 55)", () => {
     });
   });
 
-  it("shows a short code, not a guessed cause, for other failures", async () => {
+  it("shows offline copy, not a raw code, for network failures", async () => {
     setPassword.mockRejectedValueOnce(new Error("network down"));
     openPasswordForm();
     fireEvent.click(screen.getByRole("button", { name: "Update password" }));
-    await screen.findByText("PASSWORD-SAVE");
+    await screen.findByText(USER_FACING_OFFLINE);
   });
 
   it("returns to Profile after success", async () => {
