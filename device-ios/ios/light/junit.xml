@@ -1,0 +1,927 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<testsuites>
+  <testsuite name="Test Suite" device="device-gate-iphone - iOS 18.6 - 752E8FB9-896F-462F-8EBC-8FF14293254C" tests="10" failures="10" time="441.745" timestamp="2026-11-21T22:02:51">
+    <testcase id="Launch smoke, trainee Today loads" name="Launch smoke, trainee Today loads" classname="Launch smoke, trainee Today loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/1-trainee-today.yaml" time="112.176" timestamp="2026-11-21T22:02:51" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainee"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 17 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	... 22 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="Launch smoke, trainer Attention loads" name="Launch smoke, trainer Attention loads" classname="Launch smoke, trainer Attention loads" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/device/launch/2-trainer-attention.yaml" time="27.879" timestamp="2026-11-21T22:04:44" status="ERROR">
+      <properties>
+        <property name="tags" value="device, launch, trainer"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F20 Trainer nudges a client as a FitBud push (Z12-50)" name="F20 Trainer nudges a client as a FitBud push (Z12-50)" classname="F20 Trainer nudges a client as a FitBud push (Z12-50)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F20-triage-nudge.yaml" time="33.999" timestamp="2026-11-21T22:05:12" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-50"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" name="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" classname="F21 Trainer marks reviewed, resolves and adds a note (Z12-51)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F21-review-resolve-notes.yaml" time="36.122" timestamp="2026-11-21T22:05:46" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-51"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F22 Coach replies to a question (Z12-53)" name="F22 Coach replies to a question (Z12-53)" classname="F22 Coach replies to a question (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F22-reply-question.yaml" time="22.514" timestamp="2026-11-21T22:06:22" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F23 Coach reviews a check-in (Z12-53)" name="F23 Coach reviews a check-in (Z12-53)" classname="F23 Coach reviews a check-in (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F23-review-checkin.yaml" time="58.891" timestamp="2026-11-21T22:06:45" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F24 Coach reviews a session and a diet day (Z12-53)" name="F24 Coach reviews a session and a diet day (Z12-53)" classname="F24 Coach reviews a session and a diet day (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F24-session-diet-review.yaml" time="34.376" timestamp="2026-11-21T22:07:51" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F25 Clients, activity and client detail (Z12-53)" name="F25 Clients, activity and client detail (Z12-53)" classname="F25 Clients, activity and client detail (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F25-clients-activity.yaml" time="34.094" timestamp="2026-11-21T22:08:25" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F26 Ended client and reactivation (Z12-53)" name="F26 Ended client and reactivation (Z12-53)" classname="F26 Ended client and reactivation (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F26-ended-reactivation.yaml" time="37.324" timestamp="2026-11-21T22:08:59" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+    <testcase id="F27 Offline, loading, errors (Z12-53)" name="F27 Offline, loading, errors (Z12-53)" classname="F27 Offline, loading, errors (Z12-53)" file="/Users/runner/work/thefitbud/thefitbud/apps/mobile/.maestro/flows/v3/F27-offline-loading-errors.yaml" time="36.142" timestamp="2026-11-21T22:09:37" status="ERROR">
+      <properties>
+        <property name="tags" value="device, trainer, z12-53"/>
+      </properties>
+      <failure>maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:658)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55(IOSDriver.kt:519)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.setPermissions(IOSDriver.kt:518)
+	at maestro.Maestro.setPermissions$lambda$10(Maestro.kt:121)
+	at kotlinx.coroutines.InterruptibleKt.runInterruptibleInExpectedContext(Interruptible.kt:48)
+	at kotlinx.coroutines.InterruptibleKt.access$runInterruptibleInExpectedContext(Interruptible.kt:1)
+	at kotlinx.coroutines.InterruptibleKt$runInterruptible$2.invokeSuspend(Interruptible.kt:40)
+	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:124)
+	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:89)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:586)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:820)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:717)
+	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:704)
+Caused by: ios.IOSDeviceErrors$Unreachable: Device became unreachable while processing viewHierarchy
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:244)
+	at ios.xctest.XCTestIOSDevice.setPermissions(XCTestIOSDevice.kt:221)
+	at ios.LocalIOSDevice.setPermissions(LocalIOSDevice.kt:160)
+	at maestro.drivers.IOSDriver.setPermissions$lambda$55$lambda$54(IOSDriver.kt:520)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	... 15 more
+Caused by: maestro.utils.network.XCUITestServerError$Unreachable: Transport unreachable while processing viewHierarchy
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:73)
+	at xcuitest.XCTestDriverClient.executeJsonRequest(XCTestDriverClient.kt:267)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$default(XCTestDriverClient.kt:266)
+	at xcuitest.XCTestDriverClient.viewHierarchy(XCTestDriverClient.kt:83)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy$lambda$1(XCTestIOSDevice.kt:39)
+	at ios.xctest.XCTestIOSDevice.execute(XCTestIOSDevice.kt:240)
+	at ios.xctest.XCTestIOSDevice.viewHierarchy(XCTestIOSDevice.kt:37)
+	at ios.LocalIOSDevice.viewHierarchy(LocalIOSDevice.kt:49)
+	at maestro.drivers.IOSDriver.viewHierarchy(IOSDriver.kt:198)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22$lambda$21(IOSDriver.kt:193)
+	at maestro.drivers.IOSDriver.runDeviceCall(IOSDriver.kt:655)
+	at maestro.drivers.IOSDriver.contentDescriptor$lambda$22(IOSDriver.kt:193)
+	at maestro.utils.Metrics.measured(Metrics.kt:48)
+	at maestro.drivers.IOSDriver.contentDescriptor(IOSDriver.kt:192)
+	at maestro.ViewHierarchy$Companion.from-8JJjmZI(ViewHierarchy.kt:29)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke-prqvCes(Maestro.kt:547)
+	at maestro.Maestro$findElementWithTimeout$found$1$1.invoke(Maestro.kt:546)
+	... 11 more
+Caused by: java.net.ConnectException: Failed to connect to /127.0.0.1:63241
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:298)
+	at okhttp3.internal.connection.RealConnection.connect(RealConnection.kt:208)
+	at okhttp3.internal.connection.ExchangeFinder.findConnection(ExchangeFinder.kt:226)
+	at okhttp3.internal.connection.ExchangeFinder.findHealthyConnection(ExchangeFinder.kt:106)
+	at okhttp3.internal.connection.ExchangeFinder.find(ExchangeFinder.kt:74)
+	at okhttp3.internal.connection.RealCall.initExchange$okhttp(RealCall.kt:255)
+	at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:32)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.cache.CacheInterceptor.intercept(CacheInterceptor.kt:95)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.BridgeInterceptor.intercept(BridgeInterceptor.kt:83)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.http.RetryAndFollowUpInterceptor.intercept(RetryAndFollowUpInterceptor.kt:76)
+	at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+	at okhttp3.internal.connection.RealCall.getResponseWithInterceptorChain$okhttp(RealCall.kt:201)
+	at okhttp3.internal.connection.RealCall.execute(RealCall.kt:154)
+	at xcuitest.XCTestDriverClient.executeJsonRequest$lambda$7(XCTestDriverClient.kt:279)
+	at xcuitest.XCTestDriverClient.transportCall(XCTestDriverClient.kt:67)
+	... 27 more
+	Suppressed: java.io.IOException: unexpected end of stream on http://127.0.0.1:63241/...
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:210)
+		at okhttp3.internal.connection.Exchange.readResponseHeaders(Exchange.kt:110)
+		at okhttp3.internal.http.CallServerInterceptor.intercept(CallServerInterceptor.kt:93)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at maestro.utils.HttpClient.build_S81q6HU$lambda$0(HttpClient.kt:83)
+		at okhttp3.internal.http.RealInterceptorChain.proceed(RealInterceptorChain.kt:109)
+		at okhttp3.internal.connection.ConnectInterceptor.intercept(ConnectInterceptor.kt:34)
+		... 38 more
+	Caused by: java.io.EOFException: \n not found: limit=0 content=…
+		at okio.RealBufferedSource.readUtf8LineStrict(RealBufferedSource.kt:362)
+		at okhttp3.internal.http1.HeadersReader.readLine(HeadersReader.kt:29)
+		at okhttp3.internal.http1.Http1ExchangeCodec.readResponseHeaders(Http1ExchangeCodec.kt:180)
+		... 44 more
+Caused by: java.net.ConnectException: Connection refused (connect failed)
+	at java.base/sun.nio.ch.Net.pollConnect(Native Method)
+	at java.base/sun.nio.ch.Net.pollConnectNow(Net.java:694)
+	at java.base/sun.nio.ch.NioSocketImpl.timedFinishConnect(NioSocketImpl.java:542)
+	at java.base/sun.nio.ch.NioSocketImpl.connect(NioSocketImpl.java:592)
+	at java.base/java.net.SocksSocketImpl.connect(SocksSocketImpl.java:351)
+	at java.base/java.net.Socket.connect(Socket.java:751)
+	at okhttp3.internal.platform.Platform.connectSocket(Platform.kt:128)
+	at okhttp3.internal.connection.RealConnection.connectSocket(RealConnection.kt:296)
+	... 44 more
+</failure>
+    </testcase>
+  </testsuite>
+</testsuites>

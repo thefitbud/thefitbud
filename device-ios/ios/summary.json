@@ -1,0 +1,332 @@
+{
+  "platform": "ios",
+  "status": "fail",
+  "reasons": [
+    "light: 10 of 10 flows failed",
+    "dark: 5 of 10 flows failed"
+  ],
+  "flows": [
+    "device/launch/1-trainee-today.yaml",
+    "device/launch/2-trainer-attention.yaml",
+    "flows/v3/F20-triage-nudge.yaml",
+    "flows/v3/F21-review-resolve-notes.yaml",
+    "flows/v3/F22-reply-question.yaml",
+    "flows/v3/F23-review-checkin.yaml",
+    "flows/v3/F24-session-diet-review.yaml",
+    "flows/v3/F25-clients-activity.yaml",
+    "flows/v3/F26-ended-reactivation.yaml",
+    "flows/v3/F27-offline-loading-errors.yaml"
+  ],
+  "themes": [
+    {
+      "theme": "light",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 0,
+      "failed": 10,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "Launch smoke, trainee Today loads",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "Launch smoke, trainer Attention loads",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F20 Trainer nudges a client as a FitBud push (Z12-50)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F21 Trainer marks reviewed, resolves and adds a note (Z12-51)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        },
+        {
+          "flow": "F27 Offline, loading, errors (Z12-53)",
+          "message": "maestro.DeviceUnreachableException: Device became unreachable during viewHierarchy"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    },
+    {
+      "theme": "dark",
+      "maestroExit": 1,
+      "total": 10,
+      "passed": 5,
+      "failed": 5,
+      "skipped": 0,
+      "failures": [
+        {
+          "flow": "F22 Coach replies to a question (Z12-53)",
+          "message": "Assertion is false: id: ask-detail is visible"
+        },
+        {
+          "flow": "F23 Coach reviews a check-in (Z12-53)",
+          "message": "Assertion is false: id: checkins-loaded is visible"
+        },
+        {
+          "flow": "F24 Coach reviews a session and a diet day (Z12-53)",
+          "message": "Element not found: Text matching regex: .*Back.*|.*‹.*"
+        },
+        {
+          "flow": "F25 Clients, activity and client detail (Z12-53)",
+          "message": "Assertion is false: id: client-status is visible"
+        },
+        {
+          "flow": "F26 Ended client and reactivation (Z12-53)",
+          "message": "No visible element found: id: clients-filter-ended"
+        }
+      ],
+      "error": null,
+      "retries": [],
+      "notRetried": []
+    }
+  ],
+  "scan": {
+    "platform": "ios",
+    "files": [
+      "ios-device.log"
+    ],
+    "sentinel": true,
+    "status": "pass",
+    "counts": {},
+    "findings": [],
+    "truncated": 0,
+    "allowed": []
+  },
+  "extras": [
+    {
+      "file": "build.json",
+      "result": "full in 1752 s",
+      "mode": "full",
+      "seconds": 1752,
+      "cacheKey": "device-native-ios-f05b7049256595921c381373eb76595c40142ced"
+    },
+    {
+      "file": "theme.json",
+      "result": "mean screenshot luminance: light — (0), dark 0.123 (38)",
+      "light": null,
+      "dark": 0.123,
+      "count": {
+        "light": 0,
+        "dark": 38
+      },
+      "shots": [
+        {
+          "file": "TM-01a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-01a2-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-01e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "TM-02a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.104
+        },
+        {
+          "file": "TM-03a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.116
+        },
+        {
+          "file": "TM-03j-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.152
+        },
+        {
+          "file": "TM-04a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.13
+        },
+        {
+          "file": "TM-04b-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.151
+        },
+        {
+          "file": "TM-04c-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.151
+        },
+        {
+          "file": "TM-04d-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.146
+        },
+        {
+          "file": "TM-04e-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.14
+        },
+        {
+          "file": "TM-04f-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.112
+        },
+        {
+          "file": "TM-04j-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.074
+        },
+        {
+          "file": "TM-04k-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.183
+        },
+        {
+          "file": "TM-04m-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "TM-04n-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.112
+        },
+        {
+          "file": "TM-04o-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.154
+        },
+        {
+          "file": "TM-11a-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "launch-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.167
+        },
+        {
+          "file": "launch-trainer-attention-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.118
+        },
+        {
+          "file": "review-sheet-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.145
+        },
+        {
+          "file": "review-sheet-nudge-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.144
+        },
+        {
+          "file": "review-sheet-resolved-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.133
+        },
+        {
+          "file": "step-026-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.063
+        },
+        {
+          "file": "step-027-assertCondition-today-summary-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.063
+        },
+        {
+          "file": "step-027-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.062
+        },
+        {
+          "file": "step-028-assertCondition-attention-screen-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-028-assertCondition-trainee-today-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.092
+        },
+        {
+          "file": "step-037-assertCondition-checkins-loaded-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.118
+        },
+        {
+          "file": "step-038-scrollUntilVisible-clients-filter-ended-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.149
+        },
+        {
+          "file": "step-052-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-053-assertCondition-ask-detail-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.096
+        },
+        {
+          "file": "step-070-tapOnElement-Back..-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-072-runFlow-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.152
+        },
+        {
+          "file": "step-075-assertCondition-nudge-pick-next-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.152
+        },
+        {
+          "file": "step-078-assertCondition-client-status-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.152
+        },
+        {
+          "file": "step-083-assertCondition-You_nudged_._again_tomor-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.117
+        },
+        {
+          "file": "step-141-assertCondition-exception-review-dark-ios.png",
+          "theme": "dark",
+          "luma": 0.145
+        }
+      ],
+      "w03DarkTooBright": []
+    }
+  ]
+}
