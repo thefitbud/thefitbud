@@ -17,6 +17,8 @@ Production store release stays in [`store-release.md`](store-release.md). Dev / 
 
 Workspace packages export `./dist`, which is gitignored. EAS runs `eas-build-post-install` in `apps/mobile/package.json` (`pnpm -w run build:packages`) so Bundle JavaScript can resolve `@fitbud/*` on the worker.
 
+**Node / pnpm on the worker (Z12-62b):** every build profile `extends` a shared `base` that sets `node: "22.23.3"` (matches `.nvmrc` / `engines.node`) and `pnpm: "9.15.4"` (matches root `packageManager`). Without that, EAS defaults to Node 20 and `@fitbud/tokens` fails in `POST_INSTALL_HOOK` (`node: bad option: --experimental-strip-types`).
+
 ## One-time console setup
 
 1. **App Store Connect:** create (or confirm) an app whose bundle id is `com.thefitbud.mobile.staging`. Copy its Apple ID into the vault as `ASC_STAGING_APP_ID` (submit profile reads `$ASC_STAGING_APP_ID`). Team ID `26257QDTHP` is already public in `apps/mobile/app.json`.

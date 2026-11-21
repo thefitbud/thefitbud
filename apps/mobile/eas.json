@@ -4,7 +4,12 @@
     "appVersionSource": "remote"
   },
   "build": {
+    "base": {
+      "node": "22.23.3",
+      "pnpm": "9.15.4"
+    },
     "development": {
+      "extends": "base",
       "developmentClient": true,
       "distribution": "internal",
       "env": {
@@ -14,6 +19,7 @@
       }
     },
     "preview": {
+      "extends": "base",
       "distribution": "internal",
       "env": {
         "APP_VARIANT": "staging",
@@ -22,6 +28,7 @@
       }
     },
     "staging-store": {
+      "extends": "base",
       "distribution": "store",
       "autoIncrement": true,
       "environment": "preview",
@@ -32,6 +39,7 @@
       }
     },
     "production": {
+      "extends": "base",
       "distribution": "store",
       "autoIncrement": true,
       "env": {
