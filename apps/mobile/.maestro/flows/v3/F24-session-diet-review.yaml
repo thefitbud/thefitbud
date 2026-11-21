@@ -4,12 +4,11 @@ tags:
   - device
   - trainer
   - z12-53
+env:
+  CLIENT_SLUG: priya-nair
 ---
-# F24 (Z12-53): session detail from Needs you / Activity when present; diet day
-# review from a client's Review day (TM-12a) and a meal sheet (TM-12b). Priya
-# Nair is the TM-12b seed persona (D-W12-30). Env: QA_TRAINER_EMAIL, QA_PASSWORD.
-#
-# Screens: TM-11a (when a win/session opens), TM-12a, TM-12b.
+# F24 (Z12-53): session detail when present; diet day from Priya Nair (TM-12).
+# iOS wraps roster names — open by client-row-* id after scrollUntilVisible.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -23,7 +22,6 @@ tags:
 - takeScreenshot: TM-01a2
 - runFlow: ../../common/assert-no-crash.yaml
 
-# Optional: open a workout win / session card when the seed shows one.
 - runFlow:
     when:
       visible: "PR|finished|sets"
@@ -37,21 +35,22 @@ tags:
       - runFlow: ../../common/assert-no-crash.yaml
       - tapOn: "Back|‹"
       - extendedWaitUntil:
-          visible: "Needs you|Clients"
+          visible:
+            id: "attention-screen"
           timeout: 20000
 
-# Diet day: Clients → Priya Nair → Review day.
-- tapOn: "Clients"
-- extendedWaitUntil:
-    visible: "Clients"
-    timeout: 30000
+- tapOn:
+    id: "tab-clients"
 - scrollUntilVisible:
-    element: "Priya Nair.*"
+    element:
+      id: "client-row-${CLIENT_SLUG}"
     direction: DOWN
     timeout: 60000
-- tapOn: "Priya Nair.*"
+- tapOn:
+    id: "client-row-${CLIENT_SLUG}"
 - extendedWaitUntil:
-    visible: "Review day|Today's food|This week"
+    visible:
+      id: "client-status"
     timeout: 30000
 - tapOn: "Review day"
 - extendedWaitUntil:
@@ -60,7 +59,6 @@ tags:
 - takeScreenshot: TM-12a
 - runFlow: ../../common/assert-no-crash.yaml
 
-# Open a meal row for the sheet (prefer Ate out when present).
 - runFlow:
     when:
       visible: "Ate out"

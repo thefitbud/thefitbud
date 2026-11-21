@@ -4,15 +4,11 @@ tags:
   - device
   - trainer
   - z12-53
+env:
+  CLIENT_SLUG: rohan-mehta
 ---
-# F27 (Z12-53): loading / empty paths that the device can hit without a cut
-# network. Offline (TM-01f, TM-02f, TM-04h, TM-06e) and hard load errors
-# (TM-01g, TM-03h) need a stubbed API or airplane mode and are covered by the
-# render tests + Expo-web check; Z12-58's phone checklist owns the real-device
-# offline pass. Env: QA_TRAINER_EMAIL, QA_PASSWORD.
-#
-# Screens captured when present: TM-01e (brief), TM-01d (all caught up if the
-# list is empty after reviews), Clients list load.
+# F27 (Z12-53): loading / empty paths without cutting the network. Open a client
+# by row id (iOS name wrap).
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -23,9 +19,9 @@ tags:
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
 
-# Capture Needs you as it settles (loading may flash TM-01e).
 - extendedWaitUntil:
-    visible: "Needs you|Loading|All caught up"
+    visible:
+      id: "attention-screen"
     timeout: 60000
 - runFlow:
     when:
@@ -45,21 +41,24 @@ tags:
       - takeScreenshot: TM-01d
       - runFlow: ../../common/assert-no-crash.yaml
 
-- tapOn: "Clients"
+- tapOn:
+    id: "tab-clients"
 - extendedWaitUntil:
     visible: "Clients|Loading"
     timeout: 30000
 - takeScreenshot: TM-02a
 - runFlow: ../../common/assert-no-crash.yaml
 
-# Open a live client; a forced error state is not simulated here.
 - scrollUntilVisible:
-    element: "Rohan Mehta.*|Aarav.*"
+    element:
+      id: "client-row-${CLIENT_SLUG}"
     direction: DOWN
     timeout: 60000
-- tapOn: "Rohan Mehta.*|Aarav.*"
+- tapOn:
+    id: "client-row-${CLIENT_SLUG}"
 - extendedWaitUntil:
-    visible: "This week|Couldn't load|Retry|Review day"
+    visible:
+      id: "client-status"
     timeout: 30000
 - runFlow:
     when:

@@ -572,6 +572,7 @@ export function ClientsTab({
             return (
               <Pressable
                 key={item.id}
+                testID={`clients-filter-${item.id}`}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
                 onPress={() => setChip(item.id)}
@@ -643,9 +644,14 @@ export function ClientsTab({
             );
             // Invites without a relationship are not tappable into overview.
             const canOpen = Boolean(row.relationshipId);
+            const rowId = `client-row-${formatPersonName(row.name)
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, "")}`;
             return (
               <Pressable
                 key={row.key}
+                testID={rowId}
                 accessibilityRole={canOpen ? "button" : "text"}
                 disabled={!canOpen}
                 onPress={() => {

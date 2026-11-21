@@ -362,6 +362,7 @@ function NeedsYouCard({
       </View>
       {card.action ? (
         <Pressable
+          testID="needs-you-action"
           accessibilityRole="button"
           accessibilityLabel={`${card.action} ${card.name}`}
           disabled={offline}
@@ -372,6 +373,7 @@ function NeedsYouCard({
         </Pressable>
       ) : (
         <Pressable
+          testID="needs-you-action"
           accessibilityRole="button"
           accessibilityLabel={`Open ${card.name}`}
           disabled={offline}

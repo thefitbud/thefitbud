@@ -5,13 +5,9 @@ tags:
   - trainer
   - z12-53
 ---
-# F23 (Z12-53): Check-ins inbox → open a submitted check-in → reply/mark
-# reviewed. Overdue/reviewed filters when present. Env: QA_TRAINER_EMAIL,
-# QA_PASSWORD. Writes one review on the job's local DB (D-W12-34).
-#
-# Screens: TM-05a, TM-06a, TM-06b, TM-06c; overdue/reviewed when seeded.
-# Tap bottom tabs and inbox rows by testID — Attention's "N Check-ins" summary
-# tile and "To review" pills are non-interactive Views and used to steal taps.
+# F23 (Z12-53): Check-ins inbox → open row → reply (type text) → Send by id →
+# mark reviewed. Device run 44898344946: composer opened but Send stayed disabled
+# because the flow never typed.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -44,7 +40,6 @@ tags:
       - tapOn:
           id: "checkins-segment-to-review"
 
-# Open the first inbox row by stable testID (not "to review" / "Submitted" text).
 - extendedWaitUntil:
     visible:
       id: "checkin-row"
@@ -63,9 +58,18 @@ tags:
     commands:
       - tapOn: "Reply"
       - extendedWaitUntil:
-          visible: "Save|Mark reviewed|Send"
+          visible:
+            id: "checkin-reply-input"
           timeout: 15000
+      - tapOn:
+          id: "checkin-reply-input"
+      - inputText: "Nice week — keep the evening walks."
       - takeScreenshot: TM-06b
+      - tapOn:
+          id: "checkin-reply-send"
+      - extendedWaitUntil:
+          visible: "Reply sent|Undo|Mark reviewed|Check-ins"
+          timeout: 20000
 
 - runFlow:
     when:
@@ -79,7 +83,7 @@ tags:
       - tapOn: "Save review|Save"
 
 - extendedWaitUntil:
-    visible: "Undo|Check-ins|Reviewed"
+    visible: "Undo|Check-ins|Reviewed|Reply sent"
     timeout: 15000
 - takeScreenshot: TM-06c
 - runFlow: ../../common/assert-no-crash.yaml

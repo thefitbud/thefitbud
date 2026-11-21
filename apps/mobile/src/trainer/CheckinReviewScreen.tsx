@@ -550,7 +550,9 @@ export function CheckinReviewScreen({
             </Pressable>
             <Text style={styles.replyTitle}>{`Reply to ${first}`}</Text>
             <Pressable
+              testID="checkin-reply-send"
               accessibilityRole="button"
+              accessibilityLabel="Send"
               disabled={acting || offline || !note.trim()}
               onPress={() => {
                 if (alsoMarkReviewed) {
@@ -571,6 +573,7 @@ export function CheckinReviewScreen({
             </Pressable>
           </View>
           <TextInput
+            testID="checkin-reply-input"
             accessibilityLabel={`Add a note for ${first}`}
             placeholder={`Write to ${first}…`}
             placeholderTextColor={theme.colors.ink3}

@@ -5,12 +5,8 @@ tags:
   - trainer
   - z12-53
 ---
-# F22 (Z12-53): open an Asked-you card from Needs you, reply path (WhatsApp
-# prefill is never auto-sent), Mark answered. Demo seed has open asks
-# (Rajesh / Divya). Env: QA_TRAINER_EMAIL, QA_PASSWORD, DEVICE_THEME.
-#
-# Screens: TM-01a, TM-10a, TM-10b (answered toast). Banner TM-13b is
-# notification-driven and covered by Z12-58's phone checklist.
+# F22 (Z12-53): Asked-you card → Reply (TM-10). iOS merges "Reply {Name}" into one
+# a11y node, so tap needs-you-action by id after scrolling to it.
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -24,12 +20,23 @@ tags:
 - takeScreenshot: TM-01a
 - runFlow: ../../common/assert-no-crash.yaml
 
-# Open the first ask Reply (section may need a scroll).
 - scrollUntilVisible:
-    element: "Reply"
+    element:
+      id: "needs-you-action"
     direction: DOWN
     timeout: 60000
-- tapOn: "Reply"
+# Prefer an Asked-you Reply label when present; else first needs-you-action.
+- runFlow:
+    when:
+      visible: "Reply .*"
+    commands:
+      - tapOn: "Reply .*"
+- runFlow:
+    when:
+      notVisible: "Asked you|Mark answered|Reply on WhatsApp"
+    commands:
+      - tapOn:
+          id: "needs-you-action"
 - extendedWaitUntil:
     visible: "Asked you|Mark answered|Reply on WhatsApp"
     timeout: 30000
@@ -37,7 +44,6 @@ tags:
 - runFlow: ../../common/assert-no-crash.yaml
 - assertVisible: "Mark answered"
 - assertVisible: "Reply on WhatsApp"
-# Mark answered (Undo toast = TM-10b path). Do not open WhatsApp.
 - tapOn: "Mark answered"
 - extendedWaitUntil:
     visible: "Answered|Undo|Needs you"

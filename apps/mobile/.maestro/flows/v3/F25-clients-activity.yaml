@@ -4,12 +4,11 @@ tags:
   - device
   - trainer
   - z12-53
+env:
+  CLIENT_SLUG: rohan-mehta
 ---
-# F25 (Z12-53): Clients list → Rohan overview → menu / info / activity.
-# Nudge sheet steps overlap F20 (Z12-50); here we only open the picker when
-# Nudge… is on the client. Env: QA_TRAINER_EMAIL, QA_PASSWORD.
-#
-# Screens: TM-02a, TM-03a, TM-03i, TM-03f, TM-09a, TM-09d (when filter opens).
+# F25 (Z12-53): Clients → Rohan → menu / activity. Use tab-clients and client-row
+# ids (Android lost a bare "Clients" tap; iOS wraps names).
 - launchApp:
     clearState: true
     clearKeychain: true
@@ -19,10 +18,9 @@ tags:
     file: ../../common/sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
-- extendedWaitUntil:
-    visible: "Needs you|Clients"
-    timeout: 60000
-- tapOn: "Clients"
+- runFlow: ../../common/wait-attention-loaded.yaml
+- tapOn:
+    id: "tab-clients"
 - extendedWaitUntil:
     visible: "Clients"
     timeout: 30000
@@ -30,31 +28,36 @@ tags:
 - runFlow: ../../common/assert-no-crash.yaml
 
 - scrollUntilVisible:
-    element: "Rohan Mehta.*"
+    element:
+      id: "client-row-${CLIENT_SLUG}"
     direction: DOWN
     timeout: 60000
-- tapOn: "Rohan Mehta.*"
+- tapOn:
+    id: "client-row-${CLIENT_SLUG}"
 - extendedWaitUntil:
-    visible: "This week|Today's food|Review day|Nudge"
+    visible:
+      id: "client-status"
     timeout: 30000
 - takeScreenshot: TM-03a
 - runFlow: ../../common/assert-no-crash.yaml
 
 - runFlow:
     when:
-      visible: "Nudge"
+      visible:
+        id: "client-nudge"
     commands:
-      - tapOn: "Nudge.*"
+      - tapOn:
+          id: "client-nudge"
       - extendedWaitUntil:
           visible: "about|Send nudge|Close|Cancel"
           timeout: 15000
       - takeScreenshot: TM-03j
       - tapOn: "Close|Cancel|Dismiss"
       - extendedWaitUntil:
-          visible: "This week|Today's food"
+          visible:
+            id: "client-status"
           timeout: 15000
 
-# Client ⋯ menu → Goal, intake.
 - runFlow:
     when:
       visible: "More|⋯"
@@ -73,8 +76,8 @@ tags:
       - runFlow: ../../common/assert-no-crash.yaml
       - tapOn: "Back|‹"
 
-# Activity feed from Clients (tab or entry on the client when present).
-- tapOn: "Clients"
+- tapOn:
+    id: "tab-clients"
 - extendedWaitUntil:
     visible: "Clients"
     timeout: 20000

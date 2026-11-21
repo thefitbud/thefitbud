@@ -556,6 +556,7 @@ export function ClientStatusScreen({
         void load().finally(() => setRefreshing(false));
       }}
     >
+      <View testID="client-status">
       <View style={styles.nav}>
         <Pressable
           accessibilityRole="button"
@@ -716,6 +717,7 @@ export function ClientStatusScreen({
           <Text style={styles.actionText}>WhatsApp</Text>
         </Pressable>
         <Pressable
+          testID="client-nudge"
           accessibilityRole="button"
           disabled={actionsDisabled}
           onPress={() => void startNudge()}
@@ -756,6 +758,7 @@ export function ClientStatusScreen({
             <Text style={styles.issue}>{open.summary}</Text>
           </View>
           <Pressable
+            testID="client-review-exception"
             accessibilityRole="button"
             disabled={offline}
             onPress={() => onOpenException(open.id)}
@@ -1184,6 +1187,7 @@ export function ClientStatusScreen({
       </Modal>
 
       {toast ? <Snackbar message={toast} onDismiss={() => setToast(null)} /> : null}
+      </View>
     </Screen>
   );
 }
