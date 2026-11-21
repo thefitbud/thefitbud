@@ -1,13 +1,19 @@
 /**
- * Z11b-3: the active workout keeps the screen awake through the `ExpoKeepAwake`
- * native module, looked up with `requireOptionalNativeModule`. A
- * `require("expo-keep-awake")` is fatal on device (the package is not a
- * dependency of this app), and the screen must also mount when the module is
- * missing (web, tests, a build without it).
+ * Z12-57: the active workout keeps the screen awake through `expo-keep-awake`
+ * via `activateWorkoutKeepAwake` on mount. Z11b-3's
+ * `requireOptionalNativeModule("ExpoKeepAwake")` remains the fallback when the
+ * package path throws.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { workoutExecutionSchema, type WorkoutExecution } from "@fitbud/contracts";
 import { mockAuth, render } from "../test/render";
+
+const keepAwake = vi.hoisted(() => ({
+  activateKeepAwakeAsync: vi.fn(async () => undefined),
+  deactivateKeepAwake: vi.fn(async () => undefined),
+  useKeepAwake: vi.fn(),
+  throwOnImport: false,
+}));
 
 const native = vi.hoisted(() => ({
   module: null as null | {
@@ -16,6 +22,17 @@ const native = vi.hoisted(() => ({
   },
   requested: [] as string[],
 }));
+
+vi.mock("expo-keep-awake", () => {
+  if (keepAwake.throwOnImport) {
+    throw new Error("expo-keep-awake unavailable");
+  }
+  return {
+    activateKeepAwakeAsync: keepAwake.activateKeepAwakeAsync,
+    deactivateKeepAwake: keepAwake.deactivateKeepAwake,
+    useKeepAwake: keepAwake.useKeepAwake,
+  };
+});
 
 vi.mock("expo-modules-core", () => ({
   requireOptionalNativeModule: (name: string) => {
@@ -127,45 +144,58 @@ function mount() {
 }
 
 beforeEach(() => {
+  keepAwake.throwOnImport = false;
+  keepAwake.activateKeepAwakeAsync.mockClear();
+  keepAwake.deactivateKeepAwake.mockClear();
+  keepAwake.useKeepAwake.mockClear();
+  keepAwake.activateKeepAwakeAsync.mockResolvedValue(undefined);
+  keepAwake.deactivateKeepAwake.mockResolvedValue(undefined);
   native.module = null;
   native.requested.length = 0;
 });
 
 describe("active workout keep-awake", () => {
-  it("activates on mount and deactivates on unmount through ExpoKeepAwake", () => {
-    const activate = vi.fn(async () => true);
-    const deactivate = vi.fn(async () => true);
-    native.module = { activate, deactivate };
-
-    const view = mount();
-    expect(native.requested).toContain("ExpoKeepAwake");
-    expect(activate).toHaveBeenCalledWith("fitbud-active-workout");
-    expect(deactivate).not.toHaveBeenCalled();
-
-    view.unmount();
-    expect(deactivate).toHaveBeenCalledWith("fitbud-active-workout");
+  it("activates keep-awake on mount with the workout tag", () => {
+    mount();
+    expect(keepAwake.activateKeepAwakeAsync).toHaveBeenCalledWith(
+      "fitbud-active-workout",
+    );
   });
 
-  it("mounts and unmounts without throwing when the native module is absent", () => {
-    native.module = null;
-    expect(() => mount().unmount()).not.toThrow();
-    expect(native.requested).toContain("ExpoKeepAwake");
+  it("activateWorkoutKeepAwake uses expo-keep-awake", async () => {
+    const release = activateWorkoutKeepAwake();
+    expect(keepAwake.activateKeepAwakeAsync).toHaveBeenCalledWith("fitbud-active-workout");
+    release();
+    expect(keepAwake.deactivateKeepAwake).toHaveBeenCalledWith("fitbud-active-workout");
   });
 
-  it("does not fail the screen when the native calls reject or throw", async () => {
-    native.module = {
-      activate: vi.fn(async () => {
-        throw new Error("boom");
-      }),
-      deactivate: vi.fn(() => {
-        throw new Error("boom");
-      }),
-    };
+  it("does not fail the screen when expo-keep-awake rejects", async () => {
+    keepAwake.activateKeepAwakeAsync.mockRejectedValueOnce(new Error("boom"));
+    keepAwake.deactivateKeepAwake.mockImplementationOnce(() => {
+      throw new Error("boom");
+    });
     let release: () => void = () => undefined;
     expect(() => {
       release = activateWorkoutKeepAwake();
     }).not.toThrow();
     await Promise.resolve();
     expect(() => release()).not.toThrow();
+  });
+
+  it("falls back to ExpoKeepAwake when the package path throws", async () => {
+    // Re-import is awkward under vitest; exercise the fallback by making
+    // activateKeepAwakeAsync throw synchronously via a mock that throws.
+    keepAwake.activateKeepAwakeAsync.mockImplementationOnce(() => {
+      throw new Error("sync boom");
+    });
+    const activate = vi.fn(async () => true);
+    const deactivate = vi.fn(async () => true);
+    native.module = { activate, deactivate };
+
+    const release = activateWorkoutKeepAwake();
+    expect(native.requested).toContain("ExpoKeepAwake");
+    expect(activate).toHaveBeenCalledWith("fitbud-active-workout");
+    release();
+    expect(deactivate).toHaveBeenCalledWith("fitbud-active-workout");
   });
 });

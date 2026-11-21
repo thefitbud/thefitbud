@@ -33,6 +33,11 @@ export type NativeWorkoutContentState = {
   restEndsAt: number | null;
   /** Full rest length in seconds, for the progress bar. */
   restSeconds: number | null;
+  /**
+   * From JS (`lastExercise === false`). While true, native LogSet / logSet must
+   * not set `finished` (Z12-48 / Z12-57). Optional until callers send it.
+   */
+  moreExercisesRemain?: boolean;
 };
 
 /**

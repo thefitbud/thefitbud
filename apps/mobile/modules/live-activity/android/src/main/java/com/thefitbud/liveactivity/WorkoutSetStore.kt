@@ -179,6 +179,7 @@ internal class WorkoutSetStore(context: Context) {
                 // restState() can answer the app honestly when it comes back.
                 .put("restEndsAt", state.restEndsAt ?: JSONObject.NULL)
                 .put("restSeconds", state.restSeconds ?: JSONObject.NULL)
+                .put("moreExercisesRemain", state.moreExercisesRemain)
 
         fun stateFromJson(json: JSONObject): WorkoutSetNotification.SetState =
             WorkoutSetNotification.SetState(
@@ -197,6 +198,7 @@ internal class WorkoutSetStore(context: Context) {
                 workoutName = json.optString("workoutName", ""),
                 restEndsAt = if (json.isNull("restEndsAt")) null else json.optLong("restEndsAt"),
                 restSeconds = if (json.isNull("restSeconds")) null else json.optInt("restSeconds"),
+                moreExercisesRemain = json.optBoolean("moreExercisesRemain", false),
             )
     }
 }

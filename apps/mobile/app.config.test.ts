@@ -7,6 +7,8 @@ import appConfig from "./app.config.js";
 import liveActivityPlugin from "./plugins/withLiveActivity.js";
 import liveActivityTarget from "./targets/FitBudLiveActivity/expo-target.config.js";
 
+const VIBRATE_PERMISSION = "android.permission.VIBRATE";
+
 const APP_GROUPS = "com.apple.security.application-groups";
 
 function configFor(variant: string | undefined) {
@@ -161,5 +163,46 @@ describe("app.config.js variants", () => {
     expect(configFor("staging").android.googleServicesFile).toBe(
       "/tmp/eas/google-services.json",
     );
+  });
+
+  it("declares Android VIBRATE for haptics (Z12-57)", () => {
+    const config = configFor("development");
+    expect(config.android.permissions).toContain(VIBRATE_PERMISSION);
+  });
+
+  it("registers the Android mailto package-visibility query (Z10-26 / Z12-57)", async () => {
+    const config = configFor("development");
+    const mod = config.mods?.android?.manifest;
+    expect(typeof mod).toBe("function");
+    const result = await mod({
+      ...config,
+      modRequest: {
+        platform: "android",
+        projectRoot: "/tmp",
+        nextMod: (c: unknown) => c,
+      },
+      modResults: {
+        manifest: {
+          $: { "xmlns:android": "http://schemas.android.com/apk/res/android" },
+          application: [{ $: { "android:name": ".MainApplication" } }],
+        },
+      },
+    });
+    const queries = result.modResults.manifest.queries ?? [];
+    const mailto = queries.some((block: { intent?: unknown[] }) =>
+      (block.intent ?? []).some((intent: {
+        action?: { $?: { "android:name"?: string } }[];
+        data?: { $?: { "android:scheme"?: string } }[];
+      }) => {
+        const isView = (intent.action ?? []).some(
+          (action) => action.$?.["android:name"] === "android.intent.action.VIEW",
+        );
+        const isMailto = (intent.data ?? []).some(
+          (entry) => entry.$?.["android:scheme"] === "mailto",
+        );
+        return isView && isMailto;
+      }),
+    );
+    expect(mailto).toBe(true);
   });
 });

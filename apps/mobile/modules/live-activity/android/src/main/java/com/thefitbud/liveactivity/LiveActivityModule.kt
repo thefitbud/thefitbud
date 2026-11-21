@@ -51,6 +51,12 @@ class WorkoutStateRecord : Record {
     /** Full rest length in seconds, as the app set it. */
     @Field var restSeconds: Int? = null
 
+    /**
+     * From JS (`lastExercise === false`). While true, logSet must not set
+     * finished (Z12-48 / Z12-57). Default false until payloads land.
+     */
+    @Field var moreExercisesRemain: Boolean = false
+
     fun toState(openUrl: String, workoutName: String): WorkoutSetNotification.SetState =
         WorkoutSetNotification.SetState(
             exerciseName = exerciseName,
@@ -68,6 +74,7 @@ class WorkoutStateRecord : Record {
             workoutName = workoutName,
             restEndsAt = restEndsAt?.toLong(),
             restSeconds = restSeconds,
+            moreExercisesRemain = moreExercisesRemain,
         )
 }
 
