@@ -9,12 +9,22 @@ import type { ClientWorkspace } from "@fitbud/contracts";
 const auth = vi.hoisted(() => ({
   me: null as { timezone: string } | null,
 }));
+const zone = vi.hoisted(() => ({
+  device: "America/Los_Angeles",
+}));
 vi.mock("../../auth/AuthProvider", () => ({
   useAuth: () => ({ me: auth.me }),
 }));
 vi.mock("../../lib/http-api", () => ({
   cancelReactivation: vi.fn(),
 }));
+vi.mock("@fitbud/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@fitbud/core")>();
+  return {
+    ...actual,
+    deviceTimeZone: () => zone.device,
+  };
+});
 
 import { WorkspaceHeader } from "./WorkspaceHeader";
 
@@ -267,11 +277,28 @@ describe("WorkspaceHeader ended state (frame 179)", () => {
     );
   });
 
-  it("with the trainer's profile not loaded no Coached line renders", () => {
+  it("with no stored trainer zone uses the browser zone for Coached/Ended dates (D-W12-26)", () => {
     auth.me = null;
+    zone.device = "America/Los_Angeles";
+    // 2026-10-03 20:00Z is Sat 3 Oct afternoon in LA; 2026-07-06 03:00Z is Sun 5 Jul in LA.
+    renderHeader(
+      workspace("ended", null, {
+        ...ENDED,
+        startedAt: "2026-07-06T03:00:00.000Z",
+        endedAt: "2026-10-03T20:00:00.000Z",
+      }),
+    );
+    expect(screen.getByText(/^Coached Sun 5 Jul( 2026)? — Sat 3 Oct( 2026)?$/)).toBeTruthy();
+    expect(document.querySelector('.status-chip[data-kind="lifecycle"]')?.textContent).toMatch(
+      /^Ended · Sat 3 Oct( 2026)?$/,
+    );
+  });
+
+  it("with an empty stored trainer zone still falls back to the browser zone", () => {
+    auth.me = { timezone: "   " };
+    zone.device = "Asia/Kolkata";
     renderHeader(workspace("ended", null, ENDED));
-    expect(screen.queryByText(/^Coached /)).toBeNull();
-    expect(document.querySelector('.status-chip[data-kind="lifecycle"]')?.textContent).toBe("Ended");
+    expect(screen.getByText(/^Coached Mon 6 Jul( 2026)? — Sat 3 Oct( 2026)?$/)).toBeTruthy();
   });
 
   it("pending reactivation keeps the waiting line, Remind on WhatsApp and Cancel request", () => {

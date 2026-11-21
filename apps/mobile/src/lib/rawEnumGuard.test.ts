@@ -98,7 +98,10 @@ describe("rawEnumGuard: mobile trainer copy", () => {
       } as unknown as ClientDirectoryItem;
       const row = mapDirectoryItemToRow(item);
       expect(rawEnumHits(row.subtitle), status).toEqual([]);
-      expect(clientSubtitle(item)).toBe(label);
+      // TM-02d: invited rows say "Invite pending" (not the core "Invited" label).
+      expect(clientSubtitle(item)).toBe(
+        status === "invited" ? "Invite pending" : label,
+      );
     }
   });
 

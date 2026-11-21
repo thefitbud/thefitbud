@@ -1,0 +1,79 @@
+appId: com.thefitbud.mobile.staging
+name: F24 Coach reviews a session and a diet day (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+env:
+  CLIENT_SLUG: priya-nair
+---
+# F24 (Z12-53): session detail when present; diet day from Priya Nair (TM-12).
+# iOS wraps roster names — open by client-row-* id after scrollUntilVisible.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- runFlow: ../../common/wait-attention-loaded.yaml
+- takeScreenshot: TM-01a2
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "PR|finished|sets"
+    commands:
+      - tapOn: "PR|finished|sets"
+      - extendedWaitUntil:
+          visible: "Workout|Add note|Reply on WhatsApp|sets"
+          timeout: 20000
+          optional: true
+      - takeScreenshot: TM-11a
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Back|‹"
+      - extendedWaitUntil:
+          visible:
+            id: "attention-screen"
+          timeout: 20000
+
+- tapOn:
+    id: "tab-clients"
+- scrollUntilVisible:
+    element:
+      id: "client-row-${CLIENT_SLUG}"
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: "client-row-${CLIENT_SLUG}"
+- extendedWaitUntil:
+    visible:
+      id: "client-status"
+    timeout: 30000
+- tapOn: "Review day"
+- extendedWaitUntil:
+    visible: "Food|Meals ·"
+    timeout: 30000
+- takeScreenshot: TM-12a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "Ate out"
+    commands:
+      - tapOn: ".*Ate out.*"
+- runFlow:
+    when:
+      notVisible: "Plan|Logged|WhatsApp"
+    commands:
+      - tapOn: "Breakfast.*|Lunch.*|Dinner.*|Snack.*|Early morning.*"
+- extendedWaitUntil:
+    visible: "Plan|Logged|WhatsApp|Add note"
+    timeout: 20000
+- takeScreenshot: TM-12b
+- runFlow: ../../common/assert-no-crash.yaml
+- assertVisible: "WhatsApp"
+- tapOn: "Dismiss|Close"
+- runFlow: ../../common/assert-no-crash.yaml

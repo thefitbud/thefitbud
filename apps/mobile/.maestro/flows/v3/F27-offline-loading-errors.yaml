@@ -1,0 +1,68 @@
+appId: com.thefitbud.mobile.staging
+name: F27 Offline, loading, errors (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+env:
+  CLIENT_SLUG: rohan-mehta
+---
+# F27 (Z12-53): loading / empty paths without cutting the network. Open a client
+# by row id (iOS name wrap).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+
+- extendedWaitUntil:
+    visible:
+      id: "attention-screen"
+    timeout: 60000
+- runFlow:
+    when:
+      visible: "Loading"
+    commands:
+      - takeScreenshot: TM-01e
+- extendedWaitUntil:
+    notVisible: "Loading"
+    timeout: 90000
+- takeScreenshot: TM-01a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible: "All caught up"
+    commands:
+      - takeScreenshot: TM-01d
+      - runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn:
+    id: "tab-clients"
+- extendedWaitUntil:
+    visible: "Clients|Loading"
+    timeout: 30000
+- takeScreenshot: TM-02a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- scrollUntilVisible:
+    element:
+      id: "client-row-${CLIENT_SLUG}"
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: "client-row-${CLIENT_SLUG}"
+- extendedWaitUntil:
+    visible:
+      id: "client-status"
+    timeout: 30000
+- runFlow:
+    when:
+      visible: "Couldn't load|Retry"
+    commands:
+      - takeScreenshot: TM-03h
+- runFlow: ../../common/assert-no-crash.yaml

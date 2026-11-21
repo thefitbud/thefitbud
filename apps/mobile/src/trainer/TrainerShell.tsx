@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Text } from "../components/Text";
-import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
+import type { CoachAsk, TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
-import { colors, spacing } from "@fitbud/ui-mobile";
+import { spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { AttentionTab } from "./AttentionTab";
 import { TrainerMoreScreen } from "./MoreScreen";
@@ -11,20 +11,21 @@ import { TrainerNotificationSettingsScreen } from "./TrainerNotificationSettings
 import { TrainerProfileScreen } from "./TrainerProfileScreen";
 import { CheckinReviewScreen } from "./CheckinReviewScreen";
 import { CheckinsTab } from "./CheckinsTab";
-import {
-  onboardingStatusLabel,
+import { onboardingStatusLabel,
   type ClientDirectoryRow,
 } from "./clients";
 import { ClientsTab } from "./ClientsTab";
 import { ClientStatusScreen } from "./ClientStatusScreen";
 import { ExceptionReviewScreen } from "./ExceptionReviewScreen";
-import {
-  isCaptureModeEnabled,
+import { AskDetailScreen } from "./ask/AskDetailScreen";
+import { SessionDetailScreen } from "./session/SessionDetailScreen";
+import { isCaptureModeEnabled,
   registerTrainerCaptureNav,
 } from "../dev/captureBridge";
 import { stage1Api } from "../lib/stage1Api";
 import { roleForLinkKind } from "../navigation/resolveRoute";
 import { backOverlays, pushOverlay, startOverlays } from "./overlayStack";
+import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
 
 type TrainerTab = "attention" | "clients" | "checkins" | "more";
 
@@ -43,6 +44,19 @@ type Overlay =
       // Opened from a push with no screen below it: Back goes to the client page.
       cold?: boolean;
     }
+  | {
+      kind: "ask";
+      askId: string;
+      relationshipId: string;
+      displayName: string;
+      initialAsk?: CoachAsk | null;
+    }
+  | {
+      kind: "session";
+      executionId: string;
+      relationshipId: string;
+      displayName: string;
+    }
   | { kind: "notifications" }
   | { kind: "profile" };
 
@@ -54,6 +68,15 @@ const TABS: Array<{ id: TrainerTab; label: string }> = [
 ];
 
 export function TrainerShell() {
+  return (
+    <ThemeScope scheme="system">
+      <TrainerShellBody />
+    </ThemeScope>
+  );
+}
+
+function TrainerShellBody() {
+  const styles = useStyles();
   const {
     relationships,
     api,
@@ -285,6 +308,32 @@ export function TrainerShell() {
     );
   }
 
+  if (overlay?.kind === "ask") {
+    return (
+      <AskDetailScreen
+        key={refreshNonce}
+        askId={overlay.askId}
+        initialAsk={overlay.initialAsk}
+        relationshipId={overlay.relationshipId}
+        displayName={overlay.displayName}
+        onBack={() => goBack()}
+        onAnswered={() => goBack()}
+      />
+    );
+  }
+
+  if (overlay?.kind === "session") {
+    return (
+      <SessionDetailScreen
+        key={refreshNonce}
+        executionId={overlay.executionId}
+        relationshipId={overlay.relationshipId}
+        displayName={overlay.displayName}
+        onBack={() => goBack()}
+      />
+    );
+  }
+
   if (overlay?.kind === "notifications") {
     return (
       <TrainerNotificationSettingsScreen onBack={() => goBack()} />
@@ -309,6 +358,15 @@ export function TrainerShell() {
             onOpenClient={(relationshipId) => {
               void openClientById(relationshipId, undefined, "start");
             }}
+            onOpenAsk={(ask, displayName) =>
+              startAt({
+                kind: "ask",
+                askId: ask.id,
+                relationshipId: ask.relationshipId,
+                displayName,
+                initialAsk: ask,
+              })
+            }
           />
         ) : null}
 
@@ -317,6 +375,22 @@ export function TrainerShell() {
             key={refreshNonce}
             onOpenClient={openClientFromRow}
             initialSegment={clientsSegment}
+            onOpenAsk={(askId, relationshipId, displayName) =>
+              startAt({
+                kind: "ask",
+                askId,
+                relationshipId,
+                displayName,
+              })
+            }
+            onOpenSession={(executionId, relationshipId, displayName) =>
+              startAt({
+                kind: "session",
+                executionId,
+                relationshipId,
+                displayName,
+              })
+            }
           />
         ) : null}
 
@@ -338,6 +412,7 @@ export function TrainerShell() {
           return (
             <Pressable
               key={item.id}
+              testID={`tab-${item.id}`}
               accessibilityRole="tab"
               accessibilityLabel={item.label}
               accessibilityState={{ selected }}
@@ -361,36 +436,36 @@ export function TrainerShell() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   root: {
     flex: 1,
-    backgroundColor: colors.background,
+    backgroundColor: t.colors.bg,
   },
   content: {
     flex: 1,
   },
   banner: {
-    backgroundColor: colors.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 12,
     padding: spacing.lg,
     marginBottom: spacing.lg,
     gap: spacing.sm,
   },
   bannerTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontSize: 15,
     fontWeight: "600",
   },
   bannerBody: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 14,
     lineHeight: 20,
   },
   tabBar: {
     flexDirection: "row",
     borderTopWidth: 1,
-    borderTopColor: colors.lightGrey,
-    backgroundColor: colors.white,
+    borderTopColor: t.colors.line,
+    backgroundColor: t.colors.card,
     paddingBottom: spacing.sm,
     paddingTop: spacing.sm,
   },
@@ -402,18 +477,18 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   tabLabel: {
-    color: colors.midGrey,
+    color: t.colors.ink3,
     fontSize: 12,
     fontWeight: "500",
   },
   tabLabelSelected: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontWeight: "600",
   },
   tabIndicator: {
     width: 16,
     height: 3,
     borderRadius: 999,
-    backgroundColor: colors.indigo,
+    backgroundColor: t.colors.brand,
   },
-});
+}));

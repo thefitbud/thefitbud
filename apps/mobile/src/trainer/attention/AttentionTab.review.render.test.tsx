@@ -163,7 +163,9 @@ function mount() {
 }
 
 async function openSheet() {
-  fireEvent.click(await screen.findByRole("button", { name: /^Rohan Mehta, / }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: /^Review Rohan Mehta/ }),
+  );
   await screen.findByTestId("review-sheet-mark-reviewed");
 }
 
@@ -330,9 +332,8 @@ describe("AttentionTab Asked toast (Z12-51)", () => {
     loadOk();
     api.answerCoachAsk.mockResolvedValue({});
     mount();
-    fireEvent.click(await screen.findByRole("button", { name: /^Asked 2/ }));
-    const answers = await screen.findAllByText("Mark answered");
-    fireEvent.click(answers[0]!);
+    const replies = await screen.findAllByText("Reply");
+    fireEvent.click(replies[0]!);
     expect(await screen.findByText("Marked answered")).toBeTruthy();
     // The queue lets the toast go early (a tap outside it); AttentionTab is not told.
     act(() => {
@@ -340,7 +341,7 @@ describe("AttentionTab Asked toast (Z12-51)", () => {
       if (current) queue.dismiss(current.id, "close");
     });
     await waitFor(() => expect(screen.queryByText("Marked answered")).toBeNull());
-    fireEvent.click(screen.getByText("Mark answered"));
+    fireEvent.click(screen.getByText("Reply"));
     expect(await screen.findByText("Marked answered")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
   });

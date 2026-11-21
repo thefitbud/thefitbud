@@ -1,0 +1,77 @@
+appId: com.thefitbud.mobile.staging
+name: F26 Ended client and reactivation (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+---
+# F26 (Z12-53): Ended filter → Kavya → Reactivate. Ended sits off-screen to the
+# right of All / Needs attention / Check-in due — tap clients-filter-ended by id
+# (horizontal ScrollView still exposes the Pressable to Maestro by id).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- runFlow: ../../common/wait-attention-loaded.yaml
+- tapOn:
+    id: "tab-clients"
+- extendedWaitUntil:
+    visible:
+      id: "clients-filter-all"
+    timeout: 30000
+# Nudge the chip row right if Ended is not yet hit-testable, then tap by id.
+- runFlow:
+    when:
+      notVisible:
+        id: "clients-filter-ended"
+    commands:
+      - swipe:
+          start: "80%, 22%"
+          end: "20%, 22%"
+- extendedWaitUntil:
+    visible:
+      id: "clients-filter-ended"
+    timeout: 15000
+- tapOn:
+    id: "clients-filter-ended"
+- extendedWaitUntil:
+    visible: "Ended|Kavya|read only|No ended clients"
+    timeout: 30000
+- takeScreenshot: TM-02c
+- runFlow: ../../common/assert-no-crash.yaml
+
+- scrollUntilVisible:
+    element:
+      id: "client-row-kavya-menon"
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: "client-row-kavya-menon"
+- extendedWaitUntil:
+    visible: "Reactivate|ended|Coaching ended"
+    timeout: 30000
+- takeScreenshot: TM-03d
+- runFlow: ../../common/assert-no-crash.yaml
+
+- tapOn: "Reactivate.*"
+- extendedWaitUntil:
+    visible: "Send invite|Reactivate|Cancel"
+    timeout: 20000
+- takeScreenshot: TM-03e
+- runFlow: ../../common/assert-no-crash.yaml
+- runFlow:
+    when:
+      visible: "Cancel"
+    commands:
+      - tapOn: "Cancel"
+- runFlow:
+    when:
+      visible: "Dismiss|Close"
+    commands:
+      - tapOn: "Dismiss|Close"
+- runFlow: ../../common/assert-no-crash.yaml

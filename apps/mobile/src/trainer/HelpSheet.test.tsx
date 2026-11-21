@@ -11,9 +11,11 @@ vi.mock("react-native", () => ({
 }));
 vi.mock("expo-clipboard", () => ({ setStringAsync: vi.fn() }));
 vi.mock("lucide-react-native", () => ({
+  Bug: "Bug",
   Check: "Check",
   ClipboardList: "ClipboardList",
   Copy: "Copy",
+  Mail: "Mail",
   X: "X",
 }));
 vi.mock("expo-constants", () => ({
@@ -25,6 +27,39 @@ vi.mock("@fitbud/ui-mobile", () => ({
   fontFamilyBold: "b",
   fontFamilySemiBold: "s",
   spacing: { md: 12 },
+  themes: {
+    light: { scheme: "light", colors: {}, radii: {}, spacing: {}, text: {}, touchTarget: 44 },
+    dark: { scheme: "dark", colors: {}, radii: {}, spacing: {}, text: {}, touchTarget: 44 },
+  },
+}));
+vi.mock("../providers/ThemeProvider", () => ({
+  ThemeScope: ({ children }: { children: unknown }) => children,
+  useTheme: () => ({
+    scheme: "light",
+    colors: new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    ),
+    radii: {},
+    spacing: {},
+    text: {},
+    touchTarget: 44,
+  }),
+  createThemedStyles: (factory: (t: { colors: Record<string, string> }) => unknown) => {
+    const colors = new Proxy(
+      {},
+      { get: (_t, prop) => (typeof prop === "string" ? prop : "token") },
+    );
+    const styles = factory({
+      colors: colors as Record<string, string>,
+      radii: {},
+      spacing: { md: 12 },
+      text: {},
+      touchTarget: 44,
+      scheme: "light",
+    } as never);
+    return () => styles;
+  },
 }));
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 vi.mock("@fitbud/tokens", () => ({

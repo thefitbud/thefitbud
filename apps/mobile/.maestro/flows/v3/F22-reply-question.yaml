@@ -1,0 +1,52 @@
+appId: com.thefitbud.mobile.staging
+name: F22 Coach replies to a question (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+---
+# F22 (Z12-53): Asked-you card → Reply (TM-10). iOS merges "Reply {Name}" into one
+# a11y node, so tap needs-you-action by id after scrolling to it.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- runFlow: ../../common/wait-attention-loaded.yaml
+- takeScreenshot: TM-01a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- scrollUntilVisible:
+    element:
+      id: "needs-you-action"
+    direction: DOWN
+    timeout: 60000
+# Prefer an Asked-you Reply label when present; else first needs-you-action.
+- runFlow:
+    when:
+      visible: "Reply .*"
+    commands:
+      - tapOn: "Reply .*"
+- runFlow:
+    when:
+      notVisible: "Asked you|Mark answered|Reply on WhatsApp"
+    commands:
+      - tapOn:
+          id: "needs-you-action"
+- extendedWaitUntil:
+    visible: "Asked you|Mark answered|Reply on WhatsApp"
+    timeout: 30000
+- takeScreenshot: TM-10a
+- runFlow: ../../common/assert-no-crash.yaml
+- assertVisible: "Mark answered"
+- assertVisible: "Reply on WhatsApp"
+- tapOn: "Mark answered"
+- extendedWaitUntil:
+    visible: "Answered|Undo|Needs you"
+    timeout: 15000
+- takeScreenshot: TM-10b
+- runFlow: ../../common/assert-no-crash.yaml

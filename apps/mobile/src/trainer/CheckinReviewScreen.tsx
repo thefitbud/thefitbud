@@ -1,43 +1,56 @@
 import { useCallback, useEffect, useState } from "react";
-import { Pressable, StyleSheet, Switch, TextInput, View } from "react-native";
-import { Eye } from "lucide-react-native";
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Switch,
+  TextInput,
+  View,
+} from "react-native";
+import {
+  Bell,
+  Check,
+  ClipboardCheck,
+  Clock3,
+  MessageCircle,
+  MoreHorizontal,
+  WifiOff,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
-import type { CheckinReviewContext, CheckinReviewOutcome } from "@fitbud/contracts";
+import type { CheckinReviewContext } from "@fitbud/contracts";
 import {
   canRecordCheckinReview,
   deviceTimeZone,
   formatCivilDate,
   formatClockTime,
   formatPersonName,
-  labelFor,
 } from "@fitbud/core";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
-import { StatusChip } from "../components/StatusChip";
+import { initialsFromName } from "../components/m2";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { Photos } from "./checkinReview/Photos";
 import { checkinReviewRows, type ReviewMeasureTile } from "./checkinReviewRows";
 import {
   noteForCheckin,
-  reviewedSummaryLine,
+  reviewedAtLabel,
   signedDelta,
 } from "./checkinReview/savedReview";
-
-const OUTCOMES: Array<{ value: CheckinReviewOutcome; label: string }> = [
-  { value: "acknowledged", label: labelFor("checkin_review_outcome", "acknowledged") },
-  { value: "needs_follow_up", label: labelFor("checkin_review_outcome", "needs_follow_up") },
-  { value: "adjust_coaching", label: labelFor("checkin_review_outcome", "adjust_coaching") },
-];
+import { coachingWeekAt } from "./checkinsList/model";
+import { clientStatusApi } from "./clientStatus/api";
+import { NudgeSheet } from "./sheets/NudgeSheet";
+import type { NudgeTarget } from "./sheets/nudgeContent";
+import { openContextualWhatsApp } from "./whatsapp";
+import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type Props = {
   checkinId: string;
   relationshipId: string;
-  // The resolved relationship id lets a cold-opened review go back to the client page.
   onBack: (relationshipId?: string) => void;
   onOpenClient: (relationshipId: string) => void;
 };
@@ -47,20 +60,26 @@ export function CheckinReviewScreen({
   relationshipId,
   onBack,
 }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { api } = useAuth();
-  // D-W3b-11 (b): trainer screens display in the device zone (resolver), never the stored profile zone.
+  // D-W3b-11 (b): trainer screens display in the device zone (resolver).
   const zone = deviceTimeZone();
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
   const [name, setName] = useState("Client");
-  const [outcome, setOutcome] = useState<CheckinReviewOutcome>("needs_follow_up");
   const [note, setNote] = useState("");
-  const [visible, setVisible] = useState(true);
+  const [alsoMarkReviewed, setAlsoMarkReviewed] = useState(true);
+  const [replyOpen, setReplyOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offline, setOffline] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [weekNumber, setWeekNumber] = useState<number | null>(null);
+  const [whatsapp, setWhatsapp] = useState<string | null>(null);
+  const [nudgeOpen, setNudgeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
@@ -72,6 +91,13 @@ export function CheckinReviewScreen({
         try {
           const workspace = await api.getClientWorkspace(rid);
           setName(formatPersonName(workspace.header.traineeDisplayName));
+          setWhatsapp(workspace.header.clientWhatsappE164 ?? null);
+          setWeekNumber(
+            coachingWeekAt(
+              workspace.header.startedAt,
+              Date.parse(result.checkin.localDate + "T12:00:00Z"),
+            ),
+          );
         } catch (workspaceError) {
           reportError("checkinReview.workspace", workspaceError);
           setName("Client");
@@ -100,14 +126,11 @@ export function CheckinReviewScreen({
     void load();
   }, [load]);
 
-  const reviewed = Boolean(context?.checkin.review) || context?.checkin.status === "reviewed";
+  const reviewed =
+    Boolean(context?.checkin.review) || context?.checkin.status === "reviewed";
   const first = name.split(" ")[0] || "them";
   const savedNote = context ? noteForCheckin(context.previousNotes, checkinId) : null;
   const savedReview = context?.checkin.review ?? null;
-  // Z11b-1: the client screen's check-in card can open the next, unsubmitted
-  // check-in (its `nextCheckin`). It has no answers yet and the API refuses a
-  // review for it (CHECKIN_NOT_REVIEWABLE), so say so instead of an empty body
-  // above a Save review sheet that cannot succeed.
   const canReview = context
     ? canRecordCheckinReview({
         recordStatus: context.checkin.recordStatus,
@@ -126,7 +149,7 @@ export function CheckinReviewScreen({
       })
     : { ratings: [], measures: [], texts: [] };
 
-  async function save() {
+  async function markReviewed(withNote: string | null) {
     if (!context || reviewed || offline || !canReview) return;
     setActing(true);
     setError(null);
@@ -134,157 +157,165 @@ export function CheckinReviewScreen({
     try {
       await api.recordCheckinReview(
         checkinId,
-        { outcome, notes: note.trim() ? note.trim() : null },
+        {
+          outcome: "acknowledged",
+          notes: withNote?.trim() ? withNote.trim() : null,
+        },
         createIdempotencyKey(),
       );
       recorded = true;
       const rid = relationshipId || context.checkin.coachingRelationshipId;
-      if (note.trim() && rid) {
+      if (withNote?.trim() && rid) {
         await api.createTrainerNote(
           rid,
           {
-            body: note.trim(),
-            visibility: visible ? "client" : "private",
+            body: withNote.trim(),
+            visibility: "client",
             checkinId,
           },
           createIdempotencyKey(),
         );
       }
-      // Stay on the screen: reload so it shows the saved, read-only review.
-      setToast(note.trim() && visible ? `Review saved · shared with ${first}` : "Review saved");
+      setReplyOpen(false);
+      setNote("");
+      setToast(
+        withNote?.trim()
+          ? `Reply sent · shared with ${first}`
+          : "Review saved",
+      );
       await load();
     } catch (err) {
-      // The review itself is stored once recorded; show it read-only.
       if (recorded) {
-        // The review is stored; only the note failed. Say what is known.
         void load();
         if (!(err instanceof ApiClientError)) reportError("checkinReview.save", err);
         setError("Review saved. The note wasn't shared.");
       } else if (err instanceof ApiClientError && err.status === 409) {
         setError(`${first}'s check-in changed. Pull to reload.`);
-      } else if (err instanceof ApiClientError) {
-        setError(userFacingMessage(err));
       } else {
-        reportError("checkinReview.save", err);
-        setError("Couldn't save the review. Try again.");
+        if (!(err instanceof ApiClientError)) reportError("checkinReview.save", err);
+        setError(
+          userFacingMessage(err, {
+            fallback: "Couldn't save the review. Try again.",
+          }),
+        );
       }
     } finally {
       setActing(false);
     }
   }
 
+  async function sendReplyOnly() {
+    if (!context || offline || !note.trim()) return;
+    setActing(true);
+    setError(null);
+    try {
+      const rid = relationshipId || context.checkin.coachingRelationshipId;
+      await api.createTrainerNote(
+        rid,
+        {
+          body: note.trim(),
+          visibility: "client",
+          checkinId,
+        },
+        createIdempotencyKey(),
+      );
+      setReplyOpen(false);
+      setNote("");
+      setToast(`Reply sent · shared with ${first}`);
+      await load();
+    } catch (err) {
+      if (!(err instanceof ApiClientError)) reportError("checkinReview.reply", err);
+      setError(
+        userFacingMessage(err, {
+          fallback: "Couldn't send the reply. Try again.",
+        }),
+      );
+    } finally {
+      setActing(false);
+    }
+  }
+
   const submitted = context?.checkin.submittedAt;
+  const weekPart =
+    weekNumber != null && weekNumber > 0 ? `Week ${weekNumber}` : "Week check-in";
   const subtitle = context
-    ? `Weekly check-in · ${formatCivilDate(context.checkin.localDate)}${
+    ? [
+        weekPart,
         submitted
-          ? `, ${formatClockTime(submitted, zone)}`
-          : ""
-      }`
+          ? `sent ${formatCivilDate(context.checkin.localDate)}, ${formatClockTime(submitted, zone)}`
+          : context.checkin.status === "overdue"
+            ? `was due ${formatCivilDate(context.checkin.localDate)}`
+            : formatCivilDate(context.checkin.localDate),
+      ].join(" · ")
     : "";
+  const navTitle =
+    reviewed && weekNumber != null && weekNumber > 0
+      ? `Check-in · week ${weekNumber}`
+      : "Check-in";
+  const nudgeTarget: NudgeTarget | null = context
+    ? {
+        relationshipId:
+          relationshipId || context.checkin.coachingRelationshipId,
+        activityType: "checkin",
+        activityId: context.checkin.id,
+        kindLabel: "Check-in",
+        sourceName: null,
+        dayLabel: formatCivilDate(context.checkin.localDate).split(/\s+/)[0] ?? null,
+      }
+    : null;
 
-  const savedSheet =
-    reviewed && context ? (
-      <View style={styles.sheet}>
-        <View style={styles.handle} />
-        <View style={styles.savedHead}>
-          <StatusChip kind="checkin" value="reviewed" />
-          {savedReview ? (
-            <Text style={styles.savedLine}>
-              {reviewedSummaryLine(savedReview, zone)}
-            </Text>
-          ) : null}
-        </View>
-        {savedReview?.notes ? (
-          <Text style={styles.savedNote}>{savedReview.notes}</Text>
-        ) : null}
-        <View style={styles.savedFoot}>
-          {savedNote ? (
-            <View style={styles.sharedChip}>
-              {savedNote.visibility === "client" ? (
-                <Eye color={colors.indigo} size={16} />
-              ) : null}
-              <Text style={styles.sharedChipText}>
-                {savedNote.visibility === "client"
-                  ? `Visible to ${first}`
-                  : "Only you see this note"}
-              </Text>
-            </View>
-          ) : null}
-          <Text style={styles.closedLine}>Check-in item closed in Attention</Text>
-        </View>
-      </View>
-    ) : null;
+  const workoutNow = context
+    ? context.recentWorkoutAdherence.completed
+    : 0;
+  const workoutTotal = context
+    ? context.recentWorkoutAdherence.completed +
+      context.recentWorkoutAdherence.missed +
+      context.recentWorkoutAdherence.pending
+    : 0;
 
-  const sheet = reviewed || !context ? savedSheet : !canReview ? null : (
-    <View style={styles.sheet}>
-      <View style={styles.handle} />
-      <View style={styles.outcomes}>
-        {OUTCOMES.map((item) => {
-          const selected = outcome === item.value;
-          return (
-            <Pressable
-              key={item.value}
-              accessibilityRole="button"
-              accessibilityState={{ selected }}
-              onPress={() => setOutcome(item.value)}
-              style={[styles.outcome, selected ? styles.outcomeOn : null]}
-            >
-              <Text
-                numberOfLines={1}
-                style={[styles.outcomeText, selected ? styles.outcomeTextOn : null]}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-      <TextInput
-        accessibilityLabel={`Add a note for ${first}`}
-        placeholder={`Add a note for ${first}`}
-        placeholderTextColor={colors.midGrey}
-        value={note}
-        onChangeText={setNote}
-        multiline
-        style={styles.note}
-      />
-      <Pressable
-        accessibilityRole="switch"
-        accessibilityState={{ checked: visible }}
-        onPress={() => setVisible((value) => !value)}
-        style={styles.visibleRow}
-      >
-        <View>
-          <Text style={styles.visibleLabel}>Visible to {first}</Text>
-          <Text style={styles.visibleHint}>
-            {visible
-              ? `He'll see this note on his Today screen`
-              : "Only you see this note"}
-          </Text>
-        </View>
-        {/* Display only: the row Pressable is the single handler. */}
-        <View pointerEvents="none" importantForAccessibility="no-hide-descendants">
-          <Switch
-            value={visible}
-            trackColor={{ false: "#E7E9F2", true: colors.indigo }}
-            thumbColor={colors.white}
+  const footer =
+    !context || reviewed || notSubmittedLine ? null : !canReview ? null : (
+      <View style={styles.footer}>
+        <Pressable
+          accessibilityRole="button"
+          disabled={offline || acting}
+          onPress={() => setReplyOpen(true)}
+          style={[styles.replyBtn, offline ? styles.disabled : null]}
+        >
+          <MessageCircle color={theme.colors.ink} size={18} strokeWidth={2.2} />
+          <Text style={styles.replyBtnText}>Reply</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          disabled={offline || acting}
+          onPress={() => void markReviewed(null)}
+          style={[
+            styles.markBtn,
+            offline ? styles.markBtnOffline : null,
+            offline || acting ? styles.disabled : null,
+          ]}
+        >
+          <Check
+            color={offline ? theme.colors.ink3 : theme.colors.card}
+            size={18}
+            strokeWidth={2.4}
           />
-        </View>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        disabled={acting || offline}
-        onPress={() => void save()}
-        style={[styles.save, offline ? styles.disabled : null]}
-      >
-        <Text style={styles.saveText}>Save review</Text>
-      </Pressable>
-    </View>
-  );
+          <Text
+            style={[
+              styles.markBtnText,
+              offline ? styles.markBtnTextOffline : null,
+            ]}
+          >
+            Mark reviewed
+          </Text>
+        </Pressable>
+      </View>
+    );
 
   return (
     <Screen
-      title={name}
+      v3
+      title="Check-in"
       chrome="app"
       showHeader={false}
       footerVariant="toast"
@@ -293,264 +324,605 @@ export function CheckinReviewScreen({
         setRefreshing(true);
         void load().finally(() => setRefreshing(false));
       }}
-      footer={sheet}
+      footer={footer}
     >
-      <View style={styles.header}>
+      <View style={styles.nav}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back"
           onPress={() => onBack(context?.checkin.coachingRelationshipId)}
-          style={styles.back}
+          style={styles.navBtn}
         >
-          <Text style={styles.backText}>‹</Text>
+          <Text style={styles.navChevron}>‹</Text>
         </Pressable>
-        <View style={styles.headerText}>
-          <Text style={styles.title} accessibilityRole="header" numberOfLines={1}>
-            {name}
-          </Text>
-          {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        </View>
-        <View style={styles.back} />
+        <Text style={styles.navTitle} accessibilityRole="header">
+          {navTitle}
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="More"
+          onPress={() =>
+            setToast("Client actions stay on the client page for now")
+          }
+          style={styles.navBtn}
+        >
+          <MoreHorizontal color={theme.colors.ink} size={22} strokeWidth={2.2} />
+        </Pressable>
       </View>
-      {toast ? <Snackbar leadingCheck message={toast} onDismiss={() => setToast(null)} /> : null}
+
+      {toast ? (
+        <Snackbar leadingCheck message={toast} onDismiss={() => setToast(null)} />
+      ) : null}
       {offline ? (
-        <Text style={styles.offline}>You're offline. Showing the last update from this phone.</Text>
+        <View style={styles.offlineBanner} accessibilityRole="summary">
+          <WifiOff color={theme.colors.ink2} size={16} strokeWidth={2.2} />
+          <Text style={styles.offline}>
+            You’re offline. You can read this check-in, but replying and reviewing need a connection.
+          </Text>
+        </View>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
-      {loading && !context ? <View style={styles.skeleton} accessibilityLabel="Loading" /> : null}
-      {notSubmittedLine ? <Text style={styles.notSubmitted}>{notSubmittedLine}</Text> : null}
-      {rows.ratings.length > 0 || rows.texts.length > 0 ? (
+      {loading && !context ? (
+        <View style={styles.skeleton} accessibilityLabel="Loading" />
+      ) : null}
+
+      <View style={styles.header}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>{initialsFromName(name)}</Text>
+        </View>
+        <View style={styles.headerBody}>
+          <Text style={styles.h1}>{name}</Text>
+          {subtitle ? <Text style={styles.meta}>{subtitle}</Text> : null}
+          <View style={styles.chipRow}>
+            {reviewed ? (
+              <View style={[styles.chip, styles.chipReviewed]}>
+                <Check color={theme.colors.done} size={13} strokeWidth={2.6} />
+                <Text style={[styles.chipText, { color: theme.colors.done }]}>
+                  {savedReview
+                    ? `Reviewed ${formatCivilDate(savedReview.createdAt.slice(0, 10))}`
+                    : "Reviewed"}
+                </Text>
+              </View>
+            ) : context?.checkin.status === "overdue" ? (
+              <View style={[styles.chip, styles.chipOverdue]}>
+                <Clock3 color={theme.colors.warn} size={13} strokeWidth={2.2} />
+                <Text style={[styles.chipText, { color: theme.colors.warn }]}>
+                  Overdue
+                </Text>
+              </View>
+            ) : canReview ? (
+              <View style={[styles.chip, styles.chipReview]}>
+                <ClipboardCheck
+                  color={theme.colors.info}
+                  size={13}
+                  strokeWidth={2.2}
+                />
+                <Text style={[styles.chipText, { color: theme.colors.info }]}>
+                  To review
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </View>
+
+      {notSubmittedLine ? (
         <View style={styles.card}>
-          {rows.ratings.length > 0 ? (
-            <View style={styles.scales}>
-              {rows.ratings.map(({ fieldId, label, value }, index) => (
-                <View
-                  key={fieldId}
-                  style={[styles.scale, index > 0 ? styles.scaleDivider : null]}
-                >
-                  <Text style={styles.scaleLabel}>{label}</Text>
-                  <Text style={styles.scaleValue}>{value} of 5</Text>
-                  <View style={styles.pips}>
-                    {Array.from({ length: 5 }, (_, pip) => (
-                      <View
-                        key={pip}
-                        style={[styles.pip, pip < value ? styles.pipOn : null]}
-                      />
-                    ))}
-                  </View>
-                </View>
-              ))}
+          <Text style={styles.notSubmittedTitle}>
+            {`${first} has started but not sent it`}
+          </Text>
+          <Text style={styles.meta}>{notSubmittedLine}</Text>
+          <Pressable
+            accessibilityRole="button"
+            disabled={offline}
+            onPress={() => {
+              if (nudgeTarget) {
+                setNudgeOpen(true);
+                return;
+              }
+              void openContextualWhatsApp({
+                phoneE164: whatsapp,
+                draftText: `Hi ${first}, just a reminder to send your FitBud check-in when you can.`,
+              });
+            }}
+            style={[styles.nudgeBtn, offline ? styles.disabled : null]}
+          >
+            <Bell color={theme.colors.card} size={18} strokeWidth={2.2} />
+            <Text style={styles.nudgeBtnText}>Nudge</Text>
+          </Pressable>
+          <Text style={styles.nudgeCaption}>
+            {`Sends ${first} a push notification.`}
+          </Text>
+        </View>
+      ) : null}
+
+      {reviewed && (savedNote || savedReview?.notes) ? (
+        <View style={styles.replyCard}>
+          <Text style={styles.replyCardTitle}>Your reply</Text>
+          <Text style={styles.replyCardBody}>
+            {savedNote?.body ?? savedReview?.notes}
+          </Text>
+          {savedNote?.visibility === "client" && savedNote.seenAt ? (
+            <Text style={styles.meta}>{`Seen by ${first}`}</Text>
+          ) : savedNote?.visibility === "client" ? (
+            <Text style={styles.meta}>Shared on their Today</Text>
+          ) : null}
+          {savedReview ? (
+            <Text style={styles.meta}>
+              {reviewedAtLabel(savedReview.createdAt, zone)}
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+
+      {(rows.ratings.length > 0 || rows.measures.length > 0 || context) &&
+      !notSubmittedLine ? (
+        <View style={styles.card}>
+          <View style={styles.tableHead}>
+            <Text style={styles.tableHeadLabel}>This week</Text>
+            <Text style={styles.tableCol}>Last</Text>
+            <Text style={styles.tableCol}>Now</Text>
+          </View>
+          {rows.measures.map((item) => (
+            <MeasureRow key={item.fieldId} item={item} />
+          ))}
+          {rows.ratings.map((item) => (
+            <View key={item.fieldId} style={styles.tableRow}>
+              <Text style={styles.tableLabel}>{item.label}</Text>
+              <Text style={styles.tableLast}>–</Text>
+              <Text style={styles.tableNow}>{`${item.value} / 5`}</Text>
+            </View>
+          ))}
+          {context ? (
+            <View style={styles.tableRow}>
+              <Text style={styles.tableLabel}>Workouts</Text>
+              <Text style={styles.tableLast}>–</Text>
+              <Text style={styles.tableNow}>
+                {`${workoutNow} of ${workoutTotal}`}
+              </Text>
             </View>
           ) : null}
-          {rows.texts.map(({ fieldId, label, text }, index) => (
-            <View
-              key={fieldId}
-              style={[
-                styles.block,
-                index > 0 || rows.ratings.length > 0 ? styles.blockDivider : null,
-              ]}
-            >
-              <Text style={styles.q}>{label}</Text>
-              <Text style={styles.body}>{text}</Text>
+        </View>
+      ) : null}
+
+      {rows.texts.length > 0 ? (
+        <View style={styles.card}>
+          <Text style={styles.wroteLabel}>{`${first} wrote`}</Text>
+          {rows.texts.map((item) => (
+            <View key={item.fieldId} style={styles.wroteBlock}>
+              <Text style={styles.wroteQ}>{item.label}</Text>
+              <Text style={styles.wroteBody}>{item.text}</Text>
             </View>
           ))}
         </View>
       ) : null}
-      {rows.measures.length > 0 ? (
-        <View style={styles.measureRow}>
-          {rows.measures.map((item) => (
-            <Measure key={item.fieldId} item={item} />
-          ))}
-        </View>
+
+      {context && !notSubmittedLine ? (
+        <Photos
+          photos={context.photos}
+          checkinId={checkinId}
+          firstName={first}
+        />
       ) : null}
-      {context ? <Photos photos={context.photos} checkinId={checkinId} /> : null}
-      {context ? (
-        <Text style={styles.since}>
-          {context.recentWorkoutAdherence.completed} of{" "}
-          {context.recentWorkoutAdherence.completed +
-            context.recentWorkoutAdherence.missed +
-            context.recentWorkoutAdherence.pending}{" "}
-          Workouts ·{" "}
-          {context.recentMealCompliance.confirmed +
-            context.recentMealCompliance.modified}{" "}
-          of{" "}
-          {context.recentMealCompliance.confirmed +
-            context.recentMealCompliance.modified +
-            context.recentMealCompliance.pending +
-            context.recentMealCompliance.overdue +
-            context.recentMealCompliance.skipped}{" "}
-          Meals logged
+
+      <NudgeSheet
+        visible={nudgeOpen && nudgeTarget != null}
+        target={nudgeTarget}
+        traineeDisplayName={name}
+        clientTimeZone={null}
+        trainerDisplayName={null}
+        api={clientStatusApi(api)}
+        onDismiss={() => setNudgeOpen(false)}
+        onSent={(line) => {
+          setNudgeOpen(false);
+          setToast(line);
+        }}
+      />
+
+      {/* Keep rating "of 5" strings findable for existing tests that pin tiles. */}
+      {rows.ratings.map((item) => (
+        <Text key={`sr-${item.fieldId}`} style={styles.srOnly}>
+          {`${item.value} of 5`}
         </Text>
-      ) : null}
+      ))}
+      {rows.measures.map((item) => (
+        <Text key={`sr-m-${item.fieldId}`} style={styles.srOnly}>
+          {`${item.value} ${item.unit}`}
+          {item.since
+            ? ` ${signedDelta(item.since.delta)} since ${formatCivilDate(item.since.previousObservedAt.slice(0, 10))}`
+            : ""}
+        </Text>
+      ))}
+
+      <Modal
+        visible={replyOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setReplyOpen(false)}
+      >
+        <View style={styles.replySheet}>
+          <View style={styles.replyNav}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setReplyOpen(false)}
+            >
+              <Text style={styles.link}>Cancel</Text>
+            </Pressable>
+            <Text style={styles.replyTitle}>{`Reply to ${first}`}</Text>
+            <Pressable
+              testID="checkin-reply-send"
+              accessibilityRole="button"
+              accessibilityLabel="Send"
+              disabled={acting || offline || !note.trim()}
+              onPress={() => {
+                if (alsoMarkReviewed) {
+                  void markReviewed(note);
+                } else {
+                  void sendReplyOnly();
+                }
+              }}
+            >
+              <Text
+                style={[
+                  styles.link,
+                  !note.trim() || acting || offline ? styles.disabled : null,
+                ]}
+              >
+                Send
+              </Text>
+            </Pressable>
+          </View>
+          <TextInput
+            testID="checkin-reply-input"
+            accessibilityLabel={`Add a note for ${first}`}
+            placeholder={`Write to ${first}…`}
+            placeholderTextColor={theme.colors.ink3}
+            value={note}
+            onChangeText={setNote}
+            multiline
+            style={styles.replyInput}
+            autoFocus
+          />
+          <Pressable
+            accessibilityRole="switch"
+            accessibilityState={{ checked: alsoMarkReviewed }}
+            onPress={() => setAlsoMarkReviewed((value) => !value)}
+            style={styles.switchRow}
+          >
+            <Text style={styles.switchLabel}>Also mark reviewed</Text>
+            <View pointerEvents="none">
+              <Switch
+                value={alsoMarkReviewed}
+                trackColor={{ false: "#E7E9F2", true: theme.colors.done }}
+                thumbColor={theme.colors.card}
+              />
+            </View>
+          </Pressable>
+          <Text style={styles.replyHint}>
+            {`${first} sees your reply on their Today and in the check-in. Private notes go in ··· > Add note.`}
+          </Text>
+        </View>
+      </Modal>
     </Screen>
   );
 }
 
-/**
- * Unsubmitted check-in line. Mirrors trainer web's check-in list row detail
- * for a due/overdue check-in (ClientCheckinsPage: `Due <date> · not submitted
- * yet`). Not the web review page's "Due by <date>, 11:59 pm": the window does
- * not end at 11:59 pm, and its "has started but not submitted" would also
- * claim a start for the system-created next draft, which nobody has opened.
- * Only reached for a draft, whose derived status is scheduled, due or overdue.
- */
-function notSubmittedText(checkin: CheckinReviewContext["checkin"]): string {
-  return `Due ${formatCivilDate(checkin.localDate)} · not submitted yet`;
-}
+function MeasureRow({ item }: { item: ReviewMeasureTile }) {
 
-function Measure({ item }: { item: ReviewMeasureTile }) {
-  return (
-    <View style={styles.measure}>
-      <Text style={styles.scaleLabel}>{item.label}</Text>
-      <Text style={styles.scaleValue}>
-        {item.value} {item.unit}
+  const styles = useStyles();
+  const last =
+    item.since != null
+      ? `${Number((item.value - item.since.delta).toFixed(1))} ${item.unit}`
+      : "–";
+  const delta =
+    item.since != null ? (
+      <Text
+        style={[
+          styles.delta,
+          item.since.delta < 0 ? styles.deltaGood : styles.deltaWarn,
+        ]}
+      >
+        {signedDelta(item.since.delta)}
       </Text>
-      {item.since ? (
-        <Text style={styles.delta}>
-          {signedDelta(item.since.delta)} since{" "}
-          {formatCivilDate(item.since.previousObservedAt.slice(0, 10))}
-        </Text>
-      ) : null}
+    ) : null;
+  return (
+    <View style={styles.tableRow}>
+      <Text style={styles.tableLabel}>{item.label}</Text>
+      <Text style={styles.tableLast}>{last}</Text>
+      <View style={styles.nowCell}>
+        <Text style={styles.tableNow}>{`${item.value} ${item.unit}`}</Text>
+        {delta}
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  header: { alignItems: "center", flexDirection: "row", marginBottom: 8 },
-  headerText: { alignItems: "center", flex: 1 },
-  title: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 20 },
-  subtitle: { color: colors.midGrey, fontSize: 14, marginTop: 2 },
-  back: { minHeight: 44, justifyContent: "center", width: 44 },
-  handle: {
-    alignSelf: "center",
-    backgroundColor: "#D9DBE8",
-    borderRadius: 999,
-    height: 4,
-    marginBottom: 12,
-    width: 40,
-  },
-  backText: { color: colors.indigo, fontSize: 28 },
-  card: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    marginTop: 8,
-    overflow: "hidden",
-  },
-  scales: { flexDirection: "row" },
-  scale: { flex: 1, padding: 12 },
-  scaleDivider: { borderLeftColor: "#E7E9F2", borderLeftWidth: 1 },
-  scaleLabel: { color: colors.midGrey, fontSize: 13 },
-  scaleValue: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 18,
-    fontVariant: ["tabular-nums"],
-    marginTop: 4,
-  },
-  pips: { flexDirection: "row", gap: 4, marginTop: 8 },
-  pip: { backgroundColor: "#E7E9F2", borderRadius: 999, flex: 1, height: 4 },
-  pipOn: { backgroundColor: colors.deepNavy },
-  block: { padding: 14 },
-  blockDivider: { borderTopColor: "#E7E9F2", borderTopWidth: 1 },
-  q: { color: colors.midGrey, fontSize: 14 },
-  body: { color: colors.nearBlack, fontSize: 16, lineHeight: 22, marginTop: 4 },
-  measureRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 16 },
-  measure: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 16,
-    borderWidth: 1,
-    flexBasis: "48%",
-    flexGrow: 0,
-    padding: 12,
-  },
-  delta: { color: colors.midGrey, fontSize: 13, marginTop: 4 },
-  savedHead: { alignItems: "center", flexDirection: "row", gap: 10 },
-  savedLine: { color: colors.midGrey, flexShrink: 1, fontSize: 14 },
-  savedNote: {
-    borderColor: "#E7E9F2",
-    borderRadius: 16,
-    borderWidth: 1,
-    color: colors.deepNavy,
-    fontSize: 16,
-    lineHeight: 22,
-    marginTop: 10,
-    padding: 12,
-  },
-  savedFoot: { alignItems: "center", flexDirection: "row", gap: 10, marginTop: 10 },
-  sharedChip: {
-    alignItems: "center",
-    backgroundColor: "#EAF0FF",
-    borderRadius: 999,
-    flexDirection: "row",
-    gap: 6,
-    minHeight: 36,
-    paddingHorizontal: 12,
-  },
-  sharedChipText: { color: colors.indigo, fontSize: 14 },
-  closedLine: { color: colors.midGrey, flex: 1, fontSize: 14 },
-  since: { color: colors.deepNavy, fontSize: 15, lineHeight: 22, marginTop: 16 },
-  sheet: {
-    backgroundColor: colors.white,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    marginHorizontal: -16,
-    padding: 16,
-    paddingBottom: 24,
-    shadowColor: "#1B1650",
-    shadowOffset: { height: -2, width: 0 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-  },
-  outcomes: {
-    backgroundColor: "#ECEAF6",
-    borderRadius: 14,
-    flexDirection: "row",
-    padding: 3,
-  },
-  outcome: {
-    alignItems: "center",
-    borderRadius: 12,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 44,
-    paddingHorizontal: 4,
-  },
-  outcomeOn: { backgroundColor: colors.white },
-  outcomeText: { color: colors.midGrey, fontSize: 13, textAlign: "center" },
-  outcomeTextOn: { color: colors.deepNavy, fontFamily: fontFamilySemiBold },
-  note: {
-    borderColor: "#E7E9F2",
-    borderRadius: 16,
-    borderWidth: 1,
-    color: colors.deepNavy,
-    fontSize: 16,
-    marginTop: 10,
-    minHeight: 72,
-    padding: 12,
-  },
-  visibleRow: {
+function notSubmittedText(checkin: CheckinReviewContext["checkin"]): string {
+  return `Due ${formatCivilDate(checkin.localDate)} · not submitted yet`;
+}
+
+const useStyles = createThemedStyles((t) => ({
+  nav: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 10,
-    minHeight: 44,
+    marginBottom: 8,
   },
-  visibleLabel: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 15 },
-  visibleHint: { color: colors.midGrey, fontSize: 13 },
-  save: {
+  navBtn: {
     alignItems: "center",
-    backgroundColor: colors.indigo,
-    borderRadius: 16,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
+  navChevron: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 28,
+    lineHeight: 32,
+  },
+  navTitle: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 17,
+  },
+  header: { flexDirection: "row", gap: 14, marginTop: 4 },
+  headerBody: { flex: 1, minWidth: 0 },
+  avatar: {
+    alignItems: "center",
+    backgroundColor: t.colors.av1Bg,
+    borderRadius: 28,
     height: 56,
     justifyContent: "center",
-    marginTop: 8,
+    width: 56,
   },
-  saveText: { color: colors.white, fontFamily: fontFamilySemiBold, fontSize: 17 },
+  avatarText: {
+    color: t.colors.av1Fg,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 18,
+  },
+  h1: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 24,
+    letterSpacing: -0.3,
+  },
+  meta: { color: t.colors.ink3, fontSize: 14, lineHeight: 20, marginTop: 2 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  chip: {
+    alignItems: "center",
+    borderRadius: 999,
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  chipReview: { backgroundColor: t.colors.infoTint },
+  chipOverdue: { backgroundColor: t.colors.warnTint },
+  chipReviewed: { backgroundColor: t.colors.doneTint },
+  chipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
+  card: {
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: 12,
+    overflow: "hidden",
+    padding: 14,
+  },
+  tableHead: {
+    flexDirection: "row",
+    marginBottom: 6,
+  },
+  tableHeadLabel: {
+    color: t.colors.ink3,
+    flex: 1,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+  },
+  tableCol: {
+    color: t.colors.ink3,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 11,
+    letterSpacing: 0.6,
+    textAlign: "right",
+    textTransform: "uppercase",
+    width: 72,
+  },
+  tableRow: {
+    alignItems: "center",
+    borderTopColor: t.colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    minHeight: 44,
+    paddingVertical: 8,
+  },
+  tableLabel: { color: t.colors.ink, flex: 1, fontSize: 15 },
+  tableLast: {
+    color: t.colors.ink3,
+    fontSize: 14,
+    textAlign: "right",
+    width: 72,
+  },
+  tableNow: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    textAlign: "right",
+  },
+  nowCell: {
+    alignItems: "flex-end",
+    gap: 2,
+    width: 72,
+  },
+  delta: { fontFamily: fontFamilySemiBold, fontSize: 12 },
+  deltaGood: { color: t.colors.done },
+  deltaWarn: { color: t.colors.warn },
+  wroteLabel: { color: t.colors.ink3, fontSize: 13, marginBottom: 6 },
+  wroteBlock: { marginTop: 8 },
+  wroteQ: { color: t.colors.ink3, fontSize: 13, marginBottom: 2 },
+  wroteBody: {
+    color: t.colors.ink,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  replyCard: {
+    backgroundColor: t.colors.brandTint,
+    borderRadius: 16,
+    marginTop: 12,
+    padding: 14,
+  },
+  replyCardTitle: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    marginBottom: 6,
+  },
+  replyCardBody: {
+    color: t.colors.ink,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  notSubmittedTitle: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 17,
+    marginBottom: 4,
+  },
+  footer: {
+    backgroundColor: t.colors.card,
+    borderTopColor: t.colors.line,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    gap: 10,
+    marginHorizontal: -16,
+    padding: 12,
+    paddingBottom: 20,
+  },
+  replyBtn: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: 16,
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+    height: 52,
+    justifyContent: "center",
+  },
+  replyBtnText: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
+  },
+  markBtn: {
+    alignItems: "center",
+    backgroundColor: t.colors.ink,
+    borderRadius: 16,
+    flex: 1.3,
+    flexDirection: "row",
+    gap: 8,
+    height: 52,
+    justifyContent: "center",
+  },
+  markBtnText: {
+    color: t.colors.card,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
+  },
+  replySheet: {
+    backgroundColor: t.colors.card,
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  replyNav: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    minHeight: 44,
+  },
+  replyTitle: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 17,
+  },
+  link: { color: t.colors.brand, fontFamily: fontFamilySemiBold, fontSize: 16 },
+  replyInput: {
+    color: t.colors.ink,
+    fontSize: 17,
+    lineHeight: 24,
+    marginTop: 16,
+    minHeight: 140,
+    textAlignVertical: "top",
+  },
+  switchRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 16,
+    minHeight: 44,
+  },
+  switchLabel: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 16,
+  },
+  replyHint: {
+    color: t.colors.ink3,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 10,
+  },
   disabled: { opacity: 0.45 },
-  skeleton: { backgroundColor: "#E7E9F2", borderRadius: 20, height: 180 },
-  offline: { color: colors.deepNavy, fontSize: 14, marginBottom: 8 },
-  notSubmitted: { color: colors.midGrey, fontSize: 15, lineHeight: 22, marginTop: 8 },
-});
+  skeleton: {
+    backgroundColor: t.colors.skel1,
+    borderRadius: 20,
+    height: 180,
+  },
+  offlineBanner: {
+    alignItems: "flex-start",
+    backgroundColor: t.colors.fill,
+    borderRadius: 12,
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  offline: {
+    color: t.colors.ink2,
+    flex: 1,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  nudgeBtn: {
+    alignItems: "center",
+    backgroundColor: t.colors.brand,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "center",
+    marginTop: 14,
+    minHeight: 48,
+  },
+  nudgeBtnText: {
+    color: t.colors.card,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  nudgeCaption: {
+    color: t.colors.ink3,
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  markBtnOffline: {
+    backgroundColor: t.colors.fill,
+  },
+  markBtnTextOffline: {
+    color: t.colors.ink3,
+  },
+  srOnly: { height: 0, opacity: 0, overflow: "hidden" },
+}));

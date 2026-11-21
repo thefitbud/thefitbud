@@ -15,6 +15,7 @@ vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 const api = {
   listClients: vi.fn(),
   getAttentionGroups: vi.fn(async () => ({ groups: [], needsYou: [], reviewed: [] })),
+  listCoachAsks: vi.fn(async () => ({ items: [] })),
 };
 const auth = mockAuth({ api, relationships: [], selectedRole: "trainer" });
 vi.mock("../auth/AuthProvider", async () => {

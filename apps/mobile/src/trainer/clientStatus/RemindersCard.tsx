@@ -1,8 +1,9 @@
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import type { ResponsivenessResponse } from "@fitbud/contracts";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { quietHoursLine, reminderLine } from "./model";
+import { createThemedStyles } from "../../providers/ThemeProvider";
 
 /** Read-only summary of how the client responds to reminders (TW-31 headline). */
 export function RemindersCard({
@@ -12,6 +13,8 @@ export function RemindersCard({
   data: ResponsivenessResponse | null;
   failed: boolean;
 }) {
+
+  const styles = useStyles();
   if (!data && !failed) return null;
   const quiet = data ? quietHoursLine(data) : null;
   return (
@@ -25,16 +28,16 @@ export function RemindersCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   card: {
-    backgroundColor: colors.white,
+    backgroundColor: t.colors.card,
     borderColor: "#E7E9F2",
     borderRadius: 20,
     borderWidth: 1,
     marginTop: 12,
     padding: 14,
   },
-  title: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
-  line: { color: colors.nearBlack, fontSize: 15, lineHeight: 21, marginTop: 6 },
-  sub: { color: colors.midGrey, fontSize: 13, marginTop: 4 },
-});
+  title: { color: t.colors.ink, fontFamily: fontFamilySemiBold, fontSize: 18 },
+  line: { color: t.colors.ink, fontSize: 15, lineHeight: 21, marginTop: 6 },
+  sub: { color: t.colors.ink3, fontSize: 13, marginTop: 4 },
+}));

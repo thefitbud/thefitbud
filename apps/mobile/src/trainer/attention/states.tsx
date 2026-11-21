@@ -1,21 +1,30 @@
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { CircleCheck, CloudAlert, WifiOff } from "lucide-react-native";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import {
+  createThemedStyles,
+  useTheme,
+} from "../../providers/ThemeProvider";
 
-export const ATTENTION_EMPTY_TITLE = "Nobody needs you right now";
+/** TM-01d: all clear. */
+export const ATTENTION_EMPTY_TITLE = "All caught up";
 export const ATTENTION_EMPTY_BODY =
-  "New items show up here as your clients log, or miss a log. Pull down to check again.";
-export const ATTENTION_ERROR_TITLE = "Couldn't load Attention";
+  "Nobody needs you right now. We’ll notify you when a client misses something or asks.";
+export const ATTENTION_ERROR_TITLE = "Couldn't load Needs you";
 export const ATTENTION_ERROR_BODY =
-  "Pull down to try again. If it keeps happening, email tech@thefitbud.com from More › Help.";
+  "Check your connection and try again. Pull down to refresh.";
 
-/** Frame 43: all clear. */
+/** TM-01d: all clear. */
 export function AttentionEmptyState() {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.state}>
-      <View style={[styles.tile, { backgroundColor: "#EAFBF1" }]}>
-        <CircleCheck color="#0B7A4B" size={36} strokeWidth={1.75} />
+      <View style={[styles.tile, { backgroundColor: theme.colors.brandTint }]}>
+        <View style={styles.checkRing}>
+          <CircleCheck color={theme.colors.ink} size={28} strokeWidth={1.75} />
+        </View>
       </View>
       <Text style={styles.title} accessibilityRole="header">
         {ATTENTION_EMPTY_TITLE}
@@ -27,10 +36,12 @@ export function AttentionEmptyState() {
 
 /** Frame 45: could not load, with Retry (spec Z10-2). */
 export function AttentionErrorState({ onRetry }: { onRetry: () => void }) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.state} accessibilityRole="alert">
-      <View style={[styles.tile, { backgroundColor: "#FDF0EF" }]}>
-        <CloudAlert color="#B42318" size={36} strokeWidth={1.75} />
+      <View style={[styles.tile, { backgroundColor: theme.colors.critTint }]}>
+        <CloudAlert color={theme.colors.crit} size={36} strokeWidth={1.75} />
       </View>
       <Text style={styles.title} accessibilityRole="header">
         {ATTENTION_ERROR_TITLE}
@@ -38,11 +49,11 @@ export function AttentionErrorState({ onRetry }: { onRetry: () => void }) {
       <Text style={styles.body}>{ATTENTION_ERROR_BODY}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Retry"
+        accessibilityLabel="Try again"
         onPress={onRetry}
         style={styles.retry}
       >
-        <Text style={styles.retryText}>Retry</Text>
+        <Text style={styles.retryText}>Try again</Text>
       </Pressable>
     </View>
   );
@@ -50,17 +61,19 @@ export function AttentionErrorState({ onRetry }: { onRetry: () => void }) {
 
 /** Frame 44: cached list with the offline line, shown above the title. */
 export function AttentionOfflineBanner({ updatedAt }: { updatedAt: string }) {
+  const theme = useTheme();
+  const styles = useStyles();
   return (
     <View style={styles.offline} accessibilityRole="alert">
-      <WifiOff color="#8A4B06" size={20} strokeWidth={1.75} />
+      <WifiOff color={theme.colors.warn} size={20} strokeWidth={1.75} />
       <Text style={styles.offlineText}>
-        {`You're offline. Showing the last update from ${updatedAt}.`}
+        {`You're offline. Showing the last update from ${updatedAt}. Actions come back when you're online.`}
       </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   state: { alignItems: "center", paddingHorizontal: 8, paddingTop: 48 },
   tile: {
     alignItems: "center",
@@ -69,8 +82,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 72,
   },
+  checkRing: {
+    alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderRadius: 22,
+    height: 44,
+    justifyContent: "center",
+    width: 44,
+  },
   title: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 24,
     lineHeight: 30,
@@ -78,7 +99,7 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   body: {
-    color: "#5B5F73",
+    color: t.colors.ink2,
     fontSize: 16,
     lineHeight: 24,
     marginTop: 8,
@@ -86,7 +107,7 @@ const styles = StyleSheet.create({
   },
   retry: {
     alignItems: "center",
-    backgroundColor: "#EDEAFF",
+    backgroundColor: t.colors.brandTint,
     borderRadius: 16,
     justifyContent: "center",
     marginTop: 24,
@@ -95,14 +116,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
   },
   retryText: {
-    color: colors.indigo,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
   },
   offline: {
     alignItems: "center",
-    backgroundColor: "#FFF8E1",
-    borderColor: "#F3DC9A",
+    backgroundColor: t.colors.warnTint,
+    borderColor: t.colors.line2,
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
@@ -110,5 +131,5 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 12,
   },
-  offlineText: { color: "#8A4B06", flex: 1, fontSize: 16, lineHeight: 22 },
-});
+  offlineText: { color: t.colors.warn, flex: 1, fontSize: 16, lineHeight: 22 },
+}));

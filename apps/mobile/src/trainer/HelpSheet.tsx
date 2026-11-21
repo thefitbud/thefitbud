@@ -1,21 +1,29 @@
 import { useState } from "react";
-import {
-  Linking,
+import { Linking,
   Platform,
   Pressable,
-  StyleSheet,
   View,
 } from "react-native";
-import { Check, ClipboardList, Copy, X } from "lucide-react-native";
+import { Bug,
+  Check,
+  ClipboardList,
+  Copy,
+  Mail,
+  X,
+} from "lucide-react-native";
 import { setStringAsync } from "expo-clipboard";
 import Constants from "expo-constants";
-import { brand, ink, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { BottomSheet } from "../components/BottomSheet";
 import { Text } from "../components/Text";
+import { buildSupportMailto } from "../lib/support";
 import { reportError } from "../lib/reportError";
+import { ThemeScope,
+  createThemedStyles,
+  useTheme,
+} from "../providers/ThemeProvider";
 
-/** Frame 56: "App version 1.4.0 • iPhone • More". */
+/** Frame 56 / TM-07e: "App version 1.4.0 • iPhone • More". */
 export function buildHelpDetails(input: {
   version: string;
   device: string;
@@ -84,16 +92,32 @@ type Props = {
   copy?: (text: string) => Promise<boolean>;
 };
 
-export function HelpSheet({
+/**
+ * TM-07e Help sheet: Email the FitBud team and Report a problem. Falls back to
+ * the copy-address sheet when no mail app is available.
+ */
+export function HelpSheet(props: Props) {
+  return (
+    <ThemeScope scheme="system" drivesSystemBars={false}>
+      <HelpSheetBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function HelpSheetBody({
   visible,
   onDismiss,
   supportEmail,
   screen,
   copy = copyText,
 }: Props) {
+  const theme = useTheme();
+  const styles = useStyles();
   const [copied, setCopied] = useState<"address" | "details" | null>(null);
+  const [noMail, setNoMail] = useState(false);
+  const version = Constants.expoConfig?.version ?? "0.0.0";
   const details = buildHelpDetails({
-    version: Constants.expoConfig?.version ?? "0.0.0",
+    version,
     device: deviceLabel(
       Platform.OS,
       Platform.OS === "ios" && (Platform as { isPad?: boolean }).isPad === true,
@@ -105,105 +129,185 @@ export function HelpSheet({
     if (await copy(text)) setCopied(kind);
   }
 
-  return (
-    <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
-      <View style={styles.head}>
-        <View style={styles.flex}>
-          <Text style={styles.title} accessibilityRole="header">
-            Email FitBud support
-          </Text>
-          <Text style={styles.sub}>No mail app is set up on this phone</Text>
+  async function emailTeam(extra?: string) {
+    const mailto = buildSupportMailto({
+      supportEmail,
+      screenId: "TM-07e",
+      role: "trainer",
+      extra,
+    });
+    await openSupportMailOrFallback(mailto, () => setNoMail(true));
+  }
+
+  function close() {
+    setNoMail(false);
+    setCopied(null);
+    onDismiss();
+  }
+
+  if (noMail) {
+    return (
+      <BottomSheet visible={visible} headerless onDismiss={close}>
+        <View style={styles.head}>
+          <View style={styles.flex}>
+            <Text style={styles.title} accessibilityRole="header">
+              Email FitBud support
+            </Text>
+            <Text style={styles.sub}>No mail app is set up on this phone</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+            onPress={close}
+            style={styles.close}
+          >
+            <X color={theme.colors.ink2} size={18} strokeWidth={2} />
+          </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          onPress={onDismiss}
-          style={styles.close}
-        >
-          <X color={ink[700]} size={18} strokeWidth={2} />
-        </Pressable>
-      </View>
-      <Text style={styles.body}>
-        Write to {supportEmail} from any email app. We'll get back to you within
-        a day.
+        <Text style={styles.body}>
+          Write to {supportEmail} from any email app. We'll get back to you within
+          a day.
+        </Text>
+        <View style={styles.group}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Copy address, ${supportEmail}`}
+            onPress={() => {
+              void run("address", supportEmail);
+            }}
+            style={styles.row}
+          >
+            <View style={styles.tile}>
+              {copied === "address" ? (
+                <Check color={theme.colors.brand} size={20} strokeWidth={1.75} />
+              ) : (
+                <Copy color={theme.colors.brand} size={20} strokeWidth={1.75} />
+              )}
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.rowLabel}>Copy address</Text>
+              <Text style={styles.rowHint}>{supportEmail}</Text>
+            </View>
+          </Pressable>
+          <View style={styles.sep} />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Copy details, ${details}`}
+            onPress={() => {
+              void run("details", details);
+            }}
+            style={styles.row}
+          >
+            <View style={styles.tile}>
+              {copied === "details" ? (
+                <Check color={theme.colors.brand} size={20} strokeWidth={1.75} />
+              ) : (
+                <ClipboardList
+                  color={theme.colors.brand}
+                  size={20}
+                  strokeWidth={1.75}
+                />
+              )}
+            </View>
+            <View style={styles.flex}>
+              <Text style={styles.rowLabel}>Copy details</Text>
+              <Text style={styles.rowHint}>{details}</Text>
+            </View>
+          </Pressable>
+        </View>
+      </BottomSheet>
+    );
+  }
+
+  return (
+    <BottomSheet visible={visible} headerless onDismiss={close}>
+      <View style={styles.handle} accessibilityElementsHidden />
+      <Text style={styles.title} accessibilityRole="header">
+        Help
       </Text>
-      <View style={styles.group}>
+      <Text style={styles.sub}>We reply within a working day.</Text>
+      <View style={[styles.group, styles.menuGroup]}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Copy address, ${supportEmail}`}
+          accessibilityLabel={`Email the FitBud team, ${supportEmail}`}
           onPress={() => {
-            void run("address", supportEmail);
+            void emailTeam();
           }}
           style={styles.row}
         >
           <View style={styles.tile}>
-            {copied === "address" ? (
-              <Check color={brand.indigo} size={20} strokeWidth={1.75} />
-            ) : (
-              <Copy color={brand.indigo} size={20} strokeWidth={1.75} />
-            )}
+            <Mail color={theme.colors.brand} size={20} strokeWidth={1.75} />
           </View>
           <View style={styles.flex}>
-            <Text style={styles.rowLabel}>Copy address</Text>
+            <Text style={styles.rowLabel}>Email the FitBud team</Text>
             <Text style={styles.rowHint}>{supportEmail}</Text>
           </View>
         </Pressable>
         <View style={styles.sep} />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Copy details, ${details}`}
+          accessibilityLabel="Report a problem, Adds app version and device"
           onPress={() => {
-            void run("details", details);
+            void emailTeam(`Details: ${details}`);
           }}
           style={styles.row}
         >
           <View style={styles.tile}>
-            {copied === "details" ? (
-              <Check color={brand.indigo} size={20} strokeWidth={1.75} />
-            ) : (
-              <ClipboardList
-                color={brand.indigo}
-                size={20}
-                strokeWidth={1.75}
-              />
-            )}
+            <Bug color={theme.colors.brand} size={20} strokeWidth={1.75} />
           </View>
           <View style={styles.flex}>
-            <Text style={styles.rowLabel}>Copy details</Text>
-            <Text style={styles.rowHint}>{details}</Text>
+            <Text style={styles.rowLabel}>Report a problem</Text>
+            <Text style={styles.rowHint}>Adds app version and device</Text>
           </View>
         </Pressable>
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Close"
+        onPress={close}
+        style={styles.closeBtn}
+      >
+        <Text style={styles.closeBtnText}>Close</Text>
+      </Pressable>
     </BottomSheet>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   flex: { flex: 1 },
+  handle: {
+    alignSelf: "center",
+    backgroundColor: t.colors.line,
+    borderRadius: 2,
+    height: 4,
+    marginBottom: 12,
+    width: 36,
+  },
   head: { alignItems: "flex-start", flexDirection: "row", gap: spacing.md },
   title: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilyBold,
     fontSize: 26,
     letterSpacing: -0.3,
   },
-  sub: { color: ink[500], fontSize: 17, marginTop: 4 },
+  sub: { color: t.colors.ink3, fontSize: 17, marginTop: 4 },
   close: {
     alignItems: "center",
-    backgroundColor: surface.pageMobile,
+    backgroundColor: t.colors.bg,
     borderRadius: 22,
     height: 44,
     justifyContent: "center",
     width: 44,
   },
-  body: { color: brand.deepNavy, fontSize: 18, lineHeight: 28 },
+  body: { color: t.colors.ink, fontSize: 18, lineHeight: 28 },
   group: {
-    backgroundColor: surface.card,
-    borderColor: ink[200],
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
   },
+  menuGroup: { marginTop: 20 },
   row: {
     alignItems: "center",
     flexDirection: "row",
@@ -212,19 +316,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  sep: { backgroundColor: ink[200], height: 1 },
+  sep: { backgroundColor: t.colors.line, height: 1 },
   tile: {
     alignItems: "center",
-    backgroundColor: brand.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 12,
     height: 40,
     justifyContent: "center",
     width: 40,
   },
   rowLabel: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
   },
-  rowHint: { color: ink[500], fontSize: 15 },
-});
+  rowHint: { color: t.colors.ink3, fontSize: 15 },
+  closeBtn: {
+    alignItems: "center",
+    backgroundColor: t.colors.bg,
+    borderRadius: 16,
+    justifyContent: "center",
+    marginTop: 16,
+    minHeight: 52,
+  },
+  closeBtnText: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 17,
+  },
+}));

@@ -2,6 +2,8 @@ appId: com.thefitbud.mobile.staging
 ---
 # Subflow of F20 (Z12-50). No tags. On a client's screen: wait for it to load, press Nudge….
 - extendedWaitUntil:
-    visible: "Log measurement"
+    visible:
+      id: "client-nudge"
     timeout: 30000
-- tapOn: "Nudge…"
+- tapOn:
+    id: "client-nudge"

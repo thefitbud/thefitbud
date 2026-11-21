@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AppState, Pressable, StyleSheet, View } from "react-native";
-import { Check, ChevronRight } from "lucide-react-native";
-import { Text } from "../components/Text";
+import { AppState, View } from "react-native";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type {
   AttentionGroupsResponse,
@@ -13,14 +11,7 @@ import {
   deviceTimeZone,
   formatCivilDate,
   formatClockTime,
-  formatPersonName,
-  labelFor,
 } from "@fitbud/core";
-import {
-  colors,
-  fontFamilyMedium,
-  fontFamilySemiBold,
-} from "@fitbud/ui-mobile";
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
@@ -30,34 +21,36 @@ import {
   AttentionErrorState,
   AttentionOfflineBanner,
 } from "./attention/states";
+import {
+  NeedsYouHeader,
+  NeedsYouListSkeleton,
+  NeedsYouSections,
+  NeedsYouSummaryGrid,
+} from "./attention/NeedsYouView";
+import {
+  buildNeedsYouScreenModel,
+  type NeedsYouCardModel,
+} from "./attention/needsYouModel";
 import { Screen } from "../components/Screen";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { reportError } from "../lib/reportError";
 import { createIdempotencyKey } from "../lib/idempotency";
-import { StatusChip } from "../components/StatusChip";
-import { SwipeActionRow } from "../components/SwipeActionRow";
 import { Snackbar } from "../components/Snackbar";
 import { isAlreadyResolved, isResolveConflict } from "./sheets/resolveRecovery";
-import { initialsFromName } from "../components/m2";
 import {
   acknowledgeAttentionItem,
   acknowledgeAttentionItems,
   ANSWERED_TOAST_MESSAGE,
-  clientNameFor,
   restoreAttentionItem,
   ownsPendingAnswer,
   restoreAskAt,
   scheduleUndoable,
   type UndoableAction,
-  attentionIssueLine,
-  attentionSectionModel,
   ATTENTION_SCREEN_TITLE,
   buildClientAttentionCards,
   markReviewedToastMessage,
-  needsYouRowModel,
   partitionAttentionGroups,
   restoreAttentionItems,
-  reviewedRowModel,
   unreviewedItemsForRelationship,
   type AttentionLists,
   type ClientAttentionCard,
@@ -99,14 +92,14 @@ type ReviewSubSheet =
   | { kind: "resolve"; item: AttentionGroupItem }
   | { kind: "more" }
   | { kind: "note" };
-type Segment = "needs_you" | "asked" | "checkins";
-
 type Props = {
   onReviewException: (exceptionId: string) => void;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
   onOpenClients: () => void;
   /** The client's profile (status screen), from the review sheet's ⋯ menu. */
   onOpenClient?: (relationshipId: string) => void;
+  /** TM-10 ask detail (Needs you Reply / card). */
+  onOpenAsk?: (ask: CoachAsk, displayName: string) => void;
 };
 
 type Snapshot = {
@@ -122,15 +115,6 @@ type Snapshot = {
 
 const EMPTY_LISTS: AttentionLists = { groups: [], needsYou: [], reviewed: [] };
 
-const AVATARS = [
-  { backgroundColor: "#FDECEF", color: "#A3243F" },
-  { backgroundColor: "#E3EEFD", color: "#1E4B9E" },
-  { backgroundColor: "#EAF5E4", color: "#2F6B1E" },
-  { backgroundColor: "#FFF1DB", color: "#8A4B06" },
-  { backgroundColor: "#E9E5FF", color: "#3B23A8" },
-  { backgroundColor: "#F1E8FA", color: "#6B2A93" },
-] as const;
-
 function listsFromSnapshot(snapshot: Snapshot): AttentionLists {
   if (snapshot.needsYou && snapshot.reviewed) {
     return {
@@ -142,17 +126,14 @@ function listsFromSnapshot(snapshot: Snapshot): AttentionLists {
   return partitionAttentionGroups(snapshot.groups);
 }
 
-function avatarTone(name: string): (typeof AVATARS)[number] {
-  const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATARS[code % AVATARS.length] ?? AVATARS[0];
-}
-
 const CACHE_KEY = "trainer:attention";
 
 export function AttentionTab({
   onReviewException,
   onReviewCheckin,
+  onOpenClients,
   onOpenClient,
+  onOpenAsk,
 }: Props) {
   const { api, me, relationships, refreshSession } = useAuth();
   // The trainer's device zone, falling back to Asia/Kolkata when it cannot be
@@ -160,7 +141,6 @@ export function AttentionTab({
   // unresolvable still surfaces a named error from the resolver.
   const trainerZone = deviceTimeZone();
   const s1 = stage1Api(api);
-  const [segment, setSegment] = useState<Segment>("needs_you");
   const [lists, setLists] = useState<AttentionLists>(EMPTY_LISTS);
   const [asks, setAsks] = useState<CoachAsk[]>([]);
   const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
@@ -309,24 +289,35 @@ export function AttentionTab({
     () => buildClientAttentionCards(lists.needsYou),
     [lists.needsYou],
   );
-  const reviewedCards = useMemo(
-    () => buildClientAttentionCards(lists.reviewed),
-    [lists.reviewed],
-  );
 
   const offline = offlineAt != null;
   const todayLabel = formatCivilDate(localDateInTimezone(trainerZone));
+  const screenModel = useMemo(
+    () =>
+      buildNeedsYouScreenModel({
+        needsYou: lists.needsYou,
+        reviewed: lists.reviewed,
+        asks,
+        checkins,
+        clientNames,
+        dateLabel: todayLabel,
+        offlineClock: offlineAt
+          ? formatClockTime(offlineAt, trainerZone)
+          : null,
+      }),
+    [
+      lists.needsYou,
+      lists.reviewed,
+      asks,
+      checkins,
+      clientNames,
+      todayLabel,
+      offlineAt,
+      trainerZone,
+    ],
+  );
   const showEmpty =
-    !loading &&
-    !loadFailed &&
-    segment === "needs_you" &&
-    needsYouCards.length === 0 &&
-    reviewedCards.length === 0;
-  const sections = attentionSectionModel({
-    dateLabel: todayLabel,
-    needsYouCount: needsYouCards.length,
-    reviewedCount: reviewedCards.length,
-  });
+    !loading && !loadFailed && screenModel.allCaughtUp;
 
   const reviewItems = useMemo(() => {
     if (!reviewSheet) return [];
@@ -670,8 +661,8 @@ export function AttentionTab({
     }
     setAsks((current) => restoreAskAt(current, ask, index));
     setError(
-      userFacingMessage(err, { fallback: "Couldn't mark answered. Try again." }),
-    );
+        userFacingMessage(err, { fallback: "Couldn't mark answered. Try again." }),
+      );
   }
 
   // Mark answered is held for 5 s so Undo needs no server call. A second
@@ -733,8 +724,33 @@ export function AttentionTab({
 
   const markReviewedToast = undoTarget != null && toast != null;
 
+  function handleCardAction(card: NeedsYouCardModel) {
+    if (card.source.kind === "exception") {
+      openReviewSheet(card.source.card);
+      return;
+    }
+    if (card.source.kind === "ask") {
+      const ask = card.source.ask;
+      if (onOpenAsk) {
+        onOpenAsk(ask, card.name);
+        return;
+      }
+      // Fallback when the shell has not wired TM-10 yet.
+      void answerAsk(ask);
+      return;
+    }
+    onReviewCheckin(card.source.item);
+  }
+
+  function handleMarkReviewed(card: NeedsYouCardModel) {
+    if (card.source.kind === "exception") {
+      void acknowledgeCard(card.source.card);
+    }
+  }
+
   return (
     <Screen
+      v3
       title={ATTENTION_SCREEN_TITLE}
       showHeader={false}
       chrome="app"
@@ -768,45 +784,15 @@ export function AttentionTab({
         ) : undefined
       }
     >
+      <View testID="attention-screen">
       {offline ? (
         <AttentionOfflineBanner
           updatedAt={formatClockTime(offlineAt!, trainerZone)}
         />
       ) : null}
-      <Text style={styles.eyebrow}>
-        {showEmpty ? todayLabel : sections.subtitle}
-      </Text>
-      <Text style={styles.screenTitle} accessibilityRole="header">
-        {sections.title}
-      </Text>
+      <NeedsYouHeader eyebrow={screenModel.eyebrow} onSearch={onOpenClients} />
 
       {error ? <ErrorBanner message={error} /> : null}
-
-      <View style={styles.chips}>
-        <FilterChip
-          label={loadFailed ? "Needs you" : `Needs you ${needsYouCards.length}`}
-          selected={segment === "needs_you"}
-          onPress={() => setSegment("needs_you")}
-        />
-        <FilterChip
-          label={loadFailed ? "Asked" : `Asked ${asks.length}`}
-          selected={segment === "asked"}
-          onPress={() => setSegment("asked")}
-        />
-        <FilterChip
-          label={loadFailed ? "Check-ins" : `Check-ins ${checkins.length}`}
-          selected={segment === "checkins"}
-          onPress={() => setSegment("checkins")}
-        />
-      </View>
-
-      {loading && lists.groups.length === 0 ? (
-        <View>
-          <SkeletonCard />
-          <SkeletonCard />
-          <SkeletonCard />
-        </View>
-      ) : null}
 
       {loadFailed && !loading ? (
         <AttentionErrorState
@@ -817,133 +803,27 @@ export function AttentionTab({
         />
       ) : null}
 
-      {showEmpty ? <AttentionEmptyState /> : null}
-
-      {segment === "needs_you" && sections.needsYou ? (
-        <View style={styles.section}>
-          <View style={styles.sectionHead} accessibilityRole="header">
-            <Text style={styles.sectionTitle}>{sections.needsYou.title}</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{sections.needsYou.count}</Text>
-            </View>
-            <Text style={styles.sectionHint}>{sections.needsYou.hint}</Text>
-          </View>
-          <View style={styles.listCard}>
-            {needsYouCards.map((card, index) => {
-              const projected = lists.needsYou.find(
-                (group) => group.relationshipId === card.relationshipId,
-              );
-              const items = projected?.items ?? [card.primary];
-              const row = needsYouRowModel({
-                items,
-                issue: attentionIssueLine(items),
-              });
-              return (
-                <SwipeActionRow
-                  key={card.relationshipId}
-                  onMarkReviewed={() => {
-                    if (!offline) void acknowledgeCard(card);
-                  }}
-                >
-                  {index > 0 ? <View style={styles.divider} /> : null}
-                  <NeedsYouRow
-                    card={card}
-                    row={row}
-                    offline={offline}
-                    onPress={() => openReviewSheet(card)}
-                  />
-                </SwipeActionRow>
-              );
-            })}
-          </View>
-        </View>
+      {!loadFailed ? (
+        <>
+          <NeedsYouSummaryGrid
+            tiles={screenModel.tiles}
+            loading={loading && lists.groups.length === 0}
+          />
+          {loading && lists.groups.length === 0 ? (
+            <NeedsYouListSkeleton />
+          ) : null}
+          {!loading ? (
+            <NeedsYouSections
+              model={screenModel}
+              offline={offline}
+              emptySlot={showEmpty ? <AttentionEmptyState /> : null}
+              onCardAction={handleCardAction}
+              onMarkReviewed={handleMarkReviewed}
+            />
+          ) : null}
+        </>
       ) : null}
-
-      {segment === "needs_you" && sections.reviewed ? (
-        <View style={styles.section}>
-          <View style={styles.sectionHead} accessibilityRole="header">
-            <Text style={styles.sectionTitle}>{sections.reviewed.title}</Text>
-            <View style={styles.countBadge}>
-              <Text style={styles.countText}>{sections.reviewed.count}</Text>
-            </View>
-            <Text style={styles.sectionHint}>{sections.reviewed.hint}</Text>
-          </View>
-          <View style={styles.listCard}>
-            {reviewedCards.map((card, index) => {
-              const full =
-                lists.groups.find(
-                  (group) => group.relationshipId === card.relationshipId,
-                ) ??
-                lists.reviewed.find(
-                  (group) => group.relationshipId === card.relationshipId,
-                );
-              const projected = lists.reviewed.find(
-                (group) => group.relationshipId === card.relationshipId,
-              );
-              const items = full?.items ?? [card.primary];
-              const row = reviewedRowModel({
-                items,
-                issue: attentionIssueLine(projected?.items ?? items),
-                timeZone: trainerZone,
-              });
-              return (
-                <View key={card.relationshipId}>
-                  {index > 0 ? <View style={styles.divider} /> : null}
-                  <ReviewedRow
-                    card={card}
-                    row={row}
-                    offline={offline}
-                    onPress={() => openReviewSheet(card)}
-                  />
-                </View>
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
-
-      {segment === "asked"
-        ? asks.map((ask) => (
-            <View key={ask.id} style={styles.askedCard}>
-              <Text style={styles.name}>
-                {clientNameFor(clientNames, ask.relationshipId) ??
-                  labelFor("coach_ask_topic", ask.topic)}
-              </Text>
-              <Text style={styles.issue}>
-                {ask.itemLabel?.trim() || labelFor("coach_ask_topic", ask.topic)}
-                {" · Asked you on WhatsApp"}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                disabled={offline}
-                onPress={() => void answerAsk(ask)}
-                style={[styles.review, offline ? styles.disabled : null]}
-              >
-                <Text style={styles.reviewText}>Mark answered</Text>
-              </Pressable>
-            </View>
-          ))
-        : null}
-
-      {segment === "checkins"
-        ? checkins.map((item) => (
-            <Pressable
-              key={item.checkin.id}
-              accessibilityRole="button"
-              onPress={() => onReviewCheckin(item)}
-              style={styles.askedCard}
-            >
-              <Text style={styles.name}>
-                {item.traineeDisplayName
-                  ? formatPersonName(item.traineeDisplayName)
-                  : labelFor("checkin_status", item.checkin.status)}
-              </Text>
-              <Text style={styles.issue}>
-                {`${labelFor("checkin_status", item.checkin.status)} · ${formatCivilDate(item.checkin.localDate)}`}
-              </Text>
-            </Pressable>
-          ))
-        : null}
+      </View>
 
       <ReviewSheet
         visible={reviewSheet != null && reviewItems.length > 0}
@@ -1055,308 +935,3 @@ export function AttentionTab({
     </Screen>
   );
 }
-
-function NeedsYouRow({
-  card,
-  row,
-  offline,
-  onPress,
-}: {
-  card: ClientAttentionCard;
-  row: ReturnType<typeof needsYouRowModel>;
-  offline: boolean;
-  onPress: () => void;
-}) {
-  const tone = avatarTone(card.traineeDisplayName);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${formatPersonName(card.traineeDisplayName)}, ${row.issue}`}
-      disabled={offline}
-      onPress={onPress}
-      style={[styles.row, offline ? styles.disabled : null]}
-    >
-      <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
-        <Text style={[styles.avatarText, { color: tone.color }]}>
-          {initialsFromName(card.traineeDisplayName)}
-        </Text>
-      </View>
-      <View style={styles.rowBody}>
-        <Text style={styles.name}>{formatPersonName(card.traineeDisplayName)}</Text>
-        <Text style={styles.issue}>{row.issue}</Text>
-        <View style={styles.meta}>
-          <StatusChip kind="severity" value={card.primary.severity} />
-          {row.openLabel ? (
-            <View style={styles.openChip}>
-              <Text style={styles.openChipText}>{row.openLabel}</Text>
-            </View>
-          ) : null}
-          <Text style={styles.age}>{row.age}</Text>
-        </View>
-      </View>
-      <ChevronRight color={colors.midGrey} size={18} />
-    </Pressable>
-  );
-}
-
-function ReviewedRow({
-  card,
-  row,
-  offline,
-  onPress,
-}: {
-  card: ClientAttentionCard;
-  row: ReturnType<typeof reviewedRowModel>;
-  offline: boolean;
-  onPress: () => void;
-}) {
-  const tone = avatarTone(card.traineeDisplayName);
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${formatPersonName(card.traineeDisplayName)}, ${row.chip}, ${row.footer}`}
-      disabled={offline}
-      onPress={onPress}
-      style={[styles.row, offline ? styles.disabled : null]}
-    >
-      <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
-        <Text style={[styles.avatarText, { color: tone.color }]}>
-          {initialsFromName(card.traineeDisplayName)}
-        </Text>
-      </View>
-      <View style={styles.rowBody}>
-        <Text style={styles.name}>{formatPersonName(card.traineeDisplayName)}</Text>
-        <Text style={styles.issue}>{row.issue}</Text>
-        <View style={styles.reviewedChip}>
-          <Check color="#374151" size={14} strokeWidth={2.25} />
-          <Text style={styles.reviewedChipText}>{row.chip}</Text>
-        </View>
-        <Text style={styles.footer}>{row.footer}</Text>
-      </View>
-      <ChevronRight color={colors.midGrey} size={18} />
-    </Pressable>
-  );
-}
-
-function FilterChip({
-  label,
-  selected,
-  onPress,
-}: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      style={[styles.chip, selected ? styles.chipOn : null]}
-    >
-      <Text style={[styles.chipText, selected ? styles.chipTextOn : null]}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
-function SkeletonCard() {
-  return <View style={styles.skeleton} accessibilityLabel="Loading" />;
-}
-
-const styles = StyleSheet.create({
-  eyebrow: {
-    color: colors.midGrey,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  screenTitle: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 30,
-    letterSpacing: -0.4,
-    marginBottom: 12,
-    marginTop: 2,
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginBottom: 16,
-  },
-  chip: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 999,
-    borderWidth: 1,
-    justifyContent: "center",
-    minHeight: 36,
-    paddingHorizontal: 14,
-  },
-  chipOn: {
-    backgroundColor: "#EDEAFF",
-    borderColor: "#EDEAFF",
-  },
-  chipText: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilyMedium,
-    fontSize: 14,
-  },
-  chipTextOn: {
-    color: colors.indigo,
-    fontFamily: fontFamilySemiBold,
-  },
-  section: {
-    marginBottom: 18,
-  },
-  sectionHead: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 8,
-    marginBottom: 8,
-    minHeight: 28,
-  },
-  sectionTitle: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 17,
-  },
-  countBadge: {
-    alignItems: "center",
-    backgroundColor: "#EDEAFF",
-    borderRadius: 999,
-    minWidth: 22,
-    paddingHorizontal: 7,
-    paddingVertical: 1,
-  },
-  countText: {
-    color: colors.indigo,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 13,
-  },
-  sectionHint: {
-    color: colors.midGrey,
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-    textAlign: "right",
-  },
-  listCard: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: "hidden",
-  },
-  divider: {
-    backgroundColor: "#E7E9F2",
-    height: 1,
-    marginLeft: 66,
-  },
-  row: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
-  avatar: {
-    alignItems: "center",
-    borderRadius: 20,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  avatarText: {
-    fontFamily: fontFamilySemiBold,
-    fontSize: 13,
-  },
-  rowBody: {
-    flex: 1,
-    minWidth: 0,
-  },
-  name: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 17,
-  },
-  issue: {
-    color: colors.nearBlack,
-    fontSize: 16,
-    lineHeight: 22,
-    marginTop: 2,
-  },
-  meta: {
-    alignItems: "center",
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 8,
-  },
-  openChip: {
-    backgroundColor: "#EDEAFF",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  openChipText: {
-    color: colors.indigo,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 12,
-  },
-  age: {
-    color: colors.midGrey,
-    fontSize: 13,
-  },
-  reviewedChip: {
-    alignItems: "center",
-    alignSelf: "flex-start",
-    backgroundColor: "#F3F4F6",
-    borderRadius: 999,
-    flexDirection: "row",
-    gap: 4,
-    marginTop: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  reviewedChipText: {
-    color: "#374151",
-    fontFamily: fontFamilySemiBold,
-    fontSize: 12,
-  },
-  footer: {
-    color: colors.midGrey,
-    fontSize: 13,
-    lineHeight: 18,
-    marginTop: 8,
-  },
-  askedCard: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 12,
-    padding: 14,
-  },
-  review: {
-    alignItems: "center",
-    backgroundColor: "#EDEAFF",
-    borderRadius: 16,
-    height: 48,
-    justifyContent: "center",
-    marginTop: 12,
-  },
-  reviewText: {
-    color: colors.indigo,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 16,
-  },
-  disabled: { opacity: 0.45 },
-  skeleton: {
-    backgroundColor: "#E7E9F2",
-    borderRadius: 20,
-    height: 148,
-    marginBottom: 12,
-  },
-});

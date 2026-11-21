@@ -1,21 +1,18 @@
 import { useState } from "react";
-import {
-  Pressable,
+import { Pressable,
   SafeAreaView,
   ScrollView,
-  StyleSheet,
   TextInput,
   View,
 } from "react-native";
-import { ChevronLeft, ChevronRight, KeyRound } from "lucide-react-native";
+import { ChevronRight, KeyRound } from "lucide-react-native";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
-import { CURRENT_WRONG_COPY } from "../trainee/settings/PasswordScreen";
-import { brand, ink, surface } from "@fitbud/tokens";
 import { fontFamilyBold, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { reportError } from "../lib/reportError";
+import { CURRENT_WRONG_COPY } from "../trainee/settings/PasswordScreen";
 import type {
   TrainerProfile,
   UpdateTrainerProfileRequest,
@@ -23,6 +20,7 @@ import type {
 import { Screen } from "../components/Screen";
 import { Field } from "../components/Field";
 import { PrimaryButton } from "../components/PrimaryButton";
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { stage1Api } from "../lib/stage1Api";
 
 /** `PUT /me/trainer-profile` is installed on the client at runtime (api-client stage1-augment) but is not in the typed wrappers. */
@@ -47,6 +45,8 @@ export function timezoneLabel(zone: string | null | undefined): string {
 
 /** Frame 55: "Current password, then a new one". Calls the signed-in password change. */
 export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
+
+  const styles = useStyles();
   const { api } = useAuth();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
@@ -68,17 +68,18 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
       });
       setDone(true);
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        // Only INVALID_CREDENTIALS proves the current password was wrong
-        // (same rule as trainee PasswordScreen — not the login copy).
-        if (err.status === 401 && err.code === "INVALID_CREDENTIALS") {
-          setError(CURRENT_WRONG_COPY);
-        } else {
-          setError(userFacingMessage(err));
-        }
+      if (err instanceof ApiClientError && err.code === "INVALID_CREDENTIALS") {
+        // Password-change context: not the sign-in INVALID_CREDENTIALS line.
+        setError(CURRENT_WRONG_COPY);
       } else {
-        reportError("trainer-password-change", err);
-        setError("PASSWORD-SAVE");
+        if (!(err instanceof ApiClientError)) {
+          reportError("trainer-password-change", err);
+        }
+        setError(
+          userFacingMessage(err, {
+            fallback: "Couldn't update the password. Try again.",
+          }),
+        );
       }
     } finally {
       setSaving(false);
@@ -86,7 +87,12 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
   }
 
   return (
-    <Screen title="Change password" subtitle="Current password, then a new one">
+    <Screen
+      v3
+      title="Change password"
+      chrome="app"
+      subtitle="Current password, then a new one"
+    >
       {error ? <ErrorBanner message={error} /> : null}
       {done ? (
         <View style={styles.formStack}>
@@ -127,6 +133,9 @@ export function ChangePasswordForm({ onBack }: { onBack: () => void }) {
 }
 
 export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const { me, api, reloadMe } = useAuth();
   const profile = me?.trainerProfile;
   const [name, setName] = useState(profile?.displayName ?? "");
@@ -165,28 +174,30 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
       await reloadMe();
       onBack();
     } catch (err) {
-      if (err instanceof ApiClientError) {
-        setError(userFacingMessage(err));
-      } else {
+      if (!(err instanceof ApiClientError)) {
         reportError("trainer-profile-save", err);
-        setError("PROFILE-SAVE");
       }
+      setError(
+        userFacingMessage(err, {
+          fallback: "Couldn't save your profile. Try again.",
+        }),
+      );
     } finally {
       setSaving(false);
     }
   }
 
   return (
+    <ThemeScope scheme="system">
     <SafeAreaView style={styles.safe}>
       <View style={styles.bar}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Back to More"
+          accessibilityLabel="Cancel"
           onPress={onBack}
           style={styles.barSide}
         >
-          <ChevronLeft color={brand.indigo} size={22} strokeWidth={2} />
-          <Text style={styles.barLink}>More</Text>
+          <Text style={styles.barLink}>Cancel</Text>
         </Pressable>
         <Text style={styles.barTitle} accessibilityRole="header">
           Profile
@@ -253,21 +264,22 @@ export function TrainerProfileScreen({ onBack, onChangePassword }: Props) {
           style={[styles.card, styles.pwRow]}
         >
           <View style={styles.tile}>
-            <KeyRound color={brand.indigo} size={20} strokeWidth={1.75} />
+            <KeyRound color={theme.colors.brand} size={20} strokeWidth={1.75} />
           </View>
           <View style={styles.flex}>
             <Text style={styles.pwTitle}>Change password</Text>
             <Text style={styles.pwHint}>Current password, then a new one</Text>
           </View>
-          <ChevronRight color={ink[500]} size={18} strokeWidth={2} />
+          <ChevronRight color={theme.colors.ink3} size={18} strokeWidth={2} />
         </Pressable>
       </ScrollView>
     </SafeAreaView>
+    </ThemeScope>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { backgroundColor: surface.pageMobile, flex: 1 },
+const useStyles = createThemedStyles((t) => ({
+  safe: { backgroundColor: t.colors.bg, flex: 1 },
   bar: {
     alignItems: "center",
     flexDirection: "row",
@@ -283,37 +295,37 @@ const styles = StyleSheet.create({
   },
   barRight: { justifyContent: "flex-end" },
   barLink: {
-    color: brand.indigo,
+    color: t.colors.brand,
     fontFamily: fontFamilySemiBold,
     fontSize: 18,
   },
-  barTitle: { color: brand.deepNavy, fontSize: 18 },
+  barTitle: { color: t.colors.ink, fontSize: 18 },
   dim: { opacity: 0.4 },
   content: { gap: spacing.lg, padding: spacing.lg },
   card: {
-    backgroundColor: surface.card,
-    borderColor: ink[200],
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
   },
   field: { gap: 2, minHeight: 72, paddingHorizontal: 20, paddingVertical: 12 },
-  sep: { borderTopColor: ink[200], borderTopWidth: 1 },
-  label: { color: ink[500], fontSize: 16 },
+  sep: { borderTopColor: t.colors.line, borderTopWidth: 1 },
+  label: { color: t.colors.ink3, fontSize: 16 },
   input: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 20,
     minHeight: 32,
     padding: 0,
   },
   value: {
-    color: brand.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
     fontSize: 20,
     minHeight: 32,
   },
-  note: { color: ink[500], fontSize: 16, lineHeight: 24, marginHorizontal: 4 },
+  note: { color: t.colors.ink3, fontSize: 16, lineHeight: 24, marginHorizontal: 4 },
   pwRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -324,7 +336,7 @@ const styles = StyleSheet.create({
   },
   tile: {
     alignItems: "center",
-    backgroundColor: brand.paleLavender,
+    backgroundColor: t.colors.brandTint,
     borderRadius: 12,
     height: 40,
     justifyContent: "center",
@@ -332,6 +344,6 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1 },
   formStack: { gap: spacing.md },
-  pwTitle: { color: brand.deepNavy, fontFamily: fontFamilyBold, fontSize: 19 },
-  pwHint: { color: ink[500], fontSize: 16 },
-});
+  pwTitle: { color: t.colors.ink, fontFamily: fontFamilyBold, fontSize: 19 },
+  pwHint: { color: t.colors.ink3, fontSize: 16 },
+}));

@@ -12,10 +12,12 @@ import {
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
 import {
+  deviceTimeZone,
   formatCivilDate,
   formatLocalDate,
   formatRelative,
   labelFor,
+  resolveIntlTimeZone,
 } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { Button } from "../Button";
@@ -36,6 +38,21 @@ import {
 } from "./workspaceTabs";
 
 const WEEK_MS = 7 * 86_400_000;
+
+/**
+ * Trainer zone for Coached/Ended dates (D-W12-26). Prefer the stored profile
+ * zone; with none, use the browser zone through `resolveIntlTimeZone`.
+ */
+export function resolveTrainerDisplayZone(
+  stored: string | null | undefined,
+): string | null {
+  const candidate = stored?.trim() || deviceTimeZone();
+  try {
+    return resolveIntlTimeZone(candidate);
+  } catch {
+    return null;
+  }
+}
 
 function relationshipWeek(startedAt: string | null | undefined): number | null {
   if (!startedAt) return null;
@@ -125,9 +142,10 @@ export function WorkspaceHeader({
     .map((p) => p.charAt(0).toUpperCase())
     .join("");
 
-  // Frame 179: civil dates in the trainer's timezone, like the Clients list.
-  // Until the trainer's zone is known, render no date (no wrong-zone flash).
-  const trainerTz = me?.timezone ?? null;
+  // Frame 179 / D-W12-26: civil dates in the trainer's stored zone when set;
+  // otherwise the browser zone through the CU17 resolver (no "Ended" without
+  // dates while me.timezone is still loading or unset).
+  const trainerTz = resolveTrainerDisplayZone(me?.timezone);
   const civilDay = (iso: string | null | undefined): string | null => {
     if (!iso || !trainerTz) return null;
     const at = new Date(iso);
@@ -365,11 +383,11 @@ export function WorkspaceHeader({
               </div>
             ) : null}
             <div className="wsh-signals">
-              {me?.timezone ? (
+              {trainerTz ? (
                 <TimezoneBadge
                   traineeName={header.traineeDisplayName}
                   traineeTimezone={resolveTraineeTimezone(header).timezone}
-                  trainerTimezone={me.timezone}
+                  trainerTimezone={trainerTz}
                 />
               ) : null}
               {header.hasCustomMealTimes ? (

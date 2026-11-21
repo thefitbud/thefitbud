@@ -5,7 +5,7 @@ import type {
   Invitation,
   OnboardingStatus,
 } from "@fitbud/contracts";
-import { formatCivilDate, formatCount, formatLocalDate, labelFor } from "@fitbud/core";
+import { formatCivilDate, formatLocalDate, labelFor } from "@fitbud/core";
 
 export type ClientDirectoryRow = {
   key: string;
@@ -102,6 +102,7 @@ export type ClientListFilter =
   | "needs_attention"
   | "checkin_due"
   | "onboarding"
+  | "invites"
   | "ended";
 
 export type ClientListApiQuery = {
@@ -121,10 +122,13 @@ export function clientListQueryForChip(
     case "needs_attention":
       return { ...base, adherenceState: ["needs_attention"] };
     case "onboarding":
+      // TM-02: Onboarding ≠ Invites. Intake-in-progress only.
       return {
         ...base,
-        status: ["invited", "onboarding_pending", "onboarding_submitted"],
+        status: ["onboarding_pending", "onboarding_submitted"],
       };
+    case "invites":
+      return { ...base, status: ["invited"] };
     case "ended":
       return { ...base, status: ["ended"] };
     case "checkin_due":
@@ -162,7 +166,8 @@ export function endedChipLabel(
 
 /**
  * Ended clients show only under the Ended filter; check-in due narrows to
- * clients with a check-in waiting on someone.
+ * clients with a check-in waiting on someone. Invites / onboarding are
+ * status slices (TM-02d).
  */
 export function applyClientListFilter(
   items: ClientDirectoryItem[],
@@ -173,7 +178,20 @@ export function applyClientListFilter(
   if (chip === "checkin_due") {
     return live.filter((item) => isCheckinDue(item));
   }
+  if (chip === "invites") {
+    return live.filter((item) => item.status === "invited");
+  }
+  if (chip === "onboarding") {
+    return live.filter((item) =>
+      ["onboarding_pending", "onboarding_submitted"].includes(item.status),
+    );
+  }
   return live;
+}
+
+/** True when the row is a pending invite with no coaching relationship yet. */
+export function isInviteClient(item: ClientDirectoryItem): boolean {
+  return item.status === "invited" && !item.relationshipId;
 }
 
 export function isCheckinDue(item: ClientDirectoryItem): boolean {
@@ -181,34 +199,41 @@ export function isCheckinDue(item: ClientDirectoryItem): boolean {
   return status === "due" || status === "overdue" || status === "submitted";
 }
 
-export function clientSubtitle(item: ClientDirectoryItem): string {
+export function clientSubtitle(
+  item: ClientDirectoryItem,
+  timeZone?: string,
+  now?: Date,
+): string {
+  // TM-02c: ended rows read "Ended Wed 21 Oct", not goal · weeks.
+  if (isEndedClient(item)) {
+    if (timeZone) return endedChipLabel(item, timeZone, now);
+    return onboardingStatusLabel("ended");
+  }
+  if (item.status === "invited") {
+    return "Invite pending";
+  }
   const goal = item.goalShort?.trim() ?? "";
   if (!goal) {
     return item.relationshipId
       ? "No goal set yet"
       : onboardingStatusLabel(item.status);
   }
-  const weeks = isEndedClient(item) ? endedWeeks(item) : null;
   const parts = [
     goal,
     item.city?.trim() || null,
-    isEndedClient(item)
-      ? weeks != null
-        ? formatCount(weeks, "week")
-        : null
-      : item.week != null
-        ? `week ${item.week}`
-        : null,
+    item.week != null ? `week ${item.week}` : null,
   ].filter((part): part is string => Boolean(part));
   return parts.join(" · ");
 }
 
 export function mapDirectoryItemToRow(
   item: ClientDirectoryItem,
+  timeZone?: string,
+  now?: Date,
 ): ClientDirectoryRow {
   const relationshipId = item.relationshipId;
   const invitationId = item.invitationId;
-  const subtitle = clientSubtitle(item);
+  const subtitle = clientSubtitle(item, timeZone, now);
   return {
     key: relationshipId
       ? `relationship:${relationshipId}`

@@ -1,27 +1,38 @@
-import { Platform, Pressable, StyleSheet, View } from "react-native";
-import { ClipboardCheck, Clock3 } from "lucide-react-native";
-import { colors, fontFamilySemiBold } from "@fitbud/ui-mobile";
+import { Pressable, StyleSheet, View } from "react-native";
+import { Swipeable } from "react-native-gesture-handler";
+import {
+  Check,
+  ChevronRight,
+  ClipboardCheck,
+  Clock3,
+} from "lucide-react-native";
+import type { ColorTokens } from "@fitbud/tokens";
+import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
-import { initialsFromName, WhatsAppGlyph } from "../../components/m2";
+import { initialsFromName } from "../../components/m2";
 import {
   emptyCopy,
   type CheckinListModel,
   type CheckinListRow,
   type CheckinListSegment,
 } from "./model";
+import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 
-const AVATARS = [
-  { backgroundColor: "#FDECEF", color: "#A3243F" },
-  { backgroundColor: "#E3EEFD", color: "#1E4B9E" },
-  { backgroundColor: "#EAF5E4", color: "#2F6B1E" },
-  { backgroundColor: "#FFF1DB", color: "#8A4B06" },
-  { backgroundColor: "#E9E5FF", color: "#3B23A8" },
-  { backgroundColor: "#F1E8FA", color: "#6B2A93" },
-] as const;
+function avatars(c: ColorTokens) {
+  return [
+    { backgroundColor: c.av1Bg, color: c.av1Fg },
+    { backgroundColor: c.av2Bg, color: c.av2Fg },
+    { backgroundColor: c.av3Bg, color: c.av3Fg },
+    { backgroundColor: c.av4Bg, color: c.av4Fg },
+    { backgroundColor: c.av5Bg, color: c.av5Fg },
+    { backgroundColor: c.av6Bg, color: c.av6Fg },
+  ] as const;
+}
 
-function avatarTone(name: string): (typeof AVATARS)[number] {
+function avatarTone(name: string, c: ColorTokens) {
+  const list = avatars(c);
   const code = [...name].reduce((sum, char) => sum + char.charCodeAt(0), 0);
-  return AVATARS[code % AVATARS.length] ?? AVATARS[0];
+  return list[code % list.length] ?? list[0];
 }
 
 type Props = {
@@ -30,7 +41,11 @@ type Props = {
   segment: CheckinListSegment;
   onSegmentChange: (segment: CheckinListSegment) => void;
   onReview: (row: CheckinListRow) => void;
-  onWhatsApp: (row: CheckinListRow) => void;
+  onNudge: (row: CheckinListRow) => void;
+  /** Swipe-right shortcut on To review (TM-05a / TM-06c). */
+  onMarkReviewed?: (row: CheckinListRow) => void;
+  /** Optional footer under the list (reminders paused, swipe hint). */
+  footerHint?: string | null;
 };
 
 export function CheckinsList({
@@ -39,22 +54,39 @@ export function CheckinsList({
   segment,
   onSegmentChange,
   onReview,
-  onWhatsApp,
+  onNudge,
+  onMarkReviewed,
+  footerHint,
 }: Props) {
-  const rows = segment === "to_review" ? model.toReview : model.overdue;
-  const count = (n: number) => (loading ? "" : ` ${n}`);
+
+  const styles = useStyles();
+  const rows =
+    segment === "to_review"
+      ? model.toReview
+      : segment === "overdue"
+        ? model.overdue
+        : model.reviewed;
+  const count = (n: number) => (loading ? "" : ` · ${n}`);
   return (
     <View>
       <View accessibilityRole="tablist" style={styles.tabs}>
         <Tab
+          testID="checkins-segment-to-review"
           label={`To review${count(model.toReview.length)}`}
           selected={segment === "to_review"}
           onPress={() => onSegmentChange("to_review")}
         />
         <Tab
+          testID="checkins-segment-overdue"
           label={`Overdue${count(model.overdue.length)}`}
           selected={segment === "overdue"}
           onPress={() => onSegmentChange("overdue")}
+        />
+        <Tab
+          testID="checkins-segment-reviewed"
+          label="Reviewed"
+          selected={segment === "reviewed"}
+          onPress={() => onSegmentChange("reviewed")}
         />
       </View>
 
@@ -71,17 +103,22 @@ export function CheckinsList({
                 row={row}
                 segment={segment}
                 onReview={onReview}
-                onWhatsApp={onWhatsApp}
+                onNudge={onNudge}
+                onMarkReviewed={onMarkReviewed}
               />
             </View>
           ))}
         </View>
       )}
-      {!loading &&
-      Platform.OS !== "android" &&
-      segment === "to_review" &&
-      rows.length > 0 ? (
-        <Text style={styles.hint}>Pull down to check for new check-ins</Text>
+      {!loading && footerHint ? (
+        <Text style={styles.hint}>{footerHint}</Text>
+      ) : !loading &&
+        segment === "to_review" &&
+        rows.length > 0 &&
+        onMarkReviewed ? (
+        <Text style={styles.hint}>
+          Swipe right on a row to mark it reviewed.
+        </Text>
       ) : null}
     </View>
   );
@@ -91,13 +128,18 @@ function Tab({
   label,
   selected,
   onPress,
+  testID,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
+  testID?: string;
 }) {
+
+  const styles = useStyles();
   return (
     <Pressable
+      testID={testID}
       accessibilityRole="tab"
       accessibilityState={{ selected }}
       onPress={onPress}
@@ -114,16 +156,24 @@ function Row({
   row,
   segment,
   onReview,
-  onWhatsApp,
+  onNudge,
+  onMarkReviewed,
 }: {
   row: CheckinListRow;
   segment: CheckinListSegment;
   onReview: (row: CheckinListRow) => void;
-  onWhatsApp: (row: CheckinListRow) => void;
+  onNudge: (row: CheckinListRow) => void;
+  onMarkReviewed?: (row: CheckinListRow) => void;
 }) {
-  const tone = avatarTone(row.name);
+
+  const theme = useTheme();
+  const styles = useStyles();
+  const tone = avatarTone(row.name, theme.colors);
   const overdue = segment === "overdue";
-  return (
+  const reviewed = segment === "reviewed";
+  const openable = !overdue;
+
+  const body = (
     <View style={styles.row}>
       <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
         <Text style={[styles.avatarText, { color: tone.color }]}>
@@ -134,51 +184,99 @@ function Row({
         <Text style={styles.name}>{row.name}</Text>
         <Text style={styles.line}>{row.line}</Text>
         <View style={styles.foot}>
-          {overdue ? (
+          {reviewed ? (
+            <View style={[styles.chip, styles.chipReviewed]}>
+              <Check color={theme.colors.done} size={13} strokeWidth={2.6} />
+              <Text style={[styles.chipText, { color: theme.colors.done }]}>
+                Reviewed
+              </Text>
+            </View>
+          ) : overdue ? (
             <View style={[styles.chip, styles.chipOverdue]}>
-              <Clock3 color="#B45309" size={14} />
-              <Text style={[styles.chipText, { color: "#B45309" }]}>Overdue</Text>
+              <Clock3 color={theme.colors.warn} size={13} strokeWidth={2.2} />
+              <Text style={[styles.chipText, { color: theme.colors.warn }]}>
+                Overdue
+              </Text>
             </View>
           ) : (
             <View style={[styles.chip, styles.chipReview]}>
-              <ClipboardCheck color="#1D4ED8" size={14} />
-              <Text style={[styles.chipText, { color: "#1D4ED8" }]}>
+              <ClipboardCheck
+                color={theme.colors.info}
+                size={13}
+                strokeWidth={2.2}
+              />
+              <Text style={[styles.chipText, { color: theme.colors.info }]}>
                 To review
               </Text>
             </View>
           )}
+          {row.age ? <Text style={styles.age}>{row.age}</Text> : null}
           {overdue ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`WhatsApp ${row.name}`}
-              onPress={() => onWhatsApp(row)}
-              style={[styles.action, styles.actionQuiet]}
+              accessibilityLabel={`Nudge ${row.name}`}
+              onPress={() => onNudge(row)}
+              style={styles.nudge}
             >
-              <WhatsAppGlyph size={20} />
-              <Text style={styles.actionQuietText}>WhatsApp</Text>
+              <Text style={styles.nudgeText}>Nudge</Text>
             </Pressable>
           ) : (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Review ${row.name}'s check-in`}
-              onPress={() => onReview(row)}
-              style={[styles.action, styles.actionPrimary]}
-            >
-              <Text style={styles.actionPrimaryText}>Review</Text>
-            </Pressable>
+            <ChevronRight color={theme.colors.ink3} size={18} />
           )}
         </View>
       </View>
     </View>
   );
+
+  const openableRow = openable ? (
+    <Pressable
+      testID="checkin-row"
+      accessibilityRole="button"
+      accessibilityLabel={
+        reviewed
+          ? `Open ${row.name}'s reviewed check-in`
+          : `Review ${row.name}'s check-in`
+      }
+      onPress={() => onReview(row)}
+    >
+      {body}
+    </Pressable>
+  ) : (
+    <View testID="checkin-row">{body}</View>
+  );
+
+  if (segment === "to_review" && onMarkReviewed) {
+    return (
+      <Swipeable
+        overshootLeft={false}
+        overshootRight={false}
+        renderLeftActions={() => (
+          <View style={styles.swipeDone}>
+            <Check color={theme.colors.card} size={22} strokeWidth={2.4} />
+            <Text style={styles.swipeDoneText}>Reviewed</Text>
+          </View>
+        )}
+        onSwipeableOpen={(direction) => {
+          if (direction === "left") onMarkReviewed(row);
+        }}
+      >
+        {openableRow}
+      </Swipeable>
+    );
+  }
+
+  return openableRow;
 }
 
 function Empty({ segment }: { segment: CheckinListSegment }) {
+
+  const theme = useTheme();
+  const styles = useStyles();
   const copy = emptyCopy(segment);
   return (
-    <View style={styles.empty}>
+    <View style={styles.emptyCard}>
       <View style={styles.emptyIcon}>
-        <ClipboardCheck color="#047857" size={32} />
+        <Check color={theme.colors.ink} size={28} strokeWidth={2.4} />
       </View>
       <Text style={styles.emptyTitle}>{copy.title}</Text>
       {copy.body ? <Text style={styles.emptyBody}>{copy.body}</Text> : null}
@@ -188,6 +286,8 @@ function Empty({ segment }: { segment: CheckinListSegment }) {
 
 /** Static blocks: motion is for state change, not for waiting. */
 function Skeleton() {
+
+  const styles = useStyles();
   return (
     <View style={styles.card} accessibilityLabel="Loading check-ins">
       <Text style={styles.srOnly}>Loading check-ins…</Text>
@@ -198,8 +298,12 @@ function Skeleton() {
             <View style={[styles.avatar, styles.block]} />
             <View style={styles.body}>
               <View style={[styles.block, { height: 14, width: "52%" }]} />
-              <View style={[styles.block, { height: 12, width: "86%", marginTop: 10 }]} />
-              <View style={[styles.block, { height: 20, width: "36%", marginTop: 10 }]} />
+              <View
+                style={[styles.block, { height: 12, width: "86%", marginTop: 10 }]}
+              />
+              <View
+                style={[styles.block, { height: 20, width: "36%", marginTop: 10 }]}
+              />
             </View>
           </View>
         </View>
@@ -208,9 +312,9 @@ function Skeleton() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = createThemedStyles((t) => ({
   tabs: {
-    backgroundColor: "#EDEAFF",
+    backgroundColor: t.colors.fill,
     borderRadius: 14,
     flexDirection: "row",
     gap: 2,
@@ -224,18 +328,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     minHeight: 44,
+    paddingHorizontal: 4,
   },
-  tabOn: { backgroundColor: colors.white },
-  tabText: { color: colors.midGrey, fontSize: 15, fontFamily: fontFamilySemiBold },
-  tabTextOn: { color: colors.deepNavy },
+  tabOn: {
+    backgroundColor: t.colors.card,
+    shadowColor: "#1B1650",
+    shadowOffset: { height: 1, width: 0 },
+    shadowOpacity: 0.08,
+    shadowRadius: 3,
+  },
+  tabText: {
+    color: t.colors.ink3,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  tabTextOn: { color: t.colors.ink },
   card: {
-    backgroundColor: colors.white,
-    borderColor: "#E7E9F2",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
     borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
   },
-  divider: { backgroundColor: "#E7E9F2", height: 1 },
+  divider: { backgroundColor: t.colors.line, height: StyleSheet.hairlineWidth },
   row: { flexDirection: "row", gap: 12, padding: 14 },
   avatar: {
     alignItems: "center",
@@ -246,82 +362,91 @@ const styles = StyleSheet.create({
   },
   avatarText: { fontFamily: fontFamilySemiBold, fontSize: 14 },
   body: { flex: 1, minWidth: 0 },
-  name: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 18 },
-  line: { color: colors.midGrey, fontSize: 15, lineHeight: 21, marginTop: 2 },
+  name: { color: t.colors.ink, fontFamily: fontFamilySemiBold, fontSize: 17 },
+  line: { color: t.colors.ink3, fontSize: 14, lineHeight: 20, marginTop: 2 },
   foot: {
     alignItems: "center",
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    justifyContent: "space-between",
     marginTop: 10,
   },
   chip: {
     alignItems: "center",
     borderRadius: 999,
-    borderWidth: 1,
     flexDirection: "row",
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
-  chipReview: { backgroundColor: "#EEF4FF", borderColor: "#C7DAFB" },
-  chipOverdue: { backgroundColor: "#FFF5DC", borderColor: "#F8DFA4" },
-  chipText: { fontFamily: fontFamilySemiBold, fontSize: 14 },
-  action: {
+  chipReview: { backgroundColor: t.colors.infoTint },
+  chipOverdue: { backgroundColor: t.colors.warnTint },
+  chipReviewed: { backgroundColor: t.colors.doneTint },
+  chipText: { fontFamily: fontFamilySemiBold, fontSize: 12 },
+  age: { color: t.colors.ink3, flex: 1, fontSize: 13 },
+  nudge: {
     alignItems: "center",
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 8,
+    backgroundColor: t.colors.fill,
+    borderRadius: 999,
+    height: 36,
     justifyContent: "center",
-    minHeight: 48,
-    minWidth: 96,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
   },
-  actionPrimary: { backgroundColor: "#EDEAFF" },
-  actionPrimaryText: {
-    color: colors.indigo,
+  nudgeText: {
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
-    fontSize: 17,
-  },
-  actionQuiet: {
-    backgroundColor: colors.white,
-    borderColor: "#DAD8EA",
-    borderWidth: 1,
-  },
-  actionQuietText: {
-    color: colors.deepNavy,
-    fontFamily: fontFamilySemiBold,
-    fontSize: 17,
+    fontSize: 14,
   },
   hint: {
-    color: colors.midGrey,
-    fontSize: 15,
-    marginTop: 20,
+    color: t.colors.ink3,
+    fontSize: 14,
+    marginTop: 14,
     textAlign: "center",
   },
-  empty: { alignItems: "center", gap: 8, paddingHorizontal: 24, paddingTop: 56 },
+  emptyCard: {
+    alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: 8,
+    paddingHorizontal: 24,
+    paddingVertical: 40,
+  },
   emptyIcon: {
     alignItems: "center",
-    backgroundColor: "#ECFDF5",
-    borderRadius: 28,
-    height: 88,
+    backgroundColor: t.colors.fill,
+    borderRadius: 18,
+    height: 56,
     justifyContent: "center",
-    marginBottom: 16,
-    width: 88,
+    marginBottom: 8,
+    width: 56,
   },
   emptyTitle: {
-    color: colors.deepNavy,
+    color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
-    fontSize: 26,
+    fontSize: 20,
     textAlign: "center",
   },
   emptyBody: {
-    color: colors.midGrey,
-    fontSize: 17,
-    lineHeight: 24,
+    color: t.colors.ink3,
+    fontSize: 15,
+    lineHeight: 22,
     textAlign: "center",
   },
-  block: { backgroundColor: "#EDEBF5", borderRadius: 999 },
+  block: { backgroundColor: t.colors.skel1, borderRadius: 999 },
   srOnly: { height: 1, overflow: "hidden", position: "absolute", width: 1 },
-});
+  swipeDone: {
+    alignItems: "center",
+    backgroundColor: t.colors.done,
+    flexDirection: "row",
+    gap: 8,
+    justifyContent: "flex-start",
+    paddingHorizontal: 20,
+  },
+  swipeDoneText: {
+    color: t.colors.card,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 15,
+  },
+}));

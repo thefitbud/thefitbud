@@ -5,9 +5,7 @@ tags:
   - trainer
   - z12-36
 env:
-  # "Needs you <n>" shows over the skeleton too (AttentionTab.tsx), so the wait on it is
-  # followed by a wait for "Loading" to go (as in device/z12-33).
-  ATTENTION_LOADED: "Needs you [0-9]+"
+  # Attention loaded: common/wait-attention-loaded.yaml (attention-screen + title).
   CLIENT: Rohan Mehta
 ---
 # Same opt-in note as 2-trainee-today-diet: these screens stay light in the dark run
@@ -26,12 +24,7 @@ env:
     file: sign-in-password.yaml
     env:
       SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
-- extendedWaitUntil:
-    visible: "${ATTENTION_LOADED}"
-    timeout: 30000
-- extendedWaitUntil:
-    notVisible: "Loading"
-    timeout: 60000
+- runFlow: ../../common/wait-attention-loaded.yaml
 - takeScreenshot: TM-01a
 - runFlow: ../../common/assert-no-crash.yaml
 

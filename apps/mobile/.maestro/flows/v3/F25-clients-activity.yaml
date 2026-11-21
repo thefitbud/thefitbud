@@ -1,0 +1,99 @@
+appId: com.thefitbud.mobile.staging
+name: F25 Clients, activity and client detail (Z12-53)
+tags:
+  - device
+  - trainer
+  - z12-53
+env:
+  CLIENT_SLUG: rohan-mehta
+---
+# F25 (Z12-53): Clients → Rohan → menu / activity. Use tab-clients and client-row
+# ids (Android lost a bare "Clients" tap; iOS wraps names).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- runFlow: ../../common/wait-attention-loaded.yaml
+- tapOn:
+    id: "tab-clients"
+- extendedWaitUntil:
+    visible: "Clients"
+    timeout: 30000
+- takeScreenshot: TM-02a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- scrollUntilVisible:
+    element:
+      id: "client-row-${CLIENT_SLUG}"
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: "client-row-${CLIENT_SLUG}"
+- extendedWaitUntil:
+    visible:
+      id: "client-status"
+    timeout: 30000
+- takeScreenshot: TM-03a
+- runFlow: ../../common/assert-no-crash.yaml
+
+- runFlow:
+    when:
+      visible:
+        id: "client-nudge"
+    commands:
+      - tapOn:
+          id: "client-nudge"
+      - extendedWaitUntil:
+          visible: "about|Send nudge|Close|Cancel"
+          timeout: 15000
+      - takeScreenshot: TM-03j
+      - tapOn: "Close|Cancel|Dismiss"
+      - extendedWaitUntil:
+          visible:
+            id: "client-status"
+          timeout: 15000
+
+- runFlow:
+    when:
+      visible: "More|⋯"
+    commands:
+      - tapOn: "More|⋯"
+- runFlow:
+    when:
+      visible: "Goal, intake and limitations"
+    commands:
+      - takeScreenshot: TM-03i
+      - tapOn: "Goal, intake and limitations"
+      - extendedWaitUntil:
+          visible: "Goal|intake|limitations|Back"
+          timeout: 20000
+      - takeScreenshot: TM-03f
+      - runFlow: ../../common/assert-no-crash.yaml
+      - tapOn: "Back|‹"
+
+- tapOn:
+    id: "tab-clients"
+- extendedWaitUntil:
+    visible: "Clients"
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Activity"
+    commands:
+      - tapOn: "Activity"
+      - extendedWaitUntil:
+          visible: "Activity|All|Meals|Workouts"
+          timeout: 30000
+      - takeScreenshot: TM-09a
+      - runFlow: ../../common/assert-no-crash.yaml
+      - runFlow:
+          when:
+            visible: "All clients|Filter|Client"
+          commands:
+            - tapOn: "All clients|Filter|Client"
+            - takeScreenshot: TM-09d

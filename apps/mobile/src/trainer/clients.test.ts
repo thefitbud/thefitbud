@@ -140,7 +140,7 @@ describe("ended clients", () => {
     const all = [active, ended, due];
     expect(applyClientListFilter(all, "all")).toEqual([active, due]);
     expect(applyClientListFilter(all, "needs_attention")).toEqual([active, due]);
-    expect(applyClientListFilter(all, "onboarding")).toEqual([active, due]);
+    expect(applyClientListFilter(all, "onboarding")).toEqual([]);
     expect(applyClientListFilter(all, "ended")).toEqual([ended]);
   });
 
@@ -148,9 +148,27 @@ describe("ended clients", () => {
     expect(applyClientListFilter([active, ended, due], "checkin_due")).toEqual([due]);
   });
 
-  it("shows weeks coached for ended clients and week N for active ones", () => {
-    expect(mapDirectoryItemToRow(ended).subtitle).toBe("Lose 4 kg · 13 weeks");
+  it("shows Ended date for ended clients and week N for active ones (TM-02c)", () => {
+    expect(mapDirectoryItemToRow(ended, "Asia/Kolkata", new Date("2026-11-11T00:00:00Z")).subtitle).toBe(
+      "Ended Sat 3 Oct",
+    );
     expect(mapDirectoryItemToRow(active).subtitle).toBe("Lose 4 kg · week 6");
+  });
+
+  it("keeps invites and onboarding as separate filters (TM-02d)", () => {
+    const invite = item({
+      status: "invited",
+      relationshipId: null,
+      invitationId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      traineeDisplayName: "Anita Desai",
+    });
+    const intake = item({
+      status: "onboarding_pending",
+      traineeDisplayName: "Vikram Rao",
+    });
+    const all = [active, invite, intake, ended];
+    expect(applyClientListFilter(all, "invites")).toEqual([invite]);
+    expect(applyClientListFilter(all, "onboarding")).toEqual([intake]);
   });
 
   it("labels the ended chip with the end date in the trainer zone", () => {
