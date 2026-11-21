@@ -78,17 +78,21 @@ function withSentryUploadDisabled(config) {
 }
 
 /**
- * Steps (Z9-9, D-W9-6). HealthKit is read only: no update string, no
- * background delivery. The plugin writes a default update string unless it is
- * set to false. It adds the HealthKit entitlement, which needs the HealthKit
- * capability on the App ID.
+ * Steps (Z9-9, D-W9-6). Runtime is read-only (requestAuthorization with an
+ * empty write list). Apple still requires both Info.plist keys whenever the
+ * HealthKit entitlement / APIs are linked (ITMS-90683); omitting the update
+ * key with `false` fails upload. Share/update copy is honest about reading
+ * steps only — we do not save workouts or samples to Apple Health.
  */
+const HEALTH_SHARE =
+  "FitBud reads your daily step count so your coach can see it next to your plan.";
+const HEALTH_UPDATE =
+  "FitBud only reads step counts from Apple Health for coaching. It does not add or change Health samples.";
 const HEALTHKIT_PLUGIN = [
   "@kingstinct/react-native-healthkit",
   {
-    NSHealthShareUsageDescription:
-      "FitBud reads your daily step count so your coach can see it next to your plan.",
-    NSHealthUpdateUsageDescription: false,
+    NSHealthShareUsageDescription: HEALTH_SHARE,
+    NSHealthUpdateUsageDescription: HEALTH_UPDATE,
     background: false,
   },
 ];

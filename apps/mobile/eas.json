@@ -6,7 +6,10 @@
   "build": {
     "base": {
       "node": "22.23.3",
-      "pnpm": "9.15.4"
+      "pnpm": "9.15.4",
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      }
     },
     "development": {
       "extends": "base",

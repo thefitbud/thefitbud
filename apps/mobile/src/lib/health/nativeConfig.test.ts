@@ -47,9 +47,11 @@ describe("steps native config (D-W9-6)", () => {
     expect(healthkit).toEqual([
       "@kingstinct/react-native-healthkit",
       {
-        NSHealthShareUsageDescription: "FitBud reads your daily step count so your coach can see it next to your plan.",
-        // Read only: the plugin would otherwise write a default update string.
-        NSHealthUpdateUsageDescription: false,
+        NSHealthShareUsageDescription:
+          "FitBud reads your daily step count so your coach can see it next to your plan.",
+        // Runtime is read-only; Apple still requires both keys (ITMS-90683).
+        NSHealthUpdateUsageDescription:
+          "FitBud only reads step counts from Apple Health for coaching. It does not add or change Health samples.",
         background: false,
       },
     ]);
