@@ -32,6 +32,7 @@ const prefs = {
     intakeSubmitted: true,
     renewalsDue: true,
     mealTimesChanged: true,
+    clientLogEdits: true,
     morningSummary: false,
   },
 };
@@ -60,7 +61,26 @@ describe("NotificationSettingsPage", () => {
     expect(screen.getByTestId("quiet-hours-display").textContent).toMatch(
       /10:00 pm — 7:00 am • nothing during these hours/,
     );
-    expect(screen.getAllByRole("switch")).toHaveLength(6);
+    expect(screen.getAllByRole("switch")).toHaveLength(7);
+  });
+
+  it("shows Client log edits on by default and saves it to clientLogEdits (Z14-16)", async () => {
+    // An older server answer without the key still reads as on.
+    const without: Record<string, boolean> = { ...prefs.trainerCategories };
+    delete without.clientLogEdits;
+    getNotificationPreferences.mockResolvedValue({ ...prefs, trainerCategories: without });
+    render(<NotificationSettingsPage />);
+    await screen.findByText("When a client edits or removes a meal log.");
+    const toggle = screen.getByRole("switch", { name: /Client log edits/i });
+    expect(toggle.getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(updateNotificationPreferences).toHaveBeenCalledWith(
+        expect.objectContaining({
+          trainerCategories: expect.objectContaining({ clientLogEdits: false }),
+        }),
+      ),
+    );
   });
 
   it("persists a category toggle", async () => {

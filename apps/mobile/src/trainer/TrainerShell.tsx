@@ -29,11 +29,13 @@ import { ClientsTab } from "./ClientsTab";
 import { ClientStatusScreen } from "./ClientStatusScreen";
 import { ExceptionReviewScreen } from "./ExceptionReviewScreen";
 import { AskDetailScreen } from "./ask/AskDetailScreen";
+import { DietDayReviewScreen } from "./diet/DietDayReviewScreen";
 import { SessionDetailScreen } from "./session/SessionDetailScreen";
 import { isCaptureModeEnabled,
   registerTrainerCaptureNav,
 } from "../dev/captureBridge";
 import { stage1Api } from "../lib/stage1Api";
+import type { TrainerNotificationRoute } from "../notifications/routing";
 import { roleForLinkKind } from "../navigation/resolveRoute";
 import { backOverlays, pushOverlay, startOverlays } from "./overlayStack";
 import { HIDDEN_FROM_READERS, PushedScreen } from "../components/PushedScreen";
@@ -49,6 +51,17 @@ type Overlay =
       relationshipId: string;
       displayName: string;
       onboardingStatusLabelText: string;
+    }
+  | {
+      // Z14-16: a client's meal-log change opens their diet day, with the meal
+      // sheet on the entry (none for a removed entry).
+      kind: "clientDiet";
+      relationshipId: string;
+      displayName: string;
+      clientZone: string;
+      whatsappE164: string | null;
+      date: string | null;
+      entryId: string | null;
     }
   | {
       kind: "checkin";
@@ -228,6 +241,54 @@ function TrainerShellBody() {
     else open(next);
   }
 
+  // Z14-16: the push carries ids only, so the day and entry come from the
+  // stored notification row (looked up by id) unless the tap came from a row
+  // that already had them. Anything that cannot be read opens the client's
+  // diet day for today.
+  async function openClientDiet(
+    route: Extract<TrainerNotificationRoute, { kind: "clientDiet" }>,
+    push: number,
+  ) {
+    let date = route.date;
+    let entryId = route.entryId;
+    if (!date && route.notificationId) {
+      try {
+        const inbox = await api.listNotifications();
+        const row = inbox.items.find((item) => item.id === route.notificationId);
+        if (row?.logEdit) {
+          date = row.logEdit.mealDate;
+          entryId = row.logEdit.action === "edited" ? row.logEdit.entryId : null;
+        }
+      } catch (err) {
+        reportError("trainer-shell.log-edit-row", err);
+      }
+    }
+    let displayName = "Client";
+    let clientZone = "Asia/Kolkata";
+    let whatsappE164: string | null = null;
+    try {
+      const workspace = await api.getClientWorkspace(route.relationshipId);
+      displayName = formatPersonName(workspace.header.traineeDisplayName);
+      clientZone = workspace.header.traineeTimezone ?? clientZone;
+      whatsappE164 = workspace.header.clientWhatsappE164 ?? null;
+    } catch (err) {
+      reportError("trainer-shell.client-diet-header", err);
+      const cached = readClientMeta(route.relationshipId);
+      if (cached?.name) displayName = formatPersonName(cached.name);
+    }
+    // A newer push opened something else while this one loaded.
+    if (push !== latestPushRef.current) return;
+    startAt({
+      kind: "clientDiet",
+      relationshipId: route.relationshipId,
+      displayName,
+      clientZone,
+      whatsappE164,
+      date,
+      entryId,
+    });
+  }
+
   function openCheckin(item: TrainerCheckinInboxItem) {
     startAt({
       kind: "checkin",
@@ -257,6 +318,9 @@ function TrainerShellBody() {
         return;
       case "client":
         void openClientById(route.relationshipId, push, "start");
+        return;
+      case "clientDiet":
+        void openClientDiet(route, push);
         return;
       case "attention":
         closeAll();
@@ -344,6 +408,7 @@ function TrainerShellBody() {
     if (!below) return TABS.find((item) => item.id === tab)?.label ?? "Back";
     switch (below.kind) {
       case "client":
+      case "clientDiet":
         return below.displayName.split(" ")[0] || "Back";
       case "exception":
         return "Review";
@@ -391,6 +456,19 @@ function TrainerShellBody() {
             relationshipId: overlay.relationshipId,
           })
         }
+      />
+    );
+  } else if (overlay?.kind === "clientDiet") {
+    overlayNode = (
+      <DietDayReviewScreen
+        key={`${refreshNonce}:${overlay.date}:${overlay.entryId}`}
+        relationshipId={overlay.relationshipId}
+        displayName={overlay.displayName}
+        clientZone={overlay.clientZone}
+        whatsappE164={overlay.whatsappE164}
+        initialDate={overlay.date ?? undefined}
+        initialEntryId={overlay.entryId}
+        onBack={() => goBack()}
       />
     );
   } else if (overlay?.kind === "checkin") {

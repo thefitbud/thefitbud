@@ -115,3 +115,44 @@ describe("MealPanel planned vs logged (Z12-8 / 159)", () => {
     expect(screen.getByRole("link", { name: /Message on WhatsApp/i })).toBeTruthy();
   });
 });
+
+describe("MealPanel client edit marker (Z14-16, TM-09f)", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  function edited(patch: Record<string, unknown>): MealAssignment {
+    const base = assignment([scaledItem("Roti", 200)]);
+    return {
+      ...base,
+      compliance: {
+        ...base.compliance,
+        updatedAt: "2026-11-14T08:35:00.000Z",
+        ...patch,
+      },
+    } as MealAssignment;
+  }
+
+  it("names who changed it, when, and what it was before", () => {
+    renderPanel(
+      edited({
+        lastEditedByRole: "trainee",
+        lastEditedAt: "2026-11-14T08:35:00.000Z",
+        previousValue: { outcome: "confirmed", deviationKind: null, notes: null, kcal: 610 },
+      }),
+    );
+    expect(screen.getByTestId("meal-client-edit").textContent).toBe(
+      "Edited by Rohan · Sat 14 Nov, 2:05 pmWas 610 kcal · as planned",
+    );
+    expect(screen.queryByTestId("meal-coach-tag")).toBeNull();
+  });
+
+  it("shows nothing for an unedited entry and keeps the coach wording for a coach edit", () => {
+    renderPanel(edited({ lastEditedByRole: null }));
+    expect(screen.queryByTestId("meal-client-edit")).toBeNull();
+    cleanup();
+    renderPanel(edited({ lastEditedByRole: "coach" }));
+    expect(screen.queryByTestId("meal-client-edit")).toBeNull();
+    expect(screen.getByTestId("meal-coach-tag").textContent).toMatch(/^Edited by coach · /);
+  });
+});
