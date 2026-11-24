@@ -442,6 +442,16 @@ export function TraineeShell({
     Boolean(activeCheckin) ||
     (hasFullscreenOverlay && workoutImmersive && tab === "workout");
   const shownTab: TraineeTab | null = coverOn ? null : tab;
+  // The Workout tab reports "not immersive" as it unmounts under the cover.
+  // Taking that at face value would lift the cover, remount the tab, and
+  // start the loop again; so a report made while covered is ignored (the tab
+  // reports the real value when it mounts again).
+  const coverOnRef = useRef(coverOn);
+  coverOnRef.current = coverOn;
+  const reportWorkoutImmersive = useCallback((immersive: boolean) => {
+    if (!immersive && coverOnRef.current) return;
+    setWorkoutImmersive(immersive);
+  }, []);
   /** Which tab panes stay mounted, hidden, when left (Z14-2): `PaneBook`. */
   const [storedPanes, setPanes] = useState<PaneBook>(() =>
     initialPaneBook(shownTab, Date.now()),
@@ -1196,8 +1206,13 @@ export function TraineeShell({
   ) : null;
 
   /** One host per stack entry. */
-  const hostFor = (entry: TraineeOverlay, presentation: "fullscreen" | "sheet") => (
+  const hostFor = (
+    entry: TraineeOverlay,
+    presentation: "fullscreen" | "sheet",
+    key?: string,
+  ) => (
     <TraineeOverlayHost
+      key={key}
       overlay={entry}
       relationship={relationship}
       effectivePlan={effectivePlan}
@@ -1313,7 +1328,7 @@ export function TraineeShell({
             onPendingStartConsumed={() => setPendingWorkoutStartId(null)}
             pendingSummaryExecutionId={pendingSummaryExecutionId}
             onPendingSummaryConsumed={() => setPendingSummaryExecutionId(null)}
-            onImmersiveChange={setWorkoutImmersive}
+            onImmersiveChange={reportWorkoutImmersive}
           />,
         )}
 
@@ -1387,7 +1402,9 @@ export function TraineeShell({
             const isTop = index === topOverlayIndex;
             // A sheet is a Modal that would draw over whatever opens on it:
             // only a sheet on top is mounted.
-            if (layer === "sheet") return isTop ? hostFor(entry, "sheet") : null;
+            if (layer === "sheet") {
+              return isTop ? hostFor(entry, "sheet", `${index}:${entry.screen}`) : null;
+            }
             const inner = (
               <PushedScreen onBack={popTop}>{hostFor(entry, "fullscreen")}</PushedScreen>
             );
