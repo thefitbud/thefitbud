@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { ArrowLeft, ArrowUpRight, Check, Minus, Send, SkipForward } from "lucide-react-native";
 import { Text } from "../components/Text";
@@ -20,6 +20,12 @@ import {
 } from "./workoutHeroState";
 import { sessionSetCounts, sessionVolumeKg } from "./workoutSession";
 import { RpePicker } from "./workout/rpePicker";
+import {
+  RATING_HELD_MESSAGE,
+  RATING_QUEUED_MESSAGE,
+  RATING_WINDOW_CLOSED_MESSAGE,
+  type RatingOutcome,
+} from "./workout/rpeRating";
 
 /**
  * The workout summary (v3 W-17a), then the shared confirmation (W-17b).
@@ -62,8 +68,15 @@ export function WorkoutSummaryScreen({
   onDone: () => void;
   /** `view`: the read-only summary of a finished workout (W-17c). */
   mode?: "after_finish" | "view";
-  /** Queues the rating change; `recordVersion` is the version to send. */
-  onSaveRpe?: (rpe: number | null, recordVersion: number) => void;
+  /**
+   * Sends one rating change and resolves with the server's verdict. The
+   * caller owns the version (never guessed here); `progress("held")` says the
+   * pick is waiting for the finish to be sent.
+   */
+  onSaveRpe?: (
+    rpe: number | null,
+    progress: (state: "held") => void,
+  ) => Promise<RatingOutcome> | void;
   /** The clock for the 48 h rule (tests). */
   now?: Date;
   coachName?: string;
@@ -75,15 +88,65 @@ export function WorkoutSummaryScreen({
 }) {
   const [shared, setShared] = useState(false);
   const [rpe, setRpe] = useState<number | null>(execution.sessionRpe);
-  // After a finish the server's version is one past the phone's (the finish
-  // bumps it); each queued change takes the next one (decide-and-note).
-  const versionRef = useRef(
-    execution.recordVersion + (mode === "after_finish" ? 1 : 0),
-  );
+  const [rating, setRating] = useState<RatingNotice>({ kind: "idle" });
+  // Closed by the server: the group is plain text from then on (W-17c3).
+  const [windowClosed, setWindowClosed] = useState(false);
+  // The last rating the server confirmed; a refusal puts the screen back to it.
+  const confirmedRef = useRef<number | null>(execution.sessionRpe);
+  const inflightRef = useRef(false);
+  const wantedRef = useRef<{ value: number | null } | null>(null);
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  /**
+   * One pick at a time: a pick made while another is being sent replaces it
+   * (only the last one matters) and goes out when the first has its verdict.
+   */
+  async function sendRating(next: number | null) {
+    wantedRef.current = { value: next };
+    if (inflightRef.current) return;
+    inflightRef.current = true;
+    try {
+      while (wantedRef.current) {
+        const { value } = wantedRef.current;
+        wantedRef.current = null;
+        if (mountedRef.current) setRating({ kind: "saving" });
+        const outcome = await onSaveRpe?.(value, (state) => {
+          if (state === "held" && mountedRef.current && !wantedRef.current) {
+            setRating({ kind: "held" });
+          }
+        });
+        if (wantedRef.current || !mountedRef.current) continue;
+        if (!outcome) {
+          setRating({ kind: "idle" });
+        } else if (outcome.kind === "saved") {
+          confirmedRef.current = outcome.rpe;
+          setRating({ kind: "idle" });
+        } else if (outcome.kind === "queued") {
+          setRating({ kind: "queued" });
+        } else {
+          if (outcome.serverRpe !== undefined) confirmedRef.current = outcome.serverRpe;
+          setRpe(confirmedRef.current);
+          if (outcome.reason === "window_closed") setWindowClosed(true);
+          setRating({
+            kind: "refused",
+            message: outcome.message,
+            retryValue: outcome.reason === "other" ? value : undefined,
+          });
+        }
+      }
+    } finally {
+      inflightRef.current = false;
+    }
+  }
   function commitRpe(next: number | null) {
     setRpe(next);
-    onSaveRpe?.(next, versionRef.current);
-    versionRef.current += 1;
+    void sendRating(next);
   }
   const trimmedCoach = coachName.trim() || "Your coach";
   const coachFirst =
@@ -114,9 +177,12 @@ export function WorkoutSummaryScreen({
           coachFirst={coachFirst}
           timeZone={timeZone}
           rpe={rpe}
+          rating={rating}
+          windowClosed={windowClosed}
           now={now}
           onBack={onDone}
           onSaveRpe={commitRpe}
+          onRetry={commitRpe}
         />
       </Screen>
     );
@@ -149,10 +215,57 @@ export function WorkoutSummaryScreen({
           timeZone={timeZone}
           offline={offline}
           rpe={rpe}
+          confirmedRpe={confirmedRef.current}
+          rating={rating}
+          windowClosed={windowClosed}
           onPickRpe={commitRpe}
+          onRetry={commitRpe}
         />
       )}
     </Screen>
+  );
+}
+
+type RatingNotice =
+  | { kind: "idle" }
+  | { kind: "saving" }
+  | { kind: "held" }
+  | { kind: "queued" }
+  | { kind: "refused"; message: string; retryValue?: number | null };
+
+/** What happened to the last rating pick, in plain words (no codes). */
+function RatingLine({
+  rating,
+  onRetry,
+}: {
+  rating: RatingNotice;
+  onRetry: (value: number | null) => void;
+}) {
+  const styles = useStyles();
+  if (rating.kind === "idle" || rating.kind === "saving") return null;
+  const text =
+    rating.kind === "held"
+      ? RATING_HELD_MESSAGE
+      : rating.kind === "queued"
+        ? RATING_QUEUED_MESSAGE
+        : rating.message;
+  return (
+    <View style={styles.ratingNotice} accessibilityLiveRegion="polite">
+      <Text variant="subhead" tone={rating.kind === "refused" ? "crit" : "ink2"}>
+        {text}
+      </Text>
+      {rating.kind === "refused" && rating.retryValue !== undefined ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Try again"
+          onPress={() => onRetry(rating.retryValue ?? null)}
+          hitSlop={12}
+          style={styles.changeHit}
+        >
+          <Text variant="bodyStrong">Try again</Text>
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
@@ -201,7 +314,11 @@ function SummaryBody({
   timeZone,
   offline,
   rpe,
+  confirmedRpe,
+  rating,
+  windowClosed,
   onPickRpe,
+  onRetry,
 }: {
   execution: WorkoutExecution;
   assignment: WorkoutAssignment | null;
@@ -210,7 +327,11 @@ function SummaryBody({
   timeZone: string;
   offline: boolean;
   rpe: number | null;
+  confirmedRpe: number | null;
+  rating: RatingNotice;
+  windowClosed: boolean;
   onPickRpe: (next: number | null) => void;
+  onRetry: (value: number | null) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -302,12 +423,27 @@ function SummaryBody({
       ) : null}
 
       <View style={styles.rpeBlock}>
-        <RpePicker
-          value={rpe}
-          onChange={onPickRpe}
-          required={execution.requireSessionRpe}
-          coachFirst={coachFirst}
-        />
+        {windowClosed ? (
+          <View
+            accessible
+            accessibilityLabel={`Your rating ${confirmedRpe != null ? `${confirmedRpe} of 10` : "not rated"}`}
+          >
+            <Text variant="label" tone="ink2">
+              YOUR RATING
+            </Text>
+            <Text variant="body">
+              {confirmedRpe != null ? `${confirmedRpe} of 10` : "Not rated"}
+            </Text>
+          </View>
+        ) : (
+          <RpePicker
+            value={rpe}
+            onChange={onPickRpe}
+            required={execution.requireSessionRpe}
+            coachFirst={coachFirst}
+          />
+        )}
+        <RatingLine rating={rating} onRetry={onRetry} />
       </View>
     </View>
   );
@@ -352,18 +488,24 @@ function ViewBody({
   coachFirst,
   timeZone,
   rpe,
+  rating,
+  windowClosed,
   now,
   onBack,
   onSaveRpe,
+  onRetry,
 }: {
   execution: WorkoutExecution;
   assignment: WorkoutAssignment | null;
   coachFirst: string;
   timeZone: string;
   rpe: number | null;
+  rating: RatingNotice;
+  windowClosed: boolean;
   now?: Date;
   onBack: () => void;
   onSaveRpe: (next: number | null) => void;
+  onRetry: (value: number | null) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -379,7 +521,9 @@ function ViewBody({
   const eyebrow = (dateShort ? `${sessionTitle} · ${dateShort}` : sessionTitle).toUpperCase();
   const until = execution.feedbackEditableUntil ?? null;
   const editable =
-    until != null && (now ?? new Date()).getTime() < new Date(until).getTime();
+    !windowClosed &&
+    until != null &&
+    (now ?? new Date()).getTime() < new Date(until).getTime();
   const exerciseCount = execution.exercises.length;
   const sharedLine = execution.completedAt
     ? `Shared ${weekdayInstant(execution.completedAt, timeZone)}`
@@ -522,8 +666,9 @@ function ViewBody({
       <Text variant="subhead" tone="ink2" style={styles.viewHint}>
         {editable && until
           ? `You can change this until ${weekdayInstant(until, timeZone)}.`
-          : "Ratings can be changed for 48 hours after a workout."}
+          : RATING_WINDOW_CLOSED_MESSAGE}
       </Text>
+      <RatingLine rating={rating} onRetry={onRetry} />
 
       <BottomSheet
         visible={editing}
@@ -753,6 +898,11 @@ const useStyles = createThemedStyles((t) => ({
     justifyContent: "center",
     minHeight: 44,
     minWidth: 44,
+  },
+  ratingNotice: {
+    gap: t.spacing.xs,
+    marginTop: t.spacing.md,
+    paddingHorizontal: t.spacing.xs,
   },
   viewHint: {
     marginTop: t.spacing.md,

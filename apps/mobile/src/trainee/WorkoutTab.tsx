@@ -66,6 +66,7 @@ import {
   type EffectivePlanState,
 } from "./TodayTab";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
+import { saveWorkoutRating } from "./workout/rpeRating";
 import {
   durationMinutesFromExecution,
   elapsedSeconds,
@@ -640,28 +641,6 @@ export function WorkoutTab({
   }, [pendingSummaryExecutionId, loading, assignments, onPendingSummaryConsumed]);
 
   /**
-   * One rating change (Z14-12, D-W14-20): queued as a `workout.feedback`
-   * mutation with its own id, so it also works offline and a retry reuses the
-   * same id. The note is not sent: the server stores no note.
-   */
-  async function saveRpe(
-    executionId: string,
-    rpe: number | null,
-    recordVersion: number,
-  ) {
-    try {
-      await enqueueAndPush(sync, {
-        recordId: executionId,
-        operation: "workout.feedback",
-        expectedServerVersion: recordVersion,
-        payload: { executionId, body: { rpe, recordVersion } },
-      });
-    } catch (err: unknown) {
-      reportError("workout.feedback", err);
-    }
-  }
-
-  /**
    * Opens a finished workout: the trainee's own summary (View summary,
    * W-01c), or the read-only view of a coach's log (R1).
    */
@@ -821,9 +800,17 @@ export function WorkoutTab({
         today={today}
         offline={offline}
         mode={summaryIsView ? "view" : "after_finish"}
-        onSaveRpe={(rpe, recordVersion) => {
-          void saveRpe(summaryExecution.id, rpe, recordVersion);
-        }}
+        // One rating change (Z14-12, D-W14-20). The version is read from the
+        // server after the finish landed, never guessed (fix round 1).
+        onSaveRpe={(rpe, progress) =>
+          saveWorkoutRating({
+            sync,
+            api,
+            executionId: summaryExecution.id,
+            rpe,
+            progress,
+          })
+        }
         onDone={() => {
           markFinished(summaryExecution);
           setSummaryExecution(null);
