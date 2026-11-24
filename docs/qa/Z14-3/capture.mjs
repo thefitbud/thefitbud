@@ -108,80 +108,146 @@ async function timings(browser) {
   return out;
 }
 
+// Paths that stay fast when a "data" delay is on, so sign-in and /me still work
+// while the screens' own reads are held.
+const AUTH_PATH = /\/(auth|me)(\/|$)/;
+
+async function shotPage(browser, scheme) {
+  const ctx = await browser.newContext({
+    viewport: { width: 393, height: 852 },
+    colorScheme: scheme,
+  });
+  const page = await ctx.newPage();
+  const state = { all: LATENCY_MS, data: 0 };
+  await page.route("**/__fitbud_api/**", async (route) => {
+    const req = route.request();
+    const pathname = new URL(req.url()).pathname;
+    const wait = AUTH_PATH.test(pathname) ? LATENCY_MS : Math.max(state.all, state.data);
+    await sleep(wait);
+    return route.continue();
+  });
+  const ready = async () => {
+    await page.waitForFunction(() => window.__fitbudCapture?.ready === true, null, {
+      timeout: 180000,
+    });
+  };
+  await page.goto(base);
+  await ready();
+  return { page, state, ctx, ready };
+}
+
+const rows = (page) => page.locator('[data-testid^="client-row-"]');
+
+// Each screen is captured twice:
+//  - "none":     a fresh browser context (no snapshot); the screen's reads are held
+//                for 4 s, so the paint is the empty or skeleton state.
+//  - "snapshot": the screen is visited once (which saves its snapshot), the page is
+//                reloaded so nothing stays mounted, then its reads are held for 4 s:
+//                the paint is the last data plus the quiet "Updating…" line.
 async function shots(browser) {
   const dir = here;
   mkdirSync(dir, { recursive: true });
   const taken = [];
+  const save = async (page, name) => {
+    await page.screenshot({ path: path.join(dir, name) });
+    taken.push(name);
+  };
   for (const scheme of ["light", "dark"]) {
-    // No snapshot: every API call is held for 4 s, so the first paint is the
-    // empty or skeleton state. A fresh context has no snapshot.
+    // ---- With none: Needs you, Clients, Activity, client page.
     {
-      const { page, ctx } = await newPage(browser, scheme, 4000);
+      const { page, state, ctx } = await shotPage(browser, scheme);
+      state.all = 4000;
       await page.evaluate(() => window.__fitbudCapture.loginTrainer());
       await page.getByTestId("attention-screen").waitFor({ timeout: 60000 });
       await sleep(900);
-      await page.screenshot({ path: path.join(dir, `needs-you-none-${scheme}.png`) });
-      taken.push(`needs-you-none-${scheme}.png`);
+      await save(page, `needs-you-none-${scheme}.png`);
+      // Clients, first visit: reads held, so the roster is a skeleton.
+      await tab(page, "clients");
+      await sleep(900);
+      await save(page, `clients-none-${scheme}.png`);
+      // Activity, first visit.
+      await page.evaluate(() => window.__fitbudCapture.navigate("TM-09", { skipAuth: true }));
+      await sleep(900);
+      await save(page, `activity-none-${scheme}.png`);
+      // Client page, first open: let the roster arrive, then hold the page's reads.
+      await page.evaluate(() => window.__fitbudCapture.navigate("TM-02", { skipAuth: true }));
+      await rows(page).first().waitFor({ timeout: 60000 });
+      await rows(page).first().click();
+      await page.getByTestId("client-status").waitFor({ timeout: 60000 });
+      await sleep(900);
+      await save(page, `client-page-none-${scheme}.png`);
       await ctx.close();
     }
-    // With snapshots: visit each screen once at normal latency, then hold the API
-    // for 4 s and come back, so the paint is the snapshot with "Updating…".
     {
-      const { page, state, ctx } = await newPage(browser, scheme);
+      // Review sheet with no kept item: the list loads at normal speed, then the
+      // item's own reads are held, so the card shows its loading line.
+      const { page, state, ctx } = await shotPage(browser, scheme);
       await login(page);
       await sleep(2500);
-      await page.screenshot({ path: path.join(dir, `needs-you-${scheme}.png`) });
-      taken.push(`needs-you-${scheme}.png`);
-      // Review sheet on a client with several open items: item 1, then step to item 2.
+      state.data = 4000;
+      await page.locator('[data-testid="needs-you-action"]').nth(2).click();
+      await sleep(900);
+      await save(page, `review-sheet-none-${scheme}.png`);
+      await ctx.close();
+    }
+    // ---- With a snapshot, one screen at a time.
+    {
+      const { page, state, ctx, ready } = await shotPage(browser, scheme);
+      await login(page);
+      await sleep(2500);
+      await save(page, `needs-you-${scheme}.png`);
+      // Review sheet on a client with several open items: item 1, then item 2.
       await page.locator('[data-testid="needs-you-action"]').nth(2).click();
       await sleep(1500);
-      await page.screenshot({ path: path.join(dir, `review-sheet-item1-${scheme}.png`) });
-      taken.push(`review-sheet-item1-${scheme}.png`);
+      await save(page, `review-sheet-item1-${scheme}.png`);
       await page.getByLabel("Next item").first().click().catch(() => undefined);
       await sleep(250);
-      await page.screenshot({ path: path.join(dir, `review-sheet-item2-${scheme}.png`) });
-      taken.push(`review-sheet-item2-${scheme}.png`);
+      await save(page, `review-sheet-item2-${scheme}.png`);
       await page.keyboard.press("Escape");
       await sleep(300);
-      // The sheet closes with its own dismiss; fall back to a reload-free reset.
       await page.evaluate(() => window.__fitbudCapture.navigate("TM-01", { skipAuth: true }));
+      // Clients (saves its snapshot).
       await tab(page, "clients");
-      await page.locator('[data-testid^="client-row-"]').first().waitFor({ timeout: 60000 });
+      await rows(page).first().waitFor({ timeout: 60000 });
       await sleep(1500);
-      await page.screenshot({ path: path.join(dir, `clients-${scheme}.png`) });
-      taken.push(`clients-${scheme}.png`);
-      // Activity (segment inside Clients).
+      await save(page, `clients-${scheme}.png`);
+      // Activity.
       await page.evaluate(() => window.__fitbudCapture.navigate("TM-09", { skipAuth: true }));
       await sleep(3500);
-      await page.screenshot({ path: path.join(dir, `activity-${scheme}.png`) });
-      taken.push(`activity-${scheme}.png`);
-      // Client page.
+      await save(page, `activity-${scheme}.png`);
+      // Client page (saves its snapshot).
       await page.evaluate(() => window.__fitbudCapture.navigate("TM-02", { skipAuth: true }));
       await sleep(800);
-      const row = page.locator('[data-testid^="client-row-"]').first();
-      await row.waitFor({ timeout: 60000 });
-      await row.click();
+      await rows(page).first().waitFor({ timeout: 60000 });
+      await rows(page).first().click();
       await page.getByTestId("client-status").waitFor({ timeout: 60000 });
       await sleep(3000);
-      await page.screenshot({ path: path.join(dir, `client-page-${scheme}.png`) });
-      taken.push(`client-page-${scheme}.png`);
-      // Snapshot repaint: leave and reopen with the API held for 4 s.
-      await page.getByLabel("Back").first().click();
-      await row.waitFor({ timeout: 60000 });
-      state.latency = 4000;
-      await row.click();
+      await save(page, `client-page-${scheme}.png`);
+
+      // Reload and hold every data read. The session and the snapshots survive.
+      state.data = 4000;
+      await page.reload();
+      await ready();
+      // Needs you is the landing tab: snapshot with Updating….
+      await page.getByTestId("attention-screen").waitFor({ timeout: 60000 });
+      await sleep(900);
+      await save(page, `needs-you-snapshot-${scheme}.png`);
+      // Clients, mounted for the first time after the reload.
+      await tab(page, "clients");
+      await rows(page).first().waitFor({ timeout: 60000 });
+      await sleep(900);
+      await save(page, `clients-snapshot-${scheme}.png`);
+      // Activity, from its own snapshot.
+      await page.evaluate(() => window.__fitbudCapture.navigate("TM-09", { skipAuth: true }));
+      await sleep(900);
+      await save(page, `activity-snapshot-${scheme}.png`);
+      // Client page, opened again with its reads held.
+      await page.evaluate(() => window.__fitbudCapture.navigate("TM-02", { skipAuth: true }));
+      await rows(page).first().waitFor({ timeout: 60000 });
+      await rows(page).first().click();
       await page.getByTestId("client-status").waitFor({ timeout: 60000 });
-      await sleep(700);
-      await page.screenshot({ path: path.join(dir, `client-page-snapshot-${scheme}.png`) });
-      taken.push(`client-page-snapshot-${scheme}.png`);
-      state.latency = LATENCY_MS;
-      await page.getByLabel("Back").first().click();
-      // Needs you with a snapshot and the API held: switch away and back.
-      state.latency = 4000;
-      await tab(page, "attention");
-      await sleep(700);
-      await page.screenshot({ path: path.join(dir, `needs-you-snapshot-${scheme}.png`) });
-      taken.push(`needs-you-snapshot-${scheme}.png`);
+      await sleep(900);
+      await save(page, `client-page-snapshot-${scheme}.png`);
       await ctx.close();
     }
   }

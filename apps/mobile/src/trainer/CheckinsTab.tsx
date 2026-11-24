@@ -49,10 +49,12 @@ const CACHE_KEY = "trainer:checkins";
 type Props = {
   /** False while another tab is showing; the tab stays mounted (Z14-3). */
   active?: boolean;
+  /** Bumped when a detail screen closes: refresh underneath whatever the age. */
+  returnNonce?: number;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
 };
 
-export function CheckinsTab({ active = true, onReviewCheckin }: Props) {
+export function CheckinsTab({ active = true, returnNonce = 0, onReviewCheckin }: Props) {
 
   const styles = useStyles();
   const { api, refreshSession } = useAuth();
@@ -174,7 +176,7 @@ export function CheckinsTab({ active = true, onReviewCheckin }: Props) {
 
   useRefreshWhenActive(active, lastLoadedAt, () => {
     void load();
-  });
+  }, returnNonce);
 
   const today = localDateInTimezone(trainerZone);
   const visibleInbox = useMemo(

@@ -84,6 +84,8 @@ const FILTERS: Array<{ id: ClientListFilter; label: string }> = [
 type Props = {
   /** False while another tab is showing; the tab stays mounted (Z14-3). */
   active?: boolean;
+  /** Bumped when a detail screen closes: refresh underneath whatever the age. */
+  returnNonce?: number;
   onOpenClient: (row: ClientDirectoryRow) => void;
   initialSegment?: Segment;
   onOpenAsk?: (
@@ -308,6 +310,7 @@ const EMPTY_COUNTS: Counts = {
 
 export function ClientsTab({
   active = true,
+  returnNonce = 0,
   onOpenClient,
   initialSegment = "clients",
   onOpenAsk,
@@ -442,7 +445,7 @@ export function ClientsTab({
   useRefreshWhenActive(active, lastLoadedAt, () => {
     setUpdating(true);
     void load();
-  });
+  }, returnNonce);
 
   useEffect(() => {
     if (searchOpen) {

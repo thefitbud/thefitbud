@@ -89,6 +89,7 @@ import {
   type ClientMeta,
 } from "./cache";
 import {
+  dropReviewItem,
   readReviewItem,
   storeReviewItem,
 } from "./reviewItemCache";
@@ -353,6 +354,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
     try {
       await api.acknowledgeException(exceptionId, {}, ackKey.current);
       ackKey.current = null;
+      dropReviewItem(exceptionId);
       await load();
     } catch (err) {
       if (isNetworkFailure(err)) {
@@ -389,6 +391,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
         resolveKey.current,
       );
       resolveKey.current = null;
+      dropReviewItem(exceptionId);
       setResolvedOutcome(input.outcome);
       setResolveOpen(false);
       await load();
@@ -402,6 +405,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
       ) {
         // A lost success: the item is resolved, so this is success, not an error.
         resolveKey.current = null;
+        dropReviewItem(exceptionId);
         setResolvedOutcome(input.outcome);
         setResolveOpen(false);
         await load();

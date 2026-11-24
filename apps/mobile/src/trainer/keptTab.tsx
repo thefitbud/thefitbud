@@ -13,18 +13,26 @@ export function useRefreshWhenActive(
   active: boolean,
   lastLoadedAt: MutableRefObject<number>,
   reload: () => void,
+  /**
+   * Bumped by the shell when a detail screen closes: the trainer may have
+   * changed something there, so the tab refreshes whatever its age.
+   */
+  forceNonce = 0,
 ): void {
   const wasActive = useRef(active);
+  const handledNonce = useRef(forceNonce);
   const reloadRef = useRef(reload);
   reloadRef.current = reload;
   useEffect(() => {
     const returned = active && !wasActive.current;
     wasActive.current = active;
     if (!returned) return;
-    if (Date.now() - lastLoadedAt.current > TRAINER_STALE_MS) {
+    const forced = forceNonce !== handledNonce.current;
+    handledNonce.current = forceNonce;
+    if (forced || Date.now() - lastLoadedAt.current > TRAINER_STALE_MS) {
       reloadRef.current();
     }
-  }, [active, lastLoadedAt]);
+  }, [active, lastLoadedAt, forceNonce]);
 }
 
 /** The quiet line shown while a screen refreshes under a snapshot. */

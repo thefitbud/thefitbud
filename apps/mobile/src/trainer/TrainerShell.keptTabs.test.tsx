@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, mockAuth, render, screen, within } from "../test/render";
+import { useRefreshWhenActive } from "./keptTab";
 
 /**
  * Z14-3: a visited tab stays mounted. Each stub counts its mounts and
@@ -12,6 +13,7 @@ const counts = vi.hoisted(() => ({
   mount: { attention: 0, clients: 0, checkins: 0 },
   unmount: { attention: 0, clients: 0, checkins: 0 },
   active: { attention: true, clients: true, checkins: true },
+  reload: { attention: 0, clients: 0, checkins: 0 },
 }));
 
 vi.mock("../auth/AuthProvider", () => ({
@@ -29,8 +31,23 @@ vi.mock("../auth/AuthProvider", () => ({
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 
 function stub(name: "attention" | "clients" | "checkins") {
-  return function Stub(p: { active?: boolean; onOpenClient?: (row: unknown) => void }) {
+  return function Stub(p: {
+    active?: boolean;
+    returnNonce?: number;
+    onOpenClient?: (row: unknown) => void;
+  }) {
     counts.active[name] = p.active ?? true;
+    // The real hook, with data that was just loaded: only a forced refresh
+    // (a detail screen closed) can reload it inside the 30 s window.
+    const lastLoadedAt = useRef(Date.now());
+    useRefreshWhenActive(
+      p.active ?? true,
+      lastLoadedAt,
+      () => {
+        counts.reload[name] += 1;
+      },
+      p.returnNonce,
+    );
     useEffect(() => {
       counts.mount[name] += 1;
       return () => {
@@ -84,6 +101,7 @@ beforeEach(() => {
   for (const key of ["attention", "clients", "checkins"] as const) {
     counts.mount[key] = 0;
     counts.unmount[key] = 0;
+    counts.reload[key] = 0;
   }
 });
 
@@ -124,5 +142,34 @@ describe("TrainerShell keeps visited tabs mounted", () => {
     fireEvent.click(screen.getByText("back"));
     expect(counts.mount).toEqual({ attention: 1, clients: 1, checkins: 0 });
     expect(counts.active.clients).toBe(true);
+  });
+
+  it("Back from a detail screen refreshes the tab underneath inside the 30 s window", () => {
+    render(<TrainerShell />);
+    tab("Clients");
+    fireEvent.click(
+      within(screen.getByTestId("clients-tab")).getByText("open-client-row"),
+    );
+    expect(counts.reload.clients).toBe(0);
+
+    fireEvent.click(screen.getByText("back"));
+    expect(counts.reload.clients).toBe(1);
+    // Nothing else was woken, and a plain tab switch inside 30 s reloads nothing.
+    expect(counts.reload.checkins).toBe(0);
+    tab("Attention");
+    tab("Clients");
+    expect(counts.reload.clients).toBe(1);
+  });
+
+  it("a tab that was hidden when Back happened refreshes when it is next shown", () => {
+    render(<TrainerShell />);
+    tab("Clients");
+    fireEvent.click(
+      within(screen.getByTestId("clients-tab")).getByText("open-client-row"),
+    );
+    fireEvent.click(screen.getByText("back"));
+    expect(counts.reload.attention).toBe(0);
+    tab("Attention");
+    expect(counts.reload.attention).toBe(1);
   });
 });

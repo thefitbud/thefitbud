@@ -118,6 +118,36 @@ const inboxItem = trainerCheckinInboxItemSchema.parse({
   traineeTimezone: "Asia/Kolkata",
 });
 
+// A later server answer that differs from the snapshot: a different client.
+const REL2 = "7b79c726-d58d-4cfd-b8a9-661cfdf8989b";
+const group2 = {
+  ...group,
+  relationshipId: REL2,
+  traineeDisplayName: "Priya Shah",
+  items: [
+    {
+      ...group.items[0],
+      id: "1c2a7e2f-3a1b-4d66-8e4c-2b3c4d5e6f70",
+      summary: "Dinner not logged",
+    },
+  ],
+};
+const attention2 = attentionGroupsResponseSchema.parse({
+  groups: [group2],
+  needsYou: [group2],
+  reviewed: [],
+});
+const roster2 = clientDirectoryListResponseSchema.parse({
+  items: [{ ...roster.items[0], relationshipId: REL2, traineeDisplayName: "Priya Shah" }],
+  nextCursor: null,
+});
+const inboxItem2 = trainerCheckinInboxItemSchema.parse({
+  ...inboxItem,
+  checkin: { ...inboxItem.checkin, id: uuid("2"), coachingRelationshipId: REL2 },
+  coachingRelationshipId: REL2,
+  traineeDisplayName: "Priya Shah",
+});
+
 function seed(key: string, value: unknown) {
   writeTrainerCache(key, value, trainerCacheEpoch());
 }
@@ -208,5 +238,71 @@ describe("snapshot paint", () => {
     setTrainerCacheOwner(TRAINER_B);
     expect(readTrainerCache("trainer:clients")).toBeNull();
     expect(readTrainerSession("review-item:x")).toBeNull();
+  });
+});
+
+describe("snapshot paint, then refresh", () => {
+  it("Needs you swaps in the new answer and clears Updating…", async () => {
+    seed("trainer:attention", {
+      groups: attention.groups,
+      needsYou: attention.needsYou,
+      reviewed: attention.reviewed,
+      asks: [],
+      checkins: [],
+      clientNames: { [REL]: "Rohan Mehta" },
+      savedAt: "2026-11-10T04:00:00.000Z",
+    });
+    let answer: (value: unknown) => void = () => undefined;
+    api.getAttentionGroups.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    api.listCoachAsks.mockResolvedValue({ items: [], nextCursor: null });
+    api.listTrainerCheckinInbox.mockResolvedValue({ items: [], nextCursor: null });
+    api.listClients.mockResolvedValue(roster2);
+    render(
+      <AttentionTab
+        onOpenClients={vi.fn()}
+        onReviewException={vi.fn()}
+        onReviewCheckin={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
+    expect(await screen.findByText("Updating…")).toBeTruthy();
+
+    answer(attention2);
+    expect(await screen.findByText("Priya Shah")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Updating…")).toBeNull());
+    expect(screen.queryByText("Rohan Mehta")).toBeNull();
+  });
+
+  it("Clients swaps in the new roster and clears Updating…", async () => {
+    seed("trainer:clients", { items: roster.items, savedAt: "2026-11-10T04:00:00.000Z" });
+    let answer: (value: unknown) => void = () => undefined;
+    api.listClients.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    render(<ClientsTab onOpenClient={vi.fn()} />);
+    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
+    expect(await screen.findByText("Updating…")).toBeTruthy();
+
+    answer(roster2);
+    expect(await screen.findByText("Priya Shah")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Updating…")).toBeNull());
+    expect(screen.queryByText("Rohan Mehta")).toBeNull();
+  });
+
+  it("Check-ins swaps in the new inbox and clears Updating…", async () => {
+    seed("trainer:checkins", {
+      inbox: [inboxItem],
+      weeks: [[REL, 18]],
+      savedAt: "2026-11-10T04:00:00.000Z",
+    });
+    let answer: (value: unknown) => void = () => undefined;
+    api.listTrainerCheckinInbox.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    api.listClients.mockResolvedValue(roster2);
+    render(<CheckinsTab onReviewCheckin={vi.fn()} />);
+    expect(screen.getByText(/Rohan/)).toBeTruthy();
+    expect(await screen.findByText("Updating…")).toBeTruthy();
+
+    answer({ items: [inboxItem2], nextCursor: null });
+    expect(await screen.findByText(/Priya/)).toBeTruthy();
+    await waitFor(() => expect(screen.queryByText("Updating…")).toBeNull());
+    expect(screen.queryByText(/Rohan/)).toBeNull();
   });
 });

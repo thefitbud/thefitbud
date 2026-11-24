@@ -101,6 +101,15 @@ function TrainerShellBody() {
   const open = (next: Overlay) => setOverlays((stack) => pushOverlay(stack, next));
   const startAt = (next: Overlay) => setOverlays(startOverlays(next));
   const closeAll = () => setOverlays([]);
+  // Z14-3: bumped when the detail stack empties, so the tab underneath
+  // refreshes in the background (the trainer may have written something).
+  const [returnNonce, setReturnNonce] = useState(0);
+  // Derived in the same render the tabs wake in, so they see both together.
+  const [hadOverlays, setHadOverlays] = useState(false);
+  if (hadOverlays !== overlays.length > 0) {
+    setHadOverlays(overlays.length > 0);
+    if (hadOverlays) setReturnNonce((n) => n + 1);
+  }
   const goBack = (resolvedRelationshipId?: string) => {
     const result = backOverlays(overlays, resolvedRelationshipId);
     if (result.kind === "client") {
@@ -352,6 +361,7 @@ function TrainerShellBody() {
           <AttentionTab
             key={refreshNonce}
             active={atTabs && tab === "attention"}
+            returnNonce={returnNonce}
             onReviewException={(exceptionId) =>
               startAt({ kind: "exception", exceptionId })
             }
@@ -378,6 +388,7 @@ function TrainerShellBody() {
           <ClientsTab
             key={`${refreshNonce}:${clientsSegment}`}
             active={atTabs && tab === "clients"}
+            returnNonce={returnNonce}
             onOpenClient={openClientFromRow}
             initialSegment={clientsSegment}
             onOpenAsk={(askId, relationshipId, displayName) =>
@@ -405,6 +416,7 @@ function TrainerShellBody() {
             <CheckinsTab
               key={refreshNonce}
               active={atTabs && tab === "checkins"}
+              returnNonce={returnNonce}
               onReviewCheckin={openCheckin}
             />
           </View>

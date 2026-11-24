@@ -44,11 +44,17 @@ How to rerun: start the API on 8792 and the Expo web bundle with
 Frames: TM-01a Needs you, TM-02a Clients, TM-03a client page, TM-09 Activity, and
 the review sheet from Needs you (frame 31 family). Files:
 
-- `needs-you-{light,dark}.png`: loaded.
-- `needs-you-none-{light,dark}.png`: no snapshot, calls held 4 s (the skeleton).
-- `needs-you-snapshot-{light,dark}.png`: switched away and back with the API held for 4 s: the kept tab shows the last list at once, no skeleton, and (inside 30 s) no refetch, so no "Updating…" line either.
-- `clients-{light,dark}.png`, `activity-{light,dark}.png`,
-  `client-page-{light,dark}.png`, `client-page-snapshot-{light,dark}.png`.
+Each screen is captured with none (a fresh browser context, no snapshot, the
+screen's reads held 4 s: the empty or skeleton paint) and with a snapshot (the
+screen was visited once, the page reloaded so nothing stays mounted, then the
+reads held 4 s: the last data plus the quiet "Updating…" line).
+
+- Loaded: `needs-you-`, `clients-`, `activity-`, `client-page-{light,dark}.png`.
+- With none: `needs-you-none-`, `clients-none-`, `activity-none-`,
+  `client-page-none-`, `review-sheet-none-{light,dark}.png` (the review sheet one
+  has the list loaded but no kept item, so the card shows its loading line).
+- With a snapshot: `needs-you-snapshot-`, `clients-snapshot-`, `activity-snapshot-`,
+  `client-page-snapshot-{light,dark}.png`.
 - `review-sheet-item1-{light,dark}.png` and `review-sheet-item2-{light,dark}.png`:
   stepping to item 2 shows the card at once (prefetched), no "Loading item…".
 

@@ -75,6 +75,7 @@ import {
   writeTrainerCache,
 } from "./cache";
 import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
+import { dropReviewItem } from "./reviewItemCache";
 import { clientStatusApi } from "./clientStatus/api";
 import { MoreSheet } from "./sheets/MoreSheet";
 import { NoteSheet, type NoteSaveInput } from "./sheets/NoteSheet";
@@ -102,6 +103,8 @@ type ReviewSubSheet =
 type Props = {
   /** False while another tab is showing; the tab stays mounted (Z14-3). */
   active?: boolean;
+  /** Bumped when a detail screen closes: refresh underneath whatever the age. */
+  returnNonce?: number;
   onReviewException: (exceptionId: string) => void;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
   onOpenClients: () => void;
@@ -139,6 +142,7 @@ const CACHE_KEY = "trainer:attention";
 
 export function AttentionTab({
   active = true,
+  returnNonce = 0,
   onReviewException,
   onReviewCheckin,
   onOpenClients,
@@ -307,7 +311,7 @@ export function AttentionTab({
 
   useRefreshWhenActive(active, lastLoadedAt, () => {
     void load();
-  });
+  }, returnNonce);
 
   useRealtimeHints(
     api,
@@ -383,6 +387,7 @@ export function AttentionTab({
     try {
       for (const target of targets) {
         await api.acknowledgeException(target.id, {}, createIdempotencyKey());
+        dropReviewItem(target.id);
       }
     } catch (err) {
       setLists(prior);
@@ -407,6 +412,7 @@ export function AttentionTab({
     try {
       for (const target of targets) {
         await api.undoExceptionAcknowledge(target.id, createIdempotencyKey());
+        dropReviewItem(target.id);
       }
     } catch (err) {
       setLists(prior);
@@ -466,6 +472,7 @@ export function AttentionTab({
     setReviewActing(true);
     try {
       await api.acknowledgeException(exceptionId, {}, createIdempotencyKey());
+      dropReviewItem(exceptionId);
       const items = reviewSheetItemsForRelationship(
         next.groups,
         reviewSheet.relationshipId,
@@ -506,6 +513,7 @@ export function AttentionTab({
         exceptionId,
         createIdempotencyKey(),
       );
+      dropReviewItem(exceptionId);
       if (
         (restored.status === "detected" || restored.status === "active") &&
         restored.status !== known
@@ -562,6 +570,7 @@ export function AttentionTab({
 
   function finishResolved(item: AttentionGroupItem, outcome: ResolveOutcome | null) {
     resolveKeys.current = null;
+    dropReviewItem(item.id);
     const resolved: AttentionGroupItem = {
       ...item,
       status: "resolved",
@@ -612,6 +621,7 @@ export function AttentionTab({
         .find((entry) => entry.id === item.id)?.status;
       if (status === "detected" || status === "active") {
         await api.acknowledgeException(item.id, {}, keys.ack);
+        dropReviewItem(item.id);
         setLists((current) =>
           partitionAttentionGroups(acknowledgeAttentionItem(current.groups, item.id)),
         );
