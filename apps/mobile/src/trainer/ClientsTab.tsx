@@ -34,9 +34,7 @@ import {
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
 import type {
-  AttentionGroupsResponse,
   ClientDirectoryItem,
-  CoachAsk,
 } from "@fitbud/contracts";
 import {
   deviceTimeZone,
@@ -47,14 +45,20 @@ import {
 import type { ColorTokens } from "@fitbud/tokens";
 import { fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
-import { stage1Api } from "../lib/stage1Api";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { initialsFromName } from "../components/m2";
 import { reportError } from "../lib/reportError";
 import { trainerWebUrl } from "../lib/legalLinks";
 import { ActivityFeedScreen } from "./ActivityFeedScreen";
-import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
+import {
+  clientMetaFromDirectoryItem,
+  readTrainerCache,
+  trainerCacheEpoch,
+  writeClientMeta,
+  writeTrainerCache,
+} from "./cache";
+import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
 import {
   applyClientListFilter,
   clientListQueryForChip,
@@ -78,6 +82,8 @@ const FILTERS: Array<{ id: ClientListFilter; label: string }> = [
 ];
 
 type Props = {
+  /** False while another tab is showing; the tab stays mounted (Z14-3). */
+  active?: boolean;
   onOpenClient: (row: ClientDirectoryRow) => void;
   initialSegment?: Segment;
   onOpenAsk?: (
@@ -92,7 +98,6 @@ type Props = {
   ) => void;
 };
 
-type AttentionGroup = AttentionGroupsResponse["groups"][number];
 
 type RosterChip = {
   key: string;
@@ -119,12 +124,9 @@ function avatarTone(name: string, c: ColorTokens) {
   return list[code % list.length] ?? list[0];
 }
 
-function rowChips(
-  item: ClientDirectoryItem,
-  group: AttentionGroup | undefined,
-  hasOpenAsk: boolean,
-  c: ColorTokens,
-): RosterChip[] {
+function rowChips(item: ClientDirectoryItem, c: ColorTokens): RosterChip[] {
+  const summary = item.attention;
+  const hasOpenAsk = summary?.hasOpenAsk ?? false;
   if (isEndedClient(item)) {
     return [
       {
@@ -163,20 +165,12 @@ function rowChips(
   }
 
   const chips: RosterChip[] = [];
+  // Noted (acknowledged) items only, none open: the "Reviewed" chip.
   const reviewed =
-    group != null &&
-    group.items.length > 0 &&
-    group.items.every((entry) => entry.status === "acknowledged");
-  const offPlan = group?.items.some(
-    (entry) =>
-      (entry.status === "detected" || entry.status === "active") &&
-      entry.type === "meal_deviation",
-  );
-  const openMissed = group?.items.some(
-    (entry) =>
-      (entry.status === "detected" || entry.status === "active") &&
-      entry.type !== "meal_deviation",
-  );
+    summary != null && summary.needsYouCount === 0 && summary.notedCount > 0;
+  const offPlan = summary?.hasOpenOffPlan ?? false;
+  const openMissed = summary?.hasOpenMissed ?? false;
+  const mostSevere = summary?.mostSevere ?? null;
 
   if (reviewed) {
     chips.push({
@@ -186,19 +180,13 @@ function rowChips(
       bg: c.fill,
       fg: c.ink2,
     });
-  } else if (group?.mostSevere === "critical" || openMissed) {
+  } else if (mostSevere === "critical" || openMissed) {
     chips.push({
       key: "needs",
       label: "Needs attention",
-      Icon: group?.mostSevere === "critical" ? CircleAlert : TriangleAlert,
-      bg:
-        group?.mostSevere === "critical"
-          ? c.critTint
-          : c.warnTint,
-      fg:
-        group?.mostSevere === "critical"
-          ? c.crit
-          : c.warn,
+      Icon: mostSevere === "critical" ? CircleAlert : TriangleAlert,
+      bg: mostSevere === "critical" ? c.critTint : c.warnTint,
+      fg: mostSevere === "critical" ? c.crit : c.warn,
     });
   } else if (item.adherenceState === "needs_attention") {
     chips.push({
@@ -294,6 +282,12 @@ function isOfflineError(err: unknown): boolean {
   return err instanceof Error && /fetch|network|offline/i.test(err.message);
 }
 
+type ClientsSnapshot = {
+  items: ClientDirectoryItem[];
+  counts?: Counts;
+  savedAt: string;
+};
+
 type Counts = {
   all: number;
   needs: number;
@@ -313,6 +307,7 @@ const EMPTY_COUNTS: Counts = {
 };
 
 export function ClientsTab({
+  active = true,
   onOpenClient,
   initialSegment = "clients",
   onOpenAsk,
@@ -327,15 +322,20 @@ export function ClientsTab({
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [chip, setChip] = useState<ClientListFilter>("all");
-  const [items, setItems] = useState<ClientDirectoryItem[]>([]);
-  const [attentionByRelationship, setAttentionByRelationship] = useState<
-    Map<string, AttentionGroup>
-  >(new Map());
-  const [askByRelationship, setAskByRelationship] = useState<Set<string>>(
-    new Set(),
+  // Z14-3: paint the last roster at once; the first load refreshes underneath.
+  const [initialSnapshot] = useState(() =>
+    readTrainerCache<ClientsSnapshot>("trainer:clients"),
   );
-  const [counts, setCounts] = useState<Counts>(EMPTY_COUNTS);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<ClientDirectoryItem[]>(
+    initialSnapshot?.items ?? [],
+  );
+  const [counts, setCounts] = useState<Counts>(
+    initialSnapshot?.counts ?? EMPTY_COUNTS,
+  );
+  const [updating, setUpdating] = useState(false);
+  const lastLoadedAt = useRef(0);
+  const hasData = useRef(initialSnapshot != null);
+  const [loading, setLoading] = useState(initialSnapshot == null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
@@ -346,51 +346,70 @@ export function ClientsTab({
   const load = useCallback(async () => {
     setError(null);
     const cacheEpoch = trainerCacheEpoch();
+    const unfiltered = chip === "all" && query.trim().length === 0;
     try {
-      const s1 = stage1Api(api);
-      const [page, allPage, attention, asks] = await Promise.all([
-        api.listClients({ ...clientListQueryForChip(chip, query), limit: 50 }),
-        api.listClients({ limit: 50 }),
-        s1.getAttentionGroups().catch(() => ({
-          groups: [] as AttentionGroupsResponse["groups"],
-        })),
-        s1.listCoachAsks({ status: "open" }).catch(() => ({
-          items: [] as CoachAsk[],
-        })),
-      ]);
-      setItems(applyClientListFilter(page.items, chip));
-      setAttentionByRelationship(
-        new Map(attention.groups.map((group) => [group.relationshipId, group])),
-      );
-      setAskByRelationship(
-        new Set(asks.items.map((ask) => ask.relationshipId)),
-      );
-      const live = allPage.items.filter((item) => !isEndedClient(item));
-      setCounts({
-        all: live.length,
-        needs: live.filter((item) => item.adherenceState === "needs_attention")
-          .length,
-        checkin: live.filter(isCheckinDue).length,
-        onboarding: live.filter((item) =>
-          ["onboarding_pending", "onboarding_submitted"].includes(item.status),
-        ).length,
-        invites: live.filter((item) => item.status === "invited").length,
-        ended: allPage.items.filter(isEndedClient).length,
+      // One clients call. Badges come from each row's own attention summary
+      // (Z14-1), so no attention or asks call is needed. The counts need the
+      // unfiltered list: it is the same call when no filter is set.
+      const page = await api.listClients({
+        ...clientListQueryForChip(chip, query),
+        limit: 50,
       });
-      writeTrainerCache(
-        "trainer:clients",
-        {
-          items: applyClientListFilter(page.items, chip),
-          savedAt: new Date().toISOString(),
-        },
-        cacheEpoch,
-      );
+      const shown = applyClientListFilter(page.items, chip);
+      setItems(shown);
       setOfflineAt(null);
+      setLoading(false);
+      hasData.current = true;
+      lastLoadedAt.current = Date.now();
+      for (const item of page.items) {
+        if (item.relationshipId) {
+          writeClientMeta(
+            item.relationshipId,
+            clientMetaFromDirectoryItem(item),
+            cacheEpoch,
+          );
+        }
+      }
+      let allItems: ClientDirectoryItem[] | null = unfiltered ? page.items : null;
+      if (allItems === null) {
+        // A filtered view: the chip counts fill in when this answers.
+        allItems = await api
+          .listClients({ limit: 50 })
+          .then((all) => all.items)
+          .catch((err: unknown) => {
+            if (!isOfflineError(err)) reportError("clients.counts", err);
+            return null;
+          });
+      }
+      let nextCounts: Counts | null = null;
+      if (allItems !== null) {
+        const live = allItems.filter((item) => !isEndedClient(item));
+        nextCounts = {
+          all: live.length,
+          needs: live.filter((item) => item.adherenceState === "needs_attention")
+            .length,
+          checkin: live.filter(isCheckinDue).length,
+          onboarding: live.filter((item) =>
+            ["onboarding_pending", "onboarding_submitted"].includes(item.status),
+          ).length,
+          invites: live.filter((item) => item.status === "invited").length,
+          ended: allItems.filter(isEndedClient).length,
+        };
+        setCounts(nextCounts);
+      }
+      if (unfiltered) {
+        writeTrainerCache(
+          "trainer:clients",
+          {
+            items: page.items,
+            counts: nextCounts ?? undefined,
+            savedAt: new Date().toISOString(),
+          } satisfies ClientsSnapshot,
+          cacheEpoch,
+        );
+      }
     } catch (err) {
-      const cached = readTrainerCache<{
-        items: ClientDirectoryItem[];
-        savedAt: string;
-      }>("trainer:clients");
+      const cached = readTrainerCache<ClientsSnapshot>("trainer:clients");
       if (isOfflineError(err) && cached) {
         setItems(applyClientListFilter(cached.items, chip));
         setOfflineAt(cached.savedAt);
@@ -401,16 +420,29 @@ export function ClientsTab({
       }
     } finally {
       setLoading(false);
+      setUpdating(false);
     }
   }, [api, chip, query]);
 
   useEffect(() => {
-    const handle = setTimeout(() => {
-      setLoading(true);
-      void load();
-    }, 300);
+    // The first load starts at once (a snapshot, if any, is already on screen);
+    // typing in search is debounced. A snapshot never shows a skeleton.
+    const first = lastLoadedAt.current === 0;
+    const handle = setTimeout(
+      () => {
+        if (hasData.current) setUpdating(true);
+        else setLoading(true);
+        void load();
+      },
+      first ? 0 : 300,
+    );
     return () => clearTimeout(handle);
   }, [load]);
+
+  useRefreshWhenActive(active, lastLoadedAt, () => {
+    setUpdating(true);
+    void load();
+  });
 
   useEffect(() => {
     if (searchOpen) {
@@ -600,6 +632,7 @@ export function ClientsTab({
         </View>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
+      <UpdatingLine visible={updating && !refreshing && !offlineClock} />
 
       {searchOpen && !loading ? (
         <Text style={styles.resultLabel}>
@@ -632,16 +665,7 @@ export function ClientsTab({
           {rows.map(({ item, row }, index) => {
             const tone = avatarTone(row.name, theme.colors);
             const age = formatRelative(item.updatedAt);
-            const chips = rowChips(
-              item,
-              item.relationshipId
-                ? attentionByRelationship.get(item.relationshipId)
-                : undefined,
-              item.relationshipId
-                ? askByRelationship.has(item.relationshipId)
-                : false,
-              theme.colors,
-            );
+            const chips = rowChips(item, theme.colors);
             // Invites without a relationship are not tappable into overview.
             const canOpen = Boolean(row.relationshipId);
             const rowId = `client-row-${formatPersonName(row.name)

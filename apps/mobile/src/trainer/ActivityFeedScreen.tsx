@@ -24,6 +24,8 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { initialsFromName } from "../components/m2";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
+import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
+import { UpdatingLine } from "./keptTab";
 import { NoteSheet } from "./sheets/NoteSheet";
 import { ActivityMealSheet } from "./activity/ActivityMealSheet";
 import {
@@ -66,6 +68,16 @@ function avatarTone(name: string, c: ColorTokens) {
   return list[code % list.length] ?? list[0]!;
 }
 
+type ActivitySnapshot = {
+  events: ActivityFeedEvent[];
+  nextCursor: string | null;
+  savedAt: string;
+};
+
+function activityCacheKey(relationshipId: string | null | undefined): string {
+  return `trainer:activity:${relationshipId ?? "all"}`;
+}
+
 type Props = {
   /** Optional fixed relationship (client workspace activity). */
   relationshipId?: string;
@@ -100,13 +112,22 @@ export function ActivityFeedScreen({
   const s1 = stage1Api(api);
   const zone = deviceTimeZone();
   const today = formatLocalDate(new Date(), zone);
-  const [events, setEvents] = useState<ActivityFeedEvent[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  // Z14-3: paint the last first page at once, refresh underneath.
+  const [initialSnapshot] = useState(() =>
+    readTrainerCache<ActivitySnapshot>(activityCacheKey(lockedRid)),
+  );
+  const [events, setEvents] = useState<ActivityFeedEvent[]>(
+    initialSnapshot?.events ?? [],
+  );
+  const [updating, setUpdating] = useState(false);
+  const [cursor, setCursor] = useState<string | null>(
+    initialSnapshot?.nextCursor ?? null,
+  );
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [clientFilter, setClientFilter] = useState<ActivityClientOption | null>(
     null,
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialSnapshot == null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -121,7 +142,18 @@ export function ActivityFeedScreen({
   const activeRid = lockedRid ?? clientFilter?.relationshipId;
 
   const loadReset = useCallback(async () => {
-    setLoading(true);
+    const cacheEpoch = trainerCacheEpoch();
+    const snapshot = readTrainerCache<ActivitySnapshot>(
+      activityCacheKey(activeRid),
+    );
+    if (snapshot) {
+      setEvents(snapshot.events);
+      setCursor(snapshot.nextCursor);
+      setLoading(false);
+      setUpdating(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const page = await s1.getActivityFeed({
@@ -131,12 +163,22 @@ export function ActivityFeedScreen({
       });
       setEvents(page.events);
       setCursor(page.nextCursor);
+      writeTrainerCache(
+        activityCacheKey(activeRid),
+        {
+          events: page.events,
+          nextCursor: page.nextCursor,
+          savedAt: new Date().toISOString(),
+        } satisfies ActivitySnapshot,
+        cacheEpoch,
+      );
     } catch (err) {
       setError(
         userFacingMessage(err, { fallback: "Could not load activity." }),
       );
     } finally {
       setLoading(false);
+      setUpdating(false);
     }
   }, [activeRid, s1]);
 
@@ -284,6 +326,8 @@ export function ActivityFeedScreen({
           </Pressable>
         )}
       </ScrollView>
+
+      <UpdatingLine visible={updating} />
 
       {clientFilter && !lockedRid ? (
         <View style={styles.clientChipRow}>

@@ -136,7 +136,7 @@ describe("AttentionTab load states", () => {
     expect(screen.queryByText("Couldn't load Needs you")).toBeNull();
   });
 
-  it("a server error with a cache is the error state, reported, with no offline line", async () => {
+  it("a server error with a cache keeps the snapshot on screen with a retry banner, reported, no offline line (Z14-3)", async () => {
     loadOk();
     const first = mount();
     expect(await screen.findByText("Rohan Mehta")).toBeTruthy();
@@ -150,7 +150,11 @@ describe("AttentionTab load states", () => {
     });
     api.getAttentionGroups.mockRejectedValue(failure);
     mount();
-    expect(await screen.findByText("Couldn't load Needs you")).toBeTruthy();
+    // The last snapshot paints at once and stays; the refresh failure is a banner.
+    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
+    expect(await screen.findByText("Couldn't load. Pull to try again.")).toBeTruthy();
+    expect(screen.getByText("Rohan Mehta")).toBeTruthy();
+    expect(screen.queryByText("Couldn't load Needs you")).toBeNull();
     expect(screen.queryByText(/You're offline/)).toBeNull();
     expect(reportError).toHaveBeenCalledWith("attention.load", failure);
   });

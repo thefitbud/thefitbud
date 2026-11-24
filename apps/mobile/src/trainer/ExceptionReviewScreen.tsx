@@ -81,6 +81,17 @@ import {
   isNudgeableExceptionType,
   nudgeTargetFromException,
 } from "./sheets/nudgeContent";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  trainerCacheEpoch,
+  writeClientMeta,
+  type ClientMeta,
+} from "./cache";
+import {
+  readReviewItem,
+  storeReviewItem,
+} from "./reviewItemCache";
 import { openContextualWhatsApp } from "./whatsapp";
 
 type Props = {
@@ -113,23 +124,66 @@ export function ExceptionReviewScreen(props: Props) {
   );
 }
 
+function mealKcalOf(meal: MealAssignment | null): number | null {
+  if (!meal) return null;
+  const sum = plannedRowsFromAssignment(meal).reduce(
+    (total, row) => total + (row.kcalPreview ?? 0),
+    0,
+  );
+  return sum > 0 ? sum : null;
+}
+
+function infoFromMeta(meta: ClientMeta | null): ClientInfo | null {
+  if (!meta || meta.name == null) return null;
+  return {
+    name: meta.name,
+    zone: meta.timeZone,
+    whatsappE164: meta.whatsappE164,
+    goalShort: meta.goalShort,
+    startedAt: meta.startedAt,
+    endedAt: meta.endedAt,
+  };
+}
+
 function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
   const { api, me } = useAuth();
   const theme = useTheme();
   const styles = useStyles();
   const trainerZone = deviceTimeZone();
-  const [detail, setDetail] = useState<ExceptionDetail | null>(null);
-  const [card, setCard] = useState<ReviewSheetCardModel | null>(null);
+  // Z14-3: an item the review sheet already loaded, and its client's header
+  // cache entry, paint at once; the reads below refresh underneath.
+  const [kept] = useState(() => readReviewItem(exceptionId));
+  const [keptInfo] = useState(() =>
+    kept
+      ? infoFromMeta(readClientMeta(kept.bundle.detail.coachingRelationshipId))
+      : null,
+  );
+  const painted = useRef(kept != null);
+  const [detail, setDetail] = useState<ExceptionDetail | null>(
+    kept?.bundle.detail ?? null,
+  );
+  const [card, setCard] = useState<ReviewSheetCardModel | null>(() =>
+    kept
+      ? buildReviewSheetCardModel({
+          detail: kept.bundle.detail,
+          ageMinutes: exceptionAgeMinutes(kept.bundle.detail),
+          workout: kept.bundle.workout,
+          meal: kept.bundle.meal,
+          mealKcal: mealKcalOf(kept.bundle.meal),
+          timeZone: keptInfo?.zone ?? undefined,
+        })
+      : null,
+  );
   const [week, setWeek] = useState<ExceptionWeekModel | null>(null);
-  const [client, setClient] = useState<ClientInfo | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [client, setClient] = useState<ClientInfo | null>(keptInfo);
+  const [loading, setLoading] = useState(kept == null);
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   // "unknown" until the client workspace answers: live actions stay hidden
   // so an ended client is never offered Mark reviewed, Resolve, Note or Nudge.
   const [coaching, setCoaching] = useState<"unknown" | "active" | "ended">(
-    "unknown",
+    keptInfo ? (keptInfo.endedAt ? "ended" : "active") : "unknown",
   );
   const [notFound, setNotFound] = useState(false);
   const [offline, setOffline] = useState(false);
@@ -150,9 +204,12 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
   const resolveKey = useRef<string | null>(null);
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // Only a load with nothing on screen shows the loading state; a refresh
+    // (or the reload after an action) works underneath.
+    if (!painted.current) setLoading(true);
     setError(null);
     setNotFound(false);
+    const cacheEpoch = trainerCacheEpoch();
     let result: ExceptionDetail;
     try {
       result = await api.getException(exceptionId);
@@ -175,91 +232,113 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
     }
     setDetail(result);
     setOffline(false);
+    const relationshipId = result.coachingRelationshipId;
+    // One parallel round for everything else: the client header, the source
+    // assignment and the week strip. The week uses the cached client zone (or
+    // the trainer's own) so it need not wait for the workspace.
+    const weekZone = readClientMeta(relationshipId)?.timeZone ?? trainerZone;
+    const weekToday = localDateInTimezone(weekZone);
+    const weekFrom = startOfWeekMonday(weekToday);
+    const weekTo = addDays(weekFrom, 6);
+    const [workspaceRead, sourceRead, weekRead] = await Promise.all([
+      api.getClientWorkspace(relationshipId).then(
+        (workspace) => ({ ok: true as const, workspace }),
+        (err: unknown) => ({ ok: false as const, err }),
+      ),
+      (async (): Promise<{
+        workout: WorkoutAssignment | null;
+        meal: MealAssignment | null;
+      }> => {
+        // The card's Planned row is context: a failed read drops that row,
+        // never the review itself.
+        try {
+          if (result.sourceEntityType === "workout_assignment") {
+            return {
+              workout: await api.getWorkoutAssignment(result.sourceEntityId),
+              meal: null,
+            };
+          }
+          if (result.sourceEntityType === "meal_assignment") {
+            return {
+              workout: null,
+              meal: await api.getMealAssignment(result.sourceEntityId),
+            };
+          }
+        } catch (err) {
+          if (!isNetworkFailure(err)) reportError("trainer.exception.source", err);
+        }
+        return { workout: null, meal: null };
+      })(),
+      result.status === "resolved"
+        ? Promise.resolve(null)
+        : Promise.all([
+            api.listWorkoutAssignments(relationshipId, {
+              fromDate: weekFrom,
+              toDate: weekTo,
+            }),
+            api.listMealAssignments(relationshipId, {
+              fromDate: weekFrom,
+              toDate: weekTo,
+            }),
+          ]).catch((err: unknown) => {
+            if (!isNetworkFailure(err)) reportError("trainer.exception.week", err);
+            return null;
+          }),
+    ]);
     let info: ClientInfo | null = null;
-    try {
-      const workspace = await api.getClientWorkspace(
-        result.coachingRelationshipId,
-      );
+    if (workspaceRead.ok) {
+      const header = workspaceRead.workspace.header;
+      writeClientMeta(relationshipId, clientMetaFromWorkspaceHeader(header), cacheEpoch);
       info = {
-        name: workspace.header.traineeDisplayName,
-        zone: workspace.header.traineeTimezone ?? null,
-        whatsappE164: workspace.header.clientWhatsappE164 ?? null,
-        goalShort: workspace.header.goalShort ?? null,
-        startedAt: workspace.header.startedAt ?? null,
-        endedAt: workspace.header.endedAt ?? null,
+        name: header.traineeDisplayName,
+        zone: header.traineeTimezone ?? null,
+        whatsappE164: header.clientWhatsappE164 ?? null,
+        goalShort: header.goalShort ?? null,
+        startedAt: header.startedAt ?? null,
+        endedAt: header.endedAt ?? null,
       };
       setClient(info);
       setCoaching(info.endedAt ? "ended" : "active");
-    } catch (err) {
+    } else {
       // Ended-ness is unknown: keep live actions hidden until a retry works.
       setCoaching("unknown");
-      if (isNetworkFailure(err)) {
+      if (isNetworkFailure(workspaceRead.err)) {
         setOffline(true);
       } else {
-        reportError("trainer.exception.workspace", err);
+        reportError("trainer.exception.workspace", workspaceRead.err);
         setError("Could not check the client's status. (EXC-WS)");
       }
     }
-    // The card's Planned row and the week strip are context: a failed read
-    // drops that row or card, never the review itself.
-    let workout: WorkoutAssignment | null = null;
-    let meal: MealAssignment | null = null;
-    try {
-      if (result.sourceEntityType === "workout_assignment") {
-        workout = await api.getWorkoutAssignment(result.sourceEntityId);
-      } else if (result.sourceEntityType === "meal_assignment") {
-        meal = await api.getMealAssignment(result.sourceEntityId);
-      }
-    } catch (err) {
-      if (!isNetworkFailure(err)) reportError("trainer.exception.source", err);
-    }
-    const mealKcalSum = meal
-      ? plannedRowsFromAssignment(meal).reduce(
-          (sum, row) => sum + (row.kcalPreview ?? 0),
-          0,
-        )
-      : 0;
+    storeReviewItem(
+      { detail: result, workout: sourceRead.workout, meal: sourceRead.meal },
+      cacheEpoch,
+    );
     setCard(
       buildReviewSheetCardModel({
         detail: result,
         ageMinutes: exceptionAgeMinutes(result),
-        workout,
-        meal,
-        mealKcal: mealKcalSum > 0 ? mealKcalSum : null,
+        workout: sourceRead.workout,
+        meal: sourceRead.meal,
+        mealKcal: mealKcalOf(sourceRead.meal),
         timeZone: info?.zone ?? undefined,
       }),
     );
-    if (info && !info.endedAt && result.status !== "resolved") {
+    if (info && !info.endedAt && result.status !== "resolved" && weekRead) {
       const zone = info.zone ?? trainerZone;
       const today = localDateInTimezone(zone);
       const start = startOfWeekMonday(today);
-      const end = addDays(start, 6);
-      try {
-        const [workouts, meals] = await Promise.all([
-          api.listWorkoutAssignments(result.coachingRelationshipId, {
-            fromDate: start,
-            toDate: end,
-          }),
-          api.listMealAssignments(result.coachingRelationshipId, {
-            fromDate: start,
-            toDate: end,
-          }),
-        ]);
-        setWeek(
-          exceptionWeekModel({
-            dates: weekDatesFrom(start),
-            today,
-            workouts: workouts.items,
-            meals: meals.items,
-          }),
-        );
-      } catch (err) {
-        setWeek(null);
-        if (!isNetworkFailure(err)) reportError("trainer.exception.week", err);
-      }
+      setWeek(
+        exceptionWeekModel({
+          dates: weekDatesFrom(start),
+          today,
+          workouts: weekRead[0].items,
+          meals: weekRead[1].items,
+        }),
+      );
     } else {
       setWeek(null);
     }
+    painted.current = true;
     setLoading(false);
   }, [api, exceptionId, trainerZone]);
 
