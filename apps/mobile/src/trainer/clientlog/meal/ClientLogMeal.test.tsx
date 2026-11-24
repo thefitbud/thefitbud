@@ -1,8 +1,9 @@
 /** Trainer log and edit of a client's meal (Z10-19, Z12-52): editors and coach payloads. */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BackHandler, Platform } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
 import { mealAssignmentSchema } from "@fitbud/contracts";
-import { fireEvent, mockAuth, render, screen, waitFor } from "../../../test/render";
+import { act, fireEvent, mockAuth, render, screen, waitFor } from "../../../test/render";
 import { buildMealBody, mealsOn, startDraft, setOutcome, isComplete } from "./model";
 
 const ids = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -96,14 +97,14 @@ vi.mock("expo-modules-core", () => ({
 
 const { ClientLogMealScreen } = await import("./ClientLogMealScreen");
 
-function renderForm(over: { ended?: boolean; onSaved?: (m: string) => void } = {}) {
+function renderForm(over: { ended?: boolean; onSaved?: (m: string) => void; onBack?: () => void } = {}) {
   render(
     <ClientLogMealScreen
       relationshipId={RID}
       displayName="Rohan Mehta"
       ended={over.ended ?? false}
       clientZone="Asia/Kolkata"
-      onBack={() => {}}
+      onBack={over.onBack ?? (() => {})}
       onSaved={over.onSaved ?? (() => {})}
     />,
   );
@@ -314,5 +315,87 @@ describe("ClientLogMealScreen", () => {
     renderForm({ ended: true });
     await screen.findByText(/Coaching with Rohan has ended/);
     expect(screen.queryByRole("button", { name: "Save meal" })).toBeNull();
+  });
+});
+
+describe("meal log back (Z14-18)", () => {
+  let listener: (() => boolean) | null = null;
+  const realOS = Platform.OS;
+  const onBack = vi.fn();
+  beforeEach(() => {
+    listener = null;
+    onBack.mockClear();
+    api.request.mockReset();
+    (Platform as { OS: string }).OS = "android";
+    vi.spyOn(BackHandler, "addEventListener").mockImplementation(((
+      _event: string,
+      handler: () => boolean,
+    ) => {
+      listener = handler;
+      return { remove: () => undefined };
+    }) as never);
+    api.listMealAssignments.mockResolvedValue({ items: [meal()], nextCursor: null });
+  });
+  afterEach(() => {
+    (Platform as { OS: string }).OS = realOS;
+    vi.restoreAllMocks();
+  });
+  const press = (): boolean => {
+    let consumed = false;
+    act(() => {
+      consumed = listener?.() ?? false;
+    });
+    return consumed;
+  };
+  async function openFoodSearch() {
+    renderForm({ onBack });
+    await screen.findByText(/Planned for Wed 4 Nov/);
+    fireEvent.click(await screen.findByRole("button", { name: "Modified" }));
+    await screen.findByRole("button", { name: "Log it myself" });
+    fireEvent.click(screen.getByRole("button", { name: "Log it myself" }));
+    await screen.findByTestId("food-search-screen");
+  }
+
+  it("hardware back steps food search to the menu to the main view, never leaving the log", async () => {
+    await openFoodSearch();
+    expect(press()).toBe(true);
+    await screen.findByRole("button", { name: "Log it myself" });
+    expect(screen.queryByTestId("food-search-screen")).toBeNull();
+    expect(press()).toBe(true);
+    await screen.findByRole("button", { name: "Modified" });
+    expect(screen.queryByRole("button", { name: "Log it myself" })).toBeNull();
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("on-screen Back steps the same way", async () => {
+    await openFoodSearch();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("button", { name: "Log it myself" });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("button", { name: "Modified" });
+    expect(onBack).not.toHaveBeenCalled();
+  });
+
+  it("back from the main view of a dirty draft asks Discard this log?; a clean one leaves", async () => {
+    renderForm({ onBack });
+    await screen.findByText(/Planned for Wed 4 Nov/);
+    expect(press()).toBe(true);
+    expect(onBack).toHaveBeenCalledTimes(1);
+    onBack.mockClear();
+    fireEvent.click(await screen.findByRole("button", { name: "Confirmed" }));
+    expect(press()).toBe(true);
+    expect(await screen.findByText("Discard this log?")).toBeTruthy();
+    expect(onBack).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("stepping out of an inner view of a dirty draft does not ask or leave", async () => {
+    await openFoodSearch();
+    press();
+    press();
+    await screen.findByRole("button", { name: "Modified" });
+    expect(screen.queryByText("Discard this log?")).toBeNull();
+    expect(onBack).not.toHaveBeenCalled();
   });
 });

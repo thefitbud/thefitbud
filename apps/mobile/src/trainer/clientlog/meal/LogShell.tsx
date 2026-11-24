@@ -6,11 +6,12 @@
  */
 import { useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { AlertCircle, CalendarDays, ChevronLeft, Clock, Lock } from "lucide-react-native";
+import { AlertCircle, CalendarDays, Clock, Lock } from "lucide-react-native";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { formatCivilDate } from "@fitbud/core";
 import { colors, fontFamilySemiBold, spacing } from "@fitbud/ui-mobile";
 import { Text } from "../../../components/Text";
+import { HEADER_BACK_SLOT, HeaderBack } from "../../../components/HeaderBack";
 import { createIdempotencyKey } from "../../../lib/idempotency";
 import { dayOfMonth, weekdayShort } from "../../../lib/dates";
 import { reportError } from "../../../lib/reportError";
@@ -74,16 +75,17 @@ export function useLogSave(scope: string) {
 }
 
 export function LogHeader({ title, name, onBack }: { title: string; name: string; onBack: () => void }) {
+  const first = name.split(" ")[0] || name;
   return (
     <View style={styles.head}>
-      <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={onBack} style={styles.backHit}>
-        <ChevronLeft color={colors.deepNavy} size={26} />
-      </Pressable>
+      <View style={styles.backSlot}>
+        <HeaderBack onPress={onBack} label={first} />
+      </View>
       <View style={styles.headTx}>
         <Text style={styles.title} accessibilityRole="header">{title}</Text>
         <Text style={styles.subtitle}>{name}</Text>
       </View>
-      <View style={styles.backHit} />
+      <View style={styles.backSlot} />
     </View>
   );
 }
@@ -262,7 +264,7 @@ export const shared = StyleSheet.create({
 
 const styles = StyleSheet.create({
   head: { alignItems: "center", flexDirection: "row", marginBottom: spacing.md },
-  backHit: { alignItems: "center", height: 44, justifyContent: "center", width: 44 },
+  backSlot: { width: HEADER_BACK_SLOT },
   headTx: { alignItems: "center", flex: 1 },
   title: { color: colors.deepNavy, fontFamily: fontFamilySemiBold, fontSize: 20, fontWeight: "600" },
   subtitle: { color: colors.midGrey, fontSize: 15, fontWeight: "600", marginTop: 2 },

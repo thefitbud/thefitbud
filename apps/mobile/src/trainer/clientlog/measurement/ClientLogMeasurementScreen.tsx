@@ -9,6 +9,7 @@ import { Text } from "../../../components/Text";
 import { localDateInTimezone } from "../../../lib/dates";
 import { reportError } from "../../../lib/reportError";
 import { dateStrip, performedAtFor } from "../model";
+import { useDiscardGuard } from "../useDiscardGuard";
 import { DateStrip, EndedView, ErrorBox, LogHeader, ReloadButton, SaveButton, shared, useLogSave } from "../meal/LogShell";
 import {
   TYPES,
@@ -108,7 +109,11 @@ export function ClientLogMeasurementScreen({ relationshipId, displayName, ended,
     }, onSaved);
   }
 
-  const header = <LogHeader title="Log measurement" name={name} onBack={onBack} />;
+  const dirty =
+    save.state !== "saving" &&
+    JSON.stringify(draft) !== JSON.stringify(editing ? draftFor(editing) : newDraft());
+  const { requestBack, dialog } = useDiscardGuard(dirty, onBack);
+  const header = <LogHeader title="Log measurement" name={name} onBack={requestBack} />;
   if (ended) {
     return (
       <Screen title="" showHeader={false} chrome="app">
@@ -125,6 +130,7 @@ export function ClientLogMeasurementScreen({ relationshipId, displayName, ended,
   return (
     <Screen title="" showHeader={false} chrome="app" footer={footer}>
       {header}
+      {dialog}
       {save.state === "failed" ? <ErrorBox message={save.message} /> : null}
       <DateStrip
         strip={strip}

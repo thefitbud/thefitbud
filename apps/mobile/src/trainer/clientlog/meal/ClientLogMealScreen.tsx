@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, TextInput, View } from "react-native";
 import { ApiClientError } from "@fitbud/api-client";
+import { useDiscardGuard } from "../useDiscardGuard";
 import type { MealAssignment } from "@fitbud/contracts";
 import { formatCivilDate, formatPersonName, labelFor } from "@fitbud/core";
 import { colors } from "@fitbud/ui-mobile";
@@ -157,7 +158,21 @@ export function ClientLogMealScreen({ relationshipId, displayName, ended, client
     onSaved(existing ? "Edited by you" : "Logged by you");
   }
 
-  const header = <LogHeader title="Log meal" name={name} onBack={onBack} />;
+  const dirty =
+    save.state !== "saving" && JSON.stringify(draft) !== JSON.stringify(startDraft(existing));
+  const { requestBack, dialog } = useDiscardGuard(dirty, onBack, () => {
+    // Inner views step out one at a time, as their own Back does.
+    if (different === "food_search") {
+      setDifferent("menu");
+      return true;
+    }
+    if (different === "menu") {
+      setDifferent("closed");
+      return true;
+    }
+    return false;
+  });
+  const header = <LogHeader title="Log meal" name={name} onBack={requestBack} />;
   if (ended) {
     return (
       <Screen title="" showHeader={false} chrome="app">
@@ -212,6 +227,7 @@ export function ClientLogMealScreen({ relationshipId, displayName, ended, client
   return (
     <Screen title="" showHeader={false} chrome="app" footer={footer}>
       {header}
+      {dialog}
       {save.state === "failed" ? <ErrorBox message={save.message} /> : null}
       <DateStrip
         strip={strip}
