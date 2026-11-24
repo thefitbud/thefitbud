@@ -113,16 +113,16 @@ Prepare these for the reviewer, because a coaching app that shows prescribed exe
 
 ## 3.4 Account identity — a four-month decision, not a submission blocker
 
-Both developer accounts are already purchased in the partners' personal names, with personal email addresses, and the founders accept that for the closed beta. Two consequences to hold consciously:
+Both developer accounts are held by the proprietor, Shaik Firoz Basha, personally (individual accounts), which suits a sole proprietorship. Two consequences to hold consciously:
 
-- **Google Play publishes a verified developer name and address on public store listings.** For an individual account that is a person's name and address. A closed test is not publicly browsable, so exposure during the beta is limited to invited testers. At public launch it is not.
-- **Neither store appears to support converting an individual account into an organisation account.** The route is a new account plus an app transfer — workable, but not something to attempt during a launch week. [[VERIFY both of these in the current console documentation before the public launch; they change.]]
+- **Google Play publishes a verified developer name and address on public store listings.** For an individual account that is the proprietor's own name and address — the address in Chilakaluripet, unless a different one is verified. A closed test is not publicly browsable, so exposure during the beta is limited to invited testers. At public launch it is not.
+- **Neither store appears to support converting an individual account into an organisation account.** If the business is later incorporated, the route is a new organisation account (which needs a D-U-N-S number) plus an app transfer. [[VERIFY both of these in the current console documentation before the public launch; they change.]]
 
-The public launch is expected in about four months, and the partners intend to incorporate before it. **If that holds, create the organisation accounts at incorporation and transfer the app once, calmly.** If the public launch happens on the personal accounts instead, use a registered business address rather than a home address, because it will be published.
+**Decision for the proprietor before public launch:** keep the individual accounts and accept the published home address, or verify a business address (a co-working or virtual office) first.
 
 ## 4. Both stores — listing text
 
-- Do not use "FitBud®". The trade mark is applied for, not registered. ™ is acceptable.
+- Do not use "FitBud®". No trade mark application has been filed yet. ™ is acceptable.
 - Do not claim or imply medical benefit, diagnosis, treatment, cure or health monitoring.
 - Do not claim trainers are verified, certified or vetted by FitBud. They are not, by decision.
 - Do not state or imply an adherence score, percentage or risk rating, because the product deliberately has none — the listing must match the product.

@@ -4,7 +4,7 @@
 > On approval this becomes `docs/legal/credits.md`, which BT3 publishes at `https://app.thefitbud.com/credits`.
 > **This page is a licence condition, not a courtesy.** The exercise illustrations are CC BY-SA; showing them without attribution breaches the licence.
 
-**Last updated:** [[DATE]]
+**Last updated:** 1 December 2026
 
 ---
 
@@ -86,7 +86,7 @@ Any change to a CC BY-SA drawing — crop, recolour, recombine — makes the res
 
 ### B.4 Trade marks
 
-"FitBud" is used as an unregistered trade mark; the application is pending. Do not use ® anywhere in the product, the store listings or these documents. ™ may be used.
+"FitBud" is used as an unregistered trade mark; no application has been filed yet. Do not use ® anywhere in the product, the store listings or these documents. ™ may be used.
 
 ### B.5 Maintenance
 

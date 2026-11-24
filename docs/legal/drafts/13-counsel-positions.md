@@ -1,19 +1,19 @@
 # 13 · Positions on the open questions, for counsel to confirm or overrule
 
-> **DRAFT for counsel review — not legal advice.** Prepared 3 Nov 2026 by an AI agent, from the drafts, the repository and the founders' answers of 3 Nov 2026. No lawyer has reviewed any of it.
-> The counsel brief (00 §8) asked ten open questions. This document answers each one with the position the drafts now take, so that review is a matter of confirming or overruling specific positions rather than starting from blank questions. It also adds six questions that the founders' answers raised.
+> **DRAFT for counsel review — not legal advice.** Prepared 3 Nov 2026, revised 24 Nov 2026 by an AI agent, from the drafts, the repository and the owner's answers of 3 and 24 Nov 2026. No lawyer has reviewed any of it.
+> The counsel brief (00 §8) asked ten open questions. This document answers each one with the position the drafts now take, so that review is a matter of confirming or overruling specific positions rather than starting from blank questions. It also adds further questions that the owner's answers raised.
 
 **How to read each position.** *Position* is what the drafts now say. *Basis* is the reasoning. *If we are wrong* is the consequence and the fallback. *Confidence* is the drafter's honest estimate, not a legal opinion: **high** means the position follows directly from a statute or a platform rule; **medium** means it is the better reading but a court or regulator could take another; **low** means a judgment call that needs counsel.
 
 ---
 
-## A. Facts that changed on 3 Nov 2026
+## A. Facts that changed on 3 and 24 Nov 2026
 
 | # | Fact | Effect on the drafts |
 |---|---|---|
-| F1 | The contracting party is **M/s Oryvate**, a partnership firm of the two founders, which operates FitBud as one of its products. The founders intend Oryvate to own and operate further products and services under separate brands over the next few years. | 00, 01 §1, 04 §2, 07 §1A, README renamed. "FitBud", where it acts, means Oryvate (01 §1) |
-| F2 | **Both founders are employed as software developers** elsewhere, and build FitBud alongside that employment. | New risk, P11 |
-| F3 | **Nothing is documented between the founders**: no partnership deed, no founders' agreement, no IP assignment, no agreed allocation of liability. Nothing is registered. | P1, P12 |
+| F1 | **24 Nov 2026: FitBud is a sole proprietorship of Shaik Firoz Basha.** The earlier plan (a two-person partnership firm, Oryvate, owning several products) is set aside. | 00 §3, 01 §1 and §18.3, 04 §2 and §14, 07 §1A, 10 §1, 11 §3.4 rewritten |
+| F2 | **Employment facts.** The proprietor left his previous employer on 14 Aug 2026 and began FitBud afterwards (repository created 26 Sep 2026). He joined a new employer on 5 Nov 2026 and has signed no IP or NDA there; the offer letter does not mention IP. | P11 |
+| F3 | **Lokesh**, earlier a co-founder, is bound by an IP and NDA agreement with his own employer. He has confirmed he has no ownership in FitBud; the proprietor states all of his early commits have been replaced. The proprietor owns every FitBud account. No trade mark application has been filed. | P11, P12 |
 | F4 | **There is no trainee-private category of data.** Everything a trainee enters — health records, injuries, conditions, medications, dietary restrictions, measurements, workout and nutrition records, check-ins, progress and meal photos — is visible to their trainer. Only the trainer's private notes are asymmetric. | 03 §4.2, 04 §1 and §4.2, 12 §2.2 and §6 rewritten to say so plainly |
 | F5 | **A trainer can require meal photos.** The code lets a trainer require a photo for selected meals or all meals; a required meal cannot be logged as eaten without one (it can still be marked skipped). A progress-photo setting exists but is not enforced, and there is no check-in photo requirement. Earlier drafts said "FitBud never requires a photo", which was wrong. FitBud also stores progress, check-in and profile photos. | 02 §4.5, 03 §4.5, 04 §4.2, 09 §2.2, 12 §7 corrected |
 | F6 | **Which data-protection law binds today.** The DPDP Rules were published on 13 Nov 2025. Only the Board and definitions are in force; the operative obligations (notice, consent, rights, security, breach) commence on **13 May 2027**, and s.44(2), which omits s.43A of the IT Act, commences the same day. **Until then, s.43A and the SPDI Rules 2011 apply.** The closed beta (Nov 2026) and the expected public launch (about Mar 2027) both fall under SPDI; FitBud will be live under DPDP within two months of launch. | 04 §6.5 added; 04 §14 timeline; P3, P6 |
@@ -22,25 +22,25 @@
 
 ## B. Positions on the ten questions in the brief
 
-### P1 · Partnership firm now, or incorporate first? (brief Q1)
+### P1 · Sole proprietorship now, or incorporate first? (brief Q1)
 
-**Position.** Operate the closed beta as M/s Oryvate, a partnership firm. Before the beta opens, the founders sign a **partnership deed** (see P11 and P12 for what it must contain). Register the firm with the Registrar of Firms (Telangana) before any fee is charged. Incorporate **Oryvate Private Limited** at the earliest of: first revenue, FitBud's public launch, or any outside money. On incorporation, Terms §18.3 transfers every user agreement to the company without re-signature, and the deed assigns the firm's IP to the company.
+**Position.** Operate the closed beta as a sole proprietorship of Shaik Firoz Basha, trading as FitBud. No registration is needed for the proprietorship to exist; the proprietor's PAN is the business's PAN, and FitBud's income is reported on his own income-tax return. Incorporate a private limited company at the earliest of: first revenue, FitBud's public launch, or any outside money. On incorporation, Terms §18.3 transfers every user agreement to the company without re-signature, and the proprietor assigns the codebase, brand, domain and accounts to it by a written assignment.
 
-**Basis.** Two people carrying on a business together to share profits are a firm by operation of law (Partnership Act 1932, s.4); a deed records the terms but does not create the partnership. Registration is optional; the consequence of not registering is s.69 — the firm cannot sue to enforce a contract, though it can be sued. For a free beta that costs nothing. Incorporation is never compulsory, but a company is the right vehicle for a business that intends to hire, raise and own several brands, and it ends the partners' unlimited personal liability for future obligations.
+**Basis.** One person carrying on business alone, without incorporating, is a sole proprietor; there is no separate legal entity. That is the simplest lawful structure for a free beta. Its cost is unlimited personal liability, which is why incorporation should follow the first real trigger.
 
-**If we are wrong.** If counsel prefers incorporation before the beta, the identity block in 01 §1 and 04 §2 changes and §18.3 becomes unnecessary; nothing else in the drafts depends on the choice.
+**If we are wrong.** If counsel prefers incorporation before the beta, the identity blocks in 01 §1 and 04 §2 change and §18.3 becomes unnecessary; nothing else in the drafts depends on the choice.
 
 **Confidence.** High on the characterisation; the timing is a business judgment.
 
-### P2 · Is FitBud (Oryvate) the sole Data Fiduciary? (brief Q2)
+### P2 · Is FitBud's proprietor the sole Data Fiduciary? (brief Q2)
 
-**Position.** Yes. Oryvate is the sole Data Fiduciary for all personal data inside FitBud. Trainers are **authorised users** who access client data under the Trainer Terms (02 §4), bound to purpose limitation, confidentiality, a prohibition on identity and financial data, photo rules, breach reporting within 24 hours, and referral of every data request to us. A trainer is independently responsible for any copy of client data they take outside FitBud (02 §4.6).
+**Position.** Yes. The proprietor is the sole Data Fiduciary for all personal data inside FitBud. Trainers are **authorised users** who access client data under the Trainer Terms (02 §4), bound to purpose limitation, confidentiality, a prohibition on identity and financial data, photo rules, breach reporting within 24 hours, and referral of every data request to us. A trainer is independently responsible for any copy of client data they take outside FitBud (02 §4.6).
 
-**Basis.** A Data Fiduciary is whoever "alone or in conjunction with other persons determines the purpose and means of processing" (DPDP Act s.2(i)). Oryvate determines the means completely — schema, storage, retention, access rules, security — and the purpose (coaching through FitBud) is fixed by the platform, not by the trainer. The trainer's choice of *which questions to ask* is a choice within that purpose. Treating twenty individual trainers as fiduciaries would leave clients with twenty grievance processes that cannot work.
+**Basis.** A Data Fiduciary is whoever "alone or in conjunction with other persons determines the purpose and means of processing" (DPDP Act s.2(i)). The proprietor determines the means completely — schema, storage, retention, access rules, security — and the purpose (coaching through FitBud) is fixed by the platform, not by the trainer. The trainer's choice of *which questions to ask* is a choice within that purpose. Treating twenty individual trainers as fiduciaries would leave clients with twenty grievance processes that cannot work.
 
 **The weakness.** A trainer who composes the questions arguably co-determines what data is collected, which points to joint fiduciary status for trainer-authored forms. The mitigations are contractual (02 §4.4, 06 §3) and in-product (12 §5: every form says the trainer wrote it and sees the answers).
 
-**If we are wrong.** If trainers are joint fiduciaries for their own forms, add to the Trainer Terms a one-page **data-handling annex**: (a) the trainer is a joint fiduciary for questions they author; (b) Oryvate handles all notices, consents, rights requests and grievances for both, and the trainer appoints Oryvate to do so; (c) the trainer's obligations in 02 §4 continue; (d) each indemnifies the other for its own breach. The Privacy Policy §2 then names trainers as joint fiduciaries for trainer-authored questions. The product does not change.
+**If we are wrong.** If trainers are joint fiduciaries for their own forms, add to the Trainer Terms a one-page **data-handling annex**: (a) the trainer is a joint fiduciary for questions they author; (b) the proprietor handles all notices, consents, rights requests and grievances for both, and the trainer appoints the proprietor to do so; (c) the trainer's obligations in 02 §4 continue; (d) each indemnifies the other for its own breach. The Privacy Policy §2 then names trainers as joint fiduciaries for trainer-authored questions. The product does not change.
 
 **Confidence.** Medium.
 
@@ -48,7 +48,7 @@
 
 **Position.** No separate document. **One Privacy Policy written to meet both regimes**, with a section (04 §6.5) that states which law applies when. Until 13 May 2027 the SPDI Rules govern and require: a published privacy policy describing the types of sensitive data collected, the purpose, disclosures and security practices (r.4); **written consent** before collecting sensitive data, which an unticked-by-default electronic tick box satisfies (r.5(1), read with IT Act s.10A); use only for the stated purpose (r.5(4)); and a **Grievance Officer whose name and contact details are published**, who must resolve grievances within one month (r.5(9)). Draft 04 meets each of these.
 
-**Basis.** F6. The SPDI Rules apply to a "body corporate", which s.43A defines to include a firm or other association of individuals engaged in commercial or professional activities — see P15 on whether a free beta is "commercial".
+**Basis.** F6. The SPDI Rules apply to a "body corporate", which s.43A defines to include "a firm, sole proprietorship or other association of individuals engaged in commercial or professional activities" — see P15 on whether a free beta is "commercial".
 
 **If we are wrong.** A separate SPDI policy would be a subset of 04; it can be cut from it in an hour.
 
@@ -66,7 +66,7 @@
 
 ### P5 · Do the Consumer Protection (E-Commerce) Rules 2020 apply? (brief Q5)
 
-**Position.** **Not during the free beta.** The Rules apply to an "e-commerce entity" operating a digital platform for the buying or selling of goods or services. FitBud sells nothing and facilitates no sale between trainer and client (payments are recorded, never transacted). **Once Oryvate charges trainers through the app**, Oryvate itself sells a digital service and the Rules may apply to that sale. The identity disclosures they require (legal name, address, grievance officer, contact) are already in 01 §1 and 04 §14, so nothing further is needed then except a refund and cancellation section in the Terms.
+**Position.** **Not during the free beta.** The Rules apply to an "e-commerce entity" operating a digital platform for the buying or selling of goods or services. FitBud sells nothing and facilitates no sale between trainer and client (payments are recorded, never transacted). **Once FitBud charges trainers through the app**, the proprietor himself sells a digital service and the Rules may apply to that sale. The identity disclosures they require (legal name, address, grievance officer, contact) are already in 01 §1 and 04 §14, so nothing further is needed then except a refund and cancellation section in the Terms.
 
 **Confidence.** Medium.
 
@@ -118,66 +118,63 @@
 
 ---
 
-## C. New questions raised by the founders' answers
+## C. Further questions raised by the owner's answers
 
-### P11 · The founders' employment and ownership of FitBud — **highest priority**
+### P11 · Ownership of FitBud: employers and the former co-founder
 
-**Position.** This is the largest legal risk in the business today, and it is not in any user-facing document. Before the closed beta opens, each founder should:
+**Position.** On the facts confirmed on 24 Nov 2026 (F2, F3), the proprietor owns FitBud outright and no employer has a credible claim. Three steps keep it that way, all at no cost:
 
-1. **Read their own employment agreement** for (a) an IP-assignment or inventions clause, (b) a moonlighting, outside-work or exclusivity clause, and (c) confidentiality. Note whether the assignment covers only work made in the course of employment, or anything made during employment, or anything "related to the employer's business".
-2. If either agreement assigns work made **outside** working hours or with personal resources, or covers work "related to" an employer's business that could include fitness or mobile software, **obtain a written no-objection or carve-out** from that employer naming FitBud and Oryvate before going further.
-3. Keep FitBud work strictly on personal devices, personal accounts and personal time, with no employer code, tools, licences or confidential information. (The developer accounts are already personal, which helps.)
-4. Sign the **partnership deed with an IP clause** that vests in the firm everything either founder has made or will make for FitBud and other Oryvate products, with a present assignment of what already exists.
+1. **Lokesh's confirmation in writing.** A one-page assignment and waiver, signed by Lokesh, stating that he holds no ownership, share or claim in FitBud, assigning to the proprietor any rights he may have in anything he contributed, and confirming his contributions have been removed. It does not depend on his employer, because it covers only what he personally may hold; and it answers a diligence question an investor or acquirer will ask about the early commits.
+2. **Current employer.** If the new employer later presents an IP, inventions or confidentiality agreement, list FitBud as **excluded prior work** in it before signing (most such agreements have a schedule for this). Until then, keep FitBud entirely off employer devices, accounts, networks and working hours, and use none of the employer's code or confidential information. Under Copyright Act s.17(c), an employer owns only work made in the course of employment under a contract of service.
+3. **Previous employer.** No action needed: FitBud began after 14 Aug 2026, and the repository history supports that. Keep the repository history intact as evidence.
 
-**Basis.** No Indian statute prohibits moonlighting; the restriction, if any, is contractual. An exclusivity clause creates an employment risk that depends on the employer choosing to act. An **IP-assignment clause** is different: if it reaches FitBud, the employer may already own part of the code, regardless of whether it ever acts — and that surfaces in any investor or acquirer's diligence, and potentially when Oryvate assigns its IP to a company. Out-of-hours work on personal equipment strengthens the founders' position but does not settle it; the wording of each clause does.
+**Basis.** No Indian statute prohibits outside work; any restriction is contractual. Post-employment non-competes are void under Contract Act s.27, but IP assignment clauses can survive termination for work conceived during employment, which is why the start date matters.
 
-**What counsel is asked.** Review both employment agreements' IP and outside-work clauses (the founders to supply them), advise whether a no-objection is needed, and draft or review the deed's IP clause.
+**What counsel is asked.** Confirm the three steps; draft or review Lokesh's one-page assignment and waiver.
 
-**Confidence.** High that this must be checked; the answer depends entirely on the two contracts.
+**Confidence.** High.
 
-### P12 · How liability is shared between the founders
+### P12 · Personal liability of the proprietor
 
-**Position.** Toward users and everyone else, both partners are liable **jointly and severally and without limit** for the firm's acts (Partnership Act s.25), whatever they agree between themselves; the drafts cannot change that and do not try. **Between** the founders, the deed should record: capital and expense contributions; profit and loss shares (equal unless agreed otherwise); that each indemnifies the other for loss caused by their own breach of the deed, fraud or wilful misconduct; decision-making and a deadlock rule; **vesting** of each founder's share over time with a cliff, so a founder who leaves early does not keep half; what happens on exit, death or incapacity; that the firm's business covers FitBud and any other product the partners agree to run under Oryvate; and the IP clause in P11. The deed is also the document that moves into a shareholders' agreement on incorporation.
-
-**What counsel is asked.** Draft the deed, or review a draft. Advise whether a founders' agreement is needed separately or whether the deed suffices until incorporation.
+**Position.** As a sole proprietor, Shaik Firoz Basha is personally liable, without limit, for every obligation in these documents; his personal assets stand behind them. The drafts reduce exposure by structure (FitBud authors no coaching; trainers warrant competence and indemnify; the cap and exclusions in 01 §12), but cannot create a shield. The mitigations are insurance (professional indemnity and cyber) before public launch, and incorporation at the first trigger in P1.
 
 **Confidence.** High.
 
 ### P13 · CERT-In Directions (28 Apr 2022)
 
-**Position.** **Assume they apply.** They bind service providers, intermediaries, data centres and **body corporate** — the same IT Act definition that brings a firm within SPDI. They require: (a) reporting the incident types in their Annexure I to CERT-In **within 6 hours** of noticing them; (b) a named point of contact for CERT-In; (c) system clocks synchronised to NTP; and (d) **ICT system logs kept for a rolling 180 days**, retrievable for CERT-In, with a copy available within India per CERT-In's FAQ.
+**Position.** **Assume they apply.** They bind service providers, intermediaries, data centres and **body corporate** — the same IT Act definition that brings a sole proprietorship within SPDI. They require: (a) reporting the incident types in their Annexure I to CERT-In **within 6 hours** of noticing them; (b) a named point of contact for CERT-In; (c) system clocks synchronised to NTP; and (d) **ICT system logs kept for a rolling 180 days**, retrievable for CERT-In, with a copy available within India per CERT-In's FAQ.
 
 **The conflict this creates.** The earlier draft of 09 §5.1 proposed deleting access logs after 30 days, and Cloudflare's Workers log retention is short. **180-day log retention is a floor under the Directions, not a cap**, so 30 days likely did not comply; 09 §5.1 now says 180 days. The access logs contain no coaching data (09 §2.4), so keeping them longer is low-risk for privacy. Product task: export Workers request logs to storage kept for 180 days (for example an R2 bucket via Logpush, with a location hint for India or the nearest available region), and name a CERT-In point of contact (the same person as the grievance officer).
 
-**What counsel is asked.** Confirm applicability to a two-person unregistered firm running a free beta, and whether logs outside India with retrieval on demand suffice.
+**What counsel is asked.** Confirm applicability to a sole proprietor running a free beta, and whether logs outside India with retrieval on demand suffice.
 
 **Confidence.** Medium on applicability; high on what the Directions require if they apply.
 
-### P14 · One firm, several products
+### P14 · Trade mark
 
-**Position.** The firm is named Oryvate because Oryvate is intended to run further products. The user documents are written for FitBud only and say so (01 §1). When a second product launches under the same firm, it gets its own terms and privacy policy, and FitBud's documents need no change. Product data is never shared across Oryvate products without fresh notice and consent; 04 §6.4 already rules out use for any other purpose, which covers this.
+**Position.** "FitBud" is used as an unregistered trade mark, and no application has been filed. The documents use no ® symbol (08 §B.4, 11 §4). Before the public launch, run a phonetic search on the IP India register and file in the proprietor's name in class 9 (software), class 42 (software as a service) and any other class counsel advises; an individual applicant pays the lower official fee. The application is assigned to the company on incorporation.
 
-**What counsel is asked.** Confirm that "Oryvate" as an unregistered firm name raises no conflict with an existing registered mark or company name (the founders have not yet searched MCA, IP India or domains), and that one firm operating unrelated consumer products creates no problem the drafts should address.
+**What counsel is asked.** Advise on classes and on the clearance search, since "FitBud" is a common-sounding name in the fitness field.
 
-**Confidence.** High on the structure; the name search is a factual check.
+**Confidence.** High on the process; the clearance result is a factual check.
 
 ### P15 · Is a free closed beta "commercial activity"?
 
-**Position.** **Assume yes.** The SPDI Rules and CERT-In Directions reach a firm "engaged in commercial or professional activities". The beta is a pre-launch stage of a business that intends to charge, run by a firm formed to profit from it. Arguing that a free beta is non-commercial might succeed, but it would be a poor reason to skip obligations that the drafts already meet at little cost.
+**Position.** **Assume yes.** The SPDI Rules and CERT-In Directions reach a sole proprietorship "engaged in commercial or professional activities". The beta is a pre-launch stage of a business that intends to charge. Arguing that a free beta is non-commercial might succeed, but it would be a poor reason to skip obligations that the drafts already meet at little cost.
 
 **Confidence.** Medium on the law; high that the cautious assumption is the right one.
 
-### P16 · Naming the founders
+### P16 · Naming the proprietor
 
-**Position.** Name both partners in Terms §1 and Privacy Policy §2 (identification of the counterparty and of the Data Fiduciary), and one partner as Grievance Officer in Privacy Policy §14 (required by SPDI r.5(9), and by the 2021 Rules if P4 holds). Publish an operating address: SPDI and the 2021 Rules require name and contact details; a postal address is the safer reading, and a business or co-working address avoids publishing a home. The store listings already show at least one founder's name, because the developer accounts are personal.
+**Position.** Name the proprietor in Terms §1 and Privacy Policy §2 (identification of the counterparty and of the Data Fiduciary), and as Grievance Officer in Privacy Policy §14 (required by SPDI r.5(9), and by the 2021 Rules if P4 holds), with his address. The drafts publish his home address in Chilakaluripet, Andhra Pradesh, as given. A co-working or virtual office address would avoid publishing a home address, here and on the Google Play listing (11 §3.4); that is the proprietor's choice.
 
-**Confidence.** High that the grievance officer must be named; medium on whether an address is strictly required.
+**Confidence.** High that the grievance officer must be named with contact details; medium on whether a postal address is strictly required.
 
 ---
 
 ## D. What counsel is asked to do, in order
 
-1. **P11** — review both employment agreements and advise; draft or review the partnership deed with the IP and liability clauses (P11, P12).
+1. **P11** — confirm the ownership steps and draft or review Lokesh's assignment and waiver.
 2. **P2** — rule on sole versus joint fiduciary.
 3. **P7** — confirm the consent architecture.
 4. **P4, P13, P15** — confirm intermediary status, CERT-In applicability and the "commercial activity" assumption; these set the grievance and log-retention timelines.
@@ -187,4 +184,4 @@
 
 ## E. Not for counsel — for a CA or CS
 
-GST registration and reverse charge on imported services (Cloudflare, Apple, Google) at nil revenue; Telangana Shops and Establishments registration; whether the firm must file an income-tax return at nil income; and what changes when fees are charged through the app stores. These do not affect the user-facing drafts.
+GST registration and reverse charge on imported services (Cloudflare, Apple, Google) at nil revenue; Shops and Establishments registration (Telangana, where the business is carried on, or Andhra Pradesh, where the proprietor's address is); how FitBud's expenses and any income are reported on the proprietor's own income-tax return; and what changes when fees are charged through the app stores. These do not affect the user-facing drafts.

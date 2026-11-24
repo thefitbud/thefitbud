@@ -2,7 +2,7 @@
 
 > **DRAFT for counsel review — not for publication.** Prepared 2 Nov 2026.
 
-**Effective date:** [[DATE]] · **Version:** 1.0-draft
+**Effective date:** 1 December 2026 · **Version:** 1.0-draft
 
 This policy forms part of the FitBud Terms of Service and applies to everyone. Breaking it can get your account suspended or closed, and in serious cases reported to the authorities.
 

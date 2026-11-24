@@ -1,7 +1,7 @@
 # 10 · Internal procedure: data principal requests, grievances and breaches
 
 > **DRAFT for founder review.** Prepared 2 Nov 2026. Internal — not published.
-> A privacy policy that promises rights without a procedure behind it is a liability. This is the procedure. It is written for a two-partner operation, because that is what Oryvate is today.
+> A privacy policy that promises rights without a procedure behind it is a liability. This is the procedure. It is written for a one-person operation, because that is what FitBud is today: a sole proprietorship.
 
 ---
 
@@ -9,10 +9,10 @@
 
 | Role | Who | Responsibility |
 |---|---|---|
-| Data Protection / Grievance contact | [[GRIEVANCE OFFICER NAME — one of the two partners]] | Receives, decides and answers everything in this document. Named publicly in the Privacy Policy |
-| Deputy, for absence | [[the other partner]] | Acts when the contact is unreachable for more than two working days |
+| Data Protection / Grievance contact | Shaik Firoz Basha (proprietor) | Receives, decides and answers everything in this document. Named publicly in the Privacy Policy |
+| Deputy, for absence | [[NAME — someone trusted, optional]] | Can read `tech@thefitbud.com` and send an acknowledgement when the proprietor is unreachable for more than two working days. Decides nothing |
 
-**1.1** Two partners means the deputy slot can be filled properly, which removes the worst operational risk here: a statutory clock runs whether or not anyone is reading email. Both partners have access to `tech@thefitbud.com`, it is checked every working day, and anything in this document is flagged the day it arrives rather than the week it arrives. Agree between you which partner holds this and write it into the partnership deed, so it is not renegotiated during an incident.
+**1.1** One person is the worst operational risk here: a statutory clock (6 hours for CERT-In, 24 hours for a grievance acknowledgement) runs whether or not anyone is reading email. Check `tech@thefitbud.com` every day, set phone notifications for it, and set an auto-reply that acknowledges receipt with a reference. If you name a deputy, give them read access and the acknowledgement template (§9.1) only; they need no access to user data.
 
 ## 2. The request log
 
@@ -123,7 +123,7 @@ Record the nominee's name and contact against the account. [[There is no field f
 
 **6.3 Notify**
 
-- **CERT-In, within 6 hours** of noticing an incident of a type listed in the Directions' Annexure I (unauthorised access, data breach or leak, compromise of a server or application, and others). Report what is known in the prescribed format and supplement it. The CERT-In point of contact is [[GRIEVANCE OFFICER NAME — one of the two partners]].
+- **CERT-In, within 6 hours** of noticing an incident of a type listed in the Directions' Annexure I (unauthorised access, data breach or leak, compromise of a server or application, and others). Report what is known in the prescribed format and supplement it. The CERT-In point of contact is Shaik Firoz Basha.
 - **Data Protection Board of India** (from 13 May 2027): an intimation **without delay**, then a detailed report **within 72 hours** covering the facts, cause, likely impact, mitigation, and the notices sent to affected people. Do not wait for a complete picture — report what is known and supplement it.
 - **The people affected:** **without delay**. Plain language: what happened, what data, what it means for them, what we have done, what they should do.
 - **A processor's breach** is still ours to report to the people affected.

@@ -4,7 +4,7 @@ This folder holds FitBud's legal documentation. It has two levels, and the diffe
 
 | Path | What it is | Who writes it | May ship? |
 |---|---|---|---|
-| `docs/legal/drafts/` | **Agent-prepared drafts** for counsel and founder review. Not legal advice. Not approved. | Claude Code, from the repository and the owner's product decisions | **No** |
+| `docs/legal/drafts/` | **Agent-prepared drafts** for counsel and owner review. Not legal advice. Not approved. | Claude Code, from the repository and the owner's product decisions | **No** |
 | `docs/legal/privacy.md`, `terms.md`, `credits.md` | **Counsel-approved final text**, committed by Firoz (D-W3-4) | Counsel / Firoz | Yes — this is what BT3 copies into `content.ts` |
 
 **BT3 and BT3b must not read anything in `drafts/`.** D-B13 (owner, 31 Oct 2026) stands: counsel writes the shipping text, agents build the pages and links. These drafts exist to give counsel a complete, product-accurate starting point instead of a blank page, and to make the review a markup exercise rather than a drafting one.
@@ -21,11 +21,11 @@ This folder holds FitBud's legal documentation. It has two levels, and the diffe
 | 05 | [`05-health-disclaimer.md`](drafts/05-health-disclaimer.md) | Health, fitness and medical disclaimer; assumption of risk | Counsel |
 | 06 | [`06-acceptable-use.md`](drafts/06-acceptable-use.md) | Acceptable use, including what a trainer may and may not ask a client for | Counsel |
 | 07 | [`07-beta-terms.md`](drafts/07-beta-terms.md) | Closed beta terms: TestFlight and Play closed testing, feedback, no warranty, data reset | Counsel |
-| 08 | [`08-credits-and-licences.md`](drafts/08-credits-and-licences.md) | CC BY-SA attribution for exercise drawings and wger text; food data sources → becomes `docs/legal/credits.md` | Founders (facts are from the repo) |
-| 09 | [`09-data-inventory-and-retention.md`](drafts/09-data-inventory-and-retention.md) | What the system actually stores, every processor, the proposed retention schedule, security measures | Founders + counsel |
-| 10 | [`10-rights-and-grievance-procedure.md`](drafts/10-rights-and-grievance-procedure.md) | Internal runbook: data principal requests, deletion, breach notification | Founders |
-| 11 | [`11-store-privacy-disclosures.md`](drafts/11-store-privacy-disclosures.md) | Answers for Play Data safety and Apple App Privacy, traced to code | Founders |
-| 12 | [`12-in-app-notices.md`](drafts/12-in-app-notices.md) | The consent and notice strings the app itself must show, per screen | Founders + counsel |
+| 08 | [`08-credits-and-licences.md`](drafts/08-credits-and-licences.md) | CC BY-SA attribution for exercise drawings and wger text; food data sources → becomes `docs/legal/credits.md` | Owner (facts are from the repo) |
+| 09 | [`09-data-inventory-and-retention.md`](drafts/09-data-inventory-and-retention.md) | What the system actually stores, every processor, the proposed retention schedule, security measures | Owner + counsel |
+| 10 | [`10-rights-and-grievance-procedure.md`](drafts/10-rights-and-grievance-procedure.md) | Internal runbook: data principal requests, deletion, breach notification | Owner |
+| 11 | [`11-store-privacy-disclosures.md`](drafts/11-store-privacy-disclosures.md) | Answers for Play Data safety and Apple App Privacy, traced to code | Owner |
+| 12 | [`12-in-app-notices.md`](drafts/12-in-app-notices.md) | The consent and notice strings the app itself must show, per screen | Owner + counsel |
 | 13 | [`13-counsel-positions.md`](drafts/13-counsel-positions.md) | A drafted position on every open question (P1–P16), for counsel to confirm or overrule | Counsel |
 
 Read 00 first. Read 09 before 04 — the privacy policy is only as true as the inventory behind it.
@@ -34,11 +34,11 @@ Read 00 first. Read 09 before 04 — the privacy policy is only as true as the i
 
 ## The contracting party
 
-The drafts name **M/s Oryvate**, a partnership firm of two partners that operates FitBud as one of its products, as the party to every agreement. Two people operating the business together are a partnership firm under the Indian Partnership Act, 1932 by operation of law, whether or not a deed exists — a sole proprietorship has one owner by definition and does not fit.
+The drafts name **Shaik Firoz Basha**, carrying on business as the sole proprietor of FitBud, as the party to every agreement (changed 24 Nov 2026; the earlier partnership-firm plan under the name Oryvate is set aside).
 
-The partners are named in only two user-facing documents: Terms of Service §1, and the Privacy Policy (§2, and one partner as Grievance Officer in §14). Everywhere else the party is "FitBud", which Terms §1 defines as meaning Oryvate wherever it acts. This is deliberate. Terms of Service §18.3 transfers the agreements to a company on incorporation without re-signature, and provides that a change in the firm's constitution does not disturb them.
+The proprietor is named in only two user-facing documents: Terms of Service §1, and the Privacy Policy (§2, and as Grievance Officer in §14). Everywhere else the party is "FitBud", which Terms §1 defines as meaning the proprietor wherever it acts. Terms of Service §18.3 transfers the agreements to a company that later takes over the business, without re-signature.
 
-Open items on this, for counsel (brief §3): confirmation that a partnership is the right characterisation; whether the firm's unregistered status must be disclosed; and the consequence of section 69 of the Partnership Act, under which an unregistered firm cannot sue to enforce a contract.
+Open items on this, for counsel (brief §3): sufficiency of the identification, the choice of Hyderabad courts with an Andhra Pradesh address, and a written assignment and waiver from the former co-founder (draft 13 P11).
 
 ## Conventions in the drafts
 

@@ -2,7 +2,7 @@
 
 > **DRAFT for counsel review — not for publication.** Prepared 2 Nov 2026.
 
-**Effective date:** [[DATE]] · **Version:** 1.0-draft
+**Effective date:** 1 December 2026 · **Version:** 1.0-draft
 
 These Trainer Terms add to the FitBud **Terms of Service** and apply to you when you use FitBud as a trainer. Where they conflict with the Terms of Service, these Trainer Terms win. Terms defined there have the same meaning here.
 

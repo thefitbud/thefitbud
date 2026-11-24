@@ -3,7 +3,7 @@
 > **DRAFT for counsel review — not for publication.** Prepared 2 Nov 2026.
 > Written to be read by an ordinary person, in plain language, because the people who sign it are consumers giving us health information. Please keep it readable when you mark it up.
 
-**Effective date:** [[DATE]] · **Version:** 1.0-draft
+**Effective date:** 1 December 2026 · **Version:** 1.0-draft
 
 These terms add to the FitBud **Terms of Service** and apply when you use FitBud as someone's client. Where they conflict, these win.
 

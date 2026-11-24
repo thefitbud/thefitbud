@@ -2,7 +2,7 @@
 
 > **DRAFT for counsel review — not for publication.** Prepared 2 Nov 2026. Placeholders in `[[DOUBLE BRACKETS]]` must be filled. Notes beginning `> **COUNSEL:**` are for the reviewer and must be deleted before publication.
 
-**Effective date:** [[DATE]]
+**Effective date:** 1 December 2026
 **Version:** 1.0-draft
 
 These Terms apply to everyone who uses FitBud. Two supplements add to them: the **Trainer Terms** if you use FitBud as a trainer, and the **Trainee Terms** if you use FitBud as a client. While FitBud is in closed beta, the **Beta Terms** also apply and override these Terms where they conflict.
@@ -11,11 +11,11 @@ These Terms apply to everyone who uses FitBud. Two supplements add to them: the 
 
 ## 1. Who you are contracting with
 
-FitBud is operated by **M/s Oryvate**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]] ("**we**", "**us**", "**our**"). Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]]. FitBud is a product of Oryvate. Where these Terms or any document they refer to speak of "FitBud" doing, promising or being responsible for something, they mean M/s Oryvate; elsewhere "FitBud" means the FitBud app, website and service.
+FitBud is operated by **Shaik Firoz Basha**, an individual carrying on business as a sole proprietor under the name "FitBud", of 22-216, Subbaiahathota, Chilakaluripet, Andhra Pradesh 522616, India ("**we**", "**us**", "**our**"). Where these Terms or any document they refer to speak of "FitBud" doing, promising or being responsible for something, they mean Shaik Firoz Basha as the proprietor of FitBud; elsewhere "FitBud" means the FitBud app, website and service.
 
 You can reach us at **tech@thefitbud.com** for any matter, including legal notices and privacy requests.
 
-> **COUNSEL:** the firm is named Oryvate, not FitBud, because the founders intend the same firm to own and operate further products under separate brand names (brief §3). The partners are named here and in the Privacy Policy (§2, and one of them as Grievance Officer in §14), and nowhere else. Please confirm (a) this is sufficient identification of the counterparty for a consumer contract, (b) whether the firm's unregistered status must be disclosed, and (c) that the "FitBud means Oryvate where it acts" sentence is a sound way to keep the rest of the documents readable. Neither "FitBud" nor "Oryvate" is a registered trade mark; no ® symbol is used anywhere. If the partners incorporate a company, this clause and §18.3 both change.
+> **COUNSEL:** FitBud is a sole proprietorship: the proprietor and the business are one legal person, and the proprietor is personally liable for its obligations (brief §3). The proprietor is named here and in the Privacy Policy (§2, and as Grievance Officer in §14), and nowhere else. Please confirm (a) this is sufficient identification of the counterparty for a consumer contract, (b) that the "FitBud means the proprietor where it acts" sentence is a sound way to keep the rest of the documents readable, and (c) §17.2: the published address is in Andhra Pradesh while the proprietor carries on the business from Hyderabad, Telangana; Hyderabad courts are chosen on that basis. "FitBud" is used as an unregistered trade mark; no application has been filed, and no ® symbol is used anywhere. If the business is transferred to a company, this clause changes and §18.3 applies.
 
 ## 2. What FitBud is, and what it is not
 
@@ -179,7 +179,7 @@ We may change these Terms. If a change is material, we will tell you by email at
 
 **18.2 Order of precedence.** If they conflict: the Beta Terms first, then the role supplement that applies to you, then these Terms, then the other documents.
 
-**18.3 Assignment and reorganisation.** You may not transfer your rights under these Terms. We may transfer ours, including to any company incorporated by the partners to carry on the FitBud business, in which case that company becomes a party in place of the firm and assumes its obligations, and we will notify you by email. A change in the constitution of the firm, including the admission or retirement of a partner, does not affect these Terms. Your rights will not be reduced by any such transfer or change.
+**18.3 Assignment and reorganisation.** You may not transfer your rights under these Terms. We may transfer ours, including to a company or other entity that takes over the FitBud business, in which case it becomes a party in place of the proprietor and assumes the proprietor's obligations under these Terms, and we will notify you by email. Your rights will not be reduced by any such transfer.
 
 **18.4 Severability.** If a clause is unenforceable, the rest stands.
 

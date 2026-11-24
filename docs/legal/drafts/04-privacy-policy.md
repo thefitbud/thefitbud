@@ -4,7 +4,7 @@
 > Facts are drawn from draft 09 (`09-data-inventory-and-retention.md`), which cites the code. **Read 09 before approving this.**
 > On approval this becomes `docs/legal/privacy.md`, which BT3 publishes at `https://app.thefitbud.com/privacy`. Both app stores require that URL to be live before a build is accepted.
 
-**Effective date:** [[DATE]] · **Version:** 1.0-draft · **Last updated:** [[DATE]]
+**Effective date:** 1 December 2026 · **Version:** 1.0-draft · **Last updated:** 1 December 2026
 
 ---
 
@@ -25,7 +25,7 @@ This summary is for orientation only; the sections below govern.
 
 ## 2. Who we are
 
-FitBud is operated by **M/s Oryvate**, a partnership firm constituted under the Indian Partnership Act, 1932, with its principal place of business at [[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]] ("**we**", "**us**"). Its partners are [[PARTNER 1 — LEGAL NAME]] and [[PARTNER 2 — LEGAL NAME]]. FitBud is a product of Oryvate; where this policy says "FitBud" does something, it means M/s Oryvate.
+FitBud is operated by **Shaik Firoz Basha**, an individual carrying on business as a sole proprietor under the name "FitBud", of 22-216, Subbaiahathota, Chilakaluripet, Andhra Pradesh 522616, India ("**we**", "**us**"). Where this policy says "FitBud" does something, it means Shaik Firoz Basha as the proprietor of FitBud.
 
 For the purposes of the **Digital Personal Data Protection Act, 2023**, we are the **Data Fiduciary** for the personal data described here. Your trainer accesses your information as an authorised user of FitBud, bound by our Trainer Terms, and is separately responsible for any copy they keep outside FitBud.
 
@@ -228,16 +228,16 @@ If personal data in our care is lost, exposed or accessed by someone who should 
 
 If you are unhappy with how we have handled your personal data, write to:
 
-**[[GRIEVANCE OFFICER NAME — one of the two partners]]**
-Partner, M/s Oryvate
-[[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]
+**Shaik Firoz Basha**, Grievance Officer
+Proprietor, FitBud
+22-216, Subbaiahathota, Chilakaluripet, Andhra Pradesh 522616, India
 **tech@thefitbud.com**
 
 We will acknowledge your grievance within [[24 hours]] and resolve it as quickly as we can, and in any case within **one month** of receiving it. If we do not resolve it to your satisfaction, you may complain to the **Data Protection Board of India** once the 2023 Act allows it (from 13 May 2027), and you keep any other remedy the law gives you.
 
 > **COUNSEL:** one month is the SPDI Rules' outer limit (rule 5(9)) and is the binding one today. If FitBud is an intermediary, the 2021 Rules require acknowledgement within 24 hours and resolution within 15 days, which is tighter; we have assumed we will meet 24 hours anyway. From 13 May 2027 the DPDP Rules set their own period. See draft 13, P4 and P6.
 
-> **ACTION (founder):** a named person must be published here. "The team" is not sufficient.
+> **FACT:** the proprietor is the named Grievance Officer, as SPDI r.5(9) requires (draft 13 P3, P16).
 
 ## 15. Changes to this policy
 

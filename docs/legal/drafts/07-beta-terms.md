@@ -2,7 +2,7 @@
 
 > **DRAFT for counsel review — not for publication.** Prepared 2 Nov 2026.
 
-**Effective date:** [[DATE]] · **Version:** 1.0-draft
+**Effective date:** 1 December 2026 · **Version:** 1.0-draft
 
 FitBud is in closed beta. These terms add to, and where they conflict override, the Terms of Service and the role supplements. They stop applying when FitBud leaves closed beta and we tell you so.
 
@@ -18,7 +18,7 @@ FitBud is in closed beta. These terms add to, and where they conflict override, 
 
 ## 1A. Who operates the beta
 
-FitBud is operated during the beta by **M/s Oryvate**, a partnership firm, as identified in the Terms of Service §1. The partners intend to incorporate a company to carry on the business; if they do, the Terms of Service §18.3 transfers these agreements to it and we will tell you by email. Nothing about your use of FitBud changes because of it.
+FitBud is operated during the beta by **Shaik Firoz Basha** as the sole proprietor of FitBud, as identified in the Terms of Service §1. If the business is later transferred to a company, the Terms of Service §18.3 transfers these agreements to it and we will tell you by email. Nothing about your use of FitBud changes because of it.
 
 ## 2. Free of charge
 

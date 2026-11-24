@@ -3,7 +3,7 @@
 > **DRAFT for counsel review — not for publication.** Prepared 2 Nov 2026.
 > This is the document that matters most if somebody gets hurt. It is deliberately short, plain and prominent. Please do not let a markup make it longer than a person will read.
 
-**Effective date:** [[DATE]] · **Version:** 1.0-draft
+**Effective date:** 1 December 2026 · **Version:** 1.0-draft
 
 This disclaimer forms part of the FitBud Terms of Service. It must be shown to every client before they accept an invitation, and be available in the app at any time.
 

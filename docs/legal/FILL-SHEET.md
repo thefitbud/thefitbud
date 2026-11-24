@@ -1,22 +1,19 @@
 # Fill sheet · every placeholder in the drafts
 
-Generated 2 Nov 2026, index regenerated 3 Nov 2026 from `docs/legal/drafts/`. Regenerate after any edit.
+Generated 2 Nov 2026, index regenerated 24 Nov 2026 from `docs/legal/drafts/`. Regenerate after any edit.
 
-Fill the **blocking set** first — it is five values, and it is all that stands between the drafts and a counsel review. Everything else can be answered during or after that review.
+## Blocking set — filled 24 Nov 2026
 
-## Blocking set (fill these today)
-
-| Value | What to put |
+| Value | Filled with |
 |---|---|
-| `[[PARTNER 1 — LEGAL NAME]]` | Partner's full legal name as it appears on PAN |
-| `[[PARTNER 2 — LEGAL NAME]]` | Second partner's full legal name |
-| `[[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]` | The one operating address. Use a business address, not a home address — it is published in the Privacy Policy and may be published on a store listing |
-| `[[GRIEVANCE OFFICER NAME — one of the two partners]]` | Whichever partner will actually read and answer the email |
-| `[[DATE]]` | Effective date. Use the date the pages go live, not today |
+| Contracting party | Shaik Firoz Basha, sole proprietor of FitBud (01 §1, 04 §2, 07 §1A) |
+| Address | 22-216, Subbaiahathota, Chilakaluripet, Andhra Pradesh 522616, India (01 §1, 04 §2, 04 §14) |
+| Grievance Officer | Shaik Firoz Basha (04 §14, 10 §1) |
+| Effective date | 1 December 2026 (01–08 headers) |
 
-A single search and replace across `docs/legal/drafts/` handles all five.
+The remaining placeholders below can be answered during or after counsel review.
 
-## Needs a decision from the founders
+## Needs a decision from the owner
 
 | Placeholder | Where | Note |
 |---|---|---|
@@ -39,42 +36,20 @@ A single search and replace across `docs/legal/drafts/` handles all five.
 
 ### `00-counsel-brief.md`
 
-- line 5: `[[PARTNER 1 — LEGAL NAME]]`
-- line 5: `[[PARTNER 2 — LEGAL NAME]]`
-- line 44: `[[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]`
-- line 44: `[[PARTNER 1 — LEGAL NAME]]`
-- line 44: `[[PARTNER 2 — LEGAL NAME]]`
-- line 152: `[[PLACEHOLDER]]`
-- line 188: `[[CONFIRM]]`
-- line 190: `[[CAP]]`
+- line 157: `[[PLACEHOLDER]]`
+- line 193: `[[CONFIRM]]`
+- line 195: `[[CAP]]`
 
 ### `01-terms-of-service.md`
 
 - line 3: `[[DOUBLE BRACKETS]]`
-- line 5: `[[DATE]]`
-- line 14: `[[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]`
-- line 14: `[[PARTNER 1 — LEGAL NAME]]`
-- line 14: `[[PARTNER 2 — LEGAL NAME]]`
 - line 126: `[[5,000]]`
 - line 156: `[[NOTICE PERIOD — suggest 30 days]]`
 - line 160: `[[30]]`
 - line 172: `[[30]]`
 
-### `02-trainer-terms.md`
-
-- line 5: `[[DATE]]`
-
-### `03-trainee-terms.md`
-
-- line 6: `[[DATE]]`
-
 ### `04-privacy-policy.md`
 
-- line 7: `[[DATE]]`
-- line 7: `[[DATE]]`
-- line 28: `[[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]`
-- line 28: `[[PARTNER 1 — LEGAL NAME]]`
-- line 28: `[[PARTNER 2 — LEGAL NAME]]`
 - line 161: `[[DATA LOCATION — to be completed from the Cloudflare configuration before publication: the primary region of the production database and the location of the media bucket.]]`
 - line 167: `[[RETENTION — insert the approved schedule from draft 09 §5, in plain language.]]`
 - line 170: `[[30]]`
@@ -83,27 +58,15 @@ A single search and replace across `docs/legal/drafts/` handles all five.
 - line 206: `[[CONFIRM: statutory period under the DPDP Rules]]`
 - line 215: `[[CONFIRM]]`
 - line 215: `[[30]]`
-- line 231: `[[GRIEVANCE OFFICER NAME — one of the two partners]]`
-- line 233: `[[BUSINESS ADDRESS, HYDERABAD, TELANGANA, PIN]]`
 - line 236: `[[24 hours]]`
 - line 248: `[[BUSINESS ADDRESS]]`
 
 ### `05-health-disclaimer.md`
 
-- line 6: `[[DATE]]`
 - line 43: `[[AGE]]`
-
-### `06-acceptable-use.md`
-
-- line 5: `[[DATE]]`
-
-### `07-beta-terms.md`
-
-- line 5: `[[DATE]]`
 
 ### `08-credits-and-licences.md`
 
-- line 7: `[[DATE]]`
 - line 59: `[[TO BE COMPLETED: the open-source licences of the fonts (including Noto Sans Devanagari), icon set (Lucide), and any other third-party component whose licence requires a notice. Generate this from the dependency manifests rather than by hand.]]`
 
 ### `09-data-inventory-and-retention.md`
@@ -121,8 +84,7 @@ A single search and replace across `docs/legal/drafts/` handles all five.
 
 ### `10-rights-and-grievance-procedure.md`
 
-- line 12: `[[GRIEVANCE OFFICER NAME — one of the two partners]]`
-- line 13: `[[the other partner]]`
+- line 13: `[[NAME — someone trusted, optional]]`
 - line 40: `[[CONFIRM: statutory period under the DPDP Rules]]`
 - line 41: `[[CONFIRM]]`
 - line 42: `[[CONFIRM]]`
@@ -130,7 +92,6 @@ A single search and replace across `docs/legal/drafts/` handles all five.
 - line 50: `[[CONFIRM]]`
 - line 78: `[[SCRIPT: a documented deletion runbook or script must exist; doing this by hand against production invites a half-deleted account.]]`
 - line 97: `[[There is no field for this in the product today — it must be stored in the request log until one exists. Raise as a product task.]]`
-- line 126: `[[GRIEVANCE OFFICER NAME — one of the two partners]]`
 - line 137: `[[If in doubt, take advice before responding — the cost of a wrongful disclosure of health data is much higher than the cost of a delay.]]`
 - line 156: `[[DATE]]`
 - line 156: `[[REFERENCE]]`
