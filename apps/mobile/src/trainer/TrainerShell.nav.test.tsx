@@ -8,6 +8,7 @@ const EXC = "11111111-1111-4111-8111-111111111111";
 
 const api = {
   listClients: vi.fn(),
+  getClientWorkspace: vi.fn(),
   listRelationships: vi.fn(),
   getCheckinReviewContext: vi.fn(),
 };
@@ -140,6 +141,10 @@ beforeEach(() => {
       { relationshipId: REL, traineeDisplayName: "Kavya Nair", status: "active" },
     ],
   });
+  api.getClientWorkspace.mockReset();
+  api.getClientWorkspace.mockResolvedValue({
+    header: { traineeDisplayName: "Kavya Nair", onboardingStatus: "coaching_ready" },
+  });
   api.getCheckinReviewContext.mockReset();
   api.getCheckinReviewContext.mockResolvedValue({
     checkin: { coachingRelationshipId: REL },
@@ -179,12 +184,12 @@ describe("TrainerShell back navigation", () => {
     render(<TrainerShell />);
     expect(screen.getByTestId("checkin-screen").getAttribute("data-id")).toBe(CHECKIN);
     expect(clearPendingNotificationLink).toHaveBeenCalled();
-    api.listClients.mockClear();
+    api.getClientWorkspace.mockClear();
     click("back");
     await waitFor(() =>
       expect(screen.getByTestId("client-screen").getAttribute("data-rel")).toBe(REL),
     );
-    expect(api.listClients).toHaveBeenCalled();
+    expect(api.getClientWorkspace).toHaveBeenCalledWith(REL);
     expect(screen.getByTestId("client-screen").getAttribute("data-name")).toBe("Kavya Nair");
   });
 
