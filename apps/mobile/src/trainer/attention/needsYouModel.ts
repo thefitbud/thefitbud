@@ -10,6 +10,7 @@ import type {
 } from "@fitbud/contracts";
 import {
   formatCivilDate,
+  formatClockTime,
   formatPersonName,
   labelFor,
 } from "@fitbud/core";
@@ -17,6 +18,7 @@ import {
   attentionIssueLine,
   buildClientAttentionCards,
   formatAttentionAge,
+  latestAcknowledgedAt,
   oldestItemAgeMinutes,
   type ClientAttentionCard,
 } from "../attentionCards";
@@ -92,14 +94,91 @@ export type NeedsYouScreenModel = {
   allCaughtUp: boolean;
 };
 
+/** D-W14-29: the acknowledged section and its rows. */
+export const NOTED_SECTION_TITLE = "Noted, still open";
+const NOTED_CHIP = "Noted";
+
+/** "Noted · 9:52 am", or "Noted" when the server gave no time. */
+export function notedChipLabel(
+  acknowledgedAt: string | null,
+  timeZone?: string,
+): string {
+  if (!acknowledgedAt) return NOTED_CHIP;
+  try {
+    const clock = formatClockTime(acknowledgedAt, timeZone ?? "Asia/Kolkata");
+    return clock ? `${NOTED_CHIP} · ${clock}` : NOTED_CHIP;
+  } catch {
+    return NOTED_CHIP;
+  }
+}
+
+/** D-W14-25: rows a section shows before "See all". */
+export const SECTION_PREVIEW_ROWS = 3;
+
+/** What each section's count is called in "See all 5 missed". */
+const SEE_ALL_NOUN: Record<NeedsYouSectionId, string> = {
+  missed: "missed",
+  asked: "asked",
+  checkins: "check-ins",
+  off: "off plan",
+  reviewed: "noted",
+};
+
+export function seeAllLabel(section: NeedsYouSection): string | null {
+  if (section.cards.length <= SECTION_PREVIEW_ROWS) return null;
+  return `See all ${section.cards.length} ${SEE_ALL_NOUN[section.id]}`;
+}
+
+/** Rows drawn on Attention for a section: none when collapsed, else the first 3. */
+export function visibleCards(
+  section: NeedsYouSection,
+  collapsed: boolean,
+): NeedsYouCardModel[] {
+  return collapsed ? [] : section.cards.slice(0, SECTION_PREVIEW_ROWS);
+}
+
+/** Index of the section a tile jumps to, or null (zero tile: muted, not pressable). */
+export function jumpSectionIndex(
+  model: NeedsYouScreenModel,
+  id: NeedsYouSectionId,
+): number | null {
+  const index = model.sections.findIndex((s) => s.id === id);
+  return index < 0 ? null : index;
+}
+
+/** The pills of the sticky row: the four tiles, plus Noted when that section exists. */
+export type NeedsYouPill = {
+  id: NeedsYouSectionId;
+  label: string;
+  count: number;
+};
+
+export function pillsFor(model: NeedsYouScreenModel): NeedsYouPill[] {
+  const pills: NeedsYouPill[] = model.tiles.map((t) => ({
+    id: t.id,
+    label: t.label,
+    count: t.count,
+  }));
+  const noted = model.sections.find((s) => s.id === "reviewed");
+  if (noted) pills.push({ id: "reviewed", label: "Noted", count: noted.count });
+  return pills;
+}
+
+const OPEN_STATUSES: ReadonlySet<AttentionGroupItem["status"]> = new Set([
+  "detected",
+  "active",
+]);
+const NOTED_STATUSES: ReadonlySet<AttentionGroupItem["status"]> = new Set([
+  "acknowledged",
+]);
+
 function projectGroup(
   group: AttentionGroup,
   predicate: (item: AttentionGroupItem) => boolean,
+  statuses: ReadonlySet<AttentionGroupItem["status"]> = OPEN_STATUSES,
 ): AttentionGroup | null {
   const items = group.items.filter(
-    (item) =>
-      (item.status === "detected" || item.status === "active") &&
-      predicate(item),
+    (item) => statuses.has(item.status) && predicate(item),
   );
   if (items.length === 0) return null;
   const mostSevere = items.some((item) => item.severity === "critical")
@@ -131,9 +210,10 @@ function exceptionCards(
   predicate: (item: AttentionGroupItem) => boolean,
   chip: (card: ClientAttentionCard) => NeedsYouCardModel["chip"],
   action: "Review" | null = "Review",
+  statuses: ReadonlySet<AttentionGroupItem["status"]> = OPEN_STATUSES,
 ): NeedsYouCardModel[] {
   const projected = groups
-    .map((group) => projectGroup(group, predicate))
+    .map((group) => projectGroup(group, predicate, statuses))
     .filter((group): group is AttentionGroup => group != null);
   return buildClientAttentionCards(projected).map((card) => {
     const items =
@@ -144,7 +224,8 @@ function exceptionCards(
       relationshipId: card.relationshipId,
       name: formatPersonName(card.traineeDisplayName),
       issue: attentionIssueLine(items),
-      age: formatAttentionAge(oldestItemAgeMinutes(items)),
+      // The frames show a bare age ("5 d"); the section already says it is open.
+      age: formatAttentionAge(oldestItemAgeMinutes(items)).replace(/^since\s+/, ""),
       chip: chip(card),
       action,
       source: { kind: "exception", card },
@@ -344,6 +425,8 @@ export function buildNeedsYouScreenModel(input: {
   dateLabel: string;
   offlineClock?: string | null;
   nowMs?: number;
+  /** Zone for the "Noted · 9:52 am" time (the trainer's device zone). */
+  timeZone?: string;
 }): NeedsYouScreenModel {
   const nowMs = input.nowMs ?? Date.now();
   const missed = exceptionCards(
@@ -361,13 +444,24 @@ export function buildNeedsYouScreenModel(input: {
   const reviewed = exceptionCards(
     input.reviewed,
     () => true,
-    () => ({ kind: "reviewed", label: "Reviewed, still open" }),
+    () => ({ kind: "reviewed", label: NOTED_CHIP }),
     null,
-  ).map((card) => ({
-    ...card,
-    // Reviewed rows use a short age ("2 d"), not "since N d".
-    age: card.age.replace(/^since\s+/, ""),
-  }));
+    NOTED_STATUSES,
+  ).map((card) => {
+    const group = input.reviewed.find(
+      (g) => g.relationshipId === card.relationshipId,
+    );
+    const at = latestAcknowledgedAt(group?.items ?? []);
+    return {
+      ...card,
+      // Noted rows use a short age ("2 d"), not "since N d".
+      age: card.age.replace(/^since\s+/, ""),
+      chip: {
+        kind: "reviewed" as const,
+        label: notedChipLabel(at, input.timeZone),
+      },
+    };
+  });
 
   const tiles: NeedsYouTile[] = [
     {
@@ -378,7 +472,7 @@ export function buildNeedsYouScreenModel(input: {
     },
     {
       id: "asked",
-      label: "Asked you",
+      label: "Asked",
       count: asked.length,
       sub: askedSub(input.asks),
     },
@@ -436,7 +530,7 @@ export function buildNeedsYouScreenModel(input: {
   if (reviewed.length > 0) {
     sections.push({
       id: "reviewed",
-      title: "Reviewed, still open",
+      title: NOTED_SECTION_TITLE,
       count: reviewed.length,
       hint: "Stays until resolved",
       cards: reviewed,

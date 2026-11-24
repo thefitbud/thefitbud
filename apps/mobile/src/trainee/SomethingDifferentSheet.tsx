@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import { Modal, Pressable, View } from "react-native";
 import {
   ChevronRight,
   MessageCircle,
@@ -24,8 +24,13 @@ import { plannedRowsFromAssignment, type PlannedRow } from "../lib/plannedMealIt
 import { reportError } from "../lib/reportError";
 import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { AteOutForm, type CoachDeviateSave } from "./food/AteOutForm";
-import { FoodNavHeader } from "./food/FoodNavHeader";
+import {
+  AteOutForm,
+  MealSubScreen,
+  OfflineSaveBanner,
+  SubScreenSaveButton,
+  type CoachDeviateSave,
+} from "./food/AteOutForm";
 import { amountWithUnit, formatAmount, unitNoun } from "./food/logLines";
 import { announceMealSaved } from "./food/mealSavedNotice";
 import { deviateMealAssignment } from "./mealActions";
@@ -120,22 +125,6 @@ function SomethingDifferentSheetBody({
   const sync = useSyncEngine();
   const { me } = useAuth();
   const timeZone = me?.timezone ?? "UTC";
-  const { height: windowHeight } = useWindowDimensions();
-  // In the sheet, BottomSheet hosts children in a flexGrow:0 ScrollView, so a
-  // flex:1 sub-screen collapses to 0. Give it a real height there (Z11b-5).
-  // Use flexGrow/flexShrink instead of `flex: 0`: react-native-web maps
-  // `flex: 0` to CSS `0 1 0%`, which overrides height and collapses the view.
-  const subScreenStyle =
-    variant === "sheet"
-      ? [
-          styles.subScreen,
-          {
-            flexGrow: 0,
-            flexShrink: 0,
-            height: Math.min(520, Math.max(320, windowHeight * 0.75)),
-          },
-        ]
-      : styles.subScreen;
   const isCoach = authorMode === "coach";
   const coachShort = coachName.split(/\s+/)[0] ?? coachName;
   const clientShort = (clientName ?? "Client").split(/\s+/)[0] ?? "Client";
@@ -316,36 +305,58 @@ function SomethingDifferentSheetBody({
   );
 
   const ateOutBody = (
-    <View testID="something-different-subscreen" style={subScreenStyle}>
-      <AteOutForm
-        assignment={assignment}
-        relationshipId={relationshipId}
-        coachName={coachName}
-        timeZone={timeZone}
-        onCancel={backToMenu}
-        onSaved={onDone}
-        authorMode={authorMode}
-        clientName={clientName}
-        onCoachSave={onCoachSave}
-      />
-    </View>
+    <AteOutForm
+      layout="screen"
+      inModal={variant === "sheet"}
+      assignment={assignment}
+      relationshipId={relationshipId}
+      coachName={coachName}
+      timeZone={timeZone}
+      onCancel={backToMenu}
+      onSaved={onDone}
+      authorMode={authorMode}
+      clientName={clientName}
+      onCoachSave={onCoachSave}
+    />
   );
 
   const portionBody = (
-    <View testID="something-different-subscreen" style={subScreenStyle}>
-      <FoodNavHeader
-        title="Changed the portion"
-        subtitle={`${mealName} · ${formatClockTime(assignment.windowStartsAt, timeZone)}`}
-        onLeft={backToMenu}
-        rightLabel="Save"
-        onRight={() => void savePortion()}
-        busy={saving}
-      />
-      <ScrollView
-        style={styles.flexFill}
-        contentContainerStyle={styles.portionContent}
-        keyboardShouldPersistTaps="handled"
-      >
+    <MealSubScreen
+      testID="something-different-subscreen"
+      title="Changed the portion"
+      subtitle={`${mealName} \u00b7 ${formatClockTime(assignment.windowStartsAt, timeZone)}`}
+      onBack={backToMenu}
+      onSave={() => void savePortion()}
+      saving={saving}
+      inModal={variant === "sheet"}
+      banner={isCoach ? null : <OfflineSaveBanner />}
+      footer={
+        <>
+          <View style={styles.totalRow}>
+            <Text variant="subhead">Total</Text>
+            <View style={styles.totalRight}>
+              <Text variant="numberMd">
+                {portionTotal.unknown ? "at least " : ""}
+                {formatNumber(portionTotal.kcal)} kcal
+              </Text>
+              {diff != null && diff !== 0 ? (
+                <View style={[styles.diffTag, diff > 0 ? styles.diffOver : styles.diffUnder]}>
+                  <Text variant="caption" tone={diff > 0 ? "warnInk" : "done"} style={styles.strong}>
+                    {diff > 0 ? "+" : "\u2212"}
+                    {formatNumber(Math.abs(diff))} vs plan
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          </View>
+          <SubScreenSaveButton
+            label="Save portion"
+            onPress={() => void savePortion()}
+            saving={saving}
+          />
+        </>
+      }
+    >
         <Text variant="subhead" style={styles.portionIntro}>
           Change how much you had. Steps are ½.
         </Text>
@@ -419,57 +430,33 @@ function SomethingDifferentSheetBody({
           </Text>
         </View>
         {error ? <ErrorBanner message={error} /> : null}
-      </ScrollView>
-      <View style={styles.footer}>
-        <View style={styles.totalRow}>
-          <Text variant="subhead">Total</Text>
-          <View style={styles.totalRight}>
-            <Text variant="numberMd">
-              {portionTotal.unknown ? "at least " : ""}
-              {formatNumber(portionTotal.kcal)} kcal
-            </Text>
-            {diff != null && diff !== 0 ? (
-              <View style={[styles.diffTag, diff > 0 ? styles.diffOver : styles.diffUnder]}>
-                <Text variant="caption" tone={diff > 0 ? "warnInk" : "done"} style={styles.strong}>
-                  {diff > 0 ? "+" : "−"}
-                  {formatNumber(Math.abs(diff))} vs plan
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityState={{ disabled: saving, busy: saving }}
-          disabled={saving}
-          onPress={() => void savePortion()}
-          style={[styles.primary, saving ? styles.busy : null]}
-        >
-          <Text variant="bodyStrong" tone="onBrand">
-            Save portion
-          </Text>
-        </Pressable>
-      </View>
-    </View>
+    </MealSubScreen>
   );
 
-  const body = screen === "ate_out" ? ateOutBody : screen === "portion" ? portionBody : menuBody;
+  const subScreen = screen === "ate_out" ? ateOutBody : screen === "portion" ? portionBody : null;
 
   if (variant === "sheet") {
-    return <View style={styles.sheetBody}>{body}</View>;
-  }
-
-  if (screen !== "menu") {
+    // The portion and ate-out screens are full screens, not content squeezed
+    // into the sheet: they open over it and have their own scroll (Z14-13).
     return (
-      <Screen v3 title="" showHeader={false} chrome="app">
-        {body}
-      </Screen>
+      <View style={styles.sheetBody}>
+        {menuBody}
+        <Modal
+          visible={subScreen != null}
+          animationType="slide"
+          onRequestClose={backToMenu}
+        >
+          {subScreen}
+        </Modal>
+      </View>
     );
   }
 
+  if (subScreen) return subScreen;
+
   return (
     <Screen v3 title="What did you have instead?" subtitle={mealSubtitle}>
-      {body}
+      {menuBody}
       <PrimaryButton label="Cancel" variant="ghost" onPress={onCancel} />
     </Screen>
   );
