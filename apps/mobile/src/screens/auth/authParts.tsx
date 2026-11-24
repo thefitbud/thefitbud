@@ -14,6 +14,7 @@ import { ChevronLeft, CircleAlert, Clock, Eye, EyeOff } from "lucide-react-nativ
 import { defaultTextStyle } from "@fitbud/ui-mobile";
 import { BrandMark } from "../../components/BrandMark";
 import { Button } from "../../components/Button";
+import { inputSelectionProps } from "../../components/Field";
 import { Text } from "../../components/Text";
 import {
   ThemeScope,
@@ -246,8 +247,7 @@ export function PasswordInput({ label, invalid = false, onFocus, onBlur, ...rest
       >
         <TextInput
           placeholderTextColor={theme.colors.ink3}
-          selectionColor={theme.colors.brand}
-          cursorColor={theme.colors.brand}
+          {...inputSelectionProps(theme.colors)}
           keyboardAppearance={theme.scheme}
           style={styles.input}
           accessibilityLabel={label}

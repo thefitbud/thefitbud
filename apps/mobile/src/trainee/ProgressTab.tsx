@@ -11,7 +11,6 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 import {
-  Bell,
   CheckCircle2,
   ChevronRight,
   MessageCircle,
@@ -35,6 +34,8 @@ import {
   useTheme,
 } from "../providers/ThemeProvider";
 import { useAuth } from "../auth/AuthProvider";
+import { inputSelectionProps } from "../components/Field";
+import { BellButton } from "../components/BellButton";
 import { BottomSheet } from "../components/BottomSheet";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { PrimaryButton } from "../components/PrimaryButton";
@@ -200,6 +201,37 @@ function monthLabel(civilDate: string): string {
   return new Intl.DateTimeFormat("en-IN", { month: "short" }).format(d);
 }
 
+const CHART_PAD_LEFT = 8;
+const CHART_LABEL_CHAR = 6.4;
+const CHART_LABEL_GAP = 10;
+
+/** "77", "76.5": one decimal at most, no trailing ".0" (never rounds 76.5 to 77). */
+export function formatChartTick(value: number): string {
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+/**
+ * The plot's horizontal box inside a measured container. The right gutter is
+ * sized from the widest y label so the labels sit inside the SVG at any
+ * width (320 to 430 pt) and are never clipped.
+ */
+export function weightChartBox(width: number, labels: string[]) {
+  const widest = Math.max(1, ...labels.map((l) => l.length));
+  const padRight = Math.ceil(widest * CHART_LABEL_CHAR) + CHART_LABEL_GAP;
+  const padLeft = CHART_PAD_LEFT;
+  const labelX = width - 2;
+  return {
+    padLeft,
+    padRight,
+    plotWidth: Math.max(1, width - padLeft - padRight),
+    labelX,
+    /** Left edge of the widest label's text. */
+    labelLeft: labelX - Math.ceil(widest * CHART_LABEL_CHAR),
+    plotRight: width - padRight,
+  };
+}
+
 function WeightTrendChart({
   series,
   coachName,
@@ -214,10 +246,11 @@ function WeightTrendChart({
   const theme = useTheme();
   const styles = useStyles();
   const [pillWidth, setPillWidth] = useState(0);
-  const width = 329;
+  const [measured, setMeasured] = useState(0);
+  // Until the first layout pass, draw at a typical phone width; it is replaced
+  // by the measured width straight away.
+  const width = measured > 0 ? measured : 329;
   const height = 150;
-  const padLeft = 8;
-  const padRight = 32;
   const chartBottom = 126;
   const chartTop = 12;
 
@@ -233,7 +266,9 @@ function WeightTrendChart({
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
-  const plotWidth = width - padLeft - padRight;
+  const tickValues = [max, (max + min) / 2, min];
+  const box = weightChartBox(width, tickValues.map(formatChartTick));
+  const { padLeft, plotWidth } = box;
 
   const points = series.map((p, i) => {
     const x = padLeft + (i / (series.length - 1)) * plotWidth;
@@ -255,7 +290,7 @@ function WeightTrendChart({
   const markerIndex = startIndex >= 0 ? startIndex : 0;
   const marker = points[markerIndex]!;
 
-  const yTicks = [max, (max + min) / 2, min].map((v) => ({
+  const yTicks = tickValues.map((v) => ({
     value: v,
     y: chartBottom - ((v - min) / range) * (chartBottom - chartTop),
   }));
@@ -274,7 +309,10 @@ function WeightTrendChart({
   const markerLeft = clampMarkerLeft(marker.x, pillWidth, width);
 
   return (
-    <View style={styles.chartWrap}>
+    <View
+      style={styles.chartWrap}
+      onLayout={(e) => setMeasured(Math.floor(e.nativeEvent.layout.width))}
+    >
       <View
         style={[styles.chartMarker, { left: markerLeft }]}
         onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
@@ -288,15 +326,15 @@ function WeightTrendChart({
       <Svg width={width} height={height} accessibilityLabel="Weight trend">
         <Defs>
           <LinearGradient id="weightArea" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={theme.colors.coachInk} stopOpacity={0.16} />
-            <Stop offset="1" stopColor={theme.colors.coachInk} stopOpacity={0} />
+            <Stop offset="0" stopColor={theme.colors.brandTint2} stopOpacity={0.9} />
+            <Stop offset="1" stopColor={theme.colors.brandTint} stopOpacity={0} />
           </LinearGradient>
         </Defs>
         {yTicks.map((tick, i) => (
           <Line
             key={`grid-${i}`}
             x1={padLeft}
-            x2={width - padRight}
+            x2={box.plotRight}
             y1={tick.y}
             y2={tick.y}
             stroke={theme.colors.fill2}
@@ -306,14 +344,14 @@ function WeightTrendChart({
         {yTicks.map((tick, i) => (
           <SvgText
             key={`lbl-${i}`}
-            x={width - 4}
+            x={box.labelX}
             y={tick.y + 4}
             fontSize={11}
             fill={theme.colors.ink3}
             fontWeight="500"
             textAnchor="end"
           >
-            {Math.round(tick.value)}
+            {formatChartTick(tick.value)}
           </SvgText>
         ))}
         <Path d={areaPath} fill="url(#weightArea)" />
@@ -329,7 +367,7 @@ function WeightTrendChart({
         <Polyline
           points={points.map((p) => `${p.x},${p.y}`).join(" ")}
           fill="none"
-          stroke={theme.colors.coachInk}
+          stroke={theme.colors.brand}
           strokeWidth={2.5}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -340,8 +378,8 @@ function WeightTrendChart({
             cx={p.x}
             cy={p.y}
             r={i === points.length - 1 ? 5 : 3}
-            fill={i === points.length - 1 ? theme.colors.coachInk : theme.colors.card}
-            stroke={theme.colors.coachInk}
+            fill={i === points.length - 1 ? theme.colors.brand : theme.colors.card}
+            stroke={theme.colors.brand}
             strokeWidth={i === points.length - 1 ? 2.5 : 1.5}
             opacity={i === points.length - 1 ? 1 : 0.55}
           />
@@ -709,15 +747,10 @@ function ProgressTabInner({
           Progress
         </Text>
         {onOpenOverlay ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
+          <BellButton
+            unread={unreadNotifications}
             onPress={() => onOpenOverlay({ screen: "notifications" })}
-            style={styles.iconbtn}
-          >
-            <Bell size={22} color={theme.colors.ink2} strokeWidth={1.75} />
-            {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
-          </Pressable>
+          />
         ) : null}
       </View>
 
@@ -955,6 +988,7 @@ function ProgressTabInner({
             accessibilityLabel={`${logTitle}, ${logUnit}`}
             placeholder="0"
             placeholderTextColor={theme.colors.ink4}
+            {...inputSelectionProps(theme.colors)}
             style={styles.keypadInput}
           />
           <Text variant="headline" tone="ink3">
@@ -1024,22 +1058,6 @@ const useStyles = createThemedStyles((t) => ({
     fontWeight: "700",
     letterSpacing: -0.66,
     lineHeight: 36,
-  },
-  iconbtn: {
-    alignItems: "center",
-    height: 44,
-    justifyContent: "center",
-    position: "relative",
-    width: 44,
-  },
-  unreadDot: {
-    backgroundColor: t.colors.coachInk,
-    borderRadius: 5,
-    height: 9,
-    position: "absolute",
-    right: 11,
-    top: 10,
-    width: 9,
   },
   cardPad: {
     backgroundColor: t.colors.card,
