@@ -6,6 +6,8 @@
  * the readable name is fixed text so it never depends on the runtime's ICU.
  */
 
+import { EXTRA_ZONES } from "./ianaZones";
+
 export type TimeZoneRegion =
   | "Asia"
   | "Europe"
@@ -130,7 +132,7 @@ const ROWS: Array<[string, string, string, string, string, TimeZoneRegion]> = [
   ["UTC", "UTC", "Universal", "Coordinated Universal Time", "UTC,GMT,Zulu", "Other"],
 ];
 
-export const TIME_ZONES: readonly TimeZoneEntry[] = ROWS.map(
+const CURATED: TimeZoneEntry[] = ROWS.map(
   ([id, city, country, name, aliases, region]) => ({
     id,
     city,
@@ -140,6 +142,29 @@ export const TIME_ZONES: readonly TimeZoneEntry[] = ROWS.map(
     region,
   }),
 );
+
+/** "America/Argentina/Ushuaia" -> "Ushuaia", "Port-au-Prince" kept as is. */
+function cityFromId(id: string): string {
+  return (id.split("/").pop() ?? id).replace(/_/g, " ");
+}
+
+/**
+ * Every canonical IANA zone: the curated names first, then the rest of the
+ * bundled list with a city from the id (D-W14-21: any IANA zone can be picked).
+ */
+export const TIME_ZONES: readonly TimeZoneEntry[] = [
+  ...CURATED,
+  ...EXTRA_ZONES.filter(([id]) => !CURATED.some((zone) => zone.id === id)).map(
+    ([id, name, region]): TimeZoneEntry => ({
+      id,
+      city: cityFromId(id),
+      country: "",
+      name,
+      aliases: [],
+      region,
+    }),
+  ),
+];
 
 const REGION_ORDER: TimeZoneRegion[] = [
   "Asia",
@@ -249,7 +274,7 @@ function norm(text: string): string {
     .trim();
 }
 
-/** Search by city, country, readable name or abbreviation ("IST", "India"). */
+/** Search by city, country, readable name, abbreviation or raw IANA id ("IST", "India"). */
 export function searchTimeZones(query: string): TimeZoneEntry[] {
   const q = norm(query);
   if (!q) return [...TIME_ZONES];
@@ -260,7 +285,14 @@ export function searchTimeZones(query: string): TimeZoneEntry[] {
       exact.push(zone);
       continue;
     }
-    const haystack = [zone.city, zone.country, zone.name, ...zone.aliases].map(norm);
+    const haystack = [
+      zone.city,
+      zone.country,
+      zone.name,
+      zone.id,
+      zone.id.replace(/[_/]/g, " "),
+      ...zone.aliases,
+    ].map(norm);
     if (haystack.some((text) => text.includes(q))) rest.push(zone);
   }
   return [...exact, ...rest];

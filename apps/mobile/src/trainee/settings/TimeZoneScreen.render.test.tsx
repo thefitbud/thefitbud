@@ -51,8 +51,30 @@ describe("TimeZoneScreen", () => {
     const { onPick, onBack } = renderList();
     fireEvent.click(screen.getByRole("button", { name: /^Dubai,/ }));
     expect(onPick).toHaveBeenCalledWith("Asia/Dubai");
-    expect(screen.getByText("Time zone set to Dubai · UTC+4:00")).toBeTruthy();
+    expect(await screen.findByText("Time zone set to Dubai · UTC+4:00")).toBeTruthy();
     await vi.waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
+  });
+
+  it("a zone outside the curated cities can be found and saved", () => {
+    const { onPick } = renderList();
+    search("Ushuaia");
+    fireEvent.click(screen.getByRole("button", { name: /^Ushuaia,/ }));
+    expect(onPick).toHaveBeenCalledWith("America/Argentina/Ushuaia");
+  });
+
+  it("finds a zone by its raw IANA id", () => {
+    const { onPick } = renderList();
+    search("Pacific/Chatham");
+    fireEvent.click(screen.getByRole("button", { name: /^Chatham,/ }));
+    expect(onPick).toHaveBeenCalledWith("Pacific/Chatham");
+  });
+
+  it("shows no success toast and returns when the save fails", async () => {
+    const onPick = vi.fn().mockResolvedValue(false);
+    const { onBack } = renderList(onPick);
+    fireEvent.click(screen.getByRole("button", { name: /^Dubai,/ }));
+    await vi.waitFor(() => expect(onBack).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Time zone set to/)).toBeNull();
   });
 
   it("any zone can be picked, not only the phone's", () => {

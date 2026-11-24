@@ -101,11 +101,12 @@ export function AccountScreen({
     void load();
   }, [load]);
 
-  async function saveZone(next: string) {
+  async function saveZone(next: string): Promise<boolean> {
     const previous = zone;
     setZone(next);
     try {
       await api.updateNotificationPreferences({ traineeTimezone: next });
+      return true;
     } catch (err) {
       reportError("AccountScreen.saveZone", err);
       setZone(previous);
@@ -114,6 +115,7 @@ export function AccountScreen({
           fallback: "Couldn't save your time zone. Try again.",
         }),
       );
+      return false;
     }
   }
 
@@ -121,9 +123,7 @@ export function AccountScreen({
     return (
       <TimeZoneScreen
         current={zone}
-        onPick={(next) => {
-          void saveZone(next);
-        }}
+        onPick={saveZone}
         onBack={() => setZoneOpen(false)}
       />
     );

@@ -206,7 +206,8 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     // The shell's new `loaded` state reaches the still-open overlay: the
     // eyebrow carries the plan's own title, which only a loaded plan has.
     await waitFor(() => {
-      expect(screen.getByText("Strength block · from Rahul")).toBeTruthy();
+      expect(screen.getByText("FROM RAHUL")).toBeTruthy();
+      expect(screen.getByText("Strength block")).toBeTruthy();
     });
     expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
   });
@@ -218,7 +219,8 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     await openMealPlan();
 
     await waitFor(() => {
-      expect(screen.getByText("Strength block · from Rahul")).toBeTruthy();
+      expect(screen.getByText("FROM RAHUL")).toBeTruthy();
+      expect(screen.getByText("Strength block")).toBeTruthy();
     });
     expect(screen.queryByLabelText("Loading meal plan")).toBeNull();
     expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();

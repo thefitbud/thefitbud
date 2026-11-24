@@ -44,6 +44,27 @@ describe("timeZones", () => {
     expect(searchTimeZones("")).toHaveLength(TIME_ZONES.length);
   });
 
+  it("bundles the full canonical IANA list, not only the curated cities", () => {
+    expect(TIME_ZONES.length).toBeGreaterThan(400);
+    const ids = TIME_ZONES.map((zone) => zone.id);
+    expect(ids).toEqual(
+      expect.arrayContaining(["Pacific/Chatham", "America/Argentina/Ushuaia", "Asia/Kolkata", "UTC"]),
+    );
+    // Every zone the runtime knows is in the list (Node has Intl.supportedValuesOf).
+    const known = (
+      Intl as unknown as { supportedValuesOf?: (k: string) => string[] }
+    ).supportedValuesOf?.("timeZone");
+    for (const id of known ?? []) expect(ids).toContain(id);
+  });
+
+  it("finds a zone outside the curated cities by city, readable name or IANA id", () => {
+    expect(searchTimeZones("Chatham").map((z) => z.id)).toEqual(["Pacific/Chatham"]);
+    expect(searchTimeZones("Pacific/Chatham").map((z) => z.id)).toContain("Pacific/Chatham");
+    expect(searchTimeZones("Ushuaia").map((z) => z.id)).toEqual(["America/Argentina/Ushuaia"]);
+    expect(searchTimeZones("america/argentina/ushuaia")[0]?.id).toBe("America/Argentina/Ushuaia");
+    expect(searchTimeZones("buenos aires")[0]?.id).toBe("America/Argentina/Buenos_Aires");
+  });
+
   it("folds old ids and groups by region", () => {
     expect(canonicalZoneId("Asia/Calcutta")).toBe("Asia/Kolkata");
     const groups = groupTimeZones(TIME_ZONES);

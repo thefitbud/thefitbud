@@ -18,8 +18,11 @@ import { M2Group, M2Page, M2Section } from "./m2";
 type Props = {
   /** The saved IANA zone. */
   current: string;
-  /** Saves the zone (the existing account update; offline it is queued). */
-  onPick: (zoneId: string) => void;
+  /**
+   * Saves the zone (the existing account update). Resolves true when saved,
+   * false when it failed (the caller restores the old zone and shows the error).
+   */
+  onPick: (zoneId: string) => Promise<boolean> | boolean | void;
   onBack: () => void;
   /** Wait before returning to Account so the "set" toast can be read. */
   returnDelayMs?: number;
@@ -32,7 +35,7 @@ function offsetSuffix(zoneId: string): string {
 
 /**
  * TR-20h, one searchable time zone list (Z14-14, D-W14-16, D-W14-21). Search by
- * city, country or abbreviation; "Use phone's time zone" on top; the current
+ * city, country, abbreviation or IANA id; "Use phone's time zone" on top; the current
  * zone ticked. Picking saves and returns to Account after a short toast.
  */
 export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }: Props) {
@@ -42,11 +45,14 @@ export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }
   const [selected, setSelected] = useState(canonicalZoneId(current));
   const [toast, setToast] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const saving = useRef(false);
+  const mounted = useRef(true);
   const phoneZone = deviceTimeZone();
   const phoneId = phoneZone ? canonicalZoneId(phoneZone) : null;
 
   useEffect(
     () => () => {
+      mounted.current = false;
       if (timer.current) clearTimeout(timer.current);
     },
     [],
@@ -56,11 +62,20 @@ export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }
   const groups = useMemo(() => groupTimeZones(results), [results]);
   const searching = query.trim().length > 0;
 
-  function pick(zoneId: string, city: string) {
-    if (timer.current) return;
-    const id = canonicalZoneId(zoneId);
-    setSelected(id);
-    onPick(zoneId);
+  async function pick(zoneId: string, city: string) {
+    if (saving.current || timer.current) return;
+    saving.current = true;
+    const previous = selected;
+    setSelected(canonicalZoneId(zoneId));
+    const saved = (await onPick(zoneId)) !== false;
+    saving.current = false;
+    if (!mounted.current) return;
+    if (!saved) {
+      // The caller shows the failure on Account; no success copy here.
+      setSelected(previous);
+      onBack();
+      return;
+    }
     setToast(`Time zone set to ${city}${offsetSuffix(zoneId)}`);
     timer.current = setTimeout(onBack, returnDelayMs);
   }
@@ -76,7 +91,7 @@ export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }
         accessibilityRole="button"
         accessibilityLabel={`${zone.city}, ${zone.name}${offsetSuffix(zone.id)}`}
         accessibilityState={{ selected: ticked }}
-        onPress={() => pick(zone.id, zone.city)}
+        onPress={() => void pick(zone.id, zone.city)}
         style={styles.row}
       >
         <View style={styles.tx}>
@@ -126,7 +141,7 @@ export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }
               accessibilityRole="button"
               accessibilityLabel={`Use phone's time zone, ${phoneLabel.city}, ${phoneLabel.name}`}
               accessibilityState={{ selected: phoneTicked }}
-              onPress={() => pick(phoneZone, phoneLabel.city)}
+              onPress={() => void pick(phoneZone, phoneLabel.city)}
               style={styles.row}
             >
               <View style={styles.tile}>
