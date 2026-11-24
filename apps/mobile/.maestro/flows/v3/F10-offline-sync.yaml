@@ -39,8 +39,17 @@ tags:
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "Back"
 
-# Load the screens the offline part logs from. Diet is last, so it is on screen, with
-# today's meals loaded, when the device goes offline.
+# Load the screens the offline part logs from. Each one's answer is also kept on the
+# phone (Z14-2 snapshots), so part 2's offline relaunch paints them from the device.
+# Today first: it is where a relaunch opens.
+- tapOn:
+    id: "tab-today"
+- extendedWaitUntil:
+    visible: "Meals"
+    timeout: 30000
+- assertNotVisible: "Loading your day…"
+# Diet is last, so it is on screen, with today's meals loaded, when the device goes
+# offline.
 - tapOn: "Progress"
 - extendedWaitUntil:
     visible: "Log weight"

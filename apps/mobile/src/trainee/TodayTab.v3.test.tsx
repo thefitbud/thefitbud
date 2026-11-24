@@ -166,13 +166,13 @@ const api = new Proxy(
     get(_t, key: string) {
       if (key === "listWorkoutAssignments")
         return async () => {
-          if (failDay) throw new Error("offline");
+          if (failDay) throw new TypeError("Network request failed");
           return { items: workouts, nextCursor: null };
         };
       if (key === "listMealAssignments")
         return async () => {
           if (holdDay) await holdDay;
-          if (failDay) throw new Error("offline");
+          if (failDay) throw new TypeError("Network request failed");
           return { items: meals, nextCursor: null };
         };
       if (key === "listCheckins")
@@ -545,9 +545,11 @@ describe("Today v3 done and rest states", () => {
   it("a failed day load does not read as a rest day", async () => {
     failDay = true;
     renderToday();
+    // No network: the neutral offline banner (D-W14-9), not a crit one.
     await waitFor(() => {
-      expect(screen.getByText(/Couldn't refresh/)).toBeTruthy();
+      expect(screen.getByText(/^You're offline\./)).toBeTruthy();
     });
+    expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.queryByText("Recovery is part of the plan")).toBeNull();
     expect(screen.queryByText("Rest day")).toBeNull();
     expect(screen.queryByLabelText("Workout: rest day")).toBeNull();
@@ -642,10 +644,10 @@ describe("Today v3 past day, loading and offline", () => {
     await screen.findByText("3 logs waiting to send");
   });
 
-  it("offline with nothing queued keeps the saved-on-phone line", async () => {
+  it("offline with nothing queued shows the neutral offline banner only", async () => {
     failDay = true;
     renderToday();
-    await screen.findByText("Saved on phone · showing last sync");
+    await screen.findByText(/^You're offline\./);
     expect(screen.queryByText(/waiting to send/)).toBeNull();
   });
 
@@ -687,7 +689,7 @@ describe("Today v3 past day, loading and offline", () => {
     failDay = true;
     failOutbox = true;
     renderToday();
-    await screen.findByText("Saved on phone · showing last sync");
+    await screen.findByText(/^You're offline\./);
     expect(screen.queryByText(/waiting to send/)).toBeNull();
   });
 

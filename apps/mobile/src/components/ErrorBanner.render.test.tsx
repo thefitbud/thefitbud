@@ -3,10 +3,20 @@
  * regression test: if the alias, the DOM environment or the native-module
  * mocks break, this file fails before any screen test does.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import * as SecureStore from "expo-secure-store";
-import { MOCK_SECURE_STORE_VALUE, mockAuth, render, screen } from "../test/render";
-import { ErrorBanner } from "./ErrorBanner";
+import { USER_FACING_OFFLINE, USER_FACING_SERVER } from "@fitbud/api-client";
+import { themes } from "@fitbud/ui-mobile";
+import {
+  MOCK_SECURE_STORE_VALUE,
+  fireEvent,
+  mockAuth,
+  render,
+  screen,
+} from "../test/render";
+import { ThemeScope } from "../providers/ThemeProvider";
+import { ErrorBanner, isOfflineMessage } from "./ErrorBanner";
+import { offlineSavedAtText } from "./OfflineBanner";
 
 describe("ErrorBanner render", () => {
   it("renders the message it is given", () => {
@@ -61,6 +71,88 @@ describe("ErrorBanner render", () => {
     // renders something that restores a session.
     await expect(SecureStore.getItemAsync("fitbud.session")).resolves.toBe(
       MOCK_SECURE_STORE_VALUE,
+    );
+  });
+});
+
+/*
+ * Z14-2 (D-W14-9): offline is neutral. The 58 ErrorBanner call sites pass
+ * `userFacingMessage(err)`, which is the offline copy for a network failure;
+ * that copy now renders the neutral banner (fill, wifi-off, no alert role)
+ * in both themes. A real failure (5xx) stays crit.
+ */
+describe("ErrorBanner offline vs crit (Z14-2, D-W14-9)", () => {
+  function rgb(hex: string): string {
+    const n = (i: number) => Number.parseInt(hex.slice(i, i + 2), 16);
+    return `rgba(${n(1)}, ${n(3)}, ${n(5)}, 1.00)`;
+  }
+
+  for (const scheme of ["light", "dark"] as const) {
+    it(`${scheme}: the offline message is the neutral banner, not an alert`, () => {
+      render(
+        <ThemeScope scheme={scheme} drivesSystemBars={false}>
+          <ErrorBanner message={USER_FACING_OFFLINE} />
+        </ThemeScope>,
+      );
+      expect(screen.getByText(USER_FACING_OFFLINE)).toBeTruthy();
+      expect(screen.queryByRole("alert")).toBeNull();
+      const banner = screen.getByTestId("offline-banner");
+      expect(window.getComputedStyle(banner).backgroundColor).toBe(
+        rgb(themes[scheme].colors.fill),
+      );
+    });
+
+    it(`${scheme}: a server failure stays crit, as an alert`, () => {
+      render(
+        <ThemeScope scheme={scheme} drivesSystemBars={false}>
+          <ErrorBanner message={USER_FACING_SERVER} />
+        </ThemeScope>,
+      );
+      const alert = screen.getByRole("alert");
+      expect(alert.textContent).toBe(USER_FACING_SERVER);
+      expect(window.getComputedStyle(alert).backgroundColor).toBe(
+        rgb(themes[scheme].colors.critTint),
+      );
+      expect(screen.queryByTestId("offline-banner")).toBeNull();
+    });
+  }
+
+  it("a screen's own offline line and the offline prop are neutral too", () => {
+    render(
+      <>
+        <ErrorBanner message="You're offline. Reconnect to load this ask." />
+        <ErrorBanner message="Couldn't load this." offline />
+      </>,
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getAllByTestId("offline-banner")).toHaveLength(2);
+    expect(isOfflineMessage("Something went wrong on our side. Try again.")).toBe(false);
+    expect(isOfflineMessage("Offline. 1 meal is saved on your phone.")).toBe(true);
+  });
+
+  it("TR-06g: Couldn't refresh keeps crit with a Retry action", () => {
+    const onRetry = vi.fn();
+    render(
+      <ErrorBanner
+        message="Couldn't refresh. Showing 9:40 am."
+        offline={false}
+        onRetry={onRetry}
+      />,
+    );
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Couldn't refresh. Showing 9:40 am.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("the offline banner names when the shown data was saved", () => {
+    const savedAt = Date.parse("2026-11-14T04:10:00.000Z");
+    expect(offlineSavedAtText(savedAt, "Asia/Kolkata")).toBe(
+      "You're offline. Showing what was saved at 9:40 am. Logs will send when you're back.",
+    );
+    expect(offlineSavedAtText(null, "Asia/Kolkata")).toBe(
+      "You're offline. Showing what was saved on your phone. Logs will send when you're back.",
     );
   });
 });

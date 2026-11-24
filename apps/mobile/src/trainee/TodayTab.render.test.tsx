@@ -25,7 +25,7 @@ import {
   type CoachingRelationship,
   type EffectivePlanResponse,
 } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor } from "../test/render";
+import { act, mockAuth, render, screen, waitFor } from "../test/render";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
@@ -209,13 +209,24 @@ beforeEach(() => {
   resetDayLoad();
 });
 
+/**
+ * Lets the day load (released by `openDayLoad`) and the week settle. With the
+ * plan still loading, Today keeps its one skeleton (TR-06f, Z14-2), so there
+ * is no "skeleton gone" to wait for.
+ */
+async function settleLoads() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+}
+
 describe("TodayTab plan state", () => {
   it("says nothing about a plan while the plan is still loading", async () => {
     renderToday(EFFECTIVE_PLAN_LOADING);
     openDayLoad();
-    await waitFor(() => {
-      expect(screen.queryByText("Loading your day…")).toBeNull();
-    });
+    await settleLoads();
+    // One skeleton until the plan has answered too (Z14-2).
+    expect(screen.getByText("Loading your day…")).toBeTruthy();
 
     // Neither "preparing" site may render: not the greeting subtitle, and not
     // the card (whose accessibilityLabel is what Maestro reads as
@@ -261,13 +272,13 @@ describe("TodayTab plan state", () => {
     // that only set the final states would stay green with the bug alive.
     const view = renderToday(EFFECTIVE_PLAN_LOADING);
     openDayLoad();
-    await waitFor(() => {
-      expect(screen.queryByText("Loading your day…")).toBeNull();
-    });
+    await settleLoads();
 
-    // The day is on screen and the plan has not answered yet. Before CU22 the
+    // The day has answered and the plan has not yet. Before CU22 the
     // greeting read "<Coach> is preparing your plan." at exactly this point,
-    // beside the trainee's real workout.
+    // beside the trainee's real workout; since Z14-2 the skeleton holds until
+    // the plan answers.
+    expect(screen.getByText("Loading your day…")).toBeTruthy();
     expect(screen.queryAllByText(PREPARING)).toEqual([]);
 
     // The plan answers late. Only now may the day be claimed ready.
@@ -379,9 +390,13 @@ describe("TodayTab plan unavailable", () => {
       resetDayLoad();
       const view = renderToday(planState);
       openDayLoad();
-      await waitFor(() => {
-        expect(screen.queryByText("Loading your day…")).toBeNull();
-      });
+      if (planState.status === "loading") {
+        await settleLoads();
+      } else {
+        await waitFor(() => {
+          expect(screen.queryByText("Loading your day…")).toBeNull();
+        });
+      }
 
       expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
       expect(screen.queryByLabelText("Try again")).toBeNull();

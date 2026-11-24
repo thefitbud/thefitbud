@@ -306,7 +306,7 @@ describe("no ISO dates on Today or Diet", () => {
     await waitFor(() => expect(view.container.textContent).toMatch(/993/));
     offline = true;
     invalidateRelationshipDayData(REL);
-    await waitFor(() => expect(view.container.textContent).toMatch(/Saved on phone|Couldn't refresh/));
+    await waitFor(() => expect(view.container.textContent).toMatch(/You're offline|Couldn't refresh/));
     expect(view.container.textContent).toMatch(/993/);
     expect(view.container.textContent).toMatch(/2 of 3/);
   });

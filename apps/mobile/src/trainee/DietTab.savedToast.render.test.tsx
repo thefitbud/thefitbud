@@ -261,7 +261,18 @@ describe("Diet after a manual log (TR-26f, Z12-43)", () => {
     await enqueueAndPush(syncEngine, {
       recordId: SNACK_ID,
       operation: "meal.deviate",
-      payload: { assignmentId: SNACK_ID, mealName: "Evening snack", body: {} },
+      // A valid deviate body (the contract requires the kind): the row's
+      // wording comes from the queued log itself (Z14-2 outbox overlay).
+      payload: {
+        assignmentId: SNACK_ID,
+        mealName: "Evening snack",
+        body: {
+          deviationKind: "logged_foods",
+          notes: null,
+          photoIntent: null,
+          items: [{ customFood: { name: "Masala peanuts", kcal: 320 } }],
+        },
+      },
     });
     announceMealSaved({
       relationshipId: REL,

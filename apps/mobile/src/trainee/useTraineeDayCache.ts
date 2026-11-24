@@ -117,6 +117,13 @@ export type DayCacheResult<T> = {
   firstLoad: boolean;
   /** The last fetch for this day failed (data, if any, is the cached copy). */
   error: unknown;
+  /**
+   * When `data` was last answered by the server (ms), or saved on the phone
+   * for a snapshot read at a cold start (Z14-2); null with no data.
+   */
+  updatedAt: number | null;
+  /** A fetch for this day is running (first load or a background refresh). */
+  refreshing: boolean;
   /** Refetches the selected day now (pull to refresh, after a log). */
   refresh: () => Promise<void>;
 };
@@ -230,6 +237,8 @@ export function useTraineeDayCache<T>(input: {
     data,
     firstLoad,
     error: failure?.key === key ? failure.error : null,
+    updatedAt: entry?.updatedAt ?? null,
+    refreshing: pendingKey === key,
     refresh,
   };
 }
@@ -257,7 +266,12 @@ export function useTraineeWeek(input: {
   selectedDate: string;
   getMeWeek: (weekStart: string) => Promise<WeekReadModel | null>;
   where: string;
-}): { weekState: WeekModelState; refresh: () => Promise<void> } {
+}): {
+  weekState: WeekModelState;
+  refresh: () => Promise<void>;
+  /** The week has answered (loaded or failed), or a cached week is shown. */
+  settled: boolean;
+} {
   const { relationshipId, selectedDate, getMeWeek, where } = input;
   const getRef = useRef(getMeWeek);
   getRef.current = getMeWeek;
@@ -284,5 +298,9 @@ export function useTraineeWeek(input: {
   const weekState: WeekModelState =
     cache.data ??
     (cache.error != null ? { status: "unavailable" } : { status: "loading" });
-  return { weekState, refresh: cache.refresh };
+  return {
+    weekState,
+    refresh: cache.refresh,
+    settled: cache.data !== undefined || cache.error != null,
+  };
 }

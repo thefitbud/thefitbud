@@ -3,12 +3,14 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   type ReactNode,
 } from "react";
 import { AppState } from "react-native";
 import { useAuth } from "../auth/AuthProvider";
 import { isForegroundAppState, onApiActivity } from "../lib/api";
 import { reportError } from "../lib/reportError";
+import { clearDayViews } from "../trainee/dataCache";
 import { createSyncEngine, type SyncEngine } from "./engine";
 import { installNetInfoReachability } from "./netInfoReachability";
 import {
@@ -32,8 +34,26 @@ const ReachabilityContext = createContext<Reachability | null>(null);
  * another's session.
  */
 export function SyncProvider({ children }: { children: ReactNode }) {
-  const { api, me } = useAuth();
+  const { api, me, selectedRole } = useAuth();
   const userId = me?.userId ?? null;
+
+  // A switch from trainee to trainer drops the trainee's day views and the
+  // snapshots on the phone (Z14-2), as a sign-out does. The outbox is not
+  // touched: unsent logs stay and send under the same account.
+  const lastRole = useRef<{ userId: string; role: string | null } | null>(null);
+  useEffect(() => {
+    const previous = lastRole.current;
+    lastRole.current = userId ? { userId, role: selectedRole ?? null } : null;
+    if (
+      previous &&
+      previous.userId === userId &&
+      previous.role === "trainee" &&
+      selectedRole != null &&
+      selectedRole !== "trainee"
+    ) {
+      clearDayViews();
+    }
+  }, [userId, selectedRole]);
 
   const reachability = useMemo(
     () => createReachability({ probe: () => api.health() }),
@@ -49,7 +69,9 @@ export function SyncProvider({ children }: { children: ReactNode }) {
         },
         {
           onError: reportError,
-          // Unknown counts as reachable: only a failed probe holds a send back.
+          // Unknown counts as reachable: only a failed probe holds a send
+          // back. No screen waits on a log's push any more (Z14-2), so an
+          // unknown network only means the background push tries.
           isReachable: () => reachability.isReachable() !== false,
         },
       ),
