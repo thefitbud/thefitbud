@@ -1,11 +1,11 @@
 import { Pressable, View } from "react-native";
 import {
-  Bell,
   CloudAlert,
   CloudCheck,
   CloudUpload,
 } from "lucide-react-native";
 import { spacing } from "@fitbud/ui-mobile";
+import { BellButton } from "../../components/BellButton";
 import { Text } from "../../components/Text";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { pillFromStatus, type IndicatorKind } from "../../sync/outboxCopy";
@@ -80,15 +80,11 @@ export function TodayHeader({
       >
         <SyncIcon size={22} color={theme.colors.ink} strokeWidth={1.75} />
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Notifications"
+      <BellButton
+        unread={unreadNotifications}
         onPress={onOpenNotifications}
         style={styles.iconBtn}
-      >
-        <Bell size={22} color={theme.colors.ink} strokeWidth={1.75} />
-        {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
-      </Pressable>
+      />
     </View>
   );
 }
@@ -114,14 +110,5 @@ const useStyles = createThemedStyles((t) => ({
     height: 44,
     justifyContent: "center",
     width: 44,
-  },
-  unreadDot: {
-    backgroundColor: t.colors.coralStrong,
-    borderRadius: 5,
-    height: 10,
-    position: "absolute",
-    right: 9,
-    top: 8,
-    width: 10,
   },
 }));

@@ -152,6 +152,12 @@ vi.mock("expo-av", () => ({
   },
 }));
 
+// The picker ships Flow-typed source that vite cannot parse, and it is native-only (Z14-9).
+vi.mock("@react-native-community/datetimepicker", () => ({
+  default: () => null,
+  DateTimePickerAndroid: { open: vi.fn(), dismiss: vi.fn() },
+}));
+
 vi.mock("@react-native-community/netinfo", () => ({
   default: {
     addEventListener: vi.fn(() => () => undefined),

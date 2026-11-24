@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useState } from "react";
-import { View } from "react-native";
+import { Platform, Pressable, View } from "react-native";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+  type DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 import { userFacingMessage } from "@fitbud/api-client";
 import { formatPersonName } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
+import { BottomSheet } from "../../components/BottomSheet";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";
+import { PrimaryButton } from "../../components/PrimaryButton";
 import { Text } from "../../components/Text";
 import { reportError } from "../../lib/reportError";
 import { ThemeScope, createThemedStyles } from "../../providers/ThemeProvider";
@@ -26,23 +32,22 @@ export function birthDateLabel(iso: string | null | undefined): string {
   return month ? `${Number(match[3])} ${month} ${match[1]}` : "";
 }
 
-/**
- * "12 Mar 1994" (or "12 March 1994") → "1994-03-12". Null when it is not a
- * real past date; an empty string clears the date.
- */
-export function parseBirthDate(text: string, today = new Date()): string | null | "" {
-  const value = text.trim();
-  if (!value) return "";
-  const match = /^(\d{1,2})\s+([A-Za-z]{3})[A-Za-z]*\.?\s+(\d{4})$/.exec(value);
+/** Earliest date of birth the picker offers (D-W14-17). */
+export const BIRTH_DATE_MIN = new Date(1920, 0, 1);
+
+/** A picked calendar day → the API value "1994-03-12" (local day, never shifted by the zone). */
+export function birthDateIso(date: Date): string {
+  const y = String(date.getFullYear()).padStart(4, "0");
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+/** "1994-03-12" → that day at local noon (the picker's start value), or null. */
+export function birthDateFromIso(iso: string | null | undefined): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? "");
   if (!match) return null;
-  const monthIndex = MONTHS.findIndex((m) => m.toLowerCase() === match[2]!.toLowerCase());
-  if (monthIndex < 0) return null;
-  const day = Number(match[1]);
-  const year = Number(match[3]);
-  const date = new Date(Date.UTC(year, monthIndex, day));
-  if (date.getUTCMonth() !== monthIndex || date.getUTCDate() !== day) return null;
-  if (date.getTime() > today.getTime() || year < 1900) return null;
-  return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12);
 }
 
 /**
@@ -55,11 +60,13 @@ function ProfileScreenBody({ onBack, coachName }: Props) {
   const styles = useStyles();
   const [name, setName] = useState(formatPersonName(me?.email?.split("@")[0] ?? ""));
   const [gender, setGender] = useState<string | null>(null);
+  // The API value ("1994-03-12"), or "" when no date is set.
   const [dob, setDob] = useState("");
   const [savedDob, setSavedDob] = useState("");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pending, setPending] = useState<Date>(new Date());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [dobError, setDobError] = useState<string | null>(null);
   const coachFirst = coachName?.trim().split(/\s+/)[0] || "your coach";
 
   const load = useCallback(async () => {
@@ -68,13 +75,13 @@ function ProfileScreenBody({ onBack, coachName }: Props) {
       const profile = await api.getTraineeProfile();
       setName(formatPersonName(profile.displayName));
       setGender(profile.gender);
-      const label = birthDateLabel(profile.dateOfBirth);
-      setDob(label);
-      setSavedDob(label);
+      const iso = birthDateFromIso(profile.dateOfBirth) ? (profile.dateOfBirth ?? "") : "";
+      setDob(iso);
+      setSavedDob(iso);
     } catch (err) {
       reportError("ProfileScreen.load", err);
       setError(
-        userFacingMessage(err, { fallback: "Couldn't load your profile (PROF-LOAD). Go back and try again." }),
+        userFacingMessage(err, { fallback: "Couldn't load your profile. Go back and try again." }),
       );
     }
   }, [api]);
@@ -84,26 +91,39 @@ function ProfileScreenBody({ onBack, coachName }: Props) {
   }, [load]);
 
   async function save() {
-    const parsed = parseBirthDate(dob);
-    if (parsed === null) {
-      setDobError("Write it like 12 Mar 1994.");
-      return;
-    }
-    setDobError(null);
     setSaving(true);
     setError(null);
     try {
-      await api.updateTraineeProfile({ dateOfBirth: parsed || null, gender });
+      await api.updateTraineeProfile({ dateOfBirth: dob || null, gender });
       void reloadMe();
       onBack();
     } catch (err) {
       reportError("ProfileScreen.save", err);
       setError(
-        userFacingMessage(err, { fallback: "Couldn't save your profile (PROF-SAVE). Try again." }),
+        userFacingMessage(err, { fallback: "Couldn't save your profile. Try again." }),
       );
     } finally {
       setSaving(false);
     }
+  }
+
+  function openPicker() {
+    const start = birthDateFromIso(dob) ?? new Date(1990, 0, 1, 12);
+    if (Platform.OS === "android") {
+      DateTimePickerAndroid.open({
+        value: start,
+        mode: "date",
+        display: "calendar",
+        maximumDate: new Date(),
+        minimumDate: BIRTH_DATE_MIN,
+        onChange: (event: DateTimePickerEvent, picked?: Date) => {
+          if (event.type === "set" && picked) setDob(birthDateIso(picked));
+        },
+      });
+      return;
+    }
+    setPending(start);
+    setPickerOpen(true);
   }
 
   return (
@@ -134,21 +154,52 @@ function ProfileScreenBody({ onBack, coachName }: Props) {
         editable={false}
         hint="Used to sign in."
       />
-      <Field
-        label="Date of birth"
-        value={dob}
-        onChangeText={(value) => {
-          setDob(value);
-          setDobError(null);
-        }}
-        placeholder="12 Mar 1994"
-        autoCapitalize="words"
-        autoCorrect={false}
-        hint={dobError ?? undefined}
-      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Date of birth, ${birthDateLabel(dob) || "not set"}`}
+        accessibilityHint="Opens a calendar"
+        onPress={openPicker}
+        testID="profile-dob"
+      >
+        <View pointerEvents="none">
+          <Field
+            label="Date of birth"
+            value={birthDateLabel(dob)}
+            editable={false}
+            placeholder="12 Mar 1994"
+          />
+        </View>
+      </Pressable>
+      {dob ? (
+        <PrimaryButton label="Clear date of birth" variant="text" onPress={() => setDob("")} />
+      ) : null}
       <Text tone="ink3" style={styles.foot}>
         Goals and targets are set by {coachFirst}.
       </Text>
+      <BottomSheet
+        visible={pickerOpen}
+        title="Date of birth"
+        onDismiss={() => setPickerOpen(false)}
+      >
+        <DateTimePicker
+          value={pending}
+          mode="date"
+          display="spinner"
+          maximumDate={new Date()}
+          minimumDate={BIRTH_DATE_MIN}
+          onChange={(_event: DateTimePickerEvent, picked?: Date) => {
+            if (picked) setPending(picked);
+          }}
+        />
+        <PrimaryButton
+          label="Done"
+          onPress={() => {
+            setDob(birthDateIso(pending));
+            setPickerOpen(false);
+          }}
+        />
+        <PrimaryButton label="Cancel" variant="text" onPress={() => setPickerOpen(false)} />
+      </BottomSheet>
     </M2Page>
   );
 }
