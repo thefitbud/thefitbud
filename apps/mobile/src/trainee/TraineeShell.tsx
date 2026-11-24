@@ -1129,6 +1129,7 @@ export function TraineeShell({
                 setTab("workout");
               }}
               onFirstPaint={handleTodayFirstPaint}
+              active={tab === "today" && !cover}
             />
           ),
         )}

@@ -328,6 +328,11 @@ type TodayTabProps = {
    * gate opened). The shell holds in-app banners until then (Z14-2).
    */
   onFirstPaint?: () => void;
+  /**
+   * False while Today is a kept tab off screen (Z14-2): it stays mounted but
+   * queues no in-app banner.
+   */
+  active?: boolean;
 };
 
 function TodayTabInner({
@@ -344,6 +349,7 @@ function TodayTabInner({
   unreadNotifications = 0,
   onViewSummary,
   onFirstPaint,
+  active = true,
 }: TodayTabProps) {
   const theme = useTheme();
   const styles = useStyles();
@@ -566,8 +572,9 @@ function TodayTabInner({
     };
   }, [api, isToday, refreshNonce]);
 
-  // Rest only after a successful day load: a failed load also leaves
-  // `workout` null, and must not read as a rest day.
+  // Rest only from a day the server answered (now or in a saved snapshot): a
+  // failed load with nothing cached also leaves `workout` null, and must not
+  // read as a rest day.
   const doneMinutes = workout?.execution
     ? durationMinutesFromExecution(workout.execution)
     : null;
@@ -610,7 +617,7 @@ function TodayTabInner({
     };
   }, [api, doneExecutionId, refreshNonce]);
   const restDay =
-    planState.status === "loaded" && !loading && lockStateKnown && !workout;
+    planState.status === "loaded" && !loading && bundle !== undefined && !workout;
   useEffect(() => {
     if (!restDay || !isToday) {
       setNextWorkout(null);
@@ -745,7 +752,7 @@ function TodayTabInner({
   return (
     <>
       {/* In-app banners wait for Today's first paint (Z14-2). */}
-      {isToday && painted ? (
+      {isToday && painted && active ? (
         <ReviewedBanner coachName={coachName} onOpenCheckin={onOpenCheckin} />
       ) : null}
     {/* A horizontal swipe anywhere on the screen moves a day (Z12-40): a
@@ -997,7 +1004,9 @@ function TodayTabInner({
             mealsDone={mealsDone}
             mealsTotal={meals.length}
             steps={isToday ? stepsChip : { status: "unavailable" }}
-            workoutUnknown={!lockStateKnown}
+            // A day shown from the phone still knows its workout (TR-06e); only
+            // a day with nothing cached does not.
+            workoutUnknown={bundle === undefined}
             onOpenSteps={() => onOpenOverlay({ screen: "steps_settings" })}
           />
         ) : null}
