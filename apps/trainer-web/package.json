@@ -15,7 +15,8 @@
     "capture:screens": "node scripts/capture-tw-screens.mjs",
     "preview": "vite preview",
     "deploy:staging": "pnpm build && wrangler deploy --env staging",
-    "deploy:production": "pnpm build && wrangler deploy --env production"
+    "legal:check": "node --input-type=module -e \"import('@fitbud/core').then((m) => m.assertLegalPublishable())\"",
+    "deploy:production": "pnpm legal:check && pnpm build && wrangler deploy --env production"
   },
   "dependencies": {
     "@fitbud/api-client": "workspace:*",

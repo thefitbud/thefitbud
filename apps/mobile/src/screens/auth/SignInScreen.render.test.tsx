@@ -37,20 +37,26 @@ describe("SignInScreen (TR-01a)", () => {
     expect(screen.getByRole("button", { name: "Show password" })).toBeTruthy();
   });
 
-  it("Terms and Privacy open the web pages with 44 pt targets", () => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
+  it("Terms, Privacy and Health notice open in the app while signed out", () => {
     const openURL = vi.spyOn(Linking, "openURL").mockResolvedValue(true);
     renderSignIn();
-    fireEvent.click(screen.getByRole("link", { name: "Privacy policy, opens in your browser" }));
-    fireEvent.click(screen.getByRole("link", { name: "Terms of use, opens in your browser" }));
-    expect(openURL).toHaveBeenNthCalledWith(1, "https://app.thefitbud.com/privacy");
-    expect(openURL).toHaveBeenNthCalledWith(2, "https://app.thefitbud.com/terms");
+    fireEvent.click(screen.getByRole("link", { name: "Privacy Policy, opens in the app" }));
+    expect(screen.getByRole("heading", { name: "Privacy Policy" })).toBeTruthy();
+    expect(screen.getByTestId("legal-draft-notice").textContent).toMatch(/not yet in force/);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("link", { name: "Terms of Service, opens in the app" }));
+    expect(screen.getByRole("heading", { name: "Terms of Service" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("link", { name: "Health and Fitness notice, opens in the app" }));
+    expect(screen.getByRole("heading", { name: "Health and Fitness notice" })).toBeTruthy();
+    expect(openURL).not.toHaveBeenCalled();
     openURL.mockRestore();
   });
 
   it.each([
-    "Terms of use, opens in your browser",
-    "Privacy policy, opens in your browser",
+    "Terms of Service, opens in the app",
+    "Privacy Policy, opens in the app",
+    "Health and Fitness notice, opens in the app",
   ])("%s is at least 44 pt tall", (name) => {
     // BT3's review found footer links that looked right but were only ~32 px
     // hittable. Assert the link's own minimum height, not the text size.

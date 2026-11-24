@@ -109,4 +109,15 @@ describe("BottomSheet Modal presentation", () => {
     }) as ReactElement<Record<string, unknown>>;
     expect(el.props.onDismiss).toBe(onClosed);
   });
+
+  it("lifts the sheet above the keyboard on Android with a keyboard-height spacer (Z14-9)", () => {
+    const hasSpacer = (os: string) => {
+      platform.OS = os;
+      const kids = Children.toArray(avoidingView().props.children as ReactNode);
+      return kids.some((c) => isValidElement(c) && (c.props as { active?: boolean }).active === true);
+    };
+    expect(hasSpacer("android")).toBe(true);
+    expect(hasSpacer("ios")).toBe(false);
+    expect(hasSpacer("web")).toBe(false);
+  });
 });

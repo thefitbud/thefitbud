@@ -406,7 +406,7 @@
   background: #fff;
 }
 
-/* Frame 02: Mark reviewed · Nudge … spacer … ⋯ · Resolve… */
+/* Frame 02: Noted, keep open · Nudge … spacer … ⋯ · Resolve… */
 .sp-actions > .overflow-menu {
   margin-left: auto;
 }
@@ -1086,7 +1086,7 @@ label.sp-bulk-row-inner:hover {
   font: inherit;
 }
 
-/* Frame 02: helper and the Mark reviewed line read as one tight block. */
+/* Frame 02: helper and the Noted, keep open line read as one tight block. */
 .sp-foot .sp-nudge-help {
   margin: 0 0 -6px;
 }

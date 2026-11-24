@@ -20,6 +20,7 @@ import {
 } from "../components/m2";
 import { pickSessionRefresh } from "../lib/api";
 import { stage1Api } from "../lib/stage1Api";
+import { LegalEntryLinks, useLegalDocument } from "./LegalDocumentScreen";
 
 function inviteParamsFromUrl(url: string | null): {
   token: string | null;
@@ -85,6 +86,7 @@ function AcceptInviteScreenBody({
     clearError,
   } = useAuth();
   const s1 = stage1Api(api);
+  const legal = useLegalDocument();
   const [token, setToken] = useState(initialToken?.trim() ?? "");
   const [displayName, setDisplayName] = useState("");
   const [mobileDigits, setMobileDigits] = useState("");
@@ -333,6 +335,8 @@ function AcceptInviteScreenBody({
       >
         <Text style={styles.codeLink}>Have a code instead?</Text>
       </Pressable>
+      <LegalEntryLinks lead="Before you join, you can read" onOpen={legal.open} />
+      {legal.modal}
     </View>
   );
 
