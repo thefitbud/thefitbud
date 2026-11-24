@@ -11,6 +11,7 @@ import { ErrorBanner } from "../../components/ErrorBanner";
 import { useAuth } from "../../auth/AuthProvider";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
+import { usePushPermission } from "../../notifications/usePushPermission";
 import { ensureAndroidNotificationChannels } from "../../notifications/androidChannels";
 import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { clockLabel, shiftQuarterHour } from "./clock";
@@ -75,7 +76,6 @@ function ReminderSettingsScreenBody({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [osDenied, setOsDenied] = useState(false);
   const [timeOpen, setTimeOpen] = useState(false);
   const [draftTime, setDraftTime] = useState("18:00");
 
@@ -111,18 +111,10 @@ function ReminderSettingsScreenBody({
     void load();
   }, [load]);
 
+  const { denied: osDenied } = usePushPermission();
+
   useEffect(() => {
     void ensureAndroidNotificationChannels();
-    if (Platform.OS === "web") {
-      setOsDenied(false);
-      return;
-    }
-    void import("expo-notifications")
-      .then(async (Notifications) => {
-        const settings = await Notifications.getPermissionsAsync();
-        setOsDenied(settings.status === "denied");
-      })
-      .catch((err: unknown) => reportError("ReminderSettings.permission", err));
   }, []);
 
   useEffect(() => {
