@@ -66,7 +66,16 @@ function listItems(groups: ReturnType<typeof groupTimeZones>): ListItem[] {
  * The ~425 rows are a FlatList (own page chrome, because `M2Page` wraps its
  * children in a ScrollView, which would stop a nested list from virtualising).
  */
-export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }: Props) {
+export function TimeZoneScreen(props: Props) {
+  // The scope only reaches its children, so every themed hook lives in the body.
+  return (
+    <ThemeScope scheme="system">
+      <TimeZoneBody {...props} />
+    </ThemeScope>
+  );
+}
+
+function TimeZoneBody({ current, onPick, onBack, returnDelayMs = 1200 }: Props) {
   const theme = useTheme();
   const styles = useStyles();
   const [query, setQuery] = useState("");
@@ -207,7 +216,7 @@ export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }
   );
 
   return (
-    <ThemeScope scheme="system">
+    <>
       <SafeAreaView style={styles.page} testID="time-zone">
         <View style={styles.nav}>
           <Pressable
@@ -267,7 +276,7 @@ export function TimeZoneScreen({ current, onPick, onBack, returnDelayMs = 1200 }
           </View>
         ) : null}
       </SafeAreaView>
-    </ThemeScope>
+    </>
   );
 }
 

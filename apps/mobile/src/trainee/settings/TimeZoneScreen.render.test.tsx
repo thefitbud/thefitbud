@@ -2,7 +2,10 @@
  * Time zone list (Z14-14, TR-20h): search by abbreviation, city and country,
  * the "Use phone's time zone" row, the saved toast and the no-match state.
  */
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Appearance } from "react-native";
+import { themes } from "@fitbud/ui-mobile";
+import { ThemeProvider } from "../../providers/ThemeProvider";
 import { fireEvent, render, screen } from "../../test/render";
 import { TimeZoneScreen } from "./TimeZoneScreen";
 
@@ -85,5 +88,28 @@ describe("TimeZoneScreen", () => {
     search("new york");
     fireEvent.click(screen.getByRole("button", { name: /^New York,/ }));
     expect(onPick).toHaveBeenCalledWith("America/New_York");
+  });
+});
+
+describe("TimeZoneScreen theme scope", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("renders the page and rows with dark tokens when the system scheme is dark", () => {
+    vi.spyOn(Appearance, "getColorScheme").mockReturnValue("dark");
+    render(
+      <ThemeProvider>
+        <TimeZoneScreen current="Asia/Kolkata" onPick={vi.fn()} onBack={vi.fn()} />
+      </ThemeProvider>,
+    );
+    const rgb = (hex: string) => {
+      const n = (i: number) => Number.parseInt(hex.slice(i, i + 2), 16);
+      return `rgba(${n(1)}, ${n(3)}, ${n(5)}, 1.00)`;
+    };
+    const style = (el: HTMLElement, prop: string) =>
+      window.getComputedStyle(el).getPropertyValue(prop);
+    expect(style(screen.getByTestId("time-zone"), "background-color")).toBe(
+      rgb(themes.dark.colors.bg),
+    );
+    expect(style(screen.getByText("Kolkata"), "color")).toBe(rgb(themes.dark.colors.ink));
   });
 });
