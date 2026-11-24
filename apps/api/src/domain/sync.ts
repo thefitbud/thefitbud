@@ -12,6 +12,7 @@ import {
 import type {
   SyncChangeRecord,
   SyncEntityType,
+  SyncMutationOperation,
   SyncMutationRequest,
   SyncMutationResult,
 } from "@fitbud/contracts";
@@ -960,6 +961,87 @@ export async function recordSyncResult(
     if (isApplied(result)) await replace();
     return result;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Late workout writes (Z14-7)
+// ---------------------------------------------------------------------------
+
+/**
+ * Copy for the sync status when a workout write arrived after the workout was
+ * finished. Static text, safe to show as it is.
+ */
+const FINISHED_WORKOUT_NOTES: Partial<Record<SyncMutationOperation, string>> = {
+  "workout.complete_set":
+    "This set arrived after you finished the workout, so it wasn't added.",
+  "workout.skip": "This workout was already finished, so it wasn't skipped.",
+  "workout.start": "This workout was already finished.",
+};
+
+/**
+ * True when a dispatch refused a late start, skip or set because the workout
+ * is finished. The trainee's intent no longer matters (the workout is done),
+ * so this is answered as settled, never as a refusal they must act on. A
+ * finish with a different RPE is not included: that stays a conflict.
+ */
+export function isMootFinishedWorkoutRefusal(
+  operation: SyncMutationOperation,
+  httpStatus: number,
+  errorCode: string | undefined,
+): boolean {
+  return (
+    httpStatus === 409 &&
+    errorCode === "WORKOUT_ALREADY_FINISHED" &&
+    FINISHED_WORKOUT_NOTES[operation] !== undefined
+  );
+}
+
+/**
+ * The `already_applied` answer for a moot late workout write: nothing was
+ * written, and the result names the trainee's finished execution and its
+ * version so the phone keeps the server's record, with a note it can show.
+ */
+export async function finishedWorkoutSyncResult(
+  db: Db,
+  input: {
+    actorUserId: string;
+    mutation: SyncMutationRequest;
+    payload: Record<string, unknown>;
+  },
+): Promise<SyncMutationResult> {
+  const { actorUserId, mutation, payload } = input;
+  const own = (condition: SQL) =>
+    db
+      .select({
+        id: workoutExecutions.id,
+        recordVersion: workoutExecutions.recordVersion,
+      })
+      .from(workoutExecutions)
+      .where(and(condition, eq(workoutExecutions.traineeUserId, actorUserId)))
+      .limit(1);
+  const executionId = payload.executionId;
+  const assignmentId = payload.assignmentId;
+  const execution =
+    (typeof executionId === "string"
+      ? (await own(eq(workoutExecutions.id, executionId)))[0]
+      : undefined) ??
+    (typeof assignmentId === "string"
+      ? (await own(eq(workoutExecutions.assignmentId, assignmentId)))[0]
+      : undefined);
+  return {
+    mutationId: mutation.mutationId,
+    status: "already_applied",
+    recordId: execution?.id ?? mutation.recordId,
+    serverVersion: execution?.recordVersion ?? null,
+    entityType: mutation.entityType,
+    error: null,
+    note: {
+      code: "WORKOUT_ALREADY_FINISHED",
+      message:
+        FINISHED_WORKOUT_NOTES[mutation.operation] ??
+        "This workout was already finished.",
+    },
+  };
 }
 
 const EXECUTION_ADDRESSED_OPERATIONS: ReadonlySet<string> = new Set([

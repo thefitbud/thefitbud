@@ -188,6 +188,19 @@ export const syncMutationResultSchema = z.object({
    * the answer to this mutation as it stands.
    */
   retryable: z.boolean().optional(),
+  /**
+   * Z14-7: only with `already_applied`, when the server answered the mutation
+   * without applying it because it no longer could matter (a set, skip or
+   * start that arrived after the workout was finished). Nothing was written;
+   * the client drops the row, keeps the server's record and may show
+   * `message` (static, safe to show) in the sync status.
+   */
+  note: z
+    .object({
+      code: z.string().min(1),
+      message: z.string().min(1),
+    })
+    .optional(),
 });
 export type SyncMutationResult = z.infer<typeof syncMutationResultSchema>;
 

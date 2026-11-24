@@ -21,6 +21,8 @@ import {
   appendChangeLog,
   failedSyncResult,
   findStoredSyncVerdict,
+  finishedWorkoutSyncResult,
+  isMootFinishedWorkoutRefusal,
   pullChangesForTrainee,
   recordSyncResult,
   resolveWorkoutMutationPayload,
@@ -342,6 +344,30 @@ syncRoutes.post(
         data?: unknown;
         error?: { code?: string; message?: string; details?: Record<string, unknown> };
       } | null;
+
+      if (
+        isMootFinishedWorkoutRefusal(
+          mutation.operation,
+          response.status,
+          json?.error?.code,
+        )
+      ) {
+        // Z14-7: a start, skip or set that arrived after the workout was
+        // finished. Nothing was written and the trainee's intent is moot, so
+        // it is settled (`already_applied`, with a note), never a refusal.
+        results.push(
+          await recordSyncResult(db, {
+            actorUserId: actor.userId,
+            mutation,
+            result: await finishedWorkoutSyncResult(db, {
+              actorUserId: actor.userId,
+              mutation,
+              payload,
+            }),
+          }),
+        );
+        continue;
+      }
 
       if (!response.ok) {
         // A transient failure (5xx, 408, 429) is marked `retryable` and is
