@@ -748,6 +748,17 @@ export async function scheduleExceptionEvaluation(
   await scheduleExceptionEvaluations(c, db, [relationshipId]);
 }
 
+/** Trainer coach-log writes: the meal entry and the finished workout (log or edit). */
+const COACH_LOG_WRITES: ReadonlyArray<[method: string, path: RegExp]> = [
+  ["PUT", /^\/meals\/compliance\/[^/]+\/[^/]+\/?$/],
+  ["POST", /^\/workouts\/assignments\/[^/]+\/log\/?$/],
+  ["PATCH", /^\/workouts\/executions\/[^/]+\/?$/],
+];
+
+export function isCoachLogWrite(method: string, path: string): boolean {
+  return COACH_LOG_WRITES.some(([m, pattern]) => m === method && pattern.test(path));
+}
+
 const RELATIONSHIP_IN_PATH = /\/relationships\/([0-9a-f-]{36})(?:\/|$)/i;
 
 /** The relationship a successful write touched: from its path, else its body. */
@@ -766,9 +777,9 @@ async function relationshipOfWrite(c: Context): Promise<string | null> {
 }
 
 /**
- * Router middleware (workouts, meals, check-ins): after a trainee's
- * successful write, re-evaluate that relationship's exceptions behind the
- * response (D-W14-8).
+ * Router middleware (workouts, meals, check-ins): after a trainee's successful
+ * write, or a trainer's coach log, re-evaluate that relationship's exceptions
+ * behind the response (D-W14-8).
  * One line per router instead of a hook in every handler; reads pass through.
  */
 export const evaluateExceptionsAfterWrite = createMiddleware<{
@@ -777,10 +788,14 @@ export const evaluateExceptionsAfterWrite = createMiddleware<{
 }>(async (c, next) => {
   await next();
   if (c.req.method === "GET" || c.req.method === "HEAD" || !c.res.ok) return;
-  // Trainee writes (logs, skips, submits) are what change exceptions now.
-  // Trainer writes (schedules, plans, coach logs) create or adjust
+  // Trainee writes (logs, skips, submits) and trainer coach logs (a meal or
+  // workout logged or corrected for the client) change exceptions: evaluate.
+  // Other trainer writes (schedules, plans, notes) create or adjust
   // expectations whose exceptions come from time passing: the 15-minute rule.
-  if (c.get("actor")?.selectedRole !== "trainee") return;
+  const role = c.get("actor")?.selectedRole;
+  if (role !== "trainee" && !(role === "trainer" && isCoachLogWrite(c.req.method, c.req.path))) {
+    return;
+  }
   const relationshipId = await relationshipOfWrite(c);
   if (!relationshipId) return;
   await scheduleExceptionEvaluation(c, createDb(c.env.DB), relationshipId);

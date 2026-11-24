@@ -1,8 +1,9 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { formatLocalDate } from "@fitbud/core";
 import { schema, setTestDbOverride, type Db } from "../db/client.js";
 import { createId } from "../lib/crypto.js";
+import { isCoachLogWrite } from "../domain/exceptions.js";
 import type { MemoryDbHandle } from "../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../test-support/seeded-db.js";
 import {
@@ -293,5 +294,108 @@ describe("Needs you: stored exceptions, flat round trips (Z14-1)", () => {
 
     // Only the trainer resolves: the write and the read resolved nothing.
     expect(await resolvedCount(rel!.id)).toBe(resolvedBefore);
+  });
+
+  it("shows a trainer's coach-logged meal as logged later at once (the coach log evaluates)", async () => {
+    const trainerHeaders = await loginHeaders(DEMO_TRAINER, "trainer");
+    const first = await measureRequest(counter, ATTENTION, { headers: trainerHeaders });
+    expect(first.status).toBe(200);
+    const trainer = await trainerUserId(handle.db);
+
+    // An open "Required meal still unlogged" item on one of the trainer's clients.
+    const [open] = await handle.db
+      .select({
+        id: schema.exceptions.id,
+        relationshipId: schema.exceptions.coachingRelationshipId,
+        assignmentId: schema.exceptions.sourceEntityId,
+        localDate: schema.mealAssignments.localDate,
+      })
+      .from(schema.exceptions)
+      .innerJoin(
+        schema.coachingRelationships,
+        eq(schema.coachingRelationships.id, schema.exceptions.coachingRelationshipId),
+      )
+      .innerJoin(schema.mealAssignments, eq(schema.mealAssignments.id, schema.exceptions.sourceEntityId))
+      .leftJoin(schema.mealCompliance, eq(schema.mealCompliance.assignmentId, schema.mealAssignments.id))
+      .where(
+        and(
+          eq(schema.coachingRelationships.trainerUserId, trainer),
+          eq(schema.coachingRelationships.status, "active"),
+          eq(schema.exceptions.type, "overdue_meal"),
+          eq(schema.exceptions.status, "active"),
+          isNull(schema.mealCompliance.id),
+        ),
+      )
+      // The most recent one: inside the detection window (the last 3 days).
+      .orderBy(desc(schema.mealAssignments.localDate))
+      .limit(1);
+    expect(open, "demo seed has an unlogged required meal").toBeDefined();
+    const itemsOf = (body: unknown) =>
+      (body as Groups).data.needsYou
+        .concat((body as { data: { reviewed: Groups["data"]["needsYou"] } }).data.reviewed)
+        .flatMap((group) => group.items as Array<{ id: string; type: string; summary?: string }>);
+    expect(itemsOf(first.body).find((item) => item.id === open!.id)?.summary).toMatch(
+      /^Required meal still unlogged/,
+    );
+    const resolvedBefore = (
+      await handle.db
+        .select({ id: schema.exceptions.id })
+        .from(schema.exceptions)
+        .where(
+          and(
+            eq(schema.exceptions.coachingRelationshipId, open!.relationshipId),
+            eq(schema.exceptions.status, "resolved"),
+          ),
+        )
+    ).length;
+
+    vi.setSystemTime(new Date(Date.parse(NOW) + 60_000));
+    const log = await measureRequest(
+      counter,
+      `/meals/compliance/${open!.assignmentId}/${open!.localDate}`,
+      {
+        method: "PUT",
+        headers: { ...trainerHeaders, "Content-Type": "application/json", "Idempotency-Key": createId() },
+        body: JSON.stringify({ outcome: "confirmed" }),
+      },
+    );
+    expect([200, 201], JSON.stringify(log.body)).toContain(log.status);
+
+    // Well inside the 15 minutes: only the coach log's evaluation can explain a change.
+    vi.setSystemTime(new Date(Date.parse(NOW) + 2 * 60_000));
+    const after = await measureRequest(counter, ATTENTION, { headers: trainerHeaders });
+    const readEvaluated = after.trips.some((trip) =>
+      trip.sql.some((sql) => /insert into "scheduled_jobs"/i.test(sql)),
+    );
+    expect(readEvaluated).toBe(false);
+    const item = itemsOf(after.body).find((entry) => entry.id === open!.id);
+    expect(item?.type).toBe("meal_logged_later");
+    expect(item?.summary).toMatch(/^Meal logged later: /);
+
+    const resolvedAfter = (
+      await handle.db
+        .select({ id: schema.exceptions.id })
+        .from(schema.exceptions)
+        .where(
+          and(
+            eq(schema.exceptions.coachingRelationshipId, open!.relationshipId),
+            eq(schema.exceptions.status, "resolved"),
+          ),
+        )
+    ).length;
+    expect(resolvedAfter).toBe(resolvedBefore);
+  });
+});
+
+describe("which trainer writes evaluate (Z14-1, D-W14-8)", () => {
+  it("coach logs evaluate; schedules, plans and notes stay on the 15-minute rule", () => {
+    const id = "6f1c2a7e-0b3d-4e8f-9a1b-2c3d4e5f6a7b";
+    expect(isCoachLogWrite("PUT", `/meals/compliance/${id}/2026-10-27`)).toBe(true);
+    expect(isCoachLogWrite("POST", `/workouts/assignments/${id}/log`)).toBe(true);
+    expect(isCoachLogWrite("PATCH", `/workouts/executions/${id}`)).toBe(true);
+    expect(isCoachLogWrite("POST", `/checkins/relationships/${id}/schedule`)).toBe(false);
+    expect(isCoachLogWrite("POST", `/checkins/relationships/${id}/notes`)).toBe(false);
+    expect(isCoachLogWrite("POST", `/meals/relationships/${id}/assignments/generate`)).toBe(false);
+    expect(isCoachLogWrite("GET", `/workouts/executions/${id}`)).toBe(false);
   });
 });
