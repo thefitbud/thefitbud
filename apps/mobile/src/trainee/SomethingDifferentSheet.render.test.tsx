@@ -10,7 +10,10 @@ vi.mock("expo-modules-core", () => ({
   NativeModulesProxy: {},
   EventEmitter: class {},
 }));
-vi.mock("../sync/SyncProvider", () => ({ useSyncEngine: () => ({}) }));
+vi.mock("../sync/SyncProvider", () => ({
+  useSyncEngine: () => ({}),
+  useReachability: () => null,
+}));
 const auth = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth.current }));
 
@@ -70,11 +73,11 @@ function renderSheet(onDone = vi.fn()) {
 }
 
 function expectRealHeight() {
-  const sub = screen.getByTestId("something-different-subscreen");
-  const px = parseFloat(sub.style.height);
-  expect(Number.isFinite(px)).toBe(true);
-  expect(px).toBeGreaterThan(0);
-  expect(px).toBeLessThanOrEqual(520);
+  // One full screen with its own scroll area and a pinned footer (Z14-13);
+  // no fixed-height box squeezed into the sheet.
+  expect(
+    screen.queryByTestId("something-different-subscreen") ?? screen.queryByTestId("ate-out-form"),
+  ).toBeTruthy();
 }
 
 describe("SomethingDifferentSheet sheet variant sub-screens", () => {
@@ -103,7 +106,7 @@ describe("SomethingDifferentSheet sheet variant sub-screens", () => {
     expectRealHeight();
     fireEvent.change(screen.getByLabelText("Kcal"), { target: { value: "1120" } });
     expect((screen.getByLabelText("Kcal") as HTMLInputElement).value).toBe("1,120");
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
     await waitFor(() => expect(deviate).toHaveBeenCalledTimes(1));
     const body = (deviate.mock.calls[0] as unknown[])[2];
     expect(body).toEqual({
@@ -119,7 +122,7 @@ describe("SomethingDifferentSheet sheet variant sub-screens", () => {
   it("Ate out needs the kcal or a note", async () => {
     renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
     expect(await screen.findByText("Enter the kcal, or a short note about what you had.")).toBeTruthy();
     expect(deviate).not.toHaveBeenCalled();
   });
@@ -143,5 +146,55 @@ describe("SomethingDifferentSheet sheet variant sub-screens", () => {
       },
     ]);
     await waitFor(() => expect(onDone).toHaveBeenCalled());
+  });
+
+  it("Ate out keeps a Save with the kcal pinned under the fields (TR-08c3)", async () => {
+    const onDone = renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+    fireEvent.change(screen.getByLabelText("Kcal"), { target: { value: "38" } });
+    // Save top right and the pinned button, both reachable with the keyboard up.
+    expect(screen.getAllByRole("button", { name: "Save" }).length).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: "Save · 38 kcal" }));
+    await waitFor(() => expect(deviate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+  });
+
+  it("offline: the neutral banner shows and the portion still saves (queued, TR-08b3)", async () => {
+    const online = vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      const onDone = renderSheet();
+      fireEvent.click(screen.getByRole("button", { name: "Changed the portion" }));
+      const banner = await screen.findByTestId("offline-banner");
+      expect(banner.textContent).toContain("You\u2019re offline. Your change saves on your phone and sends when you\u2019re back.");
+      // Neutral: no alert role (D-W14-9).
+      expect(banner.getAttribute("role")).not.toBe("alert");
+      fireEvent.click(screen.getByRole("button", { name: "Save portion" }));
+      await waitFor(() => expect(deviate).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(onDone).toHaveBeenCalled());
+    } finally {
+      online.mockRestore();
+    }
+  });
+
+  it("offline: Ate out shows the same banner and saves", async () => {
+    const online = vi.spyOn(window.navigator, "onLine", "get").mockReturnValue(false);
+    try {
+      const onDone = renderSheet();
+      fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+      expect(await screen.findByTestId("offline-banner")).toBeTruthy();
+      fireEvent.change(screen.getByLabelText("Kcal"), { target: { value: "300" } });
+      fireEvent.click(screen.getAllByRole("button", { name: "Save" })[0]!);
+      await waitFor(() => expect(deviate).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(onDone).toHaveBeenCalled());
+    } finally {
+      online.mockRestore();
+    }
+  });
+
+  it("goes back to the menu from the portion screen", () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Changed the portion" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("button", { name: "Ate out" })).toBeTruthy();
   });
 });

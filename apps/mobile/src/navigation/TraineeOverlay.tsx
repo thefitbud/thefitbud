@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { View } from "react-native";
 import type {
   CreateCoachAskRequest,
   EffectivePlanResponse,
@@ -7,10 +8,14 @@ import type {
 
 type CoachAskItemType = CreateCoachAskRequest["itemType"];
 import type { CoachingRelationship } from "@fitbud/contracts";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { formatCivilDate } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { BottomSheet } from "../components/BottomSheet";
+import { Screen } from "../components/Screen";
+import { createThemedStyles } from "../providers/ThemeProvider";
 import { addDays, localDateInTimezone } from "../lib/dates";
+import { reportError } from "../lib/reportError";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { AssignedMealPlanScreen } from "../trainee/AssignedMealPlanScreen";
 import type { EffectivePlanState } from "../trainee/TodayTab";
@@ -87,6 +92,71 @@ export type TraineeOverlay =
   | { screen: "account" }
   | { screen: "help" };
 
+/** Why a meal screen has no meal: said in words, never as a code (D-W14-3). */
+export function mealUnavailableReason(err: unknown): string {
+  if (err instanceof ApiClientError && err.status === 404) {
+    return "This meal isn't on your plan any more.";
+  }
+  return userFacingMessage(err, {
+    fallback: "Something went wrong on our side. Try again.",
+  });
+}
+
+const MEAL_GONE_REASON = "This meal isn't on your plan any more.";
+
+type MealLoadState =
+  | { kind: "loading" }
+  | { kind: "ready" }
+  | { kind: "unavailable"; reason: string };
+
+/** A load answer tagged with the meal it is for, so a stale one is never shown. */
+type MealLoadResult = { id: string; state: MealLoadState };
+
+/**
+ * TR-08a2: three quiet rows while the meal loads, so "isn't available" never
+ * flashes before the answer is in.
+ */
+function MealLoadingRows() {
+  const styles = useLoadingStyles();
+  return (
+    <View
+      style={styles.rows}
+      accessibilityRole="progressbar"
+      accessibilityLabel="Loading meal"
+      testID="meal-loading"
+    >
+      {[0, 1, 2].map((i) => (
+        <View key={i} style={styles.row}>
+          <View style={styles.tile} />
+          <View style={styles.lines}>
+            <View style={[styles.line, styles.lineShort]} />
+            <View style={[styles.line, styles.lineLong]} />
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const useLoadingStyles = createThemedStyles((t) => ({
+  rows: { gap: 12, paddingBottom: 24, paddingTop: 8 },
+  row: {
+    alignItems: "center",
+    borderColor: t.colors.line2,
+    borderRadius: t.radii.card,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 14,
+    minHeight: 72,
+    padding: 14,
+  },
+  tile: { backgroundColor: t.colors.fill, borderRadius: 12, height: 44, width: 44 },
+  lines: { flex: 1, gap: 8 },
+  line: { backgroundColor: t.colors.fill, borderRadius: 8, height: 12 },
+  lineShort: { width: "52%" },
+  lineLong: { width: "86%" },
+}));
+
 export type TraineeOverlayOpener = (overlay: TraineeOverlay) => void;
 
 type Props = {
@@ -133,9 +203,18 @@ export function TraineeOverlayHost({
     null,
   );
 
+  const [loadResult, setLoadResult] = useState<MealLoadResult | null>(null);
+  const loadToken = useRef(0);
+
   const loadMealAssignment = useCallback(
     async (assignmentId: string) => {
       const today = localDateInTimezone(me?.timezone ?? "UTC");
+      const token = ++loadToken.current;
+      const settle = (next: MealLoadState, meal: MealAssignment | null) => {
+        if (token !== loadToken.current) return;
+        setMealAssignment(meal);
+        setLoadResult({ id: assignmentId, state: next });
+      };
       try {
         const listed = await api.listMealAssignments(relationship.id, {
           fromDate: addDays(today, -14),
@@ -143,25 +222,41 @@ export function TraineeOverlayHost({
         });
         const match = listed.items.find((item) => item.id === assignmentId);
         if (match) {
-          setMealAssignment(match);
+          settle({ kind: "ready" }, match);
           return;
         }
         const value = await api.getMealAssignment(assignmentId);
-        setMealAssignment(value);
-      } catch {
-        setMealAssignment(null);
+        if (value) settle({ kind: "ready" }, value);
+        else settle({ kind: "unavailable", reason: MEAL_GONE_REASON }, null);
+      } catch (err) {
+        reportError("TraineeOverlay.loadMeal", err);
+        settle({ kind: "unavailable", reason: mealUnavailableReason(err) }, null);
       }
     },
     [api, me?.timezone, relationship.id],
   );
+
+  // The answer counts only for the meal this overlay asks about: until it
+  // arrives the screen shows the loading state, never "isn't available".
+  const wantedMealId =
+    overlay.screen === "something_different" || overlay.screen === "food_search"
+      ? overlay.assignmentId
+      : null;
+  const mealLoad: MealLoadState =
+    loadResult && loadResult.id === wantedMealId
+      ? loadResult.state
+      : { kind: "loading" };
 
   useEffect(() => {
     if (
       overlay.screen === "something_different" ||
       overlay.screen === "food_search"
     ) {
+      setMealAssignment(null);
+      setLoadResult(null);
       void loadMealAssignment(overlay.assignmentId);
     } else {
+      loadToken.current += 1;
       setMealAssignment(null);
     }
   }, [overlay, loadMealAssignment]);
@@ -208,9 +303,18 @@ export function TraineeOverlayHost({
       return <StepsSetupScreen coachName={coachName} onBack={onClose} />;
     case "food_search":
       if (!mealAssignment) {
+        if (mealLoad.kind === "loading") {
+          return (
+            <Screen v3 chrome="app" title="Loading meal" showHeader={false}>
+              <MealLoadingRows />
+            </Screen>
+          );
+        }
         return (
           <DeepLinkUnavailableScreen
-            reason="Could not load this meal."
+            reason={
+              mealLoad.kind === "unavailable" ? mealLoad.reason : MEAL_GONE_REASON
+            }
             onGoToday={goToday}
           />
         );
@@ -226,27 +330,37 @@ export function TraineeOverlayHost({
       );
     case "something_different":
       if (!mealAssignment) {
+        const loading = mealLoad.kind === "loading";
+        const reason =
+          mealLoad.kind === "unavailable" ? mealLoad.reason : MEAL_GONE_REASON;
         if (presentation === "sheet") {
           return (
             <BottomSheet
               visible
               title="What did you have instead?"
-              subtitle="Loading meal…"
+              subtitle={loading ? undefined : "This meal can't be opened"}
               onDismiss={onClose}
             >
-              <DeepLinkUnavailableScreen
-                reason="Could not load this meal."
-                onGoToday={goToday}
-              />
+              {loading ? (
+                <MealLoadingRows />
+              ) : (
+                <DeepLinkUnavailableScreen reason={reason} onGoToday={goToday} />
+              )}
             </BottomSheet>
           );
         }
-        return (
-          <DeepLinkUnavailableScreen
-            reason="Could not load this meal."
-            onGoToday={goToday}
-          />
-        );
+        if (loading) {
+          return (
+            <Screen
+              v3
+              title="What did you have instead?"
+              subtitle="Loading meal"
+            >
+              <MealLoadingRows />
+            </Screen>
+          );
+        }
+        return <DeepLinkUnavailableScreen reason={reason} onGoToday={goToday} />;
       }
       if (presentation === "sheet") {
         return (

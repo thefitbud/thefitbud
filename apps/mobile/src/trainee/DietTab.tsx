@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { ActivityIndicator, Image, Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Svg, { Circle } from "react-native-svg";
 import {
-  Bell,
   BookOpen,
+  Camera,
   Check,
   CloudOff,
   Cookie,
@@ -24,6 +24,7 @@ import { isNetworkFailure, userFacingMessage } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatCivilDate, formatNumber } from "@fitbud/core";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { BellButton } from "../components/BellButton";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
@@ -33,6 +34,7 @@ import {
   useTheme,
 } from "../providers/ThemeProvider";
 import { useAuth } from "../auth/AuthProvider";
+import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { FutureDayBanner } from "./FutureDayBanner";
 import { PlannedMealSheet } from "./PlannedMealSheet";
@@ -48,9 +50,13 @@ import {
   useOutboxOverlay,
 } from "./today/queuedLogs";
 import {
-  attachMealPhotoBestEffort,
+  MealPhotoError,
   confirmMealAssignment,
   pendingMealLogIds,
+  pickMealPhoto,
+  prepareMealPhoto,
+  uploadAndAttachMealPhoto,
+  type MealPhotoSource,
 } from "./mealActions";
 import {
   canChangeLoggedMeal,
@@ -86,6 +92,7 @@ import {
 import { CoachLogBadge } from "./coach-log/CoachLogBadge";
 import { deviationLabel, LoggedMealSheet } from "./food/LoggedMealSheet";
 import { formatAmount } from "./food/logLines";
+import { MealPhotoSheet } from "./food/MealPhotoSheet";
 import {
   takeMealSaved,
   useMealSavedNotice,
@@ -370,6 +377,15 @@ function StateCard({
     </View>
   );
 }
+/** A picked meal photo on its way to the server (TR-07m2 / TR-07m3). */
+type PhotoJob = {
+  uri: string;
+  status: "preparing" | "waiting" | "uploading" | "failed" | "done";
+  message: string | null;
+  attachKey: string;
+  mediaAssetId: string | null;
+};
+
 type MeDay = Awaited<ReturnType<ReturnType<typeof stage1Api>["getMeDay"]>>;
 
 /** One day of Diet as cached per relationship and civil date (Z12-40). */
@@ -597,14 +613,28 @@ function DietTabBody({
    */
   const optimisticStatus = useRef(new Map<string, MealAssignment["status"]>());
   const [optimisticVersion, setOptimisticVersion] = useState(0);
-  const [photoPromptId, setPhotoPromptId] = useState<string | null>(null);
+  /**
+   * The photo choice sheet (TR-07m). `coachAsks` is true when it opened by
+   * itself after a log because the plan asks for a photo of this meal
+   * (D-W14-19); it is false when the trainee opened it from Add photo.
+   */
+  const [photoSheet, setPhotoSheet] = useState<{
+    id: string;
+    coachAsks: boolean;
+  } | null>(null);
+  /**
+   * A picked photo on its way to the server (TR-07m2 / TR-07m3). It waits for
+   * the log to be on the server and for a connection, then uploads and attaches.
+   */
+  const [photoJobs, setPhotoJobs] = useState<Record<string, PhotoJob>>({});
+  const photoBytes = useRef(new Map<string, Uint8Array>());
+  const photoRunning = useRef(new Set<string>());
   /**
    * A meal eaten as planned here: its photo prompt shows once the server has
    * the log (a photo can only follow a sent log), if that happens soon. A log
    * held up offline gets no prompt, as before.
    */
   const photoAfterSend = useRef<{ id: string; at: number } | null>(null);
-  const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
   const coachName =
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
@@ -635,7 +665,11 @@ function DietTabBody({
     const meal = bundle?.meals.find((item) => item.id === waitingFor.id);
     if (entry || (meal && isMealLoggedForCount(meal.status))) {
       photoAfterSend.current = null;
-      setPhotoPromptId(waitingFor.id);
+      // D-W14-19: the sheet opens only when the plan asks for a photo of
+      // this meal. Otherwise the card keeps a small Add photo.
+      if (meal?.photoRequired) {
+        setPhotoSheet({ id: waitingFor.id, coachAsks: true });
+      }
     }
   }, [overlay, bundle]);
 
@@ -701,7 +735,6 @@ function DietTabBody({
   const now = new Date();
 
   const focusMealId = useMemo(() => {
-    if (photoPromptId) return photoPromptId;
     // A future day has no "due now" meal: every meal is a planned row.
     if (isFuture) return null;
     const hero = nextUp({
@@ -715,7 +748,7 @@ function DietTabBody({
       return hero.meal.id;
     }
     return null;
-  }, [assignments, photoPromptId, isFuture]);
+  }, [assignments, isFuture]);
 
   function applyOptimistic(id: string, status: MealAssignment["status"]) {
     optimisticStatus.current.set(id, status);
@@ -771,15 +804,121 @@ function DietTabBody({
     }
   }
 
-  async function addMealPhoto(assignment: MealAssignment) {
-    setPhotoUploadingId(assignment.id);
+  function patchJob(id: string, patch: Partial<PhotoJob>) {
+    setPhotoJobs((jobs) => {
+      const job = jobs[id];
+      return job ? { ...jobs, [id]: { ...job, ...patch } } : jobs;
+    });
+  }
+
+  /** Camera or gallery, then resize to 1600 px JPEG; the upload follows on its own. */
+  async function choosePhoto(source: MealPhotoSource) {
+    const sheet = photoSheet;
+    setPhotoSheet(null);
+    if (!sheet) return;
+    let picked;
     try {
-      await attachMealPhotoBestEffort(api, relationship.id, assignment);
-    } finally {
-      setPhotoUploadingId(null);
-      setPhotoPromptId(null);
+      picked = await pickMealPhoto(source);
+    } catch (err) {
+      reportError("DietTab.pickPhoto", err);
+      setActionError(
+        err instanceof MealPhotoError
+          ? err.message
+          : "Couldn't open the photo. Try again.",
+      );
+      return;
+    }
+    if (!picked) return;
+    const id = sheet.id;
+    setPhotoJobs((jobs) => ({
+      ...jobs,
+      [id]: {
+        uri: picked.uri,
+        status: "preparing",
+        message: null,
+        attachKey: createIdempotencyKey(),
+        mediaAssetId: null,
+      },
+    }));
+    try {
+      const prepared = await prepareMealPhoto(picked);
+      photoBytes.current.set(id, prepared.bytes);
+      patchJob(id, { uri: prepared.uri, status: "waiting" });
+    } catch (err) {
+      reportError("DietTab.preparePhoto", err);
+      patchJob(id, {
+        status: "failed",
+        message:
+          err instanceof MealPhotoError
+            ? err.message
+            : "Photo didn't upload. Your meal is still logged.",
+      });
     }
   }
+
+  async function sendPhoto(meal: MealAssignment, entryId: string) {
+    const job = photoJobs[meal.id];
+    const bytes = photoBytes.current.get(meal.id);
+    if (!job || !bytes || photoRunning.current.has(meal.id)) return;
+    photoRunning.current.add(meal.id);
+    patchJob(meal.id, { status: "uploading", message: null });
+    try {
+      await uploadAndAttachMealPhoto(api, {
+        relationshipId: relationship.id,
+        assignmentId: meal.id,
+        entryId,
+        bytes,
+        attachKey: job.attachKey,
+        mediaAssetId: job.mediaAssetId,
+      });
+      photoBytes.current.delete(meal.id);
+      patchJob(meal.id, { status: "done" });
+      invalidateRelationshipDayData(relationship.id);
+    } catch (err) {
+      reportError("DietTab.sendPhoto", err);
+      patchJob(meal.id, {
+        status: "failed",
+        message:
+          err instanceof MealPhotoError
+            ? err.message
+            : "Photo didn't upload. Your meal is still logged.",
+        mediaAssetId:
+          err instanceof MealPhotoError ? err.mediaAssetId : job.mediaAssetId,
+      });
+    } finally {
+      photoRunning.current.delete(meal.id);
+    }
+  }
+
+  function retryPhoto(id: string) {
+    patchJob(id, { status: "waiting", message: null });
+  }
+
+  function removePhotoJob(id: string) {
+    photoBytes.current.delete(id);
+    setPhotoJobs((jobs) =>
+      Object.fromEntries(Object.entries(jobs).filter(([key]) => key !== id)),
+    );
+  }
+
+  /** The server's entry id for a logged meal; not known while the log is still on the phone. */
+  function entryIdOf(meal: MealAssignment): string | null {
+    const id = meal.compliance?.id;
+    if (!id || id.startsWith("local-") || pendingSendIds.has(meal.id)) return null;
+    return id;
+  }
+
+  // A picked photo goes up once its log is on the server and there is a
+  // connection: a meal logged offline attaches when the phone is back online.
+  useEffect(() => {
+    if (showOffline) return;
+    for (const meal of assignments) {
+      const job = photoJobs[meal.id];
+      if (job?.status !== "waiting") continue;
+      const entryId = entryIdOf(meal);
+      if (entryId) void sendPhoto(meal, entryId);
+    }
+  }, [photoJobs, assignments, showOffline, pendingSendIds]);
 
   const openSomethingDifferent = (meal: MealAssignment) =>
     onOpenOverlay({ screen: "something_different", assignmentId: meal.id });
@@ -824,12 +963,129 @@ function DietTabBody({
     );
   }
 
+  /**
+   * TR-07m2 / TR-07m3 / TR-07m4: the photo part of a logged card. Uploading,
+   * failed (with Try again and Remove photo), waiting for a connection, a
+   * photo that is on the log, or a small Add photo while the entry can still
+   * be edited (`editableUntil`, Z14-11). Never silent.
+   */
+  function renderPhotoArea(
+    meal: MealAssignment,
+    ctx: {
+      isLogged: boolean;
+      isSkipped: boolean;
+      isLocked: boolean;
+      waiting: boolean;
+      name: string;
+    },
+  ) {
+    if (!ctx.isLogged || ctx.isSkipped || ctx.waiting) return null;
+    const job = photoJobs[meal.id];
+    if (job && job.status !== "done") {
+      const failed = job.status === "failed";
+      const entryReady = entryIdOf(meal) != null;
+      const queued = job.status === "waiting" && (showOffline || !entryReady);
+      const text = failed
+        ? (job.message ?? "Photo didn't upload. Your meal is still logged.")
+        : queued
+          ? showOffline
+            ? "You're offline. The photo is saved on your phone and sends when you're back."
+            : "The photo sends as soon as your meal is saved."
+          : "Uploading photo\u2026";
+      return (
+        <View style={styles.photoArea} testID="meal-photo-status">
+          <View style={styles.photoStatus}>
+            <Image
+              source={{ uri: job.uri }}
+              style={styles.photoThumb}
+              accessibilityLabel={`Photo of ${ctx.name}`}
+            />
+            <View style={styles.photoStatusText}>
+              <Text variant="subhead" tone={failed ? "crit" : "ink2"}>
+                {text}
+              </Text>
+            </View>
+            {!failed && !queued ? (
+              <ActivityIndicator color={theme.colors.brand} />
+            ) : null}
+          </View>
+          {failed ? (
+            <View style={styles.photoButtons}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Try again"
+                onPress={() => retryPhoto(meal.id)}
+                style={styles.photoBtn}
+                testID="meal-photo-retry"
+              >
+                <RefreshCw size={18} strokeWidth={2} color={theme.colors.ink} />
+                <Text variant="bodyStrong">Try again</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Remove photo"
+                onPress={() => removePhotoJob(meal.id)}
+                style={styles.photoBtn}
+                testID="meal-photo-remove"
+              >
+                <Text variant="bodyStrong">Remove photo</Text>
+              </Pressable>
+            </View>
+          ) : null}
+        </View>
+      );
+    }
+    if (job?.status === "done" || meal.compliance?.mediaAssetId) {
+      return (
+        <View style={styles.photoArea} testID="meal-photo-added">
+          <View style={styles.photoStatus}>
+            {job?.uri ? (
+              <Image
+                source={{ uri: job.uri }}
+                style={styles.photoThumb}
+                accessibilityLabel={`Photo of ${ctx.name}`}
+              />
+            ) : (
+              <Check size={20} strokeWidth={2.4} color={theme.colors.done} />
+            )}
+            <View style={styles.photoStatusText}>
+              <Text variant="subhead">Photo added for {coachName}</Text>
+            </View>
+          </View>
+        </View>
+      );
+    }
+    const until = meal.compliance?.editableUntil;
+    const editable =
+      !ctx.isLocked &&
+      lockStateKnown &&
+      until != null &&
+      Date.parse(until) > Date.now() &&
+      entryIdOf(meal) != null;
+    if (!editable) return null;
+    return (
+      <View style={styles.photoArea}>
+        <View style={styles.photoButtons}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Add photo"
+            onPress={() => setPhotoSheet({ id: meal.id, coachAsks: false })}
+            style={styles.photoBtn}
+            testID="meal-add-photo"
+          >
+            <Camera size={18} strokeWidth={2} color={theme.colors.ink} />
+            <Text variant="bodyStrong">Add photo</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
   function renderRow(meal: MealAssignment) {
     if (isFuture) return renderPlannedRow(meal);
     const lockCopy = lockStateKnown ? mealLockCopy(meal, coachName) : null;
     const isLocked = Boolean(lockCopy);
-    const isLogged =
-      isMealLoggedForCount(meal.status) && meal.id !== photoPromptId;
+    const isLogged = isMealLoggedForCount(meal.status);
     const isSkipped = meal.status === "skipped";
     const waiting = pendingSendIds.has(meal.id) && isLogged && !isSkipped;
     const kcalRow = kcalRowById.get(meal.id);
@@ -984,6 +1240,13 @@ function DietTabBody({
             </Pressable>
           ) : null}
         </View>
+        {renderPhotoArea(meal, {
+          isLogged,
+          isSkipped,
+          isLocked,
+          waiting,
+          name,
+        })}
         {canChange ? (
           <Pressable
             accessibilityRole="button"
@@ -1009,10 +1272,7 @@ function DietTabBody({
       unresolvedExceptionCount: unresolvedExceptions,
     });
     const kcal = kcalRowById.get(meal.id)?.kcal ?? null;
-    const showPhotoPrompt =
-      photoPromptId === meal.id &&
-      (meal.status === "confirmed" || meal.status === "logged_later");
-    const dueNow = canLog && !showPhotoPrompt;
+    const dueNow = canLog;
     const name = cleanFoodLabel(meal.mealName);
     const Glyph = mealGlyph(name);
     const due = mealDueStatusLabel(meal, timeZone, now);
@@ -1028,18 +1288,10 @@ function DietTabBody({
           <View
             style={[
               styles.tile,
-              showPhotoPrompt ? styles.tileDone : styles.tileBrand,
+              styles.tileBrand,
             ]}
           >
-            {showPhotoPrompt ? (
-              <Check size={22} color={theme.colors.done} strokeWidth={2.4} />
-            ) : (
-              <Glyph
-                size={22}
-                strokeWidth={1.9}
-                color={theme.colors.brandInk}
-              />
-            )}
+            <Glyph size={22} strokeWidth={1.9} color={theme.colors.brandInk} />
           </View>
           <View style={styles.rowText}>
             <Text variant="headline" numberOfLines={1}>
@@ -1048,19 +1300,17 @@ function DietTabBody({
                 {" "}
                 {formatClockTime(meal.windowStartsAt, timeZone)}
               </Text>
-              {!showPhotoPrompt ? (
-                <Text
-                  variant="caption"
-                  tone={overdue ? "crit" : "coralInk"}
-                  style={styles.strong}
-                >
-                  {"  "}
-                  {overdue ? "Overdue" : due === "due now" ? "Due now" : due}
-                </Text>
-              ) : null}
+              <Text
+                variant="caption"
+                tone={overdue ? "crit" : "coralInk"}
+                style={styles.strong}
+              >
+                {"  "}
+                {overdue ? "Overdue" : due === "due now" ? "Due now" : due}
+              </Text>
             </Text>
             <Text variant="subhead" numberOfLines={1}>
-              {showPhotoPrompt ? "Eaten as planned" : plannedSummaryLine(meal)}
+              {plannedSummaryLine(meal)}
             </Text>
           </View>
           {kcal != null ? (
@@ -1070,7 +1320,7 @@ function DietTabBody({
             </View>
           ) : null}
         </View>
-        {canLog && !showPhotoPrompt ? (
+        {canLog ? (
           <View style={styles.actions}>
             <Pressable
               accessibilityRole="button"
@@ -1091,7 +1341,7 @@ function DietTabBody({
                     color={theme.colors.onBrand}
                     strokeWidth={2.2}
                   />
-                  <Text variant="bodyStrong" tone="onBrand" numberOfLines={1}>
+                  <Text variant="bodyStrong" tone="onBrand" style={styles.btnLabel}>
                     Eaten as planned
                   </Text>
                 </>
@@ -1104,40 +1354,10 @@ function DietTabBody({
               onPress={() => openSomethingDifferent(meal)}
               style={styles.secondaryBtn}
             >
-              <Text variant="bodyStrong" numberOfLines={1}>
+              <Text variant="bodyStrong" style={styles.btnLabel}>
                 Something different
               </Text>
             </Pressable>
-          </View>
-        ) : null}
-        {showPhotoPrompt ? (
-          <View style={styles.photoPrompt}>
-            <Text variant="bodyStrong">Add a photo for {coachName}?</Text>
-            <Text variant="subhead">
-              Your log is saved. A photo is optional and can follow later.
-            </Text>
-            <View style={styles.actions}>
-              <Pressable
-                accessibilityRole="button"
-                style={styles.secondaryBtn}
-                onPress={() => void addMealPhoto(meal)}
-              >
-                <Text variant="bodyStrong">Camera</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                style={styles.secondaryBtn}
-                onPress={() => void addMealPhoto(meal)}
-              >
-                <Text variant="bodyStrong">Gallery</Text>
-              </Pressable>
-            </View>
-            {photoUploadingId === meal.id ? (
-              <ActivityIndicator
-                color={theme.colors.brand}
-                style={styles.photoSpinner}
-              />
-            ) : null}
           </View>
         ) : null}
       </View>
@@ -1240,17 +1460,11 @@ function DietTabBody({
                   strokeWidth={1.9}
                 />
               </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Notifications"
+              <BellButton
+                unread={unreadNotifications}
                 onPress={() => onOpenOverlay({ screen: "notifications" })}
-                style={styles.iconBtn}
-              >
-                <Bell size={22} color={theme.colors.ink2} strokeWidth={1.9} />
-                {unreadNotifications > 0 ? (
-                  <View style={styles.unreadDot} />
-                ) : null}
-              </Pressable>
+                testID="diet-bell"
+              />
             </View>
           </View>
 
@@ -1404,6 +1618,18 @@ function DietTabBody({
               }
             />
           ) : null}
+          {photoSheet ? (
+            <MealPhotoSheet
+              visible
+              mealName={cleanFoodLabel(
+                assignments.find((m) => m.id === photoSheet.id)?.mealName ?? "Meal",
+              )}
+              coachAsks={photoSheet.coachAsks ? coachName : null}
+              onTakePhoto={() => void choosePhoto("camera")}
+              onChooseFromGallery={() => void choosePhoto("gallery")}
+              onNotNow={() => setPhotoSheet(null)}
+            />
+          ) : null}
         </View>
       </Screen>
     </GestureDetector>
@@ -1427,15 +1653,6 @@ const useStyles = createThemedStyles((t) => ({
     justifyContent: "center",
     position: "relative",
     width: 44,
-  },
-  unreadDot: {
-    backgroundColor: t.colors.coral,
-    borderRadius: 5,
-    height: 9,
-    position: "absolute",
-    right: 11,
-    top: 10,
-    width: 9,
   },
   chip: {
     alignItems: "center",
@@ -1567,34 +1784,58 @@ const useStyles = createThemedStyles((t) => ({
     paddingHorizontal: 72,
   },
   actions: {
-    flexDirection: "row",
-    gap: 10,
+    flexDirection: "column",
+    gap: 8,
     paddingBottom: 12,
     paddingHorizontal: 12,
   },
+  btnLabel: { flexShrink: 1, textAlign: "center" },
   primaryBtn: {
     alignItems: "center",
     backgroundColor: t.colors.brand,
     borderRadius: t.radii.button,
-    flex: 1,
     flexDirection: "row",
     gap: 6,
     justifyContent: "center",
     minHeight: 48,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
   secondaryBtn: {
+    alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
+    borderRadius: t.radii.button,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 48,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  photoArea: { gap: 8, paddingBottom: 12, paddingHorizontal: 12 },
+  photoStatus: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.card,
+    flexDirection: "row",
+    gap: 12,
+    padding: 10,
+  },
+  photoThumb: { borderRadius: 10, height: 52, width: 52 },
+  photoStatusText: { flex: 1, minWidth: 0 },
+  photoButtons: { flexDirection: "row", gap: 8 },
+  photoBtn: {
     alignItems: "center",
     backgroundColor: t.colors.fill,
     borderRadius: t.radii.button,
     flex: 1,
+    flexDirection: "row",
+    gap: 8,
     justifyContent: "center",
     minHeight: 48,
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
   },
   btnDisabled: { opacity: 0.6 },
-  photoPrompt: { gap: 4, paddingBottom: 4, paddingHorizontal: 12 },
-  photoSpinner: { marginTop: 8 },
   stateCard: {
     alignItems: "center",
     backgroundColor: t.colors.card,
