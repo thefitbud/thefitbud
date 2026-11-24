@@ -7,6 +7,15 @@ TR-07l4-assigned-plan-error
 TR-07m-photo-choice
 TR-07m2-photo-uploading
 TR-07m3-photo-failed
+TR-07m4-logged-add-photo
+TR-07n-logged-meal-edit
+TR-07n2-edit-eaten-as-planned
+TR-07n3-remove-log-confirm
+TR-07n4-edit-portion
+TR-07n5-edit-ate-out
+TR-07n6-edit-saved
+TR-07n7-locked-after-24h
+TR-07n8-edit-offline
 TR-08a2-something-different-loading
 TR-08b2-changed-portion-screen
 TR-08b3-changed-portion-offline
@@ -22,5 +31,5 @@ W-17a2-summary-rpe
 W-17a3-summary-rpe-required
 W-17a4-summary-offline
 W-17c-summary-readonly
-W-17c2-summary-change-rpe
+W-17c2-summary-edit-rating-note
 W-17c3-summary-readonly-old

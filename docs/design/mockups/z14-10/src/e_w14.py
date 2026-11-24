@@ -32,21 +32,26 @@ screen('W-17a3-summary-rpe-required','After finish: Rahul’s plan asks for RPE,
 screen('W-17a4-summary-offline','After finish, offline: neutral banner, saves on the phone',
   summ(f'<div style="margin-top:4px">{banner("You’re offline. Your workout is saved on your phone and sends to Rahul when you’re back.","neutral","wifi-off")}</div>'+HEAD()+STATS+PR+CHG+rpe(8)+NOTE,btn("Save and share with Rahul",icon="send"),'<div style="height:8px"></div>'),A_W)
 # read-only
-RO_RPE=lambda v,anch,change=True,until='Change until Thu 26 Nov, 7:10 pm':(f'<div class="t-label glabel">How hard was it</div><div class="group"><div class="li" style="--inset:14px"><div class="lic" style="background:var(--brand-tint);color:var(--brand)"><span class="tnum" style="font-weight:700;font-size:15px">{v}</span></div>'
-  f'<div class="f1"><div class="t-body">{anch}</div><div class="t-sub" style="font-size:13px">{until}</div></div>{"<span class=navbtn style=min-width:60px;justify-content:flex-end>Change</span>" if change else ""}</div></div>')
-NOTE_RO=f'<div class="t-label glabel">Your note</div><div class="group"><div class="li" style="--inset:14px"><div class="f1 t-body" data-wrapok="1">Left knee felt tight on lunges, went lighter.</div></div></div>'
+def RN(v,anch,note,change=True,until='You can change these until Thu 26 Nov, 7:10 pm'):
+    ch='<span class="navbtn" style="height:44px;margin:-12px 0;font-size:15px;font-weight:600">Change</span>' if change else ''
+    nr=(f'<div class="li" style="--inset:14px"><div class="f1"><div class="t-cap">Note for Rahul</div><div class="t-body" data-wrapok="1" style="margin-top:2px">{note}</div></div></div>' if note else
+        f'<div class="li" style="--inset:14px"><div class="f1"><div class="t-cap">Note for Rahul</div><div class="t-body" style="margin-top:2px;color:var(--ink3)">No note</div></div></div>')
+    return (f'<div class="row sp glabel" style="align-items:center"><span class="t-label">Your rating and note</span>{ch}</div><div class="group">'
+            f'<div class="li" style="--inset:58px"><div class="lic" style="background:var(--brand-tint);color:var(--brand)"><span class="tnum" style="font-weight:700;font-size:15px">{v}</span></div><div class="f1"><div class="t-cap">How hard was it</div><div class="t-body" style="margin-top:2px">{anch}</div></div></div>{nr}</div>'
+            f'<div class="t-cap" data-wrapok="1" style="margin:8px 4px 0">{until}</div>')
+NOTE_TXT='Left knee felt tight on lunges, went lighter.'
 SENT=f'<div class="row" style="gap:6px;margin-top:6px">{sync("sent")}<span class="t-cap">Shared Tue 24 Nov, 7:10 pm</span></div>'
-screen('W-17c-summary-readonly','View summary on a finished workout: read-only, RPE with Change (48 h), single Done',
-  summ(HEAD(t='Lower body B')+SENT+STATS+PR+CHG+RO_RPE(7,'7 of 10')+NOTE_RO,btn("Done"),nav("",left="back")),A_W)
-SH=sheet(f'''<div class="t-title">How hard was it?</div><div class="t-sub" style="margin-top:2px">Lower body B · Tue 24 Nov · Rahul sees the change</div>
-<div style="margin-top:4px">{rpe(8).replace('glabel','" style="margin:14px 4px 8px')}</div><div class="col" style="gap:8px;margin-top:18px">{btn("Save")}{btn("Cancel","secondary")}</div>''')
-screen('W-17c2-summary-change-rpe','Read-only summary: Change RPE sheet (within 48 h)',
-  summ(HEAD(t='Lower body B')+SENT+STATS+PR+CHG+RO_RPE(7,'7 of 10'),btn("Done"),nav("",left="back"))+SH,A_W)
+screen('W-17c-summary-readonly','View summary on a finished workout: read-only, rating and note with one Change (48 h), single Done',
+  summ(HEAD(t='Lower body B')+SENT+STATS+PR+CHG+RN(7,'7 of 10',NOTE_TXT),btn("Done"),nav("",left="back")),A_W)
+SH=sheet(f'''<div class="t-title">Your rating and note</div><div class="t-sub" style="margin-top:2px">Lower body B · Tue 24 Nov · Rahul sees the change</div>
+<div>{rpe(8).replace('glabel','" style="margin:14px 4px 8px')}</div>{field("Note for Rahul","Left knee felt tight on lunges.",focus=True)}<div class="col" style="gap:8px;margin-top:16px">{btn("Save")}{btn("Cancel","secondary")}</div>''')
+screen('W-17c2-summary-edit-rating-note','Read-only summary: Change sheet edits the rating and the note (within 48 h)',
+  summ(HEAD(t='Lower body B')+SENT+STATS+PR+CHG+RN(7,'7 of 10',NOTE_TXT),btn("Done"),nav("",left="back"))+SH,A_W)
 OLD=f'<div class="row" style="gap:8px;margin-top:14px">{st("Duration","47","min")}{st("Volume","3,860","kg")}{st("Sets","18","/ 18")}</div>'
-screen('W-17c3-summary-readonly-old','View summary after 48 h: no rating, no Change, single Done',
+screen('W-17c3-summary-readonly-old','View summary after 48 h: rating and note read-only, no Change, single Done',
   summ(HEAD('UPPER BODY A · THU 19 NOV','Upper body A')+f'<div class="row" style="gap:6px;margin-top:6px">{sync("sent")}<span class="t-cap">Shared Thu 19 Nov, 7:42 am</span></div>'+OLD+
   f'<div class="t-label glabel">Done as planned</div><div class="group">{chg("check",("var(--done-tint)","var(--done)"),"All 6 exercises","No changes from Rahul’s plan","")}</div>'
-  +RO_RPE('–','Not rated',change=False,until='Ratings can be changed for 48 hours'),btn("Done"),nav("",left="back")),A_W)
+  +RN('–','Not rated','',change=False,until='Ratings and notes can be changed for 48 hours after a workout.'),btn("Done"),nav("",left="back")),A_W)
 # ================= Time zone =================
 def zrow(city,name,off,on=False,sub=''):
     t=f'<span style="color:var(--brand)">{ic("check",20,2.6)}</span>' if on else ''
@@ -117,9 +122,9 @@ S1=diet_summary(1292,1850,(69,110),(158,210),(36,55))
 M4d=meal("cookie","Evening snack","5:00 pm","Roasted chana 1 katori · masala chai",220)
 base1=ad.day(S1,ad.M1+ad.M2+ad.M3+M4d+ad.M5,'4 of 5 logged')
 opt=lambda i,t,s='':f'<div class="li" style="--inset:58px;min-height:56px"><div class="lic" style="background:var(--brand-tint);color:var(--brand)">{ic(i,18,2)}</div><div class="f1"><div class="t-body">{t}</div>{f"<div class=t-sub style=font-size:13px>{s}</div>" if s else ""}</div></div>'
-screen('TR-07m-photo-choice','After Eaten as planned: Add a photo? Take photo / Choose from gallery / Skip',base1+sheet(f'''<div class="row" style="gap:10px"><span style="color:var(--done)">{ic("circle-check",22,2.2)}</span><div><div class="t-title">Evening snack logged</div><div class="t-sub">Add a photo for Rahul? It’s optional.</div></div></div>
+screen('TR-07m-photo-choice','After Eaten as planned, only when Rahul’s plan asks for a photo: Take photo / Choose from gallery / Not now',base1+sheet(f'''<div class="row" style="gap:10px"><span style="color:var(--done)">{ic("circle-check",22,2.2)}</span><div><div class="t-title">Evening snack logged</div><div class="t-sub">Rahul asks for a photo of this meal.</div></div></div>
 <div class="group" style="margin-top:14px;box-shadow:0 0 0 .5px var(--line2)">{opt("camera","Take photo")}{opt("image","Choose from gallery")}</div>
-<div style="margin-top:10px">{btn("Skip","secondary")}</div>'''),A_D)
+<div style="margin-top:10px">{btn("Not now","secondary")}</div><div class="t-cap" style="text-align:center;margin-top:8px">You can add it from the meal for 24 hours.</div>'''),A_D)
 thumb=lambda:f'<div style="width:44px;height:44px;border-radius:10px;flex:none;background:linear-gradient(150deg,#d9a55b,#8a5a2b);position:relative;overflow:hidden"><div style="position:absolute;left:8px;top:10px;width:28px;height:22px;border-radius:50%;background:rgba(255,240,210,.55)"></div></div>'
 def pmeal(state):
     if state=='up': s=f'<div class="t-sub" style="font-size:13px">Uploading photo…</div><div class="track" style="height:4px;margin-top:6px"><i style="width:55%;background:var(--brand)"></i></div>'; tr=''
@@ -131,7 +136,7 @@ def pmeal(state):
 screen('TR-07m2-photo-uploading','Meal photo uploading on the logged card',ad.day(S1,ad.M3+pmeal('up')+ad.M5,'4 of 5 logged'),A_D)
 screen('TR-07m3-photo-failed','Meal photo failed: says what went wrong, Try again or Remove, meal stays logged',ad.day(S1,ad.M3+pmeal('fail')+ad.M5,'4 of 5 logged'),A_D)
 # ================= Something different =================
-D0=ad.day(ad.S0,ad.M1+ad.M2+ad.M3+ad.DUE+ad.M5)
+D0=ad.day(ad.S0,ad.M1+ad.M2+ad.M3+due2(True)+ad.M5)
 oskel=lambda:f'<div class="card row" style="gap:12px;padding:14px;margin-top:8px;box-shadow:0 0 0 .5px var(--line2)">{skel("40px",40,12)}<div class="f1">{skel("55%",14)}{skel("80%",11,6,"margin-top:8px")}</div></div>'
 screen('TR-08a2-something-different-loading','Something different loading: skeleton inside the sheet, title known at once (never “isn’t available”)',
   D0+sheet(f'<div class="t-title">What did you have instead?</div><div class="t-sub" style="margin-top:2px">Evening snack · plan 220 kcal</div>{oskel()}{oskel()}{oskel()}<div style="height:44px"></div>'),A_D)
@@ -153,6 +158,55 @@ screen('TR-08c2-ate-out-screen','Ate out as a full screen: back top left, Save t
   f'<div class="content" style="{WP}">{AO("380",False,"Vada pav and cutting chai")}<div class="group" style="margin-top:16px;box-shadow:0 0 0 .5px var(--line2)">{opt("camera","Add a photo","Optional · the menu or your plate")}</div></div><div class="stick">{btn("Save · 380 kcal")}</div>',A_D)
 screen('TR-08c3-ate-out-keyboard','Ate out with the number keyboard up: Save stays reachable top right and above the keys',
   f'<div class="content" style="{WP}">{AO("38",True,"")}</div><div class="stick" style="bottom:244px;padding-bottom:12px;background:var(--bg-plain);border:0">{btn("Save · 38 kcal")}</div>{kb_num()}',A_D)
+# ================= Diet: edit a logged entry for 24 h (Firoz, 24 Nov 2026) =================
+HINT=lambda t:f'<span class="row t-cap" style="gap:5px">{ic("clock",13,2.2)}{t}</span>'
+def jl_card(photo=True):
+    a=(f'<div class="row" style="gap:8px;margin-top:10px">'
+       +(btn("Add photo","secondary",icon="camera",style="flex:1;height:44px;border-radius:12px;font-size:15px") if photo else '')
+       +btn("Edit","secondary",icon="pencil",style="flex:1;height:44px;border-radius:12px;font-size:15px")+'</div>')
+    return (f'<div class="card" style="padding:11px 14px 12px 12px"><div class="row" style="gap:12px"><div class="mt" style="background:var(--done-tint);color:var(--done)">{ic("cookie",20,2)}</div><div class="mx"><div class="row" style="gap:6px;align-items:baseline"><span class="t-bodym">Evening snack</span><span class="t-cap">5:20 pm</span></div><div class="t-sub ell msub">Eaten as planned</div></div>'
+            f'<div class="kc"><span class="n-md">220</span><span class="t-cap">kcal</span></div><div class="okc">{ic("check",15,3)}</div></div>{a}<div style="margin-top:8px">{HINT("Editable until tomorrow, 5:20 pm")}</div></div>')
+screen('TR-07m4-logged-add-photo','Just-logged meal (plan doesn’t ask for a photo): small Add photo and Edit, with the 24 h hint',ad.day(S1,ad.M3+jl_card()+ad.M5,'4 of 5 logged'),A_D)
+# logged meal sheet (changed portion) with Edit
+LUNCH_ITEMS=f'''<div class="group" style="margin-top:14px;box-shadow:none;background:var(--bg)">{ad.item("Chapati / roti","2 pieces · plan 3",160,tag("−1","warn"))}{ad.item("Dal tadka","1 katori (150 g)",210)}{ad.item("Jeera rice","½ katori · not in plan",120,tag("Added","brand"))}{ad.item("Cucumber salad","1 bowl",40)}</div>'''
+def lsheet(title,sub,kc,body,actions,hint):
+    return sheet(f'''<div class="row sp"><div><div class="t-title">{title}</div><div class="t-sub">{sub}</div></div><div class="kc"><span class="n-lg">{kc}</span><span class="t-cap">kcal</span></div></div>{body}
+<div style="margin-top:12px">{hint}</div><div class="col" style="gap:8px;margin-top:14px">{actions}</div>''')
+screen('TR-07n-logged-meal-edit','Logged meal sheet within 24 h: Edit, Add photo, Remove this log, “Editable until” hint',
+  ad.day(ad.S0,ad.M1+ad.M2+ad.M3+due2(True)+ad.M5)+lsheet("Lunch","Changed from the plan · logged 1:42 pm","610",LUNCH_ITEMS,
+  btn("Edit","tint",icon="pencil")+'<div class="row" style="gap:8px">'+btn("Add photo","secondary",icon="camera",style="flex:1")+btn("Remove this log","dangerq",style="flex:1")+'</div>',
+  HINT("Editable until tomorrow, 1:42 pm · Rahul sees any change")),A_D)
+# edit an eaten-as-planned meal
+screen('TR-07n2-edit-eaten-as-planned','Edit an “Eaten as planned” log: change to portion, log it myself or ate out, or remove it (back to not logged)',
+  ad.day(S1,ad.M1+ad.M2+ad.M3+M4d+ad.M5,'4 of 5 logged')+sheet(f'''<div class="t-title">Change this log</div><div class="t-sub" style="margin-top:2px">Evening snack · eaten as planned · 220 kcal</div>
+<div class="group" style="margin-top:14px;box-shadow:0 0 0 .5px var(--line2)">{opt("scale","Changed the portion","Same foods, more or less of each")}{opt("search","Log it myself","Search foods and set amounts")}{opt("store","Ate out","Enter the kcal from the menu or label")}</div>
+<div style="margin-top:10px">{btn("Remove this log","dangerq")}</div><div style="margin-top:10px;text-align:center">{HINT("Editable until tomorrow, 5:20 pm")}</div>'''),A_D)
+screen('TR-07n3-remove-log-confirm','Remove a log: confirm, goes back to not logged, Rahul is told',
+  ad.day(S1,ad.M1+ad.M2+ad.M3+M4d+ad.M5,'4 of 5 logged')+dialog("Remove the evening snack log?","It goes back to not logged, so you can log it again. Rahul sees that you removed it.",[btn("Remove log","danger"),btn("Cancel","secondary")],"trash-2"),A_D)
+# edit a changed portion
+EPORT=lambda offline=False:(f'<div class="content" style="{WP}">{fnav("Edit portion","Lunch · logged 1:42 pm")}'
+  +(f'<div style="margin-top:6px">{banner("You’re offline. Your change saves on your phone and sends when you’re back.","neutral","wifi-off")}</div>' if offline else '')
+  +f'''<div style="margin:8px 2px 4px">{HINT("Editable until tomorrow, 1:42 pm · Rahul sees changes")}</div>
+<div class="group" style="box-shadow:0 0 0 .5px var(--line2)">{prow("Chapati / roti","pieces","2","3 pieces",160)}{prow("Dal tadka","katori","1","1 katori",210)}{prow("Jeera rice","katori","½","1 katori",120).replace("Plan 1 katori","Added by you")}{prow("Cucumber salad","bowl","1","1 bowl",40)}</div>
+<div class="row sp" style="margin-top:12px"><span class="link row" style="gap:5px;min-height:44px">{ic("rotate-ccw",15,2.2)}Reset to plan</span><span class="link" style="color:var(--crit);min-height:44px;display:flex;align-items:center">Remove this log</span></div></div>
+<div class="stick"><div class="row sp" style="margin-bottom:10px"><span class="t-sub">Total</span><span><span class="n-md">530 kcal</span> <span class="tag" style="background:var(--warn-tint);color:var(--warn)">+30 vs plan</span></span></div>{btn("Save changes")}</div>''')
+screen('TR-07n4-edit-portion','Edit a changed-portion log: values filled in, hint, Reset, Remove, Save changes',EPORT(),A_D)
+screen('TR-07n5-edit-ate-out','Edit an ate-out log from yesterday: kcal and note filled in, Save changes, Remove',
+  f'''<div class="content" style="{WP}">{fnav("Edit ate out","Dinner · yesterday 8:30 pm")}<div style="margin:8px 2px 0">{HINT("Editable until today, 8:52 pm")}</div>{kcal("950",False)}
+<div class="t-cap" style="text-align:center;margin-top:4px">Was 1,120 kcal · Rahul’s plan for dinner: 560 kcal</div>{field("What did you have? (optional)","Office party · biryani, half the gulab jamun")}
+<div style="margin-top:14px;text-align:center"><span class="link" style="color:var(--crit);min-height:44px;display:inline-flex;align-items:center">Remove this log</span></div></div><div class="stick">{btn("Save changes · 950 kcal")}</div>''',A_D)
+M3e=meal("soup","Lunch","1:30 pm",'<span class="tag" style="background:var(--fill);color:var(--ink2);height:18px;margin-right:4px">Edited</span><span style="color:var(--warn);font-weight:600">Changed</span> · 2 roti, dal, rice',"530")
+screen('TR-07n6-edit-saved','Edit saved: toast, the meal shows a subtle Edited tag, totals updated',
+  ad.day(diet_summary(992,1850,(54,110),(124,210),(29,55)),ad.M1+ad.M2+M3e+due2(True)+ad.M5)+toast("Lunch updated · Rahul sees the change","",96),A_D)
+THU=[('S','8','none'),('M','9','ok'),('T','10','rest'),('W','11','ok'),('T','12','ok'),('F','13','rest'),('S','14','today')]
+M_thu=meal("coffee","Breakfast","8:30 am","Besan chilla, mint chutney, chai",390)+meal("soup","Lunch","1:30 pm",'<span style="color:var(--warn);font-weight:600">Changed</span> · 3 roti, dal, salad',"640")+meal("moon","Dinner","8:30 pm","Grilled fish, 1 roti, sautéed veg",600)
+thu_day=f'''<div class="content">{ad.H('Thursday, 12 Nov · Rahul’s plan')}{week(sel=4,on=6,days=THU)}{diet_summary(1630,1850,(98,110),(180,210),(50,55))}{sec("Meals",'<span class="t-sub tnum">5 of 5 logged</span>',"margin:20px 2px 10px")}<div class="meals">{M_thu}</div></div>{fade()}{tabbar("Diet")}'''
+LOCK=f'''<div class="banner neutral" style="margin-top:0">{ic("lock",18,2.2)}<span class="f1">Logged entries can be changed for 24 hours.</span></div>'''
+screen('TR-07n7-locked-after-24h','After 24 h: logged meal is read-only, no Edit, short note, Ask Rahul if it’s wrong',
+  thu_day+lsheet("Lunch","Thu 12 Nov · logged 1:51 pm","640",
+  f'''<div class="group" style="margin-top:14px;box-shadow:none;background:var(--bg)">{ad.item("Chapati / roti","3 pieces",240)}{ad.item("Dal tadka","1 katori (150 g)",210)}{ad.item("Cucumber salad","1 bowl",40)}{ad.item("Curd","1 katori",150,tag("+½","warn"))}</div>''',
+  btn("Ask Rahul to fix it","textb",icon="message-circle",style="height:44px"),LOCK),A_D)
+screen('TR-07n8-edit-offline','Edit offline: neutral banner, Save changes queues on the phone',EPORT(True),A_D)
 # ================= Android live workout (D-W14-12) — Android frame only =================
 NT=f'''<div style="position:absolute;inset:0;background:linear-gradient(170deg,#2a2160,#6b4fd6 55%,#c9b8ff)"></div>
 <div style="position:absolute;top:86px;left:0;right:0;text-align:center;color:#fff"><div style="font-size:88px;line-height:94px;font-weight:500;letter-spacing:-2px" class="tnum">6:54</div><div style="font-size:16px;font-weight:500;margin-top:2px">Tue, 24 Nov</div></div>
