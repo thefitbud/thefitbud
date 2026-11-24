@@ -3,8 +3,13 @@ import type { AttentionGroupsResponse, CoachAsk } from "@fitbud/contracts";
 import {
   askMentionsPain,
   buildNeedsYouScreenModel,
+  jumpSectionIndex,
   needsYouEyebrow,
+  notedChipLabel,
+  pillsFor,
+  seeAllLabel,
   shortAgeLabel,
+  visibleCards,
 } from "./needsYouModel";
 
 type AttentionGroup = AttentionGroupsResponse["groups"][number];
@@ -224,5 +229,71 @@ describe("buildNeedsYouScreenModel", () => {
     );
     expect(model.sections).toEqual([]);
     expect(model.eyebrow).toBe("Saturday, 14 Nov");
+  });
+});
+
+describe("Attention sections (Z14-22)", () => {
+  const ids = Array.from(
+    { length: 5 },
+    (_, i) => `${i}${i}${i}${i}${i}${i}${i}${i}-1111-4111-8111-111111111111`,
+  );
+  const missedGroups = ids.map((id, i) =>
+    group(id, `Client ${i} Test`, [
+      item({ id: `aaaaaaa${i}-aaaa-4aaa-8aaa-aaaaaaaaaaaa`, type: "missed_workout" }),
+    ]),
+  );
+  const noted = group(REL_C, "Meera Iyer", [
+    item({
+      id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      type: "overdue_meal",
+      status: "acknowledged",
+      acknowledgedAt: "2026-11-24T04:22:00.000Z",
+    }),
+  ]);
+  const model = buildNeedsYouScreenModel({
+    needsYou: missedGroups,
+    reviewed: [noted],
+    asks: [],
+    checkins: [],
+    clientNames: {},
+    dateLabel: "Tue 24 Nov",
+    nowMs: Date.parse("2026-11-24T06:00:00.000Z"),
+    timeZone: "Asia/Kolkata",
+  });
+  const missed = model.sections.find((s) => s.id === "missed")!;
+
+  it("shows the first 3 rows and a See all count past 3", () => {
+    expect(missed.cards).toHaveLength(5);
+    expect(visibleCards(missed, false)).toHaveLength(3);
+    expect(seeAllLabel(missed)).toBe("See all 5 missed");
+    const noted = model.sections.find((s) => s.id === "reviewed")!;
+    expect(seeAllLabel(noted)).toBeNull();
+    expect(visibleCards(noted, false)).toHaveLength(1);
+  });
+
+  it("a collapsed section draws no rows but keeps its count", () => {
+    expect(visibleCards(missed, true)).toHaveLength(0);
+    expect(missed.count).toBe(5);
+  });
+
+  it("zero tiles are muted: no section to jump to; others jump to their index", () => {
+    expect(model.tiles.find((t) => t.id === "asked")!.count).toBe(0);
+    expect(jumpSectionIndex(model, "asked")).toBeNull();
+    expect(jumpSectionIndex(model, "missed")).toBe(0);
+    expect(jumpSectionIndex(model, "reviewed")).toBe(1);
+    expect(pillsFor(model).map((p) => `${p.label} ${p.count}`)).toEqual([
+      "Missed 5",
+      "Asked 0",
+      "Check-ins 0",
+      "Off plan 0",
+      "Noted 1",
+    ]);
+  });
+
+  it("titles the acknowledged section Noted, still open with a Noted time on its rows", () => {
+    const section = model.sections.find((s) => s.id === "reviewed")!;
+    expect(section.title).toBe("Noted, still open");
+    expect(section.cards[0]!.chip?.label).toBe("Noted · 9:52 am");
+    expect(notedChipLabel(null)).toBe("Noted");
   });
 });
