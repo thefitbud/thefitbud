@@ -25,7 +25,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Screen } from "../../components/Screen";
 import { Text } from "../../components/Text";
-import { initialsFromName } from "../../components/m2";
+import { ClientAvatar, ClientNameLink } from "../ClientAvatar";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
@@ -53,6 +53,8 @@ type Props = {
   relationshipId?: string;
   displayName?: string;
   onBack: () => void;
+  /** Avatar or name tap: opens the client's profile on top (Z14-19). */
+  onOpenClient?: (relationshipId: string) => void;
 };
 
 function avatars(c: ColorTokens) {
@@ -77,6 +79,7 @@ export function SessionDetailScreen({
   relationshipId: ridProp,
   displayName: nameProp,
   onBack,
+  onOpenClient,
 }: Props) {
 
   const theme = useTheme();
@@ -221,6 +224,9 @@ export function SessionDetailScreen({
 
   const first = name.split(" ")[0] || name;
   const tone = avatarTone(name, theme.colors);
+  const profileId = ridProp || execution?.coachingRelationshipId || "";
+  const openProfile =
+    onOpenClient && profileId ? () => onOpenClient(profileId) : undefined;
   const status = execution ? sessionStatus(execution) : "finished";
   const metrics = useMemo(
     () => (execution ? sessionMetrics(execution) : []),
@@ -343,15 +349,22 @@ export function SessionDetailScreen({
       ) : execution ? (
         <>
           <View style={styles.who}>
-            <View
-              style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}
-            >
-              <Text style={[styles.avatarText, { color: tone.color }]}>
-                {initialsFromName(name)}
-              </Text>
-            </View>
+            <ClientAvatar
+              name={name}
+              size={48}
+              fontSize={15}
+              fontWeight="700"
+              tone={tone}
+              onPress={openProfile}
+            />
             <View style={styles.whoBody}>
-              <Text style={styles.name}>{name}</Text>
+              <ClientNameLink
+                name={name}
+                style={styles.name}
+                onPress={openProfile}
+              >
+                {name}
+              </ClientNameLink>
               {subtitle ? <Text style={styles.meta}>{subtitle}</Text> : null}
               <View style={styles.chips}>
                 <View

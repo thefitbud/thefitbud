@@ -146,6 +146,19 @@ describe("CheckinsList", () => {
     expect(props.onReview).toHaveBeenCalledWith(model.toReview[1]);
   });
 
+  it("the avatar opens the client's profile and does not open the check-in", () => {
+    const onOpenClient = vi.fn();
+    const props = renderList({ onOpenClient });
+    fireEvent.click(screen.getByRole("button", { name: "Open Deepak Nair's profile" }));
+    expect(onOpenClient).toHaveBeenCalledWith(model.toReview[1]!.item.coachingRelationshipId);
+    expect(props.onReview).not.toHaveBeenCalled();
+  });
+
+  it("rows are plain avatars when no profile handler is given", () => {
+    renderList();
+    expect(screen.queryByRole("button", { name: /^Open .*'s profile$/ })).toBeNull();
+  });
+
   it("Overdue tab offers Nudge, not Review", () => {
     const props = renderList({ segment: "overdue" });
     expect(screen.queryByRole("button", { name: /^Review/ })).toBeNull();

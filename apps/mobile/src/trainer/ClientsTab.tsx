@@ -87,6 +87,8 @@ type Props = {
   /** Bumped when a detail screen closes: refresh underneath whatever the age. */
   returnNonce?: number;
   onOpenClient: (row: ClientDirectoryRow) => void;
+  /** Activity avatar tap: pushes the client's profile over this tab (Z14-19). */
+  onOpenClientProfile?: (relationshipId: string) => void;
   initialSegment?: Segment;
   onOpenAsk?: (
     askId: string,
@@ -312,6 +314,7 @@ export function ClientsTab({
   active = true,
   returnNonce = 0,
   onOpenClient,
+  onOpenClientProfile,
   initialSegment = "clients",
   onOpenAsk,
   onOpenSession,
@@ -540,6 +543,7 @@ export function ClientsTab({
           refreshToken={activityRefresh}
           onOpenAsk={onOpenAsk}
           onOpenSession={onOpenSession}
+          onOpenProfile={onOpenClientProfile}
           onOpenClient={(relationshipId, displayName) => {
             const found = items.find(
               (item) => item.relationshipId === relationshipId,
