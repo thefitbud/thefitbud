@@ -36,12 +36,13 @@ import {
 import {
   mapCheckin,
   mapMealAssignment,
-  mapMealCompliance,
   mapMeasurement,
   mapPlanVersion,
   mapWorkoutAssignment,
   mapWorkoutExecution,
 } from "./mappers";
+import { traineeMealViews } from "./meal-edit-read";
+import { workoutFeedbackEditableUntil } from "./meal-edit-window";
 import { createId, nowIso } from "../lib/crypto";
 import { decodeCursor, encodeCursor } from "../lib/cursor";
 
@@ -107,6 +108,14 @@ export async function listTraineeRelationshipIds(
   return rows.map((row) => row.id);
 }
 
+/** Z14-11 (D-W14-20): the pulled execution carries the server's 48 h rating window. */
+function withFeedbackWindow<T extends object>(
+  mapped: T,
+  row: { status: string; completedAt: string | null; loggedByRole: "trainee" | "coach" },
+): T & { feedbackEditableUntil: string | null } {
+  return { ...mapped, feedbackEditableUntil: workoutFeedbackEditableUntil(row) };
+}
+
 async function loadWorkoutExecutionPayload(db: Db, executionId: string) {
   const execRows = await db
     .select()
@@ -131,7 +140,7 @@ async function loadWorkoutExecutionPayload(db: Db, executionId: string) {
               exercises.map((exercise) => exercise.id),
             ),
           );
-  return mapWorkoutExecution(execution, exercises, sets);
+  return withFeedbackWindow(mapWorkoutExecution(execution, exercises, sets), execution);
 }
 
 async function loadMealCompliancePayload(db: Db, complianceId: string) {
@@ -141,7 +150,9 @@ async function loadMealCompliancePayload(db: Db, complianceId: string) {
     .where(eq(mealCompliance.id, complianceId))
     .limit(1);
   const row = rows[0];
-  return row ? mapMealCompliance(row) : null;
+  if (!row) return null;
+  // Z14-11: the trainee's copy carries the server's edit window (D-W14-22).
+  return (await traineeMealViews(db, [row], nowIso())).get(row.id) ?? null;
 }
 
 async function loadCheckinPayload(db: Db, checkinId: string) {
@@ -209,7 +220,12 @@ async function loadMealAssignmentPayload(db: Db, assignmentId: string) {
     .from(mealCompliance)
     .where(eq(mealCompliance.assignmentId, row.id))
     .limit(1);
-  return mapMealAssignment(row, complianceRows[0] ?? null, nowIso());
+  const now = nowIso();
+  const compliance = complianceRows[0] ?? null;
+  const mapped = mapMealAssignment(row, compliance, now);
+  if (!compliance) return mapped;
+  const view = (await traineeMealViews(db, [compliance], now)).get(compliance.id);
+  return view ? { ...mapped, compliance: view } : mapped;
 }
 
 export async function loadChangePayload(
@@ -273,7 +289,10 @@ async function loadWorkoutExecutionPayloads(
           );
   for (const execution of executions) {
     // mapWorkoutExecution / mapExerciseExecution filter children by parent id.
-    out.set(execution.id, mapWorkoutExecution(execution, exercises, sets));
+    out.set(
+      execution.id,
+      withFeedbackWindow(mapWorkoutExecution(execution, exercises, sets), execution),
+    );
   }
   return out;
 }
@@ -286,7 +305,7 @@ async function loadMealCompliancePayloads(
     .select()
     .from(mealCompliance)
     .where(inJsonList(mealCompliance.id, ids));
-  return new Map(rows.map((row) => [row.id, mapMealCompliance(row)]));
+  return traineeMealViews(db, rows, nowIso());
 }
 
 async function loadCheckinPayloads(
@@ -398,11 +417,12 @@ async function loadMealAssignmentPayloads(
   const complianceByAssignment = new Map(
     complianceRows.map((row) => [row.assignmentId, row]),
   );
+  const views = await traineeMealViews(db, complianceRows, now);
   for (const row of rows) {
-    out.set(
-      row.id,
-      mapMealAssignment(row, complianceByAssignment.get(row.id) ?? null, now),
-    );
+    const compliance = complianceByAssignment.get(row.id) ?? null;
+    const mapped = mapMealAssignment(row, compliance, now);
+    const view = compliance ? views.get(compliance.id) : undefined;
+    out.set(row.id, view ? { ...mapped, compliance: view } : mapped);
   }
   return out;
 }

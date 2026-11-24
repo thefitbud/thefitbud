@@ -35,6 +35,7 @@ import {
   requireRole,
 } from "../middleware/auth";
 import { scheduleExceptionEvaluations } from "../domain/exceptions";
+import { bindSyncDeviceTime } from "../domain/meal-edit-window";
 import type { Env, Variables } from "../types";
 
 export const syncRoutes = new Hono<{
@@ -58,8 +59,21 @@ function getApp(): AppType {
   return boundApp;
 }
 
+/**
+ * Operations whose route writes its own change-log rows in the same batch as
+ * the entry (Z14-11): a removal is a tombstone, and an edit also refreshes the
+ * meal assignment that carries the entry, so the generic upsert after the
+ * dispatch would be wrong or redundant.
+ */
+const SELF_LOGGING_OPERATIONS: ReadonlySet<string> = new Set([
+  "meal.edit",
+  "meal.remove",
+  "meal.photo",
+  "workout.feedback",
+]);
+
 type DispatchTarget = {
-  method: "POST" | "PUT";
+  method: "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body: unknown;
 };
@@ -166,6 +180,42 @@ function mapMutationToRequest(
       return {
         method: "POST",
         path: `/meals/assignments/${assignmentId}/skip`,
+        body: payload.body ?? {},
+      };
+    }
+    case "meal.edit": {
+      const entryId = payload.entryId;
+      if (typeof entryId !== "string") return { error: "entryId is required" };
+      return {
+        method: "PATCH",
+        path: `/meals/logs/${entryId}`,
+        body: payload.body ?? {},
+      };
+    }
+    case "meal.remove": {
+      const entryId = payload.entryId;
+      if (typeof entryId !== "string") return { error: "entryId is required" };
+      return {
+        method: "DELETE",
+        path: `/meals/logs/${entryId}`,
+        body: payload.body ?? {},
+      };
+    }
+    case "meal.photo": {
+      const entryId = payload.entryId;
+      if (typeof entryId !== "string") return { error: "entryId is required" };
+      return {
+        method: "POST",
+        path: `/meals/logs/${entryId}/photo`,
+        body: payload.body ?? {},
+      };
+    }
+    case "workout.feedback": {
+      const executionId = payload.executionId;
+      if (typeof executionId !== "string") return { error: "executionId is required" };
+      return {
+        method: "PATCH",
+        path: `/workouts/executions/${executionId}/feedback`,
         body: payload.body ?? {},
       };
     }
@@ -338,6 +388,8 @@ syncRoutes.post(
         body: JSON.stringify(mapped.body),
       });
       bindInternalRequest(request, internalContext);
+      // The device time of an offline edit, for the edit windows (D-W14-22 f).
+      bindSyncDeviceTime(request, mutation.clientOccurredAt);
       const response = await getApp().fetch(request, c.env, executionCtx);
 
       const json = (await response.json().catch(() => null)) as {
@@ -395,7 +447,11 @@ syncRoutes.post(
       if (meta.relationshipId) {
         internalContext.exceptionEvaluations.add(meta.relationshipId);
       }
-      if (meta.relationshipId && meta.recordId) {
+      if (
+        meta.relationshipId &&
+        meta.recordId &&
+        !SELF_LOGGING_OPERATIONS.has(mutation.operation)
+      ) {
         await appendChangeLog(db, {
           entityType: mutation.entityType,
           recordId: meta.recordId,

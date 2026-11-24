@@ -25,6 +25,82 @@ import {
 } from "../middleware/auth.js";
 import type { Env, Variables } from "../types.js";
 
+type MealAuditSnapshot = {
+  localDate?: string;
+  mealName?: string;
+  removed?: boolean;
+  photoOnly?: boolean;
+  macros?: { kcalScaled?: number | null };
+};
+
+/** The feed item for a client changing the rating of a finished workout. */
+function describeTraineeWorkoutRating(row: {
+  entityType: string;
+  afterJson: string;
+}): { summary: string } | null {
+  if (row.entityType !== "workout_execution") return null;
+  try {
+    const after = JSON.parse(row.afterJson) as {
+      workoutDayName?: string;
+      sessionRpe?: number | null;
+    };
+    if (typeof after.workoutDayName !== "string") return null;
+    return {
+      summary:
+        after.sessionRpe == null
+          ? `Cleared the rating for ${after.workoutDayName}`
+          : `Rated ${after.workoutDayName}: RPE ${after.sessionRpe}`,
+    };
+  } catch {
+    return null; // an unreadable audit row has no item
+  }
+}
+
+/** The feed item for a client's own meal edit or removal; null for anything else. */
+function describeTraineeMealChange(row: {
+  entityType: string;
+  beforeJson: string | null;
+  afterJson: string;
+}): {
+  type: "client_edited" | "client_removed";
+  subtype: string;
+  summary: string;
+  mealDate: string | null;
+  previousKcal: number | null;
+} | null {
+  if (row.entityType !== "meal_compliance") return null;
+  let after: MealAuditSnapshot;
+  let before: MealAuditSnapshot | null = null;
+  try {
+    after = JSON.parse(row.afterJson) as MealAuditSnapshot;
+    before = row.beforeJson ? (JSON.parse(row.beforeJson) as MealAuditSnapshot) : null;
+  } catch {
+    return null; // an unreadable audit row has no item
+  }
+  if (after.photoOnly || typeof after.mealName !== "string") return null;
+  const meal = after.mealName.toLowerCase();
+  const previousKcal =
+    before?.macros?.kcalScaled == null
+      ? null
+      : Math.round(before.macros.kcalScaled / NUTRIENT_SCALE);
+  const mealDate = typeof after.localDate === "string" ? after.localDate : null;
+  return after.removed
+    ? {
+        type: "client_removed",
+        subtype: "Removed",
+        summary: `Removed the ${meal} log`,
+        mealDate,
+        previousKcal,
+      }
+    : {
+        type: "client_edited",
+        subtype: "Edited",
+        summary: `Edited ${meal}`,
+        mealDate,
+        previousKcal,
+      };
+}
+
 export const activityFeedRoutes = new Hono<{ Bindings: Env; Variables: Variables }>();
 
 activityFeedRoutes.get(
@@ -141,6 +217,9 @@ activityFeedRoutes.get(
       summary: string;
       kcal?: number | null;
       link?: string | null;
+      entryId?: string | null;
+      mealDate?: string | null;
+      previousKcal?: number | null;
     }> = [];
     for (const row of meals) {
       events.push({
@@ -204,6 +283,40 @@ activityFeedRoutes.get(
       actorProfiles.map((row) => [row.userId, formatPersonName(row.displayName)]),
     );
     for (const row of coachChanges) {
+      if (row.actorRole === "trainee") {
+        // Z14-11 (D-W14-22 e, D-W14-23 a): the client's own edit or removal of a
+        // meal log. A photo-only change is not an edit, so it has no item.
+        const rating = describeTraineeWorkoutRating(row);
+        if (rating) {
+          events.push({
+            id: `log_edit:${row.id}`,
+            relationshipId: row.coachingRelationshipId,
+            traineeDisplayName: nameByRelationship.get(row.coachingRelationshipId) ?? null,
+            type: "client_edited",
+            subtype: "Rating",
+            occurredAt: row.createdAt,
+            traineeLocalTime: null,
+            summary: rating.summary,
+          });
+          continue;
+        }
+        const traineeEvent = describeTraineeMealChange(row);
+        if (!traineeEvent) continue;
+        events.push({
+          id: `log_edit:${row.id}`,
+          relationshipId: row.coachingRelationshipId,
+          traineeDisplayName: nameByRelationship.get(row.coachingRelationshipId) ?? null,
+          type: traineeEvent.type,
+          subtype: traineeEvent.subtype,
+          occurredAt: row.createdAt,
+          traineeLocalTime: null,
+          summary: traineeEvent.summary,
+          entryId: row.entityId,
+          mealDate: traineeEvent.mealDate,
+          previousKcal: traineeEvent.previousKcal,
+        });
+        continue;
+      }
       const described = describeCoachLogEvent(row, actorNames.get(row.actorUserId) || "Coach");
       events.push({
         id: `log_edit:${row.id}`,

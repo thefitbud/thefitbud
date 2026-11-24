@@ -70,6 +70,24 @@ const KNOWN_CODE_COPY: Record<string, UserFacingError> = {
     message:
       "This workout is already finished, so nothing was changed. Reload to see what was saved.",
   },
+  // Z14-11 (D-W14-22, D-W14-20): the trainee's edit windows and their locks.
+  MEAL_EDIT_WINDOW_CLOSED: {
+    message: "Logged entries can be changed for 24 hours. Ask your coach to fix it.",
+  },
+  MEAL_REMOVE_NOT_ALLOWED: {
+    message:
+      "This meal can't be logged again any more, so its log can't be removed. You can still edit it.",
+  },
+  MEAL_EDITED_BY_COACH: {
+    message: "Your coach has already corrected this meal, so it can't be changed here.",
+  },
+  COACH_LOGGED_READ_ONLY: {
+    message: "Your coach logged this one, so it can't be changed here.",
+  },
+  MEAL_LOG_NOT_FOUND: { message: "We couldn't find that meal log. It may have been removed." },
+  FEEDBACK_EDIT_WINDOW_CLOSED: {
+    message: "Ratings can be changed for 48 hours after a workout.",
+  },
   UNKNOWN_ERROR: { message: USER_FACING_SERVER, action: "retry" },
 };
 
