@@ -27,7 +27,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
 import { Text } from "../components/Text";
-import { initialsFromName } from "../components/m2";
+import { ClientAvatar, ClientNameLink } from "./ClientAvatar";
 import { createIdempotencyKey } from "../lib/idempotency";
 import {
   addDays,
@@ -607,6 +607,11 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           <View style={styles.stack}>
             <Identity
               name={name}
+              onOpenProfile={
+                detail.coachingRelationshipId
+                  ? () => onOpenClient(detail.coachingRelationshipId)
+                  : undefined
+              }
               subtitle={exceptionHeaderSubtitle({
                 goalShort: client?.goalShort ?? null,
                 weekNumber: coachingWeekNumber(client?.startedAt),
@@ -771,8 +776,10 @@ function Identity({
   subtitle,
   severity,
   status,
+  onOpenProfile,
 }: {
   name: string;
+  onOpenProfile?: (() => void) | undefined;
   subtitle: string;
   severity: ExceptionDetail["severity"];
   status: ExceptionReviewStatus;
@@ -789,17 +796,18 @@ function Identity({
   const showSeverity = status === "open" || status === "reviewed";
   return (
     <View style={styles.identity}>
-      <View
-        style={[styles.avatar, { backgroundColor: avatar.bg }]}
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-      >
-        <Text style={[styles.avatarText, { color: avatar.ink }]}>
-          {initialsFromName(name)}
-        </Text>
-      </View>
+      <ClientAvatar
+        name={name}
+        size={68}
+        fontSize={24}
+        fontWeight="700"
+        tone={{ backgroundColor: avatar.bg, color: avatar.ink }}
+        onPress={onOpenProfile}
+      />
       <View style={styles.identityText}>
-        <Text variant="title">{name}</Text>
+        <ClientNameLink name={name} variant="title" onPress={onOpenProfile}>
+          {name}
+        </ClientNameLink>
         {subtitle ? <Text variant="subhead">{subtitle}</Text> : null}
         <View style={styles.tags}>
           {showSeverity ? (

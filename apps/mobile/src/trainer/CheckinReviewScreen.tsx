@@ -31,7 +31,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
-import { initialsFromName } from "../components/m2";
+import { ClientAvatar, ClientNameLink } from "./ClientAvatar";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { Photos } from "./checkinReview/Photos";
@@ -65,6 +65,7 @@ export function CheckinReviewScreen({
   checkinId,
   relationshipId,
   onBack,
+  onOpenClient,
 }: Props) {
 
   const theme = useTheme();
@@ -265,6 +266,8 @@ export function CheckinReviewScreen({
     }
   }
 
+  const profileId = relationshipId || context?.checkin.coachingRelationshipId || "";
+  const openProfile = profileId ? () => onOpenClient(profileId) : undefined;
   const submitted = context?.checkin.submittedAt;
   const weekPart =
     weekNumber != null && weekNumber > 0 ? `Week ${weekNumber}` : "Week check-in";
@@ -397,11 +400,16 @@ export function CheckinReviewScreen({
       ) : null}
 
       <View style={styles.header}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>{initialsFromName(name)}</Text>
-        </View>
+        <ClientAvatar
+          name={name}
+          size={56}
+          fontSize={18}
+          onPress={openProfile}
+        />
         <View style={styles.headerBody}>
-          <Text style={styles.h1}>{name}</Text>
+          <ClientNameLink name={name} style={styles.h1} onPress={openProfile}>
+            {name}
+          </ClientNameLink>
           {subtitle ? <Text style={styles.meta}>{subtitle}</Text> : null}
           <View style={styles.chipRow}>
             {reviewed ? (

@@ -131,4 +131,31 @@ describe("ActivityFeedScreen", () => {
     expect(screen.getByText("Add note")).toBeTruthy();
     expect(screen.getByText("Open Priya")).toBeTruthy();
   });
+
+  it("the avatar opens the profile; the rest of the row still opens the event", async () => {
+    api.getActivityFeed.mockResolvedValue({
+      events: [events[2]!],
+      nextCursor: null,
+    });
+    const onOpenProfile = vi.fn();
+    const onOpenClient = vi.fn();
+    render(
+      <ActivityFeedScreen onOpenProfile={onOpenProfile} onOpenClient={onOpenClient} />,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Open Deepak Nair's profile" }));
+    expect(onOpenProfile).toHaveBeenCalledWith("2b65e3ad-84cf-4fe1-a546-0d62656c2c79");
+    expect(onOpenClient).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText(/Deepak/));
+    expect(onOpenClient).toHaveBeenCalledWith(
+      "2b65e3ad-84cf-4fe1-a546-0d62656c2c79",
+      "Deepak Nair",
+    );
+  });
+
+  it("avatars are plain without a profile handler (client's own activity)", async () => {
+    api.getActivityFeed.mockResolvedValue({ events: [events[2]!], nextCursor: null });
+    render(<ActivityFeedScreen />);
+    await screen.findByText(/Deepak/);
+    expect(screen.queryByRole("button", { name: /'s profile$/ })).toBeNull();
+  });
 });
