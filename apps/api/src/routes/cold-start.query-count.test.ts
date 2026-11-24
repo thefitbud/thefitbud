@@ -1,6 +1,8 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { meResponseSchema, relationshipListResponseSchema } from "@fitbud/contracts";
+import * as schema from "../db/schema.js";
 import { setTestDbOverride } from "../db/client.js";
+import { createId } from "../lib/crypto.js";
 import type { MemoryDbHandle } from "../test-support/memory-db.js";
 import { createDemoSeededDb, prepareDemoSeededDb } from "../test-support/seeded-db.js";
 import {
@@ -79,4 +81,116 @@ describe("cold start reads: D1 round trips (Z14-28)", () => {
     expect(largeItems.length).toBeGreaterThan(smallItems.length);
     expect(large.roundTrips, describeTrips(large.trips)).toBe(small.roundTrips);
   });
+
+  // Fix round 1: the batched list must return the same content as the single
+  // read for every item, even when other trainers' relationships are newer than
+  // the actor's and would crowd a page subquery that lost its ownership or
+  // cursor condition.
+  async function addUser(role: "trainer" | "trainee", name: string, whatsapp: string | null) {
+    const id = createId();
+    const stamp = "2026-10-26T06:00:00.000Z";
+    await handle.db.insert(schema.users).values({
+      id,
+      firebaseUid: `fb-${id}`,
+      accountState: "active",
+      timezone: "Asia/Kolkata",
+      createdAt: stamp,
+      updatedAt: stamp,
+    });
+    await handle.db.insert(schema.userRoles).values({ id: createId(), userId: id, role, createdAt: stamp });
+    if (role === "trainer") {
+      await handle.db.insert(schema.trainerProfiles).values({
+        id: createId(),
+        userId: id,
+        displayName: name,
+        whatsappE164: whatsapp,
+        createdAt: stamp,
+        updatedAt: stamp,
+      });
+    } else {
+      await handle.db.insert(schema.traineeProfiles).values({
+        id: createId(),
+        userId: id,
+        displayName: name,
+        createdAt: stamp,
+        updatedAt: stamp,
+      });
+    }
+    return id;
+  }
+
+  async function addRelationship(trainerUserId: string, traineeUserId: string, createdAt: string) {
+    await handle.db.insert(schema.coachingRelationships).values({
+      id: createId(),
+      trainerUserId,
+      traineeUserId,
+      status: "active",
+      invitationId: null,
+      startedAt: createdAt,
+      createdAt,
+      updatedAt: createdAt,
+    });
+  }
+
+  it("GET /relationships pages carry the same content as GET /relationships/:id with newer foreign relationships", async () => {
+    const demoTrainer = await handle.db.query.userIdentities.findFirst({
+      where: (t, { eq }) => eq(t.email, DEMO_TRAINER),
+    });
+    const demoTrainee = await handle.db.query.userIdentities.findFirst({
+      where: (t, { eq }) => eq(t.email, DEMO_TRAINEE),
+    });
+    expect(demoTrainer && demoTrainee).toBeTruthy();
+
+    const trainerB = await addUser("trainer", "Meera Iyer", "+919800000001");
+    const trainerC = await addUser("trainer", "Karan Shah", "+919800000002");
+    // Newer than every demo relationship: more than limit + 1 of them, so a
+    // page subquery without the ownership filter would fill with these rows.
+    for (let i = 0; i < 4; i += 1) {
+      const trainee = await addUser("trainee", `Foreign client ${i}`, null);
+      await addRelationship(trainerB, trainee, `2026-10-26T12:0${i}:00.000Z`);
+    }
+    // The demo trainee also has newer relationships with two other trainers.
+    await addRelationship(trainerB, demoTrainee!.userId, "2026-10-26T13:00:00.000Z");
+    await addRelationship(trainerC, demoTrainee!.userId, "2026-10-26T14:00:00.000Z");
+
+    type Item = {
+      id: string;
+      trainerUserId: string;
+      traineeUserId: string;
+      onboardingStatus: string;
+      trainerDisplayName: string | null;
+      trainerWhatsappE164: string | null;
+    };
+    const cases = [
+      ["trainer", DEMO_TRAINER, demoTrainer!.userId],
+      ["trainee", DEMO_TRAINEE, demoTrainee!.userId],
+    ] as const;
+    for (const [role, email, userId] of cases) {
+      const headers = await loginHeaders(email, role);
+      const seen: Item[] = [];
+      let cursor: string | null = null;
+      for (let page = 0; page < 4; page += 1) {
+        const qs = `limit=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+        const res = await measureRequest(counter, `/relationships?${qs}`, { headers });
+        expect(res.status).toBe(200);
+        const data = (res.body as { data: { items: Item[]; nextCursor: string | null } }).data;
+        expect(data.items).toHaveLength(1);
+        seen.push(...data.items);
+        cursor = data.nextCursor;
+        if (!cursor) break;
+      }
+      expect(seen.length, `${role} pages`).toBeGreaterThanOrEqual(3);
+      expect(new Set(seen.map((i) => i.id)).size).toBe(seen.length);
+      for (const item of seen) {
+        expect(role === "trainer" ? item.trainerUserId : item.traineeUserId).toBe(userId);
+        const single = await measureRequest(counter, `/relationships/${item.id}`, { headers });
+        expect(single.status).toBe(200);
+        const one = (single.body as { data: Item }).data;
+        expect(item.onboardingStatus).toBe(one.onboardingStatus);
+        expect(item.trainerDisplayName).toBe(one.trainerDisplayName);
+        expect(item.trainerWhatsappE164).toBe(one.trainerWhatsappE164);
+        expect(item.trainerDisplayName, "trainer profile resolved").toBeTruthy();
+      }
+    }
+  }, 60_000);
 });
