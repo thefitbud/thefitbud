@@ -106,11 +106,9 @@ describe("NotesScreen", () => {
   });
 
   it("a failed first page shows a friendly line, never the error", async () => {
-    api.listTrainerNotes.mockReturnValueOnce(
-      Promise.reject(
-        new ApiClientError({ status: 500, code: "INTERNAL_ERROR", message: "boom", requestId: "r" }),
-      ),
-    );
+    api.listTrainerNotes.mockImplementationOnce(async () => {
+      throw new ApiClientError({ status: 500, code: "INTERNAL_ERROR", message: "boom", requestId: "r" });
+    });
     renderNotes();
     expect(await screen.findByText("Couldn't load the notes. Pull down to try again.")).toBeTruthy();
     expect(screen.queryByText(/boom|INTERNAL/)).toBeNull();

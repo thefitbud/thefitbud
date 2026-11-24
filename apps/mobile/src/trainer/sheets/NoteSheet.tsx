@@ -4,6 +4,7 @@ import { Lock, Eye } from "lucide-react-native";
 import type { CreateTrainerNoteRequest } from "@fitbud/contracts";
 import { BottomSheet } from "../../components/BottomSheet";
 import { Text } from "../../components/Text";
+import { useHardwareBack } from "../../lib/useHardwareBack";
 import {
   ThemeScope,
   createThemedStyles,
@@ -21,9 +22,12 @@ type Props = {
   traineeDisplayName: string;
   /** Kept for callers; the TM-04k composer shows no "From …" preview. */
   trainerDisplayName?: string | null;
-  /** For the consequence line "{He/She/They} gets one notification." Defaults to "They". */
-  subject?: "He" | "She" | "They";
   acting?: boolean;
+  /**
+   * False while another screen is pushed above the page that owns this sheet:
+   * hardware back then goes to that screen first (D-W14-24, top layer first).
+   */
+  active?: boolean;
   /** Static, curated error text shown inside the sheet. */
   errorMessage?: string | null;
   onDismiss: () => void;
@@ -41,11 +45,12 @@ export function noteVisibilityLabels(first: string): {
 export function noteConsequenceLine(
   visibility: TrainerNoteVisibility,
   first: string,
-  subject: "He" | "She" | "They" = "They",
 ): string {
   if (visibility === "private") return "Only you can see this note.";
-  const today = first ? `${first}'s Today` : "their Today";
-  return `Shows on ${today}. ${subject} gets one notification.`;
+  // No pronoun: the client's gender is free text, so never infer one.
+  return first
+    ? `${first} sees it on Today and gets one notification.`
+    : "They see it on Today and get one notification.";
 }
 
 /**
@@ -65,8 +70,8 @@ export function NoteSheet(props: Props) {
 function NoteSheetBody({
   visible,
   traineeDisplayName,
-  subject = "They",
   acting = false,
+  active = true,
   errorMessage,
   onDismiss,
   onSave,
@@ -97,6 +102,16 @@ function NoteSheetBody({
     if (trimmed) setAsking(true);
     else onDismiss();
   };
+  // Android back answers for the visible sheet, so a press never skips it and
+  // closes the page underneath. Asking "Discard?" is answered first.
+  useHardwareBack(() => {
+    if (asking) {
+      setAsking(false);
+      return true;
+    }
+    requestClose();
+    return true;
+  }, visible && active);
   const closeRef = useRef(requestClose);
   closeRef.current = requestClose;
 
@@ -182,7 +197,7 @@ function NoteSheetBody({
           </Pressable>
         </View>
         <Text variant="subhead" testID="note-consequence">
-          {noteConsequenceLine(visibility, first, subject)}
+          {noteConsequenceLine(visibility, first)}
         </Text>
       </View>
 

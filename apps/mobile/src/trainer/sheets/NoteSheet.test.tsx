@@ -43,7 +43,7 @@ describe("NoteSheet (TM-04k, Z14-24)", () => {
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Hi" } });
     fireEvent.click(screen.getByLabelText("Rohan too"));
     expect(
-      screen.getByText("Shows on Rohan's Today. They gets one notification."),
+      screen.getByText("Rohan sees it on Today and gets one notification."),
     ).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Save"));
     expect(onSave).toHaveBeenCalledWith({ body: "Hi", visibility: "client" });

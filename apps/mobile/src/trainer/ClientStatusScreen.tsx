@@ -1346,8 +1346,8 @@ export function ClientStatusScreen({
       <NoteSheet
         visible={noteOpen && !ended}
         traineeDisplayName={name}
-        subject={subject}
         acting={acting}
+        active={active}
         errorMessage={noteError}
         onDismiss={() => setNoteOpen(false)}
         onSave={(input) => {

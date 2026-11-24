@@ -131,8 +131,13 @@ describe("hardware back with a client page under an overlay", () => {
     await waitFor(() => expect(screen.queryByTestId("exception-screen")).toBeNull());
     // The note sheet was not touched while it was hidden.
     expect(screen.getByLabelText("Note")).toBeTruthy();
-    // Z14-24: the note sheet is a Modal that answers Android back itself, so the
-    // client page has no handler of its own and the press goes on to the shell.
+    // D-W14-24: the note sheet is now the top visible layer, so back closes it
+    // and the client page stays.
+    expect(press()).toBe(true);
+    // The client page is still there (the press did not skip the sheet) ...
+    expect(screen.getByTestId("client-status")).toBeTruthy();
+    // ... and with the sheet closed, the next press is the client page's.
+    // (react-native-web keeps a closed Modal's content in the DOM in jsdom.)
     expect(press()).toBe(true);
     await waitFor(() => expect(screen.queryByTestId("client-status")).toBeNull());
   });

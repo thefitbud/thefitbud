@@ -13,7 +13,7 @@ const RID = "1b65e3ad-84cf-4fe1-a546-0d62656c2c79";
 const UID = "a0a69e20-297d-4101-a5e2-ecce9b8491cb";
 const PV = "6d0f2a64-3c1b-4f6e-9a10-7b6f4e0c1d11";
 
-function workspace(over: { ended: boolean; traineeTz?: string; endedAt?: string }) {
+function workspace(over: { ended: boolean; traineeTz?: string; endedAt?: string; wa?: string }) {
   return clientWorkspaceSchema.parse({
     header: {
       relationshipId: RID,
@@ -28,7 +28,7 @@ function workspace(over: { ended: boolean; traineeTz?: string; endedAt?: string 
       traineeTimezone: over.traineeTz ?? "Asia/Kolkata",
       hasCustomMealTimes: false,
       trainerWhatsappE164: null,
-      clientWhatsappE164: null,
+      clientWhatsappE164: over.wa ?? null,
       endedAt: over.ended ? (over.endedAt ?? "2026-10-03T10:00:00.000Z") : null,
     },
     overview: {
@@ -415,6 +415,27 @@ describe("ClientStatusScreen profile (Z14-24)", () => {
     expect(screen.queryByText("No WhatsApp number on file")).toBeNull();
     expect(screen.queryByText("Nothing logged yet.")).toBeNull();
     expect(screen.queryByText("–")).toBeNull();
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+  });
+
+  it("Remind… and WhatsApp are disabled while pending and enabled once the first answer brings a number", async () => {
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+    setTrainerCacheOwner(TRAINER_A);
+    let release: (w: ReturnType<typeof workspace>) => void = () => undefined;
+    api.getClientWorkspace.mockImplementationOnce(
+      () => new Promise((resolve) => { release = resolve; }),
+    );
+    renderScreen();
+    const disabledOf = (label: string) =>
+      screen.getByText(label).closest("[aria-disabled]")?.getAttribute("aria-disabled");
+    expect(disabledOf("Remind…")).toBe("true");
+    expect(disabledOf("WhatsApp")).toBe("true");
+    release(workspace({ ended: false, wa: "+919876543210" }));
+    await screen.findByText("410 of 1,950");
+    await waitFor(() => expect(disabledOf("Remind…")).not.toBe("true"));
+    expect(disabledOf("WhatsApp")).not.toBe("true");
     clearTrainerCache();
     setTrainerCacheOwner(null);
   });
