@@ -11,6 +11,8 @@ tags:
 #          counts the sets that were logged, not the plan's.
 #   dark:  Discard workout → confirm → the Workout tab, with nothing left to
 #          continue on that day (the server records the workout as skipped).
+# Z14-8: each ending is tapped twice in quick succession. One finish (or one
+# discard) is saved, and nothing ends up refused in the sync status.
 - launchApp:
     stopApp: false
 - extendedWaitUntil:
@@ -34,10 +36,15 @@ tags:
             visible: "How hard was the session\\?"
           commands:
             - tapOn: "RPE 7.*"
-      - tapOn: "Finish anyway"
+      # Z14-8: a double tap saves one finish.
+      - tapOn:
+          text: "Finish anyway"
+          repeat: 2
+          delay: 60
       - extendedWaitUntil:
           visible: "Workout done"
           timeout: 30000
+      - assertNotVisible: "Discard workout"
       - takeScreenshot: z12-45-finished-early-summary
       - tapOn: "Save and share with .*"
       - extendedWaitUntil:
@@ -49,6 +56,8 @@ tags:
           timeout: 30000
       - assertNotVisible: "Continue workout"
       - assertNotVisible: "Minimise workout"
+      # One finish, nothing refused: no "Couldn't send" anywhere.
+      - assertNotVisible: "Couldn't send"
 
 # ---- dark: discard ---------------------------------------------------------------------
 - runFlow:
@@ -61,9 +70,12 @@ tags:
           timeout: 30000
       - tapOn: "Discard workout"
       - assertVisible: "Discard this workout\\?"
+      # Z14-8: a double tap queues one discard.
       - tapOn:
           text: "Discard workout"
           below: "Discard this workout\\?"
+          repeat: 2
+          delay: 60
       - extendedWaitUntil:
           visible: "Diet"
           timeout: 30000
@@ -73,5 +85,6 @@ tags:
       - assertNotVisible: "Minimise workout"
       - assertNotVisible: "Continue workout"
       - assertNotVisible: "Pick up where you left off\\?"
+      - assertNotVisible: "Couldn't send"
       - takeScreenshot: z12-45-discarded-day
 - runFlow: ../../common/assert-no-crash.yaml

@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   Pressable,
   ScrollView,
@@ -21,11 +27,13 @@ import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { CardRow, ListScreen, PagedListFooter } from "../components/ListScreen";
 import { ClientAvatar } from "./ClientAvatar";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
 import { UpdatingLine } from "./keptTab";
+import { usePagedList } from "./usePagedList";
 import { NoteSheet } from "./sheets/NoteSheet";
 import { ActivityMealSheet } from "./activity/ActivityMealSheet";
 import {
@@ -82,6 +90,8 @@ type Props = {
   /** Optional fixed relationship (client workspace activity). */
   relationshipId?: string;
   clients?: ActivityClientOption[];
+  /** Title row and segment bar of the Clients tab, scrolling with the feed. */
+  header?: ReactNode;
   onOpenClient?: (relationshipId: string, displayName: string) => void;
   /** Avatar tap: opens the client's profile on top of this screen (Z14-19). */
   onOpenProfile?: (relationshipId: string) => void;
@@ -95,18 +105,29 @@ type Props = {
     relationshipId: string,
     displayName: string,
   ) => void;
-  /** Called when the parent Screen pulls to refresh. */
-  refreshToken?: number;
 };
+
+/** D-W14-26: 30 per page, the next one at half a screen from the end. */
+const PAGE_SIZE = 30;
+/** With a filter on, keep paging until this many rows match (or the end). */
+const MIN_FILTERED_ROWS = 8;
+
+function isOfflineError(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  if (err instanceof ApiClientError) return err.status === 0;
+  return false;
+}
+
+type DaySection = { day: string; data: ActivityFeedEvent[] };
 
 export function ActivityFeedScreen({
   relationshipId: lockedRid,
   clients = [],
+  header,
   onOpenClient,
   onOpenProfile,
   onOpenAsk,
   onOpenSession,
-  refreshToken = 0,
 }: Props) {
 
   const theme = useTheme();
@@ -119,20 +140,11 @@ export function ActivityFeedScreen({
   const [initialSnapshot] = useState(() =>
     readTrainerCache<ActivitySnapshot>(activityCacheKey(lockedRid)),
   );
-  const [events, setEvents] = useState<ActivityFeedEvent[]>(
-    initialSnapshot?.events ?? [],
-  );
-  const [updating, setUpdating] = useState(false);
-  const [cursor, setCursor] = useState<string | null>(
-    initialSnapshot?.nextCursor ?? null,
-  );
   const [filter, setFilter] = useState<ActivityFilter>("all");
   const [clientFilter, setClientFilter] = useState<ActivityClientOption | null>(
     null,
   );
-  const [loading, setLoading] = useState(initialSnapshot == null);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mealEvent, setMealEvent] = useState<ActivityEventLike | null>(null);
   const [noteFor, setNoteFor] = useState<{
@@ -144,79 +156,70 @@ export function ActivityFeedScreen({
 
   const activeRid = lockedRid ?? clientFilter?.relationshipId;
 
-  const loadReset = useCallback(async () => {
-    const cacheEpoch = trainerCacheEpoch();
-    const snapshot = readTrainerCache<ActivitySnapshot>(
-      activityCacheKey(activeRid),
-    );
-    if (snapshot) {
-      setEvents(snapshot.events);
-      setCursor(snapshot.nextCursor);
-      setLoading(false);
-      setUpdating(true);
-    } else {
-      setLoading(true);
-    }
-    setError(null);
-    try {
+  const fetchPage = useCallback(
+    async (cursor: string | null) => {
+      const cacheEpoch = trainerCacheEpoch();
       const page = await s1.getActivityFeed({
-        limit: 30,
+        limit: PAGE_SIZE,
+        ...(cursor ? { cursor } : {}),
         rid: activeRid,
         since: lastSevenDaysSince(),
       });
-      setEvents(page.events);
-      setCursor(page.nextCursor);
-      writeTrainerCache(
-        activityCacheKey(activeRid),
-        {
-          events: page.events,
-          nextCursor: page.nextCursor,
-          savedAt: new Date().toISOString(),
-        } satisfies ActivitySnapshot,
-        cacheEpoch,
-      );
-    } catch (err) {
-      setError(
-        userFacingMessage(err, { fallback: "Could not load activity." }),
-      );
-    } finally {
-      setLoading(false);
-      setUpdating(false);
-    }
-  }, [activeRid, s1]);
+      if (cursor === null) {
+        writeTrainerCache(
+          activityCacheKey(activeRid),
+          {
+            events: page.events,
+            nextCursor: page.nextCursor,
+            savedAt: new Date().toISOString(),
+          } satisfies ActivitySnapshot,
+          cacheEpoch,
+        );
+      }
+      return { items: page.events, nextCursor: page.nextCursor };
+    },
+    [activeRid, s1],
+  );
 
-  useEffect(() => {
-    void loadReset();
-  }, [loadReset, refreshToken]);
-
-  async function loadMore() {
-    if (!cursor) return;
-    setLoadingMore(true);
-    setError(null);
-    try {
-      const page = await s1.getActivityFeed({
-        limit: 30,
-        cursor,
-        rid: activeRid,
-        since: lastSevenDaysSince(),
-      });
-      setEvents((prev) => [...prev, ...page.events]);
-      setCursor(page.nextCursor);
-    } catch (err) {
-      setError(
-        userFacingMessage(err, { fallback: "Could not load activity." }),
-      );
-    } finally {
-      setLoadingMore(false);
-    }
-  }
+  const paged = usePagedList<ActivityFeedEvent>({
+    queryKey: activeRid ?? "all",
+    fetchPage,
+    getKey: (event) => event.id,
+    initial: initialSnapshot
+      ? {
+          items: initialSnapshot.events,
+          nextCursor: initialSnapshot.nextCursor,
+        }
+      : null,
+    isOffline: isOfflineError,
+    onError: (err, phase) => {
+      if (phase === "first") {
+        setLoadError(
+          userFacingMessage(err, { fallback: "Could not load activity." }),
+        );
+      }
+      if (!isOfflineError(err)) reportError("activity.load", err);
+    },
+  });
+  const { items: events, loading, refreshing } = paged;
+  const shownError = paged.error ? loadError : null;
 
   const filtered = useMemo(
     () => events.filter((event) => matchesActivityFilter(event, filter)),
     [events, filter],
   );
 
-  const grouped = useMemo(() => {
+  // A filter narrows what is loaded; keep paging so a quiet filter still
+  // fills the screen (each cursor is asked for once).
+  const { hasMore, loadingMore, moreError, loadMore } = paged;
+  useEffect(() => {
+    if (filter === "all" || loading) return;
+    if (filtered.length >= MIN_FILTERED_ROWS || !hasMore) return;
+    if (loadingMore || moreError) return;
+    loadMore();
+  }, [filter, loading, filtered.length, hasMore, loadingMore, moreError, loadMore]);
+
+  const sections = useMemo<DaySection[]>(() => {
     const map = new Map<string, ActivityFeedEvent[]>();
     for (const event of filtered) {
       const day = event.occurredAt.slice(0, 10);
@@ -224,7 +227,9 @@ export function ActivityFeedScreen({
       bucket.push(event);
       map.set(day, bucket);
     }
-    return [...map.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+    return [...map.entries()]
+      .sort((a, b) => b[0].localeCompare(a[0]))
+      .map(([day, data]) => ({ day, data }));
   }, [filtered]);
 
   const empty = emptyFilterCopy({
@@ -291,9 +296,11 @@ export function ActivityFeedScreen({
     onOpenClient?.(event.relationshipId, name);
   }
 
-  return (
-    <View style={styles.wrap}>
-      {error ? <ErrorBanner message={error} /> : null}
+  const listHeader = (
+    <>
+      {header}
+      <View style={styles.wrap}>
+      {shownError ? <ErrorBanner message={shownError} /> : null}
 
       <ScrollView
         horizontal
@@ -330,7 +337,7 @@ export function ActivityFeedScreen({
         )}
       </ScrollView>
 
-      <UpdatingLine visible={updating} />
+      <UpdatingLine visible={paged.updating && !refreshing} />
 
       {clientFilter && !lockedRid ? (
         <View style={styles.clientChipRow}>
@@ -349,72 +356,83 @@ export function ActivityFeedScreen({
           </View>
         </View>
       ) : null}
+      </View>
+    </>
+  );
 
-      {loading && events.length === 0 ? (
-        <View style={styles.card}>
-          <View style={styles.skel} />
-          <View style={styles.skel} />
-          <View style={styles.skel} />
+  const emptyState =
+    loading && events.length === 0 ? (
+      <View style={styles.card}>
+        <View style={styles.skel} />
+        <View style={styles.skel} />
+        <View style={styles.skel} />
+      </View>
+    ) : filtered.length === 0 && !hasMore ? (
+      <View style={styles.empty}>
+        <View style={styles.emptyIcon}>
+          <ClipboardCheck color={theme.colors.ink} size={26} strokeWidth={2} />
         </View>
-      ) : filtered.length === 0 ? (
-        <View style={styles.empty}>
-          <View style={styles.emptyIcon}>
-            <ClipboardCheck color={theme.colors.ink} size={26} strokeWidth={2} />
+        <Text style={styles.emptyTitle}>{empty.title}</Text>
+        {empty.body ? <Text style={styles.emptyBody}>{empty.body}</Text> : null}
+        {filter !== "all" || clientFilter ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              setFilter("all");
+              setClientFilter(null);
+            }}
+            style={styles.clearBtn}
+          >
+            <Text style={styles.clearText}>Clear filters</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    ) : null;
+
+  return (
+    <>
+      <ListScreen<ActivityFeedEvent, { day: string }>
+        v3
+        title="Activity"
+        sections={sections}
+        keyExtractor={(event) => event.id}
+        header={listHeader}
+        empty={emptyState}
+        listFooter={
+          <PagedListFooter
+            loadingMore={loadingMore}
+            failure={moreError}
+            onRetry={paged.retryMore}
+          />
+        }
+        refreshing={refreshing}
+        onRefresh={paged.refresh}
+        onEndReached={loadMore}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.dayHeader}>
+            <Text style={styles.day}>
+              {activityDayLabel(section.day, today).toUpperCase()}
+            </Text>
           </View>
-          <Text style={styles.emptyTitle}>{empty.title}</Text>
-          {empty.body ? <Text style={styles.emptyBody}>{empty.body}</Text> : null}
-          {filter !== "all" || clientFilter ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                setFilter("all");
-                setClientFilter(null);
-              }}
-              style={styles.clearBtn}
-            >
-              <Text style={styles.clearText}>Clear filters</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.feed}>
-          {grouped.map(([day, dayEvents]) => (
-            <View key={day} style={styles.group}>
-              <Text style={styles.day}>
-                {activityDayLabel(day, today).toUpperCase()}
-              </Text>
-              <View style={styles.card}>
-                {dayEvents.map((event, index) => (
-                  <View key={event.id}>
-                    {index > 0 ? <View style={styles.divider} /> : null}
-                    <EventRow
-                      event={event}
-                      onPress={() => openEvent(event)}
-                      onOpenProfile={
-                        onOpenProfile
-                          ? () => onOpenProfile(event.relationshipId)
-                          : undefined
-                      }
-                    />
-                  </View>
-                ))}
-              </View>
-            </View>
-          ))}
-          {cursor ? (
-            <Pressable
-              accessibilityRole="button"
-              disabled={loadingMore}
-              onPress={() => void loadMore()}
-              style={styles.moreBtn}
-            >
-              <Text style={styles.moreText}>
-                {loadingMore ? "Loading…" : "Load more"}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      )}
+        )}
+        renderItem={({ item: event, index, section }) => (
+          <CardRow
+            first={index === 0}
+            last={index === section.data.length - 1}
+          >
+            {index > 0 ? <View style={styles.divider} /> : null}
+            <EventRow
+              event={event}
+              onPress={() => openEvent(event)}
+              onOpenProfile={
+                onOpenProfile
+                  ? () => onOpenProfile(event.relationshipId)
+                  : undefined
+              }
+            />
+          </CardRow>
+        )}
+      />
 
       <ClientPickerSheet
         visible={pickerOpen}
@@ -458,7 +476,7 @@ export function ActivityFeedScreen({
         }}
         onSave={(input) => void saveNote(input)}
       />
-    </View>
+    </>
   );
 }
 
@@ -590,6 +608,7 @@ const useStyles = createThemedStyles((t) => ({
   },
   feed: { gap: 16 },
   group: { gap: 8 },
+  dayHeader: { backgroundColor: t.colors.bg, paddingBottom: 8, paddingTop: 16 },
   day: {
     color: t.colors.ink3,
     fontFamily: fontFamilySemiBold,

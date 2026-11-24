@@ -46,6 +46,9 @@ const { MinimisedWorkoutBar } = await import("./MinimisedWorkoutBar");
 const { closeActiveSession, openActiveSession, updateActiveSession } = await import(
   "./activeSession"
 );
+const { finishMutationId, resetWorkoutActionsForTests, skipMutationId } = await import(
+  "../workoutSession"
+);
 
 const uuid = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -152,6 +155,7 @@ const tap = (name: string | RegExp) =>
 beforeEach(() => {
   enqueued.length = 0;
   resetResumePrompt();
+  resetWorkoutActionsForTests();
   closeActiveSession();
 });
 
@@ -237,6 +241,52 @@ describe("resume after the app was closed (W-18)", () => {
     expect(JSON.parse(enqueued[0]!.payloadJson)).toMatchObject({ assignmentId: uuid(2) });
     expect(onDiscarded).toHaveBeenCalledTimes(1);
     expect(onDiscarded.mock.calls[0]![0].status).toBe("skipped");
+  });
+});
+
+describe("no double save (Z14-8)", () => {
+  const rows = () =>
+    enqueued as Array<{ operation: string; payloadJson: string; mutationId?: string }>;
+
+  it("a double tap on Finish anyway queues one finish, with the execution's stable id", async () => {
+    const { onFinished } = renderPrompts();
+    tap("Finish and save");
+    const finish = screen.getAllByRole("button", { name: "Finish anyway" }).at(-1)!;
+    await act(async () => {
+      fireEvent.click(finish);
+      fireEvent.click(finish);
+      fireEvent.click(finish);
+    });
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]!.mutationId).toBe(finishMutationId(uuid(1)));
+    expect(onFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it("after a finish nothing is offered and a stale Discard is a no-op", async () => {
+    let handlers: Handlers | null = null;
+    await act(async () => {
+      handlers = renderPrompts({ canPrompt: false, execution: execution(3), finishRequested: true });
+    });
+    expect(rows().map((row) => row.operation)).toEqual(["workout.complete"]);
+    expect(handlers!.onFinished).toHaveBeenCalledTimes(1);
+    // The same open copy again (a stale list): finished on this phone, so no
+    // dialog, no Finish and no Discard.
+    renderPrompts();
+    expect(screen.queryByText("Pick up where you left off?")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Discard" })).toBeNull();
+    expect(rows()).toHaveLength(1);
+  });
+
+  it("a discard uses the assignment's stable skip id, once", async () => {
+    renderPrompts();
+    tap("Discard");
+    const discard = screen.getAllByRole("button", { name: "Discard workout" }).at(-1)!;
+    await act(async () => {
+      fireEvent.click(discard);
+      fireEvent.click(discard);
+    });
+    expect(rows()).toHaveLength(1);
+    expect(rows()[0]!.mutationId).toBe(skipMutationId(uuid(2)));
   });
 });
 

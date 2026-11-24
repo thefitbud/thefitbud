@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import {
@@ -44,6 +44,7 @@ import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { FutureDayOpensNote } from "./FutureDayBanner";
 import { isFutureDay, opensOnLabel, useLocalToday } from "./futureDay";
 import { enqueueAndPush } from "../sync/actions";
+import { recordFinishedWorkoutNotes } from "../sync/outboxCopy";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
 import { WorkoutOverviewScreen } from "./WorkoutOverviewScreen";
@@ -84,10 +85,12 @@ import {
 import {
   enrichExecutionFromAssignmentDay,
   nextUpSet,
+  isWorkoutEndedLocally,
   openActiveWorkout,
   restSecondsBySetTargetId,
   sessionSetCounts,
   sessionVolumeKg,
+  skipMutationId,
   workoutStartError,
 } from "./workoutSession";
 import { reportError } from "../lib/reportError";
@@ -264,6 +267,12 @@ export function WorkoutTab({
   const [summaryExecution, setSummaryExecution] =
     useState<WorkoutExecution | null>(null);
   const [actingId, setActingId] = useState<string | null>(null);
+  /**
+   * In-flight locks (Z14-8). `actingId` disables the buttons from the next
+   * render; these refs also stop a second tap that lands before it.
+   */
+  const startingRef = useRef(false);
+  const skippingRef = useRef(false);
   const [skipTarget, setSkipTarget] = useState<WorkoutAssignment | null>(null);
   const [skipReason, setSkipReason] = useState<string | null>(null);
   const [closedMissedIds, setClosedMissedIds] = useState<Set<string>>(
@@ -440,6 +449,8 @@ export function WorkoutTab({
       onAutoStartConsumed?.();
       return;
     }
+    if (startingRef.current) return;
+    startingRef.current = true;
     void (async () => {
       setActingId(todayAssignment.id);
       setError(null);
@@ -454,6 +465,7 @@ export function WorkoutTab({
       } catch (err) {
         setError(workoutStartError(err));
       } finally {
+        startingRef.current = false;
         setActingId(null);
         onAutoStartConsumed?.();
       }
@@ -571,6 +583,10 @@ export function WorkoutTab({
       updateActiveSession(relationship.id, { minimised: false });
       return;
     }
+    // One start at a time (Z14-8): a second tap before the buttons disable,
+    // or a pending-start effect racing a tap, queues nothing.
+    if (startingRef.current) return;
+    startingRef.current = true;
     setActingId(assignment.id);
     setError(null);
     try {
@@ -593,6 +609,7 @@ export function WorkoutTab({
       }
       setError(message);
     } finally {
+      startingRef.current = false;
       setActingId(null);
     }
   }
@@ -636,7 +653,7 @@ export function WorkoutTab({
     } catch (err) {
       reportError("workout.openLogged", err);
       setError(
-        userFacingMessage(err, { fallback: "Could not open this workout. (WORKOUT-OPEN)" }),
+        userFacingMessage(err, { fallback: "Couldn't open this workout. Try again." }),
       );
     } finally {
       setActingId(null);
@@ -663,21 +680,43 @@ export function WorkoutTab({
   async function confirmSkip(reason: string | null) {
     if (!skipTarget) return;
     const assignment = skipTarget;
-    if (onFutureDay(assignment)) {
+    // A workout finished or discarded on this phone is never skipped (Z14-8).
+    if (
+      onFutureDay(assignment) ||
+      isWorkoutEndedLocally({
+        assignmentId: assignment.id,
+        executionId: assignment.execution?.id ?? null,
+      })
+    ) {
       setSkipTarget(null);
       return;
     }
+    // One skip at a time, and one mutation per assignment: a second tap or a
+    // retry reuses it (Z14-8).
+    if (skippingRef.current) return;
+    skippingRef.current = true;
     setActingId(`skip-${assignment.id}`);
     setError(null);
+    const mutationId = skipMutationId(assignment.id);
     try {
-      await enqueueAndPush(sync, {
+      const queued = await enqueueAndPush(sync, {
+        mutationId,
+        idempotencyKey: mutationId,
         recordId: assignment.id,
         operation: "workout.skip",
         payload: {
           assignmentId: assignment.id,
           reason: reason ?? null,
+          workoutName: assignment.workoutDayName,
         },
       });
+      void queued.pushed.then((results) =>
+        recordFinishedWorkoutNotes(results, {
+          operation: "workout.skip",
+          workoutKey: assignment.id,
+          workoutName: assignment.workoutDayName,
+        }),
+      );
       invalidateRelationshipDayData(relationship.id);
       setSkipTarget(null);
       setSkipReason(null);
@@ -687,6 +726,7 @@ export function WorkoutTab({
         userFacingMessage(err, { fallback: "Could not skip workout." }),
       );
     } finally {
+      skippingRef.current = false;
       setActingId(null);
     }
   }
