@@ -180,6 +180,29 @@ describe("coach asks: cursor pages per status (Z14-20)", () => {
     }
   });
 
+  it("page size: 500 reads at most 50 with a cursor; 0 and negatives read 1; abc reads 30", async () => {
+    // 120 asks: 80 open, so more than one 50-row page.
+    await addAsks(120);
+    for (const headers of [trainer, trainee]) {
+      const big = await list("/coach-asks?status=open&limit=500", headers);
+      expect(big.items).toHaveLength(50);
+      expect(big.nextCursor).toEqual(expect.any(String));
+      for (const tiny of ["0", "-3"]) {
+        const one = await list(`/coach-asks?status=open&limit=${tiny}`, headers);
+        expect(one.items, tiny).toHaveLength(1);
+        expect(one.nextCursor).toEqual(expect.any(String));
+      }
+      const fallback = await list("/coach-asks?status=open&limit=abc", headers);
+      expect(fallback.items).toHaveLength(30);
+      expect(fallback.nextCursor).toEqual(expect.any(String));
+      const next = await list(
+        `/coach-asks?status=open&cursor=${encodeURIComponent(fallback.nextCursor!)}`,
+        headers,
+      );
+      expect(next.items).toHaveLength(30);
+    }
+  });
+
   it("an ask added between pages causes no duplicate and no gap", async () => {
     await addAsks(30);
     const original = (await list("/coach-asks?status=open")).items.map((a) => a.id);

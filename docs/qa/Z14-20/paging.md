@@ -14,7 +14,7 @@ API only (no visual check, no device run). D-W14-26: with no `limit` (and no `cu
 | `GET /checkins/relationships/:id/notes` | `limit` (1–50), `cursor` | Every note, `nextCursor: null` (unchanged) | One page, `nextCursor` or `null` at the end | `createdAt` desc, `id` desc |
 | `GET /coach-asks` | `limit` (1–50), `cursor` (per `status`, default `open`) | Every ask, **no `nextCursor` key** (unchanged) | One page + `nextCursor` (`null` at the end) | `lastAskedAt` desc, `id` desc |
 
-- `limit` follows `GET /clients`: a non-numeric value falls back to 30, then it is clamped to 1–50. A `cursor` without `limit` pages 30 at a time.
+- `limit`: a non-numeric value (`abc`) falls back to 30; any number is clamped to 1–50 (`0` and negatives read 1, `500` reads 50). A `cursor` without `limit` pages 30 at a time. (`GET /clients` reads `0` as 30; these lists follow their documented 1–50 clamp instead.)
 - A cursor that does not decode, or carries the wrong number of key parts for the read (for example a notes cursor on the inbox), gets `400 INVALID_CURSOR` "Cursor is not valid." (the same answer as `GET /clients`). An unknown `segment` gets `400 INVALID_REQUEST` "Invalid check-in segment."
 - Authorization is unchanged: the inbox reads only the trainer's own non-ended relationships; notes check ownership in the same batch before returning rows (404 otherwise); asks are scoped through the actor's own relationships.
 
@@ -36,4 +36,5 @@ Measured on the demo seed with the round-trip counter (`test-support/query-count
 
 - `apps/api/src/routes/checkins.pagination.test.ts`: unpaged parity (pages concatenate to the unpaged rows and bodies, demo seed and +120), first/middle/last pages, every segment walked with no duplicates or gaps in the app's order, a row inserted between pages (newer: not repeated; older: appears once), bad/tampered/foreign cursor and unknown segment, round trips flat with +120 check-ins, ended client hidden from every segment, trainee 403, another trainer 404 on notes and none of this trainer's rows; notes: parity, order, insert between pages, round trips flat with +80.
 - `apps/api/src/routes/coach-asks.pagination.test.ts`: unpaged has no `nextCursor` key, per-status paging for trainer and trainee with the same bodies as unpaged, insert between pages, bad cursor, round trips flat with +60, another trainer sees none.
+- Page size (fix round): `limit=500` returns 50 rows and a cursor, `limit=0` and `limit=-3` return 1, `limit=abc` returns 30, and a cursor without `limit` pages 30, for the inbox (unsegmented and a segment), notes and coach asks (trainer and trainee). Raising the cap in `lib/cursor.ts` to 500, or reading `0` as 30, fails three tests.
 - Mutation check: changing the keyset comparison to `>=` or `<=` makes the tests fail (or the walk never ends); dropping the ended-client filter fails two tests.

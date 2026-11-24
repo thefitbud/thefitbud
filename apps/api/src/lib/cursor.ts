@@ -126,18 +126,26 @@ export function buildKeysetPage<T>(
   return { rows: pageRows, nextCursor: encodeKeysetCursor(key.values, key.id) };
 }
 
+/** Largest page the optional-paging lists return (Z14-20, D-W14-26). */
+export const MAX_PAGE_LIMIT = 50;
+/** Page size when `limit` is missing (cursor only) or not a number. */
+export const DEFAULT_PAGE_LIMIT = 30;
+
 /**
  * Optional page size for lists that stay unpaged without `limit` (Z14-20,
  * D-W14-26). Returns null when neither `limit` nor `cursor` is present (the
- * caller then answers exactly as before). Same clamp as `GET /clients`:
- * a non-numeric value falls back to 30, then 1–50.
+ * caller then answers exactly as before). A missing or non-numeric `limit`
+ * becomes 30; any number is clamped to 1–50 (so `0` and negatives read 1,
+ * `500` reads 50).
  */
 export function optionalPageLimit(
   limitParam: string | undefined,
   cursorParam: string | undefined,
 ): number | null {
   if (limitParam === undefined && !cursorParam) return null;
-  return Math.min(Math.max(Number.parseInt(limitParam ?? "30", 10) || 30, 1), 50);
+  const parsed = Number.parseInt(limitParam ?? "", 10);
+  const requested = Number.isNaN(parsed) ? DEFAULT_PAGE_LIMIT : parsed;
+  return Math.min(Math.max(requested, 1), MAX_PAGE_LIMIT);
 }
 
 function bytesToBase64Url(bytes: Uint8Array): string {

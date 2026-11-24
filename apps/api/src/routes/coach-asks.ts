@@ -252,7 +252,7 @@ coachAskRoutes.get(
         in: "query",
         required: false,
         description:
-          "Page size, 1–50. Omit `limit` and `cursor` to get every ask. A non-numeric value falls back to 30; the value is then clamped.",
+          "Page size, 1–50. Omit `limit` and `cursor` to get every ask. A non-numeric value falls back to 30; a number is clamped to 1–50 (0 reads 1, 500 reads 50).",
         schema: { type: "integer", minimum: 1, maximum: 50 },
       },
       {

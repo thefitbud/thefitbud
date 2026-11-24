@@ -389,6 +389,27 @@ describe("check-in inbox and coach notes: cursor pages (Z14-20)", () => {
     expect(theirs.some((i) => mine.has(i.checkin.id))).toBe(false);
   });
 
+  it("page size: 500 reads at most 50 with a cursor; 0 and negatives read 1; abc reads 30", async () => {
+    // 180 more: 60 of them submitted, so To review also has more than 50.
+    await addCheckins(180);
+    for (const base of ["/checkins/inbox?", "/checkins/inbox?segment=to_review&"]) {
+      const big = await page<InboxItem>(`${base}limit=500`);
+      expect(big.items, base).toHaveLength(50);
+      expect(big.nextCursor, base).toEqual(expect.any(String));
+      for (const tiny of ["0", "-3"]) {
+        const one = await page<InboxItem>(`${base}limit=${tiny}`);
+        expect(one.items, `${base}${tiny}`).toHaveLength(1);
+        expect(one.nextCursor).toEqual(expect.any(String));
+      }
+      const fallback = await page<InboxItem>(`${base}limit=abc`);
+      expect(fallback.items, base).toHaveLength(30);
+      expect(fallback.nextCursor).toEqual(expect.any(String));
+      // A cursor without a limit keeps paging 30 at a time.
+      const next = await page<InboxItem>(`${base}cursor=${encodeURIComponent(fallback.nextCursor!)}`);
+      expect(next.items, base).toHaveLength(30);
+    }
+  });
+
   describe("coach notes", () => {
     async function addNotes(relationshipId: string, trainerUserId: string, count: number, startMs: number) {
       for (let i = 0; i < count; i += 1) {
@@ -465,6 +486,17 @@ describe("check-in inbox and coach notes: cursor pages (Z14-20)", () => {
       expect(new Set(seen).size).toBe(seen.length);
       for (const id of original) expect(seen).toContain(id);
       expect(seen).toHaveLength(original.length + 1);
+    });
+
+    it("page size: 500 reads at most 50 with a cursor; 0 reads 1; abc reads 30", async () => {
+      const rel = await demoRelationship();
+      await addNotes(rel.id, rel.trainerUserId, 80, Date.parse(SEED) - 86_400_000);
+      const path = `/checkins/relationships/${rel.id}/notes?limit=`;
+      const big = await page<Note>(`${path}500`);
+      expect(big.items).toHaveLength(50);
+      expect(big.nextCursor).toEqual(expect.any(String));
+      expect((await page<Note>(`${path}0`)).items).toHaveLength(1);
+      expect((await page<Note>(`${path}abc`)).items).toHaveLength(30);
     });
 
     it("one notes page costs the same round trips with 80 more notes", async () => {
