@@ -1,6 +1,9 @@
 import type { PushPayload } from "@fitbud/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { notificationTypeSchema } from "@fitbud/contracts";
 import {
+  EXPO_ANDROID_CHANNEL_BY_TYPE,
+  EXPO_ANDROID_CHANNEL_IDS,
   EXPO_PUSH_RECEIPTS_URL,
   EXPO_PUSH_SEND_URL,
   EXPO_PUSH_TIMEOUT_MS,
@@ -39,6 +42,73 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+describe("Android channel mapping (D-W14-13)", () => {
+  it("maps every notification type to one of the push-group channels", () => {
+    for (const type of notificationTypeSchema.options) {
+      expect(EXPO_ANDROID_CHANNEL_IDS).toContain(EXPO_ANDROID_CHANNEL_BY_TYPE[type]);
+    }
+    expect(Object.keys(EXPO_ANDROID_CHANNEL_BY_TYPE).sort()).toEqual([...notificationTypeSchema.options].sort());
+  });
+
+  it("uses every channel, and only the daily summary stays off the v2 channels", () => {
+    expect(new Set(Object.values(EXPO_ANDROID_CHANNEL_BY_TYPE))).toEqual(new Set(EXPO_ANDROID_CHANNEL_IDS));
+    expect([...EXPO_ANDROID_CHANNEL_IDS].sort()).toEqual(
+      ["account_v2", "checkin_v2", "clients_v2", "coach_v2", "meal_v2", "plan_v2", "summary", "workout_v2"],
+    );
+    const offV2 = notificationTypeSchema.options.filter((type) => !EXPO_ANDROID_CHANNEL_BY_TYPE[type].endsWith("_v2"));
+    expect(offV2).toEqual(["daily_summary"]);
+  });
+
+  it("puts each push group on its channel (same groups as the app's pushGroupFor)", () => {
+    expect(EXPO_ANDROID_CHANNEL_BY_TYPE).toMatchObject({
+      workout_reminder: "workout_v2",
+      meal_reminder: "meal_v2",
+      checkin_reminder: "checkin_v2",
+      daily_summary: "summary",
+      activity_nudge: "coach_v2",
+      coach_log_updated: "coach_v2",
+      plan_published: "plan_v2",
+      subscription_renewal_reminder: "account_v2",
+      trainer_checkin_submitted: "clients_v2",
+    });
+  });
+
+  it("sends each message on its type's channel at high priority", async () => {
+    const { fn, calls } = mockFetch(okTickets);
+    const types = notificationTypeSchema.options;
+    await sendExpoPushMessages(
+      types.map((notificationType, i) => ({ to: token(i), payload: { ...PAYLOAD, notificationType } })),
+      { fetchImpl: fn },
+    );
+    const sent = calls[0]!.body as Array<{ channelId: string; priority: string; data: PushPayload }>;
+    expect(sent).toHaveLength(types.length);
+    for (const message of sent) {
+      expect(message.priority).toBe("high");
+      expect(message.channelId).toBe(EXPO_ANDROID_CHANNEL_BY_TYPE[message.data.notificationType]);
+    }
+  });
+
+  it("keeps a nudge's display text unchanged and still adds the channel and priority", async () => {
+    const { fn, calls } = mockFetch(okTickets);
+    const nudge: PushPayload = { ...PAYLOAD, notificationType: "activity_nudge" };
+    await sendExpoPushMessages(
+      [{ to: token(1), payload: nudge, display: { title: "Rahul sent you a reminder", body: "Log lunch when you can" } }],
+      { fetchImpl: fn },
+    );
+    expect(calls[0]!.body).toEqual([
+      {
+        to: token(1),
+        title: "Rahul sent you a reminder",
+        body: "Log lunch when you can",
+        data: nudge,
+        sound: "default",
+        channelId: "coach_v2",
+        priority: "high",
+      },
+    ]);
+  });
+});
+
 describe("sendExpoPushMessages", () => {
   it("posts to the Expo send URL with routing data, safe text and sound; no Authorization without a token", async () => {
     const { fn, calls } = mockFetch(okTickets);
@@ -52,7 +122,15 @@ describe("sendExpoPushMessages", () => {
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers).not.toHaveProperty("Authorization");
     expect(calls[0]!.body).toEqual([
-      { to: token(1), title: "FitBud", body: "Workout reminder", data: PAYLOAD, sound: "default" },
+      {
+        to: token(1),
+        title: "FitBud",
+        body: "Workout reminder",
+        data: PAYLOAD,
+        sound: "default",
+        channelId: "workout_v2",
+        priority: "high",
+      },
     ]);
   });
 

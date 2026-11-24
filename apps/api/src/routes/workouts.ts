@@ -2,7 +2,7 @@ import {
   operation,
   dateWindowParameters,
 } from "../openapi/document";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   coachEditWorkoutRequestSchema,
@@ -35,6 +35,7 @@ import {
   setCompletionIsModified,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
+import { evaluateExceptionsAfterWrite } from "../domain/exceptions";
 import {
   coachingConfigurations,
   coachingRelationships,
@@ -112,6 +113,10 @@ export const workoutRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
 }>();
+
+// Z14-1 / D-W14-8: a successful write re-evaluates its relationship's
+// exceptions after the response, so Needs you can read stored rows.
+workoutRoutes.use("*", evaluateExceptionsAfterWrite);
 
 type Db = ReturnType<typeof createDb>;
 
@@ -581,17 +586,9 @@ workoutRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const relationship = await loadAccessibleRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship) {
-      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
-    }
-
+    const relationshipId = c.req.param("relationshipId");
     const conditions = [
-      eq(workoutAssignments.coachingRelationshipId, relationship.id),
+      eq(workoutAssignments.coachingRelationshipId, relationshipId),
       eq(workoutAssignments.scheduleStatus, "scheduled"),
     ];
     if (fromDate) {
@@ -600,26 +597,52 @@ workoutRoutes.get(
     if (toDate) {
       conditions.push(lte(workoutAssignments.localDate, toDate));
     }
+    const scope = and(...conditions);
 
-    const rows = await db
-      .select({
-        assignment: workoutAssignments,
-        execution: workoutExecutions,
-      })
-      .from(workoutAssignments)
-      .leftJoin(
-        workoutExecutions,
-        eq(workoutExecutions.assignmentId, workoutAssignments.id),
-      )
-      .where(and(...conditions))
-      .orderBy(asc(workoutAssignments.localDate), asc(workoutAssignments.id));
+    // One round trip (Z14-1): the relationship, its assignments and their
+    // executions. Executions are a separate statement paired in memory (one
+    // per assignment, unique on assignment_id): a joined select would repeat
+    // column names, which a batch result cannot map. Nothing is returned
+    // before the ownership check below.
+    const [relationshipRows, assignmentRows, executionRows] = await db.batch([
+      db
+        .select()
+        .from(coachingRelationships)
+        .where(eq(coachingRelationships.id, relationshipId))
+        .limit(1),
+      db
+        .select()
+        .from(workoutAssignments)
+        .where(scope)
+        .orderBy(asc(workoutAssignments.localDate), asc(workoutAssignments.id)),
+      db
+        .select()
+        .from(workoutExecutions)
+        .where(
+          inArray(
+            workoutExecutions.assignmentId,
+            db.select({ id: workoutAssignments.id }).from(workoutAssignments).where(scope),
+          ),
+        ),
+    ]);
+    const relationship = relationshipRows[0];
+    if (!relationship || !canAccessRelationship(actor, relationship)) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const executionByAssignment = new Map(
+      executionRows.map((execution) => [execution.assignmentId, execution]),
+    );
 
     const now = nowIso();
     return ok(
       c,
       workoutAssignmentListResponseSchema.parse({
-        items: rows.map((row) =>
-          mapWorkoutAssignment(row.assignment, row.execution ?? null, now),
+        items: assignmentRows.map((assignment) =>
+          mapWorkoutAssignment(
+            assignment,
+            executionByAssignment.get(assignment.id) ?? null,
+            now,
+          ),
         ),
         nextCursor: null,
       }),

@@ -4,7 +4,7 @@ import {
   exceptionStatusParameter,
 } from "../openapi/document";
 import { Hono } from "hono";
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import {
   acknowledgeExceptionRequestSchema,
   attentionFeedResponseSchema,
@@ -29,7 +29,9 @@ import {
   type AttentionReviewBucket,
 } from "@fitbud/core";
 import {
+  evaluateDueExceptions,
   evaluateRelationshipExceptions,
+  exceptionEvaluationDedupeKey,
   listAttentionExceptionsForTrainer,
 } from "../domain/exceptions";
 import {
@@ -47,6 +49,7 @@ import {
   exceptionActions,
   exceptions,
   interventions,
+  scheduledJobs,
   traineeProfiles,
   userIdentities,
 } from "../db/schema";
@@ -477,26 +480,59 @@ exceptionRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const relationship = await loadAccessibleRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship || relationship.trainerUserId !== actor.userId) {
+    const relationshipId = c.req.param("relationshipId");
+    const listStored = () =>
+      db
+        .select()
+        .from(exceptions)
+        .where(eq(exceptions.coachingRelationshipId, relationshipId))
+        .orderBy(desc(exceptions.detectedAt), desc(exceptions.id));
+    // One round trip: the relationship, when it was last evaluated, and its
+    // stored exceptions (returned only after the ownership check, Z14-1).
+    const [relationshipRows, storedRows] = await db.batch([
+      db
+        .select({
+          relationship: coachingRelationships,
+          evaluatedAt: sql<string | null>`${scheduledJobs.updatedAt}`.as("evaluated_at"),
+        })
+        .from(coachingRelationships)
+        .leftJoin(
+          scheduledJobs,
+          eq(scheduledJobs.dedupeKey, exceptionEvaluationDedupeKey(relationshipId)),
+        )
+        .where(eq(coachingRelationships.id, relationshipId))
+        .limit(1),
+      listStored(),
+    ]);
+    const relationship = relationshipRows[0]?.relationship;
+    if (
+      !relationship ||
+      !canAccessRelationship(actor, relationship) ||
+      relationship.trainerUserId !== actor.userId
+    ) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
 
     // Reads stay available for an ended relationship but never write (rule 5).
-    if (relationship.status !== "ended") {
-      await evaluateRelationshipExceptions(db, relationship.id, nowIso());
+    // Evaluated again only when the last evaluation is older than 15 minutes
+    // (D-W14-8); writes evaluate on their own.
+    let rows = storedRows;
+    const evaluated = await evaluateDueExceptions(
+      db,
+      [
+        {
+          id: relationship.id,
+          status: relationship.status,
+          evaluatedAt: relationshipRows[0]?.evaluatedAt ?? null,
+        },
+      ],
+      nowIso(),
+    );
+    if (evaluated.length > 0) {
+      rows = await listStored();
     }
 
     const statusFilter = c.req.query("status");
-    const rows = await db
-      .select()
-      .from(exceptions)
-      .where(eq(exceptions.coachingRelationshipId, relationship.id))
-      .orderBy(desc(exceptions.detectedAt), desc(exceptions.id));
 
     const items = rows
       .filter((row) => (statusFilter ? row.status === statusFilter : true))
@@ -694,30 +730,38 @@ exceptionRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const rows = await db
-      .select()
-      .from(exceptions)
-      .where(eq(exceptions.id, c.req.param("exceptionId")))
-      .limit(1);
-    const row = rows[0];
+    const exceptionId = c.req.param("exceptionId");
+    // One round trip (Z14-1): the item with its relationship, and its actions.
+    // Actions are returned only after the ownership check below.
+    const [rows, actions] = await db.batch([
+      db
+        .select({
+          exception: exceptions,
+          // Only columns whose names don't repeat an exceptions column: a batch
+          // maps rows by column name.
+          trainerUserId: coachingRelationships.trainerUserId,
+        })
+        .from(exceptions)
+        .innerJoin(
+          coachingRelationships,
+          eq(coachingRelationships.id, exceptions.coachingRelationshipId),
+        )
+        .where(eq(exceptions.id, exceptionId))
+        .limit(1),
+      db
+        .select()
+        .from(exceptionActions)
+        .where(eq(exceptionActions.exceptionId, exceptionId))
+        .orderBy(desc(exceptionActions.createdAt)),
+    ]);
+    const row = rows[0]?.exception;
     if (!row) {
       return fail(c, 404, "EXCEPTION_NOT_FOUND", "Exception not found.");
     }
-
-    const relationship = await loadAccessibleRelationship(
-      db,
-      row.coachingRelationshipId,
-      actor,
-    );
-    if (!relationship || relationship.trainerUserId !== actor.userId) {
+    // Trainer-only route (requireRole): the trainer must own the relationship.
+    if (actor.selectedRole !== "trainer" || rows[0]?.trainerUserId !== actor.userId) {
       return fail(c, 404, "EXCEPTION_NOT_FOUND", "Exception not found.");
     }
-
-    const actions = await db
-      .select()
-      .from(exceptionActions)
-      .where(eq(exceptionActions.exceptionId, row.id))
-      .orderBy(desc(exceptionActions.createdAt));
 
     return ok(
       c,

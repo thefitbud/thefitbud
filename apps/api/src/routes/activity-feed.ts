@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { Hono } from "hono";
 import { NUTRIENT_SCALE, activityFeedResponseSchema } from "@fitbud/contracts";
 import { formatCivilDate, formatPersonName, labelFor } from "@fitbud/core";
@@ -47,22 +47,78 @@ activityFeedRoutes.get(
     const limit = Math.min(Number(c.req.query("limit") ?? "30") || 30, 50);
     const rid = c.req.query("rid")?.trim();
     const db = createDb(c.env.DB);
-    const allRels = await db
+    // Z14-1: one batch. Ended relationships stay out of the active feed unless
+    // explicitly selected; every read is scoped through the same subquery on
+    // the trainer's own relationships, so nothing else can leak in.
+    const relScope = and(
+      eq(coachingRelationships.trainerUserId, actor.userId),
+      rid ? eq(coachingRelationships.id, rid) : eq(coachingRelationships.status, "active"),
+    );
+    const relIdsQuery = db.select({ id: coachingRelationships.id }).from(coachingRelationships).where(relScope);
+    const coachChangesQuery = db
       .select()
-      .from(coachingRelationships)
-      .where(eq(coachingRelationships.trainerUserId, actor.userId));
-    // Ended relationships stay out of the active feed unless explicitly selected.
-    const rels = rid
-      ? allRels.filter((r) => r.id === rid)
-      : allRels.filter((r) => r.status === "active");
-    const relIds = rels.map((r) => r.id);
-    if (relIds.length === 0) {
+      .from(logEditEvents)
+      .where(inArray(logEditEvents.coachingRelationshipId, relIdsQuery))
+      .orderBy(desc(logEditEvents.createdAt))
+      .limit(50);
+    const [rels, trainees, meals, workouts, checkinRows, asks, coachChanges, actorProfiles] =
+      await db.batch([
+        db.select().from(coachingRelationships).where(relScope),
+        db
+          .select()
+          .from(traineeProfiles)
+          .where(
+            inArray(
+              traineeProfiles.userId,
+              db
+                .select({ id: coachingRelationships.traineeUserId })
+                .from(coachingRelationships)
+                .where(relScope),
+            ),
+          ),
+        db
+          .select()
+          .from(mealCompliance)
+          .where(inArray(mealCompliance.coachingRelationshipId, relIdsQuery))
+          .orderBy(desc(mealCompliance.loggedAt))
+          .limit(50),
+        db
+          .select()
+          .from(workoutExecutions)
+          .where(inArray(workoutExecutions.coachingRelationshipId, relIdsQuery))
+          .orderBy(desc(workoutExecutions.completedAt))
+          .limit(50),
+        db
+          .select()
+          .from(checkins)
+          .where(inArray(checkins.coachingRelationshipId, relIdsQuery))
+          .orderBy(desc(checkins.submittedAt))
+          .limit(50),
+        db
+          .select()
+          .from(coachAsks)
+          .where(inArray(coachAsks.relationshipId, relIdsQuery))
+          .orderBy(desc(coachAsks.lastAskedAt))
+          .limit(50),
+        coachChangesQuery,
+        db
+          .select({ userId: trainerProfiles.userId, displayName: trainerProfiles.displayName })
+          .from(trainerProfiles)
+          .where(
+            inArray(
+              trainerProfiles.userId,
+              db
+                .select({ id: logEditEvents.actorUserId })
+                .from(logEditEvents)
+                .where(inArray(logEditEvents.coachingRelationshipId, relIdsQuery))
+                .orderBy(desc(logEditEvents.createdAt))
+                .limit(50),
+            ),
+          ),
+      ]);
+    if (rels.length === 0) {
       return ok(c, activityFeedResponseSchema.parse({ events: [], nextCursor: null }));
     }
-    const trainees = await db
-      .select()
-      .from(traineeProfiles)
-      .where(inArray(traineeProfiles.userId, rels.map((r) => r.traineeUserId)));
     const profileNameByUser = new Map(
       trainees.map((t) => [t.userId, t.displayName]),
     );
@@ -86,12 +142,6 @@ activityFeedRoutes.get(
       kcal?: number | null;
       link?: string | null;
     }> = [];
-    const meals = await db
-      .select()
-      .from(mealCompliance)
-      .where(inArray(mealCompliance.coachingRelationshipId, relIds))
-      .orderBy(desc(mealCompliance.loggedAt))
-      .limit(50);
     for (const row of meals) {
       events.push({
         id: `meal:${row.id}`,
@@ -108,12 +158,6 @@ activityFeedRoutes.get(
             : Math.round(row.kcalScaled / NUTRIENT_SCALE),
       });
     }
-    const workouts = await db
-      .select()
-      .from(workoutExecutions)
-      .where(inArray(workoutExecutions.coachingRelationshipId, relIds))
-      .orderBy(desc(workoutExecutions.completedAt))
-      .limit(50);
     for (const row of workouts) {
       if (!row.completedAt) continue;
       events.push({
@@ -127,12 +171,6 @@ activityFeedRoutes.get(
         summary: `Workout ${labelFor("workout_execution_status", row.status).toLowerCase()}`,
       });
     }
-    const checkinRows = await db
-      .select()
-      .from(checkins)
-      .where(inArray(checkins.coachingRelationshipId, relIds))
-      .orderBy(desc(checkins.submittedAt))
-      .limit(50);
     for (const row of checkinRows) {
       if (!row.submittedAt) continue;
       events.push({
@@ -146,12 +184,6 @@ activityFeedRoutes.get(
         summary: `Check-in ${formatCivilDate(row.localDate)}`,
       });
     }
-    const asks = await db
-      .select()
-      .from(coachAsks)
-      .where(inArray(coachAsks.relationshipId, relIds))
-      .orderBy(desc(coachAsks.lastAskedAt))
-      .limit(50);
     for (const row of asks) {
       const topicLabel = labelFor("coach_ask_topic", row.topic);
       events.push({
@@ -168,22 +200,8 @@ activityFeedRoutes.get(
     // R4 (Z6-19, Z7-22): one event per trainer create or edit. The audit row is
     // written in the same transaction as the entry, so a failed coach log
     // leaves neither this event nor the entry.
-    const coachChanges = await db
-      .select()
-      .from(logEditEvents)
-      .where(inArray(logEditEvents.coachingRelationshipId, relIds))
-      .orderBy(desc(logEditEvents.createdAt))
-      .limit(50);
-    const actorIds = [...new Set(coachChanges.map((row) => row.actorUserId))];
     const actorNames = new Map(
-      actorIds.length === 0
-        ? []
-        : (
-            await db
-              .select({ userId: trainerProfiles.userId, displayName: trainerProfiles.displayName })
-              .from(trainerProfiles)
-              .where(inArray(trainerProfiles.userId, actorIds))
-          ).map((row) => [row.userId, formatPersonName(row.displayName)]),
+      actorProfiles.map((row) => [row.userId, formatPersonName(row.displayName)]),
     );
     for (const row of coachChanges) {
       const described = describeCoachLogEvent(row, actorNames.get(row.actorUserId) || "Coach");

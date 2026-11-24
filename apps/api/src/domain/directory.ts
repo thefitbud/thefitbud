@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import type {
   AdherenceState,
   ClientDirectoryItem,
@@ -6,22 +6,37 @@ import type {
   RenewalState,
 } from "@fitbud/contracts";
 import { clientDirectoryListResponseSchema } from "@fitbud/contracts";
-import { deriveRenewalState, formatLocalDate } from "@fitbud/core";
+import {
+  ADHERENCE_EXCEPTION_SEVERITIES,
+  ADHERENCE_OPEN_EXCEPTION_STATUSES,
+  addDaysToLocalDate,
+  adherenceWindowStart,
+  deriveAdherenceState,
+  deriveClientOnboardingStatus,
+  deriveRenewalState,
+  formatLocalDate,
+  isQualifyingAdherenceObservation,
+} from "@fitbud/core";
 import type { Db } from "../db/client";
 import {
   checkinReviews,
   checkins,
   clientInvitations,
+  coachAsks,
   coachingConfigurations,
   coachingRelationships,
+  exceptions,
+  mealCompliance,
+  onboardingFormResponses,
+  onboardingReviews,
   planVersions,
   plans,
   subscriptionVersions,
   traineeProfiles,
   users,
+  workoutAssignments,
+  workoutExecutions,
 } from "../db/schema";
-import { deriveAdherenceForRelationships } from "./adherence";
-import { deriveOnboardingStatusForRelationships } from "./client-status";
 import { resolveClientDisplayName } from "./client-identity";
 import { mapCheckin } from "./mappers";
 import { buildPage } from "../lib/cursor";
@@ -43,7 +58,40 @@ export async function loadClientDirectory(
     limit: number;
   },
 ) {
-  const [relationships, invitations, trainer] = await Promise.all([
+  // Z14-1: one D1 round trip. Every read is scoped by a sub-select of this
+  // trainer's relationships instead of an id list from a first read, so none
+  // waits for another and no IN list can outgrow D1's parameter cap.
+  const trainerRelationshipIds = db
+    .select({ id: coachingRelationships.id })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.trainerUserId, input.trainerUserId));
+  const trainerTraineeIds = db
+    .select({ id: coachingRelationships.traineeUserId })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.trainerUserId, input.trainerUserId));
+  // The trainer's "today" depends on their zone, read in this same batch, so
+  // dated adherence inputs use a range one day wider each side (every zone's
+  // today is within a day of UTC's) and are trimmed exactly below.
+  const utcToday = formatLocalDate(new Date(input.nowIso), "UTC");
+  const wideStart = adherenceWindowStart(addDaysToLocalDate(utcToday, -1));
+  const wideEnd = addDaysToLocalDate(utcToday, 1);
+  const [
+    relationships,
+    invitations,
+    trainer,
+    profiles,
+    configurationRows,
+    checkinRows,
+    planRows,
+    subscriptionRows,
+    onboardingResponseRows,
+    onboardingReviewRows,
+    openExceptionRows,
+    adherenceWorkoutRows,
+    adherenceMealRows,
+    adherenceCheckinRows,
+    openAskRows,
+  ] = await db.batch([
     db
       .select()
       .from(coachingRelationships)
@@ -62,6 +110,144 @@ export async function loadClientDirectory(
       .from(users)
       .where(eq(users.id, input.trainerUserId))
       .limit(1),
+    db
+      .select({
+        userId: traineeProfiles.userId,
+        displayName: traineeProfiles.displayName,
+        timezone: users.timezone,
+      })
+      .from(traineeProfiles)
+      .innerJoin(users, eq(users.id, traineeProfiles.userId))
+      .where(inArray(traineeProfiles.userId, trainerTraineeIds)),
+    // Goals (active rows) and the "has active configuration" onboarding input.
+    db
+      .select({
+        relationshipId: coachingConfigurations.coachingRelationshipId,
+        status: coachingConfigurations.status,
+        goalShort: coachingConfigurations.goalShort,
+      })
+      .from(coachingConfigurations)
+      .where(inArray(coachingConfigurations.coachingRelationshipId, trainerRelationshipIds)),
+    db
+      .select({ checkin: checkins })
+      .from(checkins)
+      .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+      .where(
+        and(
+          inArray(checkins.coachingRelationshipId, trainerRelationshipIds),
+          eq(checkins.recordStatus, "draft"),
+          isNull(checkinReviews.id),
+        ),
+      )
+      .orderBy(asc(checkins.localDate), asc(checkins.id)),
+    db
+      .select({
+        relationshipId: plans.coachingRelationshipId,
+        planId: plans.id,
+        title: plans.title,
+        effectiveFrom: planVersions.effectiveFrom,
+        versionNumber: planVersions.versionNumber,
+      })
+      .from(planVersions)
+      .innerJoin(plans, eq(planVersions.planId, plans.id))
+      .where(
+        and(
+          inArray(plans.coachingRelationshipId, trainerRelationshipIds),
+          eq(planVersions.status, "effective"),
+        ),
+      )
+      .orderBy(desc(planVersions.effectiveFrom), desc(planVersions.versionNumber)),
+    db
+      .select({
+        relationshipId: subscriptionVersions.coachingRelationshipId,
+        renewsOn: subscriptionVersions.renewsOn,
+        versionNumber: subscriptionVersions.versionNumber,
+      })
+      .from(subscriptionVersions)
+      .where(inArray(subscriptionVersions.coachingRelationshipId, trainerRelationshipIds))
+      .orderBy(desc(subscriptionVersions.versionNumber)),
+    // Onboarding status inputs (as `deriveOnboardingStatusForRelationships`).
+    db
+      .select({
+        relationshipId: onboardingFormResponses.coachingRelationshipId,
+        status: onboardingFormResponses.status,
+      })
+      .from(onboardingFormResponses)
+      .where(inArray(onboardingFormResponses.coachingRelationshipId, trainerRelationshipIds)),
+    db
+      .select({ relationshipId: onboardingReviews.coachingRelationshipId })
+      .from(onboardingReviews)
+      .where(inArray(onboardingReviews.coachingRelationshipId, trainerRelationshipIds)),
+    // Stored open exceptions: the adherence input and the per-client attention
+    // summary. Read as stored, never evaluated here (D-W14-8).
+    db
+      .select({
+        relationshipId: exceptions.coachingRelationshipId,
+        type: exceptions.type,
+        severity: exceptions.severity,
+        status: exceptions.status,
+      })
+      .from(exceptions)
+      .where(
+        and(
+          inArray(exceptions.coachingRelationshipId, trainerRelationshipIds),
+          inArray(exceptions.status, [...ADHERENCE_OPEN_EXCEPTION_STATUSES]),
+        ),
+      ),
+    // Adherence inputs (as `deriveAdherenceForRelationships`), widened by a day.
+    db
+      .select({
+        relationshipId: workoutExecutions.coachingRelationshipId,
+        status: workoutExecutions.status,
+        localDate: workoutAssignments.localDate,
+      })
+      .from(workoutExecutions)
+      .innerJoin(workoutAssignments, eq(workoutExecutions.assignmentId, workoutAssignments.id))
+      .where(
+        and(
+          inArray(workoutExecutions.coachingRelationshipId, trainerRelationshipIds),
+          gte(workoutAssignments.localDate, wideStart),
+          lte(workoutAssignments.localDate, wideEnd),
+        ),
+      ),
+    db
+      .select({
+        relationshipId: mealCompliance.coachingRelationshipId,
+        localDate: mealCompliance.localDate,
+        logged: count(),
+      })
+      .from(mealCompliance)
+      .where(
+        and(
+          inArray(mealCompliance.coachingRelationshipId, trainerRelationshipIds),
+          gte(mealCompliance.localDate, wideStart),
+          lte(mealCompliance.localDate, wideEnd),
+        ),
+      )
+      .groupBy(mealCompliance.coachingRelationshipId, mealCompliance.localDate),
+    db
+      .select({
+        relationshipId: checkins.coachingRelationshipId,
+        recordStatus: checkins.recordStatus,
+        localDate: checkins.localDate,
+      })
+      .from(checkins)
+      .where(
+        and(
+          inArray(checkins.coachingRelationshipId, trainerRelationshipIds),
+          gte(checkins.localDate, wideStart),
+          lte(checkins.localDate, wideEnd),
+        ),
+      ),
+    db
+      .select({ relationshipId: coachAsks.relationshipId })
+      .from(coachAsks)
+      .where(
+        and(
+          inArray(coachAsks.relationshipId, trainerRelationshipIds),
+          eq(coachAsks.status, "open"),
+        ),
+      ),
   ]);
 
   const today = formatLocalDate(
@@ -74,108 +260,94 @@ export async function loadClientDirectory(
       .map((row) => row.invitationId)
       .filter((id): id is string => Boolean(id)),
   );
-  const onboardingByRelationship = await deriveOnboardingStatusForRelationships(
-    db,
-    relationships,
+
+  // Onboarding status: same rule and inputs as deriveOnboardingStatusForRelationships.
+  const submitted = new Set(
+    onboardingResponseRows
+      .filter((row) => row.status === "submitted")
+      .map((row) => row.relationshipId),
   );
-  const adherenceByRelationship = await deriveAdherenceForRelationships(db, {
-    today,
-    relationships: relationships.map((row) => ({
-      id: row.id,
-      onboardingStatus:
-        onboardingByRelationship.get(row.id) ?? "onboarding_pending",
-    })),
-  });
+  const reviewed = new Set(onboardingReviewRows.map((row) => row.relationshipId));
+  const activeConfiguration = new Set(
+    configurationRows
+      .filter((row) => row.status === "active")
+      .map((row) => row.relationshipId),
+  );
+  const onboardingByRelationship = new Map<string, OnboardingStatus>();
+  for (const row of relationships) {
+    const status = deriveClientOnboardingStatus({
+      relationshipStatus: row.status,
+      invitationPending: false,
+      hasSubmittedResponse: submitted.has(row.id),
+      hasCoachingReadyReview: reviewed.has(row.id),
+      hasActiveConfiguration: activeConfiguration.has(row.id),
+    });
+    if (status) onboardingByRelationship.set(row.id, status);
+  }
 
-  const relationshipIds = relationships.map((row) => row.id);
-  const traineeIds = relationships.map((row) => row.traineeUserId);
-  const [profiles, goals, checkinRows, planRows, subscriptionRows] =
-    await Promise.all([
-      traineeIds.length === 0
-        ? Promise.resolve([])
-        : db
-            .select({
-              userId: traineeProfiles.userId,
-              displayName: traineeProfiles.displayName,
-              timezone: users.timezone,
-            })
-            .from(traineeProfiles)
-            .innerJoin(users, eq(users.id, traineeProfiles.userId))
-            .where(inArray(traineeProfiles.userId, traineeIds)),
-      relationshipIds.length === 0
-        ? Promise.resolve([])
-        : db
-            .select({
-              relationshipId: coachingConfigurations.coachingRelationshipId,
-              goalShort: coachingConfigurations.goalShort,
-            })
-            .from(coachingConfigurations)
-            .where(
-              and(
-                inArray(
-                  coachingConfigurations.coachingRelationshipId,
-                  relationshipIds,
-                ),
-                eq(coachingConfigurations.status, "active"),
-              ),
-            ),
-      relationshipIds.length === 0
-        ? Promise.resolve([])
-        : db
-            .select({
-              checkin: checkins,
-              reviewId: checkinReviews.id,
-            })
-            .from(checkins)
-            .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-            .where(
-              and(
-                inArray(checkins.coachingRelationshipId, relationshipIds),
-                eq(checkins.recordStatus, "draft"),
-                isNull(checkinReviews.id),
-              ),
-            )
-            .orderBy(asc(checkins.localDate), asc(checkins.id)),
-      relationshipIds.length === 0
-        ? Promise.resolve([])
-        : db
-            .select({
-              relationshipId: plans.coachingRelationshipId,
-              planId: plans.id,
-              title: plans.title,
-              effectiveFrom: planVersions.effectiveFrom,
-              versionNumber: planVersions.versionNumber,
-            })
-            .from(planVersions)
-            .innerJoin(plans, eq(planVersions.planId, plans.id))
-            .where(
-              and(
-                inArray(plans.coachingRelationshipId, relationshipIds),
-                eq(planVersions.status, "effective"),
-              ),
-            )
-            .orderBy(
-              desc(planVersions.effectiveFrom),
-              desc(planVersions.versionNumber),
-            ),
-      relationshipIds.length === 0
-        ? Promise.resolve([])
-        : db
-            .select({
-              relationshipId: subscriptionVersions.coachingRelationshipId,
-              renewsOn: subscriptionVersions.renewsOn,
-              versionNumber: subscriptionVersions.versionNumber,
-            })
-            .from(subscriptionVersions)
-            .where(
-              inArray(
-                subscriptionVersions.coachingRelationshipId,
-                relationshipIds,
-              ),
-            )
-            .orderBy(desc(subscriptionVersions.versionNumber)),
-    ]);
+  // Adherence: same rule and inputs as deriveAdherenceForRelationships, on the
+  // exact window [start, today] in the trainer's zone.
+  const adherenceStart = adherenceWindowStart(today);
+  const inWindow = (localDate: string) =>
+    localDate >= adherenceStart && localDate <= today;
+  const severities: readonly string[] = ADHERENCE_EXCEPTION_SEVERITIES;
+  const openExceptionIds = new Set(
+    openExceptionRows
+      .filter((row) => severities.includes(row.severity))
+      .map((row) => row.relationshipId),
+  );
+  const qualifyingIds = new Set<string>();
+  for (const row of adherenceWorkoutRows) {
+    if (!inWindow(row.localDate)) continue;
+    if (
+      isQualifyingAdherenceObservation({
+        kind: "workout_execution",
+        status: row.status,
+        localDate: row.localDate,
+        today,
+      })
+    ) {
+      qualifyingIds.add(row.relationshipId);
+    }
+  }
+  for (const row of adherenceMealRows) {
+    if (row.relationshipId && row.localDate && inWindow(row.localDate) && row.logged > 0) {
+      qualifyingIds.add(row.relationshipId);
+    }
+  }
+  for (const row of adherenceCheckinRows) {
+    if (!inWindow(row.localDate)) continue;
+    if (
+      isQualifyingAdherenceObservation({
+        kind: "checkin",
+        status: row.recordStatus,
+        localDate: row.localDate,
+        today,
+      })
+    ) {
+      qualifyingIds.add(row.relationshipId);
+    }
+  }
+  const adherenceByRelationship = new Map<string, AdherenceState>();
+  for (const row of relationships) {
+    const onboardingStatus =
+      onboardingByRelationship.get(row.id) ?? "onboarding_pending";
+    const active = onboardingStatus === "active";
+    adherenceByRelationship.set(
+      row.id,
+      deriveAdherenceState({
+        onboardingStatus,
+        hasOpenAdherenceException: active && openExceptionIds.has(row.id),
+        hasQualifyingActivity: active && qualifyingIds.has(row.id),
+      }),
+    );
+  }
 
+  const attentionByRelationship = summarizeAttention(
+    openExceptionRows,
+    new Set(openAskRows.map((row) => row.relationshipId)),
+  );
+  const goals = configurationRows.filter((row) => row.status === "active");
   const nameByUser = new Map(profiles.map((row) => [row.userId, row.displayName]));
   const goalByRelationship = new Map(
     goals.map((row) => [row.relationshipId, row.goalShort]),
@@ -264,6 +436,7 @@ export async function loadClientDirectory(
           ? cityLabelForTimezone(traineeZone)
           : null,
       updatedAt: relationship.updatedAt,
+      attention: attentionByRelationship.get(relationship.id) ?? EMPTY_ATTENTION,
       email: invitation?.recipientEmail ?? null,
     } as DirectoryRow & { email: string | null });
   }
@@ -371,10 +544,56 @@ export async function loadClientDirectory(
       week: item.week ?? null,
       city: item.city ?? null,
       updatedAt: item.updatedAt,
+      ...(item.attention ? { attention: item.attention } : {}),
     })),
     facets,
     nextCursor: page.nextCursor,
   });
+}
+
+type AttentionSummary = NonNullable<ClientDirectoryItem["attention"]>;
+
+const EMPTY_ATTENTION: AttentionSummary = {
+  needsYouCount: 0,
+  notedCount: 0,
+  mostSevere: null,
+  hasOpenMissed: false,
+  hasOpenOffPlan: false,
+  hasOpenAsk: false,
+};
+
+/**
+ * Per-client counts from stored open exceptions and open asks (Z14-1), so the
+ * trainer app's Clients badges need no Needs you call. Same categories as the
+ * attention groups: Needs you = detected or active, noted = acknowledged.
+ */
+function summarizeAttention(
+  rows: ReadonlyArray<{ relationshipId: string; type: string; severity: string; status: string }>,
+  openAsks: ReadonlySet<string>,
+): Map<string, AttentionSummary> {
+  const summaries = new Map<string, AttentionSummary>();
+  const get = (id: string) => {
+    let summary = summaries.get(id);
+    if (!summary) {
+      summary = { ...EMPTY_ATTENTION };
+      summaries.set(id, summary);
+    }
+    return summary;
+  };
+  for (const row of rows) {
+    const summary = get(row.relationshipId);
+    if (row.severity === "critical") summary.mostSevere = "critical";
+    else if (!summary.mostSevere) summary.mostSevere = "attention";
+    if (row.status === "acknowledged") {
+      summary.notedCount += 1;
+      continue;
+    }
+    summary.needsYouCount += 1;
+    if (row.type === "meal_deviation") summary.hasOpenOffPlan = true;
+    else summary.hasOpenMissed = true;
+  }
+  for (const id of openAsks) get(id).hasOpenAsk = true;
+  return summaries;
 }
 
 function coachingWeekNumber(startedAt: string, nowIso: string): number {

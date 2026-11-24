@@ -11,6 +11,8 @@ import {
 import { handleScheduledPushReceipts } from "./jobs/push-receipts";
 import { handleScheduledReplenishment } from "./jobs/replenishment";
 import { runAccountPurge } from "./jobs/account-purge";
+import { handleScheduledExceptionEvaluation } from "./jobs/exception-evaluation";
+import { handleScheduledCleanup } from "./jobs/cleanup";
 import { runCoachAskMaintenance } from "./domain/coach-asks";
 import { createDb } from "./db/client";
 import { fail, ok } from "./lib/envelope";
@@ -307,6 +309,11 @@ const worker = {
       ["cron.coach_ask", () => runCoachAskMaintenance(createDb(env.DB))],
       // Z5-4 scaffold; Z6-17 fills in the job (see jobs/account-purge.ts).
       ["cron.account_purge", () => runAccountPurge(env, at)],
+      // Z14-1 (D-W14-8): store exceptions for clients due for evaluation, so
+      // Needs you can read stored rows even when no trainer is looking.
+      ["cron.exception_evaluation", () => handleScheduledExceptionEvaluation(env, at)],
+      // Z14-4: once a day (21:00 UTC tick); a no-op on every other tick.
+      ["cron.cleanup", () => handleScheduledCleanup(env, at)],
       // Last, so a slow receipts call never delays the jobs above.
       ["cron.push_receipts", () => handleScheduledPushReceipts(env, at)],
     ]);
