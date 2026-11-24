@@ -124,7 +124,7 @@ function planContent() {
 }
 
 type Fixture = Awaited<ReturnType<typeof coachingWithMealPlan>>;
-type AssignmentRow = { id: string; localDate: string; mealName: string };
+type AssignmentRow = { id: string; localDate: string; mealName: string; windowEndsAt: string };
 
 /** An active client with a published meal plan and two weeks of generated meals. */
 async function coachingWithMealPlan(suffix: string) {
@@ -547,7 +547,7 @@ describe("trainee edits, removes and adds a photo to a logged meal (Z14-11)", ()
     expect(retry.body.data).toEqual(first.body.data);
     expect(await audit(entry.id)).toHaveLength(1);
 
-    const reused = await patchLog(entry.id, { outcome: "skipped", recordVersion: 1 }, key);
+    const reused = await patchLog(entry.id, { outcome: "confirmed", recordVersion: 1 }, key);
     expect(reused.status).toBe(409);
     expect(reused.body.error?.code).toBe("IDEMPOTENCY_KEY_REUSE");
   });
@@ -666,6 +666,39 @@ describe("trainee edits, removes and adds a photo to a logged meal (Z14-11)", ()
     expect(late.status).toBe(422);
     expect(late.body.error?.code).toBe("MEAL_REMOVE_NOT_ALLOWED");
     expect(await db.select().from(schema.mealCompliance).where(eq(schema.mealCompliance.id, entry.id))).toHaveLength(1);
+  });
+
+  it("refused when the confirmation window has closed, even inside the 24 h edit window", async () => {
+    const entry = await confirm();
+    at(Date.parse(f.mondayBreakfast.windowEndsAt) + 60_000);
+    expect(Date.now()).toBeLessThan(Date.parse(entry.loggedAt) + DAY);
+    const read = await call(`/meals/assignments/${f.mondayBreakfast.id}`, { headers: f.trainee });
+    expect(read.body.data.compliance.canRemove).toBe(false);
+    expect(read.body.data.compliance.editableUntil).not.toBeNull();
+    const refused = await removeLog(entry.id, 0);
+    expect(refused.status).toBe(422);
+    expect(refused.body.error?.code).toBe("MEAL_REMOVE_NOT_ALLOWED");
+    expect(refused.body.error?.message).toBe("This log can't be removed any more.");
+    expect(await db.select().from(schema.mealCompliance).where(eq(schema.mealCompliance.id, entry.id))).toHaveLength(1);
+    // Editing is still allowed inside the 24 h window.
+    expect((await patchLog(entry.id, { ...ATE_OUT, recordVersion: 0 })).status).toBe(200);
+  });
+
+  it("refuses a skipped outcome on edit, and a photo or edit on an entry from before a reactivation", async () => {
+    const entry = await confirm();
+    const skipped = await patchLog(entry.id, { outcome: "skipped", recordVersion: 0 });
+    expect(skipped.status).toBe(400);
+    expect(skipped.body.error?.code).toBe("INVALID_REQUEST");
+
+    await db
+      .update(schema.coachingRelationships)
+      .set({ reactivatedAt: new Date(Date.parse(entry.loggedAt) + 60_000).toISOString() })
+      .where(eq(schema.coachingRelationships.id, f.relationshipId));
+    const photo = await attachPhoto(entry.id, await mediaAsset());
+    expect(photo.status).toBe(422);
+    expect(photo.body.error?.code).toBe("ENDED_PERIOD");
+    const edit = await patchLog(entry.id, { ...ATE_OUT, recordVersion: 0 });
+    expect(edit.body.error?.code).toBe("ENDED_PERIOD");
   });
 
   it("attaches, replaces and refuses photos; a photo-only change is neither an edit nor a notification", async () => {
@@ -923,6 +956,18 @@ describe("trainee edits, removes and adds a photo to a logged meal (Z14-11)", ()
       // A device time made up by a REST caller is not read at all.
       const rest = await patchLog(entry.id, { ...ATE_OUT, recordVersion: 0 });
       expect(rest.status).toBe(200);
+    });
+
+    it("refuses an offline removal that arrives after the confirmation window closed", async () => {
+      const entry = await confirm();
+      const madeAt = new Date(Date.parse(entry.loggedAt) + 60_000).toISOString();
+      at(Date.parse(f.mondayBreakfast.windowEndsAt) + 60_000);
+      const res = await push("meal.remove", entry.id, { recordVersion: 0 }, madeAt);
+      expect(res.body.data.results[0]).toMatchObject({
+        status: "rejected",
+        error: { code: "MEAL_REMOVE_NOT_ALLOWED" },
+      });
+      expect(await db.select().from(schema.mealCompliance).where(eq(schema.mealCompliance.id, entry.id))).toHaveLength(1);
     });
 
     it("a stale version through sync is a conflict, not an overwrite", async () => {

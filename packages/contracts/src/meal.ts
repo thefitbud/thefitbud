@@ -249,7 +249,8 @@ export type SkipMealRequest = z.infer<typeof skipMealRequestSchema>;
  */
 export const traineeEditMealRequestSchema = z
   .object({
-    outcome: mealComplianceOutcomeSchema,
+    // D-W14-22 (b): as planned, changed portion, log it myself, ate out. Never "skipped".
+    outcome: mealComplianceOutcomeSchema.exclude(["skipped"]),
     deviationKind: mealDeviationKindSchema.nullable().optional(),
     notes: z.string().trim().max(500).nullable().optional(),
     items: z.array(loggedFoodItemSchema).max(20).optional(),

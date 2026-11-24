@@ -2228,7 +2228,7 @@ mealRoutes.delete(
           exceptionStatus: exception?.status ?? null,
           timeZone,
           reactivatedAt: relationship.reactivatedAt,
-          at: deviceTime ?? now,
+          at: now,
         }),
       )
     ) {
@@ -2364,7 +2364,8 @@ mealRoutes.post(
 
     const loaded = await loadOwnMealEntry(c, db, entryId);
     if (!loaded.ok) return loaded.response;
-    const { entry, assignment, relationship } = loaded.value;
+    const own = loaded.value;
+    const { entry, assignment, relationship } = own;
     const writable = await requireWritableRelationship(c, db, relationship.id);
     if (!writable.ok) return writable.response;
     const refusal = traineeEntryRefusal(c, entry);
@@ -2379,6 +2380,16 @@ mealRoutes.post(
       })
     ) {
       return windowClosed(c);
+    }
+    // The ended period stays frozen after a reactivation (D-W6-20), as for edit.
+    const timeZone = await loadTraineeTimezone(db, actor.userId);
+    if (entryInEndedPeriod(own, timeZone)) {
+      return fail(
+        c,
+        422,
+        LOG_TIME_ERROR_CODES.ended_period,
+        LOG_TIME_ERROR_MESSAGES.ended_period,
+      );
     }
     const media = await loadReadyMealPhotoAsset(
       db,

@@ -511,6 +511,37 @@ describe("the trainee rates a finished workout for 48 hours (Z14-11)", () => {
     expect(row!.sessionRpe).toBe(8);
   });
 
+  it("refuses a note (or any unknown key) instead of silently dropping it, over REST and sync", async () => {
+    const { trainee, execution } = await finished("fb8");
+    const rest = await patchFeedback(trainee, execution.id, {
+      rpe: 6,
+      note: "Felt heavy",
+      recordVersion: execution.recordVersion,
+    });
+    expect(rest.status).toBe(400);
+    expect(rest.error?.code).toBe("INVALID_REQUEST");
+    const response = await request("/sync/push", {
+      method: "POST",
+      headers: trainee,
+      body: {
+        mutations: [
+          mutationAt(
+            81,
+            "workout.feedback",
+            execution.id,
+            { executionId: execution.id, body: { rpe: 6, note: "Felt heavy", recordVersion: execution.recordVersion } },
+            new Date().toISOString(),
+          ),
+        ],
+      },
+    });
+    const json = (await response.json()) as { data?: { results: Array<{ status: string }> } };
+    const status = response.status === 200 ? json.data!.results[0]!.status : "http-400";
+    expect(["rejected", "http-400"]).toContain(status);
+    const [row] = await db.select().from(schema.workoutExecutions).where(eq(schema.workoutExecutions.id, execution.id));
+    expect(row!.sessionRpe).toBeNull();
+  });
+
   it("commits in one batch of at most 4 statements", async () => {
     const { trainee, execution } = await finished("fb7");
     const counter = installRoundTripCounter(handle);

@@ -23,7 +23,7 @@ export const MEAL_EDITED_BY_COACH_MESSAGE =
   "Your coach has already corrected this meal, so it can't be changed here.";
 export const MEAL_REMOVE_NOT_ALLOWED_CODE = "MEAL_REMOVE_NOT_ALLOWED";
 export const MEAL_REMOVE_NOT_ALLOWED_MESSAGE =
-  "This meal can no longer be logged again, so the log can't be removed. You can still edit it.";
+  "This log can't be removed any more.";
 export const FEEDBACK_EDIT_WINDOW_CLOSED_CODE = "FEEDBACK_EDIT_WINDOW_CLOSED";
 export const FEEDBACK_EDIT_WINDOW_CLOSED_MESSAGE =
   "Ratings can be changed for 48 hours after a workout.";
@@ -76,7 +76,7 @@ export type MealRemoveInputs = {
   exceptionStatus: string | null;
   timeZone: string;
   reactivatedAt: string | null;
-  /** The instant to judge "can it still be logged" at (server now online; device time offline). */
+  /** The instant to judge "can it still be logged" at: always server now, never device time. */
   at: string;
 };
 
@@ -114,7 +114,9 @@ export function mealStillLoggable(input: MealRemoveInputs): boolean {
     alreadyLogged: false,
     windowEndsAt: input.windowEndsAt,
   });
-  return decision === "ok" || decision === "ok_late" || decision === "ok_after_resolve";
+  // `ok_late` is a log after the confirmation window closed: removing the entry
+  // would leave a required meal missed, so it is not removable (D-W14-22 c).
+  return decision === "ok" || decision === "ok_after_resolve";
 }
 
 /** Adds `editableUntil` and `canRemove` to a meal entry read for its trainee. */

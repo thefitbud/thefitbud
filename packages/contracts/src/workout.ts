@@ -207,10 +207,13 @@ export const completeWorkoutRequestSchema = z.object({
  * The note is not here: `workout_executions` has no note column and D-W14-18
  * allows no other migration (see the Z14-11 report).
  */
-export const traineeWorkoutFeedbackRequestSchema = z.object({
-  rpe: z.number().int().min(1).max(10).nullable(),
-  recordVersion: z.number().int().nonnegative(),
-});
+export const traineeWorkoutFeedbackRequestSchema = z
+  .object({
+    rpe: z.number().int().min(1).max(10).nullable(),
+    recordVersion: z.number().int().nonnegative(),
+  })
+  // Strict: a `note` (or any other key) is refused, never silently dropped.
+  .strict();
 export type TraineeWorkoutFeedbackRequest = z.infer<
   typeof traineeWorkoutFeedbackRequestSchema
 >;

@@ -76,7 +76,7 @@ const KNOWN_CODE_COPY: Record<string, UserFacingError> = {
   },
   MEAL_REMOVE_NOT_ALLOWED: {
     message:
-      "This meal can't be logged again any more, so its log can't be removed. You can still edit it.",
+      "This log can't be removed any more.",
   },
   MEAL_EDITED_BY_COACH: {
     message: "Your coach has already corrected this meal, so it can't be changed here.",
