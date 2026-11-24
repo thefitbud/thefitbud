@@ -153,7 +153,7 @@ describe("meal photo (D-W14-11)", () => {
       uploadMediaContent: vi.fn(async (_id: string, bytes: Uint8Array, type: string) => {
         calls.push(`upload:${bytes.length}:${type}`);
       }),
-      attachMealPhoto: vi.fn(async (entryId: string, body: { mediaAssetId: string }) => {
+      attachMealPhoto: vi.fn<(entryId: string, body: { mediaAssetId: string }, key: string) => Promise<void>>(async (entryId, body) => {
         calls.push(`attach:${entryId}:${body.mediaAssetId}`);
       }),
     };
@@ -196,7 +196,7 @@ describe("meal photo (D-W14-11)", () => {
       createUploadTarget: vi.fn(),
       uploadMediaContent: vi.fn(),
       attachMealPhoto: vi
-        .fn()
+        .fn<(entryId: string, body: unknown, key: string) => Promise<void>>()
         .mockRejectedValueOnce(new Error("offline"))
         .mockResolvedValueOnce(undefined),
     };

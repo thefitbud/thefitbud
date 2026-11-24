@@ -382,6 +382,8 @@ type PhotoJob = {
   uri: string;
   status: "preparing" | "waiting" | "uploading" | "failed" | "done";
   message: string | null;
+  /** The failure was the connection: shown neutral, not as an error (D-W14-9). */
+  offline?: boolean;
   attachKey: string;
   mediaAssetId: string | null;
 };
@@ -878,6 +880,7 @@ function DietTabBody({
       reportError("DietTab.sendPhoto", err);
       patchJob(meal.id, {
         status: "failed",
+        offline: isNetworkFailure(err instanceof MealPhotoError ? err.cause : err),
         message:
           err instanceof MealPhotoError
             ? err.message
@@ -1001,7 +1004,10 @@ function DietTabBody({
               accessibilityLabel={`Photo of ${ctx.name}`}
             />
             <View style={styles.photoStatusText}>
-              <Text variant="subhead" tone={failed ? "crit" : "ink2"}>
+              <Text
+                variant="subhead"
+                tone={failed && !job.offline ? "crit" : "ink2"}
+              >
                 {text}
               </Text>
             </View>
