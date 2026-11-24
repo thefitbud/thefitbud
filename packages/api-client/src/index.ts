@@ -2482,3 +2482,5 @@ import { installAccountClientMethods } from "./account-augment.js";
 installAccountClientMethods(FitBudApiClient);
 import { installWorkoutsClientMethods } from "./workouts-augment.js";
 installWorkoutsClientMethods(FitBudApiClient);
+import { installLogEditsClientMethods } from "./log-edits-augment.js";
+installLogEditsClientMethods(FitBudApiClient);

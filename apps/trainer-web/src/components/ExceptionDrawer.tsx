@@ -462,7 +462,7 @@ export function ExceptionDrawer({
   const resolveTimerRef = useRef<number | null>(null);
   const resolveGenRef = useRef(0);
   const pendingRef = useRef<PendingResolve | null>(null);
-  /** After Mark reviewed unmounts, restore focus inside the open drawer. */
+  /** After Noted, keep open unmounts, restore focus inside the open drawer. */
   const restoreFocusAfterReviewRef = useRef(false);
   const loadSeqRef = useRef(0);
 
@@ -821,7 +821,7 @@ export function ExceptionDrawer({
       restoreFocusAfterReviewRef.current = false;
       if (handleWriteCode(err, id)) return;
       setError(
-        userFacingMessage(err, { fallback: "Could not mark reviewed." }),
+        userFacingMessage(err, { fallback: "Could not save your note. Try again." }),
       );
     } finally {
       setActing(false);
@@ -1048,7 +1048,7 @@ export function ExceptionDrawer({
     detail &&
     (detail.status === "detected" || detail.status === "active");
 
-  // Mark reviewed removes its own button; move focus to Resolve (now primary)
+  // Noted, keep open removes its own button; move focus to Resolve (now primary)
   // or Close so document.body never holds focus while aria-modal is open.
   // Wait until acting clears — Resolve is disabled while the request runs, and
   // disabled controls cannot take focus (happy-dom and browsers).
@@ -1672,7 +1672,7 @@ export function ExceptionDrawer({
                   </li>
                   {detail.acknowledgedAt ? (
                     <li>
-                      <span className="sp-tl-what">Marked reviewed · you</span>
+                      <span className="sp-tl-what">Noted by you</span>
                       <span className="sp-tl-when">
                         {" · "}
                         {formatTimelineDateTime(detail.acknowledgedAt)}
@@ -1767,7 +1767,7 @@ export function ExceptionDrawer({
                       disabled={acting || !online}
                       onClick={() => void markReviewed()}
                     >
-                      Mark reviewed
+                      Noted, keep open
                     </Button>
                   ) : null}
                   {showNudge && (active || acknowledged) ? (
@@ -1868,9 +1868,14 @@ export function ExceptionDrawer({
                     {nudgeHelperText}
                   </p>
                 ) : null}
+                {acknowledged && detail?.acknowledgedAt ? (
+                  <p className="drawer-helper sp-noted-state">
+                    {`Noted by you at ${formatTimelineDateTime(detail.acknowledgedAt)} · still open`}
+                  </p>
+                ) : null}
                 <p className="drawer-helper">
                   {active
-                    ? `Mark reviewed moves ${firstName} to Reviewed. ${firstName} leaves Home when ${helperItemsText}.`
+                    ? `Noted keeps it open. ${firstName} leaves Home when ${helperItemsText}.`
                     : `Resolve closes this item. ${firstName} leaves Home when ${helperItemsText}.`}
                 </p>
                 <Link

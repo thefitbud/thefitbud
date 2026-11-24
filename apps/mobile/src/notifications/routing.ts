@@ -89,6 +89,7 @@ function exactRouteFromPayload(payload: PushPayload): ResolvedAppRoute {
     case "trainer_critical_digest":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
     case "admin_whatsapp_budget":
       return { type: "tab", tab: "today" };
     default: {

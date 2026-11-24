@@ -637,7 +637,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
           </div>
           <p className="drawer-helper">
             Only missed workouts, meals and check-ins can be resolved together.
-            Mark reviewed still applies to {firstName} as a whole.
+            Noted, keep open still applies to {firstName} as a whole.
           </p>
         </div>
       )}

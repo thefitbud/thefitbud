@@ -71,7 +71,10 @@ vi.mock("../providers/ThemeProvider", () => ({
     return () => styles;
   },
 }));
-vi.mock("expo-notifications", () => ({ getPermissionsAsync: vi.fn() }));
+const permission = vi.hoisted(() => ({ state: "granted" as string, refresh: vi.fn() }));
+vi.mock("../notifications/usePushPermission", () => ({
+  usePushPermission: () => ({ state: permission.state, refresh: permission.refresh }),
+}));
 vi.mock("../components/Text", () => ({ Text: "Text" }));
 vi.mock("../components/ErrorBanner", () => ({ ErrorBanner: "ErrorBanner" }));
 vi.mock("../components/PrimaryButton", () => ({ PrimaryButton: "PrimaryButton" }));
@@ -103,7 +106,6 @@ const PREFS = 0;
 const SAVING = 2;
 const OFFLINE = 3;
 const SNACK = 4;
-const OS_PERMISSION = 6;
 
 type El = { type: unknown; props: Record<string, unknown> & { children?: unknown } };
 function flatten(node: unknown, out: El[] = []): El[] {
@@ -133,7 +135,9 @@ const before = {
 
 beforeEach(() => {
   hooks.cells = [];
-  hooks.seed = { [PREFS]: before, 1: false, [OS_PERMISSION]: "granted" };
+  hooks.seed = { [PREFS]: before, 1: false };
+  permission.state = "granted";
+  permission.refresh.mockReset();
   api.updateNotificationPreferences.mockReset();
   vi.mocked(reportError).mockClear();
   vi.mocked(requestPushPermission).mockReset();
@@ -191,7 +195,7 @@ describe("trainer notification settings save (Z10-12, frames 52 and 58)", () => 
 
 describe("enabling a category needs phone permission (frame 54)", () => {
   beforeEach(() => {
-    hooks.seed[OS_PERMISSION] = "denied";
+    permission.state = "denied";
   });
 
   it("makes no API call and leaves the switch off when the person says no", async () => {

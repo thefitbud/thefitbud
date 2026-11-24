@@ -500,7 +500,7 @@ export function HomePage() {
     let cancelled = false;
     let commitTimer = 0;
     holdException(exceptionId);
-    showToast("Marked reviewed", () => {
+    showToast("Noted, kept open", () => {
       cancelled = true;
       window.clearTimeout(commitTimer);
       setToast(null);
@@ -806,11 +806,11 @@ export function HomePage() {
         >
           <span aria-hidden>{reviewedOpen ? "▾" : "▸"}</span>
           <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>
-            Reviewed, still open
+            Noted, still open
           </h2>
           <span className="home-count">{reviewedGroups.length}</span>
           <span className="muted" style={{ fontSize: 13 }}>
-            {reviewedGroups.length} reviewed item
+            {reviewedGroups.length} noted item
             {reviewedGroups.length === 1 ? "" : "s"} still open
           </span>
         </button>
@@ -824,7 +824,7 @@ export function HomePage() {
                 <div className="home-li-tx">
                   <b>{group.traineeDisplayName}</b>
                   <span>
-                    Reviewed ·{" "}
+                    Noted ·{" "}
                     {items[0]?.summary ||
                       labelFor("exception_type", items[0]!.type)}
                   </span>
@@ -1016,7 +1016,7 @@ export function HomePage() {
               </span>
               <h3 className="home-clear-ttl">All clear</h3>
               <p className="home-clear-copy">
-                New items appear here as clients log or miss a log. Reviewed
+                New items appear here as clients log or miss a log. Noted
                 items that are still open stay in their own list.
               </p>
             </div>
@@ -1147,7 +1147,7 @@ export function HomePage() {
                           items={[
                             {
                               id: "ack",
-                              label: "Mark reviewed",
+                              label: "Noted, keep open",
                               disabled: !online,
                               onSelect: () =>
                                 void acknowledgeFromOverflow(primary.id),

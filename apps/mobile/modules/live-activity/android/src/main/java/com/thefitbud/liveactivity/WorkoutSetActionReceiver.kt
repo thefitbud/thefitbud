@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 
 /**
- * The workout notification's buttons (LA3, frame 27-android).
+ * The workout notification's buttons (LA3; TR-15d layout since Z14-5).
  *
  * Registered by plugins/withLiveActivity.js as a non-exported receiver, so
  * only FitBud's own PendingIntents reach it. It runs with the app in any
@@ -16,22 +16,16 @@ import android.content.Intent
  * changes and no row is written. "Log set" cannot reach the API from here, so
  * it appends one row for the app to drain into the sync outbox
  * (src/notifications/liveActivityOutbox.ts), exactly like the iOS lock-screen
- * button. Nothing here decides anything coaching-related: it records what the
- * trainee entered.
+ * button. Nothing here decides anything coaching-related: it records the set
+ * the button showed ("Log 40 kg × 10").
  */
 class WorkoutSetActionReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val store = WorkoutSetStore(context)
         val state = store.readState() ?: return
+        // TR-15d has no ± steppers (Z14-5): Log and Skip rest are the only
+        // buttons. A stale PendingIntent from an older build's − / + is ignored.
         when (intent.action) {
-            WorkoutSetNotification.ACTION_LESS_WEIGHT ->
-                redraw(context, store, WorkoutSetNotification.stepWeight(state, -1))
-            WorkoutSetNotification.ACTION_MORE_WEIGHT ->
-                redraw(context, store, WorkoutSetNotification.stepWeight(state, 1))
-            WorkoutSetNotification.ACTION_FEWER_REPS ->
-                redraw(context, store, WorkoutSetNotification.stepReps(state, -1))
-            WorkoutSetNotification.ACTION_MORE_REPS ->
-                redraw(context, store, WorkoutSetNotification.stepReps(state, 1))
             WorkoutSetNotification.ACTION_LOG_SET -> logSet(context, store, state)
             // Skip rest (LA3c, frame 27-android-rest): the countdown goes and
             // the next set comes back. The app reads the cleared rest through
@@ -49,9 +43,7 @@ class WorkoutSetActionReceiver : BroadcastReceiver() {
         next: WorkoutSetNotification.SetState,
     ) {
         store.writeState(next)
-        // Skip rest clears the rest, so this drops its scheduled repaint; the
-        // weight and reps buttons leave a running rest alone and so re-arm the
-        // same one (LA3d).
+        // Skip rest clears the rest, so this drops its scheduled repaint (LA3d).
         RestAlarm.apply(context, next)
         WorkoutSetNotification.show(context, next)
     }
@@ -77,6 +69,9 @@ class WorkoutSetActionReceiver : BroadcastReceiver() {
                 reps = state.reps,
             ),
         )
+        // A running app hears about the row at once (`onOutboxRow`, Z14-5);
+        // otherwise it drains on its next foreground, as before.
+        LiveActivityModule.notifyOutboxRow(store.rows().size)
         val next = WorkoutSetNotification.logSet(state)
         store.writeState(next)
         // A logged set never inherits the previous set's countdown, so the
