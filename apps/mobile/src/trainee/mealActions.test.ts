@@ -10,7 +10,10 @@ import {
   base64ToBytes,
   bytesToBase64,
   editMealEntry,
+  hasQueuedMealEdit,
   isMealLogPending,
+  isMealPhotoUnfinished,
+  pruneSentEdits,
   mealEditState,
   mealEditUntilLabel,
   mealPhotoFailureCopy,
@@ -356,5 +359,85 @@ describe("edit or remove a logged entry for 24 hours (Z14-13b, D-W14-22)", () =>
     expect(refused?.status).toBe("confirmed");
     const [removed] = overlayMealEdits([logged()], [row("meal.remove", "in_flight", {})]);
     expect(removed).toMatchObject({ status: "pending", compliance: null });
+  });
+
+  /** An engine whose server takes every row and answers with the entry's next version. */
+  function applyingEngine(startVersion: number) {
+    let version = startVersion;
+    return createSyncEngine(createMemorySyncStore(), {
+      pushSync: async (body) => ({
+        results: body.mutations.map((mutation) => ({
+          mutationId: mutation.mutationId,
+          status: "applied" as const,
+          recordId: mutation.recordId,
+          serverVersion: ++version,
+          entityType: mutation.entityType,
+          error: null,
+        })),
+      }),
+      pullSync: async () => ({ changes: [], nextCursor: null, hasMore: false }),
+    });
+  }
+  const versionOf = (row: { payloadJson: string }) =>
+    (JSON.parse(row.payloadJson) as { body: { recordVersion: number } }).body.recordVersion;
+
+  it("after an edit applied and the day is not refreshed, the next edit carries V+1, not the stale V", async () => {
+    const sync = applyingEngine(4);
+    const meal = logged(); // the day still says recordVersion 4
+    const display = { loggedItems: [], kcal: 900 };
+    const body = { outcome: "modified" as const, deviationKind: "restaurant" as const, notes: null };
+    await editMealEntry(sync, meal, { body, display, relationshipId: "rel" });
+    await vi.waitFor(async () => expect(await sync.store.listOutbox()).toHaveLength(0));
+    expect((await sync.store.getLocal("meal_compliance", ENTRY))?.serverVersion).toBe(5);
+    // Applied, row gone, day copy untouched: the stale version would be refused (409).
+    // The day was never refreshed (or its refresh failed): same stale copy, offline phone, same store.
+    const offline = createSyncEngine(sync.store, {
+      pushSync: async () => {
+        throw new Error("offline");
+      },
+      pullSync: async () => {
+        throw new Error("offline");
+      },
+    });
+    await editMealEntry(offline, meal, { body, display, relationshipId: "rel" });
+    const [second] = await sync.store.listOutbox();
+    expect(versionOf(second!)).toBe(5);
+    expect(second?.expectedServerVersion).toBe(5);
+    // A queued row on top of the applied one still counts.
+    await removeMealEntry(offline, meal, "rel");
+    const rows = await sync.store.listOutbox();
+    expect(rows.map(versionOf)).toEqual([5, 6]);
+  });
+
+  it("knows when a photo is unfinished and when an edit is queued", () => {
+    for (const state of ["preparing", "waiting", "uploading"]) {
+      expect(isMealPhotoUnfinished({ state })).toBe(true);
+    }
+    for (const state of ["failed", "done"]) expect(isMealPhotoUnfinished({ state })).toBe(false);
+    expect(isMealPhotoUnfinished(undefined)).toBe(false);
+    const rows = [
+      { status: "pending", operation: "meal.edit", recordId: ENTRY },
+      { status: "acked", operation: "meal.remove", recordId: "other" },
+    ];
+    expect(hasQueuedMealEdit(rows, ENTRY)).toBe(true);
+    expect(hasQueuedMealEdit(rows, "other")).toBe(false);
+    expect(hasQueuedMealEdit([], ENTRY)).toBe(false);
+  });
+
+  it("drops a sent row once the refreshed day carries its result", () => {
+    const sentEdit = {
+      status: "sent",
+      operation: "meal.edit",
+      recordId: ENTRY,
+      payloadJson: JSON.stringify({ body: { recordVersion: 4 } }),
+    };
+    const sentRemove = { ...sentEdit, operation: "meal.remove" };
+    // Day still at the edited version: keep painting the edit.
+    expect(pruneSentEdits([sentEdit], [logged()])).toHaveLength(1);
+    // Day moved past it: clear.
+    expect(pruneSentEdits([sentEdit], [logged({ recordVersion: 5 })])).toHaveLength(0);
+    // A removal clears once the entry is gone from the day.
+    expect(pruneSentEdits([sentRemove], [logged()])).toHaveLength(1);
+    expect(pruneSentEdits([sentRemove], [lunch("pending")])).toHaveLength(0);
   });
 });

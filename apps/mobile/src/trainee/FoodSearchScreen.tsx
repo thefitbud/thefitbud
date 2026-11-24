@@ -372,7 +372,7 @@ function FoodSearchBody({
         });
       } else if (edit) {
         await editMealEntry(sync, assignment, {
-          body: { outcome: "modified", deviationKind: "logged_foods", notes: null, items },
+          body: { outcome: "modified", deviationKind: "logged_foods", notes: assignment.compliance?.notes ?? null, items },
           display: {
             loggedItems: toSave.map((line) => ({
               name: line.name,

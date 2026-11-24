@@ -332,4 +332,24 @@ describe("SomethingDifferentSheet Change this log mode (Z14-13b, TR-07n4)", () =
     expect(input.body).toMatchObject({ outcome: "modified", deviationKind: "portion_adjustment" });
     await waitFor(() => expect(onEdited).toHaveBeenCalled());
   });
+
+  it("keeps the entry's existing note when the portion changes (never wipes it)", async () => {
+    render(
+      <SomethingDifferentSheet
+        assignment={{
+          ...logged,
+          compliance: { ...logged.compliance!, notes: "Less rice, more dal" },
+        }}
+        relationshipId={REL}
+        variant="screen"
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+        edit={{ start: "portion", canRemove: true, onRemove: vi.fn(), onEdited: vi.fn() }}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Save changes" })[1]!);
+    await waitFor(() => expect(editEntry).toHaveBeenCalledTimes(1));
+    const input = (editEntry.mock.calls[0] as unknown[])[2] as { body: { notes: string | null } };
+    expect(input.body.notes).toBe("Less rice, more dal");
+  });
 });

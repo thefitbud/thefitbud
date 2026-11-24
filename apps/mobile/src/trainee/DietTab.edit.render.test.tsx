@@ -268,6 +268,22 @@ describe("DietTab edit a logged meal for 24 hours (Z14-13b, D-W14-22)", () => {
     expect(screen.getAllByText("900").length).toBeGreaterThan(0);
   });
 
+  it("hides Add photo while an edit of the entry is queued (the attach would bump its version)", async () => {
+    server.items = [meal()];
+    renderDiet();
+    expect(await screen.findByRole("button", { name: "Add photo" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+    fireEvent.change(await screen.findByTestId("ate-out-kcal"), { target: { value: "900" } });
+    fireEvent.click(screen.getByTestId("ate-out-save"));
+    await waitFor(async () => expect((await outbox()).length).toBe(1));
+    await screen.findByText("Lunch updated · Rahul sees the change");
+    expect(screen.queryByRole("button", { name: "Add photo" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Lunch, logged" }));
+    await screen.findByTestId("logged-meal-editable");
+    expect(screen.queryByTestId("logged-meal-add-photo")).toBeNull();
+  });
+
   it("an ate-out entry opens Edit ate out prefilled, with Was N kcal and Remove this log (TR-07n5)", async () => {
     server.items = [meal({ outcome: "modified", deviationKind: "restaurant", kcal: 1120 })];
     renderDiet();

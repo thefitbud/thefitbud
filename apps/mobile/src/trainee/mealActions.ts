@@ -448,15 +448,52 @@ function activeEditRows(
   ).length;
 }
 
-async function nextRecordVersion(
+/** True while an edit or removal of this entry is waiting or in flight. */
+export function hasQueuedMealEdit(
+  rows: ReadonlyArray<{ status: string; operation: string; recordId: string }>,
+  entryId: string | null | undefined,
+): boolean {
+  return entryId != null && activeEditRows(rows, entryId) > 0;
+}
+
+/**
+ * True while a meal photo has not reached the entry yet (still being
+ * prepared, waiting for a connection or the log, or uploading and attaching).
+ * The attach bumps the entry's version without a check, so Edit and Remove
+ * wait for it (Z14-13b fix round 1).
+ */
+export function isMealPhotoUnfinished(
+  job: { state: string } | null | undefined,
+): boolean {
+  return (
+    job != null &&
+    (job.state === "preparing" || job.state === "waiting" || job.state === "uploading")
+  );
+}
+
+/**
+ * The version the next edit must carry. The engine deletes a row once the
+ * server applied it and stores the version that came back with the entry, so
+ * the day's copy (`entry.recordVersion`) can be behind until it refreshes:
+ * take the higher of the two, then add the edits still waiting or in flight.
+ */
+export async function nextRecordVersion(
   sync: SyncEngine,
   entry: MealCompliance,
 ): Promise<number> {
-  // Edits queued one after another each bump the version on the server.
+  let base = entry.recordVersion;
   try {
-    return entry.recordVersion + activeEditRows(await sync.store.listOutbox(), entry.id);
+    const local = await sync.store.getLocal("meal_compliance", entry.id);
+    if (local?.serverVersion != null && !local.tombstone) {
+      base = Math.max(base, local.serverVersion);
+    }
   } catch {
-    return entry.recordVersion;
+    // The day's version stands.
+  }
+  try {
+    return base + activeEditRows(await sync.store.listOutbox(), entry.id);
+  } catch {
+    return base;
   }
 }
 
@@ -532,6 +569,33 @@ type EditPayload = {
     notes?: string | null;
   };
 };
+
+/**
+ * Pure: the "sent" rows still worth keeping. A row the server took stays
+ * applied until the refreshed day carries its result: the entry's version has
+ * moved past the one edited, or (for a removal) the entry is gone.
+ */
+export function pruneSentEdits<T extends EditRow>(
+  sent: readonly T[],
+  meals: ReadonlyArray<Pick<MealAssignment, "compliance">>,
+): T[] {
+  const versions = new Map<string, number>();
+  for (const meal of meals) {
+    if (meal.compliance) versions.set(meal.compliance.id, meal.compliance.recordVersion);
+  }
+  return sent.filter((row) => {
+    const seen = versions.get(row.recordId);
+    if (row.operation === "meal.remove") return seen !== undefined;
+    if (seen === undefined) return true;
+    let edited = 0;
+    try {
+      edited = (JSON.parse(row.payloadJson) as EditPayload).body?.recordVersion ?? 0;
+    } catch {
+      return false;
+    }
+    return seen <= edited;
+  });
+}
 
 /**
  * Pure: the day's meals with the phone's queued edits and removals applied

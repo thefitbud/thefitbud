@@ -219,7 +219,7 @@ function SomethingDifferentSheetBody({
         });
       } else if (edit) {
         await editMealEntry(sync, assignment, {
-          body: { outcome: "modified", deviationKind: "portion_adjustment", notes: null, items },
+          body: { outcome: "modified", deviationKind: "portion_adjustment", notes: assignment.compliance?.notes ?? null, items },
           display: {
             loggedItems: kept.map((row) => ({
               name: row.label,

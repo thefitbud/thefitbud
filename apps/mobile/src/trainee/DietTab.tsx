@@ -53,6 +53,9 @@ import {
 import {
   MealPhotoError,
   confirmMealAssignment,
+  hasQueuedMealEdit,
+  pruneSentEdits,
+  isMealPhotoUnfinished,
   mealEditState,
   mealEditUntilLabel,
   type MealEditState,
@@ -643,6 +646,12 @@ function DietTabBody({
     previousEditRows.current = current;
     if (left.length > 0) setSentEdits((list) => [...list, ...left].slice(-20));
   }, [outboxRows]);
+  // Drop a "sent" row once the refreshed day carries its result.
+  useEffect(() => {
+    if (!bundle?.meals || sentEdits.length === 0) return;
+    const kept = pruneSentEdits(sentEdits, bundle.meals);
+    if (kept.length !== sentEdits.length) setSentEdits(kept);
+  }, [bundle, sentEdits]);
   const editRows = useMemo(() => [...outboxRows, ...sentEdits], [outboxRows, sentEdits]);
   const [actingId, setActingId] = useState<string | null>(null);
   const unresolvedExceptions = 1;
@@ -1131,10 +1140,14 @@ function DietTabBody({
     if (!state.canEdit || !state.until) return null;
     const job = photoJobs[meal.id];
     const photoOnLog = Boolean(job || meal.compliance?.mediaAssetId);
+    // A photo on its way bumps the entry's version, and a queued edit would
+    // then be refused: each waits for the other (Z14-13b fix round 1).
+    const photoBusy = isMealPhotoUnfinished(job);
+    const editQueued = hasQueuedMealEdit(outboxRows, meal.compliance?.id);
     return (
       <View style={styles.photoArea} testID="meal-edit-actions">
         <View style={styles.photoButtons}>
-          {photoOnLog ? null : (
+          {photoOnLog || editQueued ? null : (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Add photo"
@@ -1146,16 +1159,18 @@ function DietTabBody({
               <Text variant="bodyStrong">Add photo</Text>
             </Pressable>
           )}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Edit"
-            onPress={() => setEditMealId(meal.id)}
-            style={styles.photoBtn}
-            testID="meal-edit"
-          >
-            <Pencil size={18} strokeWidth={2} color={theme.colors.ink} />
-            <Text variant="bodyStrong">Edit</Text>
-          </Pressable>
+          {photoBusy ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit"
+              onPress={() => setEditMealId(meal.id)}
+              style={styles.photoBtn}
+              testID="meal-edit"
+            >
+              <Pencil size={18} strokeWidth={2} color={theme.colors.ink} />
+              <Text variant="bodyStrong">Edit</Text>
+            </Pressable>
+          )}
         </View>
         <View style={styles.editHint}>
           <Clock size={16} strokeWidth={2} color={theme.colors.ink3} />
@@ -1475,6 +1490,12 @@ function DietTabBody({
   const viewEditState = viewMeal
     ? mealEditState(viewMeal, { unsentIds, lockStateKnown, now: now.getTime() })
     : NO_EDIT_STATE;
+  const viewPhotoBusy = viewMeal
+    ? isMealPhotoUnfinished(photoJobs[viewMeal.id])
+    : false;
+  const viewEditQueued = viewMeal
+    ? hasQueuedMealEdit(outboxRows, viewMeal.compliance?.id)
+    : false;
   const editMeal = editMealId
     ? (assignments.find((meal) => meal.id === editMealId) ?? null)
     : null;
@@ -1700,9 +1721,14 @@ function DietTabBody({
                 next?.();
               }}
               edit={viewEditState}
-              onEdit={() => closeViewThen(() => setEditMealId(viewMeal.id))}
+              onEdit={
+                viewPhotoBusy
+                  ? undefined
+                  : () => closeViewThen(() => setEditMealId(viewMeal.id))
+              }
               onAddPhoto={
                 viewEditState.canEdit &&
+                !viewEditQueued &&
                 !viewMeal.compliance?.mediaAssetId &&
                 !photoJobs[viewMeal.id]
                   ? () =>
@@ -1711,7 +1737,11 @@ function DietTabBody({
                       )
                   : undefined
               }
-              onRemove={() => closeViewThen(() => setRemoveMealId(viewMeal.id))}
+              onRemove={
+                viewPhotoBusy
+                  ? undefined
+                  : () => closeViewThen(() => setRemoveMealId(viewMeal.id))
+              }
               onAskCoach={() =>
                 closeViewThen(() =>
                   onOpenOverlay({
@@ -1731,11 +1761,13 @@ function DietTabBody({
               meal={editMeal}
               relationshipId={relationship.id}
               coachName={coachName}
-              canRemove={mealEditState(editMeal, {
-                unsentIds,
-                lockStateKnown,
-                now: now.getTime(),
-              }).canRemove}
+              canRemove={
+                mealEditState(editMeal, {
+                  unsentIds,
+                  lockStateKnown,
+                  now: now.getTime(),
+                }).canRemove && !isMealPhotoUnfinished(photoJobs[editMeal.id])
+              }
               onClose={() => setEditMealId(null)}
               onEdited={() => {
                 setEditMealId(null);
