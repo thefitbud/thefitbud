@@ -8,9 +8,190 @@ import { formatClockTime } from "@fitbud/core";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
 import type { SyncEngine } from "../sync/engine";
+import { recordFinishedWorkoutNotes } from "../sync/outboxCopy";
 
 function newId(): string {
   return createIdempotencyKey();
+}
+
+/* ------------------------------------------------------------------------ */
+/* One logical workout action, one mutation (Z14-8, diagnosis #13)          */
+/* ------------------------------------------------------------------------ */
+
+function hash32(input: string, seed: number): number {
+  let hash = seed >>> 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+/**
+ * A stable mutation UUID for a key, so a second tap, a retry or a re-drain of
+ * the same logical action reuses the same mutation id and idempotency key
+ * (AGENTS.md: one per logical action). Shaped as a version-4 UUID because the
+ * sync contract takes a UUID. The outbox keeps one row per mutation id and the
+ * server answers a repeat `already_applied`, so the same key never logs twice.
+ */
+export function stableMutationId(key: string): string {
+  const hex = [0x811c9dc5, 0x01000193, 0x9e3779b9, 0x85ebca6b]
+    .map((seed) => hash32(key, seed).toString(16).padStart(8, "0"))
+    .join("");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    `4${hex.slice(13, 16)}`,
+    `8${hex.slice(17, 20)}`,
+    hex.slice(20, 32),
+  ].join("-");
+}
+
+/** "Finish this execution" happens once: its id comes from the execution. */
+export function finishMutationId(executionId: string): string {
+  return stableMutationId(`workout.complete|${executionId}`);
+}
+
+/**
+ * Skipping (or discarding) a planned workout happens once per assignment: a
+ * skipped workout offers no start, so it is never skipped again.
+ */
+export function skipMutationId(assignmentId: string): string {
+  return stableMutationId(`workout.skip|${assignmentId}`);
+}
+
+/** The last log sent for each set: its values and its mutation id. */
+const lastSetLogs = new Map<string, { values: string; mutationId: string }>();
+
+/**
+ * The mutation id for logging `setId` with `values`. The same values as the
+ * set's last log (a double tap, a retry after "Log it again") reuse that
+ * log's id, so they stay one outbox row and one server write. New values (a
+ * correction, W-13) are a new log with its own id: the outbox keeps the first
+ * row's payload for a reused id and the server answers it `already_applied`,
+ * so reusing the id would silently drop the correction.
+ */
+export function setLogMutationId(
+  executionId: string,
+  setId: string,
+  values: unknown,
+): string {
+  const key = `${executionId}|${setId}`;
+  const valuesKey = JSON.stringify(values ?? null);
+  const last = lastSetLogs.get(key);
+  if (last && last.values === valuesKey) return last.mutationId;
+  const mutationId = newId();
+  lastSetLogs.set(key, { values: valuesKey, mutationId });
+  return mutationId;
+}
+
+const DONE_STATUSES: ReadonlySet<string> = new Set([
+  "completed",
+  "skipped",
+  "modified",
+]);
+
+/** Finished, finished early, or discarded (recorded as skipped). */
+export function isExecutionDone(execution: { status: string }): boolean {
+  return DONE_STATUSES.has(execution.status);
+}
+
+/**
+ * Workouts finished or discarded on this phone since the app started, by
+ * execution id and by assignment id. The finish and discard handlers mark
+ * them before anything is queued, so a second tap, a Discard after a Finish,
+ * or a lock-screen set that arrives later all see the workout as ended
+ * (Z14-8) even before the server has heard of it.
+ */
+const endedLocally = new Set<string>();
+
+export function markWorkoutEndedLocally(execution: {
+  id: string;
+  assignmentId: string;
+}): void {
+  endedLocally.add(`execution:${execution.id}`);
+  endedLocally.add(`assignment:${execution.assignmentId}`);
+  for (const key of [...lastSetLogs.keys()]) {
+    if (key.startsWith(`${execution.id}|`)) lastSetLogs.delete(key);
+  }
+}
+
+export function isWorkoutEndedLocally(ids: {
+  executionId?: string | null;
+  assignmentId?: string | null;
+}): boolean {
+  return (
+    (ids.executionId != null && endedLocally.has(`execution:${ids.executionId}`)) ||
+    (ids.assignmentId != null && endedLocally.has(`assignment:${ids.assignmentId}`))
+  );
+}
+
+/** Tests only: forget what this process has marked. */
+export function resetWorkoutActionsForTests(): void {
+  endedLocally.clear();
+  lastSetLogs.clear();
+}
+
+type OutboxLike = {
+  operation: string;
+  recordId: string;
+  payloadJson: string;
+};
+
+/**
+ * True when the phone already holds a finish or a discard of this workout:
+ * marked in this process, queued in the outbox (it survives a restart), or a
+ * finished record in the local store. Never throws; a store that cannot be
+ * read answers with what is known in memory.
+ */
+export async function isWorkoutEndedOnPhone(
+  store: Pick<SyncEngine["store"], "listOutbox" | "listLocal">,
+  ids: { executionId?: string | null; assignmentId?: string | null },
+): Promise<boolean> {
+  if (isWorkoutEndedLocally(ids)) return true;
+  const matches = (executionId: unknown, assignmentId: unknown) =>
+    (ids.executionId != null && executionId === ids.executionId) ||
+    (ids.assignmentId != null && assignmentId === ids.assignmentId);
+  try {
+    const rows: OutboxLike[] = await store.listOutbox();
+    for (const row of rows) {
+      if (row.operation !== "workout.complete" && row.operation !== "workout.skip") {
+        continue;
+      }
+      let body: Record<string, unknown> = {};
+      try {
+        body = (JSON.parse(row.payloadJson) as Record<string, unknown>) ?? {};
+      } catch {
+        body = {};
+      }
+      const executionId = body.executionId ?? (row.operation === "workout.complete" ? row.recordId : null);
+      const assignmentId = body.assignmentId ?? (row.operation === "workout.skip" ? row.recordId : null);
+      if (matches(executionId, assignmentId)) return true;
+    }
+  } catch {
+    // Fall through to the local records.
+  }
+  try {
+    for (const record of await store.listLocal("workout_execution")) {
+      if (record.tombstone || !record.payloadJson) continue;
+      let parsed: { id?: unknown; assignmentId?: unknown; status?: unknown } = {};
+      try {
+        parsed = JSON.parse(record.payloadJson) as typeof parsed;
+      } catch {
+        continue;
+      }
+      if (
+        typeof parsed.status === "string" &&
+        DONE_STATUSES.has(parsed.status) &&
+        matches(parsed.id ?? record.recordId, parsed.assignmentId)
+      ) {
+        return true;
+      }
+    }
+  } catch {
+    // Nothing more is known.
+  }
+  return false;
 }
 
 /** Build a local execution snapshot from the assignment plan (offline start/continue). */
@@ -118,10 +299,19 @@ export async function openActiveWorkout(
     return fetchExecutionOrSynthesize(api, assignment, assignment.execution);
   }
 
-  await enqueueAndPush(sync, {
+  // A second tap never gets here: the Workout tab holds an in-flight lock
+  // while a start runs. The start waits for its verdict (AWAITS_VERDICT), so
+  // each deliberate attempt is its own mutation: a stable id would pin a
+  // refused start to its old verdict for good.
+  const started = await enqueueAndPush(sync, {
     recordId: assignment.id,
     operation: "workout.start",
     payload: { assignmentId: assignment.id },
+  });
+  recordFinishedWorkoutNotes(started.results, {
+    operation: "workout.start",
+    workoutKey: assignment.id,
+    workoutName: assignment.workoutDayName ?? null,
   });
 
   try {

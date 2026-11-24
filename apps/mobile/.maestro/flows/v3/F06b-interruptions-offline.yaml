@@ -44,8 +44,10 @@ tags:
 # The set is logged on the screen: the count moved on.
 - assertNotVisible: ${maestro.copiedText}
 - assertVisible: "[1-9][0-9]* of [0-9]+ sets"
-# Nothing blames the trainee or shows a raw error.
+# Nothing blames the trainee or shows a raw error, nor a bracketed support
+# code (D-W14-3, Z14-8).
 - assertNotVisible: ".*WO-SAVE.*"
+- assertNotVisible: ".*\\([A-Z]+-[A-Z]+\\).*"
 - assertNotVisible: ".*went wrong.*"
 - takeScreenshot: W-20-active-offline
 - runFlow: ../../common/assert-no-crash.yaml

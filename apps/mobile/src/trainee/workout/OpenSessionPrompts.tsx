@@ -9,7 +9,7 @@
  *   dialog: the same "Finish early?" sheet as the log (W-16).
  * - Discard, behind the same confirm as the log (W-15).
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Timer } from "lucide-react-native";
 import type { WorkoutAssignment, WorkoutExecution } from "@fitbud/contracts";
 import { reportError } from "../../lib/reportError";
@@ -17,11 +17,16 @@ import { useTheme } from "../../providers/ThemeProvider";
 import { enqueueAndPush } from "../../sync/actions";
 import { useSyncEngine } from "../../sync/SyncProvider";
 import { DiscardDialog } from "../ActiveWorkoutScreen";
+import { recordFinishedWorkoutNotes } from "../../sync/outboxCopy";
 import {
   discardLocally,
   finishLocally,
+  finishMutationId,
+  isWorkoutEndedLocally,
+  markWorkoutEndedLocally,
   resumeBody,
   sessionSetCounts,
+  skipMutationId,
   unloggedExercises,
 } from "../workoutSession";
 import {
@@ -72,11 +77,35 @@ export function OpenSessionPrompts({
   const [finishOpen, setFinishOpen] = useState(false);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [sessionRpe, setSessionRpe] = useState<number | null>(null);
+  /** The execution a finish or discard is under way for (Z14-8). */
+  const endingRef = useRef<string | null>(null);
   const open =
     execution != null &&
     assignment != null &&
     execution.assignmentId === assignment.id &&
-    (execution.status === "started" || execution.status === "paused");
+    (execution.status === "started" || execution.status === "paused") &&
+    // Finished or discarded on this phone already: nothing to offer, even
+    // while the server's copy still reads open (Z14-8).
+    !isWorkoutEndedLocally({
+      executionId: execution.id,
+      assignmentId: execution.assignmentId,
+    });
+
+  /** True when this tap may finish or discard; takes the lock if so. */
+  function takeEndingLock(target: WorkoutExecution): boolean {
+    if (endingRef.current === target.id) return false;
+    if (
+      isWorkoutEndedLocally({
+        executionId: target.id,
+        assignmentId: target.assignmentId,
+      })
+    ) {
+      return false;
+    }
+    endingRef.current = target.id;
+    markWorkoutEndedLocally(target);
+    return true;
+  }
 
   useEffect(() => {
     if (!open || !canPrompt || !execution) return;
@@ -112,12 +141,17 @@ export function OpenSessionPrompts({
   }
 
   function finish(rpe: number | null) {
-    if (!execution || !assignment) return;
-    const optimistic = finishLocally(execution, rpe);
     setFinishOpen(false);
+    if (!execution || !assignment) return;
+    if (!takeEndingLock(execution)) return;
+    const optimistic = finishLocally(execution, rpe);
+    // The same id as the log's Finish: one finish per execution.
+    const mutationId = finishMutationId(execution.id);
     void (async () => {
       try {
         await enqueueAndPush(sync, {
+          mutationId,
+          idempotencyKey: mutationId,
           recordId: execution.id,
           operation: "workout.complete",
           expectedServerVersion: execution.recordVersion,
@@ -137,15 +171,26 @@ export function OpenSessionPrompts({
   }
 
   function discard() {
-    if (!execution || !assignment) return;
     setDiscardOpen(false);
+    if (!execution || !assignment) return;
+    if (!takeEndingLock(execution)) return;
+    const mutationId = skipMutationId(execution.assignmentId);
     void (async () => {
       try {
-        await enqueueAndPush(sync, {
+        const queued = await enqueueAndPush(sync, {
+          mutationId,
+          idempotencyKey: mutationId,
           recordId: execution.assignmentId,
           operation: "workout.skip",
           payload: { assignmentId: execution.assignmentId, workoutName: title },
         });
+        void queued.pushed.then((results) =>
+          recordFinishedWorkoutNotes(results, {
+            operation: "workout.skip",
+            workoutKey: execution.assignmentId,
+            workoutName: title,
+          }),
+        );
       } catch (err: unknown) {
         reportError("workout.discard", err);
       }
