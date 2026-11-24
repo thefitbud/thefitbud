@@ -9,11 +9,16 @@ import {
   MealPhotoError,
   base64ToBytes,
   bytesToBase64,
+  editMealEntry,
   isMealLogPending,
+  mealEditState,
+  mealEditUntilLabel,
   mealPhotoFailureCopy,
   mealPhotoResize,
   pendingMealLogIds,
+  overlayMealEdits,
   plannedUntilSentNote,
+  removeMealEntry,
   uploadAndAttachMealPhoto,
 } from "./mealActions";
 
@@ -262,5 +267,94 @@ describe("meal photo (D-W14-11)", () => {
     expect(api.createUploadTarget).not.toHaveBeenCalled();
     expect(api.attachMealPhoto).toHaveBeenCalledTimes(2);
     expect(api.attachMealPhoto.mock.calls[1]?.[2]).toBe("k");
+  });
+});
+
+describe("edit or remove a logged entry for 24 hours (Z14-13b, D-W14-22)", () => {
+  const ENTRY = "00000000-0000-4000-8000-0000000000e1";
+  const logged = (extra: Record<string, unknown> = {}): MealAssignment =>
+    ({
+      ...lunch("confirmed"),
+      compliance: {
+        id: ENTRY,
+        outcome: "confirmed",
+        recordVersion: 4,
+        loggedAt: "2026-11-24T08:00:00.000Z",
+        deviationKind: null,
+        notes: null,
+        editableUntil: "2026-11-25T08:00:00.000Z",
+        canRemove: true,
+        ...extra,
+      },
+    }) as unknown as MealAssignment;
+  const NOW = Date.parse("2026-11-24T09:00:00.000Z");
+  const none = new Set<string>();
+
+  it("reads the buttons from the server's editableUntil and canRemove, never its own clock rule", () => {
+    const open = mealEditState(logged(), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(open).toMatchObject({ canEdit: true, canRemove: true, locked: false });
+    const noRemove = mealEditState(logged({ canRemove: false }), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(noRemove).toMatchObject({ canEdit: true, canRemove: false });
+    // Logged 30 h ago by the phone's clock, but the server still says editable: trust the server.
+    const late = mealEditState(logged({ loggedAt: "2026-11-23T01:00:00.000Z" }), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(late.canEdit).toBe(true);
+    const passed = mealEditState(logged(), { unsentIds: none, lockStateKnown: true, now: Date.parse("2026-11-25T08:00:01.000Z") });
+    expect(passed).toMatchObject({ canEdit: false, canRemove: false, locked: true });
+    const noWindow = mealEditState(logged({ editableUntil: null }), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(noWindow).toMatchObject({ canEdit: false, locked: true });
+  });
+
+  it("offers nothing while the log waits to send, or is skipped, or the lock state is unknown", () => {
+    const meal = logged();
+    expect(mealEditState(meal, { unsentIds: new Set([meal.id]), lockStateKnown: true, now: NOW })).toMatchObject({ canEdit: false, locked: false });
+    expect(mealEditState({ ...meal, status: "skipped" }, { unsentIds: none, lockStateKnown: true, now: NOW }).canEdit).toBe(false);
+    expect(mealEditState(meal, { unsentIds: none, lockStateKnown: false, now: NOW }).locked).toBe(false);
+  });
+
+  it("words the window: today, tomorrow, then a date", () => {
+    const now = new Date("2026-11-14T07:00:00.000Z");
+    expect(mealEditUntilLabel("2026-11-14T15:22:00.000Z", "Asia/Kolkata", now)).toBe("today, 8:52 pm");
+    expect(mealEditUntilLabel("2026-11-15T11:50:00.000Z", "Asia/Kolkata", now)).toBe("tomorrow, 5:20 pm");
+    expect(mealEditUntilLabel("2026-11-16T11:50:00.000Z", "Asia/Kolkata", now)).toMatch(/^Mon 16 Nov, 5:20 pm$/);
+  });
+
+  it("queues the edit with the entry's version, and a second one with the next version", async () => {
+    const sync = createSyncEngine(createMemorySyncStore(), {
+      pushSync: async () => {
+        throw new Error("offline");
+      },
+      pullSync: async () => {
+        throw new Error("offline");
+      },
+    });
+    const meal = logged();
+    const display = { loggedItems: [], kcal: 900 };
+    const body = { outcome: "modified" as const, deviationKind: "restaurant" as const, notes: null };
+    await editMealEntry(sync, meal, { body, display, relationshipId: "rel" });
+    await editMealEntry(sync, meal, { body, display, relationshipId: "rel" });
+    await removeMealEntry(sync, meal, "rel");
+    const rows = await sync.store.listOutbox();
+    expect(rows.map((row) => row.operation)).toEqual(["meal.edit", "meal.edit", "meal.remove"]);
+    expect(rows.every((row) => row.recordId === ENTRY)).toBe(true);
+    expect(rows.map((row) => (JSON.parse(row.payloadJson) as { body: { recordVersion: number } }).body.recordVersion)).toEqual([4, 5, 6]);
+    expect(new Set(rows.map((row) => row.mutationId)).size).toBe(3);
+  });
+
+  it("paints a waiting edit or removal over the server copy, and not a refused one", () => {
+    const row = (operation: string, status: string, body: unknown) => ({
+      operation,
+      status,
+      recordId: ENTRY,
+      payloadJson: JSON.stringify({ entryId: ENTRY, body, display: { loggedItems: [], kcal: 900 } }),
+    });
+    const edit = { outcome: "modified", deviationKind: "restaurant", notes: "Dosa" };
+    const [painted] = overlayMealEdits([logged()], [row("meal.edit", "pending", edit)]);
+    expect(painted?.status).toBe("modified");
+    expect(painted?.compliance).toMatchObject({ deviationKind: "restaurant", notes: "Dosa", lastEditedByRole: "trainee" });
+    expect(painted?.compliance?.loggedTotals?.energyKcal).toBe(900);
+    const [refused] = overlayMealEdits([logged()], [row("meal.edit", "rejected", edit)]);
+    expect(refused?.status).toBe("confirmed");
+    const [removed] = overlayMealEdits([logged()], [row("meal.remove", "in_flight", {})]);
+    expect(removed).toMatchObject({ status: "pending", compliance: null });
   });
 });

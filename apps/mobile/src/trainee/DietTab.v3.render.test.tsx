@@ -186,7 +186,7 @@ const relationship = coachingRelationshipSchema.parse({
 });
 
 describe("Diet day v3 (Z12-42)", () => {
-  it("a locked, changed meal has no Change button; an unlocked one has it", async () => {
+  it("a locked, changed meal has no Edit button; one inside its edit window has it", async () => {
     items = [
       mealAt(
         "a1111111-1111-4111-8111-111111111111",
@@ -205,6 +205,11 @@ describe("Diet day v3 (Z12-42)", () => {
         [-4, -3],
         {
           compliance: {
+            id: "c2222222-2222-4222-8222-222222222222",
+            recordVersion: 1,
+            loggedAt: at(-3),
+            editableUntil: new Date(Date.now() + 3_600_000).toISOString(),
+            canRemove: true,
             loggedByRole: "trainee",
             loggedTotals: {
               energyKcal: 320,
@@ -225,8 +230,8 @@ describe("Diet day v3 (Z12-42)", () => {
       />,
     );
     await waitFor(() => expect(screen.getByText("2 of 2 logged")).toBeTruthy());
-    expect(screen.queryByLabelText("Change Breakfast")).toBeNull();
-    expect(screen.getByLabelText("Change Lunch")).toBeTruthy();
+    expect(screen.getAllByLabelText("Edit")).toHaveLength(1);
+    expect(screen.getByText(/^Editable until /)).toBeTruthy();
   });
 
   it("the Log {meal} ellipsis on a missed meal is a 44 pt target", async () => {

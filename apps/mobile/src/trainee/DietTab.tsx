@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Image, Pressable, View } from "react-native";
+import { ActivityIndicator, Image, Platform, Pressable, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Svg, { Circle } from "react-native-svg";
 import {
@@ -9,8 +9,10 @@ import {
   CloudOff,
   Cookie,
   Coffee,
+  Clock,
   Ellipsis,
   Lock,
+  Pencil,
   Pizza,
   RefreshCw,
   Soup,
@@ -42,7 +44,7 @@ import { plannedSummaryLine } from "../lib/plannedMealItems";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { useApiReachable } from "../sync/useSyncStatus";
+import { useApiReachable, useSyncView } from "../sync/useSyncStatus";
 import {
   overlayMeals,
   useDeviceOffline,
@@ -51,13 +53,16 @@ import {
 import {
   MealPhotoError,
   confirmMealAssignment,
+  mealEditState,
+  mealEditUntilLabel,
+  type MealEditState,
+  overlayMealEdits,
   pendingMealLogIds,
   pickMealPhoto,
   prepareMealPhoto,
   type MealPhotoSource,
 } from "./mealActions";
 import {
-  canChangeLoggedMeal,
   canShowMealLogActions,
   cleanFoodLabel,
   mealLockCopy,
@@ -90,6 +95,7 @@ import {
 import { CoachLogBadge } from "./coach-log/CoachLogBadge";
 import { deviationLabel, LoggedMealSheet } from "./food/LoggedMealSheet";
 import { formatAmount } from "./food/logLines";
+import { MealEditScreen, RemoveLogConfirm } from "./food/MealEditScreen";
 import { MealPhotoSheet } from "./food/MealPhotoSheet";
 import { serverEntryId } from "./food/mealPhotoJobs";
 import { useMealPhotoJobs } from "./food/useMealPhotoJobs";
@@ -379,6 +385,24 @@ function StateCard({
 }
 type MeDay = Awaited<ReturnType<ReturnType<typeof stage1Api>["getMeDay"]>>;
 
+type EditRowLike = {
+  mutationId: string;
+  status: string;
+  operation: string;
+  recordId: string;
+  payloadJson: string;
+};
+
+const EMPTY_EDIT_ROWS: readonly EditRowLike[] = [];
+
+const NO_EDIT_STATE: MealEditState = {
+  ready: false,
+  canEdit: false,
+  canRemove: false,
+  locked: false,
+  until: null,
+};
+
 /** One day of Diet as cached per relationship and civil date (Z12-40). */
 type DietDayBundle = {
   meals: MealAssignment[];
@@ -595,6 +619,31 @@ function DietTabBody({
     }
     return ids;
   }, [overlay]);
+  // Queued edits and removals of logged entries (Z14-13b): painted over the
+  // day at once, so the card, totals and ring change before the server answers.
+  const syncView = useSyncView();
+  const outboxRows = syncView?.rows ?? EMPTY_EDIT_ROWS;
+  // An edit or removal the server has just taken leaves the outbox before the
+  // day's refreshed copy arrives: it stays applied until that copy carries it.
+  const previousEditRows = useRef(new Map<string, EditRowLike>());
+  const [sentEdits, setSentEdits] = useState<EditRowLike[]>([]);
+  useEffect(() => {
+    const current = new Map<string, EditRowLike>();
+    for (const row of outboxRows) {
+      if (row.operation === "meal.edit" || row.operation === "meal.remove") {
+        current.set(row.mutationId, row);
+      }
+    }
+    const left: EditRowLike[] = [];
+    for (const [id, row] of previousEditRows.current) {
+      if ((row.status === "pending" || row.status === "in_flight") && !current.has(id)) {
+        left.push({ ...row, status: "sent" });
+      }
+    }
+    previousEditRows.current = current;
+    if (left.length > 0) setSentEdits((list) => [...list, ...left].slice(-20));
+  }, [outboxRows]);
+  const editRows = useMemo(() => [...outboxRows, ...sentEdits], [outboxRows, sentEdits]);
   const [actingId, setActingId] = useState<string | null>(null);
   const unresolvedExceptions = 1;
   /**
@@ -625,14 +674,41 @@ function DietTabBody({
   // Z11b-1: every count, ring and row reads the selected day's meals only.
   const assignments = useMemo(() => {
     void optimisticVersion;
-    return overlayMeals(mealsForDay(bundle?.meals ?? [], selectedDate), overlay).map((meal) => {
+    const withEdits = overlayMealEdits(
+      overlayMeals(mealsForDay(bundle?.meals ?? [], selectedDate), overlay),
+      editRows,
+    );
+    return withEdits.map((meal) => {
       const next = optimisticStatus.current.get(meal.id);
       if (!next || isMealLoggedForCount(meal.status)) return meal;
       return meal.status === "pending" || meal.status === "overdue"
         ? { ...meal, status: next }
         : meal;
     });
-  }, [bundle, selectedDate, optimisticVersion, overlay]);
+  }, [bundle, selectedDate, optimisticVersion, overlay, editRows]);
+
+  // The server's per-meal kcal of an entry being edited is out of date until
+  // the edit lands: the edited figure counts instead.
+  const totalsForDay = useMemo(() => {
+    const totals = dayTotals?.totals ?? null;
+    if (!totals) return null;
+    const edited = new Set<string>();
+    for (const row of editRows) {
+      if (
+        (row.status === "pending" || row.status === "in_flight" || row.status === "sent") &&
+        (row.operation === "meal.edit" || row.operation === "meal.remove")
+      ) {
+        for (const meal of bundle?.meals ?? []) {
+          if (meal.compliance?.id === row.recordId) edited.add(meal.prescription.id);
+        }
+      }
+    }
+    if (edited.size === 0) return totals;
+    return {
+      ...totals,
+      perMeal: totals.perMeal.filter((row) => !edited.has(row.slotKey)),
+    };
+  }, [dayTotals, editRows, bundle]);
 
   /** Meals whose log the server has not answered yet (pending or in flight). */
   const unsentIds = useMemo(() => {
@@ -703,14 +779,14 @@ function DietTabBody({
   }, [dayCache, refreshWeek]);
 
   const nutritionRings = useMemo(
-    () => buildNutritionRings(assignments, dayTotals?.totals ?? null),
-    [assignments, dayTotals],
+    () => buildNutritionRings(assignments, totalsForDay),
+    [assignments, totalsForDay],
   );
   // One kcal source for the ring and the meal rows (D-W11-6); each day sum is
   // rounded once (Z12-42).
   const kcalSummary = useMemo(
-    () => dayKcalSummary(assignments, dayTotals?.totals ?? null, selectedDate),
-    [assignments, dayTotals, selectedDate],
+    () => dayKcalSummary(assignments, totalsForDay, selectedDate),
+    [assignments, totalsForDay, selectedDate],
   );
   const kcalRowById = useMemo(
     () => new Map(kcalSummary.rows.map((row) => [row.id, row])),
@@ -738,6 +814,18 @@ function DietTabBody({
     return null;
   }, [assignments, isFuture]);
 
+  /** The most recently logged meal of the day carries the Edit actions (TR-07m4). */
+  const latestLoggedId = useMemo(() => {
+    let best: { id: string; at: number } | null = null;
+    for (const meal of assignments) {
+      if (!isMealLoggedForCount(meal.status) || meal.status === "skipped") continue;
+      const at = Date.parse(meal.compliance?.loggedAt ?? "");
+      if (Number.isNaN(at)) continue;
+      if (!best || at > best.at) best = { id: meal.id, at };
+    }
+    return best?.id ?? null;
+  }, [assignments]);
+
   function applyOptimistic(id: string, status: MealAssignment["status"]) {
     optimisticStatus.current.set(id, status);
     setOptimisticVersion((n) => n + 1);
@@ -751,6 +839,44 @@ function DietTabBody({
   const savedNotice = useMealSavedNotice(relationship.id);
   const [savedToast, setSavedToast] = useState<MealSavedNotice | null>(null);
   const [viewMealId, setViewMealId] = useState<string | null>(null);
+  /** Change this log (Z14-13b): the edit flow, the remove confirm and the toast. */
+  const [editMealId, setEditMealId] = useState<string | null>(null);
+  const [removeMealId, setRemoveMealId] = useState<string | null>(null);
+  const [editToast, setEditToast] = useState<{ id: number; message: string } | null>(null);
+  const afterSheet = useRef<(() => void) | null>(null);
+  const toastSeq = useRef(0);
+
+  // The server's edit window is the only 24 h rule (D-W14-22): this only
+  // wakes the screen when it passes, so Edit and Remove go away on an open screen.
+  const nextEditClose = useMemo(() => {
+    const instants = assignments
+      .map((meal) => meal.compliance?.editableUntil)
+      .filter((until): until is string => until != null)
+      .map((until) => Date.parse(until))
+      .filter((at) => at > Date.now());
+    return instants.length > 0 ? Math.min(...instants) : null;
+  }, [assignments]);
+  const [, setEditTick] = useState(0);
+  useEffect(() => {
+    if (nextEditClose == null) return undefined;
+    const wait = Math.min(nextEditClose - Date.now() + 250, 2 ** 31 - 1);
+    if (wait <= 0) return undefined;
+    const handle = setTimeout(() => setEditTick((n) => n + 1), wait);
+    return () => clearTimeout(handle);
+  }, [nextEditClose]);
+
+  /**
+   * Closes the logged sheet, then runs `next`. On iOS a sheet opened in the
+   * same tick as another leaves never shows, so it waits for `onClosed`.
+   */
+  function closeViewThen(next: () => void) {
+    setViewMealId(null);
+    if (Platform.OS === "ios") {
+      afterSheet.current = next;
+    } else {
+      setTimeout(next, 0);
+    }
+  }
   useEffect(() => {
     if (!savedNotice) return;
     // A log still in the outbox already reads as changed and waiting through
@@ -992,27 +1118,50 @@ function DietTabBody({
         </View>
       );
     }
-    const until = meal.compliance?.editableUntil;
-    const editable =
-      !ctx.isLocked &&
-      lockStateKnown &&
-      until != null &&
-      Date.parse(until) > Date.now() &&
-      entryIdOf(meal) != null;
-    if (!editable) return null;
+    return null;
+  }
+
+  /**
+   * TR-07m4: small Add photo and Edit on the most recently logged meal, with
+   * "Editable until …" under them. Every other logged card stays compact and
+   * opens the logged meal sheet on tap. Shown only while the server says the
+   * entry can still be edited (`editableUntil`).
+   */
+  function renderEditActions(meal: MealAssignment, state: MealEditState) {
+    if (!state.canEdit || !state.until) return null;
+    const job = photoJobs[meal.id];
+    const photoOnLog = Boolean(job || meal.compliance?.mediaAssetId);
     return (
-      <View style={styles.photoArea}>
+      <View style={styles.photoArea} testID="meal-edit-actions">
         <View style={styles.photoButtons}>
+          {photoOnLog ? null : (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add photo"
+              onPress={() => setPhotoSheet({ id: meal.id, coachAsks: false })}
+              style={styles.photoBtn}
+              testID="meal-add-photo"
+            >
+              <Camera size={18} strokeWidth={2} color={theme.colors.ink} />
+              <Text variant="bodyStrong">Add photo</Text>
+            </Pressable>
+          )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Add photo"
-            onPress={() => setPhotoSheet({ id: meal.id, coachAsks: false })}
+            accessibilityLabel="Edit"
+            onPress={() => setEditMealId(meal.id)}
             style={styles.photoBtn}
-            testID="meal-add-photo"
+            testID="meal-edit"
           >
-            <Camera size={18} strokeWidth={2} color={theme.colors.ink} />
-            <Text variant="bodyStrong">Add photo</Text>
+            <Pencil size={18} strokeWidth={2} color={theme.colors.ink} />
+            <Text variant="bodyStrong">Edit</Text>
           </Pressable>
+        </View>
+        <View style={styles.editHint}>
+          <Clock size={16} strokeWidth={2} color={theme.colors.ink3} />
+          <Text variant="subhead">
+            Editable until {mealEditUntilLabel(state.until, timeZone, now)}
+          </Text>
         </View>
       </View>
     );
@@ -1046,14 +1195,14 @@ function DietTabBody({
         unresolvedExceptionCount: unresolvedExceptions,
       }) &&
       windowOpened(meal, now);
-    // A logged, changed meal can be changed again, unless it is closed
-    // (TR-07f) or the coach logged it.
-    const canChange = canChangeLoggedMeal({
+    // Edit, Remove and Add photo come from the server's `editableUntil` and
+    // `canRemove` (Z14-13b, D-W14-22); nothing here works out the 24 h rule.
+    const editState = mealEditState(meal, {
+      unsentIds: unsentIds,
       lockStateKnown,
-      isLogged,
-      meal,
-      isLocked,
+      now: now.getTime(),
     });
+    const opensLogged = isLogged && !isSkipped;
     const summary = plannedSummaryLine(meal);
 
     const tileStyle = waiting
@@ -1081,13 +1230,21 @@ function DietTabBody({
       <View key={meal.id} style={styles.rowCard}>
         <View style={styles.row}>
           <Pressable
-            disabled={!opensDetail}
+            disabled={!opensDetail && !opensLogged}
             accessibilityRole="button"
-            accessibilityLabel={opensDetail ? `${name}, planned` : undefined}
-            accessibilityHint={
-              opensDetail ? "Shows the planned meal" : undefined
+            accessibilityLabel={
+              opensLogged ? `${name}, logged` : opensDetail ? `${name}, planned` : undefined
             }
-            onPress={() => setPlannedMeal(meal)}
+            accessibilityHint={
+              opensLogged
+                ? "Shows what you logged"
+                : opensDetail
+                  ? "Shows the planned meal"
+                  : undefined
+            }
+            onPress={() =>
+              opensLogged ? setViewMealId(meal.id) : setPlannedMeal(meal)
+            }
             style={styles.rowMain}
           >
             <View style={[styles.tile, tileStyle]}>
@@ -1132,6 +1289,13 @@ function DietTabBody({
                     summary}
                 </Text>
               )}
+              {isLogged && !isSkipped && meal.compliance?.lastEditedByRole === "trainee" ? (
+                <View style={styles.editedTag} testID="meal-edited-tag">
+                  <Text variant="caption" tone="ink2" style={styles.strong}>
+                    Edited
+                  </Text>
+                </View>
+              ) : null}
               {isLogged ? (
                 <CoachLogBadge
                   loggedByRole={meal.compliance?.loggedByRole}
@@ -1184,18 +1348,7 @@ function DietTabBody({
           waiting,
           name,
         })}
-        {canChange ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Change ${name}`}
-            onPress={() => openSomethingDifferent(meal)}
-            style={styles.changeBtn}
-          >
-            <Text variant="bodyStrong" tone="coachInk">
-              Change
-            </Text>
-          </Pressable>
-        ) : null}
+        {meal.id === latestLoggedId && !waiting ? renderEditActions(meal, editState) : null}
       </View>
     );
   }
@@ -1319,6 +1472,19 @@ function DietTabBody({
   const viewMeal = viewMealId
     ? (assignments.find((meal) => meal.id === viewMealId) ?? null)
     : null;
+  const viewEditState = viewMeal
+    ? mealEditState(viewMeal, { unsentIds, lockStateKnown, now: now.getTime() })
+    : NO_EDIT_STATE;
+  const editMeal = editMealId
+    ? (assignments.find((meal) => meal.id === editMealId) ?? null)
+    : null;
+  const removeMeal = removeMealId
+    ? (assignments.find((meal) => meal.id === removeMealId) ?? null)
+    : null;
+  function showEditToast(message: string) {
+    toastSeq.current += 1;
+    setEditToast({ id: toastSeq.current, message });
+  }
   const savedToastMessage = savedToast
     ? savedToast.kcal != null
       ? `${savedToast.mealName} saved · ${formatNumber(savedToast.kcal)} kcal`
@@ -1343,7 +1509,14 @@ function DietTabBody({
         onRefresh={() => void onRefresh()}
         footerVariant="toast"
         footer={
-          savedToast && savedToastMessage ? (
+          editToast ? (
+            <Snackbar
+              key={editToast.id}
+              leadingCheck
+              message={editToast.message}
+              onDismiss={() => setEditToast(null)}
+            />
+          ) : savedToast && savedToastMessage ? (
             <Snackbar
               key={savedToast.id}
               leadingCheck
@@ -1521,6 +1694,69 @@ function DietTabBody({
               timeZone={timeZone}
               waitingToSend={pendingSendIds.has(viewMeal.id)}
               onClose={() => setViewMealId(null)}
+              onClosed={() => {
+                const next = afterSheet.current;
+                afterSheet.current = null;
+                next?.();
+              }}
+              edit={viewEditState}
+              onEdit={() => closeViewThen(() => setEditMealId(viewMeal.id))}
+              onAddPhoto={
+                viewEditState.canEdit &&
+                !viewMeal.compliance?.mediaAssetId &&
+                !photoJobs[viewMeal.id]
+                  ? () =>
+                      closeViewThen(() =>
+                        setPhotoSheet({ id: viewMeal.id, coachAsks: false }),
+                      )
+                  : undefined
+              }
+              onRemove={() => closeViewThen(() => setRemoveMealId(viewMeal.id))}
+              onAskCoach={() =>
+                closeViewThen(() =>
+                  onOpenOverlay({
+                    screen: "ask_coach",
+                    itemType: "meal_assignment",
+                    itemId: viewMeal.id,
+                    itemLabel: `${cleanFoodLabel(viewMeal.mealName)} log`,
+                    dateLabel: formatCivilDate(viewMeal.localDate),
+                    topic: "Other",
+                  }),
+                )
+              }
+            />
+          ) : null}
+          {editMeal ? (
+            <MealEditScreen
+              meal={editMeal}
+              relationshipId={relationship.id}
+              coachName={coachName}
+              canRemove={mealEditState(editMeal, {
+                unsentIds,
+                lockStateKnown,
+                now: now.getTime(),
+              }).canRemove}
+              onClose={() => setEditMealId(null)}
+              onEdited={() => {
+                setEditMealId(null);
+                showEditToast(`${cleanFoodLabel(editMeal.mealName)} updated · ${coachName} sees the change`);
+              }}
+              onRemoved={() => {
+                setEditMealId(null);
+                showEditToast(`${cleanFoodLabel(editMeal.mealName)} log removed · ${coachName} sees the change`);
+              }}
+            />
+          ) : null}
+          {removeMeal ? (
+            <RemoveLogConfirm
+              meal={removeMeal}
+              relationshipId={relationship.id}
+              coachName={coachName}
+              onCancel={() => setRemoveMealId(null)}
+              onRemoved={() => {
+                setRemoveMealId(null);
+                showEditToast(`${cleanFoodLabel(removeMeal.mealName)} log removed · ${coachName} sees the change`);
+              }}
             />
           ) : null}
           {plannedMeal ? (
@@ -1713,12 +1949,14 @@ const useStyles = createThemedStyles((t) => ({
   /** 44 pt touch target for the "Log {meal}" ellipsis (AGENTS.md). */
   badgeTap: { borderRadius: 22, height: 44, width: 44 },
   badgeDone: { backgroundColor: t.colors.done },
-  changeBtn: {
-    alignItems: "flex-start",
-    justifyContent: "center",
-    minHeight: 44,
-    paddingBottom: 4,
-    paddingHorizontal: 72,
+  editHint: { alignItems: "center", flexDirection: "row", gap: 8, paddingHorizontal: 4 },
+  editedTag: {
+    alignSelf: "flex-start",
+    backgroundColor: t.colors.fill,
+    borderRadius: 8,
+    marginTop: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   actions: {
     flexDirection: "column",

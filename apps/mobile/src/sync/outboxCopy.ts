@@ -44,6 +44,10 @@ export function describeOutboxEntry(entry: Entry): string {
       return `${mealName(body)} · Skipped · ${when}`;
     case "meal.deviate":
       return `${mealName(body)} · Something different · ${when}`;
+    case "meal.edit":
+      return `${mealName(body)} · Log changed · ${when}`;
+    case "meal.remove":
+      return `${mealName(body)} · Log removed · ${when}`;
     case "workout.start":
       return `Workout started · ${when}`;
     case "workout.complete":
@@ -254,7 +258,35 @@ const MEAL_ACTIONS: Record<string, string> = {
   "meal.confirm": "eaten as planned",
   "meal.skip": "skipped",
   "meal.deviate": "something different",
+  "meal.edit": "log changed",
+  "meal.remove": "log removed",
 };
+
+/**
+ * Why the server refused a trainee's edit or removal of a logged meal (Z14-13b,
+ * D-W14-22 f): "Couldn't change lunch: the 24 hours had passed. Ask Rahul to
+ * fix it." Null for anything else, which keeps the usual line.
+ */
+export function mealEditFailureReason(
+  row: Pick<SheetRow, "operation" | "lastErrorCode">,
+  mealLabel: string,
+  coachFirstName: string,
+): string | null {
+  const removing = row.operation === "meal.remove";
+  if (row.operation !== "meal.edit" && !removing) return null;
+  const meal = mealLabel.trim().toLowerCase() || "meal";
+  const what = removing ? `remove the ${meal} log` : `change ${meal}`;
+  switch (row.lastErrorCode) {
+    case "MEAL_EDIT_WINDOW_CLOSED":
+      return `Couldn't ${what}: the 24 hours had passed. Ask ${coachFirstName} to fix it.`;
+    case "MEAL_EDITED_BY_COACH":
+      return `Couldn't ${what}: ${coachFirstName} already changed it. Ask ${coachFirstName} if it needs another change.`;
+    case "MEAL_REMOVE_NOT_ALLOWED":
+      return `Couldn't ${what}: it can't go back to not logged now. Ask ${coachFirstName} to fix it.`;
+    default:
+      return null;
+  }
+}
 
 const SET_OPERATION = "workout.complete_set";
 
@@ -291,7 +323,14 @@ export function sheetItems(
     const workoutId =
       text(body.executionId) ?? text(body.assignmentId) ?? row.recordId;
     const key = isWorkout ? `workout:${workoutId}` : row.mutationId;
-    const reason = state === "failed" ? failureReason(row, coach) : null;
+    const reason =
+      state === "failed"
+        ? (mealEditFailureReason(
+            row,
+            names.meal(text(body.assignmentId) ?? row.recordId) ?? mealName(body),
+            coach,
+          ) ?? failureReason(row, coach))
+        : null;
     const existing = items.get(key);
     if (existing) {
       existing.state = worst(existing.state, state);

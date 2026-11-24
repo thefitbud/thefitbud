@@ -23,7 +23,7 @@ import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
 import { useSyncEngine } from "../../sync/SyncProvider";
 import { useApiReachable } from "../../sync/useSyncStatus";
 import { useDeviceOffline } from "../today/queuedLogs";
-import { deviateMealAssignment } from "../mealActions";
+import { deviateMealAssignment, editMealEntry } from "../mealActions";
 import { cleanFoodLabel } from "../mealHelpers";
 import { nutrientsFromMealPrescription } from "../nutrition";
 import { AteOutPhotoRow, type AteOutPhoto } from "./AteOutPhotoRow";
@@ -45,6 +45,39 @@ function parseKcal(text: string): number | null {
   const digits = text.replace(/[^\d]/g, "");
   if (!digits) return null;
   return Math.min(20000, Number(digits));
+}
+
+/**
+ * Z14-13b (D-W14-22): "Change this log". The screens open prefilled and save
+ * as an edit of the logged entry, not as a new log.
+ */
+export type MealEditMode = {
+  /** Where the flow opens: the "Change this log" menu, or straight into a screen. */
+  start: "menu" | "portion" | "ate_out";
+  /** The server said the meal can still be logged again (`canRemove`). */
+  canRemove: boolean;
+  /** Opens the remove confirm (TR-07n3). */
+  onRemove: () => void;
+  /** The change is on the phone and in the outbox. */
+  onEdited: (info: { kcal: number | null }) => void;
+};
+
+/** "Remove this log" (TR-07n, TR-07n2, TR-07n4): a quiet destructive row. */
+export function RemoveLogButton({ onPress }: { onPress: () => void }) {
+  const styles = useStyles();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Remove this log"
+      onPress={onPress}
+      style={styles.removeBtn}
+      testID="meal-remove-log"
+    >
+      <Text variant="bodyStrong" tone="crit">
+        Remove this log
+      </Text>
+    </Pressable>
+  );
 }
 
 export type CoachDeviateSave = (body: {
@@ -77,6 +110,8 @@ type Props = {
   layout?: "inline" | "screen";
   /** With `layout="screen"`: the screen sits in a Modal. */
   inModal?: boolean;
+  /** Z14-13b: change a logged ate-out entry instead of logging a new one. */
+  edit?: MealEditMode;
 };
 
 
@@ -109,6 +144,8 @@ type SubScreenProps = {
   footer?: ReactNode;
   /** Set when the screen sits in a Modal: Android then needs its own keyboard lift. */
   inModal?: boolean;
+  /** The top-right label ("Save", or "Save changes" when editing a log). */
+  saveLabel?: string;
   testID?: string;
   children: ReactNode;
 };
@@ -128,6 +165,7 @@ export function MealSubScreen({
   banner,
   footer,
   inModal = false,
+  saveLabel = "Save",
   testID,
   children,
 }: SubScreenProps) {
@@ -155,7 +193,7 @@ export function MealSubScreen({
           </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Save"
+            accessibilityLabel={saveLabel}
             accessibilityState={{ disabled: saving, busy: saving }}
             disabled={saving}
             onPress={onSave}
@@ -164,7 +202,7 @@ export function MealSubScreen({
             {saving ? (
               <ActivityIndicator color={theme.colors.ink} />
             ) : (
-              <Text variant="bodyStrong">Save</Text>
+              <Text variant="bodyStrong">{saveLabel}</Text>
             )}
           </Pressable>
         </View>
@@ -235,17 +273,24 @@ export function AteOutForm({
   onCoachSave,
   layout = "inline",
   inModal = false,
+  edit,
 }: Props) {
   const styles = useStyles();
   const theme = useTheme();
   const sync = useSyncEngine();
   const coachShort = coachName.split(/\s+/)[0] ?? coachName;
   const isCoach = authorMode === "coach";
-  const [kcalText, setKcalText] = useState("");
-  const [note, setNote] = useState("");
+  // Editing: prefilled from the logged entry, and "Was N kcal" under the field.
+  const logged = edit ? assignment.compliance : null;
+  const wasKcal =
+    logged?.loggedTotals?.energyKcal != null
+      ? Math.round(logged.loggedTotals.energyKcal)
+      : null;
+  const [kcalText, setKcalText] = useState(wasKcal != null ? String(wasKcal) : "");
+  const [note, setNote] = useState(logged?.notes ?? "");
   /** TR-08c2's optional photo (screen layout, trainee only). */
   const [photo, setPhoto] = useState<AteOutPhoto | null>(null);
-  const showPhotoRow = layout === "screen" && !isCoach;
+  const showPhotoRow = layout === "screen" && !isCoach && !edit;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const planKcal = nutrientsFromMealPrescription(assignment).kcal;
@@ -272,6 +317,22 @@ export function AteOutForm({
           notes: body.notes,
           items: body.items,
         });
+      } else if (edit) {
+        await editMealEntry(sync, assignment, {
+          body: {
+            outcome: "modified",
+            deviationKind: "restaurant",
+            notes: body.notes,
+            items: body.items,
+          },
+          display: {
+            loggedItems: kcal != null ? [{ name: "Ate out", quantity: 1, energyKcal: kcal }] : [],
+            kcal,
+          },
+          relationshipId,
+        });
+        edit.onEdited({ kcal });
+        return;
       } else {
         await deviateMealAssignment(sync, assignment, body, coachName, relationshipId);
         if (photo) {
@@ -331,7 +392,12 @@ export function AteOutForm({
             kcal
           </Text>
         </View>
-        {planKcal > 0 ? (
+        {edit && wasKcal != null ? (
+          <Text variant="caption" tone="ink2" style={styles.center} testID="ate-out-was">
+            Was {formatNumber(wasKcal)} kcal
+          </Text>
+        ) : null}
+        {planKcal > 0 && !edit ? (
           <Text variant="caption" tone="ink2" style={styles.center}>
             {isCoach
               ? `Plan for ${mealName.toLowerCase()}: ${formatNumber(planKcal)} kcal`
@@ -354,23 +420,30 @@ export function AteOutForm({
         {showPhotoRow ? (
           <AteOutPhotoRow mealName={mealName} value={photo} onChange={setPhoto} />
         ) : null}
+        {edit?.canRemove ? <RemoveLogButton onPress={edit.onRemove} /> : null}
         {error ? <ErrorBanner message={error} /> : null}
     </>
   );
   const subtitle = `${mealName} \u00b7 ${formatClockTime(assignment.windowStartsAt, timeZone)}`;
 
   if (layout === "screen") {
-    const saveLabel =
-      kcal != null ? `Save \u00b7 ${formatNumber(kcal)} kcal` : note.trim() ? "Save note" : "Save";
+    const saveLabel = edit
+      ? "Save changes"
+      : kcal != null
+        ? `Save \u00b7 ${formatNumber(kcal)} kcal`
+        : note.trim()
+          ? "Save note"
+          : "Save";
     return (
       <MealSubScreen
         testID="ate-out-form"
-        title="Ate out"
+        title={edit ? "Edit ate out" : "Ate out"}
         subtitle={subtitle}
         onBack={onCancel}
         onSave={() => void save()}
         saving={saving}
         inModal={inModal}
+        saveLabel={edit ? "Save changes" : "Save"}
         banner={isCoach ? null : <OfflineSaveBanner />}
         footer={
           <SubScreenSaveButton
@@ -434,6 +507,12 @@ const useStyles = createThemedStyles((t) => ({
     minHeight: 52,
   },
   busy: { opacity: 0.6 },
+  removeBtn: {
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+    minHeight: t.touchTarget,
+  },
   body: { gap: 12, paddingBottom: 24, paddingHorizontal: 20, paddingTop: 4 },
   kcalRow: {
     alignItems: "baseline",

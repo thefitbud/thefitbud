@@ -111,7 +111,7 @@ const auth = mockAuth({
 });
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth }));
 
-const { FoodSearchScreen } = await import("./FoodSearchScreen");
+const { FoodSearchScreen, linesFromLoggedItems } = await import("./FoodSearchScreen");
 const { peekMealSaved, resetMealSavedNotice } = await import("./food/mealSavedNotice");
 
 const assignment: MealAssignment = mealAssignmentSchema.parse({
@@ -303,5 +303,21 @@ describe("Food search v3 (TR-26a–d)", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Log as Ate out" }));
     expect(await screen.findByTestId("ate-out-form")).toBeTruthy();
     expect(screen.getByText("Rahul’s plan for evening snack: 180 kcal")).toBeTruthy();
+  });
+});
+
+describe("FoodSearchScreen change this log (Z14-13b)", () => {
+  it("opens the tray with the logged foods and their amounts", () => {
+    const lines = linesFromLoggedItems(
+      [
+        { name: "Chapati / roti", quantity: 2, servingLabel: "1 piece", energyKcal: 160, proteinG: 6, carbsG: 30, fatG: 2 },
+        { name: "Masala dosa", quantity: 1, servingLabel: "1 plate", energyKcal: 400, custom: true },
+      ],
+      [],
+    );
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatchObject({ name: "Chapati / roti", quantity: 2, unitLabel: "1 piece", kcalPerUnit: 80 });
+    expect(lines[0]?.macrosPerUnit).toEqual({ protein: 3, carbs: 15, fat: 1 });
+    expect(lines[1]?.source).toEqual({ kind: "custom", saveToMyFoods: false });
   });
 });

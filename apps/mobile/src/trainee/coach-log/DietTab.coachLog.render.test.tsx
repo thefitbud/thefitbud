@@ -132,7 +132,7 @@ const relationship = coachingRelationshipSchema.parse({
 });
 
 describe("DietTab coach-logged meals", () => {
-  it("labels both entries and hides Change only on the coach-logged one", async () => {
+  it("labels both entries and offers no Edit on a coach-logged or coach-edited entry", async () => {
     render(
       <DietTab
         relationship={relationship}
@@ -143,8 +143,9 @@ describe("DietTab coach-logged meals", () => {
     );
     await waitFor(() => expect(screen.getByText("Logged by your coach")).toBeTruthy());
     expect(screen.getByText(/^Edited by your coach/)).toBeTruthy();
-    // Read-only per R1: the server rejects an edit of a coach-logged entry.
-    expect(screen.getAllByText("Change")).toHaveLength(1);
+    // Read-only per R1: the server sends no `editableUntil` for these entries,
+    // so the app offers no Edit (D-W14-22 d).
+    expect(screen.queryByLabelText("Edit")).toBeNull();
   });
 });
 
