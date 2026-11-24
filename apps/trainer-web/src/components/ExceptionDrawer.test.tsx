@@ -187,7 +187,7 @@ describe("ExceptionDrawer focus (HM1)", () => {
   });
 });
 
-describe("ExceptionDrawer Mark reviewed focus (ED1)", () => {
+describe("ExceptionDrawer Noted, keep open focus (ED1)", () => {
   beforeEach(() => {
     stubWorkspaceApis();
     api.getException.mockResolvedValue(activeDetail);
@@ -202,14 +202,14 @@ describe("ExceptionDrawer Mark reviewed focus (ED1)", () => {
     vi.clearAllMocks();
   });
 
-  it("keeps activeElement inside the drawer after Mark reviewed", async () => {
+  it("keeps activeElement inside the drawer after Noted, keep open", async () => {
     render(
       inRouter(
         <ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />,
       ),
     );
     const markReviewed = await screen.findByRole("button", {
-      name: "Mark reviewed",
+      name: "Noted, keep open",
     });
 
     api.getException.mockResolvedValue({
@@ -226,7 +226,7 @@ describe("ExceptionDrawer Mark reviewed focus (ED1)", () => {
 
     await waitFor(() => {
       expect(
-        screen.queryByRole("button", { name: "Mark reviewed" }),
+        screen.queryByRole("button", { name: "Noted, keep open" }),
       ).toBeNull();
     });
     await waitFor(() => {
@@ -629,7 +629,7 @@ describe("Side panel v3 list (Z7-5)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    expect(await screen.findByRole("button", { name: "Mark reviewed" })).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Noted, keep open" })).toBeTruthy();
     expect(api.listExceptions).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Next item" })).toBeNull();
     expect(screen.queryByText(/Also open/)).toBeNull();
@@ -1081,7 +1081,7 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
 });
 
 describe("Side panel read-only, gone and ended (Z7-7)", () => {
-  const WRITE_NAMES = ["Mark reviewed", "Resolve…", "Nudge", "More actions"];
+  const WRITE_NAMES = ["Noted, keep open", "Resolve…", "Nudge", "More actions"];
   function expectNoWriteActions() {
     for (const name of WRITE_NAMES) {
       expect(screen.queryByRole("button", { name })).toBeNull();
@@ -1217,7 +1217,7 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Noted, keep open" }));
     expect(await screen.findByTestId("panel-readonly-line")).toBeTruthy();
     expectNoWriteActions();
   });
@@ -1237,7 +1237,7 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Noted, keep open" }));
     expect(await screen.findByTestId("panel-resolved-elsewhere")).toBeTruthy();
     expectNoWriteActions();
   });
@@ -1272,7 +1272,7 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
         <ExceptionDrawer onClose={() => undefined} />
       </MemoryRouter>,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Noted, keep open" }));
     expect(await screen.findByTestId("panel-resolved-elsewhere")).toBeTruthy();
     fireEvent.click(screen.getAllByRole("button", { name: /Next item/ }).at(-1)!);
     expect(await findTitle(/Missed workout 2/)).toBeTruthy();

@@ -4,6 +4,7 @@
  * proves copy and behaviour, not layout; the visual check is the authority there.
  */
 import { describe, expect, it, vi } from "vitest";
+import { ApiClientError } from "@fitbud/api-client";
 import { clientWorkspaceSchema, responsivenessResponseSchema } from "@fitbud/contracts";
 import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
 import { buildEndedSummary, kcalTileValue, reminderLine, weekDayCells } from "./model";
@@ -327,6 +328,46 @@ describe("ClientStatusScreen", () => {
     for (let index = 0; index < localStorage.length; index += 1) {
       expect(localStorage.key(index)?.startsWith("trainer:")).toBe(false);
     }
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+  });
+
+  it("Z14-3: paints the kept snapshot, and a server error keeps it with the retry banner", async () => {
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+    setTrainerCacheOwner(TRAINER_A);
+    // First visit: a good load leaves the snapshot behind.
+    api.getClientWorkspace.mockResolvedValueOnce(workspace({ ended: false }));
+    const first = render(
+      <ClientStatusScreen
+        relationshipId={RID}
+        displayName="Kavya Nair"
+        onBack={() => {}}
+        onOpenException={() => {}}
+        onOpenCheckin={() => {}}
+      />,
+    );
+    await screen.findByText("Lower body A");
+    first.unmount();
+    expect(readTrainerCache(`trainer:client:${RID}`)).not.toBeNull();
+
+    // Second visit: the snapshot is on screen before the read answers, then the
+    // read fails on the server. The page keeps the snapshot and says so.
+    let fail: (reason: unknown) => void = () => undefined;
+    api.getClientWorkspace.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        fail = reject;
+      }),
+    );
+    renderScreen();
+    expect(screen.getByText("Lower body A")).toBeTruthy();
+    expect(screen.getByText("410 of 1,950")).toBeTruthy();
+    expect(screen.queryByText("Couldn't load. Pull to try again.")).toBeNull();
+
+    fail(new ApiClientError({ status: 500, code: "INTERNAL_ERROR", message: "Something went wrong.", requestId: "req-1" }));
+    expect(await screen.findByText("Couldn't load. Pull to try again.")).toBeTruthy();
+    expect(screen.getByText("Lower body A")).toBeTruthy();
+    expect(screen.queryByText(/Couldn’t load Kavya’s page/)).toBeNull();
     clearTrainerCache();
     setTrainerCacheOwner(null);
   });

@@ -30,6 +30,12 @@ import { createIdempotencyKey } from "../../lib/idempotency";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
 import { NoteSheet, type NoteSaveInput } from "../sheets/NoteSheet";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  trainerCacheEpoch,
+  writeClientMeta,
+} from "../cache";
 import { openContextualWhatsApp } from "../whatsapp";
 import { changeChipLabel,
   changeChips,
@@ -82,8 +88,14 @@ export function SessionDetailScreen({
   const [execution, setExecution] = useState<WorkoutExecution | null>(null);
   const [assignment, setAssignment] = useState<WorkoutAssignment | null>(null);
   const [askExerciseIds, setAskExerciseIds] = useState<Set<string>>(new Set());
-  const [name, setName] = useState(nameProp?.trim() || "Client");
-  const [whatsapp, setWhatsapp] = useState<string | null>(null);
+  // Z14-3: the header paints from the per-client cache at once.
+  const [meta] = useState(() => (ridProp ? readClientMeta(ridProp) : null));
+  const [name, setName] = useState(
+    nameProp?.trim() || (meta?.name ? formatPersonName(meta.name) : "Client"),
+  );
+  const [whatsapp, setWhatsapp] = useState<string | null>(
+    meta?.whatsappE164 ?? null,
+  );
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,35 +106,73 @@ export function SessionDetailScreen({
 
   const load = useCallback(async () => {
     setError(null);
+    const cacheEpoch = trainerCacheEpoch();
     try {
+      // The header read starts beside the execution read when the client is
+      // known up front; a full cache entry needs none.
+      const knownMeta = ridProp ? readClientMeta(ridProp) : null;
+      const earlyWorkspace =
+        ridProp && knownMeta?.timeZone == null
+          ? api.getClientWorkspace(ridProp).then(
+              (ws) => ({ ws }) as const,
+              (workspaceError: unknown) => ({ workspaceError }) as const,
+            )
+          : null;
       const exec = await api.getWorkoutExecution(executionId);
       setExecution(exec);
       const rid = ridProp || exec.coachingRelationshipId;
+      // One parallel round: header, assignment and both ask lists.
+      const [workspaceRead, assignmentRead, openAsks, answeredAsks] =
+        await Promise.all([
+          knownMeta && knownMeta.timeZone != null
+            ? Promise.resolve({ meta: knownMeta } as const)
+            : (
+                earlyWorkspace ??
+                api.getClientWorkspace(rid).then(
+                  (ws) => ({ ws }) as const,
+                  (workspaceError: unknown) => ({ workspaceError }) as const,
+                )
+              ),
+          api.getWorkoutAssignment(exec.assignmentId).then(
+            (value) => ({ value }) as const,
+            (assignmentError: unknown) => ({ assignmentError }) as const,
+          ),
+          s1.listCoachAsks({ status: "open" }).then(
+            (value) => ({ value }) as const,
+            (askError: unknown) => ({ askError }) as const,
+          ),
+          s1.listCoachAsks({ status: "answered" }).then(
+            (value) => ({ value }) as const,
+            (askError: unknown) => ({ askError }) as const,
+          ),
+        ]);
       let nextName = nameProp?.trim() || "Client";
       let nextWa: string | null = null;
-      try {
-        const ws = await api.getClientWorkspace(rid);
+      if ("meta" in workspaceRead) {
+        nextName = nameProp?.trim() || formatPersonName(workspaceRead.meta.name ?? "Client");
+        nextWa = workspaceRead.meta.whatsappE164;
+      } else if ("ws" in workspaceRead) {
+        const ws = workspaceRead.ws;
+        writeClientMeta(rid, clientMetaFromWorkspaceHeader(ws.header), cacheEpoch);
         nextName = formatPersonName(ws.header.traineeDisplayName);
         nextWa = ws.header.clientWhatsappE164 ?? null;
-      } catch (workspaceError) {
-        reportError("sessionDetail.workspace", workspaceError);
+      } else {
+        reportError("sessionDetail.workspace", workspaceRead.workspaceError);
       }
       setName(nextName);
       setWhatsapp(nextWa);
 
       let nextAssignment: WorkoutAssignment | null = null;
-      try {
-        nextAssignment = await api.getWorkoutAssignment(exec.assignmentId);
-      } catch (assignmentError) {
-        reportError("sessionDetail.assignment", assignmentError);
+      if ("value" in assignmentRead) {
+        nextAssignment = assignmentRead.value;
+      } else {
+        reportError("sessionDetail.assignment", assignmentRead.assignmentError);
       }
       setAssignment(nextAssignment);
 
       const askIds = new Set<string>();
-      try {
-        const open = await s1.listCoachAsks({ status: "open" });
-        const answered = await s1.listCoachAsks({ status: "answered" });
-        const related = [...open.items, ...answered.items].filter(
+      if ("value" in openAsks && "value" in answeredAsks) {
+        const related = [...openAsks.value.items, ...answeredAsks.value.items].filter(
           (ask: CoachAsk) => ask.relationshipId === rid,
         );
         for (const ask of related) {
@@ -136,8 +186,11 @@ export function SessionDetailScreen({
             for (const ex of exec.exercises) askIds.add(ex.id);
           }
         }
-      } catch (askError) {
-        reportError("sessionDetail.asks", askError);
+      } else {
+        reportError(
+          "sessionDetail.asks",
+          "askError" in openAsks ? openAsks.askError : (answeredAsks as { askError: unknown }).askError,
+        );
       }
       setAskExerciseIds(askIds);
       setOffline(false);

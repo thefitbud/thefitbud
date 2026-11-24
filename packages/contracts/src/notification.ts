@@ -83,6 +83,8 @@ export const notificationTypeSchema = z.enum([
   "trainer_critical_digest",
   "trainer_renewal",
   "trainer_meal_times_changed",
+  /** Trainer: a client edited or removed a meal log (Z14-11, D-W14-23). */
+  "trainer_client_log_edited",
   "admin_whatsapp_budget",
   /** Trainee: the coach created or edited one of their logs (Z6-19, D-P2-21 R5). */
   "coach_log_updated",
@@ -101,6 +103,12 @@ export const trainerCategoriesSchema = z.object({
   intakeSubmitted: z.boolean(),
   renewalsDue: z.boolean(),
   mealTimesChanged: z.boolean(),
+  /**
+   * "Client log edits" (Z14-11, D-W14-23): a client edited or removed a meal
+   * log. On by default; optional on the wire so builds that predate it still
+   * parse (the server fills in true).
+   */
+  clientLogEdits: z.boolean().optional(),
   morningSummary: z.boolean(),
 });
 export type TrainerCategories = z.infer<typeof trainerCategoriesSchema>;
@@ -421,3 +429,22 @@ export const nudgeActivityResponseSchema = z.object({
   quietHoursEnd: z.string().nullable().optional(),
 });
 export type NudgeActivityResponse = z.infer<typeof nudgeActivityResponseSchema>;
+
+/**
+ * `payloadJson` of a `trainer_client_log_edited` notification (Z14-11,
+ * D-W14-23 b). Coaching detail lives here, in the stored inbox row the trainer
+ * reads; the push itself carries routing only (plus the shared lock-screen
+ * copy). `fields` names what changed.
+ */
+export const clientLogEditPayloadSchema = z.object({
+  entryId: uuidSchema,
+  action: z.enum(["edited", "removed"]),
+  mealName: z.string().min(1).max(120),
+  mealDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  fromKcal: z.number().int().nonnegative().nullable(),
+  toKcal: z.number().int().nonnegative().nullable(),
+  fromOutcome: z.string().min(1).max(32),
+  toOutcome: z.string().min(1).max(32).nullable(),
+  fields: z.array(z.enum(["outcome", "portion", "foods", "kcal", "note"])).max(5),
+});
+export type ClientLogEditPayload = z.infer<typeof clientLogEditPayloadSchema>;

@@ -230,25 +230,37 @@ meRoutes.get("/",
   }
 
   const db = createDb(c.env.DB);
-  const [identity] = await db
-    .select()
+  // Z14-28: email and (for trainers) the profile share one D1 trip.
+  const identityQuery = db
+    .select({ email: userIdentities.email })
     .from(userIdentities)
     .where(eq(userIdentities.userId, actor.userId))
     .limit(1);
+  let identity: { email: string | null } | undefined;
   let trainerProfile: { displayName: string; whatsappE164: string | null } | null =
     null;
   if (actor.trainerProfileId) {
-    const [profile] = await db
-      .select()
-      .from(trainerProfiles)
-      .where(eq(trainerProfiles.id, actor.trainerProfileId))
-      .limit(1);
+    const [identityRows, profileRows] = await db.batch([
+      identityQuery,
+      db
+        .select({
+          displayName: trainerProfiles.displayName,
+          whatsappE164: trainerProfiles.whatsappE164,
+        })
+        .from(trainerProfiles)
+        .where(eq(trainerProfiles.id, actor.trainerProfileId))
+        .limit(1),
+    ]);
+    identity = identityRows[0];
+    const profile = profileRows[0];
     if (profile) {
       trainerProfile = {
         displayName: profile.displayName,
         whatsappE164: profile.whatsappE164,
       };
     }
+  } else {
+    [identity] = await identityQuery;
   }
 
   const data = meResponseSchema.parse({

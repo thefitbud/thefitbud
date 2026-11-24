@@ -25,26 +25,57 @@ import { buildCheckinListModel,
   type CheckinListSegment,
   type WeekLookup,
 } from "./checkinsList/model";
+import {
+  clientMetaFromDirectoryItem,
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  readTrainerCache,
+  trainerCacheEpoch,
+  writeClientMeta,
+  writeTrainerCache,
+} from "./cache";
+import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
 import { openContextualWhatsApp } from "./whatsapp";
 import { createThemedStyles } from "../providers/ThemeProvider";
 
+type CheckinsSnapshot = {
+  inbox: TrainerCheckinInboxItem[];
+  weeks: Array<[string, number]>;
+  savedAt: string;
+};
+
+const CACHE_KEY = "trainer:checkins";
+
 type Props = {
+  /** False while another tab is showing; the tab stays mounted (Z14-3). */
+  active?: boolean;
+  /** Bumped when a detail screen closes: refresh underneath whatever the age. */
+  returnNonce?: number;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
 };
 
-export function CheckinsTab({ onReviewCheckin }: Props) {
+export function CheckinsTab({ active = true, returnNonce = 0, onReviewCheckin }: Props) {
 
   const styles = useStyles();
   const { api, refreshSession } = useAuth();
   const trainerZone = deviceTimeZone();
-  const [inboxItems, setInboxItems] = useState<TrainerCheckinInboxItem[]>([]);
+  // Z14-3: paint the last inbox at once, refresh underneath.
+  const [initialSnapshot] = useState(() =>
+    readTrainerCache<CheckinsSnapshot>(CACHE_KEY),
+  );
+  const [updating, setUpdating] = useState(false);
+  const lastLoadedAt = useRef(0);
+  const hasData = useRef(initialSnapshot != null);
+  const [inboxItems, setInboxItems] = useState<TrainerCheckinInboxItem[]>(
+    initialSnapshot?.inbox ?? [],
+  );
   const [reviewedItems, setReviewedItems] = useState<TrainerCheckinInboxItem[]>(
     [],
   );
   const [weeksByRelationship, setWeeksByRelationship] = useState<WeekLookup>(
-    new Map(),
+    () => new Map(initialSnapshot?.weeks ?? []),
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialSnapshot == null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [segment, setSegment] = useState<CheckinListSegment>("to_review");
@@ -55,6 +86,8 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
 
   const load = useCallback(async () => {
     setError(null);
+    const cacheEpoch = trainerCacheEpoch();
+    if (hasData.current) setUpdating(true);
     try {
       const [inbox, clients] = await Promise.all([
         api.listTrainerCheckinInbox(),
@@ -74,6 +107,26 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
         if (week != null) weeks.set(client.relationshipId, week);
       }
       setWeeksByRelationship(weeks);
+      for (const client of clients.items) {
+        if (client.relationshipId) {
+          writeClientMeta(
+            client.relationshipId,
+            clientMetaFromDirectoryItem(client),
+            cacheEpoch,
+          );
+        }
+      }
+      hasData.current = true;
+      lastLoadedAt.current = Date.now();
+      writeTrainerCache(
+        CACHE_KEY,
+        {
+          inbox: inbox.items,
+          weeks: [...weeks.entries()],
+          savedAt: new Date().toISOString(),
+        } satisfies CheckinsSnapshot,
+        cacheEpoch,
+      );
 
       if (segment === "reviewed") {
         const since = addDaysToLocalDate(
@@ -113,12 +166,17 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
       );
     } finally {
       setLoading(false);
+      setUpdating(false);
     }
   }, [api, segment]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useRefreshWhenActive(active, lastLoadedAt, () => {
+    void load();
+  }, returnNonce);
 
   const today = localDateInTimezone(trainerZone);
   const visibleInbox = useMemo(
@@ -136,13 +194,21 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
   );
 
   async function nudge(row: CheckinListRow) {
-    let phone: string | null = null;
-    try {
-      const workspace = await api.getClientWorkspace(row.relationshipId);
-      phone = workspace.header.clientWhatsappE164 ?? null;
-    } catch (err) {
-      reportError("trainer.checkins.whatsappLookup", err);
-      phone = null;
+    // The client header cache has the number once any workspace read stored it.
+    let phone: string | null = readClientMeta(row.relationshipId)?.whatsappE164 ?? null;
+    if (!phone) {
+      try {
+        const workspace = await api.getClientWorkspace(row.relationshipId);
+        phone = workspace.header.clientWhatsappE164 ?? null;
+        writeClientMeta(
+          row.relationshipId,
+          clientMetaFromWorkspaceHeader(workspace.header),
+          trainerCacheEpoch(),
+        );
+      } catch (err) {
+        reportError("trainer.checkins.whatsappLookup", err);
+        phone = null;
+      }
     }
     await openContextualWhatsApp({
       phoneE164: phone,
@@ -229,6 +295,7 @@ export function CheckinsTab({ onReviewCheckin }: Props) {
         Check-ins
       </Text>
       {error ? <ErrorBanner message={error} /> : null}
+      <UpdatingLine visible={updating && !refreshing} />
       <CheckinsList
         loading={loading}
         model={model}

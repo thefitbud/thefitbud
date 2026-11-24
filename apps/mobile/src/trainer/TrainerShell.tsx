@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, View } from "react-native";
 import { Text } from "../components/Text";
 import type { CoachAsk, TrainerCheckinInboxItem } from "@fitbud/contracts";
@@ -89,12 +89,27 @@ function TrainerShellBody() {
   } = useAuth();
   const s1 = stage1Api(api);
   const [tab, setTab] = useState<TrainerTab>("attention");
+  // Z14-3: a tab stays mounted once visited, so switching back shows its last
+  // data at once instead of a skeleton and a refetch.
+  const [visited, setVisited] = useState<ReadonlySet<TrainerTab>>(
+    () => new Set<TrainerTab>(["attention"]),
+  );
+  if (!visited.has(tab)) setVisited(new Set([...visited, tab]));
   // Back stack of detail screens over the current tab (see overlayStack.ts).
   const [overlays, setOverlays] = useState<Overlay[]>([]);
   const overlay: Overlay | null = overlays[overlays.length - 1] ?? null;
   const open = (next: Overlay) => setOverlays((stack) => pushOverlay(stack, next));
   const startAt = (next: Overlay) => setOverlays(startOverlays(next));
   const closeAll = () => setOverlays([]);
+  // Z14-3: bumped when the detail stack empties, so the tab underneath
+  // refreshes in the background (the trainer may have written something).
+  const [returnNonce, setReturnNonce] = useState(0);
+  // Derived in the same render the tabs wake in, so they see both together.
+  const [hadOverlays, setHadOverlays] = useState(false);
+  if (hadOverlays !== overlays.length > 0) {
+    setHadOverlays(overlays.length > 0);
+    if (hadOverlays) setReturnNonce((n) => n + 1);
+  }
   const goBack = (resolvedRelationshipId?: string) => {
     const result = backOverlays(overlays, resolvedRelationshipId);
     if (result.kind === "client") {
@@ -263,8 +278,11 @@ function TrainerShellBody() {
     return () => registerTrainerCaptureNav(null);
   }, [api, s1, signOut]);
 
+  // Z14-3: an open detail screen sits over the tabs, which stay mounted
+  // (hidden) underneath so Back returns to the same data.
+  let overlayNode: ReactNode = null;
   if (overlay?.kind === "exception") {
-    return (
+    overlayNode = (
       <ExceptionReviewScreen
         key={refreshNonce}
         exceptionId={overlay.exceptionId}
@@ -272,10 +290,8 @@ function TrainerShellBody() {
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
-  }
-
-  if (overlay?.kind === "client") {
-    return (
+  } else if (overlay?.kind === "client") {
+    overlayNode = (
       <ClientStatusScreen
         key={refreshNonce}
         relationshipId={overlay.relationshipId}
@@ -294,10 +310,8 @@ function TrainerShellBody() {
         }
       />
     );
-  }
-
-  if (overlay?.kind === "checkin") {
-    return (
+  } else if (overlay?.kind === "checkin") {
+    overlayNode = (
       <CheckinReviewScreen
         key={refreshNonce}
         checkinId={overlay.checkinId}
@@ -306,10 +320,8 @@ function TrainerShellBody() {
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
-  }
-
-  if (overlay?.kind === "ask") {
-    return (
+  } else if (overlay?.kind === "ask") {
+    overlayNode = (
       <AskDetailScreen
         key={refreshNonce}
         askId={overlay.askId}
@@ -320,10 +332,8 @@ function TrainerShellBody() {
         onAnswered={() => goBack()}
       />
     );
-  }
-
-  if (overlay?.kind === "session") {
-    return (
+  } else if (overlay?.kind === "session") {
+    overlayNode = (
       <SessionDetailScreen
         key={refreshNonce}
         executionId={overlay.executionId}
@@ -332,24 +342,26 @@ function TrainerShellBody() {
         onBack={() => goBack()}
       />
     );
-  }
-
-  if (overlay?.kind === "notifications") {
-    return (
+  } else if (overlay?.kind === "notifications") {
+    overlayNode = (
       <TrainerNotificationSettingsScreen onBack={() => goBack()} />
     );
+  } else if (overlay?.kind === "profile") {
+    overlayNode = <TrainerProfileScreen onBack={() => goBack()} />;
   }
 
-  if (overlay?.kind === "profile") {
-    return <TrainerProfileScreen onBack={() => goBack()} />;
-  }
-
+  const atTabs = overlayNode === null;
   return (
     <View style={styles.root}>
+      {overlayNode}
+      <View style={[styles.root, atTabs ? null : styles.hidden]}>
       <View style={styles.content}>
-        {tab === "attention" ? (
+        {visited.has("attention") ? (
+          <View style={tab === "attention" ? styles.content : styles.hidden}>
           <AttentionTab
             key={refreshNonce}
+            active={atTabs && tab === "attention"}
+            returnNonce={returnNonce}
             onReviewException={(exceptionId) =>
               startAt({ kind: "exception", exceptionId })
             }
@@ -368,11 +380,15 @@ function TrainerShellBody() {
               })
             }
           />
+          </View>
         ) : null}
 
-        {tab === "clients" ? (
+        {visited.has("clients") ? (
+          <View style={tab === "clients" ? styles.content : styles.hidden}>
           <ClientsTab
-            key={refreshNonce}
+            key={`${refreshNonce}:${clientsSegment}`}
+            active={atTabs && tab === "clients"}
+            returnNonce={returnNonce}
             onOpenClient={openClientFromRow}
             initialSegment={clientsSegment}
             onOpenAsk={(askId, relationshipId, displayName) =>
@@ -392,10 +408,18 @@ function TrainerShellBody() {
               })
             }
           />
+          </View>
         ) : null}
 
-        {tab === "checkins" ? (
-          <CheckinsTab key={refreshNonce} onReviewCheckin={openCheckin} />
+        {visited.has("checkins") ? (
+          <View style={tab === "checkins" ? styles.content : styles.hidden}>
+            <CheckinsTab
+              key={refreshNonce}
+              active={atTabs && tab === "checkins"}
+              returnNonce={returnNonce}
+              onReviewCheckin={openCheckin}
+            />
+          </View>
         ) : null}
 
         {tab === "more" ? (
@@ -432,6 +456,7 @@ function TrainerShellBody() {
           );
         })}
       </View>
+      </View>
     </View>
   );
 }
@@ -443,6 +468,9 @@ const useStyles = createThemedStyles((t) => ({
   },
   content: {
     flex: 1,
+  },
+  hidden: {
+    display: "none",
   },
   banner: {
     backgroundColor: t.colors.brandTint,
