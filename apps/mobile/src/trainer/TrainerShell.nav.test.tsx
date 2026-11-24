@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { BackHandler, Platform } from "react-native";
 import { act, fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 
 const REL = "22222222-2222-4222-8222-222222222222";
@@ -8,6 +9,7 @@ const EXC = "11111111-1111-4111-8111-111111111111";
 const api = {
   listClients: vi.fn(),
   listRelationships: vi.fn(),
+  getCheckinReviewContext: vi.fn(),
 };
 const state: {
   pendingNotificationLink: unknown;
@@ -121,7 +123,12 @@ vi.mock("./ExceptionReviewScreen", () => ({
 
 import { TrainerShell } from "./TrainerShell";
 
-const click = (name: string) => fireEvent.click(screen.getByText(name));
+// Screens below the top one stay mounted (that is what the iOS swipe reveals),
+// so a label can match twice: the top screen's control is the last in the tree.
+const click = (name: string) => {
+  const all = screen.getAllByText(name);
+  fireEvent.click(all[all.length - 1]!);
+};
 const tab = (label: string) => fireEvent.click(screen.getByLabelText(label));
 
 beforeEach(() => {
@@ -132,6 +139,10 @@ beforeEach(() => {
     items: [
       { relationshipId: REL, traineeDisplayName: "Kavya Nair", status: "active" },
     ],
+  });
+  api.getCheckinReviewContext.mockReset();
+  api.getCheckinReviewContext.mockResolvedValue({
+    checkin: { coachingRelationshipId: REL },
   });
   clearPendingNotificationLink.mockClear();
   clearPendingDeepLink.mockClear();
@@ -203,5 +214,138 @@ describe("TrainerShell back navigation", () => {
     expect(screen.queryByTestId("client-screen")).toBeNull();
     expect(screen.queryByTestId("checkin-screen")).toBeNull();
     expect(screen.getByTestId("attention-tab")).toBeTruthy();
+  });
+});
+
+// Z14-18: the Android hardware back, through the real hook and a captured
+// BackHandler listener.
+describe("TrainerShell hardware back (Android)", () => {
+  let listener: (() => boolean) | null = null;
+  const realOS = Platform.OS;
+  beforeEach(() => {
+    listener = null;
+    (Platform as { OS: string }).OS = "android";
+    vi.spyOn(BackHandler, "addEventListener").mockImplementation(((
+      _event: string,
+      handler: () => boolean,
+    ) => {
+      listener = handler;
+      return { remove: () => undefined };
+    }) as never);
+  });
+  afterEach(() => {
+    (Platform as { OS: string }).OS = realOS;
+    vi.restoreAllMocks();
+  });
+  const press = (): boolean => {
+    let consumed = false;
+    act(() => {
+      consumed = listener?.() ?? false;
+    });
+    return consumed;
+  };
+  const selected = (label: string) =>
+    screen.getByLabelText(label).getAttribute("aria-selected") === "true";
+
+  it("Attention tab with nothing open: not consumed, so Android leaves the app", () => {
+    render(<TrainerShell />);
+    expect(press()).toBe(false);
+  });
+
+  it("Clients tab -> Attention, and the Clients tab stays mounted", () => {
+    render(<TrainerShell />);
+    tab("Clients");
+    expect(selected("Clients")).toBe(true);
+    expect(press()).toBe(true);
+    expect(selected("Attention")).toBe(true);
+    expect(screen.getByTestId("clients-tab")).toBeTruthy();
+    expect(press()).toBe(false);
+  });
+
+  it("More tab -> Attention", () => {
+    render(<TrainerShell />);
+    tab("More");
+    expect(press()).toBe(true);
+    expect(selected("Attention")).toBe(true);
+  });
+
+  it("Check-ins tab -> Attention", () => {
+    render(<TrainerShell />);
+    tab("Check-ins");
+    expect(press()).toBe(true);
+    expect(selected("Attention")).toBe(true);
+  });
+
+  it("client page opened from Clients -> back shows Clients, never leaves", () => {
+    render(<TrainerShell />);
+    tab("Clients");
+    click("open-client-row");
+    expect(screen.getByTestId("client-screen")).toBeTruthy();
+    expect(press()).toBe(true);
+    expect(screen.queryByTestId("client-screen")).toBeNull();
+    expect(selected("Clients")).toBe(true);
+  });
+
+  it("[client, check-in] -> client page, then the tab", () => {
+    render(<TrainerShell />);
+    tab("Clients");
+    click("open-client-row");
+    click("open-checkin");
+    expect(press()).toBe(true);
+    expect(screen.queryByTestId("checkin-screen")).toBeNull();
+    expect(screen.getByTestId("client-screen")).toBeTruthy();
+    expect(press()).toBe(true);
+    expect(screen.queryByTestId("client-screen")).toBeNull();
+  });
+
+  it("exception review -> Attention", () => {
+    render(<TrainerShell />);
+    click("open-exception");
+    expect(press()).toBe(true);
+    expect(screen.queryByTestId("exception-screen")).toBeNull();
+    expect(selected("Attention")).toBe(true);
+  });
+
+  it("cold check-in -> its client's page", async () => {
+    state.pendingNotificationLink = {
+      trainerRoute: { kind: "checkin", checkinId: CHECKIN },
+    };
+    render(<TrainerShell />);
+    expect(press()).toBe(true);
+    await waitFor(() =>
+      expect(screen.getByTestId("client-screen").getAttribute("data-rel")).toBe(REL),
+    );
+    expect(api.getCheckinReviewContext).toHaveBeenCalledWith(CHECKIN);
+  });
+
+  it("cold check-in whose client cannot be read -> the tab, still not leaving", async () => {
+    state.pendingNotificationLink = {
+      trainerRoute: { kind: "checkin", checkinId: CHECKIN },
+    };
+    api.getCheckinReviewContext.mockRejectedValue(new Error("offline"));
+    render(<TrainerShell />);
+    expect(press()).toBe(true);
+    await waitFor(() => expect(screen.queryByTestId("checkin-screen")).toBeNull());
+    expect(selected("Attention")).toBe(true);
+  });
+
+  it("client page opened by a push -> Attention, never leaves the app", async () => {
+    state.pendingNotificationLink = {
+      trainerRoute: { kind: "client", relationshipId: REL },
+    };
+    render(<TrainerShell />);
+    await waitFor(() => expect(screen.getByTestId("client-screen")).toBeTruthy());
+    expect(press()).toBe(true);
+    expect(screen.queryByTestId("client-screen")).toBeNull();
+    expect(selected("Attention")).toBe(true);
+  });
+
+  it("an open screen stays mounted under the one on top", () => {
+    render(<TrainerShell />);
+    tab("Clients");
+    click("open-client-row");
+    click("open-checkin");
+    expect(screen.getAllByTestId("pushed-screen")).toHaveLength(2);
+    expect(screen.getByTestId("clients-tab")).toBeTruthy();
   });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Modal,
   Pressable,
@@ -93,11 +93,17 @@ import {
   type NudgeTarget,
 } from "./sheets/nudgeContent";
 import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { HeaderBack } from "../components/HeaderBack";
+import { HIDDEN_FROM_READERS, PushedScreen } from "../components/PushedScreen";
+import { useHardwareBack } from "../lib/useHardwareBack";
+import { DiscardDialog } from "./clientlog/useDiscardGuard";
 
 type Props = {
   relationshipId: string;
   displayName: string;
   onboardingStatusLabelText?: string;
+  /** Short name of the screen below (BK-01), shown beside the iOS back chevron. */
+  backLabel?: string;
   onBack: () => void;
   onOpenException: (exceptionId: string) => void;
   onOpenCheckin: (checkinId: string) => void;
@@ -132,6 +138,7 @@ export function ClientStatusScreen({
   relationshipId,
   displayName,
   onboardingStatusLabelText,
+  backLabel,
   onBack,
   onOpenException,
   onOpenCheckin,
@@ -420,6 +427,32 @@ export function ClientStatusScreen({
     nutrition?.assigned != null &&
     nutrition.logged.kcal > nutrition.assigned.kcal;
 
+  // Z14-18: hardware back for the client page's own inner views. A log screen
+  // registers its own handler (it is mounted later, so it answers first); sheets
+  // are Modals that close themselves. Anything left falls through to the shell.
+  const [discardNoteAsk, setDiscardNoteAsk] = useState(false);
+  useHardwareBack(() => {
+    if (discardNoteAsk) {
+      setDiscardNoteAsk(false);
+      return true;
+    }
+    if (dietDayOpen) {
+      setDietDayOpen(false);
+      void load();
+      return true;
+    }
+    if (infoOpen) {
+      setInfoOpen(false);
+      return true;
+    }
+    if (noteOpen) {
+      if (noteBody.trim()) setDiscardNoteAsk(true);
+      else setNoteOpen(false);
+      return true;
+    }
+    return false;
+  });
+
   async function copyPlanLink() {
     const url = `${trainerWebUrl()}/clients/${relationshipId}`;
     try {
@@ -493,9 +526,15 @@ export function ClientStatusScreen({
     }
   }
 
+  // Z14-18: a sub-screen is a layer over the client page, which stays mounted
+  // (and scrolled) beneath it; the iOS edge swipe shows it.
+  let subScreen: ReactNode = null;
+  const subKey = loggingOther ?? (dietDayOpen ? "diet" : logging ? "log" : infoOpen ? "info" : "none");
+  let closeSubScreen: (() => void) | null = null;
   if (loggingOther) {
     const Other = loggingOther === "meal" ? ClientLogMealScreen : ClientLogMeasurementScreen;
-    return (
+    closeSubScreen = () => setLoggingOther(null);
+    subScreen = (
       <Other
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -509,10 +548,12 @@ export function ClientStatusScreen({
         }}
       />
     );
-  }
-
-  if (dietDayOpen) {
-    return (
+  } else if (dietDayOpen) {
+    closeSubScreen = () => {
+      setDietDayOpen(false);
+      void load();
+    };
+    subScreen = (
       <DietDayReviewScreen
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -524,10 +565,9 @@ export function ClientStatusScreen({
         }}
       />
     );
-  }
-
-  if (logging) {
-    return (
+  } else if (logging) {
+    closeSubScreen = () => setLogging(null);
+    subScreen = (
       <ClientLogWorkoutScreen
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -543,10 +583,9 @@ export function ClientStatusScreen({
         }}
       />
     );
-  }
-
-  if (infoOpen) {
-    return (
+  } else if (infoOpen) {
+    closeSubScreen = () => setInfoOpen(false);
+    subScreen = (
       <ClientInfoScreen
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -559,20 +598,14 @@ export function ClientStatusScreen({
   const actionsDisabled = ended || offline;
   const loadFailed = !loading && !data && Boolean(error);
 
+  let mainView: ReactNode = null;
   if (loadFailed) {
     const failName = formatPersonName(displayName);
     const failFirst = failName.split(" ")[0] || failName;
-    return (
+    mainView = (
       <Screen v3 title="" showHeader={false} chrome="app">
         <View style={styles.nav}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={onBack}
-            style={styles.navBtn}
-          >
-            <Text style={styles.navChevron}>‹</Text>
-          </Pressable>
+          <HeaderBack onPress={onBack} label={backLabel} />
           <View style={styles.navBtn} />
         </View>
         <View style={styles.loadError}>
@@ -601,7 +634,7 @@ export function ClientStatusScreen({
     );
   }
 
-  return (
+  if (!loadFailed) mainView = (
     <Screen
       v3
       title=""
@@ -615,14 +648,7 @@ export function ClientStatusScreen({
     >
       <View testID="client-status">
       <View style={styles.nav}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={onBack}
-          style={styles.navBtn}
-        >
-          <Text style={styles.navChevron}>‹</Text>
-        </Pressable>
+        <HeaderBack onPress={onBack} label={backLabel} />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="More"
@@ -1244,9 +1270,38 @@ export function ClientStatusScreen({
         </View>
       </Modal>
 
+      <DiscardDialog
+        title="Discard this note?"
+        body="What you typed won’t be saved."
+        keepLabel="Keep writing"
+        visible={discardNoteAsk}
+        onKeep={() => setDiscardNoteAsk(false)}
+        onDiscard={() => {
+          setDiscardNoteAsk(false);
+          setNoteBody("");
+          setNoteOpen(false);
+        }}
+      />
+
       {toast ? <Snackbar message={toast} onDismiss={() => setToast(null)} /> : null}
       </View>
     </Screen>
+  );
+
+  return (
+    <View style={styles.stack}>
+      <View
+        style={styles.stack}
+        {...(subScreen ? HIDDEN_FROM_READERS : {})}
+      >
+        {mainView}
+      </View>
+      {subScreen && closeSubScreen ? (
+        <PushedScreen key={subKey} onBack={closeSubScreen}>
+          {subScreen}
+        </PushedScreen>
+      ) : null}
+    </View>
   );
 }
 
@@ -1286,6 +1341,7 @@ function MenuRow({
 }
 
 const useStyles = createThemedStyles((t) => ({
+  stack: { flex: 1 },
   nav: {
     alignItems: "center",
     flexDirection: "row",
