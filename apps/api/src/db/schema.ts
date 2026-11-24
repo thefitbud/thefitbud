@@ -8,6 +8,7 @@ import {
   real,
   sqliteTable,
   text,
+  unique,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
@@ -53,7 +54,6 @@ export const userRoles = sqliteTable(
   },
   (table) => [
     uniqueIndex("user_roles_user_role_uidx").on(table.userId, table.role),
-    index("user_roles_user_idx").on(table.userId),
   ],
 );
 
@@ -159,7 +159,6 @@ export const clientInvitations = sqliteTable(
   },
   (table) => [
     uniqueIndex("client_invitations_token_hash_uidx").on(table.tokenHash),
-    index("client_invitations_trainer_idx").on(table.trainerUserId),
     index("client_invitations_trainer_email_idx").on(
       table.trainerUserId,
       table.recipientEmail,
@@ -211,7 +210,6 @@ export const coachingRelationships = sqliteTable(
       table.trainerUserId,
       table.traineeUserId,
     ),
-    index("coaching_relationships_trainer_idx").on(table.trainerUserId),
     index("coaching_relationships_trainee_idx").on(table.traineeUserId),
     check(
       "coaching_relationships_client_display_name_chk",
@@ -397,9 +395,6 @@ export const subscriptionVersions = sqliteTable(
     uniqueIndex("subscription_versions_relationship_version_uidx").on(
       table.coachingRelationshipId,
       table.versionNumber,
-    ),
-    index("subscription_versions_relationship_idx").on(
-      table.coachingRelationshipId,
     ),
     // Parent key for the same-relationship foreign key on payment_records.
     uniqueIndex("subscription_versions_relationship_id_uidx").on(
@@ -778,9 +773,6 @@ export const workoutExecutions = sqliteTable(
   },
   (table) => [
     uniqueIndex("workout_executions_assignment_uidx").on(table.assignmentId),
-    index("workout_executions_relationship_idx").on(
-      table.coachingRelationshipId,
-    ),
     index("workout_executions_relationship_completed_idx").on(
       table.coachingRelationshipId,
       table.completedAt,
@@ -971,7 +963,6 @@ export const mealCompliance = sqliteTable(
   },
   (table) => [
     uniqueIndex("meal_compliance_assignment_uidx").on(table.assignmentId),
-    index("meal_compliance_relationship_idx").on(table.coachingRelationshipId),
     index("meal_compliance_relationship_logged_idx").on(
       table.coachingRelationshipId,
       table.loggedAt,
@@ -1073,15 +1064,15 @@ export const checkins = sqliteTable(
       table.localDate,
     ),
     index("checkins_form_version_idx").on(table.checkinFormVersionId),
-    index("checkins_relationship_window_idx").on(
+    index("checkins_relationship_status_idx").on(
       table.coachingRelationshipId,
-      table.windowEndsAt,
+      table.recordStatus,
     ),
     index("checkins_relationship_submitted_idx").on(
       table.coachingRelationshipId,
       table.submittedAt,
     ),
-    index("checkins_record_status_idx").on(table.recordStatus),
+    index("checkins_window_ends_idx").on(table.windowEndsAt),
   ],
 );
 
@@ -1604,7 +1595,6 @@ export const reminderRules = sqliteTable(
       table.coachingRelationshipId,
       table.reminderType,
     ),
-    index("reminder_rules_relationship_idx").on(table.coachingRelationshipId),
   ],
 );
 
@@ -1692,6 +1682,9 @@ export const notifications = sqliteTable(
       table.recipientUserId,
       table.state,
     ),
+    // 0042 (Z14-4): the reminder cron's `state = 'deferred'` retry scan and
+    // the daily cleanup of old read rows (`state = 'read' AND created_at < ?`).
+    index("notifications_state_created_idx").on(table.state, table.createdAt),
   ],
 );
 
@@ -1786,7 +1779,6 @@ export const planTemplates = sqliteTable(
       table.ownership,
       table.trainerUserId,
     ),
-    index("plan_templates_trainer_idx").on(table.trainerUserId),
     index("plan_templates_trainer_updated_idx").on(
       table.trainerUserId,
       table.updatedAt,
@@ -2162,7 +2154,8 @@ export const foodLibraryRecipeIngredients = sqliteTable(
     ),
   },
   (table) => [
-    uniqueIndex("food_library_recipe_ingredients_pos_uidx").on(
+    // An inline UNIQUE constraint in 0031, not a named index.
+    unique("food_library_recipe_ingredients_pos_uidx").on(
       table.foodLibraryItemId,
       table.position,
     ),
@@ -2241,7 +2234,8 @@ export const exerciseLibraryInstructions = sqliteTable(
     provenance: text("provenance").notNull(),
   },
   (table) => [
-    uniqueIndex("exercise_library_instructions_uidx").on(
+    // An inline UNIQUE constraint in 0031, not a named index.
+    unique("exercise_library_instructions_uidx").on(
       table.exerciseLibraryItemId,
       table.kind,
       table.lang,
@@ -2362,7 +2356,9 @@ export const authOtps = sqliteTable("auth_otps", {
   invalidatedAt: text("invalidated_at"),
   createdAt: text("created_at").notNull(),
   ipHash: text("ip_hash"),
-});
+}, (table) => [
+  index("auth_otps_identifier_idx").on(table.identifierHash, table.purpose, table.createdAt),
+]);
 
 export const authRateLimits = sqliteTable("auth_rate_limits", {
   bucketKey: text("bucket_key").primaryKey(),
@@ -2385,7 +2381,7 @@ export const devMailOutbox = sqliteTable("dev_mail_outbox", {
   textBody: text("text_body").notNull(),
   htmlBody: text("html_body"),
   createdAt: text("created_at").notNull(),
-});
+}, (table) => [index("dev_mail_outbox_to_idx").on(table.toAddress, table.createdAt)]);
 
 export const reactivationRequests = sqliteTable("reactivation_requests", {
   id: text("id").primaryKey(),
@@ -2404,7 +2400,7 @@ export const reactivationRequests = sqliteTable("reactivation_requests", {
   expiresAt: text("expires_at").notNull(),
   createdAt: text("created_at").notNull(),
   resolvedAt: text("resolved_at"),
-});
+}, (table) => [index("reactivation_requests_rel_idx").on(table.relationshipId, table.status)]);
 
 export const coachAsks = sqliteTable("coach_asks", {
   id: text("id").primaryKey(),
@@ -2434,7 +2430,7 @@ export const coachAsks = sqliteTable("coach_asks", {
   answeredAt: text("answered_at"),
   answeredBy: text("answered_by").references(() => users.id),
   trainerNoteId: text("trainer_note_id").references(() => trainerNotes.id),
-});
+}, (table) => [index("coach_asks_rel_status_idx").on(table.relationshipId, table.status)]);
 
 export const mealTimeOverrides = sqliteTable(
   "meal_time_overrides",
@@ -2471,7 +2467,7 @@ export const traineeCustomFoods = sqliteTable("trainee_custom_foods", {
   fatScaled: integer("fat_scaled"),
   servingLabel: text("serving_label").notNull(),
   createdAt: text("created_at").notNull(),
-});
+}, (table) => [index("trainee_custom_foods_rel_idx").on(table.relationshipId)]);
 
 export const reminderStates = sqliteTable("reminder_states", {
   traineeUserId: text("trainee_user_id")
@@ -2517,7 +2513,7 @@ export const whatsappLedger = sqliteTable("whatsapp_ledger", {
   costPaise: integer("cost_paise"),
   status: text("status").notNull(),
   createdAt: text("created_at").notNull(),
-});
+}, (table) => [index("whatsapp_ledger_month_idx").on(table.monthKey)]);
 
 export const whatsappWebhookEvents = sqliteTable("whatsapp_webhook_events", {
   id: text("id").primaryKey(),

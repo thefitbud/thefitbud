@@ -6,7 +6,14 @@ vi.mock("./lib/run-command.js", async (importOriginal) => {
 });
 
 import { runCommandSync } from "./lib/run-command.js";
-import { parseDeployArgs, readCommitSha, runDeployEnv, wranglerArgs } from "./deploy-env.js";
+import {
+  optimizeArgs,
+  parseDeployArgs,
+  plannedCommands,
+  readCommitSha,
+  runDeployEnv,
+  wranglerArgs,
+} from "./deploy-env.js";
 
 const run = vi.mocked(runCommandSync);
 
@@ -102,14 +109,36 @@ describe("runDeployEnv", () => {
     expect(errors.mock.calls.flat().join("\n")).toContain(printed);
   });
 
-  it("runs the remote command with --yes", () => {
+  it("runs the remote migrations with --yes, then PRAGMA optimize on the same database (Z14-4)", () => {
     vi.spyOn(console, "log").mockImplementation(() => {});
     expect(runDeployEnv(["migrate", "--env", "production", "--yes"], "/api")).toBe(0);
-    expect(run).toHaveBeenCalledWith(
-      "pnpm",
-      ["exec", "wrangler", "d1", "migrations", "apply", "fitbud-prod", "--env", "production", "--remote"],
-      { cwd: "/api" },
-    );
+    expect(run.mock.calls).toEqual([
+      [
+        "pnpm",
+        ["exec", "wrangler", "d1", "migrations", "apply", "fitbud-prod", "--env", "production", "--remote"],
+        { cwd: "/api" },
+      ],
+      [
+        "pnpm",
+        [
+          "exec", "wrangler", "d1", "execute", "fitbud-prod", "--env", "production", "--remote",
+          "--command", "PRAGMA optimize",
+        ],
+        { cwd: "/api" },
+      ],
+    ]);
+  });
+
+  it("optimizes only after a migrate, never after a deploy", () => {
+    expect(plannedCommands(parseDeployArgs(["deploy", "--env", "staging"]))).toHaveLength(1);
+    expect(plannedCommands(parseDeployArgs(["migrate", "--env", "staging"]))).toEqual([
+      ["exec", "wrangler", "d1", "migrations", "apply", "fitbud-staging", "--env", "staging", "--remote"],
+      ["exec", ...optimizeArgs("staging")],
+    ]);
+    expect(optimizeArgs("staging", "linux")).toEqual([
+      "wrangler", "d1", "execute", "fitbud-staging", "--env", "staging", "--remote", "--command", "PRAGMA optimize",
+    ]);
+    expect(optimizeArgs("production", "win32").at(-1)).toBe('"PRAGMA optimize"');
   });
 
   it("runs a deploy dry run without --yes", () => {
@@ -146,9 +175,9 @@ describe("runDeployEnv", () => {
     const logs = vi.spyOn(console, "log").mockImplementation(() => {});
     expect(runDeployEnv(["migrate", "--env", "staging", "--dry-run"], "/api")).toBe(0);
     expect(run).not.toHaveBeenCalled();
-    expect(logs.mock.calls.flat().join("\n")).toContain(
-      "pnpm exec wrangler d1 migrations apply fitbud-staging --env staging --remote",
-    );
+    const printed = logs.mock.calls.flat().join("\n");
+    expect(printed).toContain("pnpm exec wrangler d1 migrations apply fitbud-staging --env staging --remote");
+    expect(printed).toContain('pnpm exec wrangler d1 execute fitbud-staging --env staging --remote --command "PRAGMA optimize"');
   });
 
   it("exits 1 on an unknown env without calling Wrangler", () => {

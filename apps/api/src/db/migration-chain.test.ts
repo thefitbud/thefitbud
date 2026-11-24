@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { getTableConfig } from "drizzle-orm/sqlite-core";
+import { eq, is } from "drizzle-orm";
+import { getTableConfig, SQLiteTable } from "drizzle-orm/sqlite-core";
 import { describe, expect, it } from "vitest";
 import { hashPassword } from "../auth/password.js";
 import {
@@ -17,12 +18,14 @@ import { buildDemoSeedSql } from "../seed/demo/build.js";
 import { loadDemoLibraryIndex } from "../seed/demo/personas.js";
 import { assertNoForeignKeyViolations } from "../test-support/foreign-key-check.js";
 import { createMemoryDb, yieldToEventLoop } from "../test-support/memory-db.js";
+import * as schemaModule from "./schema.js";
 import {
   coachingRelationships,
   logEditEvents,
   mealCompliance,
   measurements,
   notificationPreferences,
+  notifications,
   workoutExecutions,
 } from "./schema.js";
 
@@ -271,7 +274,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0041 in order after 0029, with 0041 last", async () => {
+  it("places 0030 to 0042 in order after 0029, with 0042 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -290,7 +293,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 10]).toBe("0039_log_authorship");
     expect(tags[previous + 11]).toBe("0040_client_basics");
     expect(tags[previous + 12]).toBe("0041_checkin_form_v2");
-    expect(tags.at(-1)).toBe("0041_checkin_form_v2");
+    expect(tags[previous + 13]).toBe("0042_index_hygiene");
+    expect(tags.at(-1)).toBe("0042_index_hygiene");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -304,6 +308,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 10]?.idx).toBe(39);
     expect(journal[previous + 11]?.idx).toBe(40);
     expect(journal[previous + 12]?.idx).toBe(41);
+    expect(journal[previous + 13]?.idx).toBe(42);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -319,7 +324,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 10]).toBe("0039_log_authorship.sql");
     expect(files[previousFile + 11]).toBe("0040_client_basics.sql");
     expect(files[previousFile + 12]).toBe("0041_checkin_form_v2.sql");
-    expect(files.at(-1)).toBe("0041_checkin_form_v2.sql");
+    expect(files[previousFile + 13]).toBe("0042_index_hygiene.sql");
+    expect(files.at(-1)).toBe("0042_index_hygiene.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -2239,4 +2245,209 @@ describe("migration chain and seeds", () => {
     },
     120_000,
   );
+  describe("0042 index hygiene (Z14-4)", () => {
+    type IndexShape = { table: string; columns: string[]; unique: boolean; partial: boolean };
+
+    /** Every index in the migrated database, explicit and from inline UNIQUE constraints (not primary keys). */
+    function migratedIndexes(sqlite: SqliteLike): Map<string, IndexShape> {
+      const out = new Map<string, IndexShape>();
+      const tables = (
+        sqlite.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []
+      ).map((row) => String(row[0]));
+      for (const table of tables) {
+        const list = sqlite.exec(`SELECT name, "unique", origin, partial FROM pragma_index_list('${table}')`)[0]?.values ?? [];
+        for (const [name, unique, origin, partial] of list) {
+          if (origin === "pk") continue;
+          const columns = (
+            sqlite.exec(`SELECT name FROM pragma_index_xinfo('${String(name)}') WHERE key = 1 ORDER BY seqno`)[0]?.values ?? []
+          ).map((row) => String(row[0]));
+          // Inline UNIQUE constraints get sqlite_autoindex_* names; key them by shape.
+          const key = origin === "u" ? `unique:${table}(${columns.join(",")})` : String(name);
+          out.set(key, { table, columns, unique: Number(unique) === 1, partial: Number(partial) === 1 });
+        }
+      }
+      return out;
+    }
+
+    function schemaIndexes(): Map<string, IndexShape> {
+      const out = new Map<string, IndexShape>();
+      for (const value of Object.values(schemaModule)) {
+        if (!is(value, SQLiteTable)) continue;
+        const config = getTableConfig(value);
+        for (const index of config.indexes) {
+          out.set(index.config.name, {
+            table: config.name,
+            columns: index.config.columns.map((column) => (column as { name: string }).name),
+            unique: Boolean(index.config.unique),
+            partial: Boolean(index.config.where),
+          });
+        }
+        for (const constraint of config.uniqueConstraints) {
+          const columns = constraint.columns.map((column) => column.name);
+          out.set(`unique:${config.name}(${columns.join(",")})`, { table: config.name, columns, unique: true, partial: false });
+        }
+        for (const column of config.columns) {
+          if (column.isUnique && !column.primary) {
+            out.set(`unique:${config.name}(${column.name})`, {
+              table: config.name,
+              columns: [column.name],
+              unique: true,
+              partial: false,
+            });
+          }
+        }
+      }
+      return out;
+    }
+
+    const DROPPED: Array<[dropped: string, kept: string]> = [
+      ["user_roles_user_idx", "user_roles_user_role_uidx"],
+      ["client_invitations_trainer_idx", "client_invitations_trainer_email_idx"],
+      ["coaching_relationships_trainer_idx", "coaching_relationships_trainer_trainee_uidx"],
+      ["subscription_versions_relationship_idx", "subscription_versions_relationship_version_uidx"],
+      ["workout_executions_relationship_idx", "workout_executions_relationship_completed_idx"],
+      ["meal_compliance_relationship_idx", "meal_compliance_relationship_logged_idx"],
+      ["reminder_rules_relationship_idx", "reminder_rules_relationship_type_uidx"],
+      ["plan_templates_trainer_idx", "plan_templates_trainer_updated_idx"],
+    ];
+
+    it("is indexes only: no table, column, row or trigger change", () => {
+      const statements = readFileSync(join(drizzleDir, "0042_index_hygiene.sql"), "utf8")
+        .split("--> statement-breakpoint")
+        .map((part) => part.replace(/^--.*$/gm, "").trim())
+        .filter(Boolean);
+      expect(statements.length).toBe(11);
+      for (const statement of statements) {
+        expect(statement).toMatch(/^(CREATE INDEX IF NOT EXISTS|DROP INDEX IF EXISTS) `[a-z_]+`( ON `[a-z_]+` \([`a-z_, ]+\))?;$/);
+      }
+    });
+
+    it("matches schema.ts index for index: same names, tables, columns and uniqueness", async () => {
+      const handle = await createMemoryDb();
+      try {
+        const migrated = migratedIndexes(handle.sqlite);
+        const declared = schemaIndexes();
+        expect([...migrated.keys()].sort()).toEqual([...declared.keys()].sort());
+        for (const [name, shape] of declared) {
+          expect(migrated.get(name), name).toEqual(shape);
+        }
+      } finally {
+        handle.close();
+      }
+    });
+
+    it("drops only indexes whose columns lead a wider index that stays", async () => {
+      const handle = await createMemoryDb({ through: "0041_checkin_form_v2.sql" });
+      try {
+        const before = migratedIndexes(handle.sqlite);
+        handle.applyMigrationsFrom("0042_index_hygiene.sql");
+        const after = migratedIndexes(handle.sqlite);
+        for (const [dropped, kept] of DROPPED) {
+          const old = before.get(dropped)!;
+          const wider = after.get(kept)!;
+          expect(old, dropped).toBeDefined();
+          expect(after.has(dropped), dropped).toBe(false);
+          expect(wider.table).toBe(old.table);
+          expect(wider.partial).toBe(false);
+          expect(wider.columns.slice(0, old.columns.length)).toEqual(old.columns);
+        }
+        const removed = [...before.keys()].filter((name) => !after.has(name)).sort();
+        expect(removed).toEqual(DROPPED.map(([dropped]) => dropped).sort());
+        expect(after.get("trainer_notes_relationship_idx")?.columns).toEqual(["coaching_relationship_id", "created_at"]);
+        expect(after.get("notifications_state_created_idx")?.columns).toEqual(["state", "created_at"]);
+      } finally {
+        handle.close();
+      }
+    });
+
+    it("keeps the rows: a seeded database reads the same counts and keys after 0042", async () => {
+      const handle = await createMemoryDb({
+        foreignKeys: true,
+        librarySeed: true,
+        through: "0041_checkin_form_v2.sql",
+      });
+      try {
+        await yieldToEventLoop();
+        const passwordHash = await hashPassword("FitBud-demo-2026");
+        const demoSql = buildDemoSeedSql({
+          referenceInstant: "2026-11-24T06:00:00.000Z",
+          passwordHash,
+          libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+        });
+        handle.sqlite.exec(withoutDeletesFromMissingTables(handle.sqlite, demoSql));
+        await yieldToEventLoop();
+        const tables = (
+          handle.sqlite.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '%fts%' ORDER BY name")[0]?.values ?? []
+        ).map((row) => String(row[0]));
+        const counts = () => tables.map((table) => [table, handle.sqlite.exec(`SELECT count(*) FROM "${table}"`)[0]!.values[0]![0]]);
+        const before = counts();
+        handle.applyMigrationsFrom("0042_index_hygiene.sql");
+        expect(counts()).toEqual(before);
+        assertNoForeignKeyViolations(handle.sqlite);
+      } finally {
+        handle.close();
+      }
+    }, 120_000);
+
+    it("the reminder job's deferred retry scan uses the new index, not a table scan", async () => {
+      const handle = await createMemoryDb();
+      try {
+        // The exact query `retryDeferredReminders` runs (domain/reminders.ts).
+        const query = handle.db.select().from(notifications).where(eq(notifications.state, "deferred")).toSQL();
+        const client = (handle.db as unknown as { $client: D1Database }).$client;
+        const plan = await client.prepare(`EXPLAIN QUERY PLAN ${query.sql}`).bind(...query.params).all<{ detail: string }>();
+        const detail = (plan.results ?? []).map((row) => row.detail).join("\n");
+        expect(detail).toContain("USING INDEX notifications_state_created_idx (state=?)");
+        expect(detail).not.toMatch(/SCAN notifications/);
+      } finally {
+        handle.close();
+      }
+    });
+
+    it("the cleanup's read-notification batch uses the same index in created_at order", async () => {
+      const handle = await createMemoryDb();
+      try {
+        const client = (handle.db as unknown as { $client: D1Database }).$client;
+        const plan = await client
+          .prepare(
+            "EXPLAIN QUERY PLAN SELECT id FROM notifications WHERE state = ? AND created_at < ? ORDER BY created_at, id LIMIT 500",
+          )
+          .bind("read", "2026-08-26T21:00:00.000Z")
+          .all<{ detail: string }>();
+        expect((plan.results ?? []).map((row) => row.detail).join("\n")).toContain("USING INDEX notifications_state_created_idx (state=? AND created_at<?)");
+      } finally {
+        handle.close();
+      }
+    });
+
+    it("records 0042 in the drizzle snapshot chain after 0041, with exactly the index changes", () => {
+      type Snapshot = {
+        id: string;
+        prevId: string;
+        tables: Record<string, { indexes: Record<string, unknown>; uniqueConstraints: Record<string, unknown> }>;
+      };
+      const previous = JSON.parse(readFileSync(join(drizzleDir, "meta/0041_snapshot.json"), "utf8")) as Snapshot;
+      const snapshot = JSON.parse(readFileSync(join(drizzleDir, "meta/0042_snapshot.json"), "utf8")) as Snapshot;
+      expect(snapshot.prevId).toBe(previous.id);
+      expect(snapshot.id).not.toBe(previous.id);
+      const declared = schemaIndexes();
+      for (const [table, shape] of Object.entries(snapshot.tables)) {
+        for (const [name, index] of Object.entries(shape.indexes)) {
+          const { columns, isUnique } = index as { columns: string[]; isUnique: boolean };
+          // drizzle records a column-level .unique() as an index named <table>_<column>_unique.
+          const key = name === `${table}_${columns[0]}_unique` ? `unique:${table}(${columns.join(",")})` : name;
+          expect(declared.get(key), `${table}.${name}`).toMatchObject({ table, columns, unique: isUnique });
+        }
+        for (const constraint of Object.values(shape.uniqueConstraints ?? {})) {
+          const { columns } = constraint as { columns: string[] };
+          expect(declared.get(`unique:${table}(${columns.join(",")})`), `${table} unique`).toMatchObject({ table, columns });
+        }
+      }
+      const snapshotIndexCount = Object.values(snapshot.tables).reduce(
+        (sum, table) => sum + Object.keys(table.indexes).length + Object.keys(table.uniqueConstraints ?? {}).length,
+        0,
+      );
+      expect(snapshotIndexCount).toBe(declared.size);
+    });
+  });
 });

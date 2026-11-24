@@ -66,7 +66,15 @@ describe("sendPushToDevice", () => {
     expect(url).toBe("https://exp.host/--/api/v2/push/send");
     expect((init!.headers as Record<string, string>).Authorization).toBe("Bearer test-expo-access-token");
     expect(JSON.parse(String(init!.body))).toEqual([
-      { to: "ExponentPushToken[abc]", title: "FitBud", body: "Check-in reminder", data: PAYLOAD, sound: "default" },
+      {
+        to: "ExponentPushToken[abc]",
+        title: "FitBud",
+        body: "Check-in reminder",
+        data: PAYLOAD,
+        sound: "default",
+        channelId: "checkin_v2",
+        priority: "high",
+      },
     ]);
   });
 
