@@ -61,6 +61,8 @@ tags:
       - extendedWaitUntil:
           visible: "Log it myself"
           timeout: 30000
+      # Z14-13: the loading rows give way to the three ways, never to "isn't available".
+      - assertNotVisible: ".*isn.t available.*"
       - assertVisible: "Changed the portion"
       - assertVisible: "Ate out"
       - takeScreenshot: TR-08a-something-different
