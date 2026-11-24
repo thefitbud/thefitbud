@@ -193,3 +193,28 @@ describe("userFacingError", () => {
     ).toEqual({ message: "Please sign in again.", action: "sign_in" });
   });
 });
+
+describe("the trainee edit windows (Z14-11)", () => {
+  it("says what happened and what to do, never the code", () => {
+    for (const code of [
+      "MEAL_EDIT_WINDOW_CLOSED",
+      "MEAL_REMOVE_NOT_ALLOWED",
+      "MEAL_EDITED_BY_COACH",
+      "COACH_LOGGED_READ_ONLY",
+      "MEAL_LOG_NOT_FOUND",
+      "FEEDBACK_EDIT_WINDOW_CLOSED",
+    ]) {
+      const copy = userFacingError(
+        new ApiClientError({ code, message: "raw", requestId: "r", status: 422 }),
+      ).message;
+      expect(copy).not.toContain(code);
+      expect(copy).not.toMatch(/[A-Z]{3,}_[A-Z_]+/);
+      expect(copy.length).toBeGreaterThan(20);
+    }
+    expect(
+      userFacingError(
+        new ApiClientError({ code: "MEAL_EDIT_WINDOW_CLOSED", message: "x", requestId: "r", status: 422 }),
+      ).message,
+    ).toBe("Logged entries can be changed for 24 hours. Ask your coach to fix it.");
+  });
+});

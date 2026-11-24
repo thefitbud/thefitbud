@@ -28,4 +28,14 @@ android {
   lintOptions {
     abortOnError false
   }
+  testOptions {
+    // The notification's pure rules are tested on the JVM; android.* calls
+    // in the same object answer defaults instead of throwing "Stub!".
+    unitTests.returnDefaultValues = true
+  }
+}
+
+dependencies {
+  // ./gradlew :live-activity:testDebugUnitTest (src/test, Z14-5).
+  testImplementation 'junit:junit:4.13.2'
 }

@@ -2,30 +2,45 @@ package com.thefitbud.liveactivity
 
 import android.annotation.SuppressLint
 import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
-import androidx.core.app.NotificationChannelCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 /**
- * The ongoing workout notification of mockup 27-android. Expo web does not
- * compile this file; a dev build does, through the local Expo module
- * (modules/live-activity/android, LA3), which puts this directory on its
- * source path.
+ * The ongoing workout notification: Android's TR-15d lock-screen tile (Z14-5,
+ * D-W14-12). Expo web does not compile this file; a dev build does, through
+ * the local Expo module (modules/live-activity/android, LA3), which puts this
+ * directory on its source path.
  *
- * Collapsed height stays within the 48 dp system template (the system draws it
- * from the content title and text). Expanded is at most 252 dp.
- * Android 12 and later still wrap the custom view in the system template
- * (NotificationCompat.DecoratedCustomViewStyle).
+ * Layout, as on iOS (targets/FitBudLiveActivity/FitBudLiveActivity.swift):
+ * - title row (the system header): "FitBud · Lower body B" and the elapsed
+ *   workout timer, a chronometer counting up from the workout's start;
+ * - "Romanian deadlift" and "Set 3 of 3";
+ * - "Last 42.5 kg × 10" (only when there is a previous set) and
+ *   "Target 40 kg × 10" in the coach colour;
+ * - "✓ Log 40 kg × 10" and "Open";
+ * - the coral progress line through the exercise's sets.
+ * There are no ± steppers: Log logs the target shown, exactly like the iOS
+ * button. Changing the values is done in the app (Open).
+ *
+ * Collapsed, the system draws the title, "Romanian deadlift · Set 3 of 3", and
+ * the Last/Target line. Expanded is at most 252 dp.
+ *
+ * It is posted on its own "Live workout" channel (`workout_live`, created here,
+ * natively): IMPORTANCE_DEFAULT so it shows on the lock screen and in the
+ * shade, silent, no vibration, lock-screen visibility PUBLIC. The "Workout
+ * reminders" channel (`workout`) is for reminders only and is no longer used
+ * here. There is no foreground service (D-W14-12: it needs a Play
+ * health-service declaration; a follow-up if a lock screen still hides this).
  *
  * Buttons are PendingIntents, not LiveActivityIntent:
- * - Less / more weight steps by 2.5 kg
- * - Fewer / more reps steps by 1
- * - Log set writes workout.log_set and advances to the next set
+ * - Log writes workout.log_set and advances to the next set
  * - Open uses the fitbud://workout/{assignmentId} deep link
  *
  * With rest on (LA3c, D-W3-3, frame 27-android-rest.png) the same notification
@@ -41,14 +56,17 @@ import androidx.core.app.NotificationManagerCompat
  * its own short notification while the ongoing one moves to the next set.
  */
 object WorkoutSetNotification {
-    const val CHANNEL_ID = "workout"
-    const val ACTION_LESS_WEIGHT = "com.thefitbud.mobile.workout.LESS_WEIGHT"
-    const val ACTION_MORE_WEIGHT = "com.thefitbud.mobile.workout.MORE_WEIGHT"
-    const val ACTION_FEWER_REPS = "com.thefitbud.mobile.workout.FEWER_REPS"
-    const val ACTION_MORE_REPS = "com.thefitbud.mobile.workout.MORE_REPS"
+    /**
+     * The "Live workout" channel (D-W14-12). Its own id, not the reminders'
+     * `workout`, so the trainee can keep reminders quiet and still see the
+     * running workout, and so the channel's lock-screen setting is its own.
+     */
+    const val CHANNEL_ID = "workout_live"
+    const val CHANNEL_NAME = "Live workout"
+    const val CHANNEL_DESCRIPTION = "Your workout while it runs, with Log and Open on the lock screen."
+
     const val ACTION_LOG_SET = "com.thefitbud.mobile.workout.LOG_SET"
     const val ACTION_SKIP_REST = "com.thefitbud.mobile.workout.SKIP_REST"
-    const val WEIGHT_STEP_KG = 2.5
 
     /** The ongoing set notification; one workout at a time, so one id. */
     const val NOTIFICATION_ID = 7301
@@ -56,14 +74,7 @@ object WorkoutSetNotification {
     /** The short "Set n logged · …" confirmation that follows a logged set. */
     const val LOGGED_NOTIFICATION_ID = 7302
 
-    /**
-     * Shown next to the app name in the system header while the trainee is on
-     * a set ("FitBud · Workout · now", frame
-     * 27-android-trainee-workout-notif.png). During rest the header carries
-     * the workout name and the countdown instead ("FitBud · Lower body B",
-     * frame 27-android-rest.png), so each frame's header is what the trainee
-     * sees in that state.
-     */
+    /** Header text when the app sent no workout name. */
     const val SUB_TEXT = "Workout"
 
     /** The rest state's collapsed title; the countdown sits in the header. */
@@ -83,7 +94,7 @@ object WorkoutSetNotification {
         val loggedLine: String?,
         val finished: Boolean,
         val openUrl: String,
-        /** "Lower body B": the header during rest (frame 27-android-rest). */
+        /** "Lower body B": the header, next to the app name. */
         val workoutName: String = "",
         /**
          * End of the running rest, epoch ms, or null when there is no rest
@@ -98,6 +109,12 @@ object WorkoutSetNotification {
          * finished (Z12-48 / Z12-57).
          */
         val moreExercisesRemain: Boolean = false,
+        /**
+         * When the workout notification was first posted, epoch ms: the
+         * TR-15d elapsed timer counts up from it (iOS: `startedAt`). Null for
+         * a state stored by a build before Z14-5; then no timer is shown.
+         */
+        val startedAt: Long? = null,
     )
 
     /** True while a rest countdown is still running at `now` (epoch ms). */
@@ -143,30 +160,30 @@ object WorkoutSetNotification {
         )
     }
 
-    fun stepWeight(state: SetState, direction: Int): SetState {
-        if (state.finished) return state
-        val next = (state.kilograms + direction * WEIGHT_STEP_KG).coerceAtLeast(0.0)
-        val rounded = kotlin.math.round(next * 10.0) / 10.0
-        return state.copy(kilograms = rounded)
-    }
+    /** "Set 3 of 3" (TR-15d). */
+    fun setLine(state: SetState): String = "Set ${state.setIndex} of ${state.setCount}"
 
-    fun stepReps(state: SetState, direction: Int): SetState {
-        if (state.finished) return state
-        return state.copy(reps = (state.reps + direction).coerceAtLeast(0))
-    }
+    /** "Romanian deadlift · Set 3 of 3": the collapsed title and the rest view's next line. */
+    fun titleLine(state: SetState): String = "${state.exerciseName} · ${setLine(state)}"
 
-    /** "Romanian deadlift · Set 2 of 3" (frame 27-android). */
-    fun titleLine(state: SetState): String =
-        "${state.exerciseName} · Set ${state.setIndex} of ${state.setCount}"
-
-    /** "Last: 20 kg × 10", or null when the trainee has no previous value. */
+    /** "Last 42.5 kg × 10", or null when the trainee has no previous value. */
     fun lastLine(state: SetState): String? {
         val kilograms = state.lastKilograms ?: return null
         val reps = state.lastReps ?: return null
-        return "Last: ${formatLoad(kilograms, reps)}"
+        return "Last ${formatLoad(kilograms, reps)}"
     }
 
-    /** "22.5 kg × 10" or "12 reps" — collapsed template when there is no "Last". */
+    /** "Target 40 kg × 10": the coach's prescription (iOS falls back to reps the same way). */
+    fun targetLine(state: SetState): String {
+        val reps = if (state.planReps > 0) state.planReps else state.reps
+        return "Target ${formatLoad(state.planKilograms, reps)}"
+    }
+
+    /** "Last 42.5 kg × 10 · Target 40 kg × 10": the collapsed text. */
+    fun lastAndTargetLine(state: SetState): String =
+        listOfNotNull(lastLine(state), targetLine(state)).joinToString(" · ")
+
+    /** "22.5 kg × 10" or "12 reps": what Log will record. */
     fun valuesLine(state: SetState): String {
         val reps = if (state.reps > 0) state.reps else state.planReps
         return formatLoad(state.kilograms, reps)
@@ -179,21 +196,25 @@ object WorkoutSetNotification {
     fun skipRestDescription(state: SetState): String =
         "Skip rest, next: ${titleLine(state)}, ${valuesLine(state)}"
 
-    /** "Log 40 kg × 10" / "Log 12 reps" (TR-15d / Z12-48 lines). */
-    fun logSetLabel(state: SetState): String {
-        val reps = if (state.reps > 0) state.reps else state.planReps
-        return "Log ${formatLoad(state.kilograms, reps)}"
+    /** "Log 40 kg × 10" / "Log 12 reps" (TR-15d; the iOS button's words). */
+    fun logSetLabel(state: SetState): String = "Log ${valuesLine(state)}"
+
+    /** Sets done through the exercise, for the progress line (iOS: setProgressFraction). */
+    fun progress(state: SetState): Pair<Int, Int> {
+        val max = state.setCount.coerceAtLeast(1)
+        return Pair(max, state.setIndex.coerceIn(0, max))
     }
 
     /**
      * The ongoing notification. Not dismissible while the workout runs, no
-     * sound (the channel is DEFAULT importance and this is a silent update),
-     * and it opens the workout when tapped.
+     * sound (silent post on a silent channel), and it opens the workout when
+     * tapped.
      */
     fun build(context: Context, state: SetState): Notification {
         if (resting(state)) return buildResting(context, state)
         val expanded = RemoteViews(context.packageName, R.layout.fitbud_workout_set)
-        expanded.setTextViewText(R.id.fitbud_workout_title, titleLine(state))
+        expanded.setTextViewText(R.id.fitbud_workout_exercise, state.exerciseName)
+        expanded.setTextViewText(R.id.fitbud_workout_set, setLine(state))
 
         val last = lastLine(state)
         if (last == null) {
@@ -202,37 +223,26 @@ object WorkoutSetNotification {
             expanded.setViewVisibility(R.id.fitbud_workout_last, android.view.View.VISIBLE)
             expanded.setTextViewText(R.id.fitbud_workout_last, last)
         }
+        expanded.setTextViewText(R.id.fitbud_workout_target, targetLine(state))
 
-        expanded.setTextViewText(R.id.fitbud_workout_weight, formatKg(state.kilograms))
-        expanded.setTextViewText(R.id.fitbud_workout_reps, state.reps.toString())
-        expanded.setTextViewText(R.id.fitbud_workout_log, "✓ ${logSetLabel(state)}")
+        val logged = state.loggedLine
+        if (logged.isNullOrBlank()) {
+            expanded.setViewVisibility(R.id.fitbud_workout_logged, android.view.View.GONE)
+        } else {
+            expanded.setViewVisibility(R.id.fitbud_workout_logged, android.view.View.VISIBLE)
+            expanded.setTextViewText(R.id.fitbud_workout_logged, logged)
+        }
 
-        expanded.setContentDescription(R.id.fitbud_workout_weight_down, "Less weight, 2.5 kg")
-        expanded.setContentDescription(R.id.fitbud_workout_weight_up, "More weight, 2.5 kg")
-        expanded.setContentDescription(R.id.fitbud_workout_reps_down, "Fewer reps")
-        expanded.setContentDescription(R.id.fitbud_workout_reps_up, "More reps")
+        val (max, done) = progress(state)
+        expanded.setProgressBar(R.id.fitbud_workout_progress, max, done, false)
         expanded.setContentDescription(
-            R.id.fitbud_workout_log,
-            "${logSetLabel(state)}, ${valuesLine(state)}",
+            R.id.fitbud_workout_progress,
+            "Set progress, ${setLine(state)}",
         )
-        expanded.setContentDescription(R.id.fitbud_workout_open, "Open the workout")
 
-        expanded.setOnClickPendingIntent(
-            R.id.fitbud_workout_weight_down,
-            action(context, ACTION_LESS_WEIGHT, REQUEST_LESS_WEIGHT),
-        )
-        expanded.setOnClickPendingIntent(
-            R.id.fitbud_workout_weight_up,
-            action(context, ACTION_MORE_WEIGHT, REQUEST_MORE_WEIGHT),
-        )
-        expanded.setOnClickPendingIntent(
-            R.id.fitbud_workout_reps_down,
-            action(context, ACTION_FEWER_REPS, REQUEST_FEWER_REPS),
-        )
-        expanded.setOnClickPendingIntent(
-            R.id.fitbud_workout_reps_up,
-            action(context, ACTION_MORE_REPS, REQUEST_MORE_REPS),
-        )
+        expanded.setTextViewText(R.id.fitbud_workout_log, "✓ ${logSetLabel(state)}")
+        expanded.setContentDescription(R.id.fitbud_workout_log, logSetLabel(state))
+        expanded.setContentDescription(R.id.fitbud_workout_open, "Open the workout")
         expanded.setOnClickPendingIntent(
             R.id.fitbud_workout_log,
             action(context, ACTION_LOG_SET, REQUEST_LOG_SET),
@@ -247,20 +257,25 @@ object WorkoutSetNotification {
         val builder =
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(smallIcon(context))
-                .setSubText(SUB_TEXT)
+                // "FitBud · Lower body B" in the title row (TR-15d).
+                .setSubText(state.workoutName.ifBlank { SUB_TEXT })
                 .setContentTitle(titleLine(state))
-                .setContentText(last ?: valuesLine(state))
+                .setContentText(lastAndTargetLine(state))
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setSilent(true)
-                // The frame's header reads "FitBud · Workout · now": the time
-                // is part of it. Every redraw is a fresh post, so it stays
-                // "now" while the trainee is working through the set.
-                .setShowWhen(true)
                 .setCategory(NotificationCompat.CATEGORY_WORKOUT)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setCustomBigContentView(expanded)
                 .setStyle(NotificationCompat.DecoratedCustomViewStyle())
+        val startedAt = state.startedAt
+        if (startedAt != null) {
+            // TR-15d's "23:14": the elapsed workout time, counted by the device
+            // from one post (a chronometer counting up from `startedAt`).
+            builder.setShowWhen(true).setWhen(startedAt).setUsesChronometer(true)
+        } else {
+            builder.setShowWhen(false)
+        }
         if (open != null) builder.setContentIntent(open)
         return builder.build()
     }
@@ -325,8 +340,7 @@ object WorkoutSetNotification {
         val builder =
             NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(smallIcon(context))
-                // "FitBud · Lower body B" in the rest frame's header, against
-                // "FitBud · Workout" on a set: each frame's own header.
+                // "FitBud · Lower body B" in the rest frame's header.
                 .setSubText(state.workoutName.ifBlank { SUB_TEXT })
                 .setContentTitle(REST_TITLE)
                 .setContentText(logged ?: nextLine(state))
@@ -394,44 +408,43 @@ object WorkoutSetNotification {
     }
 
     /**
-     * False when the trainee turned FitBud's notifications — or the workout
-     * channel — off, or has not granted POST_NOTIFICATIONS on Android 13+.
+     * False when the trainee turned FitBud's notifications — or the Live
+     * workout channel — off, or has not granted POST_NOTIFICATIONS on
+     * Android 13+.
      */
     fun notificationsEnabled(context: Context): Boolean {
         val manager = NotificationManagerCompat.from(context)
         if (!manager.areNotificationsEnabled()) return false
         // Absent is not "off": ensureChannel creates it on the way to posting.
         val channel = manager.getNotificationChannel(CHANNEL_ID) ?: return true
-        return channel.importance != android.app.NotificationManager.IMPORTANCE_NONE
+        return channel.importance != NotificationManager.IMPORTANCE_NONE
     }
+
+    /** The channel's settings, separate from posting so a unit test can read them. */
+    fun channel(): NotificationChannel =
+        NotificationChannel(CHANNEL_ID, CHANNEL_NAME, NotificationManager.IMPORTANCE_DEFAULT).apply {
+            description = CHANNEL_DESCRIPTION
+            // Silent: a running workout never rings or buzzes on an update.
+            setSound(null, null)
+            enableVibration(false)
+            enableLights(false)
+            setShowBadge(false)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+        }
 
     /**
-     * src/notifications/androidChannels.ts creates this channel at app start,
-     * but the button receiver runs with no JS runtime — after a force-stop it
-     * is the first thing to post — and a notification on a channel that does
-     * not exist is dropped. Creating one that already exists changes nothing,
-     * and re-creating a channel the trainee turned off does not turn it back
-     * on: the system keeps their importance.
-     *
-     * KEEP IN SYNC with the `workout` entry in
-     * apps/mobile/src/notifications/androidChannels.ts (TR-16 §4).
+     * Created natively, here, because the button receiver runs with no JS
+     * runtime — after a force-stop it is the first thing to post — and a
+     * notification on a channel that does not exist is dropped. Creating one
+     * that already exists changes nothing, and re-creating a channel the
+     * trainee turned off does not turn it back on: the system keeps their
+     * settings. minSdk is 26, so NotificationChannel always exists.
      */
     private fun ensureChannel(context: Context) {
-        val channel =
-            NotificationChannelCompat.Builder(
-                CHANNEL_ID,
-                NotificationManagerCompat.IMPORTANCE_DEFAULT,
-            )
-                .setName("Workout reminders")
-                .setDescription("When a workout isn't logged after your usual time.")
-                .build()
-        NotificationManagerCompat.from(context).createNotificationChannel(channel)
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return
+        manager.createNotificationChannel(channel())
     }
 
-    private const val REQUEST_LESS_WEIGHT = 7311
-    private const val REQUEST_MORE_WEIGHT = 7312
-    private const val REQUEST_FEWER_REPS = 7313
-    private const val REQUEST_MORE_REPS = 7314
     private const val REQUEST_LOG_SET = 7315
     private const val REQUEST_OPEN = 7316
     private const val REQUEST_SKIP_REST = 7317
@@ -469,12 +482,11 @@ object WorkoutSetNotification {
      * The FitBud mark, white on transparent (res/drawable/ic_fitbud_notification).
      *
      * It ships with the module rather than being resolved by name: the app has
-     * no expo-notifications config plugin and so no generated
-     * `notification_icon`, and the launcher icon is an adaptive icon with an
-     * opaque background layer, which the shade — which draws a small icon as
-     * an alpha silhouette — would render as a solid blob. The launcher icon
-     * stays as a last resort only, because a notification without a small icon
-     * throws.
+     * no generated `notification_icon` for this module to rely on, and the
+     * launcher icon is an adaptive icon with an opaque background layer, which
+     * the shade — which draws a small icon as an alpha silhouette — would
+     * render as a solid blob. The launcher icon stays as a last resort only,
+     * because a notification without a small icon throws.
      */
     private fun smallIcon(context: Context): Int {
         val icon = R.drawable.ic_fitbud_notification
@@ -486,12 +498,12 @@ object WorkoutSetNotification {
         }
     }
 
-    private fun formatKg(value: Double): String {
+    internal fun formatKg(value: Double): String {
         val rounded = kotlin.math.round(value * 10.0) / 10.0
         return if (rounded % 1.0 == 0.0) rounded.toInt().toString() else rounded.toString()
     }
 
     /** Bodyweight (kg ≤ 0) → "12 reps"; weighted → "40 kg × 10". Never "0 kg". */
-    private fun formatLoad(kilograms: Double, reps: Int): String =
+    internal fun formatLoad(kilograms: Double, reps: Int): String =
         if (kilograms <= 0.0) "$reps reps" else "${formatKg(kilograms)} kg × $reps"
 }

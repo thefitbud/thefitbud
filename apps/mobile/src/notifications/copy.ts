@@ -185,6 +185,11 @@ export function notificationRowTitle(
         type,
         trainerClientName(notification, context),
       ).title;
+    case "trainer_client_log_edited": {
+      // Z14-11 fallback; the shared copy ("{First} edited lunch") arrives with Z14-16.
+      const client = trainerClientName(notification, context);
+      return client ? `${client} changed a meal log` : "A client changed a meal log";
+    }
     case "trainer_critical_digest":
       return "Clients need attention";
     case "admin_whatsapp_budget":
@@ -330,6 +335,7 @@ export function pushGroupFor(type: NotificationType): PushGroup {
     case "trainer_intake_submitted":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
     case "trainer_critical_digest":
       return GROUPS.clients;
     default: {

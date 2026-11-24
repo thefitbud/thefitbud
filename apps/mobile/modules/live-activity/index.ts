@@ -72,6 +72,18 @@ export type NativeOutboxRead = {
   openUrl?: string | null;
 };
 
+/**
+ * `onOutboxRow` (Z14-5, D-W14-12): a lock-screen Log button just appended a
+ * row. iOS sends it when LogSetIntent writes the App Group (the intent is
+ * compiled into the app target too, and posts a Darwin notification); Android
+ * when the notification's Log button writes WorkoutSetStore. Only the number
+ * of rows now waiting: the rows themselves are read with `readOutbox`.
+ */
+export type NativeOutboxRowEvent = { count: number };
+
+/** What `addListener` returns (Expo's EventSubscription). */
+export type NativeEventSubscription = { remove(): void };
+
 export type LiveActivityNativeModule = {
   isSupported(): boolean;
   start(
@@ -90,6 +102,14 @@ export type LiveActivityNativeModule = {
   readOutbox?(): NativeOutboxRead;
   /** Drops the first `count` rows (the drained ones); returns how many went. */
   removeOutbox?(count: number): number;
+  /**
+   * Expo native modules are event emitters. Optional: a build before Z14-5
+   * sends no `onOutboxRow`, and the app then drains on foreground only.
+   */
+  addListener?(
+    eventName: "onOutboxRow",
+    listener: (event: NativeOutboxRowEvent) => void,
+  ): NativeEventSubscription;
 };
 
 export function loadLiveActivityModule(): LiveActivityNativeModule | null {

@@ -5,6 +5,7 @@ import {
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
+  attachMealPhotoRequestSchema,
   confirmMealRequestSchema,
   deviateMealRequestSchema,
   generateMealAssignmentsRequestSchema,
@@ -15,7 +16,12 @@ import {
   mealComplianceSchema,
   mealComplianceSummaryResponseSchema,
   coachLogMealRequestSchema,
+  removeMealLogResponseSchema,
   skipMealRequestSchema,
+  traineeEditMealRequestSchema,
+  traineeRemoveMealRequestSchema,
+  NUTRIENT_SCALE,
+  type MealCompliance,
   type MealPhotoIntent,
 } from "@fitbud/contracts";
 import {
@@ -30,6 +36,7 @@ import {
   coachingConfigurations,
   coachingRelationships,
   exceptions,
+  logEditEvents,
   mealAssignments,
   mealCompliance,
   mediaAssets,
@@ -75,6 +82,24 @@ import {
   FUTURE_DAY_OPENAPI_NOTE,
 } from "../domain/future-day.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
+import { notifyTrainerClientLogEdited } from "../domain/client-log-edit-notify.js";
+import {
+  removeInputsFor,
+  traineeMealView,
+  traineeMealViewById,
+} from "../domain/meal-edit-read.js";
+import {
+  MEAL_EDITED_BY_COACH_CODE,
+  MEAL_EDITED_BY_COACH_MESSAGE,
+  MEAL_EDIT_WINDOW_CLOSED_CODE,
+  MEAL_EDIT_WINDOW_CLOSED_MESSAGE,
+  MEAL_REMOVE_NOT_ALLOWED_CODE,
+  MEAL_REMOVE_NOT_ALLOWED_MESSAGE,
+  mealEditWindowAllows,
+  mealStillLoggable,
+  syncDeviceTime,
+} from "../domain/meal-edit-window.js";
+import { recordTraineeLogChange } from "../domain/trainee-log-edit.js";
 import { appendChangeLog } from "../domain/sync";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import { fail, ok, type AppContext } from "../lib/envelope";
@@ -352,6 +377,58 @@ function prescriptionMacros(mealPrescriptionJson: string) {
     carbsScaled: null as number | null,
     fatScaled: null as number | null,
   };
+}
+
+/**
+ * What a trainee-edited entry said before the trainee's latest change (the
+ * `beforeJson` of the newest trainee audit row), keyed by entry id, for the
+ * coach's meal panel (D-W14-23 a). Photo-only changes are not edits.
+ */
+async function traineeEditPreviousValues(
+  db: Db,
+  relationshipId: string,
+  entryIds: readonly string[],
+): Promise<Map<string, NonNullable<MealCompliance["previousValue"]>>> {
+  const out = new Map<string, NonNullable<MealCompliance["previousValue"]>>();
+  if (entryIds.length === 0) return out;
+  const events = await db
+    .select()
+    .from(logEditEvents)
+    .where(
+      and(
+        eq(logEditEvents.coachingRelationshipId, relationshipId),
+        eq(logEditEvents.entityType, "meal_compliance"),
+        eq(logEditEvents.actorRole, "trainee"),
+        inArray(logEditEvents.entityId, [...entryIds]),
+      ),
+    )
+    .orderBy(desc(logEditEvents.createdAt));
+  for (const event of events) {
+    if (out.has(event.entityId) || !event.beforeJson) continue;
+    try {
+      const before = JSON.parse(event.beforeJson) as {
+        outcome?: string;
+        deviationKind?: string | null;
+        notes?: string | null;
+        photoOnly?: boolean;
+        macros?: { kcalScaled?: number | null };
+      };
+      if (before.photoOnly || typeof before.outcome !== "string") continue;
+      const parsed = mealComplianceSchema.shape.previousValue.unwrap().unwrap().safeParse({
+        outcome: before.outcome,
+        deviationKind: before.deviationKind ?? null,
+        notes: before.notes ?? null,
+        kcal:
+          before.macros?.kcalScaled == null
+            ? null
+            : Math.round(before.macros.kcalScaled / NUTRIENT_SCALE),
+      });
+      if (parsed.success) out.set(event.entityId, parsed.data);
+    } catch {
+      // An unreadable audit row only drops the "previous value" line.
+    }
+  }
+  return out;
 }
 
 function serializePhotoIntent(
@@ -658,13 +735,43 @@ mealRoutes.get(
       assignmentIds,
       rows,
     });
+    const exceptionStatusByAssignment = new Map(
+      exceptionRows.map((row) => [row.sourceEntityId, row.status]),
+    );
+    const asTrainee = actor.selectedRole === "trainee";
+    const previousByEntry = asTrainee
+      ? new Map<string, NonNullable<MealCompliance["previousValue"]>>()
+      : await traineeEditPreviousValues(
+          db,
+          relationshipId,
+          rows.flatMap((row) =>
+            row.compliance?.lastEditedByRole === "trainee" ? [row.compliance.id] : [],
+          ),
+        );
     const items = rows
       .map((row) => {
         const reason = lockByAssignment.get(row.assignment.id) ?? null;
-        return mapMealAssignment(row.assignment, row.compliance ?? null, now, {
+        const mapped = mapMealAssignment(row.assignment, row.compliance ?? null, now, {
           locked: reason != null,
           reason,
         });
+        if (!row.compliance || !mapped.compliance) return mapped;
+        const compliance: MealCompliance = asTrainee
+          ? traineeMealView(row.compliance, {
+              assignment: row.assignment,
+              exceptionStatus: exceptionStatusByAssignment.get(row.assignment.id) ?? null,
+              timeZone: tzRows[0]?.timezone ?? "UTC",
+              relationship,
+              now,
+            })
+          : {
+              ...mapped.compliance,
+              lastEditedAt: row.compliance.lastEditedAt ?? null,
+              ...(previousByEntry.has(row.compliance.id)
+                ? { previousValue: previousByEntry.get(row.compliance.id) }
+                : {}),
+            };
+        return { ...mapped, compliance };
       })
       .sort((left, right) => {
         if (left.localDate !== right.localDate) {
@@ -836,17 +943,33 @@ mealRoutes.get(
       ],
     });
     const reason = locks.get(loaded.assignment.id) ?? null;
-    return ok(
-      c,
-      mealAssignmentSchema.parse(
-        mapMealAssignment(
-          loaded.assignment,
-          loaded.compliance,
-          nowIso(),
-          { locked: reason != null, reason },
-        ),
-      ),
+    const mapped = mapMealAssignment(
+      loaded.assignment,
+      loaded.compliance,
+      nowIso(),
+      { locked: reason != null, reason },
     );
+    let compliance = mapped.compliance;
+    if (loaded.compliance && compliance) {
+      if (actor.selectedRole === "trainee") {
+        compliance =
+          (await traineeMealViewById(db, loaded.compliance.id, nowIso())) ?? compliance;
+      } else {
+        const previous = await traineeEditPreviousValues(
+          db,
+          relationship.id,
+          loaded.compliance.lastEditedByRole === "trainee" ? [loaded.compliance.id] : [],
+        );
+        compliance = {
+          ...compliance,
+          lastEditedAt: loaded.compliance.lastEditedAt ?? null,
+          ...(previous.has(loaded.compliance.id)
+            ? { previousValue: previous.get(loaded.compliance.id) }
+            : {}),
+        };
+      }
+    }
+    return ok(c, mealAssignmentSchema.parse({ ...mapped, compliance }));
   },
 );
 
@@ -1094,6 +1217,15 @@ async function recordCompliance(
   }
 
   const mapped = mealComplianceSchema.parse(mapMealCompliance(row));
+  const traineeView = mealComplianceSchema.parse(
+    traineeMealView(row, {
+      assignment: loaded.assignment,
+      exceptionStatus: null,
+      timeZone,
+      relationship,
+      now,
+    }),
+  );
   await appendChangeLog(db, {
     entityType: "meal_compliance",
     recordId: mapped.id,
@@ -1111,7 +1243,7 @@ async function recordCompliance(
   });
 
   const responseBody = {
-    data: mapped,
+    data: traineeView,
   };
   await saveIdempotencyRecord(db, {
     actorUserId: actor.userId,
@@ -1649,5 +1781,703 @@ mealRoutes.put(
       serverVersion: responseBody.data.recordVersion,
     });
     return c.json(responseBody, status);
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Trainee edits, removes and adds a photo to their own logged meal (Z14-11,
+// D-W14-22, D-W14-23)
+// ---------------------------------------------------------------------------
+
+const EDIT_LOG_OPERATION = "meal.log.edit";
+const REMOVE_LOG_OPERATION = "meal.log.remove";
+const PHOTO_LOG_OPERATION = "meal.log.photo";
+
+type OwnEntry = {
+  entry: typeof mealCompliance.$inferSelect;
+  assignment: typeof mealAssignments.$inferSelect;
+  relationship: typeof coachingRelationships.$inferSelect;
+};
+
+/** The trainee's own entry, its meal and its relationship; a 404 for anyone else's. */
+async function loadOwnMealEntry(
+  c: AppContext,
+  db: Db,
+  entryId: string,
+): Promise<{ ok: true; value: OwnEntry } | { ok: false; response: Response }> {
+  const actor = c.get("actor");
+  const notFound = () =>
+    ({
+      ok: false,
+      response: fail(c, 404, "MEAL_LOG_NOT_FOUND", "We couldn't find that meal log."),
+    }) as const;
+  if (!actor) return notFound();
+  const [entry] = await db
+    .select()
+    .from(mealCompliance)
+    .where(eq(mealCompliance.id, entryId))
+    .limit(1);
+  if (!entry || entry.traineeUserId !== actor.userId) return notFound();
+  const [[assignment], [relationship]] = await db.batch([
+    db.select().from(mealAssignments).where(eq(mealAssignments.id, entry.assignmentId)).limit(1),
+    db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, entry.coachingRelationshipId))
+      .limit(1),
+  ]);
+  if (!assignment || !relationship || relationship.traineeUserId !== actor.userId) {
+    return notFound();
+  }
+  return { ok: true, value: { entry, assignment, relationship } };
+}
+
+function mealEditConflictResponse(c: AppContext, error: CoachLogConflict) {
+  return error.kind === "version"
+    ? coachMealVersionConflict(c)
+    : mealLogWriteConflict(c);
+}
+
+/** Replays a stored answer for a retried key, or refuses a key reused for a different request. */
+async function replayStoredAnswer(
+  c: AppContext,
+  db: Db,
+  input: { actorUserId: string; operation: string; key: string; fingerprint: string },
+): Promise<Response | null> {
+  const existing = await findIdempotencyRecord(db, {
+    actorUserId: input.actorUserId,
+    operation: input.operation,
+    idempotencyKey: input.key,
+  });
+  if (!existing) return null;
+  if (existing.requestFingerprint !== input.fingerprint) {
+    return fail(
+      c,
+      409,
+      "IDEMPOTENCY_KEY_REUSE",
+      "Idempotency key was reused with a different request.",
+    );
+  }
+  return c.json(JSON.parse(existing.responseBody), existing.responseStatus as 200);
+}
+
+/** The refusals every trainee change to an existing entry shares (before the window and version). */
+function traineeEntryRefusal(c: AppContext, entry: typeof mealCompliance.$inferSelect) {
+  if (entry.loggedByRole === "coach") return coachLoggedReadOnlyError(c);
+  if (entry.lastEditedByRole === "coach") {
+    return fail(c, 409, MEAL_EDITED_BY_COACH_CODE, MEAL_EDITED_BY_COACH_MESSAGE);
+  }
+  return null;
+}
+
+function windowClosed(c: AppContext) {
+  return fail(c, 422, MEAL_EDIT_WINDOW_CLOSED_CODE, MEAL_EDIT_WINDOW_CLOSED_MESSAGE);
+}
+
+function entryInEndedPeriod(own: OwnEntry, timeZone: string): boolean {
+  return isInEndedPeriod({
+    reactivatedAt: own.relationship.reactivatedAt,
+    loggedAt: own.entry.loggedAt,
+    localDate: own.assignment.localDate,
+    timeZone,
+  });
+}
+
+mealRoutes.patch(
+  "/logs/:entryId",
+  operation({
+    tag: "Meals",
+    summary: "Trainee edits their own logged meal for 24 hours",
+    description:
+      "Replaces the outcome (as planned, changed portion, logged foods or ate out), amounts, kcal and note of the trainee's own entry. Allowed until 24 hours after it was first logged (422 MEAL_EDIT_WINDOW_CLOSED). A coach-logged entry is read-only (409 COACH_LOGGED_READ_ONLY), an entry the coach edited can no longer be changed here (409 MEAL_EDITED_BY_COACH), a stale recordVersion is 409 VERSION_CONFLICT. Sets last_edited_* to the trainee, writes the change log and an activity item, tells the coach (one notification per entry per 10 minutes) and re-runs exception evaluation; it never resolves an exception. Through sync, a change made offline inside the window is accepted if it arrives within 72 hours of the window closing.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: traineeEditMealRequestSchema,
+    response: mealComplianceSchema,
+    errors: [
+      { status: 409, description: "COACH_LOGGED_READ_ONLY, MEAL_EDITED_BY_COACH or VERSION_CONFLICT." },
+      { status: 422, description: "MEAL_EDIT_WINDOW_CLOSED: the 24 hours have passed." },
+    ],
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = requireIdempotencyKey(c);
+    if (!idempotencyKey) {
+      return fail(c, 400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required.");
+    }
+    const parsed = traineeEditMealRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid meal edit.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const body = parsed.data;
+    const entryId = c.req.param("entryId");
+    const db = createDb(c.env.DB);
+    const fingerprint = await sha256Hex(JSON.stringify({ entryId, body }));
+    const replay = await replayStoredAnswer(c, db, {
+      actorUserId: actor.userId,
+      operation: EDIT_LOG_OPERATION,
+      key: idempotencyKey,
+      fingerprint,
+    });
+    if (replay) return replay;
+
+    const loaded = await loadOwnMealEntry(c, db, entryId);
+    if (!loaded.ok) return loaded.response;
+    const own = loaded.value;
+    const { entry, assignment, relationship } = own;
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
+    const refusal = traineeEntryRefusal(c, entry);
+    if (refusal) return refusal;
+
+    const now = nowIso();
+    if (
+      !mealEditWindowAllows({
+        loggedAt: entry.loggedAt,
+        now,
+        deviceTime: syncDeviceTime(c),
+      })
+    ) {
+      return windowClosed(c);
+    }
+    const timeZone = await loadTraineeTimezone(db, actor.userId);
+    if (entryInEndedPeriod(own, timeZone)) {
+      return fail(
+        c,
+        422,
+        LOG_TIME_ERROR_CODES.ended_period,
+        LOG_TIME_ERROR_MESSAGES.ended_period,
+      );
+    }
+    if (body.recordVersion !== entry.recordVersion) return coachMealVersionConflict(c);
+
+    const nextNotes = body.notes ?? null;
+    const nextDeviationKind = body.outcome === "modified" ? (body.deviationKind ?? null) : null;
+    const itemKinds = new Set(["logged_foods", "portion_adjustment", "restaurant"]);
+    if (
+      nextDeviationKind === "logged_foods" &&
+      entry.deviationKind !== "logged_foods" &&
+      !(body.items && body.items.length > 0)
+    ) {
+      return fail(c, 400, "INVALID_REQUEST", "There is no food list to keep.");
+    }
+
+    let macros: {
+      itemsJson: string | null;
+      kcalScaled: number | null;
+      proteinScaled: number | null;
+      carbsScaled: number | null;
+      fatScaled: number | null;
+    };
+    if (body.outcome === "confirmed") {
+      macros = prescriptionMacros(assignment.mealPrescriptionJson);
+    } else if (
+      body.outcome === "modified" &&
+      nextDeviationKind &&
+      itemKinds.has(nextDeviationKind) &&
+      body.items &&
+      body.items.length > 0
+    ) {
+      macros = await buildLoggedFoodsCompliance(db, {
+        traineeUserId: actor.userId,
+        relationshipId: relationship.id,
+        items: body.items,
+        allowSaveToMyFoods: nextDeviationKind === "logged_foods",
+      });
+    } else if (
+      body.outcome === "modified" &&
+      nextDeviationKind &&
+      itemKinds.has(nextDeviationKind) &&
+      entry.deviationKind === nextDeviationKind
+    ) {
+      // Note-only edit of an entry that already carries its lines.
+      macros = {
+        itemsJson: entry.itemsJson,
+        kcalScaled: entry.kcalScaled,
+        proteinScaled: entry.proteinScaled,
+        carbsScaled: entry.carbsScaled,
+        fatScaled: entry.fatScaled,
+      };
+    } else {
+      macros = {
+        itemsJson: null,
+        kcalScaled: null,
+        proteinScaled: null,
+        carbsScaled: null,
+        fatScaled: null,
+      };
+    }
+
+    const respond = async (status: 200, data: ReturnType<typeof mealComplianceSchema.parse>) => {
+      const responseBody = { data };
+      await saveIdempotencyRecord(db, {
+        actorUserId: actor.userId,
+        operation: EDIT_LOG_OPERATION,
+        idempotencyKey,
+        requestFingerprint: fingerprint,
+        responseStatus: status,
+        responseBody,
+        expiresAt: addDaysIso(7),
+      });
+      return c.json(responseBody, status);
+    };
+
+    if (
+      entry.outcome === body.outcome &&
+      entry.deviationKind === nextDeviationKind &&
+      entry.notes === nextNotes &&
+      entry.itemsJson === macros.itemsJson &&
+      entry.kcalScaled === macros.kcalScaled &&
+      entry.proteinScaled === macros.proteinScaled &&
+      entry.carbsScaled === macros.carbsScaled &&
+      entry.fatScaled === macros.fatScaled
+    ) {
+      // Nothing changed: no new version, no activity item, no notification.
+      const view = await traineeMealViewById(db, entry.id, now);
+      return respond(200, mealComplianceSchema.parse(view ?? mapMealCompliance(entry)));
+    }
+
+    const serverVersion = entry.recordVersion + 1;
+    const edited = {
+      outcome: body.outcome,
+      deviationKind: nextDeviationKind,
+      notes: nextNotes,
+      ...macros,
+      recordVersion: serverVersion,
+      lastEditedByRole: "trainee" as const,
+      lastEditedByUserId: actor.userId,
+      lastEditedAt: now,
+      updatedAt: now,
+    };
+    const beforeSnapshot = mealLogSnapshot({ assignment, compliance: entry });
+    const afterSnapshot = mealLogSnapshot({
+      assignment,
+      compliance: { ...entry, ...edited },
+    });
+    let responseData: ReturnType<typeof mealComplianceSchema.parse> | undefined;
+    try {
+      await recordTraineeLogChange(db, {
+        entity: {
+          type: "meal_compliance",
+          id: entry.id,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: actor.userId,
+          serverVersion,
+          mealAssignmentId: assignment.id,
+        },
+        kind: "edit",
+        actorUserId: actor.userId,
+        before: beforeSnapshot,
+        after: afterSnapshot,
+        now,
+        claim: () =>
+          db
+            .update(mealCompliance)
+            .set(edited)
+            .where(
+              and(
+                eq(mealCompliance.id, entry.id),
+                eq(mealCompliance.recordVersion, entry.recordVersion),
+              ),
+            ),
+        afterCommit: async () => {
+          const view = await traineeMealViewById(db, entry.id, now);
+          responseData = mealComplianceSchema.parse(view);
+          await saveIdempotencyRecord(db, {
+            actorUserId: actor.userId,
+            operation: EDIT_LOG_OPERATION,
+            idempotencyKey,
+            requestFingerprint: fingerprint,
+            responseStatus: 200,
+            responseBody: { data: responseData },
+            expiresAt: addDaysIso(7),
+          });
+        },
+      });
+    } catch (error) {
+      if (error instanceof CoachLogConflict) return mealEditConflictResponse(c, error);
+      throw error;
+    }
+    if (!responseData) throw new Error("Meal edit committed without a stored entry.");
+
+    queueRealtimeHint(c.env, {
+      eventType: "meal_compliance_changed",
+      entityType: "meal_compliance",
+      entityId: entry.id,
+      coachingRelationshipId: relationship.id,
+      serverVersion,
+    });
+    // After the commit; never fails the trainee's request (logs and goes on).
+    await notifyTrainerClientLogEdited(
+      db,
+      {
+        relationshipId: relationship.id,
+        trainerUserId: relationship.trainerUserId,
+        entryId: entry.id,
+        action: "edited",
+        mealName: assignment.mealName,
+        mealDate: assignment.localDate,
+        before: entry,
+        after: { ...entry, ...edited },
+        now,
+      },
+      coachPushConfig(c.env),
+    );
+    return c.json({ data: responseData }, 200);
+  },
+);
+
+async function removeRecordVersion(c: AppContext): Promise<number | null> {
+  const fromQuery = c.req.query("recordVersion");
+  if (fromQuery !== undefined) {
+    const value = Number(fromQuery);
+    return Number.isInteger(value) && value >= 0 ? value : null;
+  }
+  const parsed = traineeRemoveMealRequestSchema.safeParse(
+    await c.req.json().catch(() => null),
+  );
+  return parsed.success ? parsed.data.recordVersion : null;
+}
+
+mealRoutes.delete(
+  "/logs/:entryId",
+  operation({
+    tag: "Meals",
+    summary: "Trainee removes their own logged meal",
+    description:
+      "Puts the meal back to not logged. Allowed only while the entry is inside its 24 hour window and the meal could still be logged (its confirmation window is open and the day is not locked); otherwise 422 MEAL_REMOVE_NOT_ALLOWED. recordVersion is required (query or body). The change log keeps the full before-image, the coach sees a removal activity item and is notified, and exceptions are re-evaluated (never resolved).",
+    roles: ["trainee"],
+    idempotency: true,
+    response: removeMealLogResponseSchema,
+    errors: [
+      { status: 409, description: "COACH_LOGGED_READ_ONLY, MEAL_EDITED_BY_COACH or VERSION_CONFLICT." },
+      { status: 422, description: "MEAL_REMOVE_NOT_ALLOWED or MEAL_EDIT_WINDOW_CLOSED (offline)." },
+    ],
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = requireIdempotencyKey(c);
+    if (!idempotencyKey) {
+      return fail(c, 400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required.");
+    }
+    const recordVersion = await removeRecordVersion(c);
+    if (recordVersion === null) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid meal removal.");
+    }
+    const entryId = c.req.param("entryId");
+    const db = createDb(c.env.DB);
+    const fingerprint = await sha256Hex(JSON.stringify({ entryId, recordVersion }));
+    const replay = await replayStoredAnswer(c, db, {
+      actorUserId: actor.userId,
+      operation: REMOVE_LOG_OPERATION,
+      key: idempotencyKey,
+      fingerprint,
+    });
+    if (replay) return replay;
+
+    const loaded = await loadOwnMealEntry(c, db, entryId);
+    if (!loaded.ok) return loaded.response;
+    const own = loaded.value;
+    const { entry, assignment, relationship } = own;
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
+    const refusal = traineeEntryRefusal(c, entry);
+    if (refusal) return refusal;
+
+    const now = nowIso();
+    const deviceTime = syncDeviceTime(c);
+    if (!mealEditWindowAllows({ loggedAt: entry.loggedAt, now, deviceTime })) {
+      // Offline (sync) the refusal is the verdict the app shows in sync status.
+      return deviceTime
+        ? windowClosed(c)
+        : fail(c, 422, MEAL_REMOVE_NOT_ALLOWED_CODE, MEAL_REMOVE_NOT_ALLOWED_MESSAGE);
+    }
+    const [timeZone, [exception]] = await Promise.all([
+      loadTraineeTimezone(db, actor.userId),
+      db
+        .select({ status: exceptions.status })
+        .from(exceptions)
+        .where(
+          and(
+            eq(exceptions.coachingRelationshipId, relationship.id),
+            eq(exceptions.sourceEntityId, assignment.id),
+          ),
+        )
+        .limit(1),
+    ]);
+    if (
+      !mealStillLoggable(
+        removeInputsFor({
+          assignment,
+          exceptionStatus: exception?.status ?? null,
+          timeZone,
+          reactivatedAt: relationship.reactivatedAt,
+          at: now,
+        }),
+      )
+    ) {
+      return fail(c, 422, MEAL_REMOVE_NOT_ALLOWED_CODE, MEAL_REMOVE_NOT_ALLOWED_MESSAGE);
+    }
+    if (recordVersion !== entry.recordVersion) return coachMealVersionConflict(c);
+
+    const responseBody = {
+      data: removeMealLogResponseSchema.parse({
+        id: entry.id,
+        assignmentId: assignment.id,
+        coachingRelationshipId: relationship.id,
+        removed: true,
+      }),
+    };
+    const beforeSnapshot = mealLogSnapshot({ assignment, compliance: entry });
+    try {
+      await recordTraineeLogChange(db, {
+        entity: {
+          type: "meal_compliance",
+          id: entry.id,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: actor.userId,
+          serverVersion: null,
+          mealAssignmentId: assignment.id,
+        },
+        kind: "remove",
+        actorUserId: actor.userId,
+        before: beforeSnapshot,
+        // The full before-image stays in `beforeJson`; `removed` marks the item.
+        after: { ...beforeSnapshot, removed: true },
+        now,
+        claim: () =>
+          db
+            .delete(mealCompliance)
+            .where(
+              and(
+                eq(mealCompliance.id, entry.id),
+                eq(mealCompliance.recordVersion, entry.recordVersion),
+              ),
+            ),
+        afterCommit: async () => {
+          await saveIdempotencyRecord(db, {
+            actorUserId: actor.userId,
+            operation: REMOVE_LOG_OPERATION,
+            idempotencyKey,
+            requestFingerprint: fingerprint,
+            responseStatus: 200,
+            responseBody,
+            expiresAt: addDaysIso(7),
+          });
+        },
+      });
+    } catch (error) {
+      if (error instanceof CoachLogConflict) return mealEditConflictResponse(c, error);
+      throw error;
+    }
+
+    queueRealtimeHint(c.env, {
+      eventType: "meal_compliance_changed",
+      entityType: "meal_compliance",
+      entityId: entry.id,
+      coachingRelationshipId: relationship.id,
+      serverVersion: entry.recordVersion,
+    });
+    await notifyTrainerClientLogEdited(
+      db,
+      {
+        relationshipId: relationship.id,
+        trainerUserId: relationship.trainerUserId,
+        entryId: entry.id,
+        action: "removed",
+        mealName: assignment.mealName,
+        mealDate: assignment.localDate,
+        before: entry,
+        after: null,
+        now,
+      },
+      coachPushConfig(c.env),
+    );
+    return c.json(responseBody, 200);
+  },
+);
+
+mealRoutes.post(
+  "/logs/:entryId/photo",
+  operation({
+    tag: "Meals",
+    summary: "Trainee attaches a photo to a logged meal",
+    description:
+      "Links a ready meal_photo asset the trainee uploaded to their own entry, replacing an earlier photo (the change log keeps what it replaced). Refused after the entry's 24 hour window (422 MEAL_EDIT_WINDOW_CLOSED), on a coach-logged or coach-edited entry and on an ended relationship. A photo-only change does not mark the entry Edited and does not notify the coach.",
+    roles: ["trainee"],
+    idempotency: true,
+    body: attachMealPhotoRequestSchema,
+    response: mealComplianceSchema,
+    errors: [
+      { status: 409, description: "COACH_LOGGED_READ_ONLY or MEAL_EDITED_BY_COACH." },
+      { status: 422, description: "MEAL_EDIT_WINDOW_CLOSED or MEDIA_ASSET_INVALID." },
+    ],
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = requireIdempotencyKey(c);
+    if (!idempotencyKey) {
+      return fail(c, 400, "IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key header is required.");
+    }
+    const parsed = attachMealPhotoRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid photo request.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const entryId = c.req.param("entryId");
+    const db = createDb(c.env.DB);
+    const fingerprint = await sha256Hex(
+      JSON.stringify({ entryId, mediaAssetId: parsed.data.mediaAssetId }),
+    );
+    const replay = await replayStoredAnswer(c, db, {
+      actorUserId: actor.userId,
+      operation: PHOTO_LOG_OPERATION,
+      key: idempotencyKey,
+      fingerprint,
+    });
+    if (replay) return replay;
+
+    const loaded = await loadOwnMealEntry(c, db, entryId);
+    if (!loaded.ok) return loaded.response;
+    const own = loaded.value;
+    const { entry, assignment, relationship } = own;
+    const writable = await requireWritableRelationship(c, db, relationship.id);
+    if (!writable.ok) return writable.response;
+    const refusal = traineeEntryRefusal(c, entry);
+    if (refusal) return refusal;
+
+    const now = nowIso();
+    if (
+      !mealEditWindowAllows({
+        loggedAt: entry.loggedAt,
+        now,
+        deviceTime: syncDeviceTime(c),
+      })
+    ) {
+      return windowClosed(c);
+    }
+    // The ended period stays frozen after a reactivation (D-W6-20), as for edit.
+    const timeZone = await loadTraineeTimezone(db, actor.userId);
+    if (entryInEndedPeriod(own, timeZone)) {
+      return fail(
+        c,
+        422,
+        LOG_TIME_ERROR_CODES.ended_period,
+        LOG_TIME_ERROR_MESSAGES.ended_period,
+      );
+    }
+    const media = await loadReadyMealPhotoAsset(
+      db,
+      parsed.data.mediaAssetId,
+      relationship.id,
+      actor.userId,
+    );
+    if (!media) {
+      return fail(
+        c,
+        422,
+        "MEDIA_ASSET_INVALID",
+        "Linked media asset must be a ready meal photo for this relationship.",
+      );
+    }
+
+    const beforeSnapshot = mealLogSnapshot({ assignment, compliance: entry });
+    const serverVersion = entry.recordVersion + 1;
+    const photoIntent = { notedAt: now, mediaAssetId: media.id };
+    let responseData: ReturnType<typeof mealComplianceSchema.parse> | undefined;
+    try {
+      await recordTraineeLogChange(db, {
+        entity: {
+          type: "meal_compliance",
+          id: entry.id,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: actor.userId,
+          serverVersion,
+          mealAssignmentId: assignment.id,
+        },
+        kind: "edit",
+        actorUserId: actor.userId,
+        // The replaced photo stays in the history (`beforeJson`).
+        before: { ...beforeSnapshot, photoOnly: true, mediaAssetId: entry.mediaAssetId },
+        after: { ...beforeSnapshot, photoOnly: true, mediaAssetId: media.id },
+        now,
+        claim: () =>
+          db
+            .update(mealCompliance)
+            .set({
+              mediaAssetId: media.id,
+              photoIntentJson: serializePhotoIntent(photoIntent),
+              recordVersion: serverVersion,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(mealCompliance.id, entry.id),
+                eq(mealCompliance.recordVersion, entry.recordVersion),
+              ),
+            ),
+        extraWrites: () => [
+          db
+            .update(mediaAssets)
+            .set({
+              domainEntityType: "meal_compliance",
+              domainEntityId: entry.id,
+              updatedAt: now,
+            })
+            .where(eq(mediaAssets.id, media.id)),
+        ],
+        afterCommit: async () => {
+          const view = await traineeMealViewById(db, entry.id, now);
+          responseData = mealComplianceSchema.parse(view);
+          await saveIdempotencyRecord(db, {
+            actorUserId: actor.userId,
+            operation: PHOTO_LOG_OPERATION,
+            idempotencyKey,
+            requestFingerprint: fingerprint,
+            responseStatus: 200,
+            responseBody: { data: responseData },
+            expiresAt: addDaysIso(7),
+          });
+        },
+      });
+    } catch (error) {
+      if (error instanceof CoachLogConflict) return mealEditConflictResponse(c, error);
+      throw error;
+    }
+    if (!responseData) throw new Error("Meal photo committed without a stored entry.");
+
+    queueRealtimeHint(c.env, {
+      eventType: "meal_compliance_changed",
+      entityType: "meal_compliance",
+      entityId: entry.id,
+      coachingRelationshipId: relationship.id,
+      serverVersion,
+    });
+    return c.json({ data: responseData }, 200);
   },
 );

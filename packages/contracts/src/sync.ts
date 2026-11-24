@@ -3,11 +3,15 @@ import { isoDateTimeSchema, uuidSchema } from "./identity.js";
 import {
   completeSetRequestSchema,
   completeWorkoutRequestSchema,
+  traineeWorkoutFeedbackRequestSchema,
 } from "./workout.js";
 import {
   confirmMealRequestSchema,
   deviateMealRequestSchema,
   skipMealRequestSchema,
+  attachMealPhotoRequestSchema,
+  traineeEditMealRequestSchema,
+  traineeRemoveMealRequestSchema,
 } from "./meal.js";
 import {
   saveCheckinDraftRequestSchema,
@@ -44,6 +48,11 @@ export const syncMutationOperationSchema = z.enum([
   "meal.confirm",
   "meal.deviate",
   "meal.skip",
+  /** Z14-11: change or remove a meal log inside its 24 h window, attach a photo, set RPE. */
+  "meal.edit",
+  "meal.remove",
+  "meal.photo",
+  "workout.feedback",
   "checkin.save_draft",
   "checkin.submit",
   "measurement.create",
@@ -118,6 +127,27 @@ const mealSkipPayloadSchema = z.object({
   body: skipMealRequestSchema.default({}),
 });
 
+const mealEditPayloadSchema = z.object({
+  /** The meal entry (`meal_compliance.id`). */
+  entryId: uuidSchema,
+  body: traineeEditMealRequestSchema,
+});
+
+const mealRemovePayloadSchema = z.object({
+  entryId: uuidSchema,
+  body: traineeRemoveMealRequestSchema,
+});
+
+const mealPhotoPayloadSchema = z.object({
+  entryId: uuidSchema,
+  body: attachMealPhotoRequestSchema,
+});
+
+const workoutFeedbackPayloadSchema = z.object({
+  executionId: uuidSchema,
+  body: traineeWorkoutFeedbackRequestSchema,
+});
+
 const checkinDraftPayloadSchema = z.object({
   checkinId: uuidSchema,
   body: saveCheckinDraftRequestSchema,
@@ -144,6 +174,10 @@ export const syncMutationPayloadSchema = z.union([
   mealConfirmPayloadSchema,
   mealDeviatePayloadSchema,
   mealSkipPayloadSchema,
+  mealEditPayloadSchema,
+  mealRemovePayloadSchema,
+  mealPhotoPayloadSchema,
+  workoutFeedbackPayloadSchema,
   checkinDraftPayloadSchema,
   checkinSubmitPayloadSchema,
   measurementCreatePayloadSchema,
@@ -243,6 +277,10 @@ export const SYNC_OPERATION_ENTITY: Record<
   "meal.confirm": "meal_compliance",
   "meal.deviate": "meal_compliance",
   "meal.skip": "meal_compliance",
+  "meal.edit": "meal_compliance",
+  "meal.remove": "meal_compliance",
+  "meal.photo": "meal_compliance",
+  "workout.feedback": "workout_execution",
   "checkin.save_draft": "checkin",
   "checkin.submit": "checkin",
   "measurement.create": "measurement",

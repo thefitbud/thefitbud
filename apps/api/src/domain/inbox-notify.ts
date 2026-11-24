@@ -1,6 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import type { TrainerCategories } from "@fitbud/contracts";
 import {
+  clientDisplayLabel,
   DEFAULT_QUIET_HOURS_END,
   DEFAULT_QUIET_HOURS_START,
   isWithinQuietHours,
@@ -13,6 +14,7 @@ import {
   notificationDeliveries,
   notificationPreferences,
   notifications,
+  traineeProfiles,
   users,
 } from "../db/schema.js";
 import { createId, nowIso } from "../lib/crypto.js";
@@ -22,6 +24,7 @@ import {
   sendPushToDevice,
   type PushProviderMode,
 } from "../lib/push-provider.js";
+import type { PushDisplayText } from "../lib/expo-push.js";
 import { errorLogFields } from "./reminders.js";
 import { parseTrainerCategoriesJson } from "./trainer-categories.js";
 
@@ -33,6 +36,7 @@ export type InboxNotificationType =
   | "trainer_ask_coach"
   | "coach_answered"
   | "trainer_meal_times_changed"
+  | "trainer_client_log_edited"
   | "activity_nudge"
   | "checkin_reviewed"
   | "trainer_checkin_submitted"
@@ -57,6 +61,8 @@ export async function storeInboxNotification(
      * the coach-edited log's id, merged within 10 minutes). Null when unset.
      */
     mergeGroup?: string;
+    /** Coaching detail the trainer's inbox row shows (JSON text); null when unset. */
+    payloadJson?: string;
   },
 ): Promise<StoredInboxNotification> {
   const now = nowIso();
@@ -78,7 +84,7 @@ export async function storeInboxNotification(
       openedAt: null,
       priority: 10,
       mergeGroup: input.mergeGroup ?? null,
-      payloadJson: null,
+      payloadJson: input.payloadJson ?? null,
       expiresAt: null,
     })
     .onConflictDoNothing({ target: notifications.dedupeKey })
@@ -96,6 +102,7 @@ export type StoredInboxNotification =
 const TRAINER_PUSH_CATEGORY: Readonly<Record<string, keyof TrainerCategories>> = {
   trainer_ask_coach: "askCoach",
   trainer_meal_times_changed: "mealTimesChanged",
+  trainer_client_log_edited: "clientLogEdits",
   trainer_checkin_submitted: "checkinSubmitted",
   trainer_intake_submitted: "intakeSubmitted",
 };
@@ -125,6 +132,7 @@ export async function pushTrainerInboxEvent(
 ): Promise<void> {
   await pushInboxEvent(db, notificationId, config, now, {
     logScope: "trainer_inbox",
+    displayFor: (notification) => trainerPushDisplay(db, notification),
     pushesType: (type) => TRAINER_PUSH_CATEGORY[type] !== undefined,
     allowedByPreferences: (type, prefs) => {
       const category = TRAINER_PUSH_CATEGORY[type];
@@ -157,7 +165,41 @@ export async function pushTraineeCoachLogEvent(
   });
 }
 
+/**
+ * Lock-screen text for a trainer push that names the client (Z14-11: a client
+ * changed a meal log). Plain words, no kcal or meal detail: the detail is in the
+ * stored inbox row. Final shared copy arrives with Z14-16; until then this is
+ * the fallback its spec names. Other trainer types keep the generic text.
+ */
+async function trainerPushDisplay(
+  db: Db,
+  notification: typeof notifications.$inferSelect,
+): Promise<PushDisplayText | undefined> {
+  if (notification.notificationType !== "trainer_client_log_edited") return undefined;
+  const [row] = notification.coachingRelationshipId
+    ? await db
+        .select({
+          relationshipName: coachingRelationships.clientDisplayName,
+          profileName: traineeProfiles.displayName,
+        })
+        .from(coachingRelationships)
+        .leftJoin(traineeProfiles, eq(traineeProfiles.userId, coachingRelationships.traineeUserId))
+        .where(eq(coachingRelationships.id, notification.coachingRelationshipId))
+        .limit(1)
+    : [];
+  const name = clientDisplayLabel(row?.relationshipName || row?.profileName);
+  const first = name?.split(" ")[0];
+  return {
+    title: first ? `${first} changed a meal log` : "A client changed a meal log",
+    body: "Open FitBud to see what changed.",
+  };
+}
+
 type InboxPushPolicy = {
+  /** Replaces the generic lock-screen text for one notification (never the routing `data`). */
+  displayFor?: (
+    notification: typeof notifications.$inferSelect,
+  ) => Promise<PushDisplayText | undefined>;
   logScope: "trainer_inbox" | "coach_log";
   /** Which stored types this sender pushes at all. */
   pushesType: (type: string) => boolean;
@@ -243,6 +285,7 @@ async function pushInboxEvent(
         ),
       );
 
+    const display = policy.displayFor ? await policy.displayFor(notification) : undefined;
     const payload = routingPayloadForNotification({
       notificationId: notification.id,
       notificationType: notification.notificationType,
@@ -273,6 +316,7 @@ async function pushInboxEvent(
           mode: config.pushProviderMode,
           deviceToken: token.token,
           payload,
+          ...(display ? { display } : {}),
           expoAccessToken: config.expoAccessToken,
         });
         if (!result.ok && result.failureCategory === "DeviceNotRegistered") {

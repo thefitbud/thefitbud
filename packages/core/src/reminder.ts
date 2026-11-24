@@ -137,6 +137,7 @@ export function domainEntityTypeForReminder(
     case "trainer_critical_digest":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
     case "admin_whatsapp_budget":
       return "coaching_relationship";
   }
@@ -212,6 +213,7 @@ export function reminderPreferenceForNotification(input: {
     case "trainer_critical_digest":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
     case "admin_whatsapp_budget":
     case "coach_log_updated": // gated by "Coach updates to my logs", not a reminder category
       return null;
@@ -388,6 +390,7 @@ export function reminderDeliveryPriority(type: NotificationType): number {
     case "trainer_critical_digest":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
     case "admin_whatsapp_budget":
       return 10;
     default:
@@ -777,6 +780,7 @@ export function routeTargetFromPushPayload(payload: PushPayload): {
     case "trainer_critical_digest":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
     case "admin_whatsapp_budget":
       return { tab: "today", ...target };
   }
