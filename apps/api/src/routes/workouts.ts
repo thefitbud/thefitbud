@@ -35,6 +35,7 @@ import {
   setCompletionIsModified,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
+import { evaluateExceptionsAfterWrite } from "../domain/exceptions";
 import {
   coachingConfigurations,
   coachingRelationships,
@@ -112,6 +113,10 @@ export const workoutRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
 }>();
+
+// Z14-1 / D-W14-8: a successful write re-evaluates its relationship's
+// exceptions after the response, so Needs you can read stored rows.
+workoutRoutes.use("*", evaluateExceptionsAfterWrite);
 
 type Db = ReturnType<typeof createDb>;
 

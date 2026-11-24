@@ -151,6 +151,7 @@ export async function loginHeaders(
 
 export type MeasuredRequest = {
   status: number;
+  headers: Headers;
   body: unknown;
   roundTrips: number;
   trips: RoundTrip[];
@@ -173,7 +174,7 @@ export async function measureRequest(
   } catch {
     // Non-JSON bodies (304, HTML) stay as text.
   }
-  return { status: response.status, body, roundTrips: trips.length, trips };
+  return { status: response.status, headers: response.headers, body, roundTrips: trips.length, trips };
 }
 
 /** A readable list of the round trips, for assertion messages. */

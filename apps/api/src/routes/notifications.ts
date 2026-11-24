@@ -1057,24 +1057,28 @@ notificationRoutes.get(
       return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
     }
     const db = createDb(c.env.DB);
-    const relationship = await loadAccessibleRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship || relationship.trainerUserId !== actor.userId) {
-      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
-    }
     const days = Math.min(
       Math.max(Number(c.req.query("days") ?? "14") || 14, 1),
       90,
     );
-    const { deriveResponsiveness } = await import("../domain/responsiveness.js");
-    const body = await deriveResponsiveness(db, {
-      relationshipId: relationship.id,
+    const { loadResponsiveness } = await import("../domain/responsiveness.js");
+    // Z14-1: the relationship row and every read the label needs come back in
+    // one batch; the ownership check runs before anything is returned.
+    const loaded = await loadResponsiveness(db, {
+      relationshipId: c.req.param("relationshipId"),
       days,
       nowIso: nowIso(),
     });
+    const relationship = loaded?.relationship;
+    if (
+      !loaded ||
+      !relationship ||
+      !canAccessRelationship(actor, relationship) ||
+      relationship.trainerUserId !== actor.userId
+    ) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const body = loaded.response;
     return ok(c, responsivenessResponseSchema.parse(body));
   },
 );

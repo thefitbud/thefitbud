@@ -151,7 +151,9 @@ export function bindInternalRequest(
 }
 
 /** The in-process context for this request, if the caller bound one. */
-export function internalRequestContext(c: Context): InternalRequestContext | null {
+export function internalRequestContext(c: {
+  req: { raw: Request };
+}): InternalRequestContext | null {
   return internalRequests.get(c.req.raw) ?? null;
 }
 

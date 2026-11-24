@@ -570,9 +570,11 @@ export {
 } from "./profile.js";
 
 export {
+  clientDirectoryAttentionSchema,
   clientDirectoryItemSchema,
   clientDirectoryListResponseSchema,
   clientDirectoryNextCheckinSchema,
+  type ClientDirectoryAttention,
   type ClientDirectoryItem,
   type ClientDirectoryListResponse,
   type ClientDirectoryNextCheckin,

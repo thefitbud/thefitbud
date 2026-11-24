@@ -67,7 +67,9 @@ import {
   workoutExecutions,
 } from "../db/schema";
 import {
-  detectExceptionsForRelationship,
+  evaluateDueExceptions,
+  loadExceptionEvaluationTimes,
+  evaluateExceptionsAfterWrite,
   listActiveExceptionsForRelationship,
 } from "../domain/exceptions";
 import {
@@ -123,6 +125,10 @@ export const checkinRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
 }>();
+
+// Z14-1 / D-W14-8: a successful write re-evaluates its relationship's
+// exceptions after the response, so Needs you can read stored rows.
+checkinRoutes.use("*", evaluateExceptionsAfterWrite);
 
 async function loadAccessibleRelationship(
   db: Db,
@@ -1658,8 +1664,15 @@ checkinRoutes.get(
     const config = await loadActiveCheckinSchedule(db, relationship.id);
 
     // Rule 5 (EC1b): reading an ended client's check-in must not detect.
+    // Z14-1 / D-W14-8: evaluated again only when the last evaluation is older
+    // than 15 minutes; writes evaluate on their own.
     if (relationship.status !== "ended") {
-      await detectExceptionsForRelationship(db, relationship.id, now);
+      const evaluatedAt = await loadExceptionEvaluationTimes(db, [relationship.id]);
+      await evaluateDueExceptions(
+        db,
+        [{ id: relationship.id, status: relationship.status, evaluatedAt: evaluatedAt.get(relationship.id) }],
+        now,
+      );
     }
     const activeExceptionRows = await listActiveExceptionsForRelationship(
       db,

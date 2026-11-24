@@ -27,10 +27,12 @@ import {
 } from "../domain/sync";
 import { fail, ok } from "../lib/envelope";
 import {
+  bindInternalRequest,
   optionalAuthMiddleware,
   requireAuthMiddleware,
   requireRole,
 } from "../middleware/auth";
+import { scheduleExceptionEvaluations } from "../domain/exceptions";
 import type { Env, Variables } from "../types";
 
 export const syncRoutes = new Hono<{
@@ -260,9 +262,22 @@ syncRoutes.post(
     }
 
     const db = createDb(c.env.DB);
-    const authHeader = c.req.header("Authorization") ?? "";
-    const cookieHeader = c.req.header("Cookie") ?? "";
     const results: SyncMutationResult[] = [];
+    // Z14-1: the actor is resolved once for the whole push. Each mutation runs
+    // through the same route handler as its REST call, in this worker, with
+    // this actor (no second Firebase check, no second identity read).
+    // Relationships whose exceptions may have changed are evaluated once,
+    // after the response.
+    const internalContext = {
+      actor,
+      exceptionEvaluations: new Set<string>(),
+    };
+    let executionCtx: Parameters<AppType["fetch"]>[2];
+    try {
+      executionCtx = c.executionCtx;
+    } catch {
+      executionCtx = undefined; // no execution context outside Workers (tests)
+    }
 
     for (const mutation of parsed.data.mutations) {
       const expectedEntity = SYNC_OPERATION_ENTITY[mutation.operation];
@@ -311,21 +326,17 @@ syncRoutes.post(
         continue;
       }
 
-      const response = await getApp().request(
-        mapped.path,
-        {
-          method: mapped.method,
-          headers: {
-            Authorization: authHeader,
-            Cookie: cookieHeader,
-            "Content-Type": "application/json",
-            "Idempotency-Key": mutation.idempotencyKey,
-            "x-fitbud-role": "trainee",
-          },
-          body: JSON.stringify(mapped.body),
+      const request = new Request(new URL(mapped.path, "http://localhost"), {
+        method: mapped.method,
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": mutation.idempotencyKey,
+          "x-fitbud-role": "trainee",
         },
-        c.env,
-      );
+        body: JSON.stringify(mapped.body),
+      });
+      bindInternalRequest(request, internalContext);
+      const response = await getApp().fetch(request, c.env, executionCtx);
 
       const json = (await response.json().catch(() => null)) as {
         data?: unknown;
@@ -355,6 +366,9 @@ syncRoutes.post(
         error: null,
       });
 
+      if (meta.relationshipId) {
+        internalContext.exceptionEvaluations.add(meta.relationshipId);
+      }
       if (meta.relationshipId && meta.recordId) {
         await appendChangeLog(db, {
           entityType: mutation.entityType,
@@ -375,6 +389,9 @@ syncRoutes.post(
       );
     }
 
+    await scheduleExceptionEvaluations(c, db, [
+      ...internalContext.exceptionEvaluations,
+    ]);
     return ok(c, syncPushResponseSchema.parse({ results }));
   },
 );

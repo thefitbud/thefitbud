@@ -58,82 +58,160 @@ function openedCount(
     .length;
 }
 
-export async function deriveResponsiveness(
+type ResponsivenessInput = {
+  relationshipId: string;
+  days: number;
+  nowIso: string;
+};
+
+type RelationshipRow = typeof coachingRelationships.$inferSelect;
+
+type ResponsivenessReads = {
+  relationship: RelationshipRow;
+  paused: (typeof reminderStates.$inferSelect) | undefined;
+  prefs: (typeof notificationPreferences.$inferSelect) | undefined;
+  tokens: Array<(typeof deviceTokens.$inferSelect)>;
+  reminderRows: Array<(typeof notifications.$inferSelect)>;
+  complianceRows: Array<(typeof mealCompliance.$inferSelect)>;
+  workoutExecRows: Array<(typeof workoutExecutions.$inferSelect)>;
+  checkinRows: Array<(typeof checkins.$inferSelect)>;
+};
+
+/**
+ * Z14-1: one D1 round trip. Every read is keyed by the relationship id (the
+ * trainee-keyed ones through a subquery on it), so they all go in one batch.
+ * Returns the relationship row too so the caller can run its ownership check
+ * before anything is returned.
+ */
+export async function loadResponsiveness(
   db: Db,
-  input: {
-    relationshipId: string;
-    days: number;
-    nowIso: string;
-  },
-): Promise<ResponsivenessResponse> {
-  const base = await deriveResponsivenessLabel(db, input);
-  const [relationship] = await db
-    .select({ traineeUserId: coachingRelationships.traineeUserId })
-    .from(coachingRelationships)
-    .where(eq(coachingRelationships.id, input.relationshipId))
-    .limit(1);
-  if (!relationship) return base;
-  const [prefs] = await db
-    .select({
-      pushEnabled: notificationPreferences.pushEnabled,
-      quietHoursStart: notificationPreferences.quietHoursStart,
-      quietHoursEnd: notificationPreferences.quietHoursEnd,
-      preferredWorkoutTime: notificationPreferences.preferredWorkoutTime,
-    })
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.userId, relationship.traineeUserId))
-    .limit(1);
-
-  const preferredWorkoutTime = prefs?.preferredWorkoutTime ?? null;
-  const preferredWorkoutTimeSource = preferredWorkoutTime
-    ? ("learned" as const)
-    : null;
-
-  return {
-    ...base,
-    pushEnabled: prefs?.pushEnabled,
-    quietHoursStart: prefs?.quietHoursStart ?? null,
-    quietHoursEnd: prefs?.quietHoursEnd ?? null,
-    preferredWorkoutTime,
-    preferredWorkoutTimeSource,
-  };
-}
-
-async function deriveResponsivenessLabel(
-  db: Db,
-  input: {
-    relationshipId: string;
-    days: number;
-    nowIso: string;
-  },
-): Promise<ResponsivenessResponse> {
+  input: ResponsivenessInput,
+): Promise<{
+  relationship: RelationshipRow;
+  response: ResponsivenessResponse;
+} | null> {
   const since = new Date(
     Date.parse(input.nowIso) - input.days * 86_400_000,
   ).toISOString();
-
-  const [relationship] = await db
-    .select()
+  const traineeOf = db
+    .select({ id: coachingRelationships.traineeUserId })
     .from(coachingRelationships)
-    .where(eq(coachingRelationships.id, input.relationshipId))
-    .limit(1);
-  if (!relationship) {
+    .where(eq(coachingRelationships.id, input.relationshipId));
+  const [relationships, pausedRows, prefRows, tokens, reminderRows, complianceRows, workoutExecRows, checkinRows] =
+    await db.batch([
+      db
+        .select()
+        .from(coachingRelationships)
+        .where(eq(coachingRelationships.id, input.relationshipId))
+        .limit(1),
+      db
+        .select()
+        .from(reminderStates)
+        .where(
+          and(
+            inArray(reminderStates.traineeUserId, traineeOf),
+            eq(reminderStates.mode, "paused"),
+          ),
+        )
+        .limit(1),
+      db
+        .select()
+        .from(notificationPreferences)
+        .where(inArray(notificationPreferences.userId, traineeOf))
+        .limit(1),
+      db
+        .select()
+        .from(deviceTokens)
+        .where(inArray(deviceTokens.userId, traineeOf)),
+      db
+        .select()
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.coachingRelationshipId, input.relationshipId),
+            gte(notifications.createdAt, since),
+            inArray(notifications.notificationType, [...REMINDER_TYPES]),
+          ),
+        ),
+      db
+        .select()
+        .from(mealCompliance)
+        .where(
+          and(
+            eq(mealCompliance.coachingRelationshipId, input.relationshipId),
+            gte(mealCompliance.loggedAt, since),
+          ),
+        ),
+      db
+        .select()
+        .from(workoutExecutions)
+        .where(
+          and(
+            eq(workoutExecutions.coachingRelationshipId, input.relationshipId),
+            gte(workoutExecutions.completedAt, since),
+          ),
+        ),
+      db
+        .select()
+        .from(checkins)
+        .where(
+          and(
+            eq(checkins.coachingRelationshipId, input.relationshipId),
+            gte(checkins.submittedAt, since),
+          ),
+        ),
+    ]);
+  const relationship = relationships[0];
+  if (!relationship) return null;
+  const reads: ResponsivenessReads = {
+    relationship,
+    paused: pausedRows[0],
+    prefs: prefRows[0],
+    tokens,
+    reminderRows,
+    complianceRows,
+    workoutExecRows,
+    checkinRows,
+  };
+  const base = computeResponsivenessLabel(reads);
+  const preferredWorkoutTime = reads.prefs?.preferredWorkoutTime ?? null;
+  const preferredWorkoutTimeSource = preferredWorkoutTime
+    ? ("learned" as const)
+    : null;
+  return {
+    relationship,
+    response: {
+      ...base,
+      pushEnabled: reads.prefs?.pushEnabled,
+      quietHoursStart: reads.prefs?.quietHoursStart ?? null,
+      quietHoursEnd: reads.prefs?.quietHoursEnd ?? null,
+      preferredWorkoutTime,
+      preferredWorkoutTimeSource,
+    },
+  };
+}
+
+export async function deriveResponsiveness(
+  db: Db,
+  input: ResponsivenessInput,
+): Promise<ResponsivenessResponse> {
+  const loaded = await loadResponsiveness(db, input);
+  if (!loaded) {
     return {
       label: "not_enough_data",
       counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
     };
   }
+  return loaded.response;
+}
+
+function computeResponsivenessLabel(
+  reads: ResponsivenessReads,
+): ResponsivenessResponse {
+  const { paused, prefs, tokens, complianceRows, workoutExecRows, checkinRows } =
+    reads;
 
   // Paused takes priority over push-off (Farhan = reminders paused).
-  const [paused] = await db
-    .select()
-    .from(reminderStates)
-    .where(
-      and(
-        eq(reminderStates.traineeUserId, relationship.traineeUserId),
-        eq(reminderStates.mode, "paused"),
-      ),
-    )
-    .limit(1);
   if (paused) {
     return {
       label: "reminders_paused",
@@ -142,16 +220,6 @@ async function deriveResponsivenessLabel(
     };
   }
 
-  const [prefs] = await db
-    .select({ pushEnabled: notificationPreferences.pushEnabled })
-    .from(notificationPreferences)
-    .where(eq(notificationPreferences.userId, relationship.traineeUserId))
-    .limit(1);
-
-  const tokens = await db
-    .select()
-    .from(deviceTokens)
-    .where(eq(deviceTokens.userId, relationship.traineeUserId));
   // Match prior behaviour: only "notifications off" when push is disabled, or
   // every known device token is revoked (no tokens ≠ push off — Rohan seed).
   const allTokensRevoked =
@@ -164,27 +232,17 @@ async function deriveResponsivenessLabel(
     };
   }
 
-  const reminderRows = await db
-    .select()
-    .from(notifications)
-    .where(
-      and(
-        eq(notifications.coachingRelationshipId, relationship.id),
-        gte(notifications.createdAt, since),
-        inArray(notifications.notificationType, [...REMINDER_TYPES]),
-      ),
-    );
-
-  const eligible = reminderRows.filter((row) => isReminderEligible(row));
+  const eligible = reads.reminderRows.filter((row) => isReminderEligible(row));
   const sent = eligible.filter((row) => row.state !== "suppressed").length;
   const opened = eligible.filter(
     (row) => row.openedAt || row.readAt || row.state === "read",
   ).length;
 
-  const categories = await buildCategories(db, {
-    relationshipId: relationship.id,
-    since,
+  const categories = buildCategories({
     reminderRows: eligible,
+    complianceRows,
+    workoutExecRows,
+    checkinRows,
   });
 
   if (eligible.length < 5) {
@@ -194,36 +252,6 @@ async function deriveResponsivenessLabel(
       categories,
     };
   }
-
-  const complianceRows = await db
-    .select()
-    .from(mealCompliance)
-    .where(
-      and(
-        eq(mealCompliance.coachingRelationshipId, relationship.id),
-        gte(mealCompliance.loggedAt, since),
-      ),
-    );
-
-  const workoutExecRows = await db
-    .select()
-    .from(workoutExecutions)
-    .where(
-      and(
-        eq(workoutExecutions.coachingRelationshipId, relationship.id),
-        gte(workoutExecutions.completedAt, since),
-      ),
-    );
-
-  const checkinRows = await db
-    .select()
-    .from(checkins)
-    .where(
-      and(
-        eq(checkins.coachingRelationshipId, relationship.id),
-        gte(checkins.submittedAt, since),
-      ),
-    );
 
   let loggedBefore = 0;
   let loggedAfter = 0;
@@ -362,51 +390,19 @@ function logWithinTwoHours(
   return false;
 }
 
-async function buildCategories(
-  db: Db,
-  input: {
-    relationshipId: string;
-    since: string;
-    reminderRows: Array<(typeof notifications.$inferSelect)>;
-  },
-): Promise<ResponsivenessResponse["categories"]> {
-  void db;
+function buildCategories(input: {
+  reminderRows: Array<(typeof notifications.$inferSelect)>;
+  complianceRows: Array<(typeof mealCompliance.$inferSelect)>;
+  workoutExecRows: Array<(typeof workoutExecutions.$inferSelect)>;
+  checkinRows: Array<(typeof checkins.$inferSelect)>;
+}): ResponsivenessResponse["categories"] {
+  const { complianceRows, workoutExecRows, checkinRows } = input;
   const byType = (type: ReminderType) =>
     input.reminderRows.filter((r) => r.notificationType === type);
 
   const mealRows = byType("meal_reminder");
   const workoutRows = byType("workout_reminder");
   const checkinReminderRows = byType("checkin_reminder");
-
-  const [complianceRows, workoutExecRows, checkinRows] = await Promise.all([
-    db
-      .select()
-      .from(mealCompliance)
-      .where(
-        and(
-          eq(mealCompliance.coachingRelationshipId, input.relationshipId),
-          gte(mealCompliance.loggedAt, input.since),
-        ),
-      ),
-    db
-      .select()
-      .from(workoutExecutions)
-      .where(
-        and(
-          eq(workoutExecutions.coachingRelationshipId, input.relationshipId),
-          gte(workoutExecutions.completedAt, input.since),
-        ),
-      ),
-    db
-      .select()
-      .from(checkins)
-      .where(
-        and(
-          eq(checkins.coachingRelationshipId, input.relationshipId),
-          gte(checkins.submittedAt, input.since),
-        ),
-      ),
-  ]);
 
   return {
     workouts: categoryFromReminders(workoutRows, (reminder) => {

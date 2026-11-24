@@ -190,40 +190,45 @@ progressRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const relationship = await loadAccessibleRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship) {
+    // One round trip (Z14-1): the access check's relationship read and the
+    // three summary reads are independent, so they share one `db.batch`.
+    // Nothing is returned unless the relationship check passes.
+    const relationshipId = c.req.param("relationshipId");
+    const [relationshipRows, measurementRows, entryRows, mediaRows] =
+      await db.batch([
+        db
+          .select()
+          .from(coachingRelationships)
+          .where(eq(coachingRelationships.id, relationshipId))
+          .limit(1),
+        db
+          .select()
+          .from(measurements)
+          .where(eq(measurements.coachingRelationshipId, relationshipId))
+          .orderBy(desc(measurements.observedAt))
+          .limit(50),
+        db
+          .select()
+          .from(progressEntries)
+          .where(eq(progressEntries.coachingRelationshipId, relationshipId))
+          .orderBy(desc(progressEntries.observedAt))
+          .limit(50),
+        db
+          .select()
+          .from(mediaAssets)
+          .where(
+            and(
+              eq(mediaAssets.coachingRelationshipId, relationshipId),
+              eq(mediaAssets.status, "ready"),
+            ),
+          )
+          .orderBy(desc(mediaAssets.createdAt))
+          .limit(50),
+      ]);
+    const relationship = relationshipRows[0];
+    if (!relationship || !canAccessRelationship(actor, relationship)) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
-
-    const [measurementRows, entryRows, mediaRows] = await Promise.all([
-      db
-        .select()
-        .from(measurements)
-        .where(eq(measurements.coachingRelationshipId, relationship.id))
-        .orderBy(desc(measurements.observedAt))
-        .limit(50),
-      db
-        .select()
-        .from(progressEntries)
-        .where(eq(progressEntries.coachingRelationshipId, relationship.id))
-        .orderBy(desc(progressEntries.observedAt))
-        .limit(50),
-      db
-        .select()
-        .from(mediaAssets)
-        .where(
-          and(
-            eq(mediaAssets.coachingRelationshipId, relationship.id),
-            eq(mediaAssets.status, "ready"),
-          ),
-        )
-        .orderBy(desc(mediaAssets.createdAt))
-        .limit(50),
-    ]);
 
     return ok(
       c,
