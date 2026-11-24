@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import {
   type WeekDayState,
   type WeekReadModel,
@@ -39,12 +39,9 @@ function macrosFromPrescriptionItems(
   return dayMacrosFromScaledItems(items.map((item) => item.calculated ?? null));
 }
 
-async function loadAssignedTodayNutrition(
-  db: Db,
-  relationshipId: string,
-  today: string,
-): Promise<WeekTodayNutrition["assigned"]> {
-  const rows = await db
+/** The effective plan version's content for a relationship (statement only, not run). */
+function effectivePlanContentQuery(db: Db, relationshipId: string) {
+  return db
     .select({ contentJson: planVersions.contentJson })
     .from(plans)
     .innerJoin(planVersions, eq(planVersions.planId, plans.id))
@@ -56,7 +53,12 @@ async function loadAssignedTodayNutrition(
     )
     .orderBy(desc(planVersions.effectiveFrom), desc(planVersions.versionNumber))
     .limit(1);
-  const contentJson = rows[0]?.contentJson;
+}
+
+function assignedTodayNutrition(
+  contentJson: string | undefined,
+  today: string,
+): WeekTodayNutrition["assigned"] {
   if (!contentJson) return null;
 
   const content = parsePlanContentJson(contentJson);
@@ -204,43 +206,72 @@ export async function buildWeekReadModel(
   );
   const today = formatLocalDate(new Date(input.nowIso), input.timeZone);
 
-  const workouts = await db
-    .select({
-      assignment: workoutAssignments,
-      execution: workoutExecutions,
-    })
-    .from(workoutAssignments)
-    .leftJoin(
-      workoutExecutions,
-      eq(workoutExecutions.assignmentId, workoutAssignments.id),
-    )
-    .where(
-      and(
-        eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
-        gte(workoutAssignments.localDate, input.start),
-        lte(workoutAssignments.localDate, end),
-        eq(workoutAssignments.scheduleStatus, "scheduled"),
-      ),
-    );
-
-  const meals = await db
-    .select({
-      assignment: mealAssignments,
-      compliance: mealCompliance,
-    })
-    .from(mealAssignments)
-    .leftJoin(
-      mealCompliance,
-      eq(mealCompliance.assignmentId, mealAssignments.id),
-    )
-    .where(
-      and(
-        eq(mealAssignments.coachingRelationshipId, input.relationshipId),
-        gte(mealAssignments.localDate, input.start),
-        lte(mealAssignments.localDate, end),
-        eq(mealAssignments.scheduleStatus, "scheduled"),
-      ),
-    );
+  // One D1 round trip for every read. Assignments and their execution or
+  // compliance rows are separate statements joined in memory (at most one
+  // execution / compliance row per assignment, unique on assignment_id): a
+  // joined select would repeat column names, which D1 batch results cannot map.
+  const workoutScope = and(
+    eq(workoutAssignments.coachingRelationshipId, input.relationshipId),
+    gte(workoutAssignments.localDate, input.start),
+    lte(workoutAssignments.localDate, end),
+    eq(workoutAssignments.scheduleStatus, "scheduled"),
+  );
+  const mealScope = and(
+    eq(mealAssignments.coachingRelationshipId, input.relationshipId),
+    gte(mealAssignments.localDate, input.start),
+    lte(mealAssignments.localDate, end),
+    eq(mealAssignments.scheduleStatus, "scheduled"),
+  );
+  const [workoutRows, executionRows, mealRows, complianceRows, planRows] =
+    await db.batch([
+      db.select().from(workoutAssignments).where(workoutScope),
+      db
+        .select()
+        .from(workoutExecutions)
+        .where(
+          and(
+            eq(workoutExecutions.coachingRelationshipId, input.relationshipId),
+            inArray(
+              workoutExecutions.assignmentId,
+              db
+                .select({ id: workoutAssignments.id })
+                .from(workoutAssignments)
+                .where(workoutScope),
+            ),
+          ),
+        ),
+      db.select().from(mealAssignments).where(mealScope),
+      db
+        .select()
+        .from(mealCompliance)
+        .where(
+          and(
+            eq(mealCompliance.coachingRelationshipId, input.relationshipId),
+            inArray(
+              mealCompliance.assignmentId,
+              db
+                .select({ id: mealAssignments.id })
+                .from(mealAssignments)
+                .where(mealScope),
+            ),
+          ),
+        ),
+      effectivePlanContentQuery(db, input.relationshipId),
+    ]);
+  const executionByAssignment = new Map(
+    executionRows.map((execution) => [execution.assignmentId, execution]),
+  );
+  const complianceByAssignment = new Map(
+    complianceRows.map((compliance) => [compliance.assignmentId, compliance]),
+  );
+  const workouts = workoutRows.map((assignment) => ({
+    assignment,
+    execution: executionByAssignment.get(assignment.id) ?? null,
+  }));
+  const meals = mealRows.map((assignment) => ({
+    assignment,
+    compliance: complianceByAssignment.get(assignment.id) ?? null,
+  }));
 
   const nowMs = Date.parse(input.nowIso);
 
@@ -339,11 +370,7 @@ export async function buildWeekReadModel(
     };
   });
 
-  const assigned = await loadAssignedTodayNutrition(
-    db,
-    input.relationshipId,
-    today,
-  );
+  const assigned = assignedTodayNutrition(planRows[0]?.contentJson, today);
   const todayNutrition: WeekTodayNutrition = {
     date: today,
     logged: loggedTodayNutrition(meals, today),

@@ -4,11 +4,15 @@ import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { getCookie } from "hono/cookie";
 import { createDb, type Db } from "../db/client";
-import { users, webSessions } from "../db/schema";
+import { users } from "../db/schema";
 import { verifyFirebaseIdToken } from "../auth/firebase";
-import { loadActorByFirebaseUid, loadActorByUserId } from "../auth/identity";
+import {
+  actorFromIdentity,
+  loadIdentityByFirebaseUid,
+  loadLiveWebSessionIdentity,
+  type IdentityRow,
+} from "../auth/identity";
 import { fail } from "../lib/envelope";
-import { nowIso, sha256Hex } from "../lib/crypto";
 import type { ActorContext, Env, Variables } from "../types";
 
 type AuthContext = Context<{ Bindings: Env; Variables: Variables }>;
@@ -47,7 +51,7 @@ type ArchivedUser = {
 /** The user row when (and only when) the account is archived. */
 async function loadArchivedUser(
   db: Db,
-  by: { userId: string } | { firebaseUid: string },
+  by: { userId: string },
 ): Promise<ArchivedUser | null> {
   const [row] = await db
     .select({
@@ -58,12 +62,15 @@ async function loadArchivedUser(
       purgeAfter: users.purgeAfter,
     })
     .from(users)
-    .where(
-      "userId" in by
-        ? eq(users.id, by.userId)
-        : eq(users.firebaseUid, by.firebaseUid),
-    )
+    .where(eq(users.id, by.userId))
     .limit(1);
+  return archivedFromIdentity(row ?? null);
+}
+
+/** The archived view of an identity row already read (no extra query, Z14-1). */
+function archivedFromIdentity(
+  row: Pick<IdentityRow, "id" | "firebaseUid" | "timezone" | "accountState" | "purgeAfter"> | null,
+): ArchivedUser | null {
   if (!row || row.accountState !== "archived" || !row.purgeAfter) {
     return null;
   }
@@ -120,22 +127,34 @@ async function continueAsArchived(
   await next();
 }
 
-/** A live (not revoked, not expired) web session, touched on every use. */
-async function loadLiveWebSession(db: Db, token: string) {
-  const tokenHash = await sha256Hex(token);
-  const [session] = await db
-    .select()
-    .from(webSessions)
-    .where(eq(webSessions.tokenHash, tokenHash))
-    .limit(1);
-  if (!session || session.revokedAt || session.expiresAt <= nowIso()) {
-    return null;
-  }
-  await db
-    .update(webSessions)
-    .set({ lastSeenAt: nowIso() })
-    .where(eq(webSessions.id, session.id));
-  return session;
+/**
+ * Z14-1: an actor already resolved by this worker for an in-process request
+ * (sync push applies each mutation through the app without re-running auth).
+ * Keyed by the exact Request object the caller built, so nothing from outside
+ * the process can reach it: an incoming request is always a different object.
+ */
+type InternalRequestContext = {
+  actor: ActorContext;
+  /** Relationships whose exceptions the inner handlers asked to re-evaluate. */
+  exceptionEvaluations: Set<string>;
+};
+const internalRequests = new WeakMap<Request, InternalRequestContext>();
+/** Actors already resolved for a request object, so a second pass reads nothing. */
+const resolvedRequests = new WeakMap<Request, ActorContext | null>();
+
+/** Marks `request` as carrying an already-resolved actor (in-process dispatch only). */
+export function bindInternalRequest(
+  request: Request,
+  context: InternalRequestContext,
+): void {
+  internalRequests.set(request, context);
+}
+
+/** The in-process context for this request, if the caller bound one. */
+export function internalRequestContext(c: {
+  req: { raw: Request };
+}): InternalRequestContext | null {
+  return internalRequests.get(c.req.raw) ?? null;
 }
 
 function epochSecondsToIso(value: number | undefined): string | null {
@@ -148,6 +167,19 @@ export const optionalAuthMiddleware = createMiddleware<{
   Bindings: Env;
   Variables: Variables;
 }>(async (c, next) => {
+  // Z14-1: resolved once per request. A second pass (or an in-process request
+  // that carries its caller's actor) reuses it and reads nothing.
+  const internal = internalRequests.get(c.req.raw);
+  if (internal) {
+    c.set("actor", internal.actor);
+    await next();
+    return;
+  }
+  if (resolvedRequests.has(c.req.raw)) {
+    c.set("actor", resolvedRequests.get(c.req.raw) ?? null);
+    await next();
+    return;
+  }
   c.set("actor", null);
 
   const db = createDb(c.env.DB);
@@ -157,22 +189,23 @@ export const optionalAuthMiddleware = createMiddleware<{
   const authHeader = c.req.header("authorization");
 
   if (sessionToken) {
-    const session = await loadLiveWebSession(db, sessionToken);
-    if (session) {
+    // One query: session + user + roles + profiles (Z14-1).
+    const session = await loadLiveWebSessionIdentity(db, sessionToken);
+    if (session?.identity) {
       // A cookie session's sign-in time is when it was issued (D-W6-31).
       const authTime = session.createdAt;
-      const actor = await loadActorByUserId(db, {
-        userId: session.userId,
+      const actor = actorFromIdentity(session.identity, {
         surface: "trainer_web",
         authMethod: "session",
         requestedRole,
       });
       if (actor) {
         c.set("actor", { ...actor, authTime });
+        resolvedRequests.set(c.req.raw, c.get("actor"));
         await next();
         return;
       }
-      const archived = await loadArchivedUser(db, { userId: session.userId });
+      const archived = archivedFromIdentity(session.identity);
       if (archived) {
         return continueAsArchived(c, next, archived, {
           surface: "trainer_web",
@@ -202,11 +235,16 @@ export const optionalAuthMiddleware = createMiddleware<{
     });
     if (identity) {
       const authTime = epochSecondsToIso(identity.authTime);
-      const actor = await loadActorByFirebaseUid(db, identity.uid, requestedRole);
+      // One query: user + roles + profiles (Z14-1; five serial queries before).
+      const row = await loadIdentityByFirebaseUid(db, identity.uid);
+      const actor = row
+        ? actorFromIdentity(row, { surface: "mobile", authMethod: "bearer", requestedRole })
+        : null;
       if (actor) {
         c.set("actor", { ...actor, authTime });
+        resolvedRequests.set(c.req.raw, c.get("actor"));
       } else {
-        const archived = await loadArchivedUser(db, { firebaseUid: identity.uid });
+        const archived = archivedFromIdentity(row);
         if (archived) {
           return continueAsArchived(c, next, archived, {
             surface: "mobile",

@@ -10,7 +10,10 @@ import {
   isNull,
   lt,
   lte,
+  notExists,
   or,
+  sql,
+  count,
   type SQL,
 } from "drizzle-orm";
 import {
@@ -22,6 +25,12 @@ import {
   type WorkspaceActivityType,
 } from "@fitbud/contracts";
 import {
+  ADHERENCE_EXCEPTION_SEVERITIES,
+  ADHERENCE_OPEN_EXCEPTION_STATUSES,
+  adherenceWindowStart,
+  deriveAdherenceState,
+  deriveClientOnboardingStatus,
+  isQualifyingAdherenceObservation,
   deriveAge,
   deriveCheckinStatus,
   deriveMealAssignmentStatus,
@@ -30,7 +39,6 @@ import {
   formatCivilDate,
   formatLocalDate,
 } from "@fitbud/core";
-import { deriveAdherenceForRelationships } from "./adherence";
 import type { Db } from "../db/client";
 import {
   checkinReviews,
@@ -47,12 +55,13 @@ import {
   plans,
   planVersions,
   subscriptionVersions,
+  onboardingFormResponses,
+  onboardingReviews,
   checkinSchedules,
   trackingRequirements,
   traineeProfiles,
   trainerProfiles,
   userIdentities,
-  users,
   mealTimeOverrides,
   reactivationRequests,
   workoutAssignments,
@@ -60,7 +69,6 @@ import {
   workoutExpectations,
 } from "../db/schema";
 import { buildPage } from "../lib/cursor";
-import { onboardingStatusForRelationship } from "./client-status";
 import {
   resolveClientDisplayName,
   resolveClientWhatsappE164,
@@ -197,6 +205,71 @@ function pageActivity(
   return buildPage(items, limit, (item) => item.localDate);
 }
 
+function workoutActivityItem(
+  assignment: typeof workoutAssignments.$inferSelect,
+  executionRow: typeof workoutExecutions.$inferSelect | null,
+  nowIso: string,
+): WorkspaceActivityItem {
+  const execution = executionRow?.id ? executionRow : null;
+  return workspaceActivityItemSchema.parse({
+    id: assignment.id,
+    type: "workout",
+    state: deriveWorkoutAssignmentStatus({
+      nowIso,
+      windowEndsAt: assignment.windowEndsAt,
+      executionStatus: execution?.status ?? null,
+    }),
+    occurredAt: assignment.windowStartsAt,
+    localDate: assignment.localDate,
+    title: assignment.workoutDayName,
+    planVersionId: execution?.planVersionId ?? assignment.planVersionId,
+  });
+}
+
+function mealActivityItem(
+  assignment: typeof mealAssignments.$inferSelect,
+  complianceRow: typeof mealCompliance.$inferSelect | null,
+  nowIso: string,
+): WorkspaceActivityItem {
+  const compliance = complianceRow?.id ? complianceRow : null;
+  return workspaceActivityItemSchema.parse({
+    id: assignment.id,
+    type: "meal",
+    state: deriveMealAssignmentStatus({
+      nowIso,
+      windowEndsAt: assignment.windowEndsAt,
+      complianceOutcome: compliance?.outcome ?? null,
+      loggedAt: compliance?.loggedAt ?? null,
+    }),
+    occurredAt: assignment.windowStartsAt,
+    localDate: assignment.localDate,
+    title: assignment.mealName,
+    planVersionId: compliance?.planVersionId ?? assignment.planVersionId,
+  });
+}
+
+function checkinActivityItem(
+  checkin: typeof checkins.$inferSelect,
+  hasReview: boolean,
+  nowIso: string,
+): WorkspaceActivityItem {
+  return workspaceActivityItemSchema.parse({
+    id: checkin.id,
+    type: "checkin",
+    state: deriveCheckinStatus({
+      nowIso,
+      windowStartsAt: checkin.windowStartsAt,
+      windowEndsAt: checkin.windowEndsAt,
+      recordStatus: checkin.recordStatus,
+      hasReview,
+    }),
+    occurredAt: checkin.windowStartsAt,
+    localDate: checkin.localDate,
+    title: `Check-in ${formatCivilDate(checkin.localDate)}`,
+    planVersionId: null,
+  });
+}
+
 async function listWorkoutActivity(
   db: Db,
   input: ActivityListInput,
@@ -236,22 +309,9 @@ async function listWorkoutActivity(
     .orderBy(desc(workoutAssignments.localDate), desc(workoutAssignments.id))
     .limit(input.limit + 1);
 
-  return rows.map((row) => {
-    const execution = row.execution?.id ? row.execution : null;
-    return workspaceActivityItemSchema.parse({
-      id: row.assignment.id,
-      type: "workout",
-      state: deriveWorkoutAssignmentStatus({
-        nowIso: input.nowIso,
-        windowEndsAt: row.assignment.windowEndsAt,
-        executionStatus: execution?.status ?? null,
-      }),
-      occurredAt: row.assignment.windowStartsAt,
-      localDate: row.assignment.localDate,
-      title: row.assignment.workoutDayName,
-      planVersionId: execution?.planVersionId ?? row.assignment.planVersionId,
-    });
-  });
+  return rows.map((row) =>
+    workoutActivityItem(row.assignment, row.execution, input.nowIso),
+  );
 }
 
 async function listMealActivity(
@@ -293,23 +353,9 @@ async function listMealActivity(
     .orderBy(desc(mealAssignments.localDate), desc(mealAssignments.id))
     .limit(input.limit + 1);
 
-  return rows.map((row) => {
-    const compliance = row.compliance?.id ? row.compliance : null;
-    return workspaceActivityItemSchema.parse({
-      id: row.assignment.id,
-      type: "meal",
-      state: deriveMealAssignmentStatus({
-        nowIso: input.nowIso,
-        windowEndsAt: row.assignment.windowEndsAt,
-        complianceOutcome: compliance?.outcome ?? null,
-        loggedAt: compliance?.loggedAt ?? null,
-      }),
-      occurredAt: row.assignment.windowStartsAt,
-      localDate: row.assignment.localDate,
-      title: row.assignment.mealName,
-      planVersionId: compliance?.planVersionId ?? row.assignment.planVersionId,
-    });
-  });
+  return rows.map((row) =>
+    mealActivityItem(row.assignment, row.compliance, input.nowIso),
+  );
 }
 
 async function listCheckinActivity(
@@ -343,24 +389,9 @@ async function listCheckinActivity(
     .orderBy(desc(checkins.localDate), desc(checkins.id))
     .limit(input.limit + 1);
 
-  return rows.map((row) => {
-    const review = row.review?.id ? row.review : null;
-    return workspaceActivityItemSchema.parse({
-      id: row.checkin.id,
-      type: "checkin",
-      state: deriveCheckinStatus({
-        nowIso: input.nowIso,
-        windowStartsAt: row.checkin.windowStartsAt,
-        windowEndsAt: row.checkin.windowEndsAt,
-        recordStatus: row.checkin.recordStatus,
-        hasReview: Boolean(review),
-      }),
-      occurredAt: row.checkin.windowStartsAt,
-      localDate: row.checkin.localDate,
-      title: `Check-in ${formatCivilDate(row.checkin.localDate)}`,
-      planVersionId: null,
-    });
-  });
+  return rows.map((row) =>
+    checkinActivityItem(row.checkin, Boolean(row.review?.id), input.nowIso),
+  );
 }
 
 export async function listRelationshipActivity(
@@ -383,24 +414,17 @@ const FUTURE_ACTIVITY_STATES = new Set([
   "due",
 ]);
 
-async function loadRecentActivity(
-  db: Db,
-  relationshipId: string,
+/**
+ * Newest settled activity across workouts, meals and check-ins, from the rows
+ * the workspace batch already read (the newest `RECENT_ACTIVITY_LIMIT * 3` of
+ * each type, same page `listRelationshipActivity` would return).
+ */
+function recentActivityFrom(
+  items: WorkspaceActivityItem[],
   nowIso: string,
-): Promise<WorkspaceActivityItem[]> {
-  const shared = {
-    relationshipId,
-    limit: RECENT_ACTIVITY_LIMIT * 3,
-    cursor: null,
-    nowIso,
-  };
-  const [workouts, meals, checkinItems] = await Promise.all([
-    listRelationshipActivity(db, { ...shared, type: "workout" }),
-    listRelationshipActivity(db, { ...shared, type: "meal" }),
-    listRelationshipActivity(db, { ...shared, type: "checkin" }),
-  ]);
+): WorkspaceActivityItem[] {
   const nowMs = Date.parse(nowIso);
-  return [...workouts.items, ...meals.items, ...checkinItems.items]
+  return items
     .filter((item) => {
       // Exclude future slots and purely scheduled/pending items.
       if (Date.parse(item.occurredAt) > nowMs) return false;
@@ -420,129 +444,19 @@ async function loadRecentActivity(
     .slice(0, RECENT_ACTIVITY_LIMIT);
 }
 
-async function loadActiveConfiguration(db: Db, relationshipId: string) {
-  const rows = await db
-    .select()
-    .from(coachingConfigurations)
-    .where(
-      and(
-        eq(coachingConfigurations.coachingRelationshipId, relationshipId),
-        eq(coachingConfigurations.status, "active"),
-      ),
-    )
-    .limit(1);
-  const configuration = rows[0];
-  if (!configuration) return null;
-
-  const [workout] = await db
-    .select()
-    .from(workoutExpectations)
-    .where(eq(workoutExpectations.coachingConfigurationId, configuration.id))
-    .limit(1);
-  const [nutrition] = await db
-    .select()
-    .from(nutritionExpectations)
-    .where(eq(nutritionExpectations.coachingConfigurationId, configuration.id))
-    .limit(1);
-  const [checkin] = await db
-    .select()
-    .from(checkinSchedules)
-    .where(eq(checkinSchedules.coachingConfigurationId, configuration.id))
-    .limit(1);
-  const [tracking] = await db
-    .select()
-    .from(trackingRequirements)
-    .where(eq(trackingRequirements.coachingConfigurationId, configuration.id))
-    .limit(1);
-  if (!workout || !nutrition || !checkin || !tracking) return null;
-
-  return mapCoachingConfiguration({
-    configuration,
-    workout,
-    nutrition,
-    checkin,
-    tracking,
-  });
-}
-
-async function loadEffectivePlan(db: Db, relationshipId: string) {
-  const rows = await db
-    .select({
-      plan: plans,
-      version: planVersions,
-    })
-    .from(planVersions)
-    .innerJoin(plans, eq(planVersions.planId, plans.id))
-    .where(
-      and(
-        eq(plans.coachingRelationshipId, relationshipId),
-        eq(planVersions.status, "effective"),
-      ),
-    )
-    .orderBy(desc(planVersions.effectiveFrom), desc(planVersions.versionNumber))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return { plan: null, version: null };
-  return {
-    plan: mapPlan(row.plan),
-    version: mapPlanVersion(row.version),
-  };
-}
-
-async function trainerToday(db: Db, trainerUserId: string, nowIso: string) {
-  const rows = await db
-    .select({ timezone: users.timezone })
-    .from(users)
-    .where(eq(users.id, trainerUserId))
-    .limit(1);
-  return formatLocalDate(new Date(nowIso), rows[0]?.timezone ?? "UTC");
-}
-
-async function loadLatestSubscription(
-  db: Db,
-  relationshipId: string,
-  trainerUserId: string,
-  nowIso: string,
-) {
-  const rows = await db
-    .select()
-    .from(subscriptionVersions)
-    .where(eq(subscriptionVersions.coachingRelationshipId, relationshipId))
-    .orderBy(desc(subscriptionVersions.versionNumber))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
-  const today = await trainerToday(db, trainerUserId, nowIso);
-  return subscriptionSchema.parse({
-    id: row.id,
-    coachingRelationshipId: row.coachingRelationshipId,
-    versionNumber: row.versionNumber,
-    planName: row.planName,
-    paymentFrequency: row.paymentFrequency,
-    startsOn: row.startsOn,
-    renewsOn: row.renewsOn,
-    renewalState: deriveRenewalState({ today, renewsOn: row.renewsOn }),
-    createdAt: row.createdAt,
-  });
-}
-
 function severityRank(severity: string): number {
   return severity === "critical" ? 0 : 1;
 }
 
-async function loadOpenException(db: Db, relationshipId: string) {
-  const rows = await db
-    .select()
-    .from(exceptions)
-    .where(
-      and(
-        eq(exceptions.coachingRelationshipId, relationshipId),
-        inArray(exceptions.status, ["detected", "active"]),
-      ),
-    )
-    .orderBy(asc(exceptions.detectedAt), asc(exceptions.id));
-  if (rows.length === 0) return null;
-  const row = [...rows].sort((a, b) => {
+function openExceptionSummary(
+  rows: Array<typeof exceptions.$inferSelect>,
+) {
+  // `rows` arrive ordered by detectedAt, id.
+  const open = rows.filter(
+    (row) => row.status === "detected" || row.status === "active",
+  );
+  if (open.length === 0) return null;
+  const row = [...open].sort((a, b) => {
     const sev = severityRank(a.severity) - severityRank(b.severity);
     if (sev !== 0) return sev;
     // Oldest first within the same severity (matches Home triage).
@@ -563,61 +477,329 @@ async function loadOpenException(db: Db, relationshipId: string) {
   });
 }
 
-/** Next scheduled check-in only (draft). Never past submitted / awaiting review. */
-async function loadNextCheckin(db: Db, relationshipId: string, nowIso: string) {
-  const rows = await db
-    .select({
-      checkin: checkins,
-      review: checkinReviews,
-    })
-    .from(checkins)
-    .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+/** Subquery: the relationship's single active configuration (unique index). */
+function activeConfigurationId(db: Db, relationshipId: string) {
+  return db
+    .select({ id: coachingConfigurations.id })
+    .from(coachingConfigurations)
     .where(
       and(
-        eq(checkins.coachingRelationshipId, relationshipId),
-        eq(checkins.recordStatus, "draft"),
-        isNull(checkinReviews.id),
+        eq(coachingConfigurations.coachingRelationshipId, relationshipId),
+        eq(coachingConfigurations.status, "active"),
       ),
-    )
-    .orderBy(asc(checkins.localDate), asc(checkins.id))
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
-  return mapCheckin(row.checkin, null, nowIso);
+    );
 }
 
-/** Submitted check-in awaiting trainer review (for CTA / overview card). */
-async function loadPendingReviewCheckin(
+/** A check-in that has no review row (the old left join + `review.id is null`). */
+function checkinWithoutReview() {
+  return notExists(
+    sql`(select 1 from ${checkinReviews} where ${checkinReviews.checkinId} = ${checkins.id})`,
+  );
+}
+
+export type ClientWorkspaceTimezones = {
+  /** IANA zone of the trainer (civil "today" for renewal, age, adherence). */
+  trainer: string;
+  /** IANA zone of the trainee (header). */
+  trainee: string;
+};
+
+/**
+ * The trainer client workspace. Every read is independent of the others once
+ * the relationship row (and both timezones) are known, so they all go out in
+ * one `db.batch` = one D1 round trip, flat in the amount of client history.
+ *
+ * Batch statements never join two tables that share a column name (D1 batch
+ * results are mapped by position over object values, so duplicates collapse);
+ * rows that used to come from a join are fetched as two statements and paired
+ * in memory.
+ */
+export async function loadClientWorkspace(
   db: Db,
-  relationshipId: string,
+  relationship: typeof coachingRelationships.$inferSelect,
   nowIso: string,
-  /** After reactivation, ignore submissions from the prior coaching period. */
-  reactivatedAt: string | null,
+  timezones: ClientWorkspaceTimezones,
 ) {
-  const conditions = [
+  const relationshipId = relationship.id;
+  const today = formatLocalDate(new Date(nowIso), timezones.trainer);
+  const adherenceStart = adherenceWindowStart(today);
+  const recentLimit = RECENT_ACTIVITY_LIMIT * 3;
+
+  // The newest assignments / check-ins are selected twice: whole rows, and ids
+  // for the matching log rows (execution / compliance / review).
+  const recentWorkoutScope = and(
+    eq(workoutAssignments.coachingRelationshipId, relationshipId),
+    eq(workoutAssignments.scheduleStatus, "scheduled"),
+  );
+  const recentMealScope = and(
+    eq(mealAssignments.coachingRelationshipId, relationshipId),
+    eq(mealAssignments.scheduleStatus, "scheduled"),
+  );
+  const recentCheckinScope = eq(checkins.coachingRelationshipId, relationshipId);
+
+  const pendingReviewConditions = [
     eq(checkins.coachingRelationshipId, relationshipId),
     eq(checkins.recordStatus, "submitted"),
-    isNull(checkinReviews.id),
+    checkinWithoutReview(),
   ];
-  if (reactivatedAt) {
-    conditions.push(gte(checkins.submittedAt, reactivatedAt));
+  // After reactivation, ignore submissions from the prior coaching period.
+  if (relationship.reactivatedAt) {
+    pendingReviewConditions.push(
+      gte(checkins.submittedAt, relationship.reactivatedAt),
+    );
   }
-  const submitted = await db
-    .select({
-      checkin: checkins,
-      review: checkinReviews,
-    })
-    .from(checkins)
-    .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-    .where(and(...conditions))
-    .orderBy(desc(checkins.submittedAt), desc(checkins.localDate))
-    .limit(1);
-  if (!submitted[0]) return null;
-  return mapCheckin(submitted[0].checkin, null, nowIso);
-}
 
-async function loadProgressSummary(db: Db, relationshipId: string) {
-  const [measurementRows, entryRows, mediaRows] = await Promise.all([
+  const [
+    profileRows,
+    trainerProfileRows,
+    identityRows,
+    mealOverrides,
+    responseRows,
+    reviewRows,
+    configurationRows,
+    workoutExpectationRows,
+    nutritionExpectationRows,
+    checkinScheduleRows,
+    trackingRows,
+    effectiveVersionRows,
+    relationshipPlanRows,
+    subscriptionRows,
+    exceptionRows,
+    nextCheckinRows,
+    pendingReviewRows,
+    activityWorkoutRows,
+    activityWorkoutExecutionRows,
+    activityMealRows,
+    activityComplianceRows,
+    activityCheckinRows,
+    activityReviewRows,
+    measurementRows,
+    entryRows,
+    mediaRows,
+    pendingReactivationRows,
+    adherenceWorkoutRows,
+    adherenceMealRows,
+    adherenceCheckinRows,
+  ] = await db.batch([
+    db
+      .select({
+        displayName: traineeProfiles.displayName,
+        dateOfBirth: traineeProfiles.dateOfBirth,
+        gender: traineeProfiles.gender,
+      })
+      .from(traineeProfiles)
+      .where(eq(traineeProfiles.userId, relationship.traineeUserId))
+      .limit(1),
+    db
+      .select({ whatsappE164: trainerProfiles.whatsappE164 })
+      .from(trainerProfiles)
+      .where(eq(trainerProfiles.userId, relationship.trainerUserId))
+      .limit(1),
+    db
+      .select({ mobileE164: userIdentities.mobileE164 })
+      .from(userIdentities)
+      .where(eq(userIdentities.userId, relationship.traineeUserId))
+      .limit(1),
+    db
+      .select({
+        id: mealTimeOverrides.slotKey,
+        dayPattern: mealTimeOverrides.dayPattern,
+        time: mealTimeOverrides.time,
+        updatedAt: mealTimeOverrides.updatedAt,
+      })
+      .from(mealTimeOverrides)
+      .where(eq(mealTimeOverrides.relationshipId, relationshipId)),
+    // Onboarding status inputs (see `deriveOnboardingStatusForRelationships`).
+    db
+      .select({ status: onboardingFormResponses.status })
+      .from(onboardingFormResponses)
+      .where(eq(onboardingFormResponses.coachingRelationshipId, relationshipId)),
+    db
+      .select({ id: onboardingReviews.id })
+      .from(onboardingReviews)
+      .where(eq(onboardingReviews.coachingRelationshipId, relationshipId)),
+    // The active configuration (also the "has active configuration" input).
+    db
+      .select()
+      .from(coachingConfigurations)
+      .where(
+        and(
+          eq(coachingConfigurations.coachingRelationshipId, relationshipId),
+          eq(coachingConfigurations.status, "active"),
+        ),
+      )
+      .limit(1),
+    db
+      .select()
+      .from(workoutExpectations)
+      .where(
+        inArray(
+          workoutExpectations.coachingConfigurationId,
+          activeConfigurationId(db, relationshipId),
+        ),
+      )
+      .limit(1),
+    db
+      .select()
+      .from(nutritionExpectations)
+      .where(
+        inArray(
+          nutritionExpectations.coachingConfigurationId,
+          activeConfigurationId(db, relationshipId),
+        ),
+      )
+      .limit(1),
+    db
+      .select()
+      .from(checkinSchedules)
+      .where(
+        inArray(
+          checkinSchedules.coachingConfigurationId,
+          activeConfigurationId(db, relationshipId),
+        ),
+      )
+      .limit(1),
+    db
+      .select()
+      .from(trackingRequirements)
+      .where(
+        inArray(
+          trackingRequirements.coachingConfigurationId,
+          activeConfigurationId(db, relationshipId),
+        ),
+      )
+      .limit(1),
+    // Effective plan: the version, then the plan row, paired below.
+    db
+      .select()
+      .from(planVersions)
+      .where(
+        and(
+          eq(planVersions.status, "effective"),
+          inArray(
+            planVersions.planId,
+            db
+              .select({ id: plans.id })
+              .from(plans)
+              .where(eq(plans.coachingRelationshipId, relationshipId)),
+          ),
+        ),
+      )
+      .orderBy(
+        desc(planVersions.effectiveFrom),
+        desc(planVersions.versionNumber),
+      )
+      .limit(1),
+    db
+      .select()
+      .from(plans)
+      .where(eq(plans.coachingRelationshipId, relationshipId)),
+    db
+      .select()
+      .from(subscriptionVersions)
+      .where(eq(subscriptionVersions.coachingRelationshipId, relationshipId))
+      .orderBy(desc(subscriptionVersions.versionNumber))
+      .limit(1),
+    // Open exceptions (open summary and adherence both read these rows).
+    db
+      .select()
+      .from(exceptions)
+      .where(
+        and(
+          eq(exceptions.coachingRelationshipId, relationshipId),
+          inArray(exceptions.status, [
+            "detected",
+            "active",
+            ...ADHERENCE_OPEN_EXCEPTION_STATUSES,
+          ]),
+        ),
+      )
+      .orderBy(asc(exceptions.detectedAt), asc(exceptions.id)),
+    // Next scheduled check-in only (draft). Never past submitted / awaiting review.
+    db
+      .select()
+      .from(checkins)
+      .where(
+        and(
+          eq(checkins.coachingRelationshipId, relationshipId),
+          eq(checkins.recordStatus, "draft"),
+          checkinWithoutReview(),
+        ),
+      )
+      .orderBy(asc(checkins.localDate), asc(checkins.id))
+      .limit(1),
+    // Submitted check-in awaiting trainer review.
+    db
+      .select()
+      .from(checkins)
+      .where(and(...pendingReviewConditions))
+      .orderBy(desc(checkins.submittedAt), desc(checkins.localDate))
+      .limit(1),
+    // Recent activity: newest assignments / check-ins plus their logs.
+    db
+      .select()
+      .from(workoutAssignments)
+      .where(recentWorkoutScope)
+      .orderBy(desc(workoutAssignments.localDate), desc(workoutAssignments.id))
+      .limit(recentLimit),
+    db
+      .select()
+      .from(workoutExecutions)
+      .where(
+        inArray(
+          workoutExecutions.assignmentId,
+          db
+            .select({ id: workoutAssignments.id })
+            .from(workoutAssignments)
+            .where(recentWorkoutScope)
+            .orderBy(
+              desc(workoutAssignments.localDate),
+              desc(workoutAssignments.id),
+            )
+            .limit(recentLimit),
+        ),
+      ),
+    db
+      .select()
+      .from(mealAssignments)
+      .where(recentMealScope)
+      .orderBy(desc(mealAssignments.localDate), desc(mealAssignments.id))
+      .limit(recentLimit),
+    db
+      .select()
+      .from(mealCompliance)
+      .where(
+        inArray(
+          mealCompliance.assignmentId,
+          db
+            .select({ id: mealAssignments.id })
+            .from(mealAssignments)
+            .where(recentMealScope)
+            .orderBy(desc(mealAssignments.localDate), desc(mealAssignments.id))
+            .limit(recentLimit),
+        ),
+      ),
+    db
+      .select()
+      .from(checkins)
+      .where(recentCheckinScope)
+      .orderBy(desc(checkins.localDate), desc(checkins.id))
+      .limit(recentLimit),
+    db
+      .select({ checkinId: checkinReviews.checkinId })
+      .from(checkinReviews)
+      .where(
+        inArray(
+          checkinReviews.checkinId,
+          db
+            .select({ id: checkins.id })
+            .from(checkins)
+            .where(recentCheckinScope)
+            .orderBy(desc(checkins.localDate), desc(checkins.id))
+            .limit(recentLimit),
+        ),
+      ),
+    // Progress summary.
     db
       .select()
       .from(measurements)
@@ -641,117 +823,195 @@ async function loadProgressSummary(db: Db, relationshipId: string) {
       )
       .orderBy(desc(mediaAssets.createdAt))
       .limit(PROGRESS_SUMMARY_LIMIT),
-  ]);
-  return {
-    measurements: measurementRows.map(mapMeasurement),
-    entries: entryRows.map(mapProgressEntry),
-    media: mediaRows.map(mapMediaAsset),
-  };
-}
-
-export async function loadClientWorkspace(
-  db: Db,
-  relationship: typeof coachingRelationships.$inferSelect,
-  nowIso: string,
-) {
-  const [
-    profile,
-    traineeUser,
-    trainerProfile,
-    clientIdentity,
-    mealOverrides,
-    onboardingStatus,
-    configuration,
-    effectivePlan,
-    subscription,
-    openException,
-    nextCheckin,
-    pendingReviewCheckin,
-    recentActivity,
-    progress,
-    pendingReactivationRow,
-  ] = await Promise.all([
+    // Pending reactivation request (only shown for an ended client).
+    db
+      .select()
+      .from(reactivationRequests)
+      .where(
+        and(
+          eq(reactivationRequests.relationshipId, relationshipId),
+          eq(reactivationRequests.status, "pending"),
+          gt(reactivationRequests.expiresAt, nowIso),
+        ),
+      )
+      .limit(1),
+    // Adherence inputs (see `deriveAdherenceForRelationships`).
     db
       .select({
-        displayName: traineeProfiles.displayName,
-        dateOfBirth: traineeProfiles.dateOfBirth,
-        gender: traineeProfiles.gender,
+        status: workoutExecutions.status,
+        localDate: workoutAssignments.localDate,
       })
-      .from(traineeProfiles)
-      .where(eq(traineeProfiles.userId, relationship.traineeUserId))
-      .limit(1),
+      .from(workoutExecutions)
+      .innerJoin(
+        workoutAssignments,
+        eq(workoutExecutions.assignmentId, workoutAssignments.id),
+      )
+      .where(
+        and(
+          eq(workoutExecutions.coachingRelationshipId, relationshipId),
+          gte(workoutAssignments.localDate, adherenceStart),
+          lte(workoutAssignments.localDate, today),
+        ),
+      ),
     db
-      .select({ timezone: users.timezone })
-      .from(users)
-      .where(eq(users.id, relationship.traineeUserId))
-      .limit(1),
-    db
-      .select({ whatsappE164: trainerProfiles.whatsappE164 })
-      .from(trainerProfiles)
-      .where(eq(trainerProfiles.userId, relationship.trainerUserId))
-      .limit(1),
-    db
-      .select({ mobileE164: userIdentities.mobileE164 })
-      .from(userIdentities)
-      .where(eq(userIdentities.userId, relationship.traineeUserId))
-      .limit(1),
+      .select({ logged: count() })
+      .from(mealCompliance)
+      .where(
+        and(
+          eq(mealCompliance.coachingRelationshipId, relationshipId),
+          gte(mealCompliance.localDate, adherenceStart),
+          lte(mealCompliance.localDate, today),
+        ),
+      ),
     db
       .select({
-        id: mealTimeOverrides.slotKey,
-        dayPattern: mealTimeOverrides.dayPattern,
-        time: mealTimeOverrides.time,
-        updatedAt: mealTimeOverrides.updatedAt,
+        recordStatus: checkins.recordStatus,
+        localDate: checkins.localDate,
       })
-      .from(mealTimeOverrides)
-      .where(eq(mealTimeOverrides.relationshipId, relationship.id)),
-    onboardingStatusForRelationship(db, relationship),
-    loadActiveConfiguration(db, relationship.id),
-    loadEffectivePlan(db, relationship.id),
-    loadLatestSubscription(
-      db,
-      relationship.id,
-      relationship.trainerUserId,
-      nowIso,
-    ),
-    loadOpenException(db, relationship.id),
-    loadNextCheckin(db, relationship.id, nowIso),
-    loadPendingReviewCheckin(
-      db,
-      relationship.id,
-      nowIso,
-      relationship.reactivatedAt ?? null,
-    ),
-    loadRecentActivity(db, relationship.id, nowIso),
-    loadProgressSummary(db, relationship.id),
-    relationship.status === "ended"
-      ? db
-          .select()
-          .from(reactivationRequests)
-          .where(
-            and(
-              eq(reactivationRequests.relationshipId, relationship.id),
-              eq(reactivationRequests.status, "pending"),
-              gt(reactivationRequests.expiresAt, nowIso),
-            ),
-          )
-          .limit(1)
-      : Promise.resolve([]),
+      .from(checkins)
+      .where(
+        and(
+          eq(checkins.coachingRelationshipId, relationshipId),
+          gte(checkins.localDate, adherenceStart),
+          lte(checkins.localDate, today),
+        ),
+      ),
   ]);
 
-  const trainee = profile[0];
+  const trainee = profileRows[0];
   if (!trainee?.displayName) {
     throw new Error("Trainee profile is missing for this coaching relationship.");
   }
+
+  const configuration = (() => {
+    const row = configurationRows[0];
+    const workout = workoutExpectationRows[0];
+    const nutrition = nutritionExpectationRows[0];
+    const checkin = checkinScheduleRows[0];
+    const tracking = trackingRows[0];
+    if (!row || !workout || !nutrition || !checkin || !tracking) return null;
+    return mapCoachingConfiguration({
+      configuration: row,
+      workout,
+      nutrition,
+      checkin,
+      tracking,
+    });
+  })();
+
+  const effectivePlan = (() => {
+    const version = effectiveVersionRows[0];
+    const plan = version
+      ? relationshipPlanRows.find((row) => row.id === version.planId)
+      : undefined;
+    if (!version || !plan) return { plan: null, version: null };
+    return { plan: mapPlan(plan), version: mapPlanVersion(version) };
+  })();
+
+  const subscription = (() => {
+    const row = subscriptionRows[0];
+    if (!row) return null;
+    return subscriptionSchema.parse({
+      id: row.id,
+      coachingRelationshipId: row.coachingRelationshipId,
+      versionNumber: row.versionNumber,
+      planName: row.planName,
+      paymentFrequency: row.paymentFrequency,
+      startsOn: row.startsOn,
+      renewsOn: row.renewsOn,
+      renewalState: deriveRenewalState({ today, renewsOn: row.renewsOn }),
+      createdAt: row.createdAt,
+    });
+  })();
+
+  const onboardingStatus =
+    deriveClientOnboardingStatus({
+      relationshipStatus: relationship.status,
+      invitationPending: false,
+      hasSubmittedResponse: responseRows.some(
+        (row) => row.status === "submitted",
+      ),
+      hasCoachingReadyReview: reviewRows.length > 0,
+      hasActiveConfiguration: configurationRows.length > 0,
+    }) ?? "onboarding_pending";
+
+  // Adherence only looks at active clients (same rule as the shared helper).
+  const adherenceState = (() => {
+    const qualifying =
+      onboardingStatus === "active" &&
+      (adherenceWorkoutRows.some((row) =>
+        isQualifyingAdherenceObservation({
+          kind: "workout_execution",
+          status: row.status,
+          localDate: row.localDate,
+          today,
+        }),
+      ) ||
+        adherenceMealRows.some((row) => row.logged > 0) ||
+        adherenceCheckinRows.some((row) =>
+          isQualifyingAdherenceObservation({
+            kind: "checkin",
+            status: row.recordStatus,
+            localDate: row.localDate,
+            today,
+          }),
+        ));
+    const hasOpenAdherenceException =
+      onboardingStatus === "active" &&
+      exceptionRows.some(
+        (row) =>
+          (ADHERENCE_OPEN_EXCEPTION_STATUSES as readonly string[]).includes(
+            row.status,
+          ) &&
+          (ADHERENCE_EXCEPTION_SEVERITIES as readonly string[]).includes(
+            row.severity,
+          ),
+      );
+    return deriveAdherenceState({
+      onboardingStatus,
+      hasOpenAdherenceException,
+      hasQualifyingActivity: qualifying,
+    });
+  })();
+
+  const executionByAssignment = new Map(
+    activityWorkoutExecutionRows.map((row) => [row.assignmentId, row]),
+  );
+  const complianceByAssignment = new Map(
+    activityComplianceRows.map((row) => [row.assignmentId, row]),
+  );
+  const reviewedCheckinIds = new Set(
+    activityReviewRows.map((row) => row.checkinId),
+  );
+  const recentActivity = recentActivityFrom(
+    [
+      ...activityWorkoutRows.map((row) =>
+        workoutActivityItem(row, executionByAssignment.get(row.id) ?? null, nowIso),
+      ),
+      ...activityMealRows.map((row) =>
+        mealActivityItem(row, complianceByAssignment.get(row.id) ?? null, nowIso),
+      ),
+      ...activityCheckinRows.map((row) =>
+        checkinActivityItem(row, reviewedCheckinIds.has(row.id), nowIso),
+      ),
+    ],
+    nowIso,
+  );
+
+  const nextCheckin = nextCheckinRows[0]
+    ? mapCheckin(nextCheckinRows[0], null, nowIso)
+    : null;
+  const pendingReviewCheckin = pendingReviewRows[0]
+    ? mapCheckin(pendingReviewRows[0], null, nowIso)
+    : null;
+  const pendingReactivationRow =
+    relationship.status === "ended" ? pendingReactivationRows : [];
+
   // Z9-18: the header name and WhatsApp number prefer what the trainer set in
   // Client settings; they feed the header WhatsApp button and Reminders drafts.
   const displayName =
     resolveClientDisplayName(relationship, trainee.displayName) ??
     trainee.displayName;
-  const today = await trainerToday(db, relationship.trainerUserId, nowIso);
-  const adherence = await deriveAdherenceForRelationships(db, {
-    today,
-    relationships: [{ id: relationship.id, onboardingStatus }],
-  });
 
   return clientWorkspaceSchema.parse({
     header: {
@@ -769,13 +1029,13 @@ export async function loadClientWorkspace(
       renewalState: subscription?.renewalState ?? null,
       renewsOn: subscription?.renewsOn ?? null,
       startedAt: relationship.startedAt ?? null,
-      adherenceState: adherence.get(relationship.id) ?? "not_available",
+      adherenceState,
       traineeProfile: {
         displayName,
         age: deriveAge(trainee.dateOfBirth, today),
         gender: trainee.gender,
       },
-      traineeTimezone: traineeUser[0]?.timezone ?? "UTC",
+      traineeTimezone: timezones.trainee,
       hasCustomMealTimes: mealOverrides.length > 0,
       mealTimeOverrides: mealOverrides.map((row) => ({
         slotKey: row.id,
@@ -783,10 +1043,10 @@ export async function loadClientWorkspace(
         time: row.time,
         updatedAt: row.updatedAt,
       })),
-      trainerWhatsappE164: trainerProfile[0]?.whatsappE164 ?? null,
+      trainerWhatsappE164: trainerProfileRows[0]?.whatsappE164 ?? null,
       clientWhatsappE164: resolveClientWhatsappE164(
         relationship,
-        clientIdentity[0]?.mobileE164,
+        identityRows[0]?.mobileE164,
       ),
       endedAt: relationship.endedAt ?? null,
       pendingReactivation: pendingReactivationRow[0]
@@ -800,11 +1060,15 @@ export async function loadClientWorkspace(
         : null,
     },
     overview: {
-      openException,
+      openException: openExceptionSummary(exceptionRows),
       nextCheckin,
       pendingReviewCheckin,
       recentActivity,
-      progress,
+      progress: {
+        measurements: measurementRows.map(mapMeasurement),
+        entries: entryRows.map(mapProgressEntry),
+        media: mediaRows.map(mapMediaAsset),
+      },
     },
     plan: effectivePlan,
     configuration: {

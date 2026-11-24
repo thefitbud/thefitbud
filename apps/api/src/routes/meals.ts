@@ -2,7 +2,7 @@ import {
   operation,
   dateWindowParameters,
 } from "../openapi/document";
-import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   confirmMealRequestSchema,
@@ -25,6 +25,7 @@ import {
   mealPhotoIntentSatisfied,
 } from "@fitbud/core";
 import { createDb } from "../db/client";
+import { evaluateExceptionsAfterWrite } from "../domain/exceptions";
 import {
   coachingConfigurations,
   coachingRelationships,
@@ -35,6 +36,7 @@ import {
   nutritionExpectations,
   plans,
   planVersions,
+  users,
 } from "../db/schema";
 import {
   mapMealAssignment,
@@ -100,6 +102,10 @@ export const mealRoutes = new Hono<{
   Variables: Variables;
 }>();
 
+// Z14-1 / D-W14-8: a successful write re-evaluates its relationship's
+// exceptions after the response, so Needs you can read stored rows.
+mealRoutes.use("*", evaluateExceptionsAfterWrite);
+
 type Db = ReturnType<typeof createDb>;
 
 /** Resolve trainee-facing logging lock for one or many meal assignments. */
@@ -115,8 +121,7 @@ async function mealLockReasonsByAssignmentId(
     }>;
   },
 ): Promise<Map<string, string>> {
-  const lockByAssignment = new Map<string, string>();
-  if (input.assignmentIds.length === 0) return lockByAssignment;
+  if (input.assignmentIds.length === 0) return new Map<string, string>();
 
   const exceptionRows = await db
     .select({
@@ -130,6 +135,32 @@ async function mealLockReasonsByAssignmentId(
         eq(exceptions.sourceEntityType, "meal_assignment"),
       ),
     );
+  const timeZone = await loadTraineeTimezone(db, input.traineeUserId);
+  return deriveMealLockReasons({
+    exceptionRows,
+    timeZone,
+    assignmentIds: input.assignmentIds,
+    rows: input.rows,
+  });
+}
+
+/**
+ * The lock rules of `mealLockReasonsByAssignmentId` over data the caller has
+ * already read, so the list read can fetch the exception rows and the zone in
+ * its own batch (Z14-1). No I/O.
+ */
+function deriveMealLockReasons(input: {
+  exceptionRows: Array<{ sourceEntityId: string; status: string }>;
+  timeZone: string;
+  assignmentIds: string[];
+  rows: Array<{
+    assignment: typeof mealAssignments.$inferSelect;
+    compliance: typeof mealCompliance.$inferSelect | null;
+  }>;
+}): Map<string, string> {
+  const lockByAssignment = new Map<string, string>();
+  if (input.assignmentIds.length === 0) return lockByAssignment;
+  const { exceptionRows, timeZone } = input;
   const exceptionStatusById = new Map<string, string>();
   for (const ex of exceptionRows) {
     exceptionStatusById.set(ex.sourceEntityId, ex.status);
@@ -141,7 +172,6 @@ async function mealLockReasonsByAssignmentId(
     }
   }
 
-  const timeZone = await loadTraineeTimezone(db, input.traineeUserId);
   const now = nowIso();
   for (const row of input.rows) {
     if (lockByAssignment.has(row.assignment.id)) continue;
@@ -539,17 +569,15 @@ mealRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const relationship = await loadAccessibleRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship) {
-      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
-    }
-
+    // One round trip (Z14-1): the access check's relationship read, the
+    // assignments, their compliance rows, the relationship's meal exceptions
+    // and the trainee's zone are independent reads, so they share one
+    // `db.batch`. Nothing is returned unless the relationship check passes.
+    // The compliance rows are read apart from the assignments (a joined
+    // select repeats column names, which `db.batch` cannot map).
+    const relationshipId = c.req.param("relationshipId");
     const conditions = [
-      eq(mealAssignments.coachingRelationshipId, relationship.id),
+      eq(mealAssignments.coachingRelationshipId, relationshipId),
       eq(mealAssignments.scheduleStatus, "scheduled"),
     ];
     if (fromDate) {
@@ -559,33 +587,76 @@ mealRoutes.get(
       conditions.push(lte(mealAssignments.localDate, toDate));
     }
 
-    const rows = await db
-      .select({
-        assignment: mealAssignments,
-        compliance: mealCompliance,
-      })
-      .from(mealAssignments)
-      .leftJoin(
-        mealCompliance,
-        eq(mealCompliance.assignmentId, mealAssignments.id),
-      )
-      .where(and(...conditions))
-      .orderBy(
-        asc(mealAssignments.localDate),
-        asc(mealAssignments.mealName),
-        asc(mealAssignments.id),
-      );
+    const [relationshipRows, assignmentRows, complianceRows, exceptionRows, tzRows] =
+      await db.batch([
+        db
+          .select()
+          .from(coachingRelationships)
+          .where(eq(coachingRelationships.id, relationshipId))
+          .limit(1),
+        db
+          .select()
+          .from(mealAssignments)
+          .where(and(...conditions))
+          .orderBy(
+            asc(mealAssignments.localDate),
+            asc(mealAssignments.mealName),
+            asc(mealAssignments.id),
+          ),
+        db
+          .select()
+          .from(mealCompliance)
+          .where(
+            inArray(
+              mealCompliance.assignmentId,
+              db
+                .select({ id: mealAssignments.id })
+                .from(mealAssignments)
+                .where(and(...conditions)),
+            ),
+          ),
+        db
+          .select({
+            sourceEntityId: exceptions.sourceEntityId,
+            status: exceptions.status,
+          })
+          .from(exceptions)
+          .where(
+            and(
+              eq(exceptions.coachingRelationshipId, relationshipId),
+              eq(exceptions.sourceEntityType, "meal_assignment"),
+            ),
+          ),
+        db
+          .select({ timezone: users.timezone })
+          .from(users)
+          .innerJoin(
+            coachingRelationships,
+            eq(coachingRelationships.traineeUserId, users.id),
+          )
+          .where(eq(coachingRelationships.id, relationshipId))
+          .limit(1),
+      ]);
+    const relationship = relationshipRows[0];
+    if (!relationship || !canAccessRelationship(actor, relationship)) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+
+    const complianceByAssignment = new Map(
+      complianceRows.map((row) => [row.assignmentId, row]),
+    );
+    const rows = assignmentRows.map((assignment) => ({
+      assignment,
+      compliance: complianceByAssignment.get(assignment.id) ?? null,
+    }));
 
     const now = nowIso();
     const assignmentIds = rows.map((row) => row.assignment.id);
-    const lockByAssignment = await mealLockReasonsByAssignmentId(db, {
-      relationshipId: relationship.id,
-      traineeUserId: relationship.traineeUserId,
+    const lockByAssignment = deriveMealLockReasons({
+      exceptionRows,
+      timeZone: tzRows[0]?.timezone ?? "UTC",
       assignmentIds,
-      rows: rows.map((row) => ({
-        assignment: row.assignment,
-        compliance: row.compliance ?? null,
-      })),
+      rows,
     });
     const items = rows
       .map((row) => {

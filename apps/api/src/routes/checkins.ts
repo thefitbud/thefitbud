@@ -67,7 +67,9 @@ import {
   workoutExecutions,
 } from "../db/schema";
 import {
-  detectExceptionsForRelationship,
+  evaluateDueExceptions,
+  loadExceptionEvaluationTimes,
+  evaluateExceptionsAfterWrite,
   listActiveExceptionsForRelationship,
 } from "../domain/exceptions";
 import {
@@ -123,6 +125,10 @@ export const checkinRoutes = new Hono<{
   Bindings: Env;
   Variables: Variables;
 }>();
+
+// Z14-1 / D-W14-8: a successful write re-evaluates its relationship's
+// exceptions after the response, so Needs you can read stored rows.
+checkinRoutes.use("*", evaluateExceptionsAfterWrite);
 
 async function loadAccessibleRelationship(
   db: Db,
@@ -985,35 +991,49 @@ checkinRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const relationship = await loadAccessibleRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship) {
-      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
-    }
-
-    const conditions = [eq(checkins.coachingRelationshipId, relationship.id)];
+    const relationshipId = c.req.param("relationshipId");
+    const conditions = [eq(checkins.coachingRelationshipId, relationshipId)];
     if (fromDate) conditions.push(gte(checkins.localDate, fromDate));
     if (toDate) conditions.push(lte(checkins.localDate, toDate));
+    const scope = and(...conditions);
 
-    const rows = await db
-      .select({
-        checkin: checkins,
-        review: checkinReviews,
-      })
-      .from(checkins)
-      .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
-      .where(and(...conditions))
-      .orderBy(desc(checkins.localDate), desc(checkins.createdAt));
+    // One round trip (Z14-1): the relationship, the check-ins and their
+    // reviews (one per check-in, unique on checkin_id), paired in memory so
+    // the batch never maps two columns of the same name. Nothing is returned
+    // before the ownership check below.
+    const [relationshipRows, checkinRows, reviewRows] = await db.batch([
+      db
+        .select()
+        .from(coachingRelationships)
+        .where(eq(coachingRelationships.id, relationshipId))
+        .limit(1),
+      db
+        .select()
+        .from(checkins)
+        .where(scope)
+        .orderBy(desc(checkins.localDate), desc(checkins.createdAt)),
+      db
+        .select()
+        .from(checkinReviews)
+        .where(
+          inArray(
+            checkinReviews.checkinId,
+            db.select({ id: checkins.id }).from(checkins).where(scope),
+          ),
+        ),
+    ]);
+    const relationship = relationshipRows[0];
+    if (!relationship || !canAccessRelationship(actor, relationship)) {
+      return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+    }
+    const reviewByCheckin = new Map(reviewRows.map((review) => [review.checkinId, review]));
 
     const now = nowIso();
     return ok(
       c,
       checkinListResponseSchema.parse({
-        items: rows.map((row) =>
-          mapCheckin(row.checkin, row.review ?? null, now),
+        items: checkinRows.map((checkin) =>
+          mapCheckin(checkin, reviewByCheckin.get(checkin.id) ?? null, now),
         ),
         nextCursor: null,
       }),
@@ -1040,20 +1060,28 @@ checkinRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const relationship = await loadAccessibleRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship || relationship.trainerUserId !== actor.userId) {
+    const relationshipId = c.req.param("relationshipId");
+    // One round trip (Z14-1); notes are returned only after the ownership check.
+    const [relationshipRows, rows] = await db.batch([
+      db
+        .select()
+        .from(coachingRelationships)
+        .where(eq(coachingRelationships.id, relationshipId))
+        .limit(1),
+      db
+        .select()
+        .from(trainerNotes)
+        .where(eq(trainerNotes.coachingRelationshipId, relationshipId))
+        .orderBy(desc(trainerNotes.createdAt)),
+    ]);
+    const relationship = relationshipRows[0];
+    if (
+      !relationship ||
+      !canAccessRelationship(actor, relationship) ||
+      relationship.trainerUserId !== actor.userId
+    ) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
     }
-
-    const rows = await db
-      .select()
-      .from(trainerNotes)
-      .where(eq(trainerNotes.coachingRelationshipId, relationship.id))
-      .orderBy(desc(trainerNotes.createdAt));
 
     return ok(
       c,
@@ -1658,8 +1686,15 @@ checkinRoutes.get(
     const config = await loadActiveCheckinSchedule(db, relationship.id);
 
     // Rule 5 (EC1b): reading an ended client's check-in must not detect.
+    // Z14-1 / D-W14-8: evaluated again only when the last evaluation is older
+    // than 15 minutes; writes evaluate on their own.
     if (relationship.status !== "ended") {
-      await detectExceptionsForRelationship(db, relationship.id, now);
+      const evaluatedAt = await loadExceptionEvaluationTimes(db, [relationship.id]);
+      await evaluateDueExceptions(
+        db,
+        [{ id: relationship.id, status: relationship.status, evaluatedAt: evaluatedAt.get(relationship.id) }],
+        now,
+      );
     }
     const activeExceptionRows = await listActiveExceptionsForRelationship(
       db,

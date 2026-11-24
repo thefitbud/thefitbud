@@ -169,8 +169,10 @@ describe("GET /exceptions/attention query count (I1b)", () => {
       const reads = run.filter((s) => new RegExp(`^select .* from "${table}"`, "i").test(s.sql));
       expect(reads.length, `${table} is read`).toBeGreaterThan(0);
       for (const read of reads) {
+        // Z14-1: the one-query actor load reads the caller's own profile
+        // through a sub-select correlated on "users"."id" (still one user).
         expect(read.sql, `${table} read is filtered by user`).toMatch(
-          / where .*"user_id" (in \(|= \?)/i,
+          / where .*"user_id" (in \(|= \?|= "users"\."id")/i,
         );
         expect(read.params.length).toBeLessThanOrEqual(90);
       }

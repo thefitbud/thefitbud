@@ -5,6 +5,7 @@ const jobs = vi.hoisted(() => ({
   replenishment: vi.fn(),
   coachAsk: vi.fn(),
   cleanup: vi.fn(),
+  exceptionEvaluation: vi.fn(),
   pushReceipts: vi.fn(),
   queueBatch: vi.fn(),
   // Z6-17 (D-W6-37): the real purge reads D1, so it is mocked like the other jobs.
@@ -20,6 +21,9 @@ vi.mock("./jobs/replenishment", () => ({ handleScheduledReplenishment: jobs.repl
 vi.mock("./jobs/push-receipts", () => ({ handleScheduledPushReceipts: jobs.pushReceipts }));
 vi.mock("./jobs/account-purge", () => ({ runAccountPurge: jobs.accountPurge }));
 vi.mock("./jobs/cleanup", () => ({ handleScheduledCleanup: jobs.cleanup }));
+vi.mock("./jobs/exception-evaluation", () => ({
+  handleScheduledExceptionEvaluation: jobs.exceptionEvaluation,
+}));
 vi.mock("./domain/coach-asks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./domain/coach-asks")>()),
   runCoachAskMaintenance: jobs.coachAsk,
@@ -233,10 +237,35 @@ describe("scheduled() (OB2)", () => {
       ["cron.completed", "cron.replenishment"],
       ["cron.completed", "cron.coach_ask"],
       ["cron.completed", "cron.account_purge"],
+      ["cron.completed", "cron.exception_evaluation"],
       ["cron.completed", "cron.cleanup"],
       ["cron.completed", "cron.push_receipts"],
     ]);
     for (const line of cron) expect(typeof line.latencyMs).toBe("number");
+  });
+
+  it("calls exception evaluation on every tick with the tick's time (Z14-1)", async () => {
+    await worker.scheduled(controller, env("staging"));
+    expect(jobs.exceptionEvaluation).toHaveBeenCalledTimes(1);
+    const [, at] = jobs.exceptionEvaluation.mock.calls[0] as [unknown, Date];
+    expect(at.toISOString()).toBe("2026-10-31T06:00:00.000Z");
+  });
+
+  it("a failing exception evaluation is logged safely and the other jobs still run (Z14-1)", async () => {
+    jobs.exceptionEvaluation.mockRejectedValueOnce(new TypeError(SECRET_MESSAGE));
+    await expect(worker.scheduled(controller, env("staging"))).rejects.toBeInstanceOf(TypeError);
+    expect(jobs.cleanup).toHaveBeenCalledTimes(1);
+    expect(jobs.pushReceipts).toHaveBeenCalledTimes(1);
+    const cron = logLines().filter((l) => String(l.message).startsWith("cron."));
+    expect(cron).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        message: "cron.failed",
+        operation: "cron.exception_evaluation",
+        errorName: "TypeError",
+      }),
+    );
+    expect(JSON.stringify(cron)).not.toContain(SECRET_MESSAGE);
   });
 
   it("the account-purge job runs and logs on its own when coach_ask fails (Z5-4)", async () => {
@@ -272,6 +301,7 @@ describe("scheduled() (OB2)", () => {
       expect.objectContaining({ message: "cron.completed", operation: "cron.replenishment" }),
       expect.objectContaining({ message: "cron.failed", operation: "cron.coach_ask", errorName: "TypeError" }),
       expect.objectContaining({ message: "cron.completed", operation: "cron.account_purge" }),
+      expect.objectContaining({ message: "cron.completed", operation: "cron.exception_evaluation" }),
       expect.objectContaining({ message: "cron.completed", operation: "cron.cleanup" }),
       expect.objectContaining({ message: "cron.completed", operation: "cron.push_receipts" }),
     ]);
