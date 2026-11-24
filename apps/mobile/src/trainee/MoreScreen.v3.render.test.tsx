@@ -96,19 +96,39 @@ describe("trainee More (TR-20a)", () => {
     openURL.mockRestore();
   });
 
-  it("footer links open Terms, Privacy and Credits", () => {
+  it("footer links open the documents inside the app, with no browser", () => {
     const openURL = vi.spyOn(Linking, "openURL").mockResolvedValue(true);
     render(<MoreScreen relationship={relationship} onOpenOverlay={vi.fn()} />);
     expect(screen.getByText(/FitBud 1\.0\.0 \(214\)/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("link", { name: "Terms of use, opens in your browser" }));
-    fireEvent.click(screen.getByRole("link", { name: "Privacy policy, opens in your browser" }));
-    fireEvent.click(screen.getByRole("link", { name: "Credits and licences, opens in your browser" }));
-    expect(openURL.mock.calls.map((call) => String(call[0]))).toEqual([
-      expect.stringMatching(/\/terms$/),
-      expect.stringMatching(/\/privacy$/),
-      expect.stringMatching(/\/credits$/),
-    ]);
+    fireEvent.click(screen.getByRole("link", { name: "Terms of Service, opens in the app" }));
+    expect(screen.getByRole("heading", { name: "Terms of Service" })).toBeTruthy();
+    expect(screen.getByTestId("legal-draft-notice").textContent).toMatch(/not yet in force/);
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    fireEvent.click(screen.getByRole("link", { name: "Privacy Policy, opens in the app" }));
+    expect(screen.getByRole("heading", { name: "Privacy Policy" })).toBeTruthy();
+    expect(openURL).not.toHaveBeenCalled();
     openURL.mockRestore();
+  });
+
+  it("the Legal link lists every document, Credits included, and Back returns to the list", () => {
+    render(<MoreScreen relationship={relationship} onOpenOverlay={vi.fn()} />);
+    fireEvent.click(screen.getByRole("link", { name: "All legal documents, opens in the app" }));
+    for (const title of [
+      "Privacy Policy",
+      "Terms of Service",
+      "Trainer Terms",
+      "Trainee Terms",
+      "Health and Fitness notice",
+      "Acceptable Use Policy",
+      "Beta Terms",
+      "Credits and licences",
+    ]) {
+      expect(screen.getByRole("button", { name: title })).toBeTruthy();
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Credits and licences" }));
+    expect(screen.getByRole("heading", { name: "Credits and licences" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByTestId("legal-index")).toBeTruthy();
   });
 
   it("signs out at once when nothing is waiting", async () => {

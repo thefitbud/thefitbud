@@ -19,13 +19,20 @@ const PAGE_HTML = `<!doctype html>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
 <title>Delete your FitBud account</title>
+<meta name="color-scheme" content="light dark"/>
+<style>
+body{font-family:system-ui,sans-serif;padding:2rem 1rem;max-width:36rem;margin:auto;line-height:1.5;color:#1a1a1a;background:#fff}
+a{color:#4527c6}
+@media (prefers-color-scheme: dark){body{color:#ececf1;background:#14141a}a{color:#b9a8ff}}
+</style>
 </head>
-<body style="font-family:system-ui,sans-serif;padding:2rem 1rem;max-width:36rem;margin:auto;line-height:1.5;color:#1a1a1a;background:#fff">
+<body>
 <h1>Delete your FitBud account</h1>
 <p>${ACCOUNT_DELETION_PAGE_TEXT[0]} ${ACCOUNT_DELETION_PAGE_TEXT[1]} ${ACCOUNT_DELETION_PAGE_TEXT[2]} ${ACCOUNT_DELETION_PAGE_TEXT[3].replace(
   "tech@thefitbud.com",
   '<a href="mailto:tech@thefitbud.com">tech@thefitbud.com</a>',
 )}</p>
+<p>The full explanation is in our <a href="https://app.thefitbud.com/privacy#delete-account">Privacy Policy</a>.</p>
 </body>
 </html>`;
 
