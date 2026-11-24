@@ -93,6 +93,16 @@ export function preparePushPresentation(
 
 export type PushPermissionResult = "granted" | "denied" | "blocked";
 
+/** Told when a screen's own request turns permission on, so the phone registers at once (Z14-6). */
+const permissionGrantedListeners = new Set<() => void>();
+
+export function onPushPermissionGranted(listener: () => void): () => void {
+  permissionGrantedListeners.add(listener);
+  return () => {
+    permissionGrantedListeners.delete(listener);
+  };
+}
+
 /**
  * Ask for notification permission from a screen (the More card, enabling a
  * category). `blocked` means the system will not show a prompt again, so the
@@ -109,7 +119,11 @@ export async function requestPushPermission(
     if (!current.canAskAgain) return "blocked";
     await prepareForPermissionPrompt(platform);
     const asked = await notifications.requestPermissionsAsync();
-    return asked.granted ? "granted" : "denied";
+    if (asked.granted) {
+      for (const listener of [...permissionGrantedListeners]) listener();
+      return "granted";
+    }
+    return "denied";
   } catch (err) {
     reportError("push-permission", err);
     return "denied";
