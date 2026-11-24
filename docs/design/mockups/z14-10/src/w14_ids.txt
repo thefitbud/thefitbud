@@ -33,3 +33,7 @@ W-17a4-summary-offline
 W-17c-summary-readonly
 W-17c2-summary-edit-rating-note
 W-17c3-summary-readonly-old
+TM-07b2-notification-settings-log-edits
+TM-09e-activity-log-edited
+TM-09f-activity-meal-edited-sheet
+TM-13c-client-log-edited-push

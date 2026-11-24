@@ -1,6 +1,6 @@
 # Z14-10 · W14 mocks for review
 
-Drawn 24 Nov 2026 (IST) with the v3 kit (`docs/design/v3/src/kit.css` + `kit.py`), tokens only. **Status: approved by Firoz, 24 Nov 2026 (D-W14-14).** The same day his answers were applied (D-W14-19 photo only when the plan asks, D-W14-20 rating and note editable for 48 h, D-W14-21 any time zone) and the 24 h diet edit set was added (D-W14-22, group 7). Build specs: Z14-12, Z14-13, Z14-13b, Z14-14 (UI) and Z14-11, Z14-16 (API and trainer marker).
+Drawn 24 Nov 2026 (IST) with the v3 kit (`docs/design/v3/src/kit.css` + `kit.py`), tokens only. **Status: approved by Firoz, 24 Nov 2026 (D-W14-14).** The same day his answers were applied (D-W14-19 photo only when the plan asks, D-W14-20 rating and note editable for 48 h, D-W14-21 any time zone) and the 24 h diet edit set was added (D-W14-22, group 7); after his second answers (D-W14-22 confirmed, D-W14-23 notify trainers) the trainer notification set was added (group 8). Build specs: Z14-12, Z14-13, Z14-13b, Z14-14 (UI) and Z14-11, Z14-16 (API, trainer marker and notification).
 
 | Folder | Frame |
 |---|---|
@@ -8,9 +8,9 @@ Drawn 24 Nov 2026 (IST) with the v3 kit (`docs/design/v3/src/kit.css` + `kit.py`
 | `android-light/` | Android 412×915 dp @3x, light (Android status bar, gesture bar, ← back with no label) |
 | `ios-dark/` | iPhone 393×852 @3x, dark (charcoal) theme |
 | `sheets/` | one contact sheet per group (iOS light, Android light and iOS dark rows) |
-| `src/` | generator: `e_w14.py` (screens), `render_w14.mjs` (3 frames + checks), `w14_sheets.py` |
+| `src/` | generator: `e_w14.py` (trainee screens), `e_w14_trainer.py` (trainer screens), `render_w14.mjs` (3 frames + checks), `w14_sheets.py` |
 
-Re-run: copy `src/*` into a copy of `docs/design/v3/src/`, run the `a_*.py` and `d_w12.py` scripts there first (they write the base HTML and registry), then `python3 e_w14.py && node render_w14.mjs && python3 w14_sheets.py <out>`. The overflow checks are the v3 ones (CLIP, OFFSCREEN, WRAP, OVERLAP), plus a touch-target check (every button, nav button, row and search field must be at least 44 pt tall). **All 103 renders (34 screens × 3 frames + TR-15e on Android) pass with 0 warnings.**
+Re-run: copy `src/*` into a copy of `docs/design/v3/src/`, run the `a_*.py`, `d_w12.py`, `b_*.py` and `c_gaps_trainer.py` scripts there first (they write the base HTML and registry), then `python3 e_w14.py && python3 e_w14_trainer.py && node render_w14.mjs && python3 w14_sheets.py <out>` (`TM-` ids render from `html/trainer/`). The overflow checks are the v3 ones (CLIP, OFFSCREEN, WRAP, OVERLAP), plus a touch-target check (every button, nav button, row and search field must be at least 44 pt tall). **All 115 renders (38 screens × 3 frames + TR-15e on Android) pass with 0 warnings.**
 
 ## Screens
 
@@ -73,6 +73,14 @@ Re-run: copy `src/*` into a copy of `docs/design/v3/src/`, run the `a_*.py` and 
 | TR-07n7 | After 24 h (Thu 12 Nov): read-only sheet, no Edit/Remove/Add photo, "Logged entries can be changed for 24 hours." + Ask Rahul to fix it |
 | TR-07n8 | Edit offline: neutral banner, Save changes queues on the phone |
 
+### 8 · Trainer: a client edited or removed a meal log (D-W14-23) · `sheets/8-trainer-log-edit-notification.png`
+| ID | What it is |
+|---|---|
+| TM-13c | Trainer lock screen pushes: "Aarav edited lunch · 610 → 690 kcal · changed portion. Tap to see what changed." and "Priya removed their dinner log · Fri 13 Nov · was 1,120 kcal, ate out. It's back to not logged." |
+| TM-09e | Clients › Activity with the in-app banner "Aarav edited lunch": an **Edited** row and a **Removed** row (neutral tags, unread dot) above the usual rows |
+| TM-09f | Tap the push or row: meal sheet "Aarav · Lunch" with the **Edited** tag, "Edited by Aarav · Sat 14 Nov, 2:05 pm · Was 610 kcal · roti 2 pc (now 3)", Plan vs Ate, Open Aarav's diet / Add note |
+| TM-07b2 | Trainer Notifications settings with the new **Client log edits** toggle ("When a client edits or removes a meal log"), on by default |
+
 ### 6 · Android Live workout (D-W14-12, D-W14-15) · `sheets/6-android-live-workout.png`
 | ID | What it is |
 |---|---|
@@ -97,9 +105,22 @@ Re-run: copy `src/*` into a copy of `docs/design/v3/src/`, run the `a_*.py` and 
     - Add photo follows the same 24 h window.
     - After 24 h, or once Rahul has edited the entry, it's read-only with "Ask Rahul to fix it".
     - Hint times read "today, 8:52 pm", "tomorrow, 5:20 pm" or "Sun 15 Nov, 5:20 pm", from the API's `editableUntil`.
-    - The trainee sees a small neutral "Edited" tag; the coach sees the same tag plus "Edited by Aarav · {time}" and the previous value (D-W14-23, Z14-16, no new mock).
+    - The trainee sees a small neutral "Edited" tag; the coach sees the same tag plus "Edited by Aarav · {time}" and the previous value (D-W14-23, Z14-16, TM-09f).
+13. **Trainer notification (D-W14-23, details in W14.md):**
+    - In-app and push through the existing trainer path, so the pushes-off switch, quiet hours and the new **Client log edits** category apply. On by default; off still leaves the Edited/Removed tags.
+    - One notification per entry per 10 minutes: further edits update it quietly (no second buzz), so fixing a portion twice doesn't ping the coach twice.
+    - Plain copy, first names, kcal "from → to", the meal day added when it isn't today; no codes, no "nudge".
+    - The tap opens the client's diet day on that meal; a removed meal opens the day.
+    - Only the client's own edits notify; the coach's own edits and photo-only changes don't.
+    - Removal rows use the same neutral style as Edited (it's information, not an alert).
+    - Drawn iOS light, Android light and iOS dark; the lock screen reuses the TM-13a style.
 
 ## Answered by Firoz (24 Nov 2026)
 1. Photo sheet only when the trainer's plan asks for it, otherwise an Add photo link (TR-07m, TR-07m4).
 2. The note is editable with the rating for 48 h (W-17c, W-17c2).
 3. Any time zone may be picked (TR-20h as drawn).
+
+## Answered by Firoz (24 Nov 2026, second round)
+1. No removing a logged meal once the meal can no longer be logged (edit only), as drawn in TR-07n7 / D-W14-22 (c).
+2. The 72 h grace for offline edits made inside the window is fine (D-W14-22 f).
+3. Notify trainers when a client edits or removes a diet log (D-W14-23, group 8).

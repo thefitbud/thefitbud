@@ -216,11 +216,11 @@ You are working in the GitHub repo thefitbud/thefitbud (local checkout at the re
 Done when: every acceptance box in docs/specs/Z14-10.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
 ```
 
-## Z14-11: API: trainee sets RPE and note after finishing, attaches a meal photo, and edits or removes a logged meal for 24 hours
-Model: **sonnet** · Size: M · Depends on: Z14-7
+## Z14-11: API: trainee sets RPE and note after finishing, attaches a meal photo, and edits or removes a logged meal for 24 hours (trainer notified)
+Model: **sonnet** · Size: L (was M) · Depends on: Z14-7
 
 ```text
-You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-11, "API: trainee sets RPE and note after finishing, attaches a meal photo, and edits or removes a logged meal for 24 hours", batch W14.
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-11, "API: trainee sets RPE and note after finishing, attaches a meal photo, and edits or removes a logged meal for 24 hours (trainer notified)", batch W14.
 
 1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..23 apply), docs/specs/Z14-11.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
 2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-7) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-11-report, open a PR titled "Z14-11: report blocked on dependencies", merge it per the merge rules, and end.
@@ -324,14 +324,14 @@ You are working in the GitHub repo thefitbud/thefitbud (local checkout at the re
 Done when: every acceptance box in docs/specs/Z14-14.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
 ```
 
-## Z14-16: Trainer sees a subtle 'Edited' marker and removals on client meal entries
-Model: **sonnet** · Size: S · Depends on: Z14-11, Z14-3
+## Z14-16: Trainer sees an 'Edited'/'Removed' marker on client meal entries and is notified (copy, tap opens the diet day, settings toggle)
+Model: **sonnet** · Size: M (was S) · Depends on: D-W14-14, Z14-11, Z14-3, Z14-6
 
 ```text
-You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-16, "Trainer sees a subtle 'Edited' marker and removals on client meal entries", batch W14.
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-16, "Trainer sees an 'Edited'/'Removed' marker on client meal entries and is notified (copy, tap opens the diet day, settings toggle)", batch W14.
 
 1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..23 apply), docs/specs/Z14-16.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
-2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-11, Z14-3) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-16-report, open a PR titled "Z14-16: report blocked on dependencies", merge it per the merge rules, and end.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (D-W14-14, Z14-11, Z14-3, Z14-6) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-16-report, open a PR titled "Z14-16: report blocked on dependencies", merge it per the merge rules, and end.
 3. Branch: git checkout -b claude/Z14-16-trainer-edited-marker from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-16/). If you must touch another task's file, stop and follow the spec's stop conditions.
 4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
 5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.

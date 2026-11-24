@@ -17,6 +17,7 @@ G=[('1-workout-summary','Post-workout summary with RPE + read-only View summary 
    ('4-meal-actions-photo','Meal card buttons + meal photo (D-W14-11)',('TR-07a','TR-07m')),
    ('5-something-different','Something different: loading, portion, ate out (diagnosis #12)','TR-08'),
    ('7-diet-edit-24h','Diet: edit a logged entry for 24 hours (Firoz, 24 Nov 2026)',('TR-07m4','TR-07n')),
+   ('8-trainer-log-edit-notification','Trainer notification: client edited or removed a meal log (D-W14-23)','TM-'),
    ('6-android-live-workout','Android Live workout notification (D-W14-12, D-W14-15)','TR-15e')]
 S=1/3*1.0  # thumbnails at 1x (393 wide) — readable in chat
 ROWS=[('ios-light','iOS · light · 393×852'),('android-light','Android · light · 412×915'),('ios-dark','iOS · dark · 393×852')]
@@ -27,7 +28,7 @@ for gid,title,pre in G:
     W=pad+len(gs)*(cw+pad)+150; H=top+len(rows)*(ch+lab+pad)
     im=Image.new('RGB',(W,H),'#F4F5F8'); d=ImageDraw.Draw(im)
     d.text((pad,24),f'Z14-10 · {title}',fill='#1A1248',font=font(30,700))
-    d.text((pad,60),'FitBud W14 mocks for Firoz · approved by Firoz 24 Nov 2026 (D-W14-14) · diet 24 h edit added 24 Nov 2026',fill='#5B5F72',font=font(18,500))
+    d.text((pad,60),'FitBud W14 mocks for Firoz · approved by Firoz 24 Nov 2026 (D-W14-14) · diet 24 h edit + trainer notification added 24 Nov 2026',fill='#5B5F72',font=font(18,500))
     for r,(m,ml) in enumerate(rows):
         y=top+r*(ch+lab+pad)
         d.text((W-140,y+lab),ml.replace(' · ','\n',1),fill='#5B5F72',font=font(16,600))

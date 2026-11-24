@@ -1,7 +1,7 @@
 // Z14-10: render the W14 screens in three frames: ios (393x852) light + dark, android (412x915) light. @3x, overflow checks as render.mjs.
 import { chromium } from '/workspace/tfb/node_modules/.pnpm/playwright-core@1.64.1/node_modules/playwright-core/index.mjs';
 import fs from 'fs';
-const ids=fs.readFileSync('w14_ids.txt','utf8').trim().split('\n');
+const ids=fs.readFileSync(process.env.IDS||'w14_ids.txt','utf8').trim().split('\n');
 const out=process.env.OUT||'../png-w14';
 const b=await chromium.launch({executablePath:'/usr/bin/google-chrome'});
 const modes=[['ios-light',393,852,false,false],['ios-dark',393,852,true,false],['android-light',412,915,false,true]];
@@ -11,7 +11,7 @@ for(const [m,w,h,dark,andr] of modes){
   const ctx=await b.newContext({viewport:{width:w,height:h},deviceScaleFactor:3});
   for(const id of ids){
     if(id.startsWith('TR-15e')&&!andr)continue;
-    const p=await ctx.newPage(); await p.goto('file://'+process.cwd()+'/../html/trainee/'+id+'.html');
+    const p=await ctx.newPage(); const side=id.startsWith('TM-')?'trainer':'trainee';await p.goto('file://'+process.cwd()+'/../html/'+side+'/'+id+'.html');
     await p.evaluate(([dark,andr,w,h])=>{
       document.body.style.width=w+'px';document.body.style.height=h+'px';
       if(dark)document.body.classList.add('dark');
@@ -19,7 +19,7 @@ for(const [m,w,h,dark,andr] of modes){
         const sb=document.querySelector('.sb');
         if(sb){const col=sb.style.color;const t=sb.querySelector('.time')?.textContent||'';
           sb.style.height='40px';
-          sb.innerHTML=`<div class="tnum" style="position:absolute;left:22px;top:12px;font-size:14px;font-weight:500">${t||(document.title.startsWith('TR-15e')?'':'9:41')}</div>
+          sb.innerHTML=`<div class="tnum" style="position:absolute;left:22px;top:12px;font-size:14px;font-weight:500">${t||(/^(TR-15e|TM-13c)/.test(document.title)?'':'9:41')}</div>
           <div style="position:absolute;left:50%;top:10px;width:20px;height:20px;margin-left:-10px;border-radius:10px;background:#000"></div>
           <div style="position:absolute;right:20px;top:13px;display:flex;gap:6px;align-items:center">
           <svg width="15" height="15" viewBox="0 0 16 16"><path d="M8 13 1 5.5a10 10 0 0 1 14 0Z" fill="currentColor"/></svg>
