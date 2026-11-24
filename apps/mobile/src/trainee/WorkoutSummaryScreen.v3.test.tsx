@@ -138,7 +138,7 @@ describe("WorkoutSummaryScreen v3", () => {
     expect(onDone).toHaveBeenCalledTimes(1);
   });
 
-  it("says the workout is on the phone when offline", () => {
+  it("says the workout is on the phone when offline (W-17a4)", () => {
     render(
       <WorkoutSummaryScreen
         execution={execution}
@@ -150,7 +150,158 @@ describe("WorkoutSummaryScreen v3", () => {
         onDone={() => undefined}
       />,
     );
+    expect(screen.getByTestId("offline-banner")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "You're offline. Your workout is saved on your phone and sends to Rahul when you're back.",
+      ),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Save and share with Rahul" }));
     expect(screen.getByText("Saved on your phone")).toBeTruthy();
+  });
+
+  it("asks how hard it was, optional, and queues the pick with the next version (W-17a2)", () => {
+    const onSaveRpe = vi.fn();
+    render(
+      <WorkoutSummaryScreen
+        execution={execution}
+        assignment={finishedAssignment}
+        coachName="Rahul Verma"
+        onSaveRpe={onSaveRpe}
+        onDone={() => undefined}
+      />,
+    );
+    expect(screen.getByText("HOW HARD WAS IT?")).toBeTruthy();
+    expect(screen.getByText("Optional")).toBeTruthy();
+    expect(screen.getByText("1 Very easy · 5 Hard · 10 Max effort")).toBeTruthy();
+    const save = screen.getByRole("button", { name: "Save and share with Rahul" });
+    expect((save as HTMLButtonElement).disabled).toBeFalsy();
+    fireEvent.click(screen.getByRole("radio", { name: "7 of 10" }));
+    expect(onSaveRpe).toHaveBeenLastCalledWith(7, 5);
+    // Choosing it again clears it (optional); each change takes the next version.
+    fireEvent.click(screen.getByRole("radio", { name: "7 of 10" }));
+    expect(onSaveRpe).toHaveBeenLastCalledWith(null, 6);
+  });
+
+  it("shows a rating chosen at the finish as selected, with no second prompt", () => {
+    render(
+      <WorkoutSummaryScreen
+        execution={{ ...execution, sessionRpe: 8, requireSessionRpe: true }}
+        assignment={finishedAssignment}
+        coachName="Rahul Verma"
+        onDone={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Rahul asks for this")).toBeTruthy();
+    // The chosen value is read back beside the grid, so no "Tap a number" prompt.
+    expect(screen.queryByText("Tap a number")).toBeNull();
+    expect(screen.getAllByText("8")).toHaveLength(2);
+    const save = screen.getByRole("button", { name: "Save and share with Rahul" });
+    expect((save as HTMLButtonElement).disabled).toBeFalsy();
+  });
+
+  it("holds Save and share until a rating is chosen when the plan requires it (W-17a3)", () => {
+    render(
+      <WorkoutSummaryScreen
+        execution={{ ...execution, requireSessionRpe: true }}
+        assignment={finishedAssignment}
+        coachName="Rahul Verma"
+        onSaveRpe={vi.fn()}
+        onDone={() => undefined}
+      />,
+    );
+    const save = () =>
+      screen.getByRole("button", { name: "Save and share with Rahul" }) as HTMLButtonElement;
+    expect(save().disabled).toBe(true);
+    expect(screen.getByText("Pick how hard it was to save.")).toBeTruthy();
+    expect(screen.getByText("Tap a number")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "6 of 10" }));
+    expect(save().disabled).toBe(false);
+    expect(screen.queryByText("Pick how hard it was to save.")).toBeNull();
+  });
+
+  describe("View summary (W-17c, W-17c3)", () => {
+    const viewed = {
+      ...execution,
+      sessionRpe: 7,
+      feedbackEditableUntil: "2026-11-16T13:52:00.000Z",
+    } as WorkoutExecution;
+    const during = new Date("2026-11-15T10:00:00.000Z");
+
+    function renderView(over: Partial<WorkoutExecution> = {}, now = during, onSaveRpe = vi.fn()) {
+      const onDone = vi.fn();
+      render(
+        <WorkoutSummaryScreen
+          mode="view"
+          execution={{ ...viewed, ...over }}
+          assignment={finishedAssignment}
+          coachName="Rahul Verma"
+          now={now}
+          onSaveRpe={onSaveRpe}
+          onDone={onDone}
+        />,
+      );
+      return { onDone, onSaveRpe };
+    }
+
+    it("is read-only with one Done and never offers Save and share", () => {
+      const { onDone } = renderView();
+      expect(screen.queryByRole("button", { name: /Save and share/ })).toBeNull();
+      expect(screen.queryByRole("radio")).toBeNull();
+      expect(screen.getByText("YOUR RATING")).toBeTruthy();
+      expect(screen.getByText("7 of 10")).toBeTruthy();
+      expect(screen.getByText("Sent to Rahul")).toBeTruthy();
+      expect(screen.getByText("Shared Sat 14 Nov, 7:22 pm")).toBeTruthy();
+      expect(screen.queryByText(/note/i)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      expect(onDone).toHaveBeenCalledTimes(1);
+    });
+
+    it("lets the trainee change the rating inside the 48 h window and queues it (W-17c2)", () => {
+      const { onSaveRpe } = renderView();
+      expect(
+        screen.getByText("You can change this until Mon 16 Nov, 7:22 pm."),
+      ).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating" }));
+      expect(screen.getByText("Your rating")).toBeTruthy();
+      fireEvent.click(screen.getByRole("radio", { name: "9 of 10" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSaveRpe).toHaveBeenCalledTimes(1);
+      expect(onSaveRpe).toHaveBeenCalledWith(9, 4);
+      expect(screen.getByText("9 of 10")).toBeTruthy();
+    });
+
+    it("clears the rating when it is optional", () => {
+      const { onSaveRpe } = renderView();
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating" }));
+      fireEvent.click(screen.getByRole("radio", { name: "7 of 10" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(onSaveRpe).toHaveBeenCalledWith(null, 4);
+      expect(screen.getByText("Not rated")).toBeTruthy();
+    });
+
+    it("cancel saves nothing", () => {
+      const { onSaveRpe } = renderView();
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating" }));
+      fireEvent.click(screen.getByRole("radio", { name: "2 of 10" }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onSaveRpe).not.toHaveBeenCalled();
+      expect(screen.getByText("7 of 10")).toBeTruthy();
+    });
+
+    it("hides Change at and after the 48 h boundary (W-17c3)", () => {
+      renderView({}, new Date("2026-11-16T13:52:00.000Z"));
+      expect(screen.queryByRole("button", { name: "Change your rating" })).toBeNull();
+      expect(
+        screen.getByText("Ratings can be changed for 48 hours after a workout."),
+      ).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
+    });
+
+    it("shows Not rated and no Change when the API gives no window", () => {
+      renderView({ sessionRpe: null, feedbackEditableUntil: null });
+      expect(screen.getByText("Not rated")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Change your rating" })).toBeNull();
+    });
   });
 });
