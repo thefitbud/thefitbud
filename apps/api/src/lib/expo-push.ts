@@ -6,7 +6,7 @@
  * a log line. Acceptance (a ticket id) is not delivery.
  */
 
-import type { PushPayload } from "@fitbud/contracts";
+import type { NotificationType, PushPayload } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
 import type { PushSendOutcome } from "./push-provider.js";
 
@@ -89,6 +89,59 @@ function ticketFailure(
 }
 
 /**
+ * Android notification channel per push group (D-W14-13, Z14-4). The groups
+ * and their notification types mirror the app's `pushGroupFor`
+ * (apps/mobile/src/notifications/copy.ts, Z12-47). Every group except the
+ * daily summary moves to a new `_v2` channel created at IMPORTANCE_HIGH by the
+ * app (Z14-6), because Android never raises an existing channel's importance.
+ * The summary stays on its DEFAULT-importance channel.
+ */
+export const EXPO_ANDROID_CHANNEL_IDS = [
+  "workout_v2",
+  "meal_v2",
+  "checkin_v2",
+  "coach_v2",
+  "plan_v2",
+  "account_v2",
+  "clients_v2",
+  "summary",
+] as const;
+export type ExpoAndroidChannelId = (typeof EXPO_ANDROID_CHANNEL_IDS)[number];
+
+/**
+ * The one mapping table from notification type to Android channel. A
+ * `Record` over every type, so a new notification type does not compile until
+ * it is given a channel (expo-push.test.ts also checks every type maps).
+ */
+export const EXPO_ANDROID_CHANNEL_BY_TYPE: Readonly<Record<NotificationType, ExpoAndroidChannelId>> = {
+  meal_reminder: "meal_v2",
+  workout_reminder: "workout_v2",
+  checkin_reminder: "checkin_v2",
+  daily_summary: "summary",
+  activity_nudge: "coach_v2",
+  trainer_note_shared: "coach_v2",
+  checkin_reviewed: "coach_v2",
+  coach_answered: "coach_v2",
+  coach_log_updated: "coach_v2",
+  plan_published: "plan_v2",
+  subscription_renewal_reminder: "account_v2",
+  reminders_paused: "account_v2",
+  relationship_ended: "account_v2",
+  reactivation_requested: "account_v2",
+  admin_whatsapp_budget: "account_v2",
+  trainer_ask_coach: "clients_v2",
+  trainer_checkin_submitted: "clients_v2",
+  trainer_intake_submitted: "clients_v2",
+  trainer_renewal: "clients_v2",
+  trainer_meal_times_changed: "clients_v2",
+  trainer_critical_digest: "clients_v2",
+};
+
+export function expoAndroidChannelFor(type: NotificationType): ExpoAndroidChannelId {
+  return EXPO_ANDROID_CHANNEL_BY_TYPE[type];
+}
+
+/**
  * Lock-screen text: the app name and the notification type label only. It
  * carries no coaching detail (final copy is X4c, W3).
  */
@@ -157,6 +210,11 @@ export async function sendExpoPushMessages(
       ...(message.display ?? expoNotificationText(message.payload)),
       data: message.payload,
       sound: "default",
+      // Android: land on the push group's channel and wake the device so a
+      // HIGH-importance channel shows a heads-up banner (D-W14-13). iOS maps
+      // "high" to APNs priority 10, which Expo already uses for alerts.
+      channelId: expoAndroidChannelFor(message.payload.notificationType),
+      priority: "high",
     }));
     const json = await postJson(EXPO_PUSH_SEND_URL, body, options);
     const tickets = (json as { data?: unknown } | null)?.data;
