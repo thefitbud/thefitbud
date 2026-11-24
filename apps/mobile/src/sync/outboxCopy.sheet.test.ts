@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { SyncMutationResult } from "@fitbud/contracts";
 import {
   conflictSheetCopy,
+  createResolvedNotes,
   failureReason,
+  isSettledLateWrite,
+  recordFinishedWorkoutNotes,
   lastSentLabel,
   pillFromStatus,
   sendOutcomeLine,
@@ -172,8 +176,16 @@ describe("Try sending now: the result line", () => {
     expect(sendOutcomeLine({ sent: 0, status: status(2, 0, "SERVER") })).toBe(
       "FitBud didn't respond. We'll keep trying.",
     );
-    expect(sendOutcomeLine({ sent: 0, status: status(2, 0, "CLIENT") })).toContain("SYNC-PARSE");
-    expect(sendOutcomeLine({ sent: 0, status: status(2, 0, "AUTH") })).toContain("SYNC-AUTH");
+    // D-W14-3: what went wrong, no bracketed code (Z14-8).
+    expect(sendOutcomeLine({ sent: 0, status: status(2, 0, "CLIENT") })).toBe(
+      "Something went wrong on our side. We'll keep trying.",
+    );
+    expect(sendOutcomeLine({ sent: 0, status: status(2, 0, "AUTH") })).toBe(
+      "FitBud couldn't confirm it's you yet. We'll keep trying.",
+    );
+    for (const reason of ["SERVER", "CLIENT", "AUTH", "UNREACHABLE", null]) {
+      expect(sendOutcomeLine({ sent: 0, status: status(1, 0, reason) })).not.toMatch(/\([A-Z]+-[A-Z]+\)/);
+    }
     for (const reason of ["SERVER", "CLIENT", "AUTH", null]) {
       expect(sendOutcomeLine({ sent: 0, status: status(1, 0, reason) })).not.toMatch(/connection|offline/i);
     }
@@ -235,5 +247,98 @@ describe("conflict when the coach changed the plan (TR-19b)", () => {
     expect(conflictSheetCopy({ coachFirstName: "Rahul", kind: "workout", subject: null }).title).toBe(
       "Rahul changed this workout",
     );
+  });
+});
+
+describe("late workout writes are settled, not refused (Z14-8)", () => {
+  const set = (over: Partial<SheetRow>) =>
+    row({
+      operation: "workout.complete_set",
+      recordId: EXECUTION,
+      payloadJson: JSON.stringify({ executionId: EXECUTION, assignmentId: ASSIGNMENT }),
+      status: "rejected",
+      ...over,
+    });
+
+  it("a late set, skip or start refused as finished is settled; a finish conflict is not", () => {
+    expect(isSettledLateWrite(set({ lastErrorCode: "WORKOUT_ALREADY_FINISHED" }))).toBe(true);
+    expect(
+      isSettledLateWrite(
+        set({
+          lastErrorCode: "INVALID_TRANSITION",
+          lastError: "Sets can only be completed during an open workout.",
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isSettledLateWrite(set({ operation: "workout.complete", lastErrorCode: "WORKOUT_ALREADY_FINISHED" })),
+    ).toBe(false);
+    // Another INVALID_TRANSITION is a real refusal.
+    expect(
+      isSettledLateWrite(set({ lastErrorCode: "INVALID_TRANSITION", lastError: "Something else." })),
+    ).toBe(false);
+    expect(isSettledLateWrite(set({ status: "pending", lastErrorCode: "WORKOUT_ALREADY_FINISHED" }))).toBe(
+      false,
+    );
+  });
+
+  it("the sheet never lists a settled late set as Couldn't send", () => {
+    const items = sheetItems([set({ lastErrorCode: "WORKOUT_ALREADY_FINISHED" })], { timeZone: TZ });
+    expect(items).toEqual([]);
+    expect(sheetTitle(items)).toBe("All saved");
+  });
+
+  it("a finish refused because the workout was already finished reads plainly", () => {
+    expect(
+      failureReason(
+        { status: "conflicted", lastError: "x", lastErrorCode: "WORKOUT_ALREADY_FINISHED", lastErrorReason: null },
+        "Rahul",
+      ),
+    ).toBe("This workout was already finished, so nothing was changed.");
+  });
+
+  it("notes say what happened, merge per workout, keep the newest three, and carry no code", () => {
+    const notes = createResolvedNotes();
+    notes.add({ workoutKey: ASSIGNMENT, operation: "workout.complete_set", source: "lock_screen", workoutName: "Lower body B" });
+    notes.add({ workoutKey: ASSIGNMENT, operation: "workout.complete_set", source: "lock_screen", workoutName: null, count: 2 });
+    expect(notes.lines()).toEqual([
+      "3 sets logged on your lock screen arrived after Lower body B ended, so they weren't added.",
+    ]);
+    const before = notes.lines();
+    expect(notes.lines()).toBe(before);
+    notes.add({ workoutKey: "a", operation: "workout.skip", source: "app", workoutName: "Upper body A" });
+    notes.add({ workoutKey: "b", operation: "workout.start", source: "app", workoutName: null });
+    notes.add({ workoutKey: "c", operation: "workout.complete_set", source: "app", workoutName: null });
+    expect(notes.lines()).toEqual([
+      "1 set arrived after the workout ended, so it wasn't added.",
+      "This workout was already finished.",
+      "Upper body A was already finished, so it wasn't skipped.",
+    ]);
+    for (const line of notes.lines()) expect(line).not.toMatch(/[A-Z]{3,}_|\([A-Z]+-[A-Z]+\)/);
+  });
+
+  it("records only already-applied answers carrying the finished note", () => {
+    const notes = createResolvedNotes();
+    const result = (over: Partial<SyncMutationResult>): SyncMutationResult => ({
+      mutationId: "00000000-0000-4000-8000-000000000999",
+      status: "already_applied",
+      recordId: EXECUTION,
+      serverVersion: 4,
+      entityType: "workout_execution",
+      error: null,
+      ...over,
+    });
+    expect(
+      recordFinishedWorkoutNotes(
+        [
+          result({ note: { code: "WORKOUT_ALREADY_FINISHED", message: "late" } }),
+          result({}),
+          result({ status: "applied" }),
+        ],
+        { operation: "workout.complete_set", workoutKey: ASSIGNMENT, workoutName: "Lower body B" },
+        notes,
+      ),
+    ).toBe(1);
+    expect(notes.lines()).toEqual(["1 set arrived after Lower body B ended, so it wasn't added."]);
   });
 });

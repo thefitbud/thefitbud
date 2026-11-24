@@ -9,6 +9,7 @@ import {
 } from "react-native";
 import {
   ChevronLeft,
+  CircleCheck,
   CloudAlert,
   CloudOff,
   CloudUpload,
@@ -36,6 +37,7 @@ import {
   conflictSheetCopy,
   createKeptRowsBinding,
   lastSentLabel,
+  resolvedSyncNotes,
   sendOutcomeLine,
   sheetItems,
   sheetTitle,
@@ -51,6 +53,16 @@ import { useSyncView } from "../../sync/useSyncStatus";
  * taken when it mounted.
  */
 const keptRows = createKeptRowsBinding(liveActivityKeptRows);
+
+/**
+ * Late workout writes settled rather than refused (Z14-8, D-W14-12): a set
+ * that arrived after the workout ended, a skip of a finished workout. Shown
+ * as what happened, never as "Couldn't send".
+ */
+const resolvedLines = {
+  subscribe: (onChange: () => void) => resolvedSyncNotes.subscribe(onChange),
+  snapshot: () => resolvedSyncNotes.lines(),
+};
 
 type ContentProps = {
   coachName?: string;
@@ -228,6 +240,11 @@ export function SyncStatusContent({
     keptRows.snapshot,
     keptRows.snapshot,
   );
+  const settledLines = useSyncExternalStore(
+    resolvedLines.subscribe,
+    resolvedLines.snapshot,
+    resolvedLines.snapshot,
+  );
 
   const items = useMemo(
     () =>
@@ -310,6 +327,20 @@ export function SyncStatusContent({
           <Text variant="subhead">{keptRowsCopy}</Text>
         </View>
       ) : null}
+
+      {settledLines.map((line) => (
+        // Settled, nothing to do: a plain note, not a refusal (Z14-8).
+        <View
+          key={line}
+          accessibilityLiveRegion="polite"
+          style={[styles.note, styles.settledNote]}
+        >
+          <CircleCheck color={theme.colors.done} size={18} strokeWidth={2} />
+          <Text variant="subhead" style={styles.settledText}>
+            {line}
+          </Text>
+        </View>
+      ))}
 
       {items.length > 0 ? (
         <View style={styles.group}>
@@ -513,6 +544,14 @@ const useStyles = createThemedStyles((t) => ({
     backgroundColor: t.colors.fill,
     borderRadius: t.radii.group,
     padding: t.spacing.md,
+  },
+  settledNote: {
+    alignItems: "flex-start",
+    flexDirection: "row",
+    gap: t.spacing.sm,
+  },
+  settledText: {
+    flex: 1,
   },
   group: {
     backgroundColor: t.scheme === "dark" ? t.colors.card : t.colors.fill,
