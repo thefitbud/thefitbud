@@ -1,8 +1,31 @@
 import {
   operation,
   dateWindowParameters,
+  type OpenApiParameter,
 } from "../openapi/document";
-import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  lte,
+  ne,
+  or,
+  sql,
+  type SQL,
+} from "drizzle-orm";
+import {
+  buildKeysetPage,
+  decodeKeysetCursor,
+  keysetAfter,
+  optionalPageLimit,
+  type KeysetColumn,
+} from "../lib/cursor";
 import { Hono, type Context } from "hono";
 import {
   assignPreferredCheckinFormRequestSchema,
@@ -25,6 +48,8 @@ import {
   trainerNoteListResponseSchema,
   trainerNoteSchema,
   type CheckinDraftAnswers,
+  trainerCheckinInboxSegmentSchema,
+  type TrainerCheckinInboxSegment,
 } from "@fitbud/contracts";
 import {
   GLOBAL_CHECKIN_FORM_V1_VERSION_ID,
@@ -143,6 +168,237 @@ async function loadAccessibleRelationship(
   const row = rows[0];
   if (!row || !canAccessRelationship(actor, row)) return null;
   return row;
+}
+
+// ---------------------------------------------------------------------------
+// Z14-20 (D-W14-26): optional cursor pages for the check-in inbox and a
+// client's coach notes. Without `limit`/`cursor` (and, for the inbox, without
+// `segment`) the handlers keep their original code path and answer exactly as
+// before; these helpers only run for paged reads.
+// ---------------------------------------------------------------------------
+
+function optionalPageParameters(): OpenApiParameter[] {
+  return [
+    {
+      name: "limit",
+      in: "query",
+      required: false,
+      description:
+        "Page size, 1–50. Omit `limit` and `cursor` to get every row (`nextCursor: null`). A non-numeric value falls back to 30; the value is then clamped.",
+      schema: { type: "integer", minimum: 1, maximum: 50 },
+    },
+    {
+      name: "cursor",
+      in: "query",
+      required: false,
+      description:
+        "Opaque cursor from a previous nextCursor (pages 30 at a time when `limit` is omitted).",
+      schema: { type: "string" },
+    },
+  ];
+}
+
+/** Sort order per inbox read: the trainer app's order for each segment. */
+function inboxOrder(segment: TrainerCheckinInboxSegment | null): KeysetColumn[] {
+  switch (segment) {
+    case "to_review":
+      // Oldest submission first (TM-05a); `submittedAt ?? localDate` as in the app.
+      return [
+        {
+          column: sql`coalesce(${checkins.submittedAt}, ${checkins.localDate})`,
+          direction: "asc",
+        },
+      ];
+    case "overdue":
+      // Oldest due date first (TM-05b).
+      return [{ column: checkins.localDate, direction: "asc" }];
+    case "reviewed":
+      // Newest review first (TM-05e).
+      return [{ column: checkinReviews.createdAt, direction: "desc" }];
+    default:
+      // The unpaged inbox order: local date, then created, newest first.
+      return [
+        { column: checkins.localDate, direction: "desc" },
+        { column: checkins.createdAt, direction: "desc" },
+      ];
+  }
+}
+
+/**
+ * The status rule of `deriveCheckinStatus` (packages/core) as SQL, for the
+ * same `now`: reviewed > submitted > overdue (window ended) > due (window
+ * open). Text comparison matches the string comparison in core.
+ */
+function inboxStatusFilter(
+  segment: TrainerCheckinInboxSegment | null,
+  now: string,
+): SQL {
+  const notSubmitted = ne(checkins.recordStatus, "submitted");
+  switch (segment) {
+    case "to_review":
+      return and(isNull(checkinReviews.id), eq(checkins.recordStatus, "submitted"))!;
+    case "overdue":
+      return and(isNull(checkinReviews.id), notSubmitted, lt(checkins.windowEndsAt, now))!;
+    case "reviewed":
+      return isNotNull(checkinReviews.id);
+    default:
+      // Unsegmented inbox: due, overdue or submitted (never scheduled or reviewed).
+      return and(
+        isNull(checkinReviews.id),
+        or(
+          eq(checkins.recordStatus, "submitted"),
+          lte(checkins.windowStartsAt, now),
+        ),
+      )!;
+  }
+}
+
+function inboxSortValues(
+  segment: TrainerCheckinInboxSegment | null,
+  row: {
+    checkin: typeof checkins.$inferSelect;
+    review: typeof checkinReviews.$inferSelect | null;
+  },
+): string[] {
+  switch (segment) {
+    case "to_review":
+      return [row.checkin.submittedAt ?? row.checkin.localDate];
+    case "overdue":
+      return [row.checkin.localDate];
+    case "reviewed":
+      return [row.review?.createdAt ?? ""];
+    default:
+      return [row.checkin.localDate, row.checkin.createdAt];
+  }
+}
+
+async function listTrainerCheckinInboxPage(
+  c: AppContext,
+  db: Db,
+  trainerUserId: string,
+  input: {
+    segment: TrainerCheckinInboxSegment | null;
+    /** Null: the whole segment in one answer (segment given, no page size). */
+    limit: number | null;
+    cursorParam: string | undefined;
+  },
+): Promise<Response> {
+  const order = inboxOrder(input.segment);
+  let cursor: { values: string[]; id: string } | null = null;
+  if (input.cursorParam) {
+    cursor = decodeKeysetCursor(input.cursorParam, order.length);
+    if (!cursor) {
+      return fail(c, 400, "INVALID_CURSOR", "Cursor is not valid.");
+    }
+  }
+  const now = nowIso();
+  const conditions: SQL[] = [
+    eq(coachingRelationships.trainerUserId, trainerUserId),
+    // Ended clients stay out of the inbox, as on the unpaged read.
+    ne(coachingRelationships.status, "ended"),
+    inboxStatusFilter(input.segment, now),
+  ];
+  if (cursor) conditions.push(keysetAfter(order, checkins.id, cursor));
+  const idDirection = order[order.length - 1]!.direction;
+  const query = db
+    .select({
+      checkin: checkins,
+      review: checkinReviews,
+      relationship: coachingRelationships,
+      traineeTimezone: users.timezone,
+      traineeDisplayName: traineeProfiles.displayName,
+    })
+    .from(checkins)
+    .innerJoin(
+      coachingRelationships,
+      eq(coachingRelationships.id, checkins.coachingRelationshipId),
+    )
+    .leftJoin(checkinReviews, eq(checkinReviews.checkinId, checkins.id))
+    .leftJoin(users, eq(users.id, coachingRelationships.traineeUserId))
+    .leftJoin(
+      traineeProfiles,
+      eq(traineeProfiles.userId, coachingRelationships.traineeUserId),
+    )
+    .where(and(...conditions))
+    .orderBy(
+      ...order.map((col) =>
+        col.direction === "asc" ? asc(col.column as never) : desc(col.column as never),
+      ),
+      idDirection === "asc" ? asc(checkins.id) : desc(checkins.id),
+    );
+  const rows = input.limit === null ? await query : await query.limit(input.limit + 1);
+  const page =
+    input.limit === null
+      ? { rows, nextCursor: null }
+      : buildKeysetPage(rows, input.limit, (row) => ({
+          values: inboxSortValues(input.segment, row),
+          id: row.checkin.id,
+        }));
+
+  const items = page.rows.map((row) => ({
+    checkin: mapCheckin(row.checkin, row.review ?? null, now),
+    coachingRelationshipId: row.relationship.id,
+    traineeUserId: row.relationship.traineeUserId,
+    traineeDisplayName: row.traineeDisplayName ?? "Client",
+    traineeTimezone: row.traineeTimezone ?? "UTC",
+  }));
+  return ok(
+    c,
+    trainerCheckinInboxResponseSchema.parse({ items, nextCursor: page.nextCursor }),
+  );
+}
+
+async function listTrainerNotesPage(
+  c: AppContext,
+  db: Db,
+  actor: ActorContext,
+  relationshipId: string,
+  limit: number,
+  cursorParam: string | undefined,
+): Promise<Response> {
+  let cursor: { values: string[]; id: string } | null = null;
+  if (cursorParam) {
+    cursor = decodeKeysetCursor(cursorParam, 1);
+    if (!cursor) {
+      return fail(c, 400, "INVALID_CURSOR", "Cursor is not valid.");
+    }
+  }
+  const order: KeysetColumn[] = [{ column: trainerNotes.createdAt, direction: "desc" }];
+  const scope = eq(trainerNotes.coachingRelationshipId, relationshipId);
+  // One round trip, as the unpaged read; notes are returned only after the
+  // ownership check.
+  const [relationshipRows, rows] = await db.batch([
+    db
+      .select()
+      .from(coachingRelationships)
+      .where(eq(coachingRelationships.id, relationshipId))
+      .limit(1),
+    db
+      .select()
+      .from(trainerNotes)
+      .where(cursor ? and(scope, keysetAfter(order, trainerNotes.id, cursor)) : scope)
+      .orderBy(desc(trainerNotes.createdAt), desc(trainerNotes.id))
+      .limit(limit + 1),
+  ]);
+  const relationship = relationshipRows[0];
+  if (
+    !relationship ||
+    !canAccessRelationship(actor, relationship) ||
+    relationship.trainerUserId !== actor.userId
+  ) {
+    return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Relationship not found.");
+  }
+  const page = buildKeysetPage(rows, limit, (row) => ({
+    values: [row.createdAt],
+    id: row.id,
+  }));
+  return ok(
+    c,
+    trainerNoteListResponseSchema.parse({
+      items: page.rows.map(mapTrainerNote),
+      nextCursor: page.nextCursor,
+    }),
+  );
 }
 
 async function loadActiveCheckinSchedule(db: Db, relationshipId: string) {
@@ -1046,8 +1302,10 @@ checkinRoutes.get(
   operation({
     tag: "Checkins",
     summary: "Checkins operation for GET /checkins/relationships/:relationshipId/notes.",
-    description: "Checkins operation for GET /checkins/relationships/:relationshipId/notes.",
+    description:
+      "A client's coach notes, newest first. Without `limit` or `cursor` every note is returned with `nextCursor: null`; with them, one page (Z14-20).",
     roles: ["trainer"],
+    parameters: optionalPageParameters(),
     response: trainerNoteListResponseSchema,
   }),
   optionalAuthMiddleware,
@@ -1061,6 +1319,11 @@ checkinRoutes.get(
 
     const db = createDb(c.env.DB);
     const relationshipId = c.req.param("relationshipId");
+    const cursorParam = c.req.query("cursor");
+    const limit = optionalPageLimit(c.req.query("limit"), cursorParam);
+    if (limit !== null) {
+      return listTrainerNotesPage(c, db, actor, relationshipId, limit, cursorParam);
+    }
     // One round trip (Z14-1); notes are returned only after the ownership check.
     const [relationshipRows, rows] = await db.batch([
       db
@@ -1429,8 +1692,20 @@ checkinRoutes.get(
   operation({
     tag: "Checkins",
     summary: "Checkins operation for GET /checkins/inbox.",
-    description: "Checkins operation for GET /checkins/inbox.",
+    description:
+      "The trainer's due, overdue and submitted check-ins. Without `limit`, `cursor` or `segment` every row is returned with `nextCursor: null`. With `segment` (to_review, overdue, reviewed) or a page size, rows come one page at a time (Z14-20).",
     roles: ["trainer"],
+    parameters: [
+      {
+        name: "segment",
+        in: "query",
+        required: false,
+        description:
+          "One trainer Check-ins segment: to_review (submitted, oldest first), overdue (oldest due date first) or reviewed (newest review first). Omit for the whole inbox.",
+        schema: { type: "string", enum: ["to_review", "overdue", "reviewed"] },
+      },
+      ...optionalPageParameters(),
+    ],
     response: trainerCheckinInboxResponseSchema,
   }),
   optionalAuthMiddleware,
@@ -1443,6 +1718,24 @@ checkinRoutes.get(
     }
 
     const db = createDb(c.env.DB);
+    const segmentParam = c.req.query("segment");
+    const cursorParam = c.req.query("cursor");
+    const pageLimit = optionalPageLimit(c.req.query("limit"), cursorParam);
+    if (segmentParam !== undefined || pageLimit !== null) {
+      const segment =
+        segmentParam === undefined
+          ? null
+          : trainerCheckinInboxSegmentSchema.safeParse(segmentParam);
+      if (segment && !segment.success) {
+        return fail(c, 400, "INVALID_REQUEST", "Invalid check-in segment.");
+      }
+      return listTrainerCheckinInboxPage(c, db, actor.userId, {
+        segment: segment ? segment.data : null,
+        // A segment without `limit`/`cursor` returns that whole segment.
+        limit: pageLimit,
+        cursorParam,
+      });
+    }
     const rows = await db
       .select({
         checkin: checkins,

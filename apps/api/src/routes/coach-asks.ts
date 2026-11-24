@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, type SQL } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   answerCoachAskRequestSchema,
@@ -19,6 +19,12 @@ import {
 import { pushTrainerInboxEvent, storeInboxNotification } from "../domain/inbox-notify.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { createId, nowIso } from "../lib/crypto.js";
+import {
+  buildKeysetPage,
+  decodeKeysetCursor,
+  keysetAfter,
+  optionalPageLimit,
+} from "../lib/cursor.js";
 import { fail, ok } from "../lib/envelope.js";
 import { requireWritableRelationship } from "../lib/relationship-write-guard.js";
 import { operation } from "../openapi/document.js";
@@ -230,8 +236,34 @@ coachAskRoutes.get(
   operation({
     tag: "CoachAsks",
     summary: "List coach asks",
-    description: "Open coach asks for trainer or trainee.",
+    description:
+      "Coach asks for trainer or trainee, newest ask first, filtered by `status` (default open). Without `limit` or `cursor` every ask is returned and `nextCursor` is absent; with them, one page and `nextCursor` (Z14-20).",
     roles: ["trainer", "trainee"],
+    parameters: [
+      {
+        name: "status",
+        in: "query",
+        required: false,
+        description: "open (default), answered or expired. Pages are per status.",
+        schema: { type: "string", enum: ["open", "answered", "expired"] },
+      },
+      {
+        name: "limit",
+        in: "query",
+        required: false,
+        description:
+          "Page size, 1–50. Omit `limit` and `cursor` to get every ask. A non-numeric value falls back to 30; the value is then clamped.",
+        schema: { type: "integer", minimum: 1, maximum: 50 },
+      },
+      {
+        name: "cursor",
+        in: "query",
+        required: false,
+        description:
+          "Opaque cursor from a previous nextCursor, for the same status (pages 30 at a time when `limit` is omitted).",
+        schema: { type: "string" },
+      },
+    ],
     response: coachAskListResponseSchema,
   }),
   optionalAuthMiddleware,
@@ -243,6 +275,17 @@ coachAskRoutes.get(
       return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
     }
     const status = c.req.query("status") ?? "open";
+    // Z14-20 (D-W14-26): optional cursor page. Without `limit`/`cursor` the
+    // read is unchanged (every ask, no `nextCursor`).
+    const cursorParam = c.req.query("cursor");
+    const limit = optionalPageLimit(c.req.query("limit"), cursorParam);
+    let cursor: { values: string[]; id: string } | null = null;
+    if (cursorParam) {
+      cursor = decodeKeysetCursor(cursorParam, 1);
+      if (!cursor) {
+        return fail(c, 400, "INVALID_CURSOR", "Cursor is not valid.");
+      }
+    }
     const db = createDb(c.env.DB);
     const forTrainee = actor.selectedRole === "trainee";
     // Z14-1: one batch. The asks are scoped through a subquery on the actor's
@@ -262,10 +305,38 @@ coachAskRoutes.get(
           ),
       ),
     );
+    // Paged: the same scope after the cursor, newest ask first with `id` as
+    // the tie-breaker, one row past the page to know whether more follow. The
+    // label lookups are keyed by the page's asks only.
+    const pageScope: SQL | undefined =
+      limit !== null && cursor
+        ? and(
+            askScope,
+            keysetAfter(
+              [{ column: coachAsks.lastAskedAt, direction: "desc" }],
+              coachAsks.id,
+              cursor,
+            ),
+          )
+        : askScope;
     const scopedAsks = (column: typeof coachAsks.itemId | typeof coachAsks.trainerNoteId) =>
-      db.select({ v: column }).from(coachAsks).where(askScope);
-    const [rows, meals, workouts, checkinRows, notes] = await db.batch([
-      db.select().from(coachAsks).where(askScope).orderBy(desc(coachAsks.lastAskedAt)),
+      limit === null
+        ? db.select({ v: column }).from(coachAsks).where(askScope)
+        : db
+            .select({ v: column })
+            .from(coachAsks)
+            .where(pageScope)
+            .orderBy(desc(coachAsks.lastAskedAt), desc(coachAsks.id))
+            .limit(limit + 1);
+    const [askRows, meals, workouts, checkinRows, notes] = await db.batch([
+      limit === null
+        ? db.select().from(coachAsks).where(askScope).orderBy(desc(coachAsks.lastAskedAt))
+        : db
+            .select()
+            .from(coachAsks)
+            .where(pageScope)
+            .orderBy(desc(coachAsks.lastAskedAt), desc(coachAsks.id))
+            .limit(limit + 1),
       db
         .select({
           id: mealAssignments.id,
@@ -295,6 +366,14 @@ coachAskRoutes.get(
     const workoutById = new Map(workouts.map((r) => [r.id, r]));
     const checkinById = new Map(checkinRows.map((r) => [r.id, r]));
     const noteById = new Map(notes.map((r) => [r.id, r]));
+    const page =
+      limit === null
+        ? null
+        : buildKeysetPage(askRows, limit, (row) => ({
+            values: [row.lastAskedAt],
+            id: row.id,
+          }));
+    const rows = page ? page.rows : askRows;
     const items = rows.map((row) => {
       let meta: AskItemMeta = { itemLabel: null, itemDate: null };
       if (row.itemType === "meal_assignment") {
@@ -314,7 +393,12 @@ coachAskRoutes.get(
         : undefined;
       return buildAsk(row, meta, answerVisibleToClient, { forTrainee });
     });
-    return ok(c, coachAskListResponseSchema.parse({ items }));
+    return ok(
+      c,
+      coachAskListResponseSchema.parse(
+        page ? { items, nextCursor: page.nextCursor } : { items },
+      ),
+    );
   },
 );
 

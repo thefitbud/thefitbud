@@ -41,6 +41,11 @@ export type CoachAsk = z.infer<typeof coachAskSchema>;
 
 export const coachAskListResponseSchema = z.object({
   items: z.array(coachAskSchema),
+  /**
+   * Z14-20: present only when the request asked for a page (`limit` or
+   * `cursor`); null at the end. Absent on unpaged reads, as before.
+   */
+  nextCursor: z.string().nullable().optional(),
 });
 
 export const answerCoachAskRequestSchema = z.object({

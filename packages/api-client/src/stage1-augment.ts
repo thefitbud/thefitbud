@@ -252,9 +252,14 @@ proto.getReengagementCandidates =
 
 proto.listCoachAsks = async function listCoachAsks(query?: {
   status?: string;
+  /** Z14-20: page size 1–50; omit with `cursor` to get every ask. */
+  limit?: number;
+  cursor?: string;
 }) {
   const params = new URLSearchParams();
   if (query?.status) params.set("status", query.status);
+  if (query?.limit !== undefined) params.set("limit", String(query.limit));
+  if (query?.cursor) params.set("cursor", query.cursor);
   const suffix = queryString(params);
   return this.request("GET", `/coach-asks${suffix}`, coachAskListResponseSchema, {
     auth: true,

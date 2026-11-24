@@ -465,6 +465,21 @@ export type TrainerCheckinInboxItem = z.infer<
   typeof trainerCheckinInboxItemSchema
 >;
 
+/**
+ * Z14-20: optional `segment` on `GET /checkins/inbox` so each trainer
+ * Check-ins segment pages on its own. `to_review` = submitted, not reviewed;
+ * `overdue` = not submitted, window closed; `reviewed` = has a review. Without
+ * `segment` the inbox is unchanged (due, overdue and submitted).
+ */
+export const trainerCheckinInboxSegmentSchema = z.enum([
+  "to_review",
+  "overdue",
+  "reviewed",
+]);
+export type TrainerCheckinInboxSegment = z.infer<
+  typeof trainerCheckinInboxSegmentSchema
+>;
+
 export const trainerCheckinInboxResponseSchema = cursorPageSchema(
   trainerCheckinInboxItemSchema,
 );
