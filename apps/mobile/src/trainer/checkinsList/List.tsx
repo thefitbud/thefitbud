@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Swipeable } from "react-native-gesture-handler";
 import {
@@ -9,6 +10,8 @@ import {
 import type { ColorTokens } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
+import { CardRow, ListScreen, PagedListFooter } from "../../components/ListScreen";
+import type { PagedFailure } from "../usePagedList";
 import { ClientAvatar } from "../ClientAvatar";
 import {
   emptyCopy,
@@ -35,6 +38,14 @@ function avatarTone(name: string, c: ColorTokens) {
   return list[code % list.length] ?? list[0];
 }
 
+type Paging = {
+  loadingMore: boolean;
+  failure: PagedFailure | null;
+  onRetry: () => void;
+  /** Called at half a screen from the end of the loaded rows (D-W14-26). */
+  onEndReached: () => void;
+};
+
 type Props = {
   loading: boolean;
   model: CheckinListModel;
@@ -48,6 +59,20 @@ type Props = {
   onOpenClient?: (relationshipId: string) => void;
   /** Optional footer under the list (reminders paused, swipe hint). */
   footerHint?: string | null;
+  /** Title row, banners: above the segment tabs, scrolling with the list. */
+  header?: ReactNode;
+  /**
+   * A segment with more pages than are loaded counts "n+", never a partial
+   * number presented as the total.
+   */
+  moreBySegment?: Partial<Record<CheckinListSegment, boolean>>;
+  /** Paging footer and end-of-list callback for the open segment. */
+  paging?: Paging;
+  refreshing?: boolean;
+  onRefresh?: () => void;
+  /** Snackbar slot above the tab bar. */
+  toast?: ReactNode;
+  testID?: string;
 };
 
 export function CheckinsList({
@@ -60,72 +85,126 @@ export function CheckinsList({
   onMarkReviewed,
   onOpenClient,
   footerHint,
+  header,
+  moreBySegment,
+  paging,
+  refreshing,
+  onRefresh,
+  toast,
+  testID,
 }: Props) {
 
-  const styles = useStyles();
   const rows =
     segment === "to_review"
       ? model.toReview
       : segment === "overdue"
         ? model.overdue
         : model.reviewed;
-  const count = (n: number) => (loading ? "" : ` · ${n}`);
+  const count = (n: number, more?: boolean) =>
+    loading ? "" : ` · ${n}${more ? "+" : ""}`;
+  const tabs = (
+    <SegmentTabs>
+      <Tab
+        testID="checkins-segment-to-review"
+        label={`To review${count(model.toReview.length, moreBySegment?.to_review)}`}
+        selected={segment === "to_review"}
+        onPress={() => onSegmentChange("to_review")}
+      />
+      <Tab
+        testID="checkins-segment-overdue"
+        label={`Overdue${count(model.overdue.length, moreBySegment?.overdue)}`}
+        selected={segment === "overdue"}
+        onPress={() => onSegmentChange("overdue")}
+      />
+      <Tab
+        testID="checkins-segment-reviewed"
+        label="Reviewed"
+        selected={segment === "reviewed"}
+        onPress={() => onSegmentChange("reviewed")}
+      />
+    </SegmentTabs>
+  );
+  // While a page loads or after one failed, more rows continue below the
+  // last loaded one, so the card keeps its bottom edge open.
+  const rowsContinue = Boolean(paging && (paging.loadingMore || paging.failure));
   return (
-    <View>
-      <View accessibilityRole="tablist" style={styles.tabs}>
-        <Tab
-          testID="checkins-segment-to-review"
-          label={`To review${count(model.toReview.length)}`}
-          selected={segment === "to_review"}
-          onPress={() => onSegmentChange("to_review")}
-        />
-        <Tab
-          testID="checkins-segment-overdue"
-          label={`Overdue${count(model.overdue.length)}`}
-          selected={segment === "overdue"}
-          onPress={() => onSegmentChange("overdue")}
-        />
-        <Tab
-          testID="checkins-segment-reviewed"
-          label="Reviewed"
-          selected={segment === "reviewed"}
-          onPress={() => onSegmentChange("reviewed")}
-        />
-      </View>
-
-      {loading ? (
-        <Skeleton />
-      ) : rows.length === 0 ? (
-        <Empty segment={segment} />
-      ) : (
-        <View style={styles.card}>
-          {rows.map((row, index) => (
-            <View key={row.id}>
-              {index > 0 ? <View style={styles.divider} /> : null}
-              <Row
-                row={row}
-                segment={segment}
-                onReview={onReview}
-                onNudge={onNudge}
-                onMarkReviewed={onMarkReviewed}
-                onOpenClient={onOpenClient}
-              />
-            </View>
-          ))}
-        </View>
+    <ListScreen
+      v3
+      title="Check-ins"
+      testID={testID}
+      data={loading ? [] : rows}
+      keyExtractor={(row) => row.id}
+      header={
+        <>
+          {header}
+          {tabs}
+        </>
+      }
+      empty={
+        loading ? (
+          <Skeleton />
+        ) : rows.length === 0 && !rowsContinue ? (
+          <Empty segment={segment} />
+        ) : null
+      }
+      listFooter={
+        <>
+          {paging && !loading ? (
+            <PagedListFooter
+              loadingMore={paging.loadingMore}
+              failure={paging.failure}
+              onRetry={paging.onRetry}
+            />
+          ) : null}
+          {!loading && footerHint ? (
+            <FooterHint text={footerHint} />
+          ) : !loading &&
+            segment === "to_review" &&
+            rows.length > 0 &&
+            onMarkReviewed ? (
+            <FooterHint text="Swipe right on a row to mark it reviewed." />
+          ) : null}
+        </>
+      }
+      footer={toast}
+      footerVariant="toast"
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      onEndReached={paging && !loading ? paging.onEndReached : undefined}
+      renderItem={({ item: row, index }) => (
+        <CardRow first={index === 0} last={index === rows.length - 1 && !rowsContinue}>
+          {index > 0 ? <Divider /> : null}
+          <Row
+            row={row}
+            segment={segment}
+            onReview={onReview}
+            onNudge={onNudge}
+            onMarkReviewed={onMarkReviewed}
+            onOpenClient={onOpenClient}
+          />
+        </CardRow>
       )}
-      {!loading && footerHint ? (
-        <Text style={styles.hint}>{footerHint}</Text>
-      ) : !loading &&
-        segment === "to_review" &&
-        rows.length > 0 &&
-        onMarkReviewed ? (
-        <Text style={styles.hint}>
-          Swipe right on a row to mark it reviewed.
-        </Text>
-      ) : null}
+    />
+  );
+}
+
+function SegmentTabs({ children }: { children: ReactNode }) {
+  const styles = useStyles();
+  return (
+    <View accessibilityRole="tablist" style={styles.tabs}>
+      {children}
     </View>
   );
+}
+
+function Divider() {
+  const styles = useStyles();
+  return <View style={styles.divider} />;
+}
+
+function FooterHint({ text }: { text: string }) {
+  const styles = useStyles();
+  return <Text style={styles.hint}>{text}</Text>;
 }
 
 function Tab({

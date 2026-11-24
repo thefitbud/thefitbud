@@ -68,10 +68,8 @@ import {
 import { localDateInTimezone } from "../lib/dates";
 import { openContextualWhatsApp } from "./whatsapp";
 import {
-  clientMetaFromDirectoryItem,
   readTrainerCache,
   trainerCacheEpoch,
-  writeClientMeta,
   writeTrainerCache,
 } from "./cache";
 import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
@@ -233,29 +231,21 @@ export function AttentionTab({
     // flight, the late write is dropped (Z12-33).
     const cacheEpoch = trainerCacheEpoch();
     try {
-      const [attentionGroups, coachAsks, inbox, directory] = await Promise.all([
+      const [attentionGroups, coachAsks, inbox] = await Promise.all([
         s1.getAttentionGroups(),
         s1.listCoachAsks({ status: "open" }),
         api.listTrainerCheckinInbox(),
-        // Names only; the screen still works if the directory cannot load.
-        api.listClients({ limit: 50 }).catch((err) => {
-          reportError("attention.clientNames", err);
-          return null;
-        }),
       ]);
+      // Names come from the answers already in hand (Z14-21): no roster call,
+      // so no client is missing because it sat past the first 50.
       const names: Record<string, string> = {};
+      for (const item of inbox.items) {
+        if (item.traineeDisplayName) {
+          names[item.coachingRelationshipId] = item.traineeDisplayName;
+        }
+      }
       for (const group of attentionGroups.groups) {
         names[group.relationshipId] = group.traineeDisplayName;
-      }
-      for (const client of directory?.items ?? []) {
-        if (client.relationshipId) {
-          names[client.relationshipId] = client.traineeDisplayName;
-          writeClientMeta(
-            client.relationshipId,
-            clientMetaFromDirectoryItem(client),
-            cacheEpoch,
-          );
-        }
       }
       const nextCheckins = inbox.items.filter(
         (item: TrainerCheckinInboxItem) => item.checkin.status === "submitted",

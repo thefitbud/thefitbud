@@ -33,9 +33,7 @@ import {
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError } from "@fitbud/api-client";
-import type {
-  ClientDirectoryItem,
-} from "@fitbud/contracts";
+import type { ClientDirectoryItem } from "@fitbud/contracts";
 import {
   deviceTimeZone,
   formatClockTime,
@@ -46,7 +44,7 @@ import type { ColorTokens } from "@fitbud/tokens";
 import { fontFamilyMedium, fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { Screen } from "../components/Screen";
+import { CardRow, ListScreen, PagedListFooter } from "../components/ListScreen";
 import { initialsFromName } from "../components/m2";
 import { reportError } from "../lib/reportError";
 import { trainerWebUrl } from "../lib/legalLinks";
@@ -59,6 +57,8 @@ import {
   writeTrainerCache,
 } from "./cache";
 import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
+import { countsFromFacets } from "./clientCounts";
+import { usePagedList } from "./usePagedList";
 import {
   applyClientListFilter,
   clientListQueryForChip,
@@ -287,7 +287,9 @@ function isOfflineError(err: unknown): boolean {
 }
 
 type ClientsSnapshot = {
+  /** The first page of the unfiltered roster (Z14-3); later pages are not cached. */
   items: ClientDirectoryItem[];
+  nextCursor?: string | null;
   counts?: Counts;
   savedAt: string;
 };
@@ -295,7 +297,8 @@ type ClientsSnapshot = {
 type Counts = {
   all: number;
   needs: number;
-  checkin: number;
+  /** Not in the API's counts: known once the whole roster has been loaded. */
+  checkin: number | null;
   onboarding: number;
   invites: number;
   ended: number;
@@ -304,11 +307,15 @@ type Counts = {
 const EMPTY_COUNTS: Counts = {
   all: 0,
   needs: 0,
-  checkin: 0,
+  checkin: null,
   onboarding: 0,
   invites: 0,
   ended: 0,
 };
+
+/** D-W14-26: 30 per page, the next one at half a screen from the end. */
+const PAGE_SIZE = 30;
+const SEARCH_DEBOUNCE_MS = 300;
 
 export function ClientsTab({
   active = true,
@@ -327,128 +334,122 @@ export function ClientsTab({
   const [segment, setSegment] = useState<Segment>(initialSegment);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
   const [chip, setChip] = useState<ClientListFilter>("all");
   // Z14-3: paint the last roster at once; the first load refreshes underneath.
   const [initialSnapshot] = useState(() =>
     readTrainerCache<ClientsSnapshot>("trainer:clients"),
   );
-  const [items, setItems] = useState<ClientDirectoryItem[]>(
-    initialSnapshot?.items ?? [],
-  );
   const [counts, setCounts] = useState<Counts>(
     initialSnapshot?.counts ?? EMPTY_COUNTS,
   );
-  const [updating, setUpdating] = useState(false);
+  const countsRef = useRef(counts);
+  countsRef.current = counts;
   const lastLoadedAt = useRef(0);
-  const hasData = useRef(initialSnapshot != null);
-  const [loading, setLoading] = useState(initialSnapshot == null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [activityRefresh, setActivityRefresh] = useState(0);
   const searchRef = useRef<TextInput>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    const cacheEpoch = trainerCacheEpoch();
-    const unfiltered = chip === "all" && query.trim().length === 0;
-    try {
-      // One clients call. Badges come from each row's own attention summary
-      // (Z14-1), so no attention or asks call is needed. The counts need the
-      // unfiltered list: it is the same call when no filter is set.
-      const page = await api.listClients({
-        ...clientListQueryForChip(chip, query),
-        limit: 50,
-      });
-      const shown = applyClientListFilter(page.items, chip);
-      setItems(shown);
-      setOfflineAt(null);
-      setLoading(false);
-      hasData.current = true;
-      lastLoadedAt.current = Date.now();
-      for (const item of page.items) {
-        if (item.relationshipId) {
-          writeClientMeta(
-            item.relationshipId,
-            clientMetaFromDirectoryItem(item),
-            cacheEpoch,
-          );
-        }
-      }
-      let allItems: ClientDirectoryItem[] | null = unfiltered ? page.items : null;
-      if (allItems === null) {
-        // A filtered view: the chip counts fill in when this answers.
-        allItems = await api
-          .listClients({ limit: 50 })
-          .then((all) => all.items)
-          .catch((err: unknown) => {
-            if (!isOfflineError(err)) reportError("clients.counts", err);
-            return null;
-          });
-      }
-      let nextCounts: Counts | null = null;
-      if (allItems !== null) {
-        const live = allItems.filter((item) => !isEndedClient(item));
-        nextCounts = {
-          all: live.length,
-          needs: live.filter((item) => item.adherenceState === "needs_attention")
-            .length,
-          checkin: live.filter(isCheckinDue).length,
-          onboarding: live.filter((item) =>
-            ["onboarding_pending", "onboarding_submitted"].includes(item.status),
-          ).length,
-          invites: live.filter((item) => item.status === "invited").length,
-          ended: allItems.filter(isEndedClient).length,
-        };
-        setCounts(nextCounts);
-      }
-      if (unfiltered) {
-        writeTrainerCache(
-          "trainer:clients",
-          {
-            items: page.items,
-            counts: nextCounts ?? undefined,
-            savedAt: new Date().toISOString(),
-          } satisfies ClientsSnapshot,
-          cacheEpoch,
-        );
-      }
-    } catch (err) {
-      const cached = readTrainerCache<ClientsSnapshot>("trainer:clients");
-      if (isOfflineError(err) && cached) {
-        setItems(applyClientListFilter(cached.items, chip));
-        setOfflineAt(cached.savedAt);
-        setError(null);
-      } else {
-        if (!isOfflineError(err)) reportError("clients.load", err);
-        setError("Couldn't load. Pull to try again.");
-      }
-    } finally {
-      setLoading(false);
-      setUpdating(false);
-    }
-  }, [api, chip, query]);
-
+  // The search box debounces; chips and the segment apply at once.
   useEffect(() => {
-    // The first load starts at once (a snapshot, if any, is already on screen);
-    // typing in search is debounced. A snapshot never shows a skeleton.
-    const first = lastLoadedAt.current === 0;
-    const handle = setTimeout(
-      () => {
-        if (hasData.current) setUpdating(true);
-        else setLoading(true);
-        void load();
-      },
-      first ? 0 : 300,
-    );
+    if (query === searchTerm) return;
+    const handle = setTimeout(() => setSearchTerm(query), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(handle);
-  }, [load]);
+  }, [query, searchTerm]);
 
-  useRefreshWhenActive(active, lastLoadedAt, () => {
-    setUpdating(true);
-    void load();
-  }, returnNonce);
+  const fetchPage = useCallback(
+    async (cursor: string | null) => {
+      const cacheEpoch = trainerCacheEpoch();
+      const unfiltered = chip === "all" && searchTerm.trim().length === 0;
+      try {
+        const page = await api.listClients({
+          ...clientListQueryForChip(chip, searchTerm),
+          limit: PAGE_SIZE,
+          ...(cursor ? { cursor } : {}),
+        });
+        for (const item of page.items) {
+          if (item.relationshipId) {
+            writeClientMeta(
+              item.relationshipId,
+              clientMetaFromDirectoryItem(item),
+              cacheEpoch,
+            );
+          }
+        }
+        // Chip counts come from the facets every page carries.
+        const fromFacets = page.facets ? countsFromFacets(page.facets) : null;
+        if (fromFacets) {
+          setCounts((prev) => ({ ...prev, ...fromFacets }));
+        }
+        if (cursor === null) {
+          setOfflineAt(null);
+          lastLoadedAt.current = Date.now();
+          if (unfiltered) {
+            writeTrainerCache(
+              "trainer:clients",
+              {
+                items: page.items,
+                nextCursor: page.nextCursor,
+                counts: { ...countsRef.current, ...fromFacets },
+                savedAt: new Date().toISOString(),
+              } satisfies ClientsSnapshot,
+              cacheEpoch,
+            );
+          }
+        }
+        return {
+          items: applyClientListFilter(page.items, chip),
+          nextCursor: page.nextCursor,
+        };
+      } catch (err) {
+        const cached = readTrainerCache<ClientsSnapshot>("trainer:clients");
+        if (cursor === null && isOfflineError(err) && cached) {
+          setOfflineAt(cached.savedAt);
+          return {
+            items: applyClientListFilter(cached.items, chip),
+            nextCursor: null,
+          };
+        }
+        throw err;
+      }
+    },
+    [api, chip, searchTerm],
+  );
+
+  const paged = usePagedList<ClientDirectoryItem>({
+    queryKey: `${chip}|${searchTerm.trim()}`,
+    fetchPage,
+    getKey: (item) => item.relationshipId ?? item.invitationId ?? item.traineeDisplayName,
+    initial: initialSnapshot
+      ? {
+          items: initialSnapshot.items,
+          nextCursor: initialSnapshot.nextCursor ?? null,
+        }
+      : null,
+    isOffline: isOfflineError,
+    onError: (err, phase) => {
+      if (!isOfflineError(err)) {
+        reportError(phase === "first" ? "clients.load" : "clients.loadMore", err);
+      }
+    },
+  });
+  const { items, loading, refreshing } = paged;
+
+  useRefreshWhenActive(active, lastLoadedAt, () => paged.refreshQuietly(), returnNonce);
+
+  // The Check-in due count is not in the API's counts; it is exact once the
+  // whole list is loaded, so show it only then (never a partial number).
+  useEffect(() => {
+    if (loading || paged.hasMore || paged.error) return;
+    if (searchTerm.trim().length > 0) return;
+    if (chip !== "all" && chip !== "checkin_due") return;
+    const due =
+      chip === "checkin_due"
+        ? items.length
+        : items.filter((item) => !isEndedClient(item) && isCheckinDue(item))
+            .length;
+    setCounts((prev) => (prev.checkin === due ? prev : { ...prev, checkin: due }));
+  }, [items, loading, paged.hasMore, paged.error, chip, searchTerm]);
 
   useEffect(() => {
     if (searchOpen) {
@@ -491,6 +492,9 @@ export function ClientsTab({
       : counts.all > 0
         ? `${counts.all} active`
         : "Clients";
+  // A first page that failed: the old copy, only when nothing else explains it.
+  const error =
+    paged.error && !offlineClock ? "Couldn't load. Pull to try again." : null;
 
   async function copyWebLink() {
     // Dynamic import keeps expo-clipboard out of the ClientsTab module graph
@@ -508,6 +512,7 @@ export function ClientsTab({
   function closeSearch() {
     setSearchOpen(false);
     setQuery("");
+    setSearchTerm("");
   }
 
   if (segment === "activity") {
@@ -518,69 +523,49 @@ export function ClientsTab({
         displayName: item.traineeDisplayName ?? "Client",
       }));
     return (
-      <Screen
-        v3
-        title="Clients"
-        chrome="app"
-        showHeader={false}
-        refreshing={refreshing}
-        onRefresh={() => {
-          setRefreshing(true);
-          setActivityRefresh((n) => n + 1);
-          void load().finally(() => setRefreshing(false));
+      <ActivityFeedScreen
+        clients={activityClients}
+        header={
+          <>
+            <ClientsHeader
+              eyebrow="Last 7 days"
+              onSearch={() => {
+                setSegment("clients");
+                setSearchOpen(true);
+              }}
+            />
+            <SegmentBar segment={segment} onChange={setSegment} />
+          </>
+        }
+        onOpenAsk={onOpenAsk}
+        onOpenSession={onOpenSession}
+        onOpenProfile={onOpenClientProfile}
+        onOpenClient={(relationshipId, displayName) => {
+          const found = items.find(
+            (item) => item.relationshipId === relationshipId,
+          );
+          if (found) {
+            onOpenClient(mapDirectoryItemToRow(found, trainerZone));
+            return;
+          }
+          onOpenClient({
+            key: `relationship:${relationshipId}`,
+            kind: "relationship",
+            name: displayName,
+            subtitle: "",
+            onboardingStatus: "coaching_ready",
+            relationshipId,
+            invitationId: null,
+            traineeUserId: null,
+            updatedAt: new Date().toISOString(),
+          });
         }}
-      >
-        <ClientsHeader
-          eyebrow="Last 7 days"
-          onSearch={() => {
-            setSegment("clients");
-            setSearchOpen(true);
-          }}
-        />
-        <SegmentBar segment={segment} onChange={setSegment} />
-        <ActivityFeedScreen
-          clients={activityClients}
-          refreshToken={activityRefresh}
-          onOpenAsk={onOpenAsk}
-          onOpenSession={onOpenSession}
-          onOpenProfile={onOpenClientProfile}
-          onOpenClient={(relationshipId, displayName) => {
-            const found = items.find(
-              (item) => item.relationshipId === relationshipId,
-            );
-            if (found) {
-              onOpenClient(mapDirectoryItemToRow(found, trainerZone));
-              return;
-            }
-            onOpenClient({
-              key: `relationship:${relationshipId}`,
-              kind: "relationship",
-              name: displayName,
-              subtitle: "",
-              onboardingStatus: "coaching_ready",
-              relationshipId,
-              invitationId: null,
-              traineeUserId: null,
-              updatedAt: new Date().toISOString(),
-            });
-          }}
-        />
-      </Screen>
+      />
     );
   }
 
-  return (
-    <Screen
-      v3
-      title="Clients"
-      chrome="app"
-      showHeader={false}
-      refreshing={refreshing}
-      onRefresh={() => {
-        setRefreshing(true);
-        void load().finally(() => setRefreshing(false));
-      }}
-    >
+  const header = (
+    <>
       {searchOpen ? (
         <SearchBar
           inputRef={searchRef}
@@ -639,121 +624,144 @@ export function ClientsTab({
         </View>
       ) : null}
       {error ? <ErrorBanner message={error} /> : null}
-      <UpdatingLine visible={updating && !refreshing && !offlineClock} />
+      <UpdatingLine visible={paged.updating && !refreshing && !offlineClock} />
 
       {searchOpen && !loading ? (
         <Text style={styles.resultLabel}>
-          {rows.length === 1
-            ? "1 client"
-            : `${rows.length} clients`}
+          {`${rows.length}${paged.hasMore ? "+" : ""} ${rows.length === 1 && !paged.hasMore ? "client" : "clients"}`}
         </Text>
       ) : null}
+    </>
+  );
 
-      {loading && rows.length === 0 ? <LoadingSkeleton /> : null}
+  const empty = loading && rows.length === 0 ? (
+    <LoadingSkeleton />
+  ) : !loading && rows.length === 0 ? (
+    searchTerm.trim() || chip !== "all" || searchOpen ? (
+      <Text style={styles.emptyMatch}>
+        {searchTerm.trim()
+          ? "No clients match."
+          : chip === "invites"
+            ? "No pending invites."
+            : chip === "ended"
+              ? "No ended clients."
+              : "No clients match."}
+      </Text>
+    ) : (
+      <EmptyState copied={copied} onCopy={() => void copyWebLink()} />
+    )
+  ) : null;
 
-      {!loading && rows.length === 0 ? (
-        query.trim() || chip !== "all" || searchOpen ? (
-          <Text style={styles.emptyMatch}>
-            {query.trim()
-              ? "No clients match."
-              : chip === "invites"
-                ? "No pending invites."
-                : chip === "ended"
-                  ? "No ended clients."
-                  : "No clients match."}
-          </Text>
-        ) : (
-          <EmptyState copied={copied} onCopy={() => void copyWebLink()} />
-        )
-      ) : null}
-
-      {rows.length > 0 ? (
-        <View style={styles.list}>
-          {rows.map(({ item, row }, index) => {
-            const tone = avatarTone(row.name, theme.colors);
-            const age = formatRelative(item.updatedAt);
-            const chips = rowChips(item, theme.colors);
-            // Invites without a relationship are not tappable into overview.
-            const canOpen = Boolean(row.relationshipId);
-            const rowId = `client-row-${formatPersonName(row.name)
-              .toLowerCase()
-              .replace(/[^a-z0-9]+/g, "-")
-              .replace(/^-|-$/g, "")}`;
-            return (
-              <Pressable
-                key={row.key}
-                testID={rowId}
-                accessibilityRole={canOpen ? "button" : "text"}
-                disabled={!canOpen}
-                onPress={() => {
-                  if (canOpen) onOpenClient(row);
-                }}
-                style={[
-                  styles.row,
-                  index > 0 ? styles.rowBorder : null,
-                  isEndedClient(item) ? styles.rowDim : null,
-                ]}
-              >
-                <View
-                  style={[
-                    styles.avatar,
-                    {
-                      backgroundColor: isEndedClient(item) || item.status === "invited"
-                        ? theme.colors.fill
-                        : tone.backgroundColor,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.avatarText,
-                      {
-                        color:
-                          isEndedClient(item) || item.status === "invited"
-                            ? theme.colors.ink3
-                            : tone.color,
-                      },
-                    ]}
-                  >
-                    {initialsFromName(row.name)}
-                  </Text>
-                </View>
-                <View style={styles.rowBody}>
-                  <View style={styles.rowTop}>
-                    <Text style={styles.name}>{formatPersonName(row.name)}</Text>
-                    <Text style={styles.age}>{age}</Text>
-                  </View>
-                  <Text style={styles.sub}>{row.subtitle}</Text>
-                  {chips.length > 0 ? (
-                    <View style={styles.chipRow}>
-                      {chips.map((entry) => (
-                        <RosterChipView key={entry.key} chip={entry} />
-                      ))}
-                    </View>
-                  ) : null}
-                </View>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {searchOpen && query.trim() ? (
+  const listFooter = (
+    <>
+      <PagedListFooter
+        loadingMore={paged.loadingMore}
+        failure={paged.moreError}
+        onRetry={paged.retryMore}
+      />
+      {searchOpen && searchTerm.trim() ? (
         <Text style={styles.endedNote}>
           Searches active, invited and ended clients.
         </Text>
       ) : null}
-      {chip === "ended" && rows.length > 0 ? (
+      {chip === "ended" && rows.length > 0 && !paged.hasMore ? (
         <Text style={styles.endedNote}>
           Ended clients are read only. Reactivate from a client’s page.
         </Text>
       ) : null}
-      {chip === "invites" && rows.length > 0 ? (
+      {chip === "invites" && rows.length > 0 && !paged.hasMore ? (
         <Text style={styles.endedNote}>
           Invite new clients on FitBud web.
         </Text>
       ) : null}
-    </Screen>
+    </>
+  );
+
+  return (
+    <ListScreen
+      v3
+      title="Clients"
+      data={rows}
+      keyExtractor={(entry) => entry.row.key}
+      header={header}
+      empty={empty}
+      listFooter={listFooter}
+      refreshing={refreshing}
+      onRefresh={paged.refresh}
+      onEndReached={paged.loadMore}
+      renderItem={({ item: { item, row }, index }) => {
+        const tone = avatarTone(row.name, theme.colors);
+        const age = formatRelative(item.updatedAt);
+        const chips = rowChips(item, theme.colors);
+        // Invites without a relationship are not tappable into overview.
+        const canOpen = Boolean(row.relationshipId);
+        const rowId = `client-row-${formatPersonName(row.name)
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")}`;
+        return (
+          <CardRow
+            first={index === 0}
+            last={index === rows.length - 1 && !paged.hasMore}
+            style={index === 0 ? styles.listTop : undefined}
+          >
+            <Pressable
+              testID={rowId}
+              accessibilityRole={canOpen ? "button" : "text"}
+              disabled={!canOpen}
+              onPress={() => {
+                if (canOpen) onOpenClient(row);
+              }}
+              style={[
+                styles.row,
+                index > 0 ? styles.rowBorder : null,
+                isEndedClient(item) ? styles.rowDim : null,
+              ]}
+            >
+              <View
+                style={[
+                  styles.avatar,
+                  {
+                    backgroundColor:
+                      isEndedClient(item) || item.status === "invited"
+                        ? theme.colors.fill
+                        : tone.backgroundColor,
+                  },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.avatarText,
+                    {
+                      color:
+                        isEndedClient(item) || item.status === "invited"
+                          ? theme.colors.ink3
+                          : tone.color,
+                    },
+                  ]}
+                >
+                  {initialsFromName(row.name)}
+                </Text>
+              </View>
+              <View style={styles.rowBody}>
+                <View style={styles.rowTop}>
+                  <Text style={styles.name}>{formatPersonName(row.name)}</Text>
+                  <Text style={styles.age}>{age}</Text>
+                </View>
+                <Text style={styles.sub}>{row.subtitle}</Text>
+                {chips.length > 0 ? (
+                  <View style={styles.chipRow}>
+                    {chips.map((entry) => (
+                      <RosterChipView key={entry.key} chip={entry} />
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+            </Pressable>
+          </CardRow>
+        );
+      }}
+    />
   );
 }
 
@@ -1049,6 +1057,7 @@ const useStyles = createThemedStyles((t) => ({
     marginTop: 4,
     overflow: "hidden",
   },
+  listTop: { marginTop: 4 },
   row: {
     alignItems: "flex-start",
     flexDirection: "row",
