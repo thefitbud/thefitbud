@@ -5,7 +5,7 @@
  * of the cached day; offline is neutral and "Couldn't refresh" is crit only
  * when the API was reachable (TR-06e, TR-06g).
  */
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   coachingRelationshipSchema,
   effectivePlanResponseSchema,
@@ -17,7 +17,14 @@ import { act, mockAuth, render, screen, waitFor } from "../test/render";
 import { localDateInTimezone } from "../lib/dates";
 
 const TIME_ZONE = "Asia/Kolkata";
-const TODAY = localDateInTimezone(TIME_ZONE);
+/**
+ * The clock is pinned to 3:30 pm IST (10:00 UTC) so the fixture's meal windows
+ * (01:00-02:59 UTC, i.e. 6:30-8:29 am IST) are always earlier in the trainee's
+ * own day, whatever time the suite really runs. Only `Date` is faked: the
+ * tests still use real timers for their waits.
+ */
+const PINNED_NOW = new Date("2026-11-10T10:00:00.000Z");
+const TODAY = localDateInTimezone(TIME_ZONE, PINNED_NOW);
 
 const relationship = coachingRelationshipSchema.parse({
   id: "1b65e3ad-84cf-4fe1-a546-0d62656c2c79",
@@ -224,12 +231,17 @@ function anyBlockRendered(): boolean {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ now: PINNED_NOW, toFake: ["Date"] });
   clearDayViews();
   dayRead = async () => ({ items: [], nextCursor: null });
   weekRead = async () => null;
   outboxRows = [];
   apiReachable = null;
   Object.defineProperty(navigator, "onLine", { value: true, configurable: true });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe("one Today skeleton (TR-06f, #2)", () => {
