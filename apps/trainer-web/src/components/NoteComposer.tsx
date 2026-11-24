@@ -25,30 +25,6 @@ type AboutOption = {
 
 const MAX_CHARS = 1000;
 
-/** Nominative pronoun for frame copy ("He sees…"). Fallback: "They". */
-function subjectPronoun(genderOrPronoun: string | null | undefined): string {
-  const raw = (genderOrPronoun ?? "").trim().toLowerCase();
-  if (
-    raw === "female" ||
-    raw === "woman" ||
-    raw === "f" ||
-    raw === "she" ||
-    raw === "her"
-  ) {
-    return "She";
-  }
-  if (
-    raw === "male" ||
-    raw === "man" ||
-    raw === "m" ||
-    raw === "he" ||
-    raw === "his"
-  ) {
-    return "He";
-  }
-  return "They";
-}
-
 function noteCivilDay(iso: string, timeZone?: string | null): string {
   try {
     const civil = timeZone
@@ -113,7 +89,6 @@ export function NoteComposer({
   }, [traineeName]);
 
   const pronoun = possessivePronoun(traineeGender);
-  const they = subjectPronoun(traineeGender);
 
   const trainerFirstName = useMemo(() => {
     const raw = (me?.trainerProfile?.displayName ?? "Coach")
@@ -351,21 +326,42 @@ export function NoteComposer({
         </label>
 
         <div className="note-vis-row">
-          <div className="note-vis-copy">
-            <strong>Visible to {firstName}</strong>
-            <span>
-              {they} sees it on Today and gets one notification.
-            </span>
+          <div
+            className="note-vis-seg"
+            role="radiogroup"
+            aria-label="Who can see this note"
+            aria-describedby="note-vis-line"
+          >
+            <label
+              className={`note-vis-opt${visibility === "private" ? " is-on" : ""}`}
+            >
+              <input
+                type="radio"
+                name="note-visibility"
+                value="private"
+                checked={visibility === "private"}
+                onChange={() => setVisibility("private")}
+              />
+              <span>Only me</span>
+            </label>
+            <label
+              className={`note-vis-opt${visibility === "client" ? " is-on" : ""}`}
+            >
+              <input
+                type="radio"
+                name="note-visibility"
+                value="client"
+                checked={visibility === "client"}
+                onChange={() => setVisibility("client")}
+              />
+              <span>{firstName} too</span>
+            </label>
           </div>
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label={`Visible to ${firstName}`}
-            checked={visibility === "client"}
-            onChange={(e) =>
-              setVisibility(e.target.checked ? "client" : "private")
-            }
-          />
+          <p id="note-vis-line" className="note-vis-line">
+            {visibility === "client"
+              ? `${firstName} sees it on Today and gets one notification.`
+              : "Only you can see this note."}
+          </p>
         </div>
 
         {visibility === "client" ? (

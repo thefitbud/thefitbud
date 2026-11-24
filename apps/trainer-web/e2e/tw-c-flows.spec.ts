@@ -217,24 +217,24 @@ test.describe("TW-C workspace", () => {
     await page.getByRole("button", { name: /^Add note$/i }).click();
     await expect(page.getByTestId("screen-TW-34")).toBeVisible();
     await expect(page.getByText(/About · optional/i)).toBeVisible();
-    const visibility = page.getByRole("switch", {
-      name: /Visible to Rohan/i,
-    });
-    await expect(visibility).not.toBeChecked();
+    const onlyMe = page.getByRole("radio", { name: "Only me" });
+    const clientToo = page.getByRole("radio", { name: "Rohan too" });
+    await expect(onlyMe).toBeChecked();
+    await expect(page.getByText("Only you can see this note.")).toBeVisible();
     const area = page.locator("textarea").first();
     await area.fill("x".repeat(820));
     // Frame 188: always-on "N of 1,000" counter (Z12-7).
     await expect(page.getByText(/820 of 1,?000/)).toBeVisible();
-    await visibility.check();
+    await clientToo.check();
     await expect(
       // Frame 188 helper + TW-34 preview when switch is on.
-      page.getByText(/He sees it on Today and gets one notification/i),
+      page.getByText(/Rohan sees it on Today and gets one notification/i),
     ).toBeVisible();
     await expect(
       page.getByText(/Rohan will see this on (his|her|their) Today screen/i),
     ).toBeVisible();
     await expect(page.getByText(/From rahul · just now/i)).toBeVisible();
-    await visibility.uncheck();
+    await onlyMe.check();
     // Unique per run so --repeat-each against one seeded DB stays unambiguous.
     const noteBody = `Private note from TW-C e2e ${Date.now()}`;
     await area.fill(noteBody);

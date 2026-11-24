@@ -152,7 +152,7 @@ function advance(ms: number) {
 }
 
 function noActionTaken() {
-  expect(screen.queryByText("Marked reviewed")).toBeNull();
+  expect(screen.queryByText("Noted, kept open")).toBeNull();
   expect(api.getException).not.toHaveBeenCalled();
   expect(api.nudgeActivity).not.toHaveBeenCalled();
   expect(assignSpy).not.toHaveBeenCalled();
@@ -228,7 +228,7 @@ describe("HomePage row shortcuts guard (HM4)", () => {
     const grid = await renderHome("/");
     tabInto(grid);
     type("a");
-    expect(screen.getByText("Marked reviewed")).toBeTruthy();
+    expect(screen.getByText("Noted, kept open")).toBeTruthy();
     expect(api.acknowledgeException).not.toHaveBeenCalled();
     advance(5000);
     expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
@@ -241,7 +241,7 @@ describe("HomePage row shortcuts guard (HM4)", () => {
     advance(1000);
     tabInto(grid);
     type("a");
-    expect(screen.getByText("Marked reviewed")).toBeTruthy();
+    expect(screen.getByText("Noted, kept open")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     advance(6000);
     expect(api.acknowledgeException).not.toHaveBeenCalled();

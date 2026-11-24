@@ -143,7 +143,7 @@ describe("Home all clear (Z7-4, frame 135)", () => {
     expect(screen.getByText("Nobody needs you right now.")).toBeTruthy();
     expect(
       screen.getByText(
-        "New items appear here as clients log or miss a log. Reviewed items that are still open stay in their own list.",
+        "New items appear here as clients log or miss a log. Noted items that are still open stay in their own list.",
       ),
     ).toBeTruthy();
     const attention = screen
@@ -178,7 +178,7 @@ describe("Home all clear (Z7-4, frame 135)", () => {
     expect(screen.queryByText(/Next due/)).toBeNull();
   });
 
-  it("keeps Reviewed, still open and Getting started below the all-clear card", async () => {
+  it("keeps Noted, still open and Getting started below the all-clear card", async () => {
     api.getAttentionGroups.mockResolvedValue({
       groups: [
         {
@@ -214,7 +214,7 @@ describe("Home all clear (Z7-4, frame 135)", () => {
     renderHome();
     await screen.findByRole("heading", { name: "All clear" });
     expect(
-      await screen.findByRole("heading", { name: "Reviewed, still open" }),
+      await screen.findByRole("heading", { name: "Noted, still open" }),
     ).toBeTruthy();
     expect(await screen.findByRole("heading", { name: "Getting started" })).toBeTruthy();
     expect(screen.getByText("Sneha Kulkarni")).toBeTruthy();
