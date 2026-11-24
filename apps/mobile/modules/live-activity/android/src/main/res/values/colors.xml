@@ -1,12 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Workout notification colours (LA3). Light shade: the FitBud brand tokens
-  (packages/tokens: indigo #4527C6, chalk #FAF7F2, pale lavender #EDEAFF).
-  values-night/ carries the dark shade of frame 27-android. These apply to the
-  notification shade only; the app itself stays light-theme (CLAUDE.md).
+  Workout notification colours, light shade, from TR-15d (Z14-5) and the v3
+  tokens the iOS tile uses (targets/FitBudLiveActivity/FitBudLiveActivity.swift):
+  the navy Log button, the coach colour for Target, the coral progress line.
+  values-night/ carries the dark shade. These apply to the notification shade
+  only.
 -->
 <resources>
-    <color name="fitbud_workout_accent">#4527C6</color>
-    <color name="fitbud_workout_on_accent">#FAF7F2</color>
-    <color name="fitbud_workout_group">#EDEAFF</color>
+    <!-- "✓ Log 40 kg × 10" and Skip rest: TR-15d's navy button. -->
+    <color name="fitbud_workout_accent">#1A1248</color>
+    <color name="fitbud_workout_on_accent">#FFFFFF</color>
+    <!-- Open, and the rest view's grouped values. -->
+    <color name="fitbud_workout_group">#E4E0F5</color>
+    <!-- "Target 40 kg × 10" (light.coach). -->
+    <color name="fitbud_workout_coach">#5448C8</color>
+    <!-- Progress line (light.coralStrong) and its track. -->
+    <color name="fitbud_workout_coral">#EE456E</color>
+    <color name="fitbud_workout_coral_track">#40EE456E</color>
 </resources>

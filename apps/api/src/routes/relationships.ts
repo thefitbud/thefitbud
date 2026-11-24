@@ -12,8 +12,17 @@ import {
   relationshipListResponseSchema,
 } from "@fitbud/contracts";
 import { createDb } from "../db/client";
-import { coachingRelationships, trainerProfiles } from "../db/schema";
-import { deriveOnboardingStatusForRelationships } from "../domain/client-status";
+import {
+  coachingConfigurations,
+  coachingRelationships,
+  onboardingFormResponses,
+  onboardingReviews,
+  trainerProfiles,
+} from "../db/schema";
+import {
+  deriveOnboardingStatusForRelationships,
+  statusesFromRows,
+} from "../domain/client-status";
 import { mapRelationship } from "../domain/mappers";
 import {
   cancelRelationshipReactivation,
@@ -101,30 +110,75 @@ relationshipRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const rows = await db
-      .select()
-      .from(coachingRelationships)
-      .where(and(...conditions))
-      .orderBy(
-        desc(coachingRelationships.createdAt),
-        desc(coachingRelationships.id),
-      )
-      .limit(limit + 1);
+    // Z14-28: the page, the three onboarding-status inputs and the trainer
+    // profiles are one D1 trip. The inputs select through the same page
+    // subquery (ownership, cursor, order, limit + 1), so the batch stays one
+    // consistent snapshot and the trip count is flat in the list size.
+    const pageIds = () =>
+      db
+        .select({ id: coachingRelationships.id })
+        .from(coachingRelationships)
+        .where(and(...conditions))
+        .orderBy(
+          desc(coachingRelationships.createdAt),
+          desc(coachingRelationships.id),
+        )
+        .limit(limit + 1);
+    const [rows, responses, reviews, configurations, profiles] = await db.batch([
+      db
+        .select()
+        .from(coachingRelationships)
+        .where(and(...conditions))
+        .orderBy(
+          desc(coachingRelationships.createdAt),
+          desc(coachingRelationships.id),
+        )
+        .limit(limit + 1),
+      db
+        .select({
+          coachingRelationshipId: onboardingFormResponses.coachingRelationshipId,
+          status: onboardingFormResponses.status,
+        })
+        .from(onboardingFormResponses)
+        .where(inArray(onboardingFormResponses.coachingRelationshipId, pageIds())),
+      db
+        .select({
+          coachingRelationshipId: onboardingReviews.coachingRelationshipId,
+        })
+        .from(onboardingReviews)
+        .where(inArray(onboardingReviews.coachingRelationshipId, pageIds())),
+      db
+        .select({
+          coachingRelationshipId: coachingConfigurations.coachingRelationshipId,
+          status: coachingConfigurations.status,
+        })
+        .from(coachingConfigurations)
+        .where(inArray(coachingConfigurations.coachingRelationshipId, pageIds())),
+      db
+        .select({
+          userId: trainerProfiles.userId,
+          displayName: trainerProfiles.displayName,
+          whatsappE164: trainerProfiles.whatsappE164,
+        })
+        .from(trainerProfiles)
+        .where(
+          inArray(
+            trainerProfiles.userId,
+            db
+              .select({ id: coachingRelationships.trainerUserId })
+              .from(coachingRelationships)
+              .where(inArray(coachingRelationships.id, pageIds())),
+          ),
+        ),
+    ]);
 
     const page = buildPage(rows, limit, (item) => item.createdAt);
-    const statuses = await deriveOnboardingStatusForRelationships(db, page.items);
-    const trainerIds = [...new Set(page.items.map((row) => row.trainerUserId))];
-    const profiles =
-      trainerIds.length === 0
-        ? []
-        : await db
-            .select({
-              userId: trainerProfiles.userId,
-              displayName: trainerProfiles.displayName,
-              whatsappE164: trainerProfiles.whatsappE164,
-            })
-            .from(trainerProfiles)
-            .where(inArray(trainerProfiles.userId, trainerIds));
+    const statuses = statusesFromRows(
+      page.items,
+      responses,
+      reviews,
+      configurations,
+    );
     const profileByTrainer = new Map(
       profiles.map(
         (row) =>

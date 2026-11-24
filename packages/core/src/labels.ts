@@ -358,6 +358,7 @@ const LABELS = {
     trainer_critical_digest: "Critical digest",
     trainer_renewal: "Renewal",
     trainer_meal_times_changed: "Meal times changed",
+    trainer_client_log_edited: "Client changed a meal log",
     admin_whatsapp_budget: "WhatsApp budget",
     coach_log_updated: "Update from your coach",
   },

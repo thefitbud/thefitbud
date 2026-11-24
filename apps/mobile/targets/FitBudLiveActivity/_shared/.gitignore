@@ -1,0 +1,3 @@
+# Written by plugins/withLiveActivity.js on every prebuild; the App Group
+# differs per APP_VARIANT, so it is never committed.
+GeneratedAppGroup.swift

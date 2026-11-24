@@ -812,3 +812,24 @@ export * from "./steps.js";
 export * from "./exception-bulk.js";
 export * from "./account.js";
 export * from "./coach-log.js";
+
+// Z14-11: the trainee's edit of a logged meal, meal photo, workout rating and the
+// coach's client-log-edit notification payload.
+export {
+  attachMealPhotoRequestSchema,
+  removeMealLogResponseSchema,
+  traineeEditMealRequestSchema,
+  traineeRemoveMealRequestSchema,
+  type AttachMealPhotoRequest,
+  type RemoveMealLogResponse,
+  type TraineeEditMealRequest,
+  type TraineeRemoveMealRequest,
+} from "./meal.js";
+export {
+  traineeWorkoutFeedbackRequestSchema,
+  type TraineeWorkoutFeedbackRequest,
+} from "./workout.js";
+export {
+  clientLogEditPayloadSchema,
+  type ClientLogEditPayload,
+} from "./notification.js";

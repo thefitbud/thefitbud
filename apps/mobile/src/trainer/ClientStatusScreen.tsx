@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Modal,
   Pressable,
@@ -56,7 +56,16 @@ import {
 import { isMealLoggedForCount } from "../trainee/nutrition";
 import { reportError } from "../lib/reportError";
 import { trainerWebUrl } from "../lib/legalLinks";
-import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  readTrainerCache,
+  trainerCacheEpoch,
+  writeClientMeta,
+  writeTrainerCache,
+} from "./cache";
+import { UpdatingLine } from "./keptTab";
+import { onboardingStatusLabel } from "./clients";
 import { ClientLogWorkoutScreen } from "./clientlog/ClientLogWorkoutScreen";
 import { ClientLogMealScreen } from "./clientlog/meal/ClientLogMealScreen";
 import { ClientLogMeasurementScreen } from "./clientlog/measurement/ClientLogMeasurementScreen";
@@ -122,6 +131,7 @@ function isOfflineError(err: unknown): boolean {
 export function ClientStatusScreen({
   relationshipId,
   displayName,
+  onboardingStatusLabelText,
   onBack,
   onOpenException,
   onOpenCheckin,
@@ -134,8 +144,14 @@ export function ClientStatusScreen({
   const today = localDateInTimezone(zone);
   const weekStart = startOfWeekMonday(today);
   const weekEnd = addDays(weekStart, 6);
-  const [data, setData] = useState<Snapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Z14-3: paint the last snapshot of this client at once, refresh underneath.
+  const [initialSnapshot] = useState(() =>
+    readTrainerCache<Snapshot>(`trainer:client:${relationshipId}`),
+  );
+  const [data, setData] = useState<Snapshot | null>(initialSnapshot);
+  const hasData = useRef(initialSnapshot != null);
+  const [updating, setUpdating] = useState(false);
+  const [loading, setLoading] = useState(initialSnapshot == null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
@@ -161,37 +177,76 @@ export function ClientStatusScreen({
     // Captured before the fetch: if the trainer changes while it is in
     // flight, the late write is dropped (Z12-33).
     const cacheEpoch = trainerCacheEpoch();
+    if (hasData.current) setUpdating(true);
     try {
-      const [workspace, workoutPage, mealPage, notePage] = await Promise.all([
-        api.getClientWorkspace(relationshipId),
-        api.listWorkoutAssignments(relationshipId, {
-          fromDate: weekStart,
-          toDate: weekEnd,
-        }),
-        api.listMealAssignments(relationshipId, {
-          fromDate: weekStart,
-          toDate: weekEnd,
-        }),
-        api.listTrainerNotes(relationshipId),
-      ]);
+      // One parallel round. The week and responsiveness reads are live-only,
+      // so they run beside the workspace when the client is already known to
+      // be coaching (header cache, last snapshot or the row that opened this
+      // page), and skip when known ended. Only a client never seen before
+      // waits for the workspace to say which.
+      const hintStatus =
+        readClientMeta(relationshipId)?.status ??
+        initialSnapshot?.workspace.header.onboardingStatus ??
+        null;
+      const knownState: "ended" | "live" | "unknown" =
+        hintStatus != null
+          ? hintStatus === "ended"
+            ? "ended"
+            : "live"
+          : onboardingStatusLabelText === onboardingStatusLabel("ended")
+            ? "ended"
+            : onboardingStatusLabelText && onboardingStatusLabelText !== "Unknown"
+              ? "live"
+              : "unknown";
+      let responsivenessFailed = false;
+      const readLive = () =>
+        Promise.all([
+          clientStatusApi(api)
+            .getWorkspaceWeek(relationshipId, weekStart)
+            .catch((err: unknown) => {
+              reportError("client-status.week", err);
+              return null;
+            }),
+          clientStatusApi(api)
+            .getResponsiveness(relationshipId)
+            .catch((err: unknown) => {
+              reportError("client-status.responsiveness", err);
+              responsivenessFailed = true;
+              return null;
+            }),
+        ]);
+      const [workspace, workoutPage, mealPage, notePage, liveRead] =
+        await Promise.all([
+          api.getClientWorkspace(relationshipId),
+          api.listWorkoutAssignments(relationshipId, {
+            fromDate: weekStart,
+            toDate: weekEnd,
+          }),
+          api.listMealAssignments(relationshipId, {
+            fromDate: weekStart,
+            toDate: weekEnd,
+          }),
+          api.listTrainerNotes(relationshipId),
+          knownState === "live"
+            ? readLive()
+            : Promise.resolve([null, null] as [WeekReadModel | null, ResponsivenessResponse | null]),
+        ]);
+      writeClientMeta(
+        relationshipId,
+        clientMetaFromWorkspaceHeader(workspace.header),
+        cacheEpoch,
+      );
       const isEnded =
         workspace.header.onboardingStatus === "ended" || Boolean(workspace.header.endedAt);
-      let week: WeekReadModel | null = null;
-      let responsiveness: ResponsivenessResponse | null = null;
-      let responsivenessFailed = false;
-      if (!isEnded) {
-        [week, responsiveness] = await Promise.all([
-          clientStatusApi(api).getWorkspaceWeek(relationshipId, weekStart).catch((err: unknown) => {
-            reportError("client-status.week", err);
-            return null;
-          }),
-          clientStatusApi(api).getResponsiveness(relationshipId).catch((err: unknown) => {
-            reportError("client-status.responsiveness", err);
-            responsivenessFailed = true;
-            return null;
-          }),
-        ]);
+      let [week, responsiveness] = liveRead;
+      if (isEnded) {
+        week = null;
+        responsiveness = null;
+        responsivenessFailed = false;
+      } else if (knownState === "unknown") {
+        [week, responsiveness] = await readLive();
       }
+      hasData.current = true;
       const snapshot: Snapshot = {
         workspace,
         workouts: workoutPage.items,
@@ -212,11 +267,13 @@ export function ClientStatusScreen({
         setOfflineAt(cached.savedAt);
         setError(null);
       } else {
-        setData(null);
+        // A snapshot already on screen stays; the banner says the refresh failed.
+        if (!hasData.current) setData(null);
         setError("Couldn't load. Pull to try again.");
       }
     } finally {
       setLoading(false);
+      setUpdating(false);
     }
   }, [api, relationshipId, weekStart, weekEnd]);
 
@@ -582,6 +639,7 @@ export function ClientStatusScreen({
         </Text>
       ) : null}
       {error && data ? <ErrorBanner message={error} /> : null}
+      <UpdatingLine visible={updating && !refreshing && !offline} />
       {loading && !data ? (
         <View>
           <View style={styles.skeleton} />

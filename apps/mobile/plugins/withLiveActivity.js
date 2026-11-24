@@ -6,13 +6,30 @@ const { withAndroidManifest, withDangerousMod } = require("expo/config-plugins")
 const APP_GROUP_INFO_PLIST_KEY = "FitBudAppGroup";
 
 /**
- * Where the widget's App Group constant is generated, relative to the Expo
- * project root. The file sits inside targets/FitBudLiveActivity, which
- * @bacons/apple-targets adds to the widget target as an Xcode synchronized
- * folder, so every .swift file in it is compiled into the widget with no
- * project edit and no ordering dependency on the apple-targets mods.
+ * The widget folder's `_shared` subfolder. @bacons/apple-targets compiles each
+ * file in it into the widget AND the main app target (it globs `_shared/*`
+ * inside its Xcode project mod), which is how the Live Activity intents reach
+ * the app's process (Z14-5, D-W14-12). Relative to the Expo project root.
  */
-const APP_GROUP_SWIFT_PATH = path.join(
+const SHARED_SWIFT_DIR = path.join("targets", "FitBudLiveActivity", "_shared");
+
+/** The intents and the App Group outbox, compiled into the widget and the app. */
+const SHARED_INTENTS_SWIFT_PATH = path.join(SHARED_SWIFT_DIR, "LiveActivityIntents.swift");
+
+/**
+ * Where the App Group constant is generated. It sits in `_shared` because the
+ * shared intents read it, so it must exist in both targets. Expo runs every
+ * dangerous mod before the Xcode project mods, so the file is on disk when
+ * @bacons/apple-targets globs the folder. `_shared/.gitignore` keeps it out of
+ * git (the group differs per variant).
+ */
+const APP_GROUP_SWIFT_PATH = path.join(SHARED_SWIFT_DIR, "GeneratedAppGroup.swift");
+
+/**
+ * Where builds before Z14-5 generated it. A copy left there by an earlier
+ * prebuild would declare FitBudAppGroup twice in the widget, so it is removed.
+ */
+const LEGACY_APP_GROUP_SWIFT_PATH = path.join(
   "targets",
   "FitBudLiveActivity",
   "GeneratedAppGroup.swift",
@@ -68,6 +85,11 @@ function withAppGroupConstant(config, appGroup) {
         fs.mkdirSync(path.dirname(file), { recursive: true });
         fs.writeFileSync(file, source);
       }
+      const legacy = path.join(
+        modConfig.modRequest.projectRoot,
+        LEGACY_APP_GROUP_SWIFT_PATH,
+      );
+      if (fs.existsSync(legacy)) fs.rmSync(legacy);
       return modConfig;
     },
   ]);
@@ -83,7 +105,7 @@ const WORKOUT_RECEIVER = "com.thefitbud.liveactivity.WorkoutSetActionReceiver";
 /**
  * Registers that receiver in the app's manifest. Not exported and with no
  * intent filter: only FitBud's own explicit PendingIntents reach it, so no
- * other app can press −, + or Log set. `directBootAware` is left off; the
+ * other app can press Log or Skip rest. `directBootAware` is left off; the
  * notification is posted after the user has unlocked at least once.
  *
  * @param {import('@expo/config').ExpoConfig} config
@@ -121,11 +143,14 @@ function withWorkoutSetReceiver(config) {
  * (app.config.js). The host app gets it as the FitBudAppGroup Info.plist key
  * and as an entitlement; the widget gets it as a generated Swift constant
  * (withAppGroupConstant), because a widget target's Info.plist keys never
- * reach its bundle with @bacons/apple-targets 0.2.1.
+ * reach its bundle with @bacons/apple-targets 0.2.1. The constant is written
+ * into `_shared`, so the app target compiles it too.
  *
  * The widget target and LiveActivityIntent buttons are not compiled by
  * Expo web or Expo Go. They need a dev build: @bacons/apple-targets (in the
- * plugins list, LA1) adds targets/FitBudLiveActivity to the iOS build.
+ * plugins list, LA1) adds targets/FitBudLiveActivity to the iOS build, and
+ * links targets/FitBudLiveActivity/_shared (the intents, Z14-5) to the app
+ * target as well, so iOS can perform them in the app's process.
  * Log set advances to the next set. After a set logged in the app, the
  * activity shows the rest countdown (frame 27c, LA1c) until it runs out or
  * Skip is tapped.
@@ -169,4 +194,7 @@ module.exports = withLiveActivity;
 module.exports.APP_GROUP_INFO_PLIST_KEY = APP_GROUP_INFO_PLIST_KEY;
 module.exports.WORKOUT_RECEIVER = WORKOUT_RECEIVER;
 module.exports.APP_GROUP_SWIFT_PATH = APP_GROUP_SWIFT_PATH;
+module.exports.LEGACY_APP_GROUP_SWIFT_PATH = LEGACY_APP_GROUP_SWIFT_PATH;
+module.exports.SHARED_SWIFT_DIR = SHARED_SWIFT_DIR;
+module.exports.SHARED_INTENTS_SWIFT_PATH = SHARED_INTENTS_SWIFT_PATH;
 module.exports.appGroupSwiftSource = appGroupSwiftSource;

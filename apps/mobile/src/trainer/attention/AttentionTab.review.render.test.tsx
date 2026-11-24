@@ -48,6 +48,7 @@ vi.mock("../../realtime/useRealtimeHints", () => ({ useRealtimeHints: vi.fn() })
 
 const { AttentionTab } = await import("../AttentionTab");
 const { clearTrainerCache, setTrainerCacheOwner } = await import("../cache");
+const { readReviewItem } = await import("../reviewItemCache");
 
 const TRAINER = "6f1c2a9e-3b4d-4c5e-8f70-1a2b3c4d5e6f";
 const REL = "6a68b615-c47c-4bfc-a7f8-550becf7878a";
@@ -188,6 +189,33 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     fireEvent.click(nudge);
     await screen.findByText(/nudged you/);
     expect(openContextualWhatsApp).not.toHaveBeenCalled();
+  });
+
+  it("Z14-3: Mark reviewed and Resolve… drop the kept item so it is read fresh next time", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    // The sheet kept the item it just loaded, fresh.
+    await waitFor(() => expect(readReviewItem(EX_ID)?.stale).toBe(false));
+
+    api.acknowledgeException.mockResolvedValue({});
+    fireEvent.click(screen.getByTestId("review-sheet-mark-reviewed"));
+    await waitFor(() => expect(api.acknowledgeException).toHaveBeenCalled());
+    await waitFor(() => expect(readReviewItem(EX_ID)?.stale).toBe(true));
+  });
+
+  it("Z14-3: Resolve… from the sheet drops the kept item", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    await waitFor(() => expect(readReviewItem(EX_ID)?.stale).toBe(false));
+    fireEvent.click(screen.getByTestId("review-sheet-resolve"));
+    fireEvent.click(await screen.findByText("Talked to Rohan"));
+    api.acknowledgeException.mockResolvedValue({});
+    api.resolveException.mockResolvedValue({});
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    await screen.findByText("All 1 resolved for Rohan");
+    expect(readReviewItem(EX_ID)?.stale).toBe(true);
   });
 
   it("does not offer Nudge… for a logged meal", async () => {
