@@ -71,6 +71,7 @@ import {
 import { scheduledAssignments } from "./scheduledAssignments";
 import { pickTodayCheckin } from "./pickTodayCheckin";
 import { invalidateRelationshipDayData } from "./dataCache";
+import { DAY_VIEW_MAX_AGE_MS } from "./useTraineeDayCache";
 import {
   bindTraineeSnapshots,
   flushTraineeSnapshots,
@@ -160,6 +161,110 @@ export function useTraineeSnapshots(
     return () => subscription?.remove();
   }, []);
   return ready;
+}
+
+/** How an overlay sits over the tabs. */
+function overlayLayer(
+  overlay: TraineeOverlay | null,
+): "sheet" | "tabbed" | "fullscreen" | null {
+  if (overlay == null) return null;
+  if (overlay.screen === "something_different" || overlay.screen === "ask_coach") {
+    return "sheet";
+  }
+  if (overlay.screen === "meal_plan" || overlay.screen === "deep_link") {
+    return "tabbed";
+  }
+  // "ended" is the Today tab body when coaching has ended — never a
+  // fullscreen overlay that would hide the tab bar (TR-22a).
+  if (overlay.screen === "ended") return null;
+  return "fullscreen";
+}
+
+/**
+ * A kept tab shown again after this long since it last loaded refreshes
+ * underneath what it shows (Z14-2; the trainer app's 30 s rule, Z14-3).
+ */
+export const KEPT_TAB_STALE_MS = DAY_VIEW_MAX_AGE_MS;
+
+/**
+ * Tabs that refresh themselves when shown again (their `active` prop runs
+ * the day cache's age rule, keeping scroll and what they show). The others
+ * are remounted instead, and paint from the cache at once.
+ */
+const SELF_REFRESHING_TABS: ReadonlySet<TraineeTab> = new Set(["today", "diet"]);
+
+/**
+ * Which tab panes are mounted (Z14-2). A tab left by a tab bar press stays
+ * mounted, hidden, so a switch back paints at once. A tab left any other way
+ * (a notification, a deep link, a button that switches tab, a check-in or a
+ * fullscreen overlay covering it) is unmounted: something open on it (an RN
+ * `Modal` sheet, which ignores the parent's `display: none`, or a live
+ * workout's Android Back handler) must not outlive it off screen. A hidden
+ * Workout pane is never kept while immersive (the live log, a summary).
+ */
+export type PaneBook = {
+  /** The pane on screen at the last render; null under a cover. */
+  shown: TraineeTab | null;
+  /** Mounted panes, the one on screen included. */
+  kept: ReadonlySet<TraineeTab>;
+  /** Bumped to remount a pane (its React key). */
+  generation: Readonly<Partial<Record<TraineeTab, number>>>;
+  /** When each pane last mounted or refreshed (ms). */
+  loadedAt: Readonly<Partial<Record<TraineeTab, number>>>;
+  /** The tab the tab bar just picked, until the switch it makes is seen. */
+  picked: TraineeTab | null;
+};
+
+export function initialPaneBook(shown: TraineeTab | null, now: number): PaneBook {
+  return {
+    shown,
+    kept: new Set(shown ? [shown] : []),
+    generation: {},
+    loadedAt: shown ? { [shown]: now } : {},
+    picked: null,
+  };
+}
+
+/** The book for this render; the same object when nothing changed. */
+export function advancePaneBook(
+  book: PaneBook,
+  shown: TraineeTab | null,
+  workoutImmersive: boolean,
+  now: number,
+): PaneBook {
+  let next = book;
+  if (shown !== book.shown) {
+    const kept = new Set(book.kept);
+    const generation = { ...book.generation };
+    const loadedAt = { ...book.loadedAt };
+    const left = book.shown;
+    const viaTabBar = shown != null && book.picked === shown;
+    if (left != null) {
+      if (viaTabBar && !(left === "workout" && workoutImmersive)) kept.add(left);
+      else kept.delete(left);
+    }
+    if (shown != null) {
+      if (!kept.has(shown)) {
+        kept.add(shown);
+        loadedAt[shown] = now;
+      } else if (
+        !SELF_REFRESHING_TABS.has(shown) &&
+        now - (loadedAt[shown] ?? 0) > KEPT_TAB_STALE_MS
+      ) {
+        generation[shown] = (generation[shown] ?? 0) + 1;
+        loadedAt[shown] = now;
+      } else if (SELF_REFRESHING_TABS.has(shown)) {
+        loadedAt[shown] = now;
+      }
+    }
+    next = { shown, kept, generation, loadedAt, picked: null };
+  }
+  if (workoutImmersive && next.shown !== "workout" && next.kept.has("workout")) {
+    const kept = new Set(next.kept);
+    kept.delete("workout");
+    next = { ...next, kept };
+  }
+  return next;
 }
 
 const TABS: Array<{
@@ -321,13 +426,27 @@ export function TraineeShell({
   const [planState, setPlanState] =
     useState<EffectivePlanState>(EFFECTIVE_PLAN_LOADING);
   const snapshotsReady = useTraineeSnapshots(me?.userId ?? null, relationship.id);
-  /** Tabs opened this session: they stay mounted, hidden, when left (Z14-2). */
-  const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<TraineeTab>>(
-    () => new Set<TraineeTab>(["today"]),
+  // A check-in or a fullscreen overlay covers the tabs (Z14-2).
+  const coverOn =
+    Boolean(activeCheckin) || overlayLayer(overlay) === "fullscreen";
+  const shownTab: TraineeTab | null = coverOn ? null : tab;
+  /** Which tab panes stay mounted, hidden, when left (Z14-2): `PaneBook`. */
+  const [storedPanes, setPanes] = useState<PaneBook>(() =>
+    initialPaneBook(shownTab, Date.now()),
   );
-  useEffect(() => {
-    setVisitedTabs((prev) => (prev.has(tab) ? prev : new Set(prev).add(tab)));
-  }, [tab]);
+  const panes = advancePaneBook(
+    storedPanes,
+    shownTab,
+    workoutImmersive,
+    Date.now(),
+  );
+  // Adjusted while rendering, so a pane left by a notification or under a
+  // cover is gone before anything paints (no frame with its sheet on top).
+  if (panes !== storedPanes) setPanes(panes);
+  const selectTabFromBar = useCallback((next: TraineeTab) => {
+    setPanes((prev) => (prev.picked === next ? prev : { ...prev, picked: next }));
+    setTab(next);
+  }, []);
   /** Today painted its content once: in-app banners may show from then on. */
   const [todayPainted, setTodayPainted] = useState(false);
   const handleTodayFirstPaint = useCallback(() => setTodayPainted(true), []);
@@ -1007,18 +1126,10 @@ export function TraineeShell({
     return <View style={styles.root} testID="trainee-shell-hydrating" />;
   }
 
-  const sheetOverlay =
-    overlay?.screen === "something_different" ||
-    overlay?.screen === "ask_coach";
-  const tabbedOverlay =
-    overlay?.screen === "meal_plan" || overlay?.screen === "deep_link";
-  // "ended" is the Today tab body when coaching has ended — never a
-  // fullscreen overlay that would hide the tab bar (TR-22a).
-  const fullscreenOverlay =
-    overlay != null &&
-    !sheetOverlay &&
-    !tabbedOverlay &&
-    overlay.screen !== "ended";
+  const layer = overlayLayer(overlay);
+  const sheetOverlay = layer === "sheet";
+  const tabbedOverlay = layer === "tabbed";
+  const fullscreenOverlay = layer === "fullscreen";
   // The Workout tab stays mounted when left (Z14-2); its immersive screens
   // only hide the tab bar while Workout is the tab on screen.
   const hideTabBar =
@@ -1030,8 +1141,9 @@ export function TraineeShell({
 
   /*
    * A check-in or a fullscreen overlay covers the tabs instead of replacing
-   * them: the tabs stay mounted (hidden) underneath, so closing it shows
-   * them as they were, with no refetch (Z14-2).
+   * them: kept tabs stay mounted (hidden) underneath; the tab it covered is
+   * unmounted (`PaneBook`) and repaints from the cache when it closes
+   * (Z14-2).
    */
   const cover = activeCheckin ? (
     <CheckinScreen
@@ -1065,13 +1177,13 @@ export function TraineeShell({
     />
   ) : null;
 
-  /** A visited tab stays mounted; only the one on screen is shown (Z14-2). */
+  /** A kept tab stays mounted; only the one on screen is shown (Z14-2). */
   const pane = (id: TraineeTab, node: ReactNode) => {
-    if (tab !== id && !visitedTabs.has(id)) return null;
-    const shown = tab === id && !cover;
+    if (panes.shown !== id && !panes.kept.has(id)) return null;
+    const shown = panes.shown === id;
     return (
       <View
-        key={id}
+        key={`${id}:${panes.generation[id] ?? 0}`}
         testID={`trainee-pane-${id}`}
         style={shown ? styles.pane : styles.paneHidden}
         aria-hidden={!shown}
@@ -1129,7 +1241,7 @@ export function TraineeShell({
                 setTab("workout");
               }}
               onFirstPaint={handleTodayFirstPaint}
-              active={tab === "today" && !cover}
+              active={panes.shown === "today"}
             />
           ),
         )}
@@ -1161,6 +1273,7 @@ export function TraineeShell({
             onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
             unreadNotifications={unreadNotifications}
+            active={panes.shown === "diet"}
           />,
         )}
 
@@ -1268,7 +1381,7 @@ export function TraineeShell({
         </View>
       ) : null}
 
-      {!hideTabBar ? <TraineeTabBar active={tab} onSelect={setTab} /> : null}
+      {!hideTabBar ? <TraineeTabBar active={tab} onSelect={selectTabFromBar} /> : null}
     </View>
   );
 }

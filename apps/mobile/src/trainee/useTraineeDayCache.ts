@@ -102,6 +102,23 @@ export async function sharedRead<T>(
   return fetchDayInto(key, fetch, { force: options.force });
 }
 
+/**
+ * Calls `onReturn` when a kept screen comes back on screen (`active` goes
+ * from false to true), not on its first render (Z14-2). The trainee shell
+ * keeps visited tabs mounted, hidden; a tab shown again refreshes what is
+ * older than `DAY_VIEW_MAX_AGE_MS` underneath what it shows.
+ */
+export function useOnReturn(active: boolean, onReturn: () => void): void {
+  const wasActive = useRef(active);
+  const onReturnRef = useRef(onReturn);
+  onReturnRef.current = onReturn;
+  useEffect(() => {
+    const returned = active && !wasActive.current;
+    wasActive.current = active;
+    if (returned) onReturnRef.current();
+  }, [active]);
+}
+
 export function needsRevalidate(
   entry: { updatedAt: number; stale: boolean } | undefined,
   now: number,
@@ -140,6 +157,12 @@ export function useTraineeDayCache<T>(input: {
   /** Days between prefetched keys: 1 for days, 7 for weeks. */
   prefetchStepDays?: number;
   maxAgeMs?: number;
+  /**
+   * False while the screen is a kept tab off screen (Z14-2). Coming back on
+   * screen refetches the day if it is older than `maxAgeMs` (or stale),
+   * keeping what it shows meanwhile.
+   */
+  active?: boolean;
 }): DayCacheResult<T> {
   const {
     screen,
@@ -149,6 +172,7 @@ export function useTraineeDayCache<T>(input: {
     prefetchRadius = PREFETCH_RADIUS,
     prefetchStepDays = 1,
     maxAgeMs = DAY_VIEW_MAX_AGE_MS,
+    active = true,
   } = input;
   // Another relationship on screen (another account) drops the previous
   // one's days before anything is read.
@@ -172,6 +196,8 @@ export function useTraineeDayCache<T>(input: {
   // A write anywhere (a log, a sync) marks the day views stale and fires the
   // global listeners: refetch the day on screen, keeping what it shows.
   useEffect(() => subscribeAll(() => setNonce((n) => n + 1)), []);
+  // Back on screen after a while: the same age rule, checked again.
+  useOnReturn(active, () => setNonce((n) => n + 1));
 
   const revalidate = useCallback(
     async (force: boolean) => {
@@ -266,13 +292,15 @@ export function useTraineeWeek(input: {
   selectedDate: string;
   getMeWeek: (weekStart: string) => Promise<WeekReadModel | null>;
   where: string;
+  /** False while the screen is a kept tab off screen (Z14-2). */
+  active?: boolean;
 }): {
   weekState: WeekModelState;
   refresh: () => Promise<void>;
   /** The week has answered (loaded or failed), or a cached week is shown. */
   settled: boolean;
 } {
-  const { relationshipId, selectedDate, getMeWeek, where } = input;
+  const { relationshipId, selectedDate, getMeWeek, where, active } = input;
   const getRef = useRef(getMeWeek);
   getRef.current = getMeWeek;
   const fetchWeek = useCallback(
@@ -294,6 +322,7 @@ export function useTraineeWeek(input: {
     fetchDay: fetchWeek,
     prefetchRadius: 1,
     prefetchStepDays: 7,
+    active,
   });
   const weekState: WeekModelState =
     cache.data ??

@@ -68,6 +68,8 @@ import { cacheKey, dayViewKey, getCached, subscribeAll } from "./dataCache";
 import { dayEyebrow, useDayState } from "./useDayState";
 import {
   sharedRead,
+  needsRevalidate,
+  useOnReturn,
   useTraineeDayCache,
   useTraineeWeek,
 } from "./useTraineeDayCache";
@@ -430,6 +432,7 @@ function TodayTabInner({
     relationshipId: relationship.id,
     date: selectedDate,
     fetchDay,
+    active,
   });
   const bundle = dayCache.data;
   /** The last load of this day failed; what shows is its cached copy, if any. */
@@ -452,6 +455,7 @@ function TodayTabInner({
     selectedDate,
     getMeWeek: (start) => s1.getMeWeek(start),
     where: "TodayTab.getMeWeek",
+    active,
   });
   /*
    * One skeleton (TR-06f, diagnosis #2): nothing but the header, the strip
@@ -538,6 +542,19 @@ function TodayTabInner({
       setRefreshNonce((value) => value + 1);
     });
   }, []);
+  // A kept Today shown again (Z14-2): what it read beside the day (steps,
+  // the next workout) refreshes by the day's own age rule, underneath.
+  const dayUpdatedAt = dayCache.updatedAt;
+  useOnReturn(active, () => {
+    if (
+      needsRevalidate(
+        dayUpdatedAt == null ? undefined : { updatedAt: dayUpdatedAt, stale: false },
+        Date.now(),
+      )
+    ) {
+      setRefreshNonce((value) => value + 1);
+    }
+  });
 
   const refreshDay = dayCache.refresh;
   const onRefresh = useCallback(async () => {

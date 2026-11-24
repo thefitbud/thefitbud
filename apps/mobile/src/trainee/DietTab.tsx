@@ -452,6 +452,11 @@ type DietTabProps = {
   onSelectDate: (localDate: string) => void;
   onOpenOverlay: TraineeOverlayOpener;
   unreadNotifications?: number;
+  /**
+   * False while Diet is a kept tab off screen (Z14-2); shown again, it
+   * refreshes a day older than 30 s underneath what it shows.
+   */
+  active?: boolean;
 };
 
 /**
@@ -472,6 +477,7 @@ function DietTabBody({
   onSelectDate,
   onOpenOverlay,
   unreadNotifications = 0,
+  active: onScreen = true,
 }: DietTabProps) {
   const styles = useStyles();
   const theme = useTheme();
@@ -531,6 +537,7 @@ function DietTabBody({
     relationshipId: relationship.id,
     date: selectedDate,
     fetchDay,
+    active: onScreen,
   });
   const bundle = dayCache.data;
   /** The skeleton case only: a first visit to a day with nothing cached. */
@@ -550,6 +557,7 @@ function DietTabBody({
     selectedDate,
     getMeWeek: (start) => s1.getMeWeek(start),
     where: "DietTab.getMeWeek",
+    active: onScreen,
   });
   // The strip keeps the last `GET /me/day` answer while the next day loads;
   // `navigatorDaysFor` applies it only to the date it names (Z5-8).
