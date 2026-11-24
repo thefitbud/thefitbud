@@ -3,20 +3,21 @@ import {
   Modal,
   Pressable,
   StyleSheet,
-  TextInput,
   View,
 } from "react-native";
 import {
+  Bell,
   Check,
   ChevronRight,
   Circle,
   CircleAlert,
   CloudOff,
+  ClipboardCheck,
   Copy,
-  ExternalLink,
+  Dumbbell,
   FileText,
-  Hand,
   NotebookPen,
+  Utensils,
   MoreHorizontal,
   RefreshCw,
   UserCheck,
@@ -36,7 +37,6 @@ import {
   formatCivilDate,
   formatClockTime,
   formatPersonName,
-  formatRelative,
   labelFor,
 } from "@fitbud/core";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
@@ -96,7 +96,11 @@ import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { HeaderBack } from "../components/HeaderBack";
 import { HIDDEN_FROM_READERS, PushedScreen } from "../components/PushedScreen";
 import { useHardwareBack } from "../lib/useHardwareBack";
-import { DiscardDialog } from "./clientlog/useDiscardGuard";
+import { ActivityFeedScreen } from "./ActivityFeedScreen";
+import { NoteSheet, type NoteSaveInput } from "./sheets/NoteSheet";
+import { NotesScreen } from "./clientStatus/NotesScreen";
+import { NoteRow } from "./clientStatus/NoteRow";
+import { limitationBlock } from "./clientStatus/infoModel";
 
 type Props = {
   relationshipId: string;
@@ -114,6 +118,9 @@ type Props = {
   onOpenException: (exceptionId: string) => void;
   onOpenCheckin: (checkinId: string) => void;
 };
+
+/** The profile shows the latest 3; one more read says whether "See all notes" is needed. */
+const NOTES_ON_PROFILE = 3;
 
 type Snapshot = {
   workspace: ClientWorkspace;
@@ -175,8 +182,13 @@ export function ClientStatusScreen({
     { target: NudgeTarget | null; items: NudgePickItem[] } | null
   >(null);
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteBody, setNoteBody] = useState("");
-  const [noteVisible, setNoteVisible] = useState(false);
+  const [noteError, setNoteError] = useState<string | null>(null);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  // The kept header fields of this client (from the clients list or an earlier
+  // visit): the header and action row paint from them before the first answer.
+  const [kept] = useState(() => readClientMeta(relationshipId));
+  const [limitation, setLimitation] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [logging, setLogging] = useState<{ date?: string; assignmentId?: string } | null>(null);
   const [loggingOther, setLoggingOther] = useState<"meal" | "measurement" | null>(null);
@@ -240,7 +252,7 @@ export function ClientStatusScreen({
             fromDate: weekStart,
             toDate: weekEnd,
           }),
-          api.listTrainerNotes(relationshipId),
+          api.listTrainerNotes(relationshipId, { limit: NOTES_ON_PROFILE + 1 }),
           knownState === "live"
             ? readLive()
             : Promise.resolve([null, null] as [WeekReadModel | null, ResponsivenessResponse | null]),
@@ -335,11 +347,19 @@ export function ClientStatusScreen({
   const header = data?.workspace.header;
   const name = formatPersonName(header?.traineeDisplayName || displayName);
   const first = name.split(" ")[0] || "there";
-  const ended = header?.onboardingStatus === "ended" || Boolean(header?.endedAt);
+  // Until the first answer, what the row or the kept header already says.
+  const pending = data == null;
+  const ended = header
+    ? header.onboardingStatus === "ended" || Boolean(header.endedAt)
+    : kept?.status === "ended" ||
+      Boolean(kept?.endedAt) ||
+      onboardingStatusLabelText === onboardingStatusLabel("ended");
+  const whatsappE164 = header ? header.clientWhatsappE164 : (kept?.whatsappE164 ?? null);
+  const clientTimeZone = header?.traineeTimezone ?? kept?.timeZone ?? null;
   const onboardingIncomplete = isOnboardingIncomplete(header?.onboardingStatus);
   const offline = offlineAt != null;
   const open = data?.workspace.overview.openException ?? null;
-  const weekNumber = coachingWeek(header?.startedAt);
+  const weekNumber = coachingWeek(header?.startedAt ?? kept?.startedAt);
   const startedAt = header?.startedAt ?? null;
   const endedAt = header?.endedAt ?? null;
   // Ended-path dates are the client's own calendar (web's ended overview does the same).
@@ -358,14 +378,15 @@ export function ClientStatusScreen({
   const joinedLabel = startedAt
     ? `Joined ${formatCivilDate(startedAt.slice(0, 10))}`
     : null;
-  const meta = ended
+  const metaLine = ended
     ? [header?.goalShort, endDate ? `ended ${formatCivilDate(endDate)}` : null]
         .filter(Boolean)
         .join(" · ")
     : onboardingIncomplete
       ? [joinedLabel, "no plan yet"].filter(Boolean).join(" · ")
-      : [header?.goalShort, weekLabel].filter(Boolean).join(" · ") ||
-        "No plan assigned yet";
+      : [header ? header.goalShort : kept?.goalShort, weekLabel]
+          .filter(Boolean)
+          .join(" · ") || (pending ? "" : "No plan assigned yet");
   const gender = header?.traineeProfile?.gender?.toLowerCase() ?? "";
   const possessive =
     gender === "female" || gender === "f" || gender === "she/her"
@@ -395,6 +416,26 @@ export function ClientStatusScreen({
     () => weekDayCells(zone, weekDatesFrom(weekStart), data?.workouts ?? []),
     [zone, weekStart, data?.workouts],
   );
+
+  // "Profile and safety": the limitation from intake, read once the page has data.
+  const hasAnswer = data != null;
+  useEffect(() => {
+    if (!hasAnswer || ended || onboardingIncomplete) return;
+    let cancelled = false;
+    Promise.resolve()
+      .then(() => api.getOnboardingResponse(relationshipId))
+      .then((response) => {
+        if (!cancelled) setLimitation(limitationBlock(response.answers ?? null)?.body ?? null);
+      })
+      .catch((err: unknown) => {
+        if (!(err instanceof ApiClientError && err.status === 404)) {
+          reportError("client-status.intake", err);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [api, relationshipId, hasAnswer, ended, onboardingIncomplete]);
 
   const weekWorkouts = data?.workouts ?? [];
   const doneWorkouts = weekWorkouts.filter(
@@ -437,10 +478,13 @@ export function ClientStatusScreen({
   // Z14-18: hardware back for the client page's own inner views. A log screen
   // registers its own handler (it is mounted later, so it answers first); sheets
   // are Modals that close themselves. Anything left falls through to the shell.
-  const [discardNoteAsk, setDiscardNoteAsk] = useState(false);
   useHardwareBack(() => {
-    if (discardNoteAsk) {
-      setDiscardNoteAsk(false);
+    if (notesOpen) {
+      setNotesOpen(false);
+      return true;
+    }
+    if (activityOpen) {
+      setActivityOpen(false);
       return true;
     }
     if (dietDayOpen) {
@@ -452,11 +496,7 @@ export function ClientStatusScreen({
       setInfoOpen(false);
       return true;
     }
-    if (noteOpen) {
-      if (noteBody.trim()) setDiscardNoteAsk(true);
-      else setNoteOpen(false);
-      return true;
-    }
+    // The note sheet is a Modal: Android back reaches its own discard guard.
     return false;
   }, active);
 
@@ -481,24 +521,25 @@ export function ClientStatusScreen({
     }
   }
 
-  async function saveNote() {
-    if (!noteBody.trim() || ended || offline) return;
+  async function saveNote(input: NoteSaveInput) {
+    if (!input.body.trim() || ended || offline) return;
     setActing(true);
+    setNoteError(null);
     try {
       await api.createTrainerNote(
         relationshipId,
-        {
-          body: noteBody.trim(),
-          visibility: noteVisible ? "client" : "private",
-        },
+        { body: input.body.trim(), visibility: input.visibility },
         createIdempotencyKey(),
       );
-      setNoteBody("");
       setNoteOpen(false);
       setToast("Note saved");
       await load();
     } catch (err) {
-      setError(userFacingMessage(err, { fallback: "Couldn't load. Pull to try again." }));
+      // The sheet stays open with what was typed; the line inside says what happened.
+      reportError("client-status.note", err);
+      setNoteError(
+        userFacingMessage(err, { fallback: "Couldn't save the note. Try again." }),
+      );
     } finally {
       setActing(false);
     }
@@ -536,7 +577,19 @@ export function ClientStatusScreen({
   // Z14-18: a sub-screen is a layer over the client page, which stays mounted
   // (and scrolled) beneath it; the iOS edge swipe shows it.
   let subScreen: ReactNode = null;
-  const subKey = loggingOther ?? (dietDayOpen ? "diet" : logging ? "log" : infoOpen ? "info" : "none");
+  const subKey =
+    loggingOther ??
+    (dietDayOpen
+      ? "diet"
+      : logging
+        ? "log"
+        : infoOpen
+          ? "info"
+          : notesOpen
+            ? "notes"
+            : activityOpen
+              ? "activity"
+              : "none");
   let closeSubScreen: (() => void) | null = null;
   if (loggingOther) {
     const Other = loggingOther === "meal" ? ClientLogMealScreen : ClientLogMeasurementScreen;
@@ -588,6 +641,30 @@ export function ClientStatusScreen({
           setToast(message);
           void load();
         }}
+      />
+    );
+  } else if (notesOpen) {
+    closeSubScreen = () => setNotesOpen(false);
+    subScreen = (
+      <NotesScreen
+        relationshipId={relationshipId}
+        displayName={header?.traineeDisplayName || displayName}
+        onBack={() => setNotesOpen(false)}
+      />
+    );
+  } else if (activityOpen) {
+    closeSubScreen = () => setActivityOpen(false);
+    subScreen = (
+      <ActivityFeedScreen
+        relationshipId={relationshipId}
+        header={
+          <View>
+            <HeaderBack onPress={() => setActivityOpen(false)} label={first} />
+            <Text style={styles.subTitle} accessibilityRole="header">
+              {`Activity · ${first}`}
+            </Text>
+          </View>
+        }
       />
     );
   } else if (infoOpen) {
@@ -673,12 +750,6 @@ export function ClientStatusScreen({
       ) : null}
       {error && data ? <ErrorBanner message={error} /> : null}
       <UpdatingLine visible={updating && !refreshing && !offline} />
-      {loading && !data ? (
-        <View>
-          <View style={styles.skeleton} />
-          <View style={styles.skeleton} />
-        </View>
-      ) : null}
 
       <View style={styles.header}>
         <View style={styles.avatarLg}>
@@ -686,9 +757,18 @@ export function ClientStatusScreen({
         </View>
         <View style={styles.headerBody}>
           <Text style={styles.h1}>{name}</Text>
-          <Text style={styles.meta}>{meta}</Text>
+          {metaLine ? (
+            <Text style={styles.meta}>{metaLine}</Text>
+          ) : pending ? (
+            <View style={[styles.skelLine, { width: "55%", marginTop: 6 }]} testID="skeleton-meta" />
+          ) : null}
+          {clientTimeZone && clientTimeZone !== zone ? (
+            <Text style={styles.meta}>
+              {`${first}'s time ${formatClockTime(new Date().toISOString(), clientTimeZone)}`}
+            </Text>
+          ) : null}
           <View style={styles.chipRow}>
-            {ended ? (
+            {pending && !ended ? null : ended ? (
               <StatusChip kind="lifecycle" value="ended" />
             ) : onboardingIncomplete ? (
               <View style={styles.onboardChip}>
@@ -713,12 +793,6 @@ export function ClientStatusScreen({
           </View>
         </View>
       </View>
-
-      {header?.traineeTimezone && header.traineeTimezone !== zone ? (
-        <Text style={styles.tz}>
-          {`${first}'s time ${formatClockTime(new Date().toISOString(), header.traineeTimezone)}`}
-        </Text>
-      ) : null}
 
       {ended ? (
         <View style={styles.ended} accessibilityRole="summary">
@@ -795,14 +869,14 @@ export function ClientStatusScreen({
       <View style={styles.actions}>
         <Pressable
           accessibilityRole="button"
-          disabled={actionsDisabled || !header?.clientWhatsappE164}
+          disabled={actionsDisabled || !whatsappE164}
           onPress={() =>
             void openContextualWhatsApp({
-              phoneE164: header?.clientWhatsappE164,
+              phoneE164: whatsappE164,
               draftText: `Hi ${first}, `,
             }).then(() => setToast("Opened WhatsApp"))
           }
-          style={[styles.actionBtn, actionsDisabled ? styles.disabled : null]}
+          style={[styles.actionBtn, actionsDisabled || !whatsappE164 ? styles.disabled : null]}
         >
           <WhatsAppGlyph size={18} />
           <Text style={styles.actionText}>WhatsApp</Text>
@@ -810,27 +884,42 @@ export function ClientStatusScreen({
         <Pressable
           testID="client-nudge"
           accessibilityRole="button"
-          disabled={actionsDisabled}
+          disabled={actionsDisabled || pending}
           onPress={() => void startNudge()}
-          style={[styles.actionBtn, actionsDisabled ? styles.disabled : null]}
+          style={[styles.actionBtn, actionsDisabled || pending ? styles.disabled : null]}
         >
-          <Hand color={theme.colors.ink} size={16} strokeWidth={2.2} />
-          <Text style={styles.actionText}>Nudge…</Text>
+          <Bell color={theme.colors.ink} size={16} strokeWidth={2.2} />
+          <Text style={styles.actionText}>Remind…</Text>
         </Pressable>
         <Pressable
+          testID="client-add-note"
           accessibilityRole="button"
           disabled={actionsDisabled}
-          onPress={() => setNoteOpen(true)}
+          onPress={() => {
+            setNoteError(null);
+            setNoteOpen(true);
+          }}
           style={[styles.actionBtn, actionsDisabled ? styles.disabled : null]}
         >
           <NotebookPen color={theme.colors.ink} size={16} strokeWidth={2.2} />
-          <Text style={styles.actionText}>Note</Text>
+          <Text style={styles.actionText}>Add note</Text>
         </Pressable>
       </View>
-      {!header?.clientWhatsappE164 && !ended ? (
+      {!pending && !whatsappE164 && !ended ? (
         <Text style={styles.hint}>No WhatsApp number on file</Text>
       ) : null}
 
+      {pending ? (
+        <View testID="client-skeleton">
+          <SkeletonCard title="Needs attention" lines={2} />
+          <SkeletonCard title="This week" lines={1} dots />
+          <SkeletonCard title="Today's food" lines={2} />
+          <SkeletonCard title="Next check-in" lines={1} />
+          <SkeletonCard title="Recent activity" lines={2} />
+          <SkeletonCard title="Coach notes" lines={2} />
+        </View>
+      ) : (
+      <>
       {open && !ended ? (
         <View style={styles.card}>
           <View style={styles.cardTop}>
@@ -985,123 +1074,110 @@ export function ClientStatusScreen({
 
       {ended ? null : (
         <View>
-          <RemindersCard
-            data={data?.responsiveness ?? null}
-            failed={Boolean(data?.responsivenessFailed)}
-          />
           <View style={styles.card}>
             <View style={styles.cardTop}>
               <Text style={styles.cardTitle}>Recent activity</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="See all activity"
+                onPress={() => setActivityOpen(true)}
+                style={styles.seeAll}
+              >
+                <Text style={styles.link}>See all</Text>
+              </Pressable>
             </View>
             {(data?.workspace.overview.recentActivity ?? []).length === 0 ? (
               <Text style={styles.meta}>Nothing logged yet.</Text>
             ) : null}
-            {(data?.workspace.overview.recentActivity ?? []).map((item) => (
-              <View key={item.id} style={styles.activity}>
-                <Text style={styles.activityTitle}>{item.title}</Text>
-                <Text style={styles.meta}>
-                  {`${formatCivilDate(item.localDate)} · ${formatRelative(item.occurredAt)}`}
-                </Text>
-                {item.type === "workout" &&
-                (item.state === "completed" || item.state === "modified") &&
-                !offline &&
-                dateStrip(localDateInTimezone(clientZone)).includes(
-                  item.localDate,
-                ) ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Edit ${item.title}`}
-                    onPress={() =>
-                      setLogging({
-                        date: item.localDate,
-                        assignmentId: item.id,
-                      })
-                    }
-                    style={styles.editLink}
-                  >
-                    <Text style={styles.link}>Edit</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            ))}
+            {(data?.workspace.overview.recentActivity ?? []).map((item) => {
+              const ActivityIcon =
+                item.type === "workout"
+                  ? Dumbbell
+                  : item.type === "meal"
+                    ? Utensils
+                    : ClipboardCheck;
+              const sameDay = item.localDate === localDateInTimezone(clientZone);
+              return (
+                <View key={item.id} style={styles.activity}>
+                  <View style={styles.activityLine}>
+                    <ActivityIcon color={theme.colors.ink3} size={16} strokeWidth={2} />
+                    <Text style={styles.activityTitle} numberOfLines={2}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.activityTime}>
+                      {sameDay
+                        ? formatClockTime(item.occurredAt, clientZone)
+                        : formatCivilDate(item.localDate)}
+                    </Text>
+                  </View>
+                  {item.type === "workout" &&
+                  (item.state === "completed" || item.state === "modified") &&
+                  !offline &&
+                  dateStrip(localDateInTimezone(clientZone)).includes(
+                    item.localDate,
+                  ) ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit ${item.title}`}
+                      onPress={() =>
+                        setLogging({
+                          date: item.localDate,
+                          assignmentId: item.id,
+                        })
+                      }
+                      style={styles.editLink}
+                    >
+                      <Text style={styles.link}>Edit</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
         </View>
       )}
 
       <View style={styles.card}>
-        <View style={styles.cardTop}>
-          <Text style={styles.cardTitle}>Coach notes</Text>
-          {!ended ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => setNoteOpen(true)}
-            >
-              <Text style={styles.link}>Add note</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        {(data?.notes ?? []).map((note) => (
-          <View key={note.id} style={styles.noteBlock}>
-            <Text style={styles.issue}>{note.body}</Text>
-            <Text style={styles.meta}>
-              {`${labelFor("trainer_note_visibility", note.visibility)} · ${formatCivilDate(note.createdAt.slice(0, 10))}`}
-            </Text>
-          </View>
+        <Text style={styles.cardTitle}>Coach notes</Text>
+        {(data?.notes ?? []).length === 0 ? (
+          <Text style={[styles.meta, styles.noteEmpty]}>No notes yet.</Text>
+        ) : null}
+        {(data?.notes ?? []).slice(0, NOTES_ON_PROFILE).map((note) => (
+          <NoteRow key={note.id} note={note} first={first} />
         ))}
-      </View>
-
-      {noteOpen ? (
-        <View style={styles.card}>
-          <TextInput
-            accessibilityLabel="Note"
-            value={noteBody}
-            onChangeText={setNoteBody}
-            placeholder="Add a note"
-            placeholderTextColor={theme.colors.ink3}
-            multiline
-            style={styles.input}
-          />
-          <Pressable
-            accessibilityRole="switch"
-            accessibilityState={{ checked: noteVisible }}
-            onPress={() => setNoteVisible((value) => !value)}
-            style={styles.switchRow}
-          >
-            <Text style={styles.meta}>
-              {noteVisible
-                ? `Visible to ${first}`
-                : "Only you see this note"}
-            </Text>
-          </Pressable>
+        {(data?.notes ?? []).length > NOTES_ON_PROFILE ? (
           <Pressable
             accessibilityRole="button"
-            disabled={acting || offline || ended}
-            onPress={() => void saveNote()}
-            style={styles.tintBtn}
+            onPress={() => setNotesOpen(true)}
+            style={styles.seeAllNotes}
+            testID="see-all-notes"
           >
-            <Text style={styles.tintBtnText}>Save note</Text>
+            <Text style={styles.link}>See all notes</Text>
           </Pressable>
+        ) : null}
+      </View>
+
+      {ended ? null : (
+        <RemindersCard
+          data={data?.responsiveness ?? null}
+          failed={Boolean(data?.responsivenessFailed)}
+        />
+      )}
+
+      {limitation && !ended ? (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Profile and safety</Text>
+          <View style={styles.attnBody}>
+            <View style={styles.limitChip}>
+              <CircleAlert color={theme.colors.warn} size={13} strokeWidth={2.4} />
+              <Text style={styles.limitChipText}>Limitation</Text>
+            </View>
+            <Text style={styles.issue}>{limitation}</Text>
+          </View>
         </View>
       ) : null}
-
-      <View style={styles.card}>
-        <View style={styles.editPlanRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.activityTitle}>Edit plan</Text>
-            <Text style={styles.meta}>
-              Plans and templates are built on FitBud web
-            </Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => void copyPlanLink()}
-            style={styles.copyBtn}
-          >
-            <Copy color={theme.colors.ink} size={16} strokeWidth={2.2} />
-            <Text style={styles.actionText}>Copy link</Text>
-          </Pressable>
-        </View>
-      </View>
+      </>
+      )}
         </>
       )}
 
@@ -1134,16 +1210,6 @@ export function ClientStatusScreen({
         />
         <View style={styles.menuSheet}>
           <MenuRow
-            icon={NotebookPen}
-            title="Add note"
-            sub={`Private, or shared on ${first}'s Today`}
-            onPress={() => {
-              setMenuOpen(false);
-              setNoteOpen(true);
-            }}
-            disabled={ended}
-          />
-          <MenuRow
             icon={FileText}
             title="Goal, intake and limitations"
             onPress={() => {
@@ -1162,9 +1228,9 @@ export function ClientStatusScreen({
             disabled={ended || offline}
           />
           <MenuRow
-            icon={ExternalLink}
-            title={`Open ${first} on FitBud web`}
-            sub="Edit plan, end coaching"
+            icon={Copy}
+            title="Copy FitBud web link"
+            sub="Edit the plan on FitBud web"
             onPress={() => {
               setMenuOpen(false);
               void copyPlanLink();
@@ -1277,16 +1343,15 @@ export function ClientStatusScreen({
         </View>
       </Modal>
 
-      <DiscardDialog
-        title="Discard this note?"
-        body="What you typed won’t be saved."
-        keepLabel="Keep writing"
-        visible={discardNoteAsk}
-        onKeep={() => setDiscardNoteAsk(false)}
-        onDiscard={() => {
-          setDiscardNoteAsk(false);
-          setNoteBody("");
-          setNoteOpen(false);
+      <NoteSheet
+        visible={noteOpen && !ended}
+        traineeDisplayName={name}
+        subject={subject}
+        acting={acting}
+        errorMessage={noteError}
+        onDismiss={() => setNoteOpen(false)}
+        onSave={(input) => {
+          void saveNote(input);
         }}
       />
 
@@ -1308,6 +1373,39 @@ export function ClientStatusScreen({
           {subScreen}
         </PushedScreen>
       ) : null}
+    </View>
+  );
+}
+
+/** One card of the loading page: its real title, quiet lines inside (TM-03a4). */
+function SkeletonCard({
+  title,
+  lines,
+  dots = false,
+}: {
+  title: string;
+  lines: number;
+  dots?: boolean;
+}) {
+  const styles = useStyles();
+  return (
+    <View style={styles.card} accessibilityLabel={`${title}, loading`}>
+      <Text style={styles.cardTitle}>{title}</Text>
+      {dots ? (
+        <View style={styles.skelDots}>
+          {Array.from({ length: 7 }, (_, i) => (
+            <View key={i} style={styles.skelDot} />
+          ))}
+        </View>
+      ) : null}
+      <View style={styles.skelBody}>
+        {Array.from({ length: lines }, (_, i) => (
+          <View
+            key={i}
+            style={[styles.skelLine, { width: i === 0 ? "92%" : "60%" }]}
+          />
+        ))}
+      </View>
     </View>
   );
 }
@@ -1421,17 +1519,38 @@ const useStyles = createThemedStyles((t) => ({
     fontFamily: fontFamilySemiBold,
     fontSize: 14,
   },
-  copyBtn: {
+  subTitle: {
+    color: t.colors.ink,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 22,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  skelLine: { backgroundColor: t.colors.skel1, borderRadius: 6, height: 12 },
+  skelDot: { backgroundColor: t.colors.skel1, borderRadius: 14, height: 28, width: 28 },
+  skelDots: { flexDirection: "row", gap: 10, justifyContent: "space-between", marginTop: 12 },
+  skelBody: { gap: 10, marginTop: 14 },
+  seeAll: { justifyContent: "center", minHeight: 44, paddingLeft: 12 },
+  seeAllNotes: { justifyContent: "center", minHeight: 44, marginTop: 4 },
+  noteEmpty: { marginTop: 8 },
+  activityLine: { alignItems: "center", flexDirection: "row", gap: 10 },
+  activityTime: { color: t.colors.ink3, fontSize: 13 },
+  limitChip: {
     alignItems: "center",
-    backgroundColor: t.colors.fill,
-    borderRadius: 12,
+    alignSelf: "flex-start",
+    backgroundColor: t.colors.warnTint,
+    borderRadius: 999,
     flexDirection: "row",
-    gap: 6,
-    height: 40,
-    paddingHorizontal: 12,
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  limitChipText: {
+    color: t.colors.warn,
+    fontFamily: fontFamilySemiBold,
+    fontSize: 12,
   },
   hint: { color: t.colors.ink3, fontSize: 13, marginTop: 6 },
-  tz: { color: t.colors.ink3, fontSize: 14, marginTop: 8 },
   card: {
     backgroundColor: t.colors.card,
     borderColor: t.colors.line,
@@ -1516,13 +1635,6 @@ const useStyles = createThemedStyles((t) => ({
     marginTop: 8,
     paddingTop: 10,
   },
-  editPlanRow: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: 12,
-  },
-  input: { color: t.colors.ink, fontSize: 16, minHeight: 72 },
-  switchRow: { minHeight: 44, justifyContent: "center" },
   ended: {
     alignItems: "center",
     backgroundColor: t.colors.fill,
@@ -1580,12 +1692,6 @@ const useStyles = createThemedStyles((t) => ({
     fontSize: 16,
   },
   offline: { color: t.colors.ink, fontSize: 14, marginBottom: 8 },
-  skeleton: {
-    backgroundColor: t.colors.skel1,
-    borderRadius: 20,
-    height: 120,
-    marginBottom: 12,
-  },
   loadError: {
     alignItems: "center",
     flex: 1,

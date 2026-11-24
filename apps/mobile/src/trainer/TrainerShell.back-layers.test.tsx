@@ -118,7 +118,7 @@ const press = (): boolean => {
 };
 
 describe("hardware back with a client page under an overlay", () => {
-  it("pops the Exception overlay and leaves the open note form underneath", async () => {
+  it("pops the Exception overlay and leaves the open note sheet underneath", async () => {
     render(<TrainerShell />);
     fireEvent.click(screen.getByLabelText("Clients"));
     fireEvent.click(screen.getByText("open-client-row"));
@@ -129,11 +129,11 @@ describe("hardware back with a client page under an overlay", () => {
 
     expect(press()).toBe(true);
     await waitFor(() => expect(screen.queryByTestId("exception-screen")).toBeNull());
-    // The note form was not touched while it was hidden.
+    // The note sheet was not touched while it was hidden.
     expect(screen.getByLabelText("Note")).toBeTruthy();
-    // Now the client page is on top again: back closes the note form.
+    // Z14-24: the note sheet is a Modal that answers Android back itself, so the
+    // client page has no handler of its own and the press goes on to the shell.
     expect(press()).toBe(true);
-    await waitFor(() => expect(screen.queryByLabelText("Note")).toBeNull());
-    expect(screen.getByTestId("client-status")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId("client-status")).toBeNull());
   });
 });

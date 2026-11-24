@@ -63,7 +63,12 @@ const api = {
   listExceptions: vi.fn(),
   listWorkoutAssignments: vi.fn(async () => ({ items: [], nextCursor: null })),
   listMealAssignments: vi.fn(async () => ({ items: [], nextCursor: null })),
-  listTrainerNotes: vi.fn(async () => ({ items: [], nextCursor: null })),
+  listTrainerNotes: vi.fn<
+    (
+      rid: string,
+      query?: { limit?: number; cursor?: string },
+    ) => Promise<{ items: ReturnType<typeof note>[]; nextCursor: string | null }>
+  >(async () => ({ items: [], nextCursor: null })),
   getWorkspaceWeek: vi.fn(async () => ({
     start: "2026-11-09",
     workouts: { assigned: 4, completed: 2 },
@@ -96,6 +101,10 @@ const api = {
   })),
   getMealCompliance: vi.fn(async () => ({ items: [], totals: {} })),
   listCheckins: vi.fn(async () => ({ items: [], nextCursor: null })),
+  getOnboardingResponse: vi.fn(async () => {
+    throw new ApiClientError({ status: 404, code: "NOT_FOUND", message: "Not found.", requestId: "r" });
+  }),
+  createTrainerNote: vi.fn(async () => ({})),
   requestReactivation: vi.fn(async () => ({
     requestId: "b2c3d4e5-f6a7-4890-b123-456789abcdef",
     status: "pending" as const,
@@ -215,7 +224,7 @@ describe("ClientStatusScreen", () => {
     expect(screen.queryByText("Reactivate")).toBeNull();
   });
 
-  it("Nudge… offers only unlogged items: logged meals (deviation, logged later) are not offered", async () => {
+  it("Remind… offers only unlogged items: logged meals (deviation, logged later) are not offered", async () => {
     const item = (id: string, type: string, source: string) => ({
       id,
       coachingRelationshipId: RID,
@@ -238,7 +247,7 @@ describe("ClientStatusScreen", () => {
     });
     renderScreen();
     await screen.findByText("410 of 1,950");
-    fireEvent.click(screen.getByText("Nudge…"));
+    fireEvent.click(screen.getByText("Remind…"));
     await screen.findByText("Nothing open to nudge about");
     expect(screen.queryByText("Nudge Kavya")).toBeNull();
 
@@ -246,7 +255,7 @@ describe("ClientStatusScreen", () => {
       items: [item("e1", "meal_deviation", "Dinner"), item("e3", "missed_workout", "Lower body A")],
       nextCursor: null,
     });
-    fireEvent.click(screen.getByText("Nudge…"));
+    fireEvent.click(screen.getByText("Remind…"));
     await screen.findByText("Nudge Kavya");
     // Body is filled in a useEffect one tick after the heading (NudgeSheet).
     expect(
@@ -267,7 +276,7 @@ describe("ClientStatusScreen", () => {
     expect(screen.getByText(/kcal · no plan/)).toBeTruthy();
     // Actions stay visible but disabled (TM-03d).
     expect(screen.getByText("WhatsApp")).toBeTruthy();
-    expect(screen.getByText("Nudge…")).toBeTruthy();
+    expect(screen.getByText("Remind…")).toBeTruthy();
     expect(screen.queryByText("Reminders")).toBeNull();
     expect(api.getWorkspaceWeek).not.toHaveBeenCalled();
     expect(api.getResponsiveness).not.toHaveBeenCalled();
@@ -370,5 +379,141 @@ describe("ClientStatusScreen", () => {
     expect(screen.queryByText(/Couldn’t load Kavya’s page/)).toBeNull();
     clearTrainerCache();
     setTrainerCacheOwner(null);
+  });
+});
+
+const note = (n: number, visibility: "private" | "client") => ({
+  id: `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
+  coachingRelationshipId: RID,
+  trainerUserId: UID,
+  checkinId: null,
+  body: `Coach note ${n}`,
+  visibility,
+  subjectType: null,
+  subjectId: null,
+  sharedAt: null,
+  seenAt: null,
+  createdAt: `2026-11-${String(14 - n).padStart(2, "0")}T04:00:00.000Z`,
+  updatedAt: "2026-11-14T04:00:00.000Z",
+});
+
+describe("ClientStatusScreen profile (Z14-24)", () => {
+  it("loading: the header and action row paint at once; the cards show their titles with skeletons, no zeros", async () => {
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+    setTrainerCacheOwner(TRAINER_A);
+    api.getClientWorkspace.mockReturnValueOnce(new Promise(() => undefined));
+    renderScreen();
+    expect(screen.getByText("Kavya Nair")).toBeTruthy();
+    expect(screen.getByText("WhatsApp")).toBeTruthy();
+    expect(screen.getByText("Remind…")).toBeTruthy();
+    expect(screen.getByText("Add note")).toBeTruthy();
+    for (const title of ["Needs attention", "This week", "Today's food", "Next check-in"]) {
+      expect(screen.getByLabelText(`${title}, loading`)).toBeTruthy();
+    }
+    expect(screen.queryByText(/0 of 0/)).toBeNull();
+    expect(screen.queryByText("No WhatsApp number on file")).toBeNull();
+    expect(screen.queryByText("Nothing logged yet.")).toBeNull();
+    expect(screen.queryByText("–")).toBeNull();
+    clearTrainerCache();
+    setTrainerCacheOwner(null);
+  });
+
+  it("Add note is in the action row only; the menu has three rows and Cancel", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: false }));
+    renderScreen();
+    await screen.findByText("410 of 1,950");
+    expect(screen.getAllByText("Add note")).toHaveLength(1);
+    expect(screen.queryByText("Edit plan")).toBeNull();
+    fireEvent.click(screen.getByLabelText("More"));
+    expect(await screen.findByText("Goal, intake and limitations")).toBeTruthy();
+    expect(screen.getByText("Log in person for Kavya")).toBeTruthy();
+    expect(screen.getByText("Copy FitBud web link")).toBeTruthy();
+    expect(screen.getByText("Cancel")).toBeTruthy();
+    expect(screen.getAllByText("Add note")).toHaveLength(1);
+  });
+
+  it("Copy FitBud web link copies once and shows the existing toast", async () => {
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: false }));
+    renderScreen();
+    await screen.findByText("410 of 1,950");
+    fireEvent.click(screen.getByLabelText("More"));
+    fireEvent.click(await screen.findByText("Copy FitBud web link"));
+    expect(await screen.findByText("Link copied")).toBeTruthy();
+    expect(writeText).toHaveBeenCalledTimes(1);
+  });
+
+  it("Coach notes: the latest 3 with marks, and See all notes only when there are more", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: false }));
+    api.listTrainerNotes.mockResolvedValueOnce({
+      items: [note(1, "client"), note(2, "private"), note(3, "private"), note(4, "private")],
+      nextCursor: null,
+    });
+    renderScreen();
+    await screen.findByText("Coach note 1");
+    expect(api.listTrainerNotes).toHaveBeenCalledWith(RID, { limit: 4 });
+    expect(screen.getAllByTestId("note-row")).toHaveLength(3);
+    expect(screen.queryByText("Coach note 4")).toBeNull();
+    expect(screen.getByText(/Kavya sees it · /)).toBeTruthy();
+    expect(screen.getAllByText(/Only you · /)).toHaveLength(2);
+    expect(screen.getByText("See all notes")).toBeTruthy();
+  });
+
+  it("Coach notes: three or fewer show no See all notes", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: false }));
+    api.listTrainerNotes.mockResolvedValueOnce({
+      items: [note(1, "private")],
+      nextCursor: null,
+    });
+    renderScreen();
+    await screen.findByText("Coach note 1");
+    expect(screen.queryByText("See all notes")).toBeNull();
+  });
+
+  it("Add note opens the one note sheet; Only me saves as private through the contract", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: false }));
+    renderScreen();
+    await screen.findByText("410 of 1,950");
+    fireEvent.click(screen.getByText("Add note"));
+    await screen.findByRole("heading", { name: "Note for Kavya" });
+    expect(screen.getByText("Only you can see this note.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Check the knee" } });
+    fireEvent.click(screen.getByLabelText("Save"));
+    await waitFor(() =>
+      expect(api.createTrainerNote).toHaveBeenCalledWith(
+        RID,
+        { body: "Check the knee", visibility: "private" },
+        expect.any(String),
+      ),
+    );
+    expect(await screen.findByText("Note saved")).toBeTruthy();
+  });
+
+  it("ended client: Add note is off and no note sheet opens", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: true }));
+    renderScreen();
+    await screen.findByText("Reactivate");
+    expect(screen.getByText("Add note").closest("[aria-disabled]")?.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(screen.getByText("Add note"));
+    expect(screen.queryByRole("heading", { name: "Note for Kavya" })).toBeNull();
+  });
+
+  it("See all notes opens the notes list for this client", async () => {
+    api.getClientWorkspace.mockResolvedValue(workspace({ ended: false }));
+    api.listTrainerNotes.mockResolvedValueOnce({
+      items: [note(1, "client"), note(2, "private"), note(3, "private"), note(4, "private")],
+      nextCursor: null,
+    });
+    renderScreen();
+    fireEvent.click(await screen.findByText("See all notes"));
+    await waitFor(() =>
+      expect(api.listTrainerNotes).toHaveBeenCalledWith(RID, { limit: 30 }),
+    );
+    expect(await screen.findByRole("heading", { name: "Notes" })).toBeTruthy();
   });
 });

@@ -346,6 +346,8 @@ describe("AttentionTab review sheet (Z12-51)", () => {
       fireEvent.change(await screen.findByLabelText("Note"), {
         target: { value: `Note ${n}` },
       });
+      // Z14-24: the sheet defaults to "Only me"; this test is about the shown-on-Today toast.
+      fireEvent.click(screen.getByLabelText("Rohan too"));
       fireEvent.click(screen.getByTestId("note-save"));
       await waitFor(() => expect(api.createTrainerNote).toHaveBeenCalledTimes(n + 1));
     }

@@ -163,22 +163,30 @@ describe("client page back", () => {
     expect(press()).toBe(false);
   });
 
-  it("the inline note form closes on back; typed text asks first", async () => {
+  it("the note sheet's Cancel asks only when text was typed (Android back is the sheet's own)", async () => {
     renderScreen();
     fireEvent.click((await screen.findAllByRole("button", { name: /Add note/ }))[0]!);
     await screen.findByLabelText("Note");
-    expect(press()).toBe(true);
-    await waitFor(() => expect(screen.queryByLabelText("Note")).toBeNull());
+    // Nothing typed: Cancel closes without a question.
+    fireEvent.click(screen.getByText("Cancel"));
+    expect(screen.queryByText("Discard this note?")).toBeNull();
+    // (A closed web Modal stays in the DOM until its animation ends, so the
+    // sheet is reopened rather than checked for removal.)
     fireEvent.click((await screen.findAllByRole("button", { name: /Add note/ }))[0]!);
     fireEvent.change(await screen.findByLabelText("Note"), {
       target: { value: "Knee felt better" },
     });
-    expect(press()).toBe(true);
+    fireEvent.click(screen.getByText("Cancel"));
     expect(await screen.findByText("Discard this note?")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Keep writing" }));
-    expect(screen.getByLabelText("Note")).toBeTruthy();
-    press();
+    expect((screen.getByLabelText("Note") as HTMLTextAreaElement).value).toBe(
+      "Knee felt better",
+    );
+    fireEvent.click(screen.getByText("Cancel"));
     fireEvent.click(await screen.findByRole("button", { name: "Discard" }));
-    await waitFor(() => expect(screen.queryByLabelText("Note")).toBeNull());
+    fireEvent.click((await screen.findAllByRole("button", { name: /Add note/ }))[0]!);
+    await waitFor(() =>
+      expect((screen.getByLabelText("Note") as HTMLTextAreaElement).value).toBe(""),
+    );
   });
 });
