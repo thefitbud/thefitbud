@@ -1,51 +1,82 @@
-import { ArrowLeft, Copyright, FileText, Shield, TriangleAlert } from "lucide-react";
-import { Link } from "react-router-dom";
+import {
+  ArrowLeft,
+  Ban,
+  Copyright,
+  FileText,
+  FlaskConical,
+  HeartPulse,
+  Shield,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useMemo } from "react";
+import { Link, useLocation } from "react-router-dom";
+import {
+  LEGAL_BANNER,
+  LEGAL_COUNSEL_SIGNOFF,
+  LEGAL_EFFECTIVE_DATE,
+  LEGAL_LAST_UPDATED,
+  fillLegalTokens,
+  isLegalInForce,
+} from "@fitbud/core";
+import { LEGAL_MARKDOWN } from "../../../../../docs/legal/published/documents";
+import { parseLegalMarkdown, type Block } from "../../../../../docs/legal/published/markdown";
 import { BrandMark } from "../../components/BrandMark";
 import "./legal.css";
 import {
   LEGAL_CHROME,
-  LEGAL_DOCUMENTS,
   LEGAL_NAV,
   SUPPORT_EMAIL,
+  credits,
+  legalDocByPath,
   type CreditCard,
   type CreditsDocument,
-  type DraftDocument,
   type LegalPath,
 } from "./content";
+import { LegalBlock, LegalMarkdown } from "./LegalMarkdown";
 
-const NAV_ICONS = {
+const NAV_ICONS: Record<LegalPath, LucideIcon> = {
   "/privacy": Shield,
   "/terms": FileText,
+  "/terms/trainer": FileText,
+  "/terms/trainee": FileText,
+  "/health": HeartPulse,
+  "/acceptable-use": Ban,
+  "/beta": FlaskConical,
   "/credits": Copyright,
-} as const;
+};
 
-function DraftBody({ doc }: { doc: DraftDocument }) {
+/** The published text for a document, with the config values filled in. */
+function blocksFor(path: LegalPath): Block[] {
+  const doc = legalDocByPath(path);
+  if (!doc) return [];
+  return parseLegalMarkdown(fillLegalTokens(LEGAL_MARKDOWN[doc.slug]));
+}
+
+function Banner() {
+  if (isLegalInForce(LEGAL_COUNSEL_SIGNOFF)) return null;
   return (
-    <>
-      <p className="legal-updated">{doc.updated}</p>
-      <div className="legal-draft-banner" role="note" data-testid="legal-draft-notice">
-        <TriangleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
-        <span>{doc.notice}</span>
-      </div>
-      {doc.fact ? (
-        <p className="legal-fact" data-testid="legal-account-deletion">
-          <b>{doc.fact.lead}</b> {doc.fact.before}{" "}
-          <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a> {doc.fact.after}
-        </p>
-      ) : null}
-      {doc.sections.map((section) => (
-        <section key={section.heading} className="legal-section">
-          <h2>{section.heading}</h2>
-          <p className="legal-draft-note">{doc.sectionNote}</p>
-          <div aria-hidden="true">
-            {section.bars.map((width, i) => (
-              <i key={i} className="legal-bar" style={{ width: `${width}%` }} />
-            ))}
-          </div>
-        </section>
-      ))}
-    </>
+    <div className="legal-draft-banner" role="note" data-testid="legal-draft-notice">
+      <TriangleAlert size={18} strokeWidth={1.75} aria-hidden="true" />
+      <span>
+        <b>{LEGAL_BANNER.title}.</b> {LEGAL_BANNER.text}
+      </span>
+    </div>
   );
+}
+
+function Dates() {
+  return (
+    <p className="legal-updated" data-testid="legal-dates">
+      {LEGAL_CHROME.effective} {LEGAL_EFFECTIVE_DATE} · {LEGAL_CHROME.lastUpdated}{" "}
+      {LEGAL_LAST_UPDATED}
+    </p>
+  );
+}
+
+function DocumentBody({ path }: { path: LegalPath }) {
+  const blocks = useMemo(() => blocksFor(path), [path]);
+  return <LegalMarkdown blocks={blocks} />;
 }
 
 function Cards({ cards }: { cards: CreditCard[] }) {
@@ -64,9 +95,19 @@ function Cards({ cards }: { cards: CreditCard[] }) {
 
 function CreditsBody({ doc }: { doc: CreditsDocument }) {
   const { drawings } = doc;
+  // The rest of draft 08 (descriptions, estimates note, fonts and icons, questions).
+  const blocks = useMemo(() => blocksFor("/credits"), []);
+  const sections = useMemo(() => splitSections(blocks), [blocks]);
+  const pick = (title: string) => sections.find((s) => s.title === title)?.blocks ?? [];
+  const nutritionNote = pick("Food and nutrition data").filter(
+    (b) =>
+      b.type === "paragraph" &&
+      b.inline[0]?.type === "text" &&
+      b.inline[0].value.startsWith("Nutrition figures"),
+  );
   return (
     <>
-      <p className="legal-updated">{doc.intro}</p>
+      <p className="legal-lead">{doc.intro}</p>
       <section className="legal-section">
         <h2>{drawings.heading}</h2>
         <p className="legal-lead">{drawings.summary}</p>
@@ -106,19 +147,47 @@ function CreditsBody({ doc }: { doc: CreditsDocument }) {
       <section className="legal-section">
         <h2>{doc.food.heading}</h2>
         <Cards cards={doc.food.cards} />
+        {nutritionNote.map((block, i) => (
+          <div key={i} className="legal-md">
+            <LegalBlock block={block} />
+          </div>
+        ))}
       </section>
-      <section className="legal-section">
-        <h2>{doc.text.heading}</h2>
-        <Cards cards={doc.text.cards} />
-      </section>
+      {["Exercise descriptions", "Fonts, icons and software", "Questions"].map((title) => (
+        <section key={title} className="legal-section legal-md">
+          {pick(title).map((block, i) => (
+            <LegalBlock key={i} block={block} />
+          ))}
+        </section>
+      ))}
     </>
   );
 }
 
+/** Split the credits markdown into its `##` sections (heading kept as the first block). */
+function splitSections(blocks: Block[]): { title: string; blocks: Block[] }[] {
+  const out: { title: string; blocks: Block[] }[] = [];
+  for (const block of blocks) {
+    if (block.type === "heading" && block.level === 2) {
+      out.push({ title: block.text, blocks: [block] });
+    } else {
+      out[out.length - 1]?.blocks.push(block);
+    }
+  }
+  return out;
+}
+
 export function LegalPage({ path }: { path: LegalPath }) {
-  const doc = LEGAL_DOCUMENTS[path];
+  const doc = legalDocByPath(path);
+  const { hash } = useLocation();
+  // A link such as /privacy#delete-account scrolls to its heading once the text is on screen.
+  useEffect(() => {
+    if (!hash) return;
+    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView();
+  }, [hash, path]);
+  if (!doc) return null;
   return (
-    <div className="legal-page" data-testid={`legal-${path.slice(1)}`}>
+    <div className="legal-page" data-testid={`legal-${doc.slug}`}>
       <header className="legal-top">
         <span className="legal-brand">
           <BrandMark size={28} />
@@ -156,7 +225,9 @@ export function LegalPage({ path }: { path: LegalPath }) {
         </nav>
         <main className="legal-doc">
           <h1>{doc.title}</h1>
-          {doc.kind === "draft" ? <DraftBody doc={doc} /> : <CreditsBody doc={doc} />}
+          <Dates />
+          <Banner />
+          {path === "/credits" ? <CreditsBody doc={credits} /> : <DocumentBody path={path} />}
         </main>
       </div>
     </div>
@@ -168,6 +239,21 @@ export function PrivacyPage() {
 }
 export function TermsPage() {
   return <LegalPage path="/terms" />;
+}
+export function TrainerTermsPage() {
+  return <LegalPage path="/terms/trainer" />;
+}
+export function TraineeTermsPage() {
+  return <LegalPage path="/terms/trainee" />;
+}
+export function HealthPage() {
+  return <LegalPage path="/health" />;
+}
+export function AcceptableUsePage() {
+  return <LegalPage path="/acceptable-use" />;
+}
+export function BetaTermsPage() {
+  return <LegalPage path="/beta" />;
 }
 export function CreditsPage() {
   return <LegalPage path="/credits" />;

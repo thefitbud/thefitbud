@@ -143,7 +143,7 @@ function markReviewed() {
   fireEvent.click(
     screen.getByRole("button", { name: "More actions for Rohan Mehta" }),
   );
-  fireEvent.click(screen.getByRole("menuitem", { name: "Mark reviewed" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Noted, keep open" }));
 }
 
 describe("HomePage section refresh (Z7-1)", () => {
@@ -173,7 +173,7 @@ describe("HomePage section refresh (Z7-1)", () => {
     hidden = false;
   });
 
-  it("refetches only attention, and its count, after Mark reviewed", async () => {
+  it("refetches only attention, and its count, after Noted, keep open", async () => {
     await renderHome();
     const before = counts();
     Object.defineProperty(window, "scrollY", {

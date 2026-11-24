@@ -41,6 +41,12 @@ import {
   reviewedAtLabel,
   signedDelta,
 } from "./checkinReview/savedReview";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  trainerCacheEpoch,
+  writeClientMeta,
+} from "./cache";
 import { coachingWeekAt } from "./checkinsList/model";
 import { clientStatusApi } from "./clientStatus/api";
 import { NudgeSheet } from "./sheets/NudgeSheet";
@@ -67,7 +73,11 @@ export function CheckinReviewScreen({
   // D-W3b-11 (b): trainer screens display in the device zone (resolver).
   const zone = deviceTimeZone();
   const [context, setContext] = useState<CheckinReviewContext | null>(null);
-  const [name, setName] = useState("Client");
+  // Z14-3: the header paints from the per-client cache at once.
+  const [meta] = useState(() => (relationshipId ? readClientMeta(relationshipId) : null));
+  const [name, setName] = useState(
+    meta?.name ? formatPersonName(meta.name) : "Client",
+  );
   const [note, setNote] = useState("");
   const [alsoMarkReviewed, setAlsoMarkReviewed] = useState(true);
   const [replyOpen, setReplyOpen] = useState(false);
@@ -78,28 +88,48 @@ export function CheckinReviewScreen({
   const [offline, setOffline] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [weekNumber, setWeekNumber] = useState<number | null>(null);
-  const [whatsapp, setWhatsapp] = useState<string | null>(null);
+  const [whatsapp, setWhatsapp] = useState<string | null>(
+    meta?.whatsappE164 ?? null,
+  );
   const [nudgeOpen, setNudgeOpen] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
+    const cacheEpoch = trainerCacheEpoch();
     try {
+      // Z14-3: with the client known up front, the header read runs beside the
+      // check-in read instead of after it; a full cache entry needs no read.
+      const cachedMeta = relationshipId ? readClientMeta(relationshipId) : null;
+      const workspaceNeeded = Boolean(relationshipId) && cachedMeta?.timeZone == null;
+      const earlyWorkspace = workspaceNeeded
+        ? api.getClientWorkspace(relationshipId).then(
+            (workspace) => ({ workspace }) as const,
+            (workspaceError: unknown) => ({ workspaceError }) as const,
+          )
+        : null;
       const result = await api.getCheckinReviewContext(checkinId);
       setContext(result);
       const rid = relationshipId || result.checkin.coachingRelationshipId;
-      if (rid) {
-        try {
-          const workspace = await api.getClientWorkspace(rid);
-          setName(formatPersonName(workspace.header.traineeDisplayName));
-          setWhatsapp(workspace.header.clientWhatsappE164 ?? null);
-          setWeekNumber(
-            coachingWeekAt(
-              workspace.header.startedAt,
-              Date.parse(result.checkin.localDate + "T12:00:00Z"),
-            ),
-          );
-        } catch (workspaceError) {
-          reportError("checkinReview.workspace", workspaceError);
+      const at = Date.parse(result.checkin.localDate + "T12:00:00Z");
+      if (cachedMeta && !workspaceNeeded) {
+        setName(formatPersonName(cachedMeta.name ?? "Client"));
+        setWhatsapp(cachedMeta.whatsappE164 ?? null);
+        setWeekNumber(coachingWeekAt(cachedMeta.startedAt, at));
+      } else if (rid) {
+        const read =
+          (await earlyWorkspace) ??
+          (await api.getClientWorkspace(rid).then(
+            (workspace) => ({ workspace }) as const,
+            (workspaceError: unknown) => ({ workspaceError }) as const,
+          ));
+        if ("workspace" in read) {
+          const header = read.workspace.header;
+          writeClientMeta(rid, clientMetaFromWorkspaceHeader(header), cacheEpoch);
+          setName(formatPersonName(header.traineeDisplayName));
+          setWhatsapp(header.clientWhatsappE164 ?? null);
+          setWeekNumber(coachingWeekAt(header.startedAt, at));
+        } else {
+          reportError("checkinReview.workspace", read.workspaceError);
           setName("Client");
         }
       }

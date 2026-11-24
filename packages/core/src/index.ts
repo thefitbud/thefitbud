@@ -369,3 +369,19 @@ export {
   accountReactivationCopy,
   formatPurgeDate,
 } from "./account-deletion-copy.js";
+export {
+  LEGAL_BANNER,
+  LEGAL_COUNSEL_SIGNOFF,
+  LEGAL_EFFECTIVE_DATE,
+  LEGAL_LAST_UPDATED,
+  LEGAL_SUPPORT_EMAIL,
+  LEGAL_VALUES,
+  TO_BE_CONFIRMED,
+  assertLegalPublishable,
+  fillLegalTokens,
+  isLegalInForce,
+  missingLegalValues,
+  type LegalKey,
+  type LegalSignoff,
+  type LegalValues,
+} from "./legal-config.js";

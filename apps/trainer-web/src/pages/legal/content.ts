@@ -1,100 +1,45 @@
 /**
- * Text for the public legal pages (BT3). LegalPage.tsx holds no copy of its own.
+ * Chrome and structured credits for the public legal pages (BT3, Z14-27).
  *
- * DRAFT STATUS (owner decision, Firoz, 2 Nov 2026): counsel's text for the
- * Privacy policy and Terms of use is still being prepared, so those two pages
- * ship as clearly marked drafts. To publish counsel's text, replace the
- * `sections` of `privacy` and `terms`, set `updated`, and change the `notice`;
- * the page structure does not change. The Credits page is real content from
- * docs/spec/credits-and-licences.md and apps/api/seed/library/ATTRIBUTION.md.
+ * The text of each document is published markdown (`docs/legal/published/*.md`,
+ * bundled by `documents.ts`), copied from the drafts prepared for counsel in
+ * PR #177. Counsel has not approved it: every page keeps the "pending counsel
+ * review, not yet in force" banner until Firoz records sign-off
+ * (`LEGAL_COUNSEL_SIGNOFF` in packages/core/src/legal-config.ts).
+ *
+ * The credits page keeps the factual exercise and food credits as structured
+ * tables (docs/spec/credits-and-licences.md) and adds the remaining notices
+ * from draft 08.
  */
+import {
+  LEGAL_DOC_LIST,
+  legalDocByPath,
+  type LegalDocMeta,
+  type LegalPath,
+} from "../../../../../docs/legal/published/registry";
+
+export { LEGAL_DOC_LIST, legalDocByPath };
+export type { LegalDocMeta, LegalPath };
 
 export const SUPPORT_EMAIL = "tech@thefitbud.com";
 
 export const CC_BY_SA_4 = "https://creativecommons.org/licenses/by-sa/4.0/";
 export const CC_BY_SA_3 = "https://creativecommons.org/licenses/by-sa/3.0/";
 
-export type LegalPath = "/privacy" | "/terms" | "/credits";
-
-export const LEGAL_NAV: { path: LegalPath; label: string }[] = [
-  { path: "/privacy", label: "Privacy policy" },
-  { path: "/terms", label: "Terms of use" },
-  { path: "/credits", label: "Credits and licences" },
-];
+/** Side navigation and Help links: every public document. */
+export const LEGAL_NAV: { path: LegalPath; label: string }[] = LEGAL_DOC_LIST.map((doc) => ({
+  path: doc.path,
+  label: doc.title,
+}));
 
 export const LEGAL_CHROME = {
   brand: "FitBud",
   backToSignIn: "Back to sign in",
   navLabel: "Legal",
   questionsPrefix: "Questions?",
+  effective: "Effective",
+  lastUpdated: "Last updated",
 } as const;
-
-export type DraftSection = {
-  heading: string;
-  /** Widths (percent) of the grey bars that stand in for the missing text. */
-  bars: number[];
-};
-
-export type DraftDocument = {
-  kind: "draft";
-  path: "/privacy" | "/terms";
-  title: string;
-  updated: string;
-  /** Stated at the top of the page so it cannot be mistaken for the real text. */
-  notice: string;
-  /** Shown under every heading whose text is not written yet. */
-  sectionNote: string;
-  /** A real, already-decided fact shown above the draft sections. */
-  fact?: { lead: string; before: string; after: string };
-  sections: DraftSection[];
-};
-
-const DRAFT_NOTICE =
-  "Draft only. Counsel is still preparing the final text, so this page is not yet in force and is not the policy or terms that apply to you. Do not rely on it. The sections below are headings only.";
-const SECTION_NOTE = "Draft. Counsel's text is not written yet.";
-
-export const privacy: DraftDocument = {
-  kind: "draft",
-  path: "/privacy",
-  title: "Privacy policy",
-  updated: "Last updated: not yet published",
-  notice: DRAFT_NOTICE,
-  sectionNote: SECTION_NOTE,
-  fact: {
-    lead: "Deleting your account during the beta.",
-    before: "Email",
-    after:
-      "from the email or number on your account and ask us to delete it. There is no in-app delete button yet.",
-  },
-  sections: [
-    { heading: "1. Who we are", bars: [100, 96, 88] },
-    { heading: "2. What we collect", bars: [100, 96, 88, 72] },
-    { heading: "3. What your coach can see", bars: [100, 96, 88] },
-    { heading: "4. How we use your data", bars: [100, 96, 88, 72] },
-    { heading: "5. Who we share it with", bars: [100, 96, 88] },
-    { heading: "6. Deleting your account", bars: [100, 96] },
-    { heading: "7. Contact", bars: [100, 96] },
-  ],
-};
-
-export const terms: DraftDocument = {
-  kind: "draft",
-  path: "/terms",
-  title: "Terms of use",
-  updated: "Last updated: not yet published",
-  notice: DRAFT_NOTICE,
-  sectionNote: SECTION_NOTE,
-  sections: [
-    { heading: "1. Using FitBud", bars: [100, 96, 88, 72] },
-    { heading: "2. Accounts", bars: [100, 96, 88] },
-    { heading: "3. Coaches and clients", bars: [100, 96, 88, 72] },
-    { heading: "4. Health information", bars: [100, 96, 88] },
-    { heading: "5. Payments", bars: [100, 96] },
-    { heading: "6. Ending your account", bars: [100, 96, 88] },
-    { heading: "7. Liability", bars: [100, 96, 88] },
-    { heading: "8. Changes to these terms", bars: [100, 96] },
-  ],
-};
 
 export type CreditRow = {
   author: string;
@@ -110,7 +55,6 @@ export type CreditCard = {
 };
 
 export type CreditsDocument = {
-  kind: "credits";
   path: "/credits";
   title: string;
   intro: string;
@@ -122,11 +66,9 @@ export type CreditsDocument = {
     footnote: string;
   };
   food: { heading: string; cards: CreditCard[] };
-  text: { heading: string; cards: CreditCard[] };
 };
 
 export const credits: CreditsDocument = {
-  kind: "credits",
   path: "/credits",
   title: "Credits and licences",
   intro:
@@ -188,27 +130,14 @@ export const credits: CreditsDocument = {
       },
     ],
   },
-  text: {
-    heading: "Exercise text",
-    cards: [
-      {
-        name: "free-exercise-db (yuhonas)",
-        line: "Exercise names, steps, muscles, equipment",
-        licence: "The Unlicense (public domain)",
-      },
-    ],
-  },
 };
 
-export type LegalDocument = DraftDocument | CreditsDocument;
 
-export const LEGAL_DOCUMENTS: Record<LegalPath, LegalDocument> = {
-  "/privacy": privacy,
-  "/terms": terms,
-  "/credits": credits,
-};
-
-/** Short labels for the sign-in footer. */
+/**
+ * Short labels for the sign-in footer. Three links: the footer's spacing and 44px targets are
+ * pinned at 375, 1024 and 1440px by e2e/bt3f-signin-footer.spec.ts. Every other document is one
+ * click away in the Legal nav on each legal page.
+ */
 export const LEGAL_FOOTER_LINKS: { path: LegalPath; label: string }[] = [
   { path: "/privacy", label: "Privacy" },
   { path: "/terms", label: "Terms" },

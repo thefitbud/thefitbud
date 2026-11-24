@@ -84,13 +84,20 @@ describe("NoteComposer (frames 188 / 189)", () => {
         name: /Workout plan · Fat loss, phase 2/,
       }),
     ).toBeTruthy();
-    const visibility = await screen.findByRole("switch", {
-      name: /Visible to Rohan/i,
-    });
-    expect((visibility as HTMLInputElement).checked).toBe(false);
     expect(
-      screen.getByText(/He sees it on Today and gets one notification/i),
+      await screen.findByRole("radiogroup", { name: /who can see this note/i }),
     ).toBeTruthy();
+    const onlyMe = screen.getByRole("radio", { name: "Only me" });
+    const withClient = screen.getByRole("radio", { name: "Rohan too" });
+    expect((onlyMe as HTMLInputElement).checked).toBe(true);
+    expect((withClient as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByText("Only you can see this note.")).toBeTruthy();
+    fireEvent.click(withClient);
+    expect(
+      screen.getByText("Rohan sees it on Today and gets one notification."),
+    ).toBeTruthy();
+    fireEvent.click(onlyMe);
+    expect(screen.getByText("Only you can see this note.")).toBeTruthy();
     expect(screen.getByText(/Earlier notes/i)).toBeTruthy();
     expect(screen.getByText(NOTE_A.body)).toBeTruthy();
     expect(screen.getByText(/0 of 1,000|0 of 1000/)).toBeTruthy();
