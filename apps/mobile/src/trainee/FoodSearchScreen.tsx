@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, SafeAreaView, ScrollView, TextInput, View } from "react-native";
 import { Check, Plus, Search, WifiOff, X } from "lucide-react-native";
 import { userFacingMessage } from "@fitbud/api-client";
-import type { MealAssignment } from "@fitbud/contracts";
+import type { MealAssignment, MealComplianceLoggedItem } from "@fitbud/contracts";
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { formatNumber } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
@@ -18,7 +18,7 @@ import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProv
 import { useSyncEngine } from "../sync/SyncProvider";
 import { isNetworkFailure } from "../trainer/attention/offline";
 import { CustomFoodScreen } from "./CustomFoodScreen";
-import { AteOutForm, type CoachDeviateSave } from "./food/AteOutForm";
+import { AteOutForm, type CoachDeviateSave, type MealEditMode } from "./food/AteOutForm";
 import { FoodAmountPicker } from "./food/FoodAmountPicker";
 import { FoodNavHeader } from "./food/FoodNavHeader";
 import {
@@ -39,7 +39,7 @@ import {
 } from "./food/logLines";
 import { fetchTraineeFoodDetail } from "./food/foodServingsApi";
 import { announceMealSaved } from "./food/mealSavedNotice";
-import { deviateMealAssignment } from "./mealActions";
+import { deviateMealAssignment, editMealEntry } from "./mealActions";
 import { cleanFoodLabel } from "./mealHelpers";
 import { nutrientsFromMealPrescription } from "./nutrition";
 import { useDeviceOffline } from "./today/queuedLogs";
@@ -58,7 +58,48 @@ type Props = {
   authorMode?: "trainee" | "coach";
   clientName?: string;
   onCoachSave?: CoachDeviateSave;
+  /**
+   * Z14-13b (D-W14-22): edit a logged "log it myself" entry. The tray opens
+   * with the entry's foods and Save changes edits the entry.
+   */
+  edit?: MealEditMode;
 };
+
+/**
+ * The tray of an entry being edited: its logged foods with their amounts. A
+ * library food keeps the plan's serving when the plan names it; otherwise the
+ * server's default serving applies, as when it was first logged.
+ */
+export function linesFromLoggedItems(
+  items: readonly MealComplianceLoggedItem[],
+  planRows: readonly PlannedRow[],
+): LogLine[] {
+  return items.map((item, index) => {
+    const quantity = item.quantity != null && item.quantity > 0 ? item.quantity : 1;
+    const per = (value: number | null | undefined) =>
+      value == null ? null : value / quantity;
+    const protein = per(item.proteinG);
+    const carbs = per(item.carbsG);
+    const fat = per(item.fatG);
+    const planned = item.foodId ? planRows.find((row) => row.foodId === item.foodId) : undefined;
+    return {
+      key: item.foodId ? `food:${item.foodId}` : `logged:${index}`,
+      name: cleanFoodLabel(item.name),
+      quantity,
+      unitLabel: item.servingLabel ? cleanFoodLabel(item.servingLabel) : "serving",
+      kcalPerUnit: per(item.energyKcal),
+      macrosPerUnit:
+        protein == null && carbs == null && fat == null
+          ? null
+          : { protein: protein ?? 0, carbs: carbs ?? 0, fat: fat ?? 0 },
+      source: item.foodId
+        ? { kind: "library", foodId: item.foodId, servingId: planned?.servingId }
+        : { kind: "custom", saveToMyFoods: false },
+      servingKnown: true,
+      touched: true,
+    } satisfies LogLine;
+  });
+}
 
 type Mode =
   | { kind: "search" }
@@ -147,6 +188,7 @@ function FoodSearchBody({
   authorMode = "trainee",
   clientName,
   onCoachSave,
+  edit,
 }: Props) {
   const isCoach = authorMode === "coach";
   const styles = useStyles();
@@ -166,7 +208,11 @@ function FoodSearchBody({
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState<SearchState>({ kind: "idle" });
   const [recent, setRecent] = useState<FoodSearchItem[]>([]);
-  const [lines, setLines] = useState<LogLine[]>([]);
+  const [lines, setLines] = useState<LogLine[]>(() =>
+    edit && assignment.compliance?.deviationKind === "logged_foods"
+      ? linesFromLoggedItems(assignment.compliance.loggedItems ?? [], plannedRowsFromAssignment(assignment))
+      : [],
+  );
   const [toast, setToast] = useState<AddedToast | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -324,6 +370,22 @@ function FoodSearchBody({
           notes: null,
           items,
         });
+      } else if (edit) {
+        await editMealEntry(sync, assignment, {
+          body: { outcome: "modified", deviationKind: "logged_foods", notes: assignment.compliance?.notes ?? null, items },
+          display: {
+            loggedItems: toSave.map((line) => ({
+              name: line.name,
+              quantity: line.quantity,
+              servingLabel: line.unitLabel,
+              energyKcal: line.kcalPerUnit == null ? null : Math.round(line.kcalPerUnit * line.quantity),
+            })),
+            kcal: saved.unknown ? null : Math.round(saved.kcal),
+          },
+          relationshipId,
+        });
+        edit.onEdited({ kcal: saved.unknown ? null : Math.round(saved.kcal) });
+        return;
       } else {
         await deviateMealAssignment(
           sync,
@@ -411,6 +473,7 @@ function FoodSearchBody({
           timeZone={timeZone}
           onCancel={() => setMode({ kind: "search" })}
           onSaved={onSaved}
+          edit={edit}
           authorMode={authorMode}
           clientName={clientName}
           onCoachSave={onCoachSave}
@@ -680,7 +743,7 @@ function FoodSearchBody({
             testID="food-log-save"
           >
             <Text variant="bodyStrong" tone="onBrand">
-              Save {mealLower}
+              {edit ? "Save changes" : `Save ${mealLower}`}
             </Text>
           </Pressable>
         </View>

@@ -28,12 +28,14 @@ import {
   AteOutForm,
   MealSubScreen,
   OfflineSaveBanner,
+  RemoveLogButton,
   SubScreenSaveButton,
   type CoachDeviateSave,
+  type MealEditMode,
 } from "./food/AteOutForm";
 import { amountWithUnit, formatAmount, unitNoun } from "./food/logLines";
 import { announceMealSaved } from "./food/mealSavedNotice";
-import { deviateMealAssignment } from "./mealActions";
+import { deviateMealAssignment, editMealEntry } from "./mealActions";
 import { cleanFoodLabel } from "./mealHelpers";
 import { nutrientsFromMealPrescription } from "./nutrition";
 
@@ -62,6 +64,11 @@ type Props = {
   /** Client display name when authorMode is coach (portion / ate-out copy). */
   clientName?: string;
   onCoachSave?: CoachDeviateSave;
+  /**
+   * Z14-13b (D-W14-22): "Change this log". The menu reads "Change this log",
+   * each path opens prefilled from the logged entry and saves as an edit.
+   */
+  edit?: MealEditMode;
 };
 
 function rowKcal(row: PortionRow): number | null {
@@ -94,6 +101,22 @@ function initialRows(assignment: MealAssignment): PortionRow[] {
 }
 
 /**
+ * The portion rows of an entry being edited (TR-07n4): the plan's foods with
+ * the amounts that were logged. A plan food missing from the log reads 0.
+ */
+function loggedRows(assignment: MealAssignment): PortionRow[] {
+  const logged = assignment.compliance?.loggedItems ?? [];
+  const planned = initialRows(assignment);
+  if (logged.length === 0) return planned;
+  return planned.map((row) => {
+    const hit = logged.find(
+      (item) => cleanFoodLabel(item.name).toLowerCase() === row.label.toLowerCase(),
+    );
+    return { ...row, quantity: hit ? (hit.quantity ?? row.plannedQuantity) : 0 };
+  });
+}
+
+/**
  * Something different (TR-08a): changed the portion (TR-08b), log it myself
  * (TR-26a) or ate out (TR-08c). In the bottom sheet each sub-screen gets a
  * real height (Z11b-5). The sheet follows the system theme itself so it
@@ -119,6 +142,7 @@ function SomethingDifferentSheetBody({
   authorMode = "trainee",
   clientName,
   onCoachSave,
+  edit,
 }: Props) {
   const styles = useStyles();
   const theme = useTheme();
@@ -130,8 +154,13 @@ function SomethingDifferentSheetBody({
   const clientShort = (clientName ?? "Client").split(/\s+/)[0] ?? "Client";
   const mealName = cleanFoodLabel(assignment.mealName);
 
-  const [screen, setScreen] = useState<ScreenId>("menu");
-  const [portionRows, setPortionRows] = useState<PortionRow[]>(() => initialRows(assignment));
+  const startScreen: ScreenId = edit?.start ?? "menu";
+  const [screen, setScreen] = useState<ScreenId>(startScreen);
+  const [portionRows, setPortionRows] = useState<PortionRow[]>(() =>
+    edit && assignment.compliance?.deviationKind === "portion_adjustment"
+      ? loggedRows(assignment)
+      : initialRows(assignment),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,6 +192,11 @@ function SomethingDifferentSheetBody({
 
   function backToMenu() {
     setError(null);
+    // Opened straight into a screen to edit it: back leaves the flow.
+    if (edit && startScreen !== "menu") {
+      onCancel();
+      return;
+    }
     setScreen("menu");
   }
 
@@ -183,6 +217,22 @@ function SomethingDifferentSheetBody({
           notes: null,
           items,
         });
+      } else if (edit) {
+        await editMealEntry(sync, assignment, {
+          body: { outcome: "modified", deviationKind: "portion_adjustment", notes: assignment.compliance?.notes ?? null, items },
+          display: {
+            loggedItems: kept.map((row) => ({
+              name: row.label,
+              quantity: row.quantity,
+              servingLabel: row.unitLabel,
+              energyKcal: rowKcal(row),
+            })),
+            kcal: portionTotal.unknown ? null : portionTotal.kcal,
+          },
+          relationshipId,
+        });
+        edit.onEdited({ kcal: portionTotal.unknown ? null : portionTotal.kcal });
+        return;
       } else {
         await deviateMealAssignment(
           sync,
@@ -252,7 +302,9 @@ function SomethingDifferentSheetBody({
       {variant === "sheet" ? (
         <View style={styles.menuHead}>
           <View style={styles.flex}>
-            <Text variant="title">What did you have instead?</Text>
+            <Text variant="title">
+              {edit ? "Change this log" : "What did you have instead?"}
+            </Text>
             <Text variant="subhead">{mealSubtitle}</Text>
           </View>
           <Pressable
@@ -267,6 +319,7 @@ function SomethingDifferentSheetBody({
           </Pressable>
         </View>
       ) : null}
+      {edit ? <OfflineSaveBanner /> : null}
       <View style={styles.options}>
         {option({
           icon: SlidersHorizontal,
@@ -293,7 +346,8 @@ function SomethingDifferentSheetBody({
           },
         })}
       </View>
-      {!isCoach && onAskCoach ? (
+      {edit?.canRemove ? <RemoveLogButton onPress={edit.onRemove} /> : null}
+      {!isCoach && onAskCoach && !edit ? (
         <Pressable accessibilityRole="button" onPress={onAskCoach} style={styles.askCoach}>
           <MessageCircle size={16} strokeWidth={2.2} color={theme.colors.brand} />
           <Text variant="bodyStrong" tone="brand">
@@ -314,6 +368,7 @@ function SomethingDifferentSheetBody({
       timeZone={timeZone}
       onCancel={backToMenu}
       onSaved={onDone}
+      edit={edit}
       authorMode={authorMode}
       clientName={clientName}
       onCoachSave={onCoachSave}
@@ -323,7 +378,8 @@ function SomethingDifferentSheetBody({
   const portionBody = (
     <MealSubScreen
       testID="something-different-subscreen"
-      title="Changed the portion"
+      title={edit ? "Edit portion" : "Changed the portion"}
+      saveLabel={edit ? "Save changes" : "Save"}
       subtitle={`${mealName} \u00b7 ${formatClockTime(assignment.windowStartsAt, timeZone)}`}
       onBack={backToMenu}
       onSave={() => void savePortion()}
@@ -350,7 +406,7 @@ function SomethingDifferentSheetBody({
             </View>
           </View>
           <SubScreenSaveButton
-            label="Save portion"
+            label={edit ? "Save changes" : "Save portion"}
             onPress={() => void savePortion()}
             saving={saving}
           />
@@ -429,6 +485,7 @@ function SomethingDifferentSheetBody({
             {isCoach ? `${clientShort} sees this` : `${coachShort} sees the difference`}
           </Text>
         </View>
+        {edit?.canRemove ? <RemoveLogButton onPress={edit.onRemove} /> : null}
         {error ? <ErrorBanner message={error} /> : null}
     </MealSubScreen>
   );
@@ -455,7 +512,11 @@ function SomethingDifferentSheetBody({
   if (subScreen) return subScreen;
 
   return (
-    <Screen v3 title="What did you have instead?" subtitle={mealSubtitle}>
+    <Screen
+      v3
+      title={edit ? "Change this log" : "What did you have instead?"}
+      subtitle={mealSubtitle}
+    >
       {menuBody}
       <PrimaryButton label="Cancel" variant="ghost" onPress={onCancel} />
     </Screen>

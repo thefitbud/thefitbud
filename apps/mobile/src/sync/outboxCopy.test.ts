@@ -14,6 +14,7 @@ import {
   createKeptRowsBinding,
   describeOutboxEntry,
   indicatorFromCounts,
+  mealEditFailureReason,
 } from "./outboxCopy";
 import {
   keptLiveActivityRowsCopy,
@@ -170,5 +171,37 @@ describe("kept lock-screen rows binding", () => {
     expect(line).not.toMatch(/[0-9a-f]{8}-/i);
     expect(line).not.toMatch(/%/);
     expect(line).not.toMatch(/[a-z]+_[a-z]+/);
+  });
+});
+
+describe("refused meal edits (Z14-13b, D-W14-22 f)", () => {
+  it("names the meal and says what to do, never a code", () => {
+    expect(
+      mealEditFailureReason({ operation: "meal.edit", lastErrorCode: "MEAL_EDIT_WINDOW_CLOSED" }, "Lunch", "Rahul"),
+    ).toBe("Couldn't change lunch: the 24 hours had passed. Ask Rahul to fix it.");
+    expect(
+      mealEditFailureReason({ operation: "meal.remove", lastErrorCode: "MEAL_EDIT_WINDOW_CLOSED" }, "Lunch", "Rahul"),
+    ).toBe("Couldn't remove the lunch log: the 24 hours had passed. Ask Rahul to fix it.");
+    expect(
+      mealEditFailureReason({ operation: "meal.edit", lastErrorCode: "MEAL_EDITED_BY_COACH" }, "Lunch", "Rahul"),
+    ).toMatch(/^Couldn't change lunch: Rahul already changed it\./);
+    expect(
+      mealEditFailureReason({ operation: "meal.confirm", lastErrorCode: "MEAL_EDIT_WINDOW_CLOSED" }, "Lunch", "Rahul"),
+    ).toBeNull();
+    expect(
+      mealEditFailureReason({ operation: "meal.edit", lastErrorCode: "SOMETHING_ELSE" }, "Lunch", "Rahul"),
+    ).toBeNull();
+  });
+
+  it("describes the queued rows", () => {
+    const entry = (operation: string) => ({
+      operation,
+      payloadJson: JSON.stringify({ mealName: "Lunch" }),
+      clientOccurredAt: "2026-10-19T08:22:00.000Z",
+      lastError: null,
+      status: "pending",
+    });
+    expect(describeOutboxEntry(entry("meal.edit") as never)).toMatch(/^Lunch · Log changed · /);
+    expect(describeOutboxEntry(entry("meal.remove") as never)).toMatch(/^Lunch · Log removed · /);
   });
 });

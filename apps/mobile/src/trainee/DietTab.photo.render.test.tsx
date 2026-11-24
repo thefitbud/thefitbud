@@ -309,6 +309,28 @@ describe("DietTab meal photo (D-W14-11, D-W14-19)", () => {
     expect(await screen.findByRole("button", { name: "Add photo" })).toBeTruthy();
   });
 
+  it("hides Edit and Remove while the photo is still on its way, then brings them back", async () => {
+    server.items = [meal({ logged: true })];
+    let finish: (value: { mediaAssetId: string }) => void = () => undefined;
+    photo.send.mockImplementationOnce(
+      () => new Promise<{ mediaAssetId: string }>((resolve) => (finish = resolve)),
+    );
+    renderDiet();
+    fireEvent.click(await screen.findByRole("button", { name: "Add photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from gallery" }));
+    await waitFor(() => expect(photo.send).toHaveBeenCalledTimes(1));
+    // Uploading: the attach will bump the entry's version, so no edit can be queued now.
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Evening snack, logged" }));
+    expect(await screen.findByTestId("logged-meal-editable")).toBeTruthy();
+    expect(screen.queryByTestId("logged-meal-edit")).toBeNull();
+    expect(screen.queryByTestId("logged-meal-remove")).toBeNull();
+    await act(async () => {
+      finish({ mediaAssetId: "00000000-0000-4000-8000-0000000000d1" });
+    });
+    await waitFor(() => expect(screen.getByTestId("logged-meal-edit")).toBeTruthy());
+  });
+
   it("offers no Add photo once the 24 hour window has closed", async () => {
     server.items = [meal({ logged: true, editableUntil: null })];
     renderDiet();

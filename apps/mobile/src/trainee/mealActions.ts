@@ -1,5 +1,13 @@
 import { isNetworkFailure, userFacingMessage, type FitBudApiClient } from "@fitbud/api-client";
-import type { MealAssignment } from "@fitbud/contracts";
+import type {
+  MealAssignment,
+  MealCompliance,
+  MealComplianceLoggedItem,
+  MealDeviationKind,
+  TraineeEditMealRequest,
+} from "@fitbud/contracts";
+import { formatCivilDate, formatClockTime, formatLocalDate } from "@fitbud/core";
+import { addDays } from "../lib/dates";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
 import type { SyncEngine } from "../sync/engine";
@@ -354,4 +362,306 @@ export async function isMealLogPending(
   } catch {
     return false;
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Edit or remove a logged entry for 24 hours (Z14-13b, D-W14-22)               */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What the trainee may do with a logged meal. Every answer comes from the
+ * server's `editableUntil` / `canRemove` (Z14-11): the phone never works out
+ * the 24 h rule itself, it only compares the server's instant with the clock
+ * so the buttons go away while a screen is open.
+ */
+export type MealEditState = {
+  /** The entry is the server's and no send of it is still waiting. */
+  ready: boolean;
+  canEdit: boolean;
+  canRemove: boolean;
+  /** Show the lock note and "Ask {coach} to fix it". */
+  locked: boolean;
+  /** The server's close of the window; null when it cannot be edited. */
+  until: string | null;
+};
+
+export function mealEditState(
+  meal: Pick<MealAssignment, "id" | "status" | "compliance">,
+  input: { unsentIds: ReadonlySet<string>; lockStateKnown: boolean; now?: number },
+): MealEditState {
+  const none: MealEditState = {
+    ready: false,
+    canEdit: false,
+    canRemove: false,
+    locked: false,
+    until: null,
+  };
+  const entry = meal.compliance;
+  if (!entry || meal.status === "skipped" || !input.lockStateKnown) return none;
+  const unsent = input.unsentIds.has(meal.id) || String(entry.id ?? "").startsWith("local-");
+  if (unsent) return none;
+  const until = entry.editableUntil ?? null;
+  const now = input.now ?? Date.now();
+  const open = until != null && Date.parse(until) > now;
+  return {
+    ready: true,
+    canEdit: open,
+    canRemove: open && entry.canRemove === true,
+    locked: !open,
+    until: open ? until : null,
+  };
+}
+
+/**
+ * "today, 8:52 pm" / "tomorrow, 5:20 pm" / "Sun 15 Nov, 5:20 pm" (D-W14-22 a).
+ * `until` is the server's instant.
+ */
+export function mealEditUntilLabel(
+  until: string,
+  timeZone: string,
+  now: Date = new Date(),
+): string {
+  const at = new Date(until);
+  const time = formatClockTime(at, timeZone);
+  const day = formatLocalDate(at, timeZone);
+  const today = formatLocalDate(now, timeZone);
+  if (day === today) return `today, ${time}`;
+  if (day === addDays(today, 1)) return `tomorrow, ${time}`;
+  return `${formatCivilDate(day, { includeWeekday: true, now })}, ${time}`;
+}
+
+/** What the phone shows for an edit before the server confirms it. */
+export type MealEditDisplay = {
+  loggedItems: MealComplianceLoggedItem[];
+  kcal: number | null;
+};
+
+function activeEditRows(
+  rows: ReadonlyArray<{ status: string; operation: string; recordId: string }>,
+  entryId: string,
+): number {
+  return rows.filter(
+    (row) =>
+      (row.status === "pending" || row.status === "in_flight") &&
+      (row.operation === "meal.edit" || row.operation === "meal.remove") &&
+      row.recordId === entryId,
+  ).length;
+}
+
+/** True while an edit or removal of this entry is waiting or in flight. */
+export function hasQueuedMealEdit(
+  rows: ReadonlyArray<{ status: string; operation: string; recordId: string }>,
+  entryId: string | null | undefined,
+): boolean {
+  return entryId != null && activeEditRows(rows, entryId) > 0;
+}
+
+/**
+ * True while a meal photo has not reached the entry yet (still being
+ * prepared, waiting for a connection or the log, or uploading and attaching).
+ * The attach bumps the entry's version without a check, so Edit and Remove
+ * wait for it (Z14-13b fix round 1).
+ */
+export function isMealPhotoUnfinished(
+  job: { state: string } | null | undefined,
+): boolean {
+  return (
+    job != null &&
+    (job.state === "preparing" || job.state === "waiting" || job.state === "uploading")
+  );
+}
+
+/**
+ * The version the next edit must carry. The engine deletes a row once the
+ * server applied it and stores the version that came back with the entry, so
+ * the day's copy (`entry.recordVersion`) can be behind until it refreshes:
+ * take the higher of the two, then add the edits still waiting or in flight.
+ */
+export async function nextRecordVersion(
+  sync: SyncEngine,
+  entry: MealCompliance,
+): Promise<number> {
+  let base = entry.recordVersion;
+  try {
+    const local = await sync.store.getLocal("meal_compliance", entry.id);
+    if (local?.serverVersion != null && !local.tombstone) {
+      base = Math.max(base, local.serverVersion);
+    }
+  } catch {
+    // The day's version stands.
+  }
+  try {
+    return base + activeEditRows(await sync.store.listOutbox(), entry.id);
+  } catch {
+    return base;
+  }
+}
+
+/**
+ * The trainee changes a logged entry (D-W14-22 b). One outbox row with the
+ * entry's `recordVersion`; the screen paints it at once from the outbox
+ * (`overlayMealEdits`) and a refusal reverts it and says so in sync status.
+ */
+export async function editMealEntry(
+  sync: SyncEngine,
+  assignment: MealAssignment,
+  input: {
+    body: Omit<TraineeEditMealRequest, "recordVersion">;
+    display: MealEditDisplay;
+    relationshipId: string;
+  },
+): Promise<void> {
+  const entry = assignment.compliance;
+  if (!entry) throw new MealSyncError("That meal isn't logged yet.");
+  const recordVersion = await nextRecordVersion(sync, entry);
+  await enqueueAndPush(sync, {
+    recordId: entry.id,
+    operation: "meal.edit",
+    expectedServerVersion: recordVersion,
+    payload: {
+      entryId: entry.id,
+      // Display only: the outbox sheet and the overlay read these.
+      assignmentId: assignment.id,
+      mealName: assignment.mealName,
+      display: input.display,
+      body: { ...input.body, recordVersion },
+    },
+  });
+  afterMealMutation(input.relationshipId);
+}
+
+/** The trainee removes a logged entry: the meal goes back to not logged. */
+export async function removeMealEntry(
+  sync: SyncEngine,
+  assignment: MealAssignment,
+  relationshipId: string,
+): Promise<void> {
+  const entry = assignment.compliance;
+  if (!entry) throw new MealSyncError("That meal isn't logged yet.");
+  const recordVersion = await nextRecordVersion(sync, entry);
+  await enqueueAndPush(sync, {
+    recordId: entry.id,
+    operation: "meal.remove",
+    expectedServerVersion: recordVersion,
+    payload: {
+      entryId: entry.id,
+      assignmentId: assignment.id,
+      mealName: assignment.mealName,
+      body: { recordVersion },
+    },
+  });
+  afterMealMutation(relationshipId);
+}
+
+type EditRow = {
+  status: string;
+  operation: string;
+  recordId: string;
+  payloadJson: string;
+};
+
+type EditPayload = {
+  display?: MealEditDisplay;
+  body?: {
+    recordVersion?: number;
+    outcome?: string;
+    deviationKind?: MealDeviationKind | null;
+    notes?: string | null;
+  };
+};
+
+/**
+ * Pure: the "sent" rows still worth keeping. A row the server took stays
+ * applied until the refreshed day carries its result: the entry's version has
+ * moved past the one edited, or (for a removal) the entry is gone.
+ */
+export function pruneSentEdits<T extends EditRow>(
+  sent: readonly T[],
+  meals: ReadonlyArray<Pick<MealAssignment, "compliance">>,
+): T[] {
+  const versions = new Map<string, number>();
+  for (const meal of meals) {
+    if (meal.compliance) versions.set(meal.compliance.id, meal.compliance.recordVersion);
+  }
+  return sent.filter((row) => {
+    const seen = versions.get(row.recordId);
+    if (row.operation === "meal.remove") return seen !== undefined;
+    if (seen === undefined) return true;
+    let edited = 0;
+    try {
+      edited = (JSON.parse(row.payloadJson) as EditPayload).body?.recordVersion ?? 0;
+    } catch {
+      return false;
+    }
+    return seen <= edited;
+  });
+}
+
+/**
+ * Pure: the day's meals with the phone's queued edits and removals applied
+ * (TR-07n6), so the card, totals and ring change at once. Only rows still
+ * waiting apply; a refused row is not applied, so the meal reverts to the
+ * server's version and sync status says why.
+ */
+export function overlayMealEdits<T extends MealAssignment>(
+  meals: readonly T[],
+  rows: readonly EditRow[],
+): T[] {
+  const waiting = rows.filter(
+    (row) =>
+      (row.status === "pending" || row.status === "in_flight" || row.status === "sent") &&
+      (row.operation === "meal.edit" || row.operation === "meal.remove"),
+  );
+  if (waiting.length === 0) return meals as T[];
+  return meals.map((meal) => {
+    let next: T = meal;
+    for (const row of waiting) {
+      const entry = next.compliance;
+      if (!entry || row.recordId !== entry.id) continue;
+      let payload: EditPayload;
+      try {
+        payload = JSON.parse(row.payloadJson) as EditPayload;
+      } catch {
+        continue;
+      }
+      const body = payload.body;
+      // A row the server has taken applies only until the day's refreshed
+      // copy carries it (its version has moved past the one edited).
+      if (row.status === "sent" && entry.recordVersion > (body?.recordVersion ?? 0)) {
+        continue;
+      }
+      if (row.operation === "meal.remove") {
+        next = { ...next, status: "pending", compliance: null };
+        continue;
+      }
+      if (!body) continue;
+      const modified = body.outcome === "modified";
+      const known = payload.display?.kcal ?? null;
+      const edited: MealCompliance = {
+        ...entry,
+        outcome: modified ? "modified" : "confirmed",
+        deviationKind: modified ? (body.deviationKind ?? null) : null,
+        notes: body.notes ?? null,
+        loggedItems: modified ? (payload.display?.loggedItems ?? []) : [],
+        lastEditedByRole: "trainee",
+        lastEditedAt: new Date().toISOString(),
+      };
+      if (modified && known != null) {
+        edited.loggedTotals = {
+          energyKcal: known,
+          proteinG: null,
+          carbsG: null,
+          fatG: null,
+        };
+      } else {
+        delete edited.loggedTotals;
+      }
+      next = {
+        ...next,
+        status: modified ? "modified" : "confirmed",
+        compliance: edited,
+      };
+    }
+    return next;
+  });
 }

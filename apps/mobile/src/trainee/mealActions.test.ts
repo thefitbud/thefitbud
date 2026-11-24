@@ -9,11 +9,19 @@ import {
   MealPhotoError,
   base64ToBytes,
   bytesToBase64,
+  editMealEntry,
+  hasQueuedMealEdit,
   isMealLogPending,
+  isMealPhotoUnfinished,
+  pruneSentEdits,
+  mealEditState,
+  mealEditUntilLabel,
   mealPhotoFailureCopy,
   mealPhotoResize,
   pendingMealLogIds,
+  overlayMealEdits,
   plannedUntilSentNote,
+  removeMealEntry,
   uploadAndAttachMealPhoto,
 } from "./mealActions";
 
@@ -262,5 +270,174 @@ describe("meal photo (D-W14-11)", () => {
     expect(api.createUploadTarget).not.toHaveBeenCalled();
     expect(api.attachMealPhoto).toHaveBeenCalledTimes(2);
     expect(api.attachMealPhoto.mock.calls[1]?.[2]).toBe("k");
+  });
+});
+
+describe("edit or remove a logged entry for 24 hours (Z14-13b, D-W14-22)", () => {
+  const ENTRY = "00000000-0000-4000-8000-0000000000e1";
+  const logged = (extra: Record<string, unknown> = {}): MealAssignment =>
+    ({
+      ...lunch("confirmed"),
+      compliance: {
+        id: ENTRY,
+        outcome: "confirmed",
+        recordVersion: 4,
+        loggedAt: "2026-11-24T08:00:00.000Z",
+        deviationKind: null,
+        notes: null,
+        editableUntil: "2026-11-25T08:00:00.000Z",
+        canRemove: true,
+        ...extra,
+      },
+    }) as unknown as MealAssignment;
+  const NOW = Date.parse("2026-11-24T09:00:00.000Z");
+  const none = new Set<string>();
+
+  it("reads the buttons from the server's editableUntil and canRemove, never its own clock rule", () => {
+    const open = mealEditState(logged(), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(open).toMatchObject({ canEdit: true, canRemove: true, locked: false });
+    const noRemove = mealEditState(logged({ canRemove: false }), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(noRemove).toMatchObject({ canEdit: true, canRemove: false });
+    // Logged 30 h ago by the phone's clock, but the server still says editable: trust the server.
+    const late = mealEditState(logged({ loggedAt: "2026-11-23T01:00:00.000Z" }), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(late.canEdit).toBe(true);
+    const passed = mealEditState(logged(), { unsentIds: none, lockStateKnown: true, now: Date.parse("2026-11-25T08:00:01.000Z") });
+    expect(passed).toMatchObject({ canEdit: false, canRemove: false, locked: true });
+    const noWindow = mealEditState(logged({ editableUntil: null }), { unsentIds: none, lockStateKnown: true, now: NOW });
+    expect(noWindow).toMatchObject({ canEdit: false, locked: true });
+  });
+
+  it("offers nothing while the log waits to send, or is skipped, or the lock state is unknown", () => {
+    const meal = logged();
+    expect(mealEditState(meal, { unsentIds: new Set([meal.id]), lockStateKnown: true, now: NOW })).toMatchObject({ canEdit: false, locked: false });
+    expect(mealEditState({ ...meal, status: "skipped" }, { unsentIds: none, lockStateKnown: true, now: NOW }).canEdit).toBe(false);
+    expect(mealEditState(meal, { unsentIds: none, lockStateKnown: false, now: NOW }).locked).toBe(false);
+  });
+
+  it("words the window: today, tomorrow, then a date", () => {
+    const now = new Date("2026-11-14T07:00:00.000Z");
+    expect(mealEditUntilLabel("2026-11-14T15:22:00.000Z", "Asia/Kolkata", now)).toBe("today, 8:52 pm");
+    expect(mealEditUntilLabel("2026-11-15T11:50:00.000Z", "Asia/Kolkata", now)).toBe("tomorrow, 5:20 pm");
+    expect(mealEditUntilLabel("2026-11-16T11:50:00.000Z", "Asia/Kolkata", now)).toMatch(/^Mon 16 Nov, 5:20 pm$/);
+  });
+
+  it("queues the edit with the entry's version, and a second one with the next version", async () => {
+    const sync = createSyncEngine(createMemorySyncStore(), {
+      pushSync: async () => {
+        throw new Error("offline");
+      },
+      pullSync: async () => {
+        throw new Error("offline");
+      },
+    });
+    const meal = logged();
+    const display = { loggedItems: [], kcal: 900 };
+    const body = { outcome: "modified" as const, deviationKind: "restaurant" as const, notes: null };
+    await editMealEntry(sync, meal, { body, display, relationshipId: "rel" });
+    await editMealEntry(sync, meal, { body, display, relationshipId: "rel" });
+    await removeMealEntry(sync, meal, "rel");
+    const rows = await sync.store.listOutbox();
+    expect(rows.map((row) => row.operation)).toEqual(["meal.edit", "meal.edit", "meal.remove"]);
+    expect(rows.every((row) => row.recordId === ENTRY)).toBe(true);
+    expect(rows.map((row) => (JSON.parse(row.payloadJson) as { body: { recordVersion: number } }).body.recordVersion)).toEqual([4, 5, 6]);
+    expect(new Set(rows.map((row) => row.mutationId)).size).toBe(3);
+  });
+
+  it("paints a waiting edit or removal over the server copy, and not a refused one", () => {
+    const row = (operation: string, status: string, body: unknown) => ({
+      operation,
+      status,
+      recordId: ENTRY,
+      payloadJson: JSON.stringify({ entryId: ENTRY, body, display: { loggedItems: [], kcal: 900 } }),
+    });
+    const edit = { outcome: "modified", deviationKind: "restaurant", notes: "Dosa" };
+    const [painted] = overlayMealEdits([logged()], [row("meal.edit", "pending", edit)]);
+    expect(painted?.status).toBe("modified");
+    expect(painted?.compliance).toMatchObject({ deviationKind: "restaurant", notes: "Dosa", lastEditedByRole: "trainee" });
+    expect(painted?.compliance?.loggedTotals?.energyKcal).toBe(900);
+    const [refused] = overlayMealEdits([logged()], [row("meal.edit", "rejected", edit)]);
+    expect(refused?.status).toBe("confirmed");
+    const [removed] = overlayMealEdits([logged()], [row("meal.remove", "in_flight", {})]);
+    expect(removed).toMatchObject({ status: "pending", compliance: null });
+  });
+
+  /** An engine whose server takes every row and answers with the entry's next version. */
+  function applyingEngine(startVersion: number) {
+    let version = startVersion;
+    return createSyncEngine(createMemorySyncStore(), {
+      pushSync: async (body) => ({
+        results: body.mutations.map((mutation) => ({
+          mutationId: mutation.mutationId,
+          status: "applied" as const,
+          recordId: mutation.recordId,
+          serverVersion: ++version,
+          entityType: mutation.entityType,
+          error: null,
+        })),
+      }),
+      pullSync: async () => ({ changes: [], nextCursor: null, hasMore: false }),
+    });
+  }
+  const versionOf = (row: { payloadJson: string }) =>
+    (JSON.parse(row.payloadJson) as { body: { recordVersion: number } }).body.recordVersion;
+
+  it("after an edit applied and the day is not refreshed, the next edit carries V+1, not the stale V", async () => {
+    const sync = applyingEngine(4);
+    const meal = logged(); // the day still says recordVersion 4
+    const display = { loggedItems: [], kcal: 900 };
+    const body = { outcome: "modified" as const, deviationKind: "restaurant" as const, notes: null };
+    await editMealEntry(sync, meal, { body, display, relationshipId: "rel" });
+    await vi.waitFor(async () => expect(await sync.store.listOutbox()).toHaveLength(0));
+    expect((await sync.store.getLocal("meal_compliance", ENTRY))?.serverVersion).toBe(5);
+    // Applied, row gone, day copy untouched: the stale version would be refused (409).
+    // The day was never refreshed (or its refresh failed): same stale copy, offline phone, same store.
+    const offline = createSyncEngine(sync.store, {
+      pushSync: async () => {
+        throw new Error("offline");
+      },
+      pullSync: async () => {
+        throw new Error("offline");
+      },
+    });
+    await editMealEntry(offline, meal, { body, display, relationshipId: "rel" });
+    const [second] = await sync.store.listOutbox();
+    expect(versionOf(second!)).toBe(5);
+    expect(second?.expectedServerVersion).toBe(5);
+    // A queued row on top of the applied one still counts.
+    await removeMealEntry(offline, meal, "rel");
+    const rows = await sync.store.listOutbox();
+    expect(rows.map(versionOf)).toEqual([5, 6]);
+  });
+
+  it("knows when a photo is unfinished and when an edit is queued", () => {
+    for (const state of ["preparing", "waiting", "uploading"]) {
+      expect(isMealPhotoUnfinished({ state })).toBe(true);
+    }
+    for (const state of ["failed", "done"]) expect(isMealPhotoUnfinished({ state })).toBe(false);
+    expect(isMealPhotoUnfinished(undefined)).toBe(false);
+    const rows = [
+      { status: "pending", operation: "meal.edit", recordId: ENTRY },
+      { status: "acked", operation: "meal.remove", recordId: "other" },
+    ];
+    expect(hasQueuedMealEdit(rows, ENTRY)).toBe(true);
+    expect(hasQueuedMealEdit(rows, "other")).toBe(false);
+    expect(hasQueuedMealEdit([], ENTRY)).toBe(false);
+  });
+
+  it("drops a sent row once the refreshed day carries its result", () => {
+    const sentEdit = {
+      status: "sent",
+      operation: "meal.edit",
+      recordId: ENTRY,
+      payloadJson: JSON.stringify({ body: { recordVersion: 4 } }),
+    };
+    const sentRemove = { ...sentEdit, operation: "meal.remove" };
+    // Day still at the edited version: keep painting the edit.
+    expect(pruneSentEdits([sentEdit], [logged()])).toHaveLength(1);
+    // Day moved past it: clear.
+    expect(pruneSentEdits([sentEdit], [logged({ recordVersion: 5 })])).toHaveLength(0);
+    // A removal clears once the entry is gone from the day.
+    expect(pruneSentEdits([sentRemove], [logged()])).toHaveLength(1);
+    expect(pruneSentEdits([sentRemove], [lunch("pending")])).toHaveLength(0);
   });
 });

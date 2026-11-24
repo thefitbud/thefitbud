@@ -18,6 +18,7 @@ const auth = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth.current }));
 
 const deviate = vi.hoisted(() => vi.fn(async () => undefined));
+const editEntry = vi.hoisted(() => vi.fn(async () => undefined));
 const photo = vi.hoisted(() => ({
   pick: vi.fn(),
   prepare: vi.fn(),
@@ -28,6 +29,7 @@ vi.mock("./mealActions", async () => {
   return {
     ...actual,
     deviateMealAssignment: deviate,
+    editMealEntry: editEntry,
     pickMealPhoto: photo.pick,
     prepareMealPhoto: photo.prepare,
     uploadAndAttachMealPhoto: photo.send,
@@ -271,5 +273,83 @@ describe("Ate out screen (TR-08c2)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Take photo" }));
     fireEvent.click(await screen.findByRole("button", { name: "Remove photo" }));
     expect(screen.getByRole("button", { name: "Add a photo" })).toBeTruthy();
+  });
+});
+
+describe("SomethingDifferentSheet Change this log mode (Z14-13b, TR-07n4)", () => {
+  const logged: MealAssignment = {
+    ...assignment,
+    status: "modified",
+    compliance: {
+      id: "e5555555-5555-4555-8555-555555555555",
+      assignmentId: assignment.id,
+      coachingRelationshipId: REL,
+      planVersionId: assignment.planVersionId,
+      traineeUserId: USER,
+      outcome: "modified",
+      recordVersion: 2,
+      loggedAt: new Date().toISOString(),
+      deviationKind: "portion_adjustment",
+      notes: null,
+      photoRequired: false,
+      photoIntent: null,
+      mediaAssetId: null,
+      loggedItems: [{ name: "Vegetable poha", quantity: 2, servingLabel: "1 bowl", energyKcal: 800 }],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  };
+
+  beforeEach(() => {
+    editEntry.mockClear();
+    deviate.mockClear();
+    auth.current = mockAuth();
+  });
+
+  it("opens the portion screen prefilled with the logged amounts and saves as an edit", async () => {
+    const onEdited = vi.fn();
+    const onRemove = vi.fn();
+    render(
+      <SomethingDifferentSheet
+        assignment={logged}
+        relationshipId={REL}
+        variant="screen"
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+        edit={{ start: "portion", canRemove: true, onRemove, onEdited }}
+      />,
+    );
+    expect(screen.getByText("Edit portion")).toBeTruthy();
+    expect(screen.getByLabelText(/Vegetable poha: 2 bowl/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Remove this log" }));
+    expect(onRemove).toHaveBeenCalled();
+    fireEvent.click(screen.getAllByRole("button", { name: "Save changes" })[1]!);
+    await waitFor(() => expect(editEntry).toHaveBeenCalledTimes(1));
+    expect(deviate).not.toHaveBeenCalled();
+    const input = (editEntry.mock.calls[0] as unknown[])[2] as {
+      body: { outcome: string; deviationKind: string };
+    };
+    expect(input.body).toMatchObject({ outcome: "modified", deviationKind: "portion_adjustment" });
+    await waitFor(() => expect(onEdited).toHaveBeenCalled());
+  });
+
+  it("keeps the entry's existing note when the portion changes (never wipes it)", async () => {
+    render(
+      <SomethingDifferentSheet
+        assignment={{
+          ...logged,
+          compliance: { ...logged.compliance!, notes: "Less rice, more dal" },
+        }}
+        relationshipId={REL}
+        variant="screen"
+        onDone={vi.fn()}
+        onCancel={vi.fn()}
+        edit={{ start: "portion", canRemove: true, onRemove: vi.fn(), onEdited: vi.fn() }}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Save changes" })[1]!);
+    await waitFor(() => expect(editEntry).toHaveBeenCalledTimes(1));
+    const input = (editEntry.mock.calls[0] as unknown[])[2] as { body: { notes: string | null } };
+    expect(input.body.notes).toBe("Less rice, more dal");
   });
 });

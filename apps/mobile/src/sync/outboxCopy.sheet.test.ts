@@ -342,3 +342,28 @@ describe("late workout writes are settled, not refused (Z14-8)", () => {
     expect(notes.lines()).toEqual(["1 set arrived after Lower body B ended, so it wasn't added."]);
   });
 });
+
+describe("a refused meal edit (Z14-13b)", () => {
+  it("shows the friendly line with the meal and the coach, not the server's code", () => {
+    const items = sheetItems(
+      [
+        row({
+          operation: "meal.edit",
+          recordId: "60000000-0000-4000-8000-000000000001",
+          status: "rejected",
+          lastError: "The edit window has closed.",
+          lastErrorCode: "MEAL_EDIT_WINDOW_CLOSED",
+          payloadJson: JSON.stringify({ assignmentId: MEAL, mealName: "Lunch", body: {} }),
+        }),
+      ],
+      { coachFirstName: "Rahul", timeZone: TZ },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      kind: "meal",
+      state: "failed",
+      reason: "Couldn't change lunch: the 24 hours had passed. Ask Rahul to fix it.",
+    });
+    expect(items[0]?.detail).toMatch(/^Diet · log changed · /);
+  });
+});
