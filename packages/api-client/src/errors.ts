@@ -64,6 +64,12 @@ const KNOWN_CODE_COPY: Record<string, UserFacingError> = {
   },
   OTP_INVALID: { message: "That code didn't work. Try again." },
   OTP_EXPIRED: { message: "That code has expired. Request a new one." },
+  // Z14-7: a write that would change a workout that is already finished
+  // (trainee finish, skip or set; also the trainer's log on a finished one).
+  WORKOUT_ALREADY_FINISHED: {
+    message:
+      "This workout is already finished, so nothing was changed. Reload to see what was saved.",
+  },
   UNKNOWN_ERROR: { message: USER_FACING_SERVER, action: "retry" },
 };
 

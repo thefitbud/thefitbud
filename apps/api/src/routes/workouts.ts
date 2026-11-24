@@ -25,7 +25,6 @@ import {
   canMutateOpenWorkoutExecution,
   canPauseWorkoutExecution,
   canResumeWorkoutExecution,
-  canSkipAssignedWorkout,
   canSkipOpenWorkoutExecution,
   canStartWorkoutAssignment,
   formatLocalDate,
@@ -368,6 +367,46 @@ function coachLoggedReadOnlyError(c: AppContext) {
     "COACH_LOGGED_READ_ONLY",
     "This workout was logged by your coach and cannot be changed.",
   );
+}
+
+/**
+ * Z14-7: a write that would change a finished workout. Nothing is written; a
+ * finished workout is never edited by a late trainee write. Sync push turns
+ * this into `already_applied` with a note for a late start, skip or set.
+ */
+const WORKOUT_ALREADY_FINISHED = "WORKOUT_ALREADY_FINISHED";
+
+const ALREADY_FINISHED_MESSAGES = {
+  complete: "This workout is already finished.",
+  skip: "This workout is already finished, so it can't be skipped.",
+  set: "This workout is already finished, so the set wasn't added.",
+} as const;
+
+function workoutAlreadyFinishedError(
+  c: AppContext,
+  action: keyof typeof ALREADY_FINISHED_MESSAGES,
+) {
+  return fail(
+    c,
+    409,
+    WORKOUT_ALREADY_FINISHED,
+    ALREADY_FINISHED_MESSAGES[action],
+  );
+}
+
+/** A workout finished by finishing it (not by skipping it). */
+function wasFinishedByCompleting(status: string): boolean {
+  return status === "completed" || status === "modified";
+}
+
+/** One statement of a `db.batch` (D1 runs a batch as one transaction). */
+type BatchStatement = Parameters<Db["batch"]>[0][number];
+
+/** Runs workout writes as one atomic batch (Z14-7). */
+async function runAtomic(db: Db, statements: BatchStatement[]): Promise<void> {
+  const [first, ...rest] = statements;
+  if (!first) return;
+  await db.batch([first, ...rest]);
 }
 
 async function loadAssignmentWithExecution(db: Db, assignmentId: string) {
@@ -974,62 +1013,70 @@ workoutRoutes.post(
       loaded.assignment.workoutDayJson,
     ) as WorkoutDay;
 
+    // Z14-7: the execution, its exercises and its sets are written in one
+    // batch, so a failure part-way leaves no execution without its sets.
     const executionId = createId();
-    await db.insert(workoutExecutions).values({
-      id: executionId,
-      assignmentId: loaded.assignment.id,
-      coachingRelationshipId: relationship.id,
-      planVersionId: loaded.assignment.planVersionId,
-      traineeUserId: actor.userId,
-      status: "started",
-      recordVersion: 0,
-      startedAt: logInstant,
-      pausedAt: null,
-      completedAt: null,
-      sessionRpe: null,
-      requireSessionRpe,
-      clientLoggedAt: clientLoggedAt ? logInstant : null,
-      createdAt: now,
-      updatedAt: now,
-    });
-
+    const startWrites: BatchStatement[] = [
+      db.insert(workoutExecutions).values({
+        id: executionId,
+        assignmentId: loaded.assignment.id,
+        coachingRelationshipId: relationship.id,
+        planVersionId: loaded.assignment.planVersionId,
+        traineeUserId: actor.userId,
+        status: "started",
+        recordVersion: 0,
+        startedAt: logInstant,
+        pausedAt: null,
+        completedAt: null,
+        sessionRpe: null,
+        requireSessionRpe,
+        clientLoggedAt: clientLoggedAt ? logInstant : null,
+        createdAt: now,
+        updatedAt: now,
+      }),
+    ];
     for (const exercise of workoutDay.exercises
       .slice()
       .sort((a, b) => a.order - b.order)) {
       const exerciseId = createId();
-      await db.insert(exerciseExecutions).values({
-        id: exerciseId,
-        workoutExecutionId: executionId,
-        exerciseId: exercise.id,
-        name: exercise.name,
-        order: exercise.order,
-        status: "pending",
-        createdAt: now,
-        updatedAt: now,
-      });
+      startWrites.push(
+        db.insert(exerciseExecutions).values({
+          id: exerciseId,
+          workoutExecutionId: executionId,
+          exerciseId: exercise.id,
+          name: exercise.name,
+          order: exercise.order,
+          status: "pending",
+          createdAt: now,
+          updatedAt: now,
+        }),
+      );
       for (const setTarget of exercise.setTargets
         .slice()
         .sort((a, b) => a.order - b.order)) {
-        await db.insert(setExecutions).values({
-          id: createId(),
-          exerciseExecutionId: exerciseId,
-          setTargetId: setTarget.id,
-          order: setTarget.order,
-          status: "pending",
-          prescribedReps: setTarget.reps,
-          prescribedLoadLabel: setTarget.loadLabel,
-          actualReps: null,
-          actualLoadLabel: null,
-          ...resolveSetLoad({
+        startWrites.push(
+          db.insert(setExecutions).values({
+            id: createId(),
+            exerciseExecutionId: exerciseId,
+            setTargetId: setTarget.id,
+            order: setTarget.order,
+            status: "pending",
+            prescribedReps: setTarget.reps,
             prescribedLoadLabel: setTarget.loadLabel,
+            actualReps: null,
             actualLoadLabel: null,
+            ...resolveSetLoad({
+              prescribedLoadLabel: setTarget.loadLabel,
+              actualLoadLabel: null,
+            }),
+            completedAt: null,
+            createdAt: now,
+            updatedAt: now,
           }),
-          completedAt: null,
-          createdAt: now,
-          updatedAt: now,
-        });
+        );
       }
     }
+    await runAtomic(db, startWrites);
 
     const bundle = await loadExecutionBundle(db, executionId);
     const mapped = mapExecution(bundle!);
@@ -1286,9 +1333,12 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/sets/:setExecutionId/complete.",
-    description: `Logs one set of an open workout. A set that was already logged or skipped can be logged again while the workout is open: the latest values stand and the first logged time is kept. 409 INVALID_TRANSITION once the workout is finished. ${FUTURE_DAY_OPENAPI_NOTE}`,
+    description: `Logs one set of an open workout. A set that was already logged or skipped can be logged again while the workout is open: the latest values stand and the first logged time is kept. Once the workout is finished nothing changes (Z14-7): the same values as the logged set answer 200 with the stored execution, anything else is 409 WORKOUT_ALREADY_FINISHED. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
-    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
+    errors: [
+      { status: 409, description: "WORKOUT_ALREADY_FINISHED: the workout is finished and the set differs from what it holds. Nothing was written." },
+      { status: 422, description: FUTURE_DAY_LOG_ERROR_DOC },
+    ],
     body: completeSetRequestSchema,
     response: workoutExecutionSchema,
   }),
@@ -1312,15 +1362,6 @@ workoutRoutes.post(
     }
 
     const { db, bundle } = loaded;
-    if (!canMutateOpenWorkoutExecution(bundle.execution.status)) {
-      return fail(
-        c,
-        409,
-        "INVALID_TRANSITION",
-        "Sets can only be completed during an open workout.",
-      );
-    }
-
     const setRow = bundle.sets.find(
       (set) => set.id === c.req.param("setExecutionId"),
     );
@@ -1329,27 +1370,43 @@ workoutRoutes.post(
     }
     // Z12-45 (W-13): while the workout is open the trainee may log a set
     // again, to correct what they logged or to log a set they had skipped.
-    // The latest log stands. A finished workout is refused above
-    // (INVALID_TRANSITION), so a coach never sees a closed session change.
+    // The latest log stands.
     const { status: setStatus, actualReps, actualLoadLabel, loadColumns } =
       resolveSetCompletion(setRow, parsed.data);
     const modified = setStatus === "modified";
 
+    if (!canMutateOpenWorkoutExecution(bundle.execution.status)) {
+      // Z14-7: the workout is finished, so it never changes. A repeat of what
+      // it already holds (a retried or late copy of the same log) is a no-op;
+      // anything else is refused with nothing written.
+      const sameAsStored =
+        wasLoggedSet(setRow.status) &&
+        setRow.status === setStatus &&
+        setRow.actualReps === actualReps &&
+        setRow.actualLoadLabel === actualLoadLabel;
+      if (!sameAsStored) return workoutAlreadyFinishedError(c, "set");
+      return ok(c, workoutExecutionSchema.parse(mapExecution(bundle)));
+    }
+
+    // The set and, when it was the exercise's last open set, the exercise
+    // are written in one batch (Z14-7).
     const now = nowIso();
-    await db
-      .update(setExecutions)
-      .set({
-        status: modified ? "modified" : "completed",
-        actualReps,
-        actualLoadLabel,
-        ...loadColumns,
-        // A correction keeps the time the set was first logged.
-        completedAt: wasLoggedSet(setRow.status)
-          ? (setRow.completedAt ?? now)
-          : now,
-        updatedAt: now,
-      })
-      .where(eq(setExecutions.id, setRow.id));
+    const setWrites: BatchStatement[] = [
+      db
+        .update(setExecutions)
+        .set({
+          status: modified ? "modified" : "completed",
+          actualReps,
+          actualLoadLabel,
+          ...loadColumns,
+          // A correction keeps the time the set was first logged.
+          completedAt: wasLoggedSet(setRow.status)
+            ? (setRow.completedAt ?? now)
+            : now,
+          updatedAt: now,
+        })
+        .where(eq(setExecutions.id, setRow.id)),
+    ];
 
     // Refresh exercise status when all sets are terminal
     const exerciseSets = bundle.sets.filter(
@@ -1362,11 +1419,14 @@ workoutRoutes.post(
     );
     const allDone = updatedStatuses.every((status) => status !== "pending");
     if (allDone) {
-      await db
-        .update(exerciseExecutions)
-        .set({ status: "completed", updatedAt: now })
-        .where(eq(exerciseExecutions.id, setRow.exerciseExecutionId));
+      setWrites.push(
+        db
+          .update(exerciseExecutions)
+          .set({ status: "completed", updatedAt: now })
+          .where(eq(exerciseExecutions.id, setRow.exerciseExecutionId)),
+      );
     }
+    await runAtomic(db, setWrites);
 
     const refreshed = await loadExecutionBundle(db, bundle.execution.id);
     emitWorkoutExecutionChanged(c.env, {
@@ -1423,21 +1483,23 @@ workoutRoutes.post(
     // the trainee logged can be turned into a skipped one. What was logged
     // is cleared, so a skipped set never carries reps or a load.
     const now = nowIso();
-    await db
-      .update(setExecutions)
-      .set({
-        status: "skipped",
-        actualReps: null,
-        actualLoadLabel: null,
-        // Back to the columns a set has before it is logged (Z6-15).
-        ...resolveSetLoad({
-          prescribedLoadLabel: setRow.prescribedLoadLabel,
+    const skipWrites: BatchStatement[] = [
+      db
+        .update(setExecutions)
+        .set({
+          status: "skipped",
+          actualReps: null,
           actualLoadLabel: null,
-        }),
-        completedAt: now,
-        updatedAt: now,
-      })
-      .where(eq(setExecutions.id, setRow.id));
+          // Back to the columns a set has before it is logged (Z6-15).
+          ...resolveSetLoad({
+            prescribedLoadLabel: setRow.prescribedLoadLabel,
+            actualLoadLabel: null,
+          }),
+          completedAt: now,
+          updatedAt: now,
+        })
+        .where(eq(setExecutions.id, setRow.id)),
+    ];
 
     const exerciseSets = bundle.sets.filter(
       (set) => set.exerciseExecutionId === setRow.exerciseExecutionId,
@@ -1446,11 +1508,15 @@ workoutRoutes.post(
       set.id === setRow.id ? true : set.status !== "pending",
     );
     if (allDone) {
-      await db
-        .update(exerciseExecutions)
-        .set({ status: "completed", updatedAt: now })
-        .where(eq(exerciseExecutions.id, setRow.exerciseExecutionId));
+      skipWrites.push(
+        db
+          .update(exerciseExecutions)
+          .set({ status: "completed", updatedAt: now })
+          .where(eq(exerciseExecutions.id, setRow.exerciseExecutionId)),
+      );
     }
+    // One batch: the set and its exercise (Z14-7).
+    await runAtomic(db, skipWrites);
 
     const refreshed = await loadExecutionBundle(db, bundle.execution.id);
     emitWorkoutExecutionChanged(c.env, {
@@ -1472,9 +1538,12 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/executions/:executionId/complete.",
-    description: `Workouts operation for POST /workouts/executions/:executionId/complete. ${FUTURE_DAY_OPENAPI_NOTE}`,
+    description: `Workouts operation for POST /workouts/executions/:executionId/complete. A finish on a workout that is already finished (Z14-7) answers 200 with the stored execution and \`alreadyCompleted: true\` when it sends the same session RPE or none; nothing is written. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
-    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
+    errors: [
+      { status: 409, description: "WORKOUT_ALREADY_FINISHED: the workout was skipped, or was finished with a different session RPE. Nothing was written." },
+      { status: 422, description: FUTURE_DAY_LOG_ERROR_DOC },
+    ],
     idempotency: true,
     body: completeWorkoutRequestSchema,
     response: workoutExecutionSchema,
@@ -1538,6 +1607,39 @@ workoutRoutes.post(
     if (isOwnershipFailure(loaded)) return ownershipError(c, loaded);
 
     const { bundle } = loaded;
+
+    // Z14-7: a finish that arrives after the workout was finished (a retry
+    // with a new key, a double tap, an offline copy) answers with the stored
+    // execution when it asks for the same thing: same RPE or none. A
+    // different RPE, or a finish on a skipped workout, is a conflict; nothing
+    // is written either way.
+    if (!isOpenWorkoutExecution(bundle.execution.status)) {
+      const requestedRpe = parsed.data.sessionRpe;
+      const sameRpe =
+        requestedRpe === undefined ||
+        requestedRpe === null ||
+        requestedRpe === bundle.execution.sessionRpe;
+      if (!wasFinishedByCompleting(bundle.execution.status) || !sameRpe) {
+        return workoutAlreadyFinishedError(c, "complete");
+      }
+      const responseBody = {
+        data: workoutExecutionSchema.parse({
+          ...mapExecution(bundle),
+          alreadyCompleted: true,
+        }),
+      };
+      await saveIdempotencyRecord(db, {
+        actorUserId: actor.userId,
+        operation: COMPLETE_OPERATION,
+        idempotencyKey,
+        requestFingerprint: fingerprint,
+        responseStatus: 200,
+        responseBody,
+        expiresAt: addDaysIso(7),
+      });
+      return c.json(responseBody, 200);
+    }
+
     const sessionRpe =
       parsed.data.sessionRpe === undefined
         ? bundle.execution.sessionRpe
@@ -1600,9 +1702,12 @@ workoutRoutes.post(
   operation({
     tag: "Workouts",
     summary: "Workouts operation for POST /workouts/assignments/:assignmentId/skip.",
-    description: `Workouts operation for POST /workouts/assignments/:assignmentId/skip. ${FUTURE_DAY_OPENAPI_NOTE}`,
+    description: `Workouts operation for POST /workouts/assignments/:assignmentId/skip. A repeated skip (Z14-7) answers 200 with the stored skipped execution and \`alreadyCompleted: true\`; nothing is written. ${FUTURE_DAY_OPENAPI_NOTE}`,
     roles: ["trainee"],
-    errors: [{ status: 422, description: FUTURE_DAY_LOG_ERROR_DOC }],
+    errors: [
+      { status: 409, description: "WORKOUT_ALREADY_FINISHED: the workout was already finished, so it can't be skipped. Nothing was written." },
+      { status: 422, description: FUTURE_DAY_LOG_ERROR_DOC },
+    ],
     idempotency: true,
     body: skipWorkoutRequestSchema,
     bodyRequired: false,
@@ -1711,6 +1816,35 @@ workoutRoutes.post(
     if (loaded.execution?.loggedByRole === "coach") {
       return coachLoggedReadOnlyError(c);
     }
+    // Z14-7: a workout that is already finished never changes. A repeated
+    // skip answers with the stored skipped execution; a skip after the
+    // workout was finished is refused with a stable code (sync push reports
+    // it as moot, never as a refusal the trainee must act on).
+    if (
+      loaded.execution &&
+      isQualifyingWorkoutExecution(loaded.execution.status)
+    ) {
+      if (loaded.execution.status !== "skipped") {
+        return workoutAlreadyFinishedError(c, "skip");
+      }
+      const stored = await loadExecutionBundle(db, loaded.execution.id);
+      const responseBody = {
+        data: workoutExecutionSchema.parse({
+          ...mapExecution(stored!),
+          alreadyCompleted: true,
+        }),
+      };
+      await saveIdempotencyRecord(db, {
+        actorUserId: actor.userId,
+        operation: SKIP_OPERATION,
+        idempotencyKey,
+        requestFingerprint: fingerprint,
+        responseStatus: 200,
+        responseBody,
+        expiresAt: addDaysIso(7),
+      });
+      return c.json(responseBody, 200);
+    }
     // Absent client time keeps today's skip, which does not apply the
     // window bounds. A supplied time is judged with the same bounds as start.
     if (clientLoggedAt) {
@@ -1766,23 +1900,8 @@ workoutRoutes.post(
       return c.json(responseBody, 200);
     }
 
-    if (
-      !canSkipAssignedWorkout({
-        hasQualifyingExecution: Boolean(
-          loaded.execution &&
-            isQualifyingWorkoutExecution(loaded.execution.status),
-        ),
-        hasOpenExecution: false,
-      })
-    ) {
-      return fail(
-        c,
-        409,
-        "INVALID_TRANSITION",
-        "Workout already finished and cannot be skipped.",
-      );
-    }
-
+    // A finished workout was answered above and an open one was skipped, so
+    // there is no execution yet.
     const config = await loadActiveWorkoutConfig(db, relationship.id);
     const executionId = createId();
     await db.insert(workoutExecutions).values({

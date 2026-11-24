@@ -105,6 +105,14 @@ export const workoutExecutionSchema = z.object({
   loggedByRole: z.enum(["trainee", "coach"]).optional(),
   /** Set when a coach edited the entry ("Edited by your coach"). */
   lastEditedByRole: z.enum(["trainee", "coach"]).nullable().optional(),
+  /**
+   * Z14-7: only on a trainee write's response. `true` when the workout had
+   * already been finished that way (a repeated finish, or a repeated skip),
+   * so nothing was written and this is the stored execution. Absent otherwise.
+   * A finish or skip that conflicts with how the workout was finished is
+   * refused with 409 `WORKOUT_ALREADY_FINISHED` instead.
+   */
+  alreadyCompleted: z.boolean().optional(),
   exercises: z.array(exerciseExecutionSchema),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
