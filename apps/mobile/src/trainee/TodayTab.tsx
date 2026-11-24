@@ -1,5 +1,5 @@
-import { userFacingMessage } from "@fitbud/api-client";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { isNetworkFailure, userFacingMessage } from "@fitbud/api-client";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Linking, Pressable, StyleSheet, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { Text } from "../components/Text";
@@ -30,6 +30,7 @@ import {
 import { Button } from "../components/Button";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { OfflineBanner, offlineSavedAtText } from "../components/OfflineBanner";
 import { Screen } from "../components/Screen";
 import {
   ThemeScope,
@@ -46,6 +47,7 @@ import { reportError } from "../lib/reportError";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
+import { useApiReachable } from "../sync/useSyncStatus";
 import { TodayCheckinCard } from "./CheckinScreen";
 import {
   TraineeDateNavigator,
@@ -62,10 +64,12 @@ import {
   estimateDurationMinutesFromDay,
 } from "./workoutDuration";
 import { isWorkoutDone, workoutHeroState } from "./workoutHeroState";
-import { cacheKey, subscribeAll } from "./dataCache";
+import { cacheKey, dayViewKey, getCached, subscribeAll } from "./dataCache";
 import { dayEyebrow, useDayState } from "./useDayState";
 import {
   sharedRead,
+  needsRevalidate,
+  useOnReturn,
   useTraineeDayCache,
   useTraineeWeek,
 } from "./useTraineeDayCache";
@@ -95,9 +99,11 @@ import { workoutTimeLabel } from "./today/workoutTime";
 import { TodayHeader } from "./today/TodayHeader";
 import { TodaySkeleton } from "./today/TodaySkeleton";
 import {
+  overlayMeals,
+  overlayWorkout,
   queuedLogsLabel,
   useDeviceOffline,
-  useQueuedLogs,
+  useOutboxOverlay,
 } from "./today/queuedLogs";
 
 function mealItemLine(meal: MealAssignment): string {
@@ -319,6 +325,16 @@ type TodayTabProps = {
    * that execution's summary (D-W10-9).
    */
   onViewSummary?: (executionId: string) => void;
+  /**
+   * Called once, when Today first paints its content (the TR-06f skeleton
+   * gate opened). The shell holds in-app banners until then (Z14-2).
+   */
+  onFirstPaint?: () => void;
+  /**
+   * False while Today is a kept tab off screen (Z14-2): it stays mounted but
+   * queues no in-app banner.
+   */
+  active?: boolean;
 };
 
 function TodayTabInner({
@@ -334,6 +350,8 @@ function TodayTabInner({
   onOpenOverlay,
   unreadNotifications = 0,
   onViewSummary,
+  onFirstPaint,
+  active = true,
 }: TodayTabProps) {
   const theme = useTheme();
   const styles = useStyles();
@@ -368,7 +386,17 @@ function TodayTabInner({
             }),
           { force },
         ),
-        s1.getMeDay(date).catch(() => null),
+        // A failed `GET /me/day` with a cached day fails the refresh, so the
+        // screen keeps the last answer whole (meals and totals from one
+        // moment) and says it couldn't refresh; it is never replaced by
+        // fresh meals beside no totals (the inconsistent home, Z14-2). With
+        // nothing cached the day still paints, without server totals.
+        s1.getMeDay(date).catch((err: unknown) => {
+          if (getCached(dayViewKey("today", relationship.id, date)) !== undefined) {
+            throw err;
+          }
+          return null;
+        }),
         sharedRead(
           cacheKey("day", "coach-notes", relationship.id),
           () =>
@@ -404,35 +432,87 @@ function TodayTabInner({
     relationshipId: relationship.id,
     date: selectedDate,
     fetchDay,
+    active,
   });
   const bundle = dayCache.data;
   /** The last load of this day failed; what shows is its cached copy, if any. */
   const loadFailed = dayCache.error != null;
-  /** The skeleton case only: a first visit to a day with nothing cached. */
-  const loading = dayCache.firstLoad;
-  const workout = bundle?.workout ?? null;
+  // Offline is a state, not a failure (D-W14-9): a load that never got an
+  // answer, an API last seen unreachable, or a device with no network.
+  const apiReachable = useApiReachable();
+  const deviceOffline = useDeviceOffline();
+  const loadFailedOffline = loadFailed && isNetworkFailure(dayCache.error);
+  const offline = loadFailedOffline || apiReachable === false || deviceOffline;
+  // Four-state, never a nullable model: see `WeekModelState` (CU23,
+  // D-W3b-25). Cached per week and shared with Diet (Z12-40); a failed
+  // `GET /me/week` reads `unavailable`, never days derived from the date.
+  const {
+    weekState,
+    refresh: refreshWeek,
+    settled: weekSettled,
+  } = useTraineeWeek({
+    relationshipId: relationship.id,
+    selectedDate,
+    getMeWeek: (start) => s1.getMeWeek(start),
+    where: "TodayTab.getMeWeek",
+    active,
+  });
+  /*
+   * One skeleton (TR-06f, diagnosis #2): nothing but the header, the strip
+   * and the skeleton until the day bundle, the plan state and the week have
+   * answered or failed; then every block at once. A day painted from a
+   * snapshot (memory or the phone) opens the gate at once and never shows
+   * the skeleton. Once open it stays open; a later first visit to a day with
+   * nothing cached shows the same whole-body skeleton.
+   */
+  const paintedFromSnapshot = useRef(bundle !== undefined);
+  const daySettled = bundle !== undefined || loadFailed;
+  const planSettled = planState.status !== "loading";
+  const gateReady =
+    daySettled && planSettled && (weekSettled || paintedFromSnapshot.current);
+  const [gateOpen, setGateOpen] = useState(gateReady);
+  useEffect(() => {
+    if (gateReady && !gateOpen) setGateOpen(true);
+  }, [gateReady, gateOpen]);
+  const firstPaintSent = useRef(false);
+  const painted = gateOpen || gateReady;
+  useEffect(() => {
+    if (!painted || firstPaintSent.current) return;
+    firstPaintSent.current = true;
+    onFirstPaint?.();
+  }, [painted, onFirstPaint]);
+  /** The whole-body skeleton: before the gate, or a first visit to a day with nothing cached. */
+  const loading = !painted || dayCache.firstLoad;
+  // The phone's own logs on top of the cached day (D-W14-6): what is still in
+  // the outbox, and what was just sent until the server's copy shows it.
+  const { overlay, queued } = useOutboxOverlay({
+    relationshipId: relationship.id,
+    offline,
+  });
+  const workout = useMemo(
+    () => overlayWorkout(bundle?.workout ?? null, overlay),
+    [bundle, overlay],
+  );
   // Z11b-1: counts, rings and rows read the selected day's meals only.
   const meals = useMemo(
-    () => mealsForDay(bundle?.meals ?? [], selectedDate),
-    [bundle, selectedDate],
+    () => overlayMeals(mealsForDay(bundle?.meals ?? [], selectedDate), overlay),
+    [bundle, selectedDate, overlay],
   );
   const checkin = bundle?.checkin ?? null;
   /** False until listMealAssignments returns derived loggingLocked flags. */
   const lockStateKnown = bundle !== undefined && !loadFailed;
   const [actionError, setActionError] = useState<string | null>(null);
-  const error =
-    actionError ?? (loadFailed ? "Couldn't refresh · pull to try again." : null);
-  const offlineHint = loadFailed;
+  /** When what Today shows was answered by the server (or saved on the phone). */
+  const shownAt = dayCache.updatedAt;
+  const refreshFailedText =
+    shownAt != null
+      ? `Couldn't refresh. Showing ${formatClockTime(new Date(shownAt).toISOString(), timeZone)}.`
+      : "Couldn't load today. Try again.";
+  const offlineText =
+    shownAt != null
+      ? offlineSavedAtText(shownAt, timeZone)
+      : "You're offline. Today will load when you're back. Anything you log is saved on your phone.";
   const [refreshing, setRefreshing] = useState(false);
-  // Four-state, never a nullable model: see `WeekModelState` (CU23,
-  // D-W3b-25). Cached per week and shared with Diet (Z12-40); a failed
-  // `GET /me/week` reads `unavailable`, never days derived from the date.
-  const { weekState, refresh: refreshWeek } = useTraineeWeek({
-    relationshipId: relationship.id,
-    selectedDate,
-    getMeWeek: (start) => s1.getMeWeek(start),
-    where: "TodayTab.getMeWeek",
-  });
   const dayTotals = bundle?.day ?? null;
   // The strip keeps the last `GET /me/day` answer while the next day loads;
   // `navigatorDaysFor` applies it only to the date it names (Z5-8).
@@ -462,6 +542,19 @@ function TodayTabInner({
       setRefreshNonce((value) => value + 1);
     });
   }, []);
+  // A kept Today shown again (Z14-2): what it read beside the day (steps,
+  // the next workout) refreshes by the day's own age rule, underneath.
+  const dayUpdatedAt = dayCache.updatedAt;
+  useOnReturn(active, () => {
+    if (
+      needsRevalidate(
+        dayUpdatedAt == null ? undefined : { updatedAt: dayUpdatedAt, stale: false },
+        Date.now(),
+      )
+    ) {
+      setRefreshNonce((value) => value + 1);
+    }
+  });
 
   const refreshDay = dayCache.refresh;
   const onRefresh = useCallback(async () => {
@@ -496,8 +589,9 @@ function TodayTabInner({
     };
   }, [api, isToday, refreshNonce]);
 
-  // Rest only after a successful day load: a failed load also leaves
-  // `workout` null, and must not read as a rest day.
+  // Rest only from a day the server answered (now or in a saved snapshot): a
+  // failed load with nothing cached also leaves `workout` null, and must not
+  // read as a rest day.
   const doneMinutes = workout?.execution
     ? durationMinutesFromExecution(workout.execution)
     : null;
@@ -540,7 +634,7 @@ function TodayTabInner({
     };
   }, [api, doneExecutionId, refreshNonce]);
   const restDay =
-    planState.status === "loaded" && !loading && lockStateKnown && !workout;
+    planState.status === "loaded" && !loading && bundle !== undefined && !workout;
   useEffect(() => {
     if (!restDay || !isToday) {
       setNextWorkout(null);
@@ -630,12 +724,6 @@ function TodayTabInner({
     (meal) => meal.status === "pending" || meal.status === "overdue",
   );
 
-  // Offline means the day load failed or the device reports no network. The
-  // outbox is read only then: that is when "waiting to send" is news.
-  const deviceOffline = useDeviceOffline();
-  const offline = offlineHint || deviceOffline;
-  const queued = useQueuedLogs(offline);
-
   const lateLoggableCount = meals.filter((meal) =>
     canShowMealLogActions({
       lockStateKnown,
@@ -650,6 +738,8 @@ function TodayTabInner({
     setMealActingId(meal.id);
     setActionError(null);
     try {
+      // Returns once the log is on the phone (D-W14-6): the outbox overlay
+      // shows it logged at once; the push and the refresh run behind it.
       await confirmMealAssignment(
         api,
         sync,
@@ -657,7 +747,6 @@ function TodayTabInner({
         meal,
         coachName,
       );
-      await refreshDay();
     } catch (err) {
       setActionError(
         userFacingMessage(err, {
@@ -679,7 +768,8 @@ function TodayTabInner({
 
   return (
     <>
-      {isToday ? (
+      {/* In-app banners wait for Today's first paint (Z14-2). */}
+      {isToday && painted && active ? (
         <ReviewedBanner coachName={coachName} onOpenCheckin={onOpenCheckin} />
       ) : null}
     {/* A horizontal swipe anywhere on the screen moves a day (Z12-40): a
@@ -704,6 +794,21 @@ function TodayTabInner({
           onOpenNotifications={() => onOpenOverlay({ screen: "notifications" })}
         />
         {/*
+          TR-06g: the refresh failed while the API was reachable. Crit, with
+          Retry, above the strip; what shows below is the last answer. A
+          failure for lack of network is the neutral offline banner instead
+          (D-W14-9).
+        */}
+        {loadFailed && !offline ? (
+          <ErrorBanner
+            message={refreshFailedText}
+            offline={false}
+            onRetry={() => {
+              void onRefresh();
+            }}
+          />
+        ) : null}
+        {/*
           The strip renders this screen's own week state (CU23 review fix).
           It used to fetch `GET /me/week` a second time for the same week and
           could never re-fetch, so it kept telling the trainee to pull down —
@@ -719,20 +824,30 @@ function TodayTabInner({
           showPreviewBanner={false}
         />
 
-        {offline ? (
+        {/* TR-06e: offline is neutral, with when the shown day was saved. */}
+        {offline ? <OfflineBanner message={offlineText} /> : null}
+        {/*
+          The count the sync chip reports, in words (frame 104). The day
+          below already includes these logs (the outbox overlay), so the two
+          never disagree. Not shown when the outbox could not be read.
+        */}
+        {offline && queued && queued.count > 0 ? (
           <Text style={styles.offlineHint} accessibilityRole="text">
-            {queued && queued.count > 0
-              ? queuedLogsLabel(queued.count)
-              : "Saved on phone · showing last sync"}
+            {queuedLogsLabel(queued.count)}
           </Text>
         ) : null}
-        {error ? <ErrorBanner message={error} /> : null}
+        {actionError ? <ErrorBanner message={actionError} /> : null}
         {/*
           The plan was fetched but could not be cached on the device. That is
           a real failure with its own cause, so it is shown rather than
           swallowed or disguised as "no plan" (D-W3-12, D-W3-18).
         */}
         {planCacheError ? <ErrorBanner message={planCacheError} /> : null}
+
+        {loading ? <TodaySkeleton /> : null}
+        {/* Nothing below renders before the gate opens (one skeleton, #2). */}
+        {!loading ? (
+        <>
 
         {/*
           The plan could not be loaded and nothing was cached (CU24,
@@ -878,8 +993,6 @@ function TodayTabInner({
           </View>
         ) : null}
 
-        {loading ? <TodaySkeleton /> : null}
-
         {/*
           Names the plan-loaded region for screen readers and the Maestro
           flows that wait on it (CU22, D-W3b-24: gated on the plan, so a
@@ -908,7 +1021,9 @@ function TodayTabInner({
             mealsDone={mealsDone}
             mealsTotal={meals.length}
             steps={isToday ? stepsChip : { status: "unavailable" }}
-            workoutUnknown={!lockStateKnown}
+            // A day shown from the phone still knows its workout (TR-06e); only
+            // a day with nothing cached does not.
+            workoutUnknown={bundle === undefined}
             onOpenSteps={() => onOpenOverlay({ screen: "steps_settings" })}
           />
         ) : null}
@@ -1168,13 +1283,26 @@ function TodayTabInner({
                     lockStateKnown && !logged
                       ? mealLockCopy(meal, coachName)
                       : null;
-                  const sub = [
-                    mealItemLine(meal),
-                    kcal != null ? formatKcal(kcal, false) : null,
-                    lockCopy,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ");
+                  // A log still on the phone reads "Not sent yet · eaten as
+                  // planned" (TR-06e) and counts everywhere as logged.
+                  const queuedLog = overlay.meals.get(meal.id);
+                  const waitingToSend =
+                    queuedLog != null && queuedLog.unsent && queuedLog.waiting;
+                  const sub = waitingToSend
+                    ? `Not sent yet · ${
+                        queuedLog.status === "skipped"
+                          ? "skipped"
+                          : queuedLog.status === "modified"
+                            ? "logged differently"
+                            : "eaten as planned"
+                      }`
+                    : [
+                        mealItemLine(meal),
+                        kcal != null ? formatKcal(kcal, false) : null,
+                        lockCopy,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ");
                   if (isFuture) {
                     // D-W12-7: a planned meal on a future day opens the
                     // read-only planned meal; the row has no log action.
@@ -1222,9 +1350,10 @@ function TodayTabInner({
                           {sub}
                         </Text>
                       </View>
-                      {!lockCopy &&
-                      !isMealLoggedForCount(meal.status) &&
-                      queued?.mealAssignmentIds.has(meal.id) ? (
+                      {waitingToSend ||
+                      (!lockCopy &&
+                        !isMealLoggedForCount(meal.status) &&
+                        queued?.mealAssignmentIds.has(meal.id)) ? (
                         <WaitingChip />
                       ) : !lockCopy && chip.tone === "info" ? (
                         <UpNextChip label={chip.label} />
@@ -1342,6 +1471,8 @@ function TodayTabInner({
           >
             <Text style={styles.planLink}>View assigned meal plan ›</Text>
           </Pressable>
+        ) : null}
+        </>
         ) : null}
       </View>
     </Screen>

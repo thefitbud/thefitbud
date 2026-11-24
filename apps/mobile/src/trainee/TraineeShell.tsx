@@ -1,5 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { AppState, Pressable, StyleSheet, View } from "react-native";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import {
   CalendarDays,
@@ -64,6 +71,12 @@ import {
 import { scheduledAssignments } from "./scheduledAssignments";
 import { pickTodayCheckin } from "./pickTodayCheckin";
 import { invalidateRelationshipDayData } from "./dataCache";
+import { DAY_VIEW_MAX_AGE_MS } from "./useTraineeDayCache";
+import {
+  bindTraineeSnapshots,
+  flushTraineeSnapshots,
+  snapshotsBoundFor,
+} from "./snapshotStore";
 import { subscribeMealNotificationResponses } from "../notifications/nativeActions";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { ForegroundBanner } from "./notifications/ForegroundBanner";
@@ -96,6 +109,163 @@ export function deepLinkFailureReason(
 }
 
 type TraineeTab = "today" | "workout" | "diet" | "progress" | "more";
+
+/**
+ * How long the shell waits for the phone's snapshots before it paints
+ * anyway (Z14-2). Reading them takes a few milliseconds; a storage that
+ * hangs must not keep the trainee on a blank screen.
+ */
+export const SNAPSHOT_HYDRATE_CAP_MS = 1500;
+
+/**
+ * Puts the trainee's snapshots from the phone into the day cache before the
+ * first tab renders (Z14-2, D-W14-6), so a cold start (airplane mode
+ * included) paints Today, Diet, Workout and Progress from the phone with no
+ * skeleton. True once that is done, or the cap ran out.
+ */
+export function useTraineeSnapshots(
+  userId: string | null,
+  relationshipId: string,
+): boolean {
+  const [ready, setReady] = useState(
+    () => userId == null || snapshotsBoundFor(userId, relationshipId),
+  );
+  useEffect(() => {
+    if (userId == null) {
+      setReady(true);
+      return;
+    }
+    if (snapshotsBoundFor(userId, relationshipId)) {
+      setReady(true);
+      return;
+    }
+    let active = true;
+    setReady(false);
+    const cap = setTimeout(() => {
+      if (active) setReady(true);
+    }, SNAPSHOT_HYDRATE_CAP_MS);
+    void bindTraineeSnapshots({ userId, relationshipId }).finally(() => {
+      clearTimeout(cap);
+      if (active) setReady(true);
+    });
+    return () => {
+      active = false;
+      clearTimeout(cap);
+    };
+  }, [userId, relationshipId]);
+  // Queued snapshot writes land before the OS can stop a backgrounded app.
+  useEffect(() => {
+    const subscription = AppState.addEventListener?.("change", (next) => {
+      if (next !== "active") void flushTraineeSnapshots();
+    });
+    return () => subscription?.remove();
+  }, []);
+  return ready;
+}
+
+/** How an overlay sits over the tabs. */
+function overlayLayer(
+  overlay: TraineeOverlay | null,
+): "sheet" | "tabbed" | "fullscreen" | null {
+  if (overlay == null) return null;
+  if (overlay.screen === "something_different" || overlay.screen === "ask_coach") {
+    return "sheet";
+  }
+  if (overlay.screen === "meal_plan" || overlay.screen === "deep_link") {
+    return "tabbed";
+  }
+  // "ended" is the Today tab body when coaching has ended — never a
+  // fullscreen overlay that would hide the tab bar (TR-22a).
+  if (overlay.screen === "ended") return null;
+  return "fullscreen";
+}
+
+/**
+ * A kept tab shown again after this long since it last loaded refreshes
+ * underneath what it shows (Z14-2; the trainer app's 30 s rule, Z14-3).
+ */
+export const KEPT_TAB_STALE_MS = DAY_VIEW_MAX_AGE_MS;
+
+/**
+ * Tabs that refresh themselves when shown again (their `active` prop runs
+ * the day cache's age rule, keeping scroll and what they show). The others
+ * are remounted instead, and paint from the cache at once.
+ */
+const SELF_REFRESHING_TABS: ReadonlySet<TraineeTab> = new Set(["today", "diet"]);
+
+/**
+ * Which tab panes are mounted (Z14-2). A tab left by a tab bar press stays
+ * mounted, hidden, so a switch back paints at once. A tab left any other way
+ * (a notification, a deep link, a button that switches tab, a check-in or a
+ * fullscreen overlay covering it) is unmounted: something open on it (an RN
+ * `Modal` sheet, which ignores the parent's `display: none`, or a live
+ * workout's Android Back handler) must not outlive it off screen. A hidden
+ * Workout pane is never kept while immersive (the live log, a summary).
+ */
+export type PaneBook = {
+  /** The pane on screen at the last render; null under a cover. */
+  shown: TraineeTab | null;
+  /** Mounted panes, the one on screen included. */
+  kept: ReadonlySet<TraineeTab>;
+  /** Bumped to remount a pane (its React key). */
+  generation: Readonly<Partial<Record<TraineeTab, number>>>;
+  /** When each pane last mounted or refreshed (ms). */
+  loadedAt: Readonly<Partial<Record<TraineeTab, number>>>;
+  /** The tab the tab bar just picked, until the switch it makes is seen. */
+  picked: TraineeTab | null;
+};
+
+export function initialPaneBook(shown: TraineeTab | null, now: number): PaneBook {
+  return {
+    shown,
+    kept: new Set(shown ? [shown] : []),
+    generation: {},
+    loadedAt: shown ? { [shown]: now } : {},
+    picked: null,
+  };
+}
+
+/** The book for this render; the same object when nothing changed. */
+export function advancePaneBook(
+  book: PaneBook,
+  shown: TraineeTab | null,
+  workoutImmersive: boolean,
+  now: number,
+): PaneBook {
+  let next = book;
+  if (shown !== book.shown) {
+    const kept = new Set(book.kept);
+    const generation = { ...book.generation };
+    const loadedAt = { ...book.loadedAt };
+    const left = book.shown;
+    const viaTabBar = shown != null && book.picked === shown;
+    if (left != null) {
+      if (viaTabBar && !(left === "workout" && workoutImmersive)) kept.add(left);
+      else kept.delete(left);
+    }
+    if (shown != null) {
+      if (!kept.has(shown)) {
+        kept.add(shown);
+        loadedAt[shown] = now;
+      } else if (
+        !SELF_REFRESHING_TABS.has(shown) &&
+        now - (loadedAt[shown] ?? 0) > KEPT_TAB_STALE_MS
+      ) {
+        generation[shown] = (generation[shown] ?? 0) + 1;
+        loadedAt[shown] = now;
+      } else if (SELF_REFRESHING_TABS.has(shown)) {
+        loadedAt[shown] = now;
+      }
+    }
+    next = { shown, kept, generation, loadedAt, picked: null };
+  }
+  if (workoutImmersive && next.shown !== "workout" && next.kept.has("workout")) {
+    const kept = new Set(next.kept);
+    kept.delete("workout");
+    next = { ...next, kept };
+  }
+  return next;
+}
 
 const TABS: Array<{
   id: TraineeTab;
@@ -255,6 +425,31 @@ export function TraineeShell({
   // state.
   const [planState, setPlanState] =
     useState<EffectivePlanState>(EFFECTIVE_PLAN_LOADING);
+  const snapshotsReady = useTraineeSnapshots(me?.userId ?? null, relationship.id);
+  // A check-in or a fullscreen overlay covers the tabs (Z14-2).
+  const coverOn =
+    Boolean(activeCheckin) || overlayLayer(overlay) === "fullscreen";
+  const shownTab: TraineeTab | null = coverOn ? null : tab;
+  /** Which tab panes stay mounted, hidden, when left (Z14-2): `PaneBook`. */
+  const [storedPanes, setPanes] = useState<PaneBook>(() =>
+    initialPaneBook(shownTab, Date.now()),
+  );
+  const panes = advancePaneBook(
+    storedPanes,
+    shownTab,
+    workoutImmersive,
+    Date.now(),
+  );
+  // Adjusted while rendering, so a pane left by a notification or under a
+  // cover is gone before anything paints (no frame with its sheet on top).
+  if (panes !== storedPanes) setPanes(panes);
+  const selectTabFromBar = useCallback((next: TraineeTab) => {
+    setPanes((prev) => (prev.picked === next ? prev : { ...prev, picked: next }));
+    setTab(next);
+  }, []);
+  /** Today painted its content once: in-app banners may show from then on. */
+  const [todayPainted, setTodayPainted] = useState(false);
+  const handleTodayFirstPaint = useCallback(() => setTodayPainted(true), []);
   const [planCacheError, setPlanCacheError] = useState<string | null>(null);
   const effectivePlan = planFromState(planState);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
@@ -446,6 +641,36 @@ export function TraineeShell({
     [handleNotificationNavigate],
   );
 
+  const readCachedPlan = useCallback(async () => {
+    const cached = await sync.store.listLocal("effective_plan");
+    const newest = cached
+      .filter((row) => !row.tombstone && row.payloadJson)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    return newest?.payloadJson
+      ? (JSON.parse(newest.payloadJson) as EffectivePlanResponse)
+      : null;
+  }, [sync]);
+
+  // Offline-first plan (D-W14-6): the plan saved on the phone answers at
+  // once, so Today's gate does not wait for the pull and the fetch below
+  // (which replace it when they answer). Only while nothing else has.
+  useEffect(() => {
+    let active = true;
+    readCachedPlan()
+      .then((cached) => {
+        if (!active || !cached) return;
+        setPlanState((prev) =>
+          prev.status === "loading" ? effectivePlanStateFor(cached) : prev,
+        );
+      })
+      .catch((err: unknown) => {
+        reportError("trainee.effectivePlan.cacheRead", err);
+      });
+    return () => {
+      active = false;
+    };
+  }, [readCachedPlan]);
+
   const loadEffectivePlan = useCallback(async () => {
     const outcome = await loadEffectivePlanState({
       // A pull failure is not a plan failure: the plan is fetched from the
@@ -461,19 +686,11 @@ export function TraineeShell({
           tombstone: false,
           updatedAt: new Date().toISOString(),
         }),
-      readCached: async () => {
-        const cached = await sync.store.listLocal("effective_plan");
-        const newest = cached
-          .filter((row) => !row.tombstone && row.payloadJson)
-          .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
-        return newest?.payloadJson
-          ? (JSON.parse(newest.payloadJson) as EffectivePlanResponse)
-          : null;
-      },
+      readCached: readCachedPlan,
     });
     setPlanCacheError(outcome.cacheError);
     setPlanState(outcome.state);
-  }, [api, relationship.id, sync]);
+  }, [api, readCachedPlan, relationship.id, sync]);
 
   const refreshUnread = useCallback(async () => {
     try {
@@ -902,67 +1119,88 @@ export function TraineeShell({
     );
   }
 
-  if (activeCheckin) {
-    return (
-      <CheckinScreen
-        relationship={relationship}
-        checkin={activeCheckin}
-        onDone={() => setActiveCheckin(null)}
-      />
-    );
+  // The phone's snapshots go into the cache before the first tab renders
+  // (Z14-2); reading them takes milliseconds, capped at
+  // SNAPSHOT_HYDRATE_CAP_MS.
+  if (!snapshotsReady) {
+    return <View style={styles.root} testID="trainee-shell-hydrating" />;
   }
 
-  const sheetOverlay =
-    overlay?.screen === "something_different" ||
-    overlay?.screen === "ask_coach";
-  const tabbedOverlay =
-    overlay?.screen === "meal_plan" || overlay?.screen === "deep_link";
-  // "ended" is the Today tab body when coaching has ended — never a
-  // fullscreen overlay that would hide the tab bar (TR-22a).
-  const fullscreenOverlay =
-    overlay != null &&
-    !sheetOverlay &&
-    !tabbedOverlay &&
-    overlay.screen !== "ended";
+  const layer = overlayLayer(overlay);
+  const sheetOverlay = layer === "sheet";
+  const tabbedOverlay = layer === "tabbed";
+  const fullscreenOverlay = layer === "fullscreen";
+  // The Workout tab stays mounted when left (Z14-2); its immersive screens
+  // only hide the tab bar while Workout is the tab on screen.
   const hideTabBar =
     Boolean(activeCheckin) ||
-    workoutImmersive ||
+    (workoutImmersive && tab === "workout") ||
     Boolean(captureWorkout) ||
     Boolean(captureWorkoutSummary) ||
     fullscreenOverlay;
 
-  if (fullscreenOverlay && overlay) {
+  /*
+   * A check-in or a fullscreen overlay covers the tabs instead of replacing
+   * them: kept tabs stay mounted (hidden) underneath; the tab it covered is
+   * unmounted (`PaneBook`) and repaints from the cache when it closes
+   * (Z14-2).
+   */
+  const cover = activeCheckin ? (
+    <CheckinScreen
+      relationship={relationship}
+      checkin={activeCheckin}
+      onDone={() => setActiveCheckin(null)}
+    />
+  ) : fullscreenOverlay && overlay ? (
+    <TraineeOverlayHost
+      overlay={overlay}
+      relationship={relationship}
+      effectivePlan={effectivePlan}
+      planState={planState}
+      onRetryPlan={() => {
+        void loadEffectivePlan();
+      }}
+      onClose={() => setOverlay(null)}
+      onOpen={openOverlay}
+      onSignOut={signOut}
+      onGoToday={() => {
+        setOverlay(null);
+        setTab("today");
+      }}
+      onOpenDiet={() => {
+        setOverlay(null);
+        setTab("diet");
+      }}
+      onNotificationNavigate={handleNotificationNavigate}
+      onCoachingResumed={handleCoachingResumed}
+      onStartWorkout={handleStartWorkoutFromOverview}
+    />
+  ) : null;
+
+  /** A kept tab stays mounted; only the one on screen is shown (Z14-2). */
+  const pane = (id: TraineeTab, node: ReactNode) => {
+    if (panes.shown !== id && !panes.kept.has(id)) return null;
+    const shown = panes.shown === id;
     return (
-      <TraineeOverlayHost
-        overlay={overlay}
-        relationship={relationship}
-        effectivePlan={effectivePlan}
-        planState={planState}
-        onRetryPlan={() => {
-          void loadEffectivePlan();
-        }}
-        onClose={() => setOverlay(null)}
-        onOpen={openOverlay}
-        onSignOut={signOut}
-        onGoToday={() => {
-          setOverlay(null);
-          setTab("today");
-        }}
-        onOpenDiet={() => {
-          setOverlay(null);
-          setTab("diet");
-        }}
-        onNotificationNavigate={handleNotificationNavigate}
-        onCoachingResumed={handleCoachingResumed}
-        onStartWorkout={handleStartWorkoutFromOverview}
-      />
+      <View
+        key={`${id}:${panes.generation[id] ?? 0}`}
+        testID={`trainee-pane-${id}`}
+        style={shown ? styles.pane : styles.paneHidden}
+        aria-hidden={!shown}
+        accessibilityElementsHidden={!shown}
+        importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
+      >
+        {node}
+      </View>
     );
-  }
+  };
 
   return (
     <View style={styles.root}>
       <View style={styles.content}>
-        {tab === "today" ? (
+        {cover}
+        {pane(
+          "today",
           relationship.status === "ended" ? (
             <EndedCoachingScreen
               relationship={relationship}
@@ -1002,11 +1240,14 @@ export function TraineeShell({
                 setPendingSummaryExecutionId(executionId);
                 setTab("workout");
               }}
+              onFirstPaint={handleTodayFirstPaint}
+              active={panes.shown === "today"}
             />
-          )
-        ) : null}
+          ),
+        )}
 
-        {tab === "workout" ? (
+        {pane(
+          "workout",
           <WorkoutTab
             relationship={relationship}
             planState={planState}
@@ -1021,34 +1262,38 @@ export function TraineeShell({
             pendingSummaryExecutionId={pendingSummaryExecutionId}
             onPendingSummaryConsumed={() => setPendingSummaryExecutionId(null)}
             onImmersiveChange={setWorkoutImmersive}
-          />
-        ) : null}
+          />,
+        )}
 
-        {tab === "diet" ? (
+        {pane(
+          "diet",
           <DietTab
             relationship={relationship}
             selectedDate={selectedDate}
             onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
             unreadNotifications={unreadNotifications}
-          />
-        ) : null}
+            active={panes.shown === "diet"}
+          />,
+        )}
 
-        {tab === "progress" ? (
+        {pane(
+          "progress",
           <ProgressTab
             relationship={relationship}
             unreadNotifications={unreadNotifications}
             onOpenOverlay={openOverlay}
             onOpenCheckin={setActiveCheckin}
-          />
-        ) : null}
+          />,
+        )}
 
-        {tab === "more" ? (
-          <MoreScreen relationship={relationship} onOpenOverlay={openOverlay} />
-        ) : null}
+        {pane(
+          "more",
+          <MoreScreen relationship={relationship} onOpenOverlay={openOverlay} />,
+        )}
       </View>
 
-      {sheetOverlay ? (
+      {sheetOverlay && !cover ? (
         <TraineeOverlayHost
           overlay={overlay!}
           relationship={relationship}
@@ -1078,7 +1323,10 @@ export function TraineeShell({
         />
       ) : null}
 
-      {tab === "today" && relationship.status !== "ended" ? (
+      {tab === "today" &&
+      relationship.status !== "ended" &&
+      !cover &&
+      todayPainted ? (
         <ForegroundBanner
           relationship={relationship}
           coachName={relationship.trainerDisplayName?.trim() || "Your coach"}
@@ -1089,7 +1337,7 @@ export function TraineeShell({
         />
       ) : null}
 
-      {tabbedOverlay ? (
+      {tabbedOverlay && !cover ? (
         <View style={styles.tabbedOverlay}>
           <TraineeOverlayHost
             overlay={overlay!}
@@ -1133,7 +1381,7 @@ export function TraineeShell({
         </View>
       ) : null}
 
-      {!hideTabBar ? <TraineeTabBar active={tab} onSelect={setTab} /> : null}
+      {!hideTabBar ? <TraineeTabBar active={tab} onSelect={selectTabFromBar} /> : null}
     </View>
   );
 }
@@ -1245,6 +1493,13 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  pane: {
+    flex: 1,
+  },
+  /** A kept tab off screen: mounted, laid out nowhere, read by nothing. */
+  paneHidden: {
+    display: "none",
   },
   /** Same inset as Screen's toast footer: the bar floats above the tab bar. */
   minimisedBarSlot: {

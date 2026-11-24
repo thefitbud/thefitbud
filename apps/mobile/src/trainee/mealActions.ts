@@ -38,6 +38,13 @@ export async function uploadMealPhoto(
   return target.mediaAsset.id;
 }
 
+/**
+ * Throws the trainee-facing copy for a verdict the caller waited for. Meal
+ * logs no longer wait (Z14-2, D-W14-6): `enqueueAndPush` returns once the log
+ * is on the phone, `results` is empty, and a refusal reaches the screen
+ * through the outbox row (sync status, with the server's message). Kept for
+ * a caller that asks for the verdict with `wait`.
+ */
 function assertSyncOk(
   results: Awaited<ReturnType<typeof enqueueAndPush>>["results"],
   coachName?: string,
@@ -46,6 +53,10 @@ function assertSyncOk(
   if (message) throw new MealSyncError(message);
 }
 
+/**
+ * Marks the relationship's day views stale: the screens keep what they show
+ * (with the outbox overlay on top) and refresh in the background.
+ */
 function afterMealMutation(relationshipId: string) {
   invalidateRelationshipDayData(relationshipId);
 }

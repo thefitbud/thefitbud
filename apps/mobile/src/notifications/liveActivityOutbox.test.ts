@@ -183,7 +183,7 @@ function engineWithPush(): {
   return { engine, pushed };
 }
 
-function drain(
+async function drain(
   mod: ReturnType<typeof fakeModule>,
   engine: SyncEngine,
   running: WorkoutExecution | null | (() => Promise<WorkoutExecution | null>),
@@ -191,7 +191,7 @@ function drain(
   platformOS: string = "ios",
   isSupported = true,
 ) {
-  return drainLiveActivityOutbox({
+  const result = await drainLiveActivityOutbox({
     sync: engine,
     findRunningWorkout: typeof running === "function" ? running : async () => running,
     platformOS,
@@ -207,6 +207,10 @@ function drain(
     onKept,
     warn: () => undefined,
   });
+  // Z14-2: a log returns once it is on the phone and its push runs behind
+  // it; wait for that push (pushes run one at a time) before asserting.
+  await engine.sendNow();
+  return result;
 }
 
 beforeEach(() => {
