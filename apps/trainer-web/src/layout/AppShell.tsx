@@ -458,7 +458,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         }
         const trainerZone =
           me?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
-        items.push(
+        items.unshift(
           ...logEditBellItems(
             notifications.items,
             names,
