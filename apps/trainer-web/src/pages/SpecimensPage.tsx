@@ -28,7 +28,7 @@ export function SpecimensPage() {
           <Button variant="whatsapp">WhatsApp</Button>
           <OverflowMenu
             items={[
-              { id: "one", label: "Mark reviewed", onSelect: () => undefined },
+              { id: "one", label: "Noted, keep open", onSelect: () => undefined },
               { id: "two", label: "Open client", onSelect: () => undefined },
             ]}
           />
