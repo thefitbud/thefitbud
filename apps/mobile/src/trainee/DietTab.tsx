@@ -17,14 +17,14 @@ import {
   Sunrise,
   Utensils,
   UtensilsCrossed,
-  WifiOff,
   type LucideIcon,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
-import { userFacingMessage } from "@fitbud/api-client";
+import { isNetworkFailure, userFacingMessage } from "@fitbud/api-client";
 import type { CoachingRelationship, MealAssignment } from "@fitbud/contracts";
 import { formatClockTime, formatCivilDate, formatNumber } from "@fitbud/core";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { OfflineBanner } from "../components/OfflineBanner";
 import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
 import {
@@ -41,11 +41,15 @@ import { plannedSummaryLine } from "../lib/plannedMealItems";
 import { stage1Api } from "../lib/stage1Api";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { useSyncEngine } from "../sync/SyncProvider";
-import { useDeviceOffline } from "./today/queuedLogs";
+import { useApiReachable } from "../sync/useSyncStatus";
+import {
+  overlayMeals,
+  useDeviceOffline,
+  useOutboxOverlay,
+} from "./today/queuedLogs";
 import {
   attachMealPhotoBestEffort,
   confirmMealAssignment,
-  isMealLogPending,
   pendingMealLogIds,
 } from "./mealActions";
 import {
@@ -54,14 +58,18 @@ import {
   cleanFoodLabel,
   mealLockCopy,
 } from "./mealHelpers";
-import { cacheKey, invalidateRelationshipDayData } from "./dataCache";
+import {
+  cacheKey,
+  dayViewKey,
+  getCached,
+  invalidateRelationshipDayData,
+} from "./dataCache";
 import { dayEyebrow, useDayState } from "./useDayState";
 import {
   sharedRead,
   useTraineeDayCache,
   useTraineeWeek,
 } from "./useTraineeDayCache";
-import { isNetworkFailure } from "../trainer/attention/offline";
 import { mealDueStatusLabel, nextUp } from "./nextUp";
 import {
   buildNutritionRings,
@@ -444,6 +452,11 @@ type DietTabProps = {
   onSelectDate: (localDate: string) => void;
   onOpenOverlay: TraineeOverlayOpener;
   unreadNotifications?: number;
+  /**
+   * False while Diet is a kept tab off screen (Z14-2); shown again, it
+   * refreshes a day older than 30 s underneath what it shows.
+   */
+  active?: boolean;
 };
 
 /**
@@ -464,6 +477,7 @@ function DietTabBody({
   onSelectDate,
   onOpenOverlay,
   unreadNotifications = 0,
+  active: onScreen = true,
 }: DietTabProps) {
   const styles = useStyles();
   const theme = useTheme();
@@ -500,7 +514,14 @@ function DietTabBody({
             }),
           { force },
         ),
-        s1.getMeDay(date).catch(() => null),
+        // As on Today (Z14-2): with a cached day a failed `GET /me/day` fails
+        // the refresh, so meals and totals stay from one moment.
+        s1.getMeDay(date).catch((err: unknown) => {
+          if (getCached(dayViewKey("diet", relationship.id, date)) !== undefined) {
+            throw err;
+          }
+          return null;
+        }),
       ]);
       return {
         meals: sortMealsByTime(
@@ -516,6 +537,7 @@ function DietTabBody({
     relationshipId: relationship.id,
     date: selectedDate,
     fetchDay,
+    active: onScreen,
   });
   const bundle = dayCache.data;
   /** The skeleton case only: a first visit to a day with nothing cached. */
@@ -535,6 +557,7 @@ function DietTabBody({
     selectedDate,
     getMeWeek: (start) => s1.getMeWeek(start),
     where: "DietTab.getMeWeek",
+    active: onScreen,
   });
   // The strip keeps the last `GET /me/day` answer while the next day loads;
   // `navigatorDaysFor` applies it only to the date it names (Z5-8).
@@ -546,6 +569,25 @@ function DietTabBody({
   const [refreshing, setRefreshing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const deviceOffline = useDeviceOffline();
+  const apiReachable = useApiReachable();
+  // Offline is neutral (D-W14-9): a load that got no answer, an API last seen
+  // unreachable, or a device with no network.
+  const showOffline =
+    loadFailedOffline || apiReachable === false || deviceOffline;
+  // The phone's logs on top of the cached day (D-W14-6), wherever they were
+  // made (here, Today, a sheet): the same overlay Today reads.
+  const { overlay } = useOutboxOverlay({
+    relationshipId: relationship.id,
+    offline: showOffline,
+  });
+  /** Meals whose log is held up on the phone ("not sent yet", TR-07d). */
+  const pendingSendIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const [id, entry] of overlay.meals) {
+      if (entry.unsent && entry.waiting) ids.add(id);
+    }
+    return ids;
+  }, [overlay]);
   const [actingId, setActingId] = useState<string | null>(null);
   const unresolvedExceptions = 1;
   /**
@@ -555,10 +597,13 @@ function DietTabBody({
    */
   const optimisticStatus = useRef(new Map<string, MealAssignment["status"]>());
   const [optimisticVersion, setOptimisticVersion] = useState(0);
-  const [pendingSendIds, setPendingSendIds] = useState<ReadonlySet<string>>(
-    () => new Set(),
-  );
   const [photoPromptId, setPhotoPromptId] = useState<string | null>(null);
+  /**
+   * A meal eaten as planned here: its photo prompt shows once the server has
+   * the log (a photo can only follow a sent log), if that happens soon. A log
+   * held up offline gets no prompt, as before.
+   */
+  const photoAfterSend = useRef<{ id: string; at: number } | null>(null);
   const [photoUploadingId, setPhotoUploadingId] = useState<string | null>(null);
   const coachName =
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
@@ -566,14 +611,33 @@ function DietTabBody({
   // Z11b-1: every count, ring and row reads the selected day's meals only.
   const assignments = useMemo(() => {
     void optimisticVersion;
-    return mealsForDay(bundle?.meals ?? [], selectedDate).map((meal) => {
+    return overlayMeals(mealsForDay(bundle?.meals ?? [], selectedDate), overlay).map((meal) => {
       const next = optimisticStatus.current.get(meal.id);
       if (!next || isMealLoggedForCount(meal.status)) return meal;
       return meal.status === "pending" || meal.status === "overdue"
         ? { ...meal, status: next }
         : meal;
     });
-  }, [bundle, selectedDate, optimisticVersion]);
+  }, [bundle, selectedDate, optimisticVersion, overlay]);
+
+  useEffect(() => {
+    const waitingFor = photoAfterSend.current;
+    if (!waitingFor) return;
+    if (Date.now() - waitingFor.at > 30_000) {
+      photoAfterSend.current = null;
+      return;
+    }
+    const entry = overlay.meals.get(waitingFor.id);
+    if (entry?.unsent) {
+      if (entry.waiting) photoAfterSend.current = null;
+      return;
+    }
+    const meal = bundle?.meals.find((item) => item.id === waitingFor.id);
+    if (entry || (meal && isMealLoggedForCount(meal.status))) {
+      photoAfterSend.current = null;
+      setPhotoPromptId(waitingFor.id);
+    }
+  }, [overlay, bundle]);
 
   // After each load of the day: read which logs still wait in the outbox,
   // and drop optimistic statuses the server now has (or the outbox lost).
@@ -602,16 +666,12 @@ function DietTabBody({
           changed = true;
         }
       }
-      setPendingSendIds(pendingIds);
       if (changed) setOptimisticVersion((n) => n + 1);
     })();
     return () => {
       active = false;
     };
   }, [bundle, sync]);
-
-  /** A plain refetch of the selected day (after a log). */
-  const load = dayCache.refresh;
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -634,7 +694,6 @@ function DietTabBody({
     () => new Map(kcalSummary.rows.map((row) => [row.id, row])),
     [kcalSummary],
   );
-  const showOffline = loadFailedOffline || deviceOffline;
   const ringOf = (key: "protein" | "carbs" | "fat") => {
     const ring = nutritionRings.find((r) => r.key === key);
     return { logged: ring?.logged ?? 0, assigned: ring?.assigned ?? 0 };
@@ -671,36 +730,13 @@ function DietTabBody({
   const savedNotice = useMealSavedNotice(relationship.id);
   const [savedToast, setSavedToast] = useState<MealSavedNotice | null>(null);
   const [viewMealId, setViewMealId] = useState<string | null>(null);
-  /** How each waiting changed meal was logged, for its "not sent yet" row. */
-  const pendingKind = useRef(new Map<string, MealSavedNotice["kind"]>());
-  const mountedRef = useRef(true);
-  useEffect(
-    () => () => {
-      mountedRef.current = false;
-    },
-    [],
-  );
   useEffect(() => {
     if (!savedNotice) return;
-    // Taking the notice re-renders with none, so the outbox read below must
-    // not be tied to this effect's cleanup.
-    const notice = savedNotice;
-    takeMealSaved(notice.id);
-    setSavedToast(notice);
-    void (async () => {
-      let waiting = false;
-      try {
-        waiting = pendingDietLogIds(await sync.store.listOutbox()).has(notice.assignmentId);
-      } catch (err) {
-        reportError("DietTab.listOutbox", err);
-      }
-      if (!mountedRef.current || !waiting) return;
-      pendingKind.current.set(notice.assignmentId, notice.kind);
-      optimisticStatus.current.set(notice.assignmentId, "modified");
-      setOptimisticVersion((n) => n + 1);
-      setPendingSendIds((ids) => new Set(ids).add(notice.assignmentId));
-    })();
-  }, [savedNotice, sync]);
+    // A log still in the outbox already reads as changed and waiting through
+    // the outbox overlay; the notice only brings the toast.
+    takeMealSaved(savedNotice.id);
+    setSavedToast(savedNotice);
+  }, [savedNotice]);
 
   async function confirmMeal(assignment: MealAssignment) {
     setActingId(assignment.id);
@@ -714,15 +750,11 @@ function DietTabBody({
         assignment,
         coachName,
       );
+      // The log is on the phone and shows as logged now (D-W14-6); the push
+      // and the day's refresh run behind it. A photo can follow once the
+      // server has the log (`photoAfterSend`).
+      photoAfterSend.current = { id: assignment.id, at: Date.now() };
       invalidateRelationshipDayData(relationship.id);
-      if (await isMealLogPending(sync, assignment.id)) {
-        // Saved on this phone, not sent (TR-07d): it counts as planned until
-        // the server has it, and a photo can only follow once it is sent.
-        setPendingSendIds((ids) => new Set(ids).add(assignment.id));
-      } else {
-        setPhotoPromptId(assignment.id);
-      }
-      await load();
     } catch (err) {
       // `MealSyncError` carries the app's own static text; anything else is
       // shown as fixed copy, never the raw error (AGENTS.md client errors).
@@ -884,7 +916,7 @@ function DietTabBody({
               ) : waiting ? (
                 <Text variant="subhead" numberOfLines={1}>
                   {meal.status === "modified"
-                    ? `${deviationLabel(pendingKind.current.get(meal.id))} · not sent yet`
+                    ? `${deviationLabel(meal.compliance?.deviationKind)} · not sent yet`
                     : "Eaten as planned · not sent yet"}
                 </Text>
               ) : isSkipped ? (
@@ -1255,13 +1287,9 @@ function DietTabBody({
               />
             </View>
           ) : null}
+          {/* TR-07d: offline is neutral, never an alert (D-W14-9). */}
           {showOffline && !showLoadError ? (
-            <View style={styles.offlineBanner} accessibilityRole="alert">
-              <WifiOff size={20} color={theme.colors.ink2} strokeWidth={1.9} />
-              <Text variant="body" tone="ink2" style={styles.offlineText}>
-                {offlineNote}
-              </Text>
-            </View>
+            <OfflineBanner message={offlineNote} testID="diet-offline-banner" />
           ) : null}
 
           {showLoadError ? (
@@ -1419,16 +1447,6 @@ const useStyles = createThemedStyles((t) => ({
     paddingHorizontal: 12,
   },
   gap: { marginBottom: 12 },
-  offlineBanner: {
-    alignItems: "center",
-    backgroundColor: t.colors.fill,
-    borderRadius: 14,
-    flexDirection: "row",
-    gap: 12,
-    marginBottom: 14,
-    padding: 14,
-  },
-  offlineText: { flex: 1 },
   loadingText: { paddingVertical: 24, textAlign: "center" },
   summary: {
     alignItems: "center",

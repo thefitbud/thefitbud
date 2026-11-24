@@ -146,6 +146,17 @@ const { fireEvent, render, screen, waitFor } = await import("../test/render");
 const { TraineeShell } = await import("./TraineeShell");
 const { PLAN_UNAVAILABLE_MESSAGE } = await import("./TodayTab");
 
+/**
+ * Elements with `text` that are on screen. Tabs the trainee left stay
+ * mounted, hidden and `aria-hidden` (Z14-2), so Today's own copy of the plan
+ * card is in the DOM behind the overlay; it is not what the trainee sees.
+ */
+function shownText(text: string): HTMLElement[] {
+  return screen
+    .queryAllByText(text)
+    .filter((element) => !element.closest('[aria-hidden="true"]'));
+}
+
 /** Opens the meal plan overlay from the Diet tab, as a trainee does. */
 async function openMealPlan(): Promise<void> {
   fireEvent.click(await screen.findByRole("tab", { name: "Diet" }));
@@ -168,7 +179,7 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     await openMealPlan();
 
     expect(screen.getByLabelText("Loading meal plan")).toBeTruthy();
-    expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
+    expect(shownText(PLAN_UNAVAILABLE_MESSAGE)).toHaveLength(0);
   });
 
   it("shows unavailable with a retry, not a spinner, when the shell's plan load failed", async () => {
@@ -209,7 +220,7 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
       expect(screen.getByText("FROM RAHUL")).toBeTruthy();
       expect(screen.getByText("Strength block")).toBeTruthy();
     });
-    expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
+    expect(shownText(PLAN_UNAVAILABLE_MESSAGE)).toHaveLength(0);
   });
 
   it("shows the published plan when the shell's plan load succeeded", async () => {
@@ -223,7 +234,7 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
       expect(screen.getByText("Strength block")).toBeTruthy();
     });
     expect(screen.queryByLabelText("Loading meal plan")).toBeNull();
-    expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
+    expect(shownText(PLAN_UNAVAILABLE_MESSAGE)).toHaveLength(0);
   });
 });
 

@@ -143,8 +143,58 @@ export function setCached<T>(
   const now = Date.now();
   store.set(key, { value, updatedAt: now, touchedAt: now });
   if (key.startsWith("dayview:")) evictDayViews();
+  try {
+    persistence?.onWrite(key, value, now);
+  } catch {
+    // Keeping a copy on the phone must never break a screen's write.
+  }
   notify(key);
   return true;
+}
+
+/**
+ * Where a copy of each cache write goes (Z14-2): the trainee snapshot store
+ * (`snapshotStore.ts`) registers here, so the cache needs no import of it.
+ */
+export type CachePersistence = {
+  onWrite(key: string, value: unknown, updatedAt: number): void;
+};
+
+let persistence: CachePersistence | null = null;
+
+export function setCachePersistence(next: CachePersistence | null): void {
+  persistence = next;
+}
+
+let snapshotClearer: (() => void) | null = null;
+
+/** The snapshot store's "drop everything on the phone", run by `clearDayViews`. */
+export function registerSnapshotClearer(clear: (() => void) | null): void {
+  snapshotClearer = clear;
+}
+
+/**
+ * Puts snapshots read from the phone into the cache (Z14-2), each with the
+ * time it was saved, so a reader sees how old it is and refreshes it in the
+ * background (`needsRevalidate`). An entry already in memory is newer than
+ * anything on the phone and is never replaced.
+ */
+export function hydrateCached(
+  entries: ReadonlyArray<{ key: string; value: unknown; savedAt: number }>,
+): void {
+  const now = Date.now();
+  const added: string[] = [];
+  for (const entry of entries) {
+    if (store.has(entry.key)) continue;
+    store.set(entry.key, {
+      value: entry.value,
+      updatedAt: Math.min(entry.savedAt, now),
+      touchedAt: Math.min(entry.savedAt, now),
+    });
+    added.push(entry.key);
+  }
+  evictDayViews();
+  for (const key of added) notify(key);
 }
 
 function evictDayViews() {
@@ -205,12 +255,28 @@ export function invalidateRelationshipDayData(relationshipId: string): void {
 export function clearDayViews(): void {
   dayCacheOwner = null;
   dropDayData(true);
+  // The copies on the phone belong to the same session (Z14-2).
+  persistence = null;
+  try {
+    snapshotClearer?.();
+  } catch {
+    // Clearing the phone's copies is best effort here; the next owner's
+    // open removes them too (`claimSnapshotOwner`).
+  }
 }
 
 function dropDayData(notifyListeners: boolean): void {
   epoch += 1;
   inflightReads.clear();
-  const prefixes = ["dayview:", "meals:", "workouts:", "day:", "week:"];
+  const prefixes = [
+    "dayview:",
+    "meals:",
+    "workouts:",
+    "day:",
+    "week:",
+    "progress:",
+    "progress-checkins:",
+  ];
   for (const key of [...store.keys()]) {
     if (!prefixes.some((prefix) => key.startsWith(prefix))) continue;
     store.delete(key);

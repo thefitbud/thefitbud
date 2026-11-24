@@ -639,8 +639,10 @@ describe("exercise menu and set actions (W-08, W-09, W-09b, W-13)", () => {
       tap("Mark not done");
     });
     expect(screen.getByRole("button", { name: /^Set 1, 20 kg × 10, logged/ })).toBeTruthy();
-    // Network failure → Z12-64 offline copy (not the WO-UNLOG fallback).
-    expect(screen.getByRole("alert").textContent).toBe(USER_FACING_OFFLINE);
+    // Network failure → Z12-64 offline copy (not the WO-UNLOG fallback),
+    // shown as the neutral offline banner, never an alert (D-W14-9).
+    expect(screen.getByText(USER_FACING_OFFLINE)).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 

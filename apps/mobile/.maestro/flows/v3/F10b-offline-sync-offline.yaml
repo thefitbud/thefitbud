@@ -12,6 +12,10 @@ tags:
 - launchApp:
     stopApp: false
 
+# Offline is a calm, neutral state (Z14-2, D-W14-9): nothing on screen reads as a
+# failure. (The neutral banner itself is checked after the relaunch below.)
+- assertNotVisible: "Couldn.t refresh.*"
+
 # Log with no network: a weight and a waist measurement, which can be logged at any
 # hour. No meal here: the Diet screen offers "Eaten as planned" on a meal whose window
 # has not opened and the server refuses that log (run 43714008509, dark: dinner logged
@@ -24,9 +28,11 @@ tags:
 - tapOn: "Log weight"
 - tapOn: "Increase"
 - tapOn: "Save"
+# A log returns as soon as it is on the phone (Z14-2): the sheet closes at once,
+# never after a network timeout.
 - extendedWaitUntil:
     notVisible: "Adjust with the stepper, then save\\."
-    timeout: 20000
+    timeout: 5000
 - tapOn: "Log Waist"
 - tapOn: "Increase"
 - tapOn: "Save"
@@ -74,6 +80,27 @@ tags:
     timeout: 60000
 - assertNotVisible: ".*We could not load your coaching account.*"
 - assertNotVisible: "Sign in with a code instead"
+- runFlow: ../../common/assert-no-crash.yaml
+
+# Z14-2: the relaunch paints Today from the phone (the snapshot part 1 saved), in one
+# piece and with no skeleton, under the neutral offline banner (TR-06e).
+- extendedWaitUntil:
+    visible: "Meals"
+    timeout: 20000
+- assertNotVisible: "Loading your day…"
+- assertVisible: "You.re offline\\. Showing what was saved .*"
+- assertNotVisible: "Couldn.t refresh.*"
+- takeScreenshot: TR-06e-relaunch
+# Progress and Diet paint from the phone too.
+- tapOn: "Progress"
+- extendedWaitUntil:
+    visible: "Log weight"
+    timeout: 10000
+- tapOn: "Diet"
+- extendedWaitUntil:
+    visible: "Meals"
+    timeout: 10000
+- assertNotVisible: "Loading meals…"
 - runFlow: ../../common/assert-no-crash.yaml
 - tapOn: "More"
 - scrollUntilVisible:

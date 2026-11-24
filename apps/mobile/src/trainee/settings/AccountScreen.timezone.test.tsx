@@ -3,7 +3,14 @@
  * worked; a failed or offline save restores the old zone and shows the banner.
  */
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, mockAuth, render, screen, waitFor } from "../../test/render";
+import { ApiClientError, USER_FACING_OFFLINE } from "@fitbud/api-client";
+import {
+  fireEvent,
+  mockAuth,
+  render,
+  screen,
+  waitFor,
+} from "../../test/render";
 import { AccountScreen } from "./AccountScreen";
 
 const h = vi.hoisted(() => ({ auth: {} as Record<string, unknown> }));
@@ -13,7 +20,9 @@ function setup(update: () => Promise<unknown>) {
   h.auth = mockAuth({
     me: { timezone: "Asia/Kolkata" },
     api: {
-      getNotificationPreferences: vi.fn(async () => ({ traineeTimezone: "Asia/Kolkata" })),
+      getNotificationPreferences: vi.fn(async () => ({
+        traineeTimezone: "Asia/Kolkata",
+      })),
       listRelationships: vi.fn(async () => ({ items: [] })),
       updateNotificationPreferences: vi.fn(update),
     },
@@ -30,8 +39,16 @@ function setup(update: () => Promise<unknown>) {
 }
 
 async function pickDubai() {
-  fireEvent.click(await screen.findByRole("button", { name: /^Time zone/ }, { timeout: 8000 }));
-  fireEvent.click(await screen.findByRole("button", { name: /^Dubai,/ }, { timeout: 8000 }));
+  fireEvent.click(
+    await screen.findByRole(
+      "button",
+      { name: /^Time zone/ },
+      { timeout: 8000 },
+    ),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: /^Dubai,/ }, { timeout: 8000 }),
+  );
 }
 
 describe("AccountScreen time zone save", () => {
@@ -48,14 +65,38 @@ describe("AccountScreen time zone save", () => {
     expect(await screen.findByText(/^Time zone set to Dubai/)).toBeTruthy();
   });
 
-  it("restores the old zone and shows the banner when the save fails, with no success toast", async () => {
+  it("restores the old zone and shows the offline banner when the save cannot reach the server, with no success toast", async () => {
     setup(async () => {
       throw new TypeError("Network request failed");
     });
     await pickDubai();
-    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy(), { timeout: 8000 });
+    // Offline is a state, not a failure (D-W14-9): neutral banner, no alert role.
+    await waitFor(
+      () => expect(screen.getByText(USER_FACING_OFFLINE)).toBeTruthy(),
+      {
+        timeout: 8000,
+      },
+    );
     expect(screen.queryByText(/Time zone set to/)).toBeNull();
     // Back on Account with the previous zone showing.
+    expect(screen.getByText("India Standard Time")).toBeTruthy();
+    expect(screen.queryByText("Gulf Standard Time")).toBeNull();
+  });
+
+  it("restores the old zone and shows the error banner when the server fails the save, with no success toast", async () => {
+    setup(async () => {
+      throw new ApiClientError({
+        code: "INTERNAL_ERROR",
+        message: "Something broke.",
+        requestId: "req-1",
+        status: 500,
+      });
+    });
+    await pickDubai();
+    await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy(), {
+      timeout: 8000,
+    });
+    expect(screen.queryByText(/Time zone set to/)).toBeNull();
     expect(screen.getByText("India Standard Time")).toBeTruthy();
     expect(screen.queryByText("Gulf Standard Time")).toBeNull();
   });
