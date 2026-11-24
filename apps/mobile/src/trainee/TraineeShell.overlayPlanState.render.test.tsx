@@ -153,8 +153,8 @@ async function openMealPlan(): Promise<void> {
   // the same overlay.
   const [entry] = await screen.findAllByRole("button", { name: "Meal plan" });
   fireEvent.click(entry!);
-  // The overlay's own day-type switch: only the meal plan screen has it.
-  await screen.findByText("Training day");
+  // The overlay's own fixed header: only the meal plan screen has it.
+  await screen.findByTestId("assigned-plan-header");
 }
 
 beforeEach(() => {
@@ -167,7 +167,7 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     render(<TraineeShell relationship={relationship} />);
     await openMealPlan();
 
-    expect(screen.getByText("Loading meal plan…")).toBeTruthy();
+    expect(screen.getByLabelText("Loading meal plan")).toBeTruthy();
     expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
   });
 
@@ -180,9 +180,9 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     await openMealPlan();
 
     await waitFor(() => {
-      expect(screen.getByText(PLAN_UNAVAILABLE_MESSAGE)).toBeTruthy();
+      expect(screen.getByText("Couldn't load your meal plan")).toBeTruthy();
     });
-    expect(screen.queryByText("Loading meal plan…")).toBeNull();
+    expect(screen.queryByLabelText("Loading meal plan")).toBeNull();
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
@@ -193,7 +193,7 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     render(<TraineeShell relationship={relationship} />);
     await openMealPlan();
     await waitFor(() => {
-      expect(screen.getByText(PLAN_UNAVAILABLE_MESSAGE)).toBeTruthy();
+      expect(screen.getByText("Couldn't load your meal plan")).toBeTruthy();
     });
     const callsBefore = getEffectivePlan.mock.calls.length;
 
@@ -220,7 +220,7 @@ describe("TraineeShell passes planState to the meal plan overlay", () => {
     await waitFor(() => {
       expect(screen.getByText("Strength block · from Rahul")).toBeTruthy();
     });
-    expect(screen.queryByText("Loading meal plan…")).toBeNull();
+    expect(screen.queryByLabelText("Loading meal plan")).toBeNull();
     expect(screen.queryByText(PLAN_UNAVAILABLE_MESSAGE)).toBeNull();
   });
 });

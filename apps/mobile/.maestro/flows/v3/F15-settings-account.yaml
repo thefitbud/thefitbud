@@ -77,6 +77,17 @@ tags:
     timeout: 20000
 - assertVisible: "Time zone"
 - takeScreenshot: TR-20c
+# Z14-14: one Time zone row opens the searchable list (TR-20h) and returns.
+- tapOn: "Time zone"
+- extendedWaitUntil:
+    visible: "Use phone's time zone"
+    timeout: 10000
+- assertVisible: "Search city or time zone"
+- takeScreenshot: TR-20h
+- tapOn: "Back"
+- extendedWaitUntil:
+    visible: "SIGN-IN"
+    timeout: 10000
 - tapOn: "Password"
 - extendedWaitUntil:
     visible: "Change password"

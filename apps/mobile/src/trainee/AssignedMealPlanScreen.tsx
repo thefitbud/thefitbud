@@ -9,25 +9,18 @@ import {
 } from "@fitbud/core";
 import { colors, spacing } from "@fitbud/ui-mobile";
 import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import type { EffectivePlanState } from "./TodayTab";
 import {
-  PLAN_UNAVAILABLE_MESSAGE,
-  type EffectivePlanState,
-} from "./TodayTab";
-import { MessageCircle, Sparkles } from "lucide-react-native";
+  ChevronLeft,
+  CloudOff,
+  MessageCircle,
+  RefreshCw,
+  Sparkles,
+} from "lucide-react-native";
 import { Text } from "../components/Text";
-import { Button } from "../components/Button";
-import {
-  Card2,
-  M2ScrollBody,
-  M2TopNav,
-  NoteCallout,
-} from "../components/m2";
-import { WhatsAppGlyph } from "../components/m2/WhatsAppGlyph";
-import { SegmentedControl } from "../components/SegmentedControl";
+import { Card2, NoteCallout } from "../components/m2";
 import { sortMealsByTime } from "./scheduledAssignments";
-
-type DayKind = "training" | "rest";
 
 type Props = {
   /**
@@ -41,6 +34,7 @@ type Props = {
   coachName?: string;
   onBack: () => void;
   onAskCoach?: () => void;
+  /** Ignored: the overlay owns the whole screen (Z14-14). */
   insetTabBar?: boolean;
 };
 
@@ -90,9 +84,10 @@ export function AssignedMealPlanScreen({
   coachName = "Your coach",
   onBack,
   onAskCoach,
-  insetTabBar = false,
 }: Props) {
-  const [dayKind, setDayKind] = useState<DayKind>("training");
+  // Z14-14: the overlay owns the whole screen, so the old tab-bar inset (a
+  // blank band at the bottom) no longer applies; `insetTabBar` is ignored.
+  const [scrolled, setScrolled] = useState(false);
   const effectivePlan: EffectivePlanResponse | null =
     planState.status === "loaded" ? planState.plan : null;
   const meals = sortMealsByTime(
@@ -108,57 +103,73 @@ export function AssignedMealPlanScreen({
         "calculated" in item && item.calculated ? item.calculated : null,
       ),
     );
-    const base = dayMacrosFromScaledItems(items);
-    if (dayKind === "rest" && base.kcal > 0) {
-      return {
-        ...base,
-        kcal: Math.round(base.kcal * 0.92),
-        proteinG: Math.round(base.proteinG * 0.95),
-        carbsG: Math.round(base.carbsG * 0.95),
-        fatG: Math.round(base.fatG * 0.95),
-      };
-    }
-    return base;
-  }, [dayKind, meals]);
+    return dayMacrosFromScaledItems(items);
+  }, [meals]);
 
   const loading = planState.status === "loading";
   const unavailable = planState.status === "unavailable";
   const changeNote = publishedAt
     ? `From ${formatCivilDate(publishedAt.slice(0, 10))}: your coach updated this plan.`
     : null;
-
-  const footer = onAskCoach ? (
-    <Pressable accessibilityRole="button" onPress={onAskCoach} style={styles.askLink}>
-      <WhatsAppGlyph />
-      <Text style={styles.askLinkText}>Ask {coachFirst} about this plan</Text>
-    </Pressable>
-  ) : null;
+  const headerTitle = scrolled && effectivePlan ? `${planTitle} · From ${coachFirst}` : "Meal plan";
 
   return (
     <View style={styles.root}>
-      <M2ScrollBody footer={footer} insetTabBar={insetTabBar}>
-        <M2TopNav backLabel="Diet" onBack={onBack} />
-        <View style={styles.lt2}>
-          <Text style={styles.eb}>
-            {planTitle} · from {coachFirst}
-          </Text>
-          <Text style={styles.h1}>Meal plan</Text>
+      <View style={styles.header} testID="assigned-plan-header">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Back to Diet"
+          onPress={onBack}
+          style={styles.backBtn}
+        >
+          <ChevronLeft size={24} color={colors.indigo} strokeWidth={2} />
+          <Text style={styles.backLabel}>Diet</Text>
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1} accessibilityRole="header">
+          {headerTitle}
+        </Text>
+        <View style={styles.headerRight}>
+          {onAskCoach ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Ask ${coachFirst} about this plan`}
+              onPress={onAskCoach}
+              style={styles.askPill}
+            >
+              <MessageCircle size={18} color={colors.deepNavy} strokeWidth={2} />
+              <Text style={styles.askPillText}>Ask {coachFirst}</Text>
+            </Pressable>
+          ) : null}
         </View>
-
-        <SegmentedControl<DayKind>
-          value={dayKind}
-          onChange={setDayKind}
-          options={[
-            { id: "training", label: "Training day" },
-            { id: "rest", label: "Rest day" },
-          ]}
-        />
-
+      </View>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        scrollEventThrottle={32}
+        onScroll={(event) => setScrolled(event.nativeEvent.contentOffset.y > 70)}
+      >
         {loading ? (
-          <Text style={styles.muted}>Loading meal plan…</Text>
+          <View
+            accessible
+            accessibilityLabel="Loading meal plan"
+            accessibilityState={{ busy: true }}
+            testID="assigned-plan-skeleton"
+          >
+            <View style={[styles.bone, { height: 14, width: 150 }]} />
+            <View style={[styles.bone, { height: 32, marginTop: 10, width: 230 }]} />
+            <View style={[styles.bone, { height: 76, marginTop: 20 }]} />
+            <View style={[styles.bone, { height: 150, marginTop: 14 }]} />
+            <View style={[styles.bone, { height: 190, marginTop: 14 }]} />
+          </View>
         ) : unavailable ? (
-          <View>
-            <Text style={styles.muted}>{PLAN_UNAVAILABLE_MESSAGE}</Text>
+          <View style={styles.errorWrap}>
+            <View style={styles.errorTile}>
+              <CloudOff size={30} color={colors.deepNavy} strokeWidth={1.75} />
+            </View>
+            <Text style={styles.errorTitle}>Couldn&apos;t load your meal plan</Text>
+            <Text style={styles.errorBody}>
+              Something went wrong on our side. Your Diet tab still works.
+            </Text>
             {onRetryPlan ? (
               <Pressable
                 accessibilityRole="button"
@@ -168,31 +179,47 @@ export function AssignedMealPlanScreen({
                 }}
                 style={styles.retry}
               >
+                <RefreshCw size={18} color={colors.deepNavy} strokeWidth={2} />
                 <Text style={styles.retryLabel}>Try again</Text>
               </Pressable>
             ) : null}
           </View>
         ) : meals.length === 0 ? (
-          <Text style={styles.muted}>
-            Meals from your coach&apos;s plan appear here when a plan is published.
-          </Text>
+          <>
+            <View style={styles.lt2}>
+              <Text style={styles.eb}>
+                {planTitle} · from {coachFirst}
+              </Text>
+            </View>
+            <Text style={styles.muted}>
+              Meals from your coach&apos;s plan appear here when a plan is published.
+            </Text>
+          </>
         ) : (
           <>
+            <View style={styles.lt2}>
+              <Text style={styles.eb}>
+                {planTitle} · from {coachFirst}
+              </Text>
+              <Text style={styles.h1}>Meal plan</Text>
+            </View>
+
             <Card2 style={styles.summary}>
-              <View>
-                <Text style={styles.kcalMain}>
+              <View style={styles.stat}>
+                <Text style={styles.statMain}>
                   {dayTotals.unknown ? "≥ " : ""}
-                  {formatNumber(dayTotals.kcal)} kcal
+                  {formatNumber(dayTotals.kcal)}
                 </Text>
-                <Text style={styles.macLine}>
-                  P <Text style={styles.macBold}>{dayTotals.proteinG}</Text>
-                  {"  "}
-                  C <Text style={styles.macBold}>{dayTotals.carbsG}</Text>
-                  {"  "}
-                  F <Text style={styles.macBold}>{dayTotals.fatG}</Text> g
-                </Text>
+                <Text style={styles.statLabel}>kcal a day</Text>
               </View>
-              <Text style={styles.mealCount}>{meals.length} meals</Text>
+              <View style={[styles.stat, styles.statMid]}>
+                <Text style={styles.statMain}>{dayTotals.proteinG} g</Text>
+                <Text style={styles.statLabel}>protein</Text>
+              </View>
+              <View style={styles.stat}>
+                <Text style={styles.statMain}>{meals.length}</Text>
+                <Text style={styles.statLabel}>meals</Text>
+              </View>
             </Card2>
 
             {changeNote ? (
@@ -256,19 +283,132 @@ export function AssignedMealPlanScreen({
                 </Card2>
               );
             })}
+            <View style={styles.dayTotal}>
+              <Text style={styles.slotMacros}>Day total</Text>
+              <Text style={styles.slotKcal}>
+                {dayTotals.unknown ? "≥ " : ""}
+                {formatKcal(dayTotals.kcal, false)}
+              </Text>
+            </View>
           </>
         )}
-
-        <Button label="Back" variant="tertiary" onPress={onBack} />
-      </M2ScrollBody>
+      </ScrollView>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   root: {
-    backgroundColor: colors.white,
+    backgroundColor: "#F3F4F8",
     flex: 1,
+  },
+  header: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderBottomColor: "#E7E9F2",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    flexDirection: "row",
+    minHeight: 56,
+    paddingHorizontal: spacing.sm,
+  },
+  backBtn: {
+    alignItems: "center",
+    flexDirection: "row",
+    minHeight: 44,
+    minWidth: 76,
+  },
+  backLabel: {
+    color: colors.indigo,
+    fontSize: 17,
+    fontWeight: "600",
+  },
+  headerTitle: {
+    color: colors.deepNavy,
+    flex: 1,
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  headerRight: {
+    alignItems: "flex-end",
+    minWidth: 76,
+  },
+  askPill: {
+    alignItems: "center",
+    backgroundColor: "#EAE8F3",
+    borderRadius: 22,
+    flexDirection: "row",
+    gap: 6,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  askPillText: {
+    color: colors.deepNavy,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: spacing.md,
+    paddingBottom: spacing.lg * 2,
+  },
+  bone: {
+    backgroundColor: "#E3E5EC",
+    borderRadius: 14,
+  },
+  errorWrap: {
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingTop: 64,
+  },
+  errorTile: {
+    alignItems: "center",
+    backgroundColor: "#EAE8F3",
+    borderRadius: 20,
+    height: 80,
+    justifyContent: "center",
+    width: 80,
+  },
+  errorTitle: {
+    color: colors.deepNavy,
+    fontSize: 21,
+    fontWeight: "700",
+    marginTop: 20,
+    textAlign: "center",
+  },
+  errorBody: {
+    color: colors.midGrey,
+    fontSize: 16,
+    lineHeight: 22,
+    marginTop: 8,
+    textAlign: "center",
+  },
+  stat: {
+    alignItems: "center",
+    flex: 1,
+  },
+  statMid: {
+    borderColor: "#E7E9F2",
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderRightWidth: StyleSheet.hairlineWidth,
+  },
+  statMain: {
+    color: colors.deepNavy,
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  statLabel: {
+    color: colors.midGrey,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  dayTotal: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing.md,
+    paddingHorizontal: 4,
   },
   lt2: {
     marginBottom: spacing.md,
@@ -294,39 +434,26 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   retry: {
-    marginTop: spacing.sm,
-    minHeight: 44,
+    alignItems: "center",
+    alignSelf: "stretch",
+    backgroundColor: "#EAE8F3",
+    borderRadius: 16,
+    flexDirection: "row",
+    gap: 8,
     justifyContent: "center",
+    marginTop: spacing.lg,
+    minHeight: 52,
   },
   retryLabel: {
-    color: colors.indigo,
-    fontSize: 16,
+    color: colors.deepNavy,
+    fontSize: 17,
+    fontWeight: "700",
   },
   summary: {
     alignItems: "center",
     flexDirection: "row",
-    justifyContent: "space-between",
     marginTop: spacing.md,
     paddingVertical: 12,
-  },
-  kcalMain: {
-    color: colors.deepNavy,
-    fontSize: 20,
-    fontWeight: "700",
-  },
-  macLine: {
-    color: colors.midGrey,
-    fontSize: 14,
-    marginTop: 2,
-  },
-  macBold: {
-    color: colors.nearBlack,
-    fontWeight: "700",
-  },
-  mealCount: {
-    color: colors.midGrey,
-    fontSize: 13,
-    fontWeight: "600",
   },
   changeBold: {
     color: colors.deepNavy,
@@ -398,17 +525,5 @@ const styles = StyleSheet.create({
     color: colors.deepNavy,
     fontSize: 14,
     fontWeight: "700",
-  },
-  askLink: {
-    alignItems: "center",
-    flexDirection: "row",
-    gap: spacing.sm,
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  askLinkText: {
-    color: colors.indigo,
-    fontSize: 15,
-    fontWeight: "600",
   },
 });
