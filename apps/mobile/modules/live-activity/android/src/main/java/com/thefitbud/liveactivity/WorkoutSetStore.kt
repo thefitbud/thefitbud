@@ -180,6 +180,8 @@ internal class WorkoutSetStore(context: Context) {
                 .put("restEndsAt", state.restEndsAt ?: JSONObject.NULL)
                 .put("restSeconds", state.restSeconds ?: JSONObject.NULL)
                 .put("moreExercisesRemain", state.moreExercisesRemain)
+                // TR-15d's elapsed timer (Z14-5); absent in states stored before it.
+                .put("startedAt", state.startedAt ?: JSONObject.NULL)
 
         fun stateFromJson(json: JSONObject): WorkoutSetNotification.SetState =
             WorkoutSetNotification.SetState(
@@ -199,6 +201,8 @@ internal class WorkoutSetStore(context: Context) {
                 restEndsAt = if (json.isNull("restEndsAt")) null else json.optLong("restEndsAt"),
                 restSeconds = if (json.isNull("restSeconds")) null else json.optInt("restSeconds"),
                 moreExercisesRemain = json.optBoolean("moreExercisesRemain", false),
+                startedAt =
+                    if (!json.has("startedAt") || json.isNull("startedAt")) null else json.optLong("startedAt"),
             )
     }
 }

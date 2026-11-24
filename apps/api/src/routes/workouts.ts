@@ -14,6 +14,7 @@ import {
   localDateSchema,
   skipWorkoutRequestSchema,
   startWorkoutRequestSchema,
+  traineeWorkoutFeedbackRequestSchema,
   workoutAdherenceResponseSchema,
   workoutAssignmentListResponseSchema,
   workoutAssignmentSchema,
@@ -81,6 +82,14 @@ import {
   workoutLogSnapshot,
   type CoachLogWrite,
 } from "../domain/coach-log.js";
+import {
+  FEEDBACK_EDIT_WINDOW_CLOSED_CODE,
+  FEEDBACK_EDIT_WINDOW_CLOSED_MESSAGE,
+  feedbackEditWindowAllows,
+  syncDeviceTime,
+  workoutFeedbackEditableUntil,
+} from "../domain/meal-edit-window.js";
+import { recordTraineeLogChange } from "../domain/trainee-log-edit.js";
 import { resolvePushProviderMode } from "../lib/push-provider.js";
 import { addDaysIso, createId, nowIso, sha256Hex } from "../lib/crypto";
 import type { AppContext } from "../lib/envelope";
@@ -284,7 +293,11 @@ async function loadExecutionBundle(db: Db, executionId: string) {
 type ExecutionBundle = NonNullable<Awaited<ReturnType<typeof loadExecutionBundle>>>;
 
 function mapExecution(bundle: ExecutionBundle) {
-  return mapWorkoutExecution(bundle.execution, bundle.exercises, bundle.sets);
+  return {
+    ...mapWorkoutExecution(bundle.execution, bundle.exercises, bundle.sets),
+    // Z14-11 (D-W14-20): the server owns the 48 h rating window.
+    feedbackEditableUntil: workoutFeedbackEditableUntil(bundle.execution),
+  };
 }
 
 /**
@@ -2679,5 +2692,214 @@ workoutRoutes.patch(
       recordVersion: refreshed.execution.recordVersion,
     });
     return ok(c, workoutExecutionSchema.parse(mapExecution(refreshed)));
+  },
+);
+
+// ---------------------------------------------------------------------------
+// Trainee rates a finished workout for 48 hours (Z14-11, D-W14-20)
+// ---------------------------------------------------------------------------
+
+const FEEDBACK_OPERATION = "workout.execution.feedback";
+
+workoutRoutes.patch(
+  "/executions/:executionId/feedback",
+  operation({
+    tag: "Workouts",
+    summary: "Trainee sets or clears the session RPE of a finished workout",
+    description:
+      "Sets (1 to 10) or clears the session RPE of the trainee's own finished workout. Allowed until 48 hours after completedAt (422 FEEDBACK_EDIT_WINDOW_CLOSED); recordVersion must match (409 VERSION_CONFLICT). Writes the change log (before and after), an activity item for the coach and a realtime hint. The execution read returns feedbackEditableUntil. Through sync, a change made offline inside the window is accepted if it arrives within 72 hours of the window closing. A note is not stored: workout_executions has no note column (see the Z14-11 report).",
+    roles: ["trainee"],
+    idempotency: true,
+    body: traineeWorkoutFeedbackRequestSchema,
+    response: workoutExecutionSchema,
+    errors: [
+      { status: 409, description: "VERSION_CONFLICT, or the workout is not finished." },
+      { status: 422, description: "FEEDBACK_EDIT_WINDOW_CLOSED, or SESSION_RPE_REQUIRED when the plan requires a rating." },
+    ],
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainee"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor?.selectedRole) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+    const idempotencyKey = requireIdempotencyKey(c);
+    if (!idempotencyKey) {
+      return fail(
+        c,
+        400,
+        "IDEMPOTENCY_KEY_REQUIRED",
+        "Idempotency-Key header is required.",
+      );
+    }
+    const parsed = traineeWorkoutFeedbackRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid rating.", {
+        issues: parsed.error.issues,
+      });
+    }
+    const body = parsed.data;
+    const executionId = c.req.param("executionId");
+    const db = createDb(c.env.DB);
+    const fingerprint = await sha256Hex(JSON.stringify({ executionId, body }));
+    const existing = await findIdempotencyRecord(db, {
+      actorUserId: actor.userId,
+      operation: FEEDBACK_OPERATION,
+      idempotencyKey,
+    });
+    if (existing) {
+      if (existing.requestFingerprint !== fingerprint) {
+        return fail(
+          c,
+          409,
+          "IDEMPOTENCY_KEY_REUSE",
+          "Idempotency key was reused with a different request.",
+        );
+      }
+      return c.json(JSON.parse(existing.responseBody), existing.responseStatus as 200);
+    }
+
+    const loaded = await requireTraineeOwnedOpenExecution(c, executionId);
+    if (isOwnershipFailure(loaded)) return ownershipError(c, loaded);
+    const { bundle, relationship } = loaded;
+    const execution = bundle.execution;
+    if (!wasFinishedByCompleting(execution.status) || !execution.completedAt) {
+      return fail(c, 409, "INVALID_TRANSITION", "This workout isn't finished yet.");
+    }
+    const now = nowIso();
+    if (
+      !feedbackEditWindowAllows({
+        completedAt: execution.completedAt,
+        now,
+        deviceTime: syncDeviceTime(c),
+      })
+    ) {
+      return fail(
+        c,
+        422,
+        FEEDBACK_EDIT_WINDOW_CLOSED_CODE,
+        FEEDBACK_EDIT_WINDOW_CLOSED_MESSAGE,
+      );
+    }
+    if (body.recordVersion !== execution.recordVersion) {
+      return fail(
+        c,
+        409,
+        "VERSION_CONFLICT",
+        "This workout changed since it was opened. Reload and try again.",
+      );
+    }
+    if (body.rpe === null && execution.requireSessionRpe) {
+      return fail(
+        c,
+        422,
+        "SESSION_RPE_REQUIRED",
+        "Session RPE is required to complete this workout.",
+      );
+    }
+
+    const respond = async (data: ReturnType<typeof workoutExecutionSchema.parse>) => {
+      const responseBody = { data };
+      await saveIdempotencyRecord(db, {
+        actorUserId: actor.userId,
+        operation: FEEDBACK_OPERATION,
+        idempotencyKey,
+        requestFingerprint: fingerprint,
+        responseStatus: 200,
+        responseBody,
+        expiresAt: addDaysIso(7),
+      });
+      return responseBody;
+    };
+
+    if (body.rpe === execution.sessionRpe) {
+      // Nothing changed: no new version, no activity item.
+      return c.json(
+        await respond(workoutExecutionSchema.parse(mapExecution(bundle))),
+        200,
+      );
+    }
+
+    const [assignment] = await db
+      .select()
+      .from(workoutAssignments)
+      .where(eq(workoutAssignments.id, execution.assignmentId))
+      .limit(1);
+    if (!assignment) {
+      return fail(c, 404, "EXECUTION_NOT_FOUND", "Execution not found.");
+    }
+    const serverVersion = execution.recordVersion + 1;
+    const snapshotOf = (sessionRpe: number | null) =>
+      workoutLogSnapshot({
+        assignment,
+        execution: { status: execution.status, completedAt: execution.completedAt, sessionRpe },
+        exercises: bundle.exercises.map((exercise) => ({
+          id: exercise.id,
+          name: exercise.name,
+          order: exercise.order,
+        })),
+        sets: bundle.sets,
+      });
+    let responseBody: { data: ReturnType<typeof workoutExecutionSchema.parse> } | undefined;
+    try {
+      await recordTraineeLogChange(db, {
+        entity: {
+          type: "workout_execution",
+          id: execution.id,
+          coachingRelationshipId: relationship.id,
+          traineeUserId: actor.userId,
+          serverVersion,
+        },
+        kind: "edit",
+        actorUserId: actor.userId,
+        before: snapshotOf(execution.sessionRpe),
+        after: snapshotOf(body.rpe),
+        now,
+        claim: () =>
+          db
+            .update(workoutExecutions)
+            .set({
+              sessionRpe: body.rpe,
+              recordVersion: serverVersion,
+              lastEditedByRole: "trainee",
+              lastEditedByUserId: actor.userId,
+              lastEditedAt: now,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(workoutExecutions.id, execution.id),
+                eq(workoutExecutions.recordVersion, execution.recordVersion),
+              ),
+            ),
+        afterCommit: async () => {
+          const fresh = await loadExecutionBundle(db, execution.id);
+          responseBody = await respond(workoutExecutionSchema.parse(mapExecution(fresh!)));
+        },
+      });
+    } catch (error) {
+      if (error instanceof CoachLogConflict) {
+        return error.kind === "version"
+          ? fail(
+              c,
+              409,
+              "VERSION_CONFLICT",
+              "This workout changed since it was opened. Reload and try again.",
+            )
+          : fail(c, 409, LOG_WRITE_CONFLICT.code, LOG_WRITE_CONFLICT.message);
+      }
+      throw error;
+    }
+    if (!responseBody) throw new Error("Workout rating committed without a stored execution.");
+    emitWorkoutExecutionChanged(c.env, {
+      id: execution.id,
+      coachingRelationshipId: relationship.id,
+      recordVersion: serverVersion,
+    });
+    return c.json(responseBody, 200);
   },
 );

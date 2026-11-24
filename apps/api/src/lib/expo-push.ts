@@ -134,6 +134,7 @@ export const EXPO_ANDROID_CHANNEL_BY_TYPE: Readonly<Record<NotificationType, Exp
   trainer_intake_submitted: "clients_v2",
   trainer_renewal: "clients_v2",
   trainer_meal_times_changed: "clients_v2",
+  trainer_client_log_edited: "clients_v2",
   trainer_critical_digest: "clients_v2",
 };
 

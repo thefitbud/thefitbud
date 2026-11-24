@@ -11,8 +11,9 @@ import expo.modules.kotlin.records.Record
  * The Android half of the local `LiveActivity` module (LA3).
  *
  * Android has no Live Activity: the same JS calls drive an ongoing
- * notification instead (frame 27-android), posted on the `workout` channel
- * that src/notifications/androidChannels.ts creates. Local only — no push, no
+ * notification instead (TR-15d since Z14-5), posted on its own "Live workout"
+ * channel (`workout_live`), which WorkoutSetNotification creates natively.
+ * Local only — no push, no
  * network, no API call from here (D-B7, D-W2-5), exactly like iOS.
  *
  * KEEP IN SYNC with ios/LiveActivityModule.swift and with the module type in
@@ -57,7 +58,11 @@ class WorkoutStateRecord : Record {
      */
     @Field var moreExercisesRemain: Boolean = false
 
-    fun toState(openUrl: String, workoutName: String): WorkoutSetNotification.SetState =
+    fun toState(
+        openUrl: String,
+        workoutName: String,
+        startedAt: Long?,
+    ): WorkoutSetNotification.SetState =
         WorkoutSetNotification.SetState(
             exerciseName = exerciseName,
             setIndex = setIndex,
@@ -75,6 +80,7 @@ class WorkoutStateRecord : Record {
             restEndsAt = restEndsAt?.toLong(),
             restSeconds = restSeconds,
             moreExercisesRemain = moreExercisesRemain,
+            startedAt = startedAt,
         )
 }
 
@@ -87,6 +93,26 @@ class LiveActivityModule : Module() {
 
     override fun definition() = ModuleDefinition {
         Name("LiveActivity")
+
+        /**
+         * `{ count }` after the notification's Log button appended a row
+         * (Z14-5; the same event iOS sends for LogSetIntent). Only while JS
+         * listens and this module is alive; otherwise the app drains on its
+         * next foreground, as before.
+         */
+        Events(EVENT_OUTBOX_ROW)
+
+        OnStartObserving {
+            outboxListener = { count -> sendEvent(EVENT_OUTBOX_ROW, mapOf("count" to count)) }
+        }
+
+        OnStopObserving {
+            outboxListener = null
+        }
+
+        OnDestroy {
+            outboxListener = null
+        }
 
         /** False when the trainee turned notifications, or the channel, off. */
         Function("isSupported") {
@@ -102,7 +128,14 @@ class LiveActivityModule : Module() {
             if (!WorkoutSetNotification.notificationsEnabled(context)) {
                 null
             } else {
-                val next = state.toState(attributes.openUrl, attributes.workoutName)
+                // The same workout keeps its start, so the elapsed timer does not
+                // jump back to 0:00 when the app starts it again (iOS reuses the
+                // running activity the same way).
+                val previous = store.readState()
+                val startedAt =
+                    previous?.startedAt?.takeIf { previous.openUrl == attributes.openUrl }
+                        ?: System.currentTimeMillis()
+                val next = state.toState(attributes.openUrl, attributes.workoutName, startedAt)
                 store.writeState(next)
                 // A previous workout's confirmation line has no place here.
                 WorkoutSetNotification.cancelAll(context)
@@ -126,7 +159,7 @@ class LiveActivityModule : Module() {
          */
         AsyncFunction("update") { state: WorkoutStateRecord ->
             val current = store.readState() ?: return@AsyncFunction
-            val next = state.toState(current.openUrl, current.workoutName)
+            val next = state.toState(current.openUrl, current.workoutName, current.startedAt)
             store.writeState(next)
             RestAlarm.apply(context, next)
             if (next.finished) {
@@ -201,6 +234,22 @@ class LiveActivityModule : Module() {
          */
         Function("removeOutbox") { count: Int ->
             store.removeFirst(count)
+        }
+    }
+
+    companion object {
+        const val EVENT_OUTBOX_ROW = "onOutboxRow"
+
+        /** Set while JS observes this module's events; the receiver calls it. */
+        @Volatile private var outboxListener: ((Int) -> Unit)? = null
+
+        /** Called by WorkoutSetActionReceiver after it appended a row. Never throws. */
+        fun notifyOutboxRow(count: Int) {
+            try {
+                outboxListener?.invoke(count)
+            } catch (error: Exception) {
+                // A JS runtime that is going away must not break the button.
+            }
         }
     }
 }

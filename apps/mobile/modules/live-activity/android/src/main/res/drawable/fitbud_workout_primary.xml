@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The primary "✓ Log set n" button (frame 27-android). -->
+<!-- The primary "✓ Log 40 kg × 10" button (TR-15d) and Skip rest. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
     <solid android:color="@color/fitbud_workout_accent" />
-    <corners android:radius="24dp" />
+    <corners android:radius="14dp" />
 </shape>

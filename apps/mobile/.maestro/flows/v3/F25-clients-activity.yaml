@@ -97,3 +97,18 @@ env:
           commands:
             - tapOn: "All clients|Filter|Client"
             - takeScreenshot: TM-09d
+
+# Z14-3: visited tabs stay mounted. Away and back, the Clients tab is there at
+# once (short timeouts: no skeleton and no wait for a refetch).
+- tapOn:
+    id: "tab-attention"
+- extendedWaitUntil:
+    visible:
+      id: "attention-screen"
+    timeout: 5000
+- tapOn:
+    id: "tab-clients"
+- extendedWaitUntil:
+    visible: "Clients|Activity"
+    timeout: 3000
+- runFlow: ../../common/assert-no-crash.yaml

@@ -1633,6 +1633,8 @@ export const notifications = sqliteTable(
         "trainer_critical_digest",
         "trainer_renewal",
         "trainer_meal_times_changed",
+        // Z14-11 (D-W14-23): a client edited or removed a meal log. No DB CHECK, no migration.
+        "trainer_client_log_edited",
         "admin_whatsapp_budget",
         // Z6-19 (D-W6-30, D-W6-32): a trainer created or edited one of the trainee's logs.
         // No DB CHECK on this column, so no migration.
