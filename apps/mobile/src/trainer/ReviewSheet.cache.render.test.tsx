@@ -80,12 +80,13 @@ function sheet(index: number) {
       onBrowseItem={vi.fn()}
       onShowSummary={vi.fn()}
       onDismiss={vi.fn()}
-      onMarkReviewed={vi.fn()}
+      onNoted={vi.fn()}
       onUndo={vi.fn()}
       onNextClient={vi.fn()}
       onNudge={vi.fn()}
       onResolve={vi.fn()}
-      onMore={vi.fn()}
+      onAddNote={vi.fn()}
+      onWhatsApp={vi.fn()}
     />
   );
 }
