@@ -104,6 +104,12 @@ type Props = {
   onboardingStatusLabelText?: string;
   /** Short name of the screen below (BK-01), shown beside the iOS back chevron. */
   backLabel?: string;
+  /**
+   * False while another screen is pushed above this one (an exception or check-in
+   * opened from the client page): its hardware-back handlers then stay quiet so
+   * back pops the visible screen, not a hidden note form.
+   */
+  active?: boolean;
   onBack: () => void;
   onOpenException: (exceptionId: string) => void;
   onOpenCheckin: (checkinId: string) => void;
@@ -139,6 +145,7 @@ export function ClientStatusScreen({
   displayName,
   onboardingStatusLabelText,
   backLabel,
+  active = true,
   onBack,
   onOpenException,
   onOpenCheckin,
@@ -451,7 +458,7 @@ export function ClientStatusScreen({
       return true;
     }
     return false;
-  });
+  }, active);
 
   async function copyPlanLink() {
     const url = `${trainerWebUrl()}/clients/${relationshipId}`;

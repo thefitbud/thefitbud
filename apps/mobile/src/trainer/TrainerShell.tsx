@@ -347,6 +347,7 @@ function TrainerShellBody() {
         displayName={overlay.displayName}
         onboardingStatusLabelText={overlay.onboardingStatusLabelText}
         backLabel={parentLabel(index)}
+        active={index === overlays.length - 1}
         onBack={() => goBack()}
         onOpenException={(exceptionId) =>
           open({ kind: "exception", exceptionId })
