@@ -4,6 +4,7 @@ const jobs = vi.hoisted(() => ({
   reminders: vi.fn(),
   replenishment: vi.fn(),
   coachAsk: vi.fn(),
+  cleanup: vi.fn(),
   pushReceipts: vi.fn(),
   queueBatch: vi.fn(),
   // Z6-17 (D-W6-37): the real purge reads D1, so it is mocked like the other jobs.
@@ -18,6 +19,7 @@ vi.mock("./jobs/reminders", async (importOriginal) => ({
 vi.mock("./jobs/replenishment", () => ({ handleScheduledReplenishment: jobs.replenishment }));
 vi.mock("./jobs/push-receipts", () => ({ handleScheduledPushReceipts: jobs.pushReceipts }));
 vi.mock("./jobs/account-purge", () => ({ runAccountPurge: jobs.accountPurge }));
+vi.mock("./jobs/cleanup", () => ({ handleScheduledCleanup: jobs.cleanup }));
 vi.mock("./domain/coach-asks", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./domain/coach-asks")>()),
   runCoachAskMaintenance: jobs.coachAsk,
@@ -231,6 +233,7 @@ describe("scheduled() (OB2)", () => {
       ["cron.completed", "cron.replenishment"],
       ["cron.completed", "cron.coach_ask"],
       ["cron.completed", "cron.account_purge"],
+      ["cron.completed", "cron.cleanup"],
       ["cron.completed", "cron.push_receipts"],
     ]);
     for (const line of cron) expect(typeof line.latencyMs).toBe("number");
@@ -254,6 +257,7 @@ describe("scheduled() (OB2)", () => {
 
     expect(jobs.replenishment).toHaveBeenCalledTimes(1);
     expect(jobs.coachAsk).toHaveBeenCalledTimes(1);
+    expect(jobs.cleanup).toHaveBeenCalledTimes(1);
     expect(jobs.pushReceipts).toHaveBeenCalledTimes(1);
     const cron = logLines().filter((l) => String(l.message).startsWith("cron."));
     expect(cron).toEqual([
@@ -268,6 +272,7 @@ describe("scheduled() (OB2)", () => {
       expect.objectContaining({ message: "cron.completed", operation: "cron.replenishment" }),
       expect.objectContaining({ message: "cron.failed", operation: "cron.coach_ask", errorName: "TypeError" }),
       expect.objectContaining({ message: "cron.completed", operation: "cron.account_purge" }),
+      expect.objectContaining({ message: "cron.completed", operation: "cron.cleanup" }),
       expect.objectContaining({ message: "cron.completed", operation: "cron.push_receipts" }),
     ]);
     expectNothingSensitive();
