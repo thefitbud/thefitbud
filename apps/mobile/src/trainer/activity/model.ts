@@ -3,6 +3,8 @@ import {
   formatCivilDate,
   formatLocalDate,
   formatRelative,
+  mealEditedByLine,
+  mealWasLine,
 } from "@fitbud/core";
 
 export type ActivityFilter =
@@ -19,6 +21,8 @@ export type ActivityTagKind =
   | "changed"
   | "checkin"
   | "change"
+  | "edited"
+  | "removed"
   | "note_seen"
   | "ask"
   | "other";
@@ -39,6 +43,10 @@ export type ActivityEventLike = {
   summary: string;
   kcal?: number | null;
   link?: string | null;
+  /** Z14-16: on a client's own meal edit or removal, the entry, its day and the previous kcal. */
+  entryId?: string | null;
+  mealDate?: string | null;
+  previousKcal?: number | null;
 };
 
 export const ACTIVITY_FILTERS: Array<{ id: ActivityFilter; label: string }> = [
@@ -57,6 +65,10 @@ export function matchesActivityFilter(
   const type = event.type.toLowerCase();
   const subtype = (event.subtype ?? "").toLowerCase();
   const summary = event.summary.toLowerCase();
+  // Z14-16: a client's own meal edit or removal shows under Meals and Changes.
+  const clientMealChange = type === "client_edited" || type === "client_removed";
+  if (filter === "meals" && clientMealChange) return true;
+  if (filter === "changes" && clientMealChange) return true;
   if (filter === "meals") {
     return type.includes("meal") || summary.includes("meal") || summary.includes("kcal");
   }
@@ -84,6 +96,14 @@ export function activityTag(event: ActivityEventLike): ActivityTag {
   const subtype = (event.subtype ?? "").toLowerCase();
   const summary = event.summary.toLowerCase();
 
+  // Z14-16 (D-W14-23 a): quiet neutral "Edited" / "Removed" tags. A rating a
+  // client changed on a finished workout keeps its own label.
+  if (type === "client_removed") return { kind: "removed", label: "Removed" };
+  if (type === "client_edited") {
+    return subtype === "rating"
+      ? { kind: "other", label: "Rating" }
+      : { kind: "edited", label: "Edited" };
+  }
   if (type.includes("checkin") || summary.includes("check-in")) {
     return { kind: "checkin", label: "Check-in" };
   }
@@ -201,4 +221,43 @@ export function emptyFilterCopy(input: {
 export function parseMealComplianceId(eventId: string): string | null {
   const match = /^meal:([0-9a-f-]{36})$/i.exec(eventId);
   return match?.[1] ?? null;
+}
+
+type ClientEditFields = {
+  lastEditedByRole?: "trainee" | "coach" | null;
+  lastEditedAt?: string | null;
+  updatedAt: string;
+  previousValue?: {
+    outcome: string;
+    deviationKind: string | null;
+    kcal: number | null;
+  } | null;
+};
+
+/** Z14-16: the client changed this entry (a coach edit is not this). */
+export function isClientEdited(
+  compliance: Pick<ClientEditFields, "lastEditedByRole"> | null | undefined,
+): boolean {
+  return compliance?.lastEditedByRole === "trainee";
+}
+
+/**
+ * The quiet box on a meal the client edited (TM-09f): "Edited by Aarav · Sat 14
+ * Nov, 2:05 pm" and "Was 610 kcal · as planned". Null when the client never
+ * edited it, or when a coach did.
+ */
+export function clientEditMarker(
+  compliance: ClientEditFields | null | undefined,
+  clientName: string,
+  zone: string,
+): { by: string; was: string | null } | null {
+  if (!compliance || !isClientEdited(compliance)) return null;
+  return {
+    by: mealEditedByLine({
+      clientName,
+      editedAt: compliance.lastEditedAt ?? compliance.updatedAt,
+      zone,
+    }),
+    was: compliance.previousValue ? mealWasLine(compliance.previousValue) : null,
+  };
 }

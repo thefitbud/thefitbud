@@ -43,6 +43,7 @@ const api = vi.hoisted(() => ({
   reviewOnboarding: vi.fn(),
   listWorkspaceActivity: vi.fn(),
   getMealAssignment: vi.fn(),
+  listNotifications: vi.fn(async () => ({ items: [] })),
   listCheckins: vi.fn(),
   listCheckinFormTemplates: vi.fn(),
   listPlanTemplates: vi.fn(),
@@ -65,6 +66,7 @@ const api = vi.hoisted(() => ({
 const stage1 = vi.hoisted(() => ({
   getWorkspaceWeek: vi.fn(),
   getResponsiveness: vi.fn(),
+  getActivityFeed: vi.fn(async () => ({ events: [] })),
   patchTrainerNote: vi.fn(),
 }));
 

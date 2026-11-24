@@ -34,10 +34,12 @@ import {
   Users,
 } from "lucide-react";
 import {
+  formatLocalDate,
   formatPersonName,
   labelFor,
   trainerNotificationCopy,
 } from "@fitbud/core";
+import { logEditBellItems } from "./bellItems";
 import type { ClientDirectoryItem } from "@fitbud/contracts";
 import { useAuth } from "../auth/AuthProvider";
 import { useConfig } from "../lib/config";
@@ -414,12 +416,15 @@ export function AppShell({ children }: { children: ReactNode }) {
     let cancelled = false;
     void (async () => {
       try {
-        const [asks, inbox, directory] = await Promise.all([
+        const [asks, inbox, directory, notifications] = await Promise.all([
           stage1Api.listCoachAsks({
             status: "open",
           }) as Promise<{ items: Array<{ id: string; relationshipId: string }> }>,
           apiClient.listTrainerCheckinInbox(),
           apiClient.listClients({ limit: 100 }).catch(() => ({ items: [] })),
+          // Z14-16: a client's meal-log changes. Without them the bell still
+          // shows asks and check-ins (Activity keeps the Edited/Removed rows).
+          apiClient.listNotifications().catch(() => ({ items: [] })),
         ]);
         if (cancelled) return;
         const names = new Map<string, string>();
@@ -451,6 +456,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             href: `/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}`,
           });
         }
+        const trainerZone =
+          me?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone ?? "UTC";
+        items.push(
+          ...logEditBellItems(
+            notifications.items,
+            names,
+            formatLocalDate(new Date(), trainerZone),
+          ),
+        );
         setBellItems(items);
       } catch {
         if (!cancelled) setBellItems([]);
