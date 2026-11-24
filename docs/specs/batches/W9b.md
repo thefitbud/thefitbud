@@ -9,7 +9,7 @@
 ## Decisions
 - **D-W9b-1 Steps privacy copy (frames 93, 95):** steps **are** shared with the coach (the trainer sees daily steps). The frames' line "Steps stay on your phone and aren't shared with your coach" is false. The copy Z9-10 shipped is correct: "FitBud reads your daily step count from {Apple Health | Health Connect} and shares the daily total with {coach}." Decided by Firoz, 11 Nov 2026. The PNGs are not repainted; see the notes in `docs/design/README.md` and `DESIGN-NOTES.md` › "Superseded by (W9b, 11 Nov 2026)".
 - **D-W9b-2 Client ⋯ menu (frame 208):** "Add note" is deliberately left out of the client header overflow menu. Notes are added from Overview. This confirms what Z9-13 shipped. Decided by Firoz, 11 Nov 2026.
-- **D-W9b-3 Lanes (planner):** workout (`WorkoutTab.tsx`, `WorkoutTab.week.test.tsx`, `TraineeShell.tsx`, plus the `FOCUS_DATE` fixture lines in `WorkoutTab.render.test.tsx` and `workout/coach-logged/WorkoutTab.gating.test.tsx`), steps-copy (`trainee/settings/StepsSettingsScreen.tsx`, only if reachable), ci (`.github/workflows/ci.yml`, Z9b-0). Z10-15 and Z14-20 are not touched.
+- **D-W9b-3 Lanes (planner):** workout (`WorkoutTab.tsx`, `WorkoutTab.week.test.tsx`, `TraineeShell.tsx`, plus the `FOCUS_DATE` fixture lines in `WorkoutTab.render.test.tsx` and `workout/coach-logged/WorkoutTab.gating.test.tsx`), steps-copy (`trainee/settings/StepsSettingsScreen.tsx`, only if reachable), ci (`.github/workflows/ci.yml`, Z9b-0). Z10-15 and Z16-20 are not touched.
 
 ## Questions for Firoz
 - None.
@@ -41,7 +41,7 @@
 
 ## Report (filled in by the orchestrator at the end)
 
-Run by the W9 Claude Code orchestrator session, 11 Nov 2026. Nothing was deployed and no remote commands were run. Z10-15, Z14-20 and #307 were not touched. W10 was not started.
+Run by the W9 Claude Code orchestrator session, 11 Nov 2026. Nothing was deployed and no remote commands were run. Z10-15, Z16-20 and #307 were not touched. W10 was not started.
 
 **Main SHA for Firoz's iOS and Android builds: `8f816c80335f01f6e823cd7f6706e45fc96b0ba2`** (the Z9b-1 merge). Main CI is green on it (run 43068577638: ci, e2e and banned-strings).
 

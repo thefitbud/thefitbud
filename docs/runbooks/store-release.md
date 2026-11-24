@@ -4,7 +4,7 @@ How Firoz builds the production app and submits it for the closed beta: TestFlig
 
 For the **staging** app on TestFlight / Play internal (`staging-store` profile), see [`mobile-distribution.md`](mobile-distribution.md).
 
-This runbook is written in W4 and used in W13 (D-W4-13). W13 (D-W13-4) changes the store answers before submission: in-app account deletion, and HealthKit / Health Connect because steps ship in that beta. Until that update, this cut declares neither HealthKit nor Health Connect, and account deletion is by email.
+This runbook is written in W4 and used in W15 (Z15-9, Z15-10; was W13 until 24 Nov 2026, D-W4-13). W13 (D-W13-4) changes the store answers before submission: in-app account deletion, and HealthKit / Health Connect because steps ship in that beta. Until that update, this cut declares neither HealthKit nor Health Connect, and account deletion is by email.
 
 No secret values belong in this file, the repo, a PR or a chat. Names only.
 
