@@ -358,10 +358,18 @@ a.home-tile:focus-visible {
   color: var(--ink-700, var(--ink2));
 }
 
+/* W14: a long issue wraps to two lines at every width (the full text stays in
+   the cell's title and the row's accessible name) instead of being cut to one
+   line with an ellipsis. */
 .home-issue-txt {
-  white-space: nowrap;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  line-height: 18px;
 }
 
 .home-more {

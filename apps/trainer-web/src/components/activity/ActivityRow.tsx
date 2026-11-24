@@ -1,12 +1,15 @@
+import { useContext } from "react";
 import type { MealAssignment } from "@fitbud/contracts";
 import type { WorkspaceActivityItem } from "@fitbud/contracts";
-import { formatKcal, labelFor } from "@fitbud/core";
+import { formatKcal, labelFor, mealRemovedActivityLine } from "@fitbud/core";
 import {
   AlertOctagon,
   AlertTriangle,
   CheckCircle2,
   CircleDashed,
   Info,
+  Pencil,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { LinkedMedia } from "../LinkedMedia";
@@ -17,11 +20,13 @@ import {
   chipValueForActivity,
   formatActivityTime,
   activityMealChipLabel,
+  isClientEdited,
   mealDetailLine,
   planEnergyKcal,
   workoutChipLabel,
   type ActivityChipTone,
 } from "./activityUtils";
+import { UnreadLogEditsContext } from "./unreadLogEdits";
 
 export type NudgeUiState =
   | { kind: "ready" }
@@ -81,6 +86,52 @@ function mealTitleLine(
   return item.title;
 }
 
+const UNREAD_DOT_STYLE = {
+  background: "currentColor",
+  borderRadius: "50%",
+  display: "inline-block",
+  height: 8,
+  marginLeft: 6,
+  width: 8,
+} as const;
+
+/** TM-09e: a client removed a meal log. A quiet row with a neutral "Removed" tag. */
+export function ActivityRemovedRow({
+  clientName,
+  summary,
+  mealDate,
+  previousKcal,
+  occurredAt,
+  clientTimezone,
+  trainerTimezone,
+}: {
+  clientName: string | null;
+  summary: string;
+  mealDate: string | null;
+  previousKcal: number | null;
+  occurredAt: string;
+  clientTimezone: string;
+  trainerTimezone: string;
+}) {
+  const time = formatActivityTime(occurredAt, clientTimezone, trainerTimezone);
+  return (
+    <li className="activity-feed-row" data-testid="activity-removed-row">
+      <time className="activity-feed-time" dateTime={occurredAt} title={time.title}>
+        {time.label}
+      </time>
+      <div className="activity-feed-main">
+        <p className="activity-feed-title">
+          {mealRemovedActivityLine({ clientName, summary, mealDate, previousKcal })}
+        </p>
+      </div>
+      <span className="activity-status activity-status-neutral" data-testid="removed-tag">
+        <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+        <span>Removed</span>
+      </span>
+    </li>
+  );
+}
+
 export function ActivityRow({
   item,
   clientTimezone,
@@ -133,6 +184,10 @@ export function ActivityRow({
   const photoId =
     item.type === "meal" ? mealAssignment?.compliance?.mediaAssetId : null;
 
+  const clientEdited = isClientEdited(mealAssignment?.compliance);
+  const unreadEntries = useContext(UnreadLogEditsContext);
+  const editUnread =
+    clientEdited && unreadEntries.has(mealAssignment?.compliance?.id ?? "");
   const showNudge = !readOnly && canNudgeItem(item);
   const title =
     item.type === "meal" ? mealTitleLine(item, mealAssignment) : item.title;
@@ -161,6 +216,20 @@ export function ActivityRow({
         <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
         <span>{chipText}</span>
       </span>
+      {clientEdited ? (
+        <span className="activity-status activity-status-neutral" data-testid="edited-tag">
+          <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span>Edited</span>
+          {editUnread ? (
+            <span
+              style={UNREAD_DOT_STYLE}
+              role="img"
+              aria-label="Unread"
+              data-testid="edited-unread-dot"
+            />
+          ) : null}
+        </span>
+      ) : null}
       <div className="activity-feed-actions">
         {showNudge ? (
           nudge?.kind === "sent" ? (

@@ -869,16 +869,25 @@ describe("trainee edits, removes and adds a photo to a logged meal (Z14-11)", ()
       }
     });
 
-    it("the trainer's inbox lists it and the push title names the client without coaching detail", async () => {
+    it("the trainer's inbox lists it with what changed (Z14-16), so the shared copy and the tap can use it", async () => {
       await registerTrainerPhone();
       const entry = await confirm();
       await patchLog(entry.id, { ...ATE_OUT, recordVersion: 0 });
       const inbox = await call("/notifications", { headers: f.trainer });
       expect(inbox.status).toBe(200);
-      const item = (inbox.body.data.items as Array<{ type: string }>).find(
-        (row) => row.type === "trainer_client_log_edited",
-      );
+      const item = (
+        inbox.body.data.items as Array<{
+          type: string;
+          logEdit?: { entryId: string; action: string; mealName: string; mealDate: string };
+        }>
+      ).find((row) => row.type === "trainer_client_log_edited");
       expect(item).toBeDefined();
+      expect(item!.logEdit).toMatchObject({
+        entryId: entry.id,
+        action: "edited",
+        mealName: "Breakfast",
+        mealDate: f.mondayBreakfast.localDate,
+      });
     });
   });
 

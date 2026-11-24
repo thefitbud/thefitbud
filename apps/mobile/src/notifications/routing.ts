@@ -14,6 +14,18 @@ import type { ResolvedAppRoute } from "../navigation/linking";
 export type TrainerNotificationRoute =
   | { kind: "checkin"; checkinId: string }
   | { kind: "client"; relationshipId: string }
+  | {
+      // Z14-16 (D-W14-23 g): a client changed a meal log. Opens that client's
+      // diet day. The push carries ids only, so `date` and `entryId` are filled
+      // from the stored inbox row (`item.logEdit`) when the tap comes from the
+      // inbox; from a push the shell looks the row up by `notificationId`.
+      kind: "clientDiet";
+      relationshipId: string;
+      notificationId: string | null;
+      date: string | null;
+      /** Null for a removed entry: the day opens with nothing selected. */
+      entryId: string | null;
+    }
   | { kind: "attention" };
 
 export type NotificationDeepLink = {
@@ -120,6 +132,16 @@ function trainerRouteFromPayload(
       return payload.domainEntityType === "coaching_relationship"
         ? { kind: "client", relationshipId: id }
         : { kind: "attention" };
+    case "trainer_client_log_edited":
+      return payload.domainEntityType === "coaching_relationship"
+        ? {
+            kind: "clientDiet",
+            relationshipId: id,
+            notificationId: payload.notificationId,
+            date: null,
+            entryId: null,
+          }
+        : { kind: "attention" };
     case "trainer_ask_coach":
       // Asks are shown and answered under the Attention tab's Asked filter.
       return { kind: "attention" };
@@ -167,11 +189,22 @@ export function deepLinkFromNotificationPayload(
   };
 }
 
-/** Prefer server `route` with validated routing payload (TR-15). */
+/**
+ * Prefer server `route` with validated routing payload (TR-15). A client's
+ * meal-log change also carries the day and entry from the stored row.
+ */
 export function deepLinkFromNotification(
-  item: Pick<Notification, "routing" | "route">,
+  item: Pick<Notification, "routing" | "route"> & Partial<Pick<Notification, "logEdit">>,
 ): NotificationDeepLink | null {
-  return deepLinkFromNotificationPayload(item.routing);
+  const link = deepLinkFromNotificationPayload(item.routing);
+  if (link?.trainerRoute?.kind === "clientDiet" && item.logEdit) {
+    link.trainerRoute = {
+      ...link.trainerRoute,
+      date: item.logEdit.mealDate,
+      entryId: item.logEdit.action === "edited" ? item.logEdit.entryId : null,
+    };
+  }
+  return link;
 }
 
 /** Every trainee-facing notification type in §4 maps to a documented screen. */
@@ -198,6 +231,7 @@ export const TRAINER_NOTIFICATION_TYPES: NotificationType[] = [
   "trainer_checkin_submitted",
   "trainer_intake_submitted",
   "trainer_meal_times_changed",
+  "trainer_client_log_edited",
 ];
 
 /** Which role may route a push of this type; null = not routed from a tap. */
