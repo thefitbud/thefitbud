@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { View } from "react-native";
 import type {
   CreateCoachAskRequest,
@@ -16,6 +16,7 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { Button } from "../components/Button";
 import { Screen } from "../components/Screen";
+import { HeaderBack } from "../components/HeaderBack";
 import { createThemedStyles } from "../providers/ThemeProvider";
 import { addDays, localDateInTimezone } from "../lib/dates";
 import { reportError } from "../lib/reportError";
@@ -241,6 +242,28 @@ function MealLoadFailed({
   );
 }
 
+/**
+ * Z14-25: the shared header back (BK-01) over a pushed screen that draws no
+ * back of its own (reminder help, a meal that is still loading). Screens that
+ * already draw one (the M2 top bar, 44 pt) keep it; it calls the same `onBack`.
+ */
+function BackBar({ onBack, children }: { onBack: () => void; children: ReactNode }) {
+  const styles = useBackBarStyles();
+  return (
+    <View style={styles.fill}>
+      <View style={styles.bar}>
+        <HeaderBack onPress={onBack} />
+      </View>
+      <View style={styles.fill}>{children}</View>
+    </View>
+  );
+}
+
+const useBackBarStyles = createThemedStyles((t) => ({
+  fill: { flex: 1 },
+  bar: { backgroundColor: t.colors.bg, paddingHorizontal: 8, paddingTop: 8 },
+}));
+
 /** "{Meal} · plan N kcal" as the opener knew it, or nothing. */
 function mealLoadingSubtitle(overlay: TraineeOverlay): string | undefined {
   if (overlay.screen !== "something_different" || !overlay.mealName) return undefined;
@@ -260,7 +283,10 @@ type Props = {
   planState: EffectivePlanState;
   onRetryPlan?: () => void;
   presentation?: "fullscreen" | "sheet";
+  /** Back: the screen below this one, or the tab. Every screen's back is this. */
   onClose: () => void;
+  /** A flow that really ended (a meal saved): close every layer. Defaults to `onClose`. */
+  onDone?: () => void;
   onOpen: TraineeOverlayOpener;
   onSignOut: () => void;
   onGoToday?: () => void;
@@ -278,6 +304,7 @@ export function TraineeOverlayHost({
   onRetryPlan,
   presentation = "fullscreen",
   onClose,
+  onDone,
   onOpen,
   onSignOut,
   onGoToday,
@@ -287,6 +314,7 @@ export function TraineeOverlayHost({
   onStartWorkout,
 }: Props) {
   const goToday = onGoToday ?? onClose;
+  const finish = onDone ?? onClose;
   const { api, me } = useAuth();
   const coachName =
     relationship.trainerDisplayName?.trim() ||
@@ -383,10 +411,12 @@ export function TraineeOverlayHost({
       );
     case "reminder_setup":
       return (
-        <ReminderSetupScreen
-          onDone={onClose}
-          onOpenQuietHours={() => onOpen({ screen: "quiet_hours" })}
-        />
+        <BackBar onBack={onClose}>
+          <ReminderSetupScreen
+            onDone={onClose}
+            onOpenQuietHours={() => onOpen({ screen: "quiet_hours" })}
+          />
+        </BackBar>
       );
     case "reminder_settings":
       return (
@@ -412,9 +442,11 @@ export function TraineeOverlayHost({
       if (!mealAssignment) {
         if (mealLoad.kind === "loading") {
           return (
-            <Screen v3 chrome="app" title="Loading meal" showHeader={false}>
-              <MealLoadingRows />
-            </Screen>
+            <BackBar onBack={onClose}>
+              <Screen v3 chrome="app" title="Loading meal" showHeader={false}>
+                <MealLoadingRows />
+              </Screen>
+            </BackBar>
           );
         }
         if (mealLoad.kind === "failed") {
@@ -444,7 +476,7 @@ export function TraineeOverlayHost({
           relationshipId={relationship.id}
           coachName={coachName}
           onBack={onClose}
-          onSaved={onClose}
+          onSaved={finish}
         />
       );
     case "something_different":
@@ -655,7 +687,7 @@ export function TraineeOverlayHost({
         />
       );
     case "delete_account":
-      return <DeleteAccountScreen onBack={() => onOpen({ screen: "privacy" })} />;
+      return <DeleteAccountScreen onBack={onClose} />;
     case "password":
       return <PasswordScreen onBack={onClose} />;
     case "account":

@@ -253,8 +253,9 @@ describe("TraineeShell kept tabs leave nothing live behind (Z14-2)", () => {
       openActiveSession({ relationshipId: shellRelationship.id, execution, assignment });
       const view = await openShell();
       fireEvent.click(screen.getByTestId("tab-workout"));
-      // The live log is on screen and owns Back (it minimises, W-14).
-      await waitFor(() => expect(handlers.length).toBe(1));
+      // The live log is on screen and owns Back (it minimises, W-14). Two
+      // listeners: the shell's one dispatcher (Z14-25) and the live log's own.
+      await waitFor(() => expect(handlers.length).toBe(2));
 
       await tapNotification(view, todayLink);
       await waitFor(() =>
@@ -267,7 +268,9 @@ describe("TraineeShell kept tabs leave nothing live behind (Z14-2)", () => {
       expect(pressBack()).toBe(false);
       // ...the workout was not silently minimised...
       expect(getActiveSession(shellRelationship.id)?.minimised).toBe(false);
-      // ...because the Workout pane is gone, not hidden.
+      // ...because the Workout pane is gone, not hidden (only the shell's
+      // dispatcher is left).
+      expect(handlers.length).toBe(1);
       expect(screen.queryByTestId("trainee-pane-workout")).toBeNull();
       expect(otherErrors).toEqual([]);
     } finally {

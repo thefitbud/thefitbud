@@ -71,6 +71,9 @@ import {
 import { scheduledAssignments } from "./scheduledAssignments";
 import { pickTodayCheckin } from "./pickTodayCheckin";
 import { invalidateRelationshipDayData } from "./dataCache";
+import { HIDDEN_FROM_READERS, PushedScreen } from "../components/PushedScreen";
+import { useHardwareBack } from "../lib/useHardwareBack";
+import { popOverlay, pushOverlay, resetOverlays } from "./traineeOverlayStack";
 import { DAY_VIEW_MAX_AGE_MS } from "./useTraineeDayCache";
 import {
   bindTraineeSnapshots,
@@ -414,7 +417,12 @@ export function TraineeShell({
     string | null
   >(null);
   const [workoutImmersive, setWorkoutImmersive] = useState(false);
-  const [overlay, setOverlay] = useState<TraineeOverlay | null>(null);
+  // Z14-25: the screens opened over a tab are a stack; Back pops (traineeOverlayStack.ts).
+  const [overlays, setOverlays] = useState<TraineeOverlay[]>([]);
+  const overlaysRef = useRef(overlays);
+  overlaysRef.current = overlays;
+  const overlay: TraineeOverlay | null = overlays[overlays.length - 1] ?? null;
+  const hasFullscreenOverlay = overlays.some((o) => overlayLayer(o) === "fullscreen");
   const [activeCheckin, setActiveCheckin] = useState<Checkin | null>(null);
   // Four-state (CU22, D-W3b-24; `unavailable` is CU24, D-W3b-27): the initial
   // value is `loading`, not a null plan, because "not loaded yet", "no plan
@@ -427,9 +435,23 @@ export function TraineeShell({
     useState<EffectivePlanState>(EFFECTIVE_PLAN_LOADING);
   const snapshotsReady = useTraineeSnapshots(me?.userId ?? null, relationship.id);
   // A check-in or a fullscreen overlay covers the tabs (Z14-2).
+  // Overlays sit over the mounted tab (so the iOS swipe shows the real screen
+  // below); only a live workout is unmounted under one, so its own Android
+  // Back handler cannot answer for a screen on top of it.
   const coverOn =
-    Boolean(activeCheckin) || overlayLayer(overlay) === "fullscreen";
+    Boolean(activeCheckin) ||
+    (hasFullscreenOverlay && workoutImmersive && tab === "workout");
   const shownTab: TraineeTab | null = coverOn ? null : tab;
+  // The Workout tab reports "not immersive" as it unmounts under the cover.
+  // Taking that at face value would lift the cover, remount the tab, and
+  // start the loop again; so a report made while covered is ignored (the tab
+  // reports the real value when it mounts again).
+  const coverOnRef = useRef(coverOn);
+  coverOnRef.current = coverOn;
+  const reportWorkoutImmersive = useCallback((immersive: boolean) => {
+    if (!immersive && coverOnRef.current) return;
+    setWorkoutImmersive(immersive);
+  }, []);
   /** Which tab panes stay mounted, hidden, when left (Z14-2): `PaneBook`. */
   const [storedPanes, setPanes] = useState<PaneBook>(() =>
     initialPaneBook(shownTab, Date.now()),
@@ -491,7 +513,7 @@ export function TraineeShell({
   });
 
   const openOverlay: TraineeOverlayOpener = useCallback((next) => {
-    setOverlay(next);
+    setOverlays((stack) => pushOverlay(stack, next));
   }, []);
 
   const handleStartWorkoutFromOverview = useCallback((assignmentId: string) => {
@@ -503,15 +525,15 @@ export function TraineeShell({
     (link: NotificationDeepLink) => {
       const route = link.route;
       if (route.type === "unavailable") {
-        setOverlay({ screen: "deep_link", reason: route.reason });
+        setOverlays(resetOverlays({ screen: "deep_link", reason: route.reason }));
         return;
       }
       if (route.type === "workout_overview" || route.type === "workout_active") {
         setTab("workout");
-        setOverlay({
+        setOverlays(resetOverlays({
           screen: "workout_overview",
           assignmentId: route.assignmentId,
-        });
+        }));
         return;
       }
       if (route.type === "meal") {
@@ -526,22 +548,22 @@ export function TraineeShell({
               (item) => item.id === route.assignmentId,
             );
             if (!match) {
-              setOverlay({
+              setOverlays(resetOverlays({
                 screen: "deep_link",
                 reason: "This meal isn't available anymore.",
-              });
+              }));
               return;
             }
             setSelectedDate(match.localDate);
-            setOverlay({
+            setOverlays(resetOverlays({
               screen: "something_different",
               assignmentId: match.id,
-            });
+            }));
           } catch (err) {
-            setOverlay({
+            setOverlays(resetOverlays({
               screen: "deep_link",
               reason: deepLinkFailureReason("TraineeShell.openMeal", err, "meal"),
-            });
+            }));
           }
         })();
         return;
@@ -556,36 +578,36 @@ export function TraineeShell({
             );
             if (match) setActiveCheckin(match);
             else
-              setOverlay({
+              setOverlays(resetOverlays({
                 screen: "deep_link",
                 reason: "This check-in isn't available anymore.",
-              });
+              }));
           } catch (err) {
-            setOverlay({
+            setOverlays(resetOverlays({
               screen: "deep_link",
               reason: deepLinkFailureReason(
                 "TraineeShell.openCheckin",
                 err,
                 "check-in",
               ),
-            });
+            }));
           }
         })();
         return;
       }
       if (route.type === "note") {
         setTab("today");
-        setOverlay(null);
+        setOverlays(resetOverlays());
         return;
       }
       if (route.type === "reactivate") {
         setTab("today");
-        setOverlay({ screen: "ended" });
+        setOverlays(resetOverlays({ screen: "ended" }));
         return;
       }
       if (route.type === "reminders") {
         setTab("more");
-        setOverlay({ screen: "reminder_settings" });
+        setOverlays(resetOverlays({ screen: "reminder_settings" }));
         return;
       }
       if (route.type === "tab") {
@@ -826,7 +848,7 @@ export function TraineeShell({
         if (due) setActiveCheckin(due);
       },
       closeOverlay() {
-        setOverlay(null);
+        setOverlays(resetOverlays());
         setActiveCheckin(null);
       },
       async ensureWorkoutDay() {
@@ -861,7 +883,7 @@ export function TraineeShell({
       },
       async startCaptureWorkout() {
         setCaptureWorkoutSummary(null);
-        setOverlay(null);
+        setOverlays(resetOverlays());
         const from = addDays(today, -21);
         const listed = await api.listWorkoutAssignments(relationship.id, {
           fromDate: from,
@@ -898,7 +920,7 @@ export function TraineeShell({
         setCaptureWorkout(execution);
       },
       async showCaptureWorkoutSummary() {
-        setOverlay(null);
+        setOverlays(resetOverlays());
         let stub = captureWorkoutRef.current;
         const weekStart = startOfWeekMonday(today);
         const listed = await api.listWorkoutAssignments(relationship.id, {
@@ -1072,11 +1094,49 @@ export function TraineeShell({
   const handleCoachingResumed = useCallback(
     (updated: CoachingRelationship) => {
       setActiveRelationship(updated);
-      setOverlay(null);
+      setOverlays(resetOverlays());
       void refreshSession();
     },
     [refreshSession, setActiveRelationship],
   );
+
+  /**
+   * Back from the top screen (hardware back, the header back and the iOS edge
+   * swipe all call this). A sheet or tabbed screen refreshes the day views as
+   * it closes, as it did before the stack.
+   */
+  const popTop = useCallback(() => {
+    const stack = overlaysRef.current;
+    const top = stack[stack.length - 1];
+    if (!top) return;
+    const layer = overlayLayer(top);
+    if (layer === "sheet" || layer === "tabbed") {
+      invalidateRelationshipDayData(relationship.id);
+    }
+    setOverlays(popOverlay(stack));
+  }, [relationship.id]);
+
+  // Z14-25 (D-W14-24): one Android back handler for the shell, the table in
+  // docs/specs/Z14-25.md. Sheets are Modals that close themselves first
+  // (onRequestClose) and a live workout registers its own handler; both are
+  // mounted later than the shell, so they answer before it. Only what is on
+  // top answers: a kept tab that is hidden registers nothing here.
+  useHardwareBack(() => {
+    if (activeCheckin) {
+      // Same function as the check-in's own Close.
+      setActiveCheckin(null);
+      return true;
+    }
+    if (overlaysRef.current.length > 0) {
+      popTop();
+      return true;
+    }
+    if (tab !== "today") {
+      setTab("today");
+      return true;
+    }
+    return false; // Today, nothing open: leave the app.
+  });
 
   // Ended coaching (TR-22a) stays in the shell with the tab bar: Today shows
   // EndedCoachingScreen embedded; past_coaching and other overlays use the
@@ -1126,56 +1186,59 @@ export function TraineeShell({
     return <View style={styles.root} testID="trainee-shell-hydrating" />;
   }
 
-  const layer = overlayLayer(overlay);
-  const sheetOverlay = layer === "sheet";
-  const tabbedOverlay = layer === "tabbed";
-  const fullscreenOverlay = layer === "fullscreen";
   // The Workout tab stays mounted when left (Z14-2); its immersive screens
-  // only hide the tab bar while Workout is the tab on screen.
+  // only hide the tab bar while Workout is the tab on screen. Overlays are
+  // layers over the tab bar, so they do not hide it (the swipe shows it).
   const hideTabBar =
     Boolean(activeCheckin) ||
     (workoutImmersive && tab === "workout") ||
     Boolean(captureWorkout) ||
-    Boolean(captureWorkoutSummary) ||
-    fullscreenOverlay;
+    Boolean(captureWorkoutSummary);
+  const topOverlayIndex = overlays.length - 1;
 
-  /*
-   * A check-in or a fullscreen overlay covers the tabs instead of replacing
-   * them: kept tabs stay mounted (hidden) underneath; the tab it covered is
-   * unmounted (`PaneBook`) and repaints from the cache when it closes
-   * (Z14-2).
-   */
+  /** A check-in covers the tabs instead of replacing them (Z14-2). */
   const cover = activeCheckin ? (
     <CheckinScreen
       relationship={relationship}
       checkin={activeCheckin}
       onDone={() => setActiveCheckin(null)}
     />
-  ) : fullscreenOverlay && overlay ? (
+  ) : null;
+
+  /** One host per stack entry. */
+  const hostFor = (
+    entry: TraineeOverlay,
+    presentation: "fullscreen" | "sheet",
+    key?: string,
+  ) => (
     <TraineeOverlayHost
-      overlay={overlay}
+      key={key}
+      overlay={entry}
       relationship={relationship}
       effectivePlan={effectivePlan}
       planState={planState}
       onRetryPlan={() => {
         void loadEffectivePlan();
       }}
-      onClose={() => setOverlay(null)}
+      presentation={presentation}
+      onClose={popTop}
+      onDone={() => setOverlays(resetOverlays())}
       onOpen={openOverlay}
       onSignOut={signOut}
       onGoToday={() => {
-        setOverlay(null);
+        invalidateRelationshipDayData(relationship.id);
+        setOverlays(resetOverlays());
         setTab("today");
       }}
       onOpenDiet={() => {
-        setOverlay(null);
+        setOverlays(resetOverlays());
         setTab("diet");
       }}
       onNotificationNavigate={handleNotificationNavigate}
       onCoachingResumed={handleCoachingResumed}
       onStartWorkout={handleStartWorkoutFromOverview}
     />
-  ) : null;
+  );
 
   /** A kept tab stays mounted; only the one on screen is shown (Z14-2). */
   const pane = (id: TraineeTab, node: ReactNode) => {
@@ -1197,6 +1260,10 @@ export function TraineeShell({
 
   return (
     <View style={styles.root}>
+      <View
+        style={styles.root}
+        {...(hasFullscreenOverlay && !activeCheckin ? HIDDEN_FROM_READERS : {})}
+      >
       <View style={styles.content}>
         {cover}
         {pane(
@@ -1241,7 +1308,7 @@ export function TraineeShell({
                 setTab("workout");
               }}
               onFirstPaint={handleTodayFirstPaint}
-              active={panes.shown === "today"}
+              active={panes.shown === "today" && !hasFullscreenOverlay}
             />
           ),
         )}
@@ -1261,7 +1328,7 @@ export function TraineeShell({
             onPendingStartConsumed={() => setPendingWorkoutStartId(null)}
             pendingSummaryExecutionId={pendingSummaryExecutionId}
             onPendingSummaryConsumed={() => setPendingSummaryExecutionId(null)}
-            onImmersiveChange={setWorkoutImmersive}
+            onImmersiveChange={reportWorkoutImmersive}
           />,
         )}
 
@@ -1273,7 +1340,7 @@ export function TraineeShell({
             onSelectDate={setSelectedDate}
             onOpenOverlay={openOverlay}
             unreadNotifications={unreadNotifications}
-            active={panes.shown === "diet"}
+            active={panes.shown === "diet" && !hasFullscreenOverlay}
           />,
         )}
 
@@ -1293,39 +1360,10 @@ export function TraineeShell({
         )}
       </View>
 
-      {sheetOverlay && !cover ? (
-        <TraineeOverlayHost
-          overlay={overlay!}
-          relationship={relationship}
-          effectivePlan={effectivePlan}
-          planState={planState}
-          onRetryPlan={() => {
-            void loadEffectivePlan();
-          }}
-          presentation="sheet"
-          onClose={() => {
-            invalidateRelationshipDayData(relationship.id);
-            setOverlay(null);
-          }}
-          onOpen={openOverlay}
-          onSignOut={signOut}
-          onGoToday={() => {
-            invalidateRelationshipDayData(relationship.id);
-            setOverlay(null);
-            setTab("today");
-          }}
-          onOpenDiet={() => {
-            setOverlay(null);
-            setTab("diet");
-          }}
-          onNotificationNavigate={handleNotificationNavigate}
-          onStartWorkout={handleStartWorkoutFromOverview}
-        />
-      ) : null}
-
       {tab === "today" &&
       relationship.status !== "ended" &&
       !cover &&
+      !hasFullscreenOverlay &&
       todayPainted ? (
         <ForegroundBanner
           relationship={relationship}
@@ -1335,33 +1373,6 @@ export function TraineeShell({
           }
           onGoToday={() => setTab("today")}
         />
-      ) : null}
-
-      {tabbedOverlay && !cover ? (
-        <View style={styles.tabbedOverlay}>
-          <TraineeOverlayHost
-            overlay={overlay!}
-            relationship={relationship}
-            effectivePlan={effectivePlan}
-            planState={planState}
-            onRetryPlan={() => {
-              void loadEffectivePlan();
-            }}
-            onClose={() => {
-              invalidateRelationshipDayData(relationship.id);
-              setOverlay(null);
-            }}
-            onOpen={openOverlay}
-            onSignOut={signOut}
-            onGoToday={() => {
-              invalidateRelationshipDayData(relationship.id);
-              setOverlay(null);
-              setTab("today");
-            }}
-            onNotificationNavigate={handleNotificationNavigate}
-            onStartWorkout={handleStartWorkoutFromOverview}
-          />
-        </View>
       ) : null}
 
       {/*
@@ -1382,6 +1393,36 @@ export function TraineeShell({
       ) : null}
 
       {!hideTabBar ? <TraineeTabBar active={tab} onSelect={selectTabFromBar} /> : null}
+      </View>
+      {activeCheckin
+        ? null
+        : overlays.map((entry, index) => {
+            const layer = overlayLayer(entry);
+            if (layer == null) return null;
+            const isTop = index === topOverlayIndex;
+            // A sheet is a Modal that would draw over whatever opens on it:
+            // only a sheet on top is mounted.
+            if (layer === "sheet") {
+              return isTop ? hostFor(entry, "sheet", `${index}:${entry.screen}`) : null;
+            }
+            const inner = (
+              <PushedScreen onBack={popTop}>{hostFor(entry, "fullscreen")}</PushedScreen>
+            );
+            return (
+              <View
+                key={`${index}:${entry.screen}`}
+                testID={`trainee-overlay-${entry.screen}`}
+                style={[
+                  layer === "tabbed" ? styles.tabbedOverlay : StyleSheet.absoluteFill,
+                  { pointerEvents: isTop ? "auto" : "none" },
+                ]}
+                {...(isTop ? {} : HIDDEN_FROM_READERS)}
+              >
+                {inner}
+              </View>
+            );
+          })}
+
     </View>
   );
 }
