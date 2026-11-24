@@ -16,22 +16,34 @@
  *   node docs/qa/Z14-13/web-capture.mjs
  *
  * Writes `<screen ID>-<WxH>-<theme>-web.png` next to this file.
+ *
+ * Fix round 1: TR-07m3 is the real failure (the upload answers 500, crit
+ * copy with Try again / Remove photo); `TR-07m3-offline` is a lost
+ * connection, which is a neutral wait that sends itself (D-W14-9). TR-08a2
+ * only appears when the phone has no copy of the meal (a Diet day opens
+ * the sheet at once from its cache), so `ONLY=TR-08a2` takes just that frame,
+ * run once with the cache lookup bypassed locally.
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 
 const BASE = process.env.EXPO_WEB_URL ?? "http://127.0.0.1:8083";
+const ONLY = process.env.ONLY ?? null;
 const OUT = dirname(fileURLToPath(import.meta.url));
-const EMAIL = "aarav.ontrack@demo.fitbud.test";
+// After midnight in India every meal of the new day is still ahead and the
+// server refuses its log; CAPTURE_EMAIL / CAPTURE_TZ_OFFSET_H pick a trainee in
+// another time zone (fix round 1 used fatima.london, offset 0).
+const EMAIL = process.env.CAPTURE_EMAIL ?? "aarav.ontrack@demo.fitbud.test";
+const TZ_OFFSET_MS = Number(process.env.CAPTURE_TZ_OFFSET_H ?? 5.5) * 3600_000;
 const PASSWORD = "FitBud-demo-2026";
 const SIZES = [
   { width: 393, height: 852 },
   { width: 360, height: 800 },
 ];
-// A real 1x1 JPEG for the file chooser (the resize runs on a canvas on web).
+// A small real JPEG (a plate) for the file chooser (the resize runs on a canvas on web).
 const JPEG = Buffer.from(
-  "/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=",
+  "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAoHBwgHBgoICAgLCgoLDhgQDg0NDh0VFhEYIx8lJCIfIiEmKzcvJik0KSEiMEExNDk7Pj4+JS5ESUM8SDc9Pjv/2wBDAQoLCw4NDhwQEBw7KCIoOzs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozs7Ozv/wAARCABgAGADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwBlFFFfPHvBShSaeiZqZY/ak2BCI6d5VWVip4i4qeYCn5VNMdXjFxTGio5gKJUikq00ftULpiqTAjooopgFSImaYoyasxrSbAciZqwkdEaVZjjrNsBixVIIqmRCxCqpYnsBmp1srllyIjj3IFSk3sgbS3KRiqNoq0TY3IBPldPQioHjZTh0Kn0IxQ1JboE09jPeOq7pitGSOq0iVSYGe6YqOrUi1WYYNaJgPjFW4lqtFVyIVMgLES1q2dgZAsknCHnHc/8A1qpWMQluEQ9CefpXQgAAADAHQCrpU1LVmNWbjohEjSNdqKFHtTqKK6zlCkZVddrAMD2IpaKAM2707gvAOAOV7/hWPKtdVWDqcIhuSFACsNwA7Vy1aaj7yOmlUb0ZkSrVSQVelFU5azibhFVyI1RjNW4mokBqafKIrqNj0zg5OMZ4roa5WJq2LLUBtWKXAA4DfyzV0ZqOjMasG9UaVFICCAQcg9CKWus5QooooAKw9WlD3RA/gAXIP+fWr13qKxApCQzY+92H+NYcrVzVpp+6jppQa95leU1TlqzK1VJDWUTcYpwasxtVWpEfFU0BoRvVmOSs5HxVhJKzaA0oriSL/VyFfbt+VWV1KcLghGPqRWUstSCWkpSjsxOMXujROpzkEbUHuAary3Usg+eQkenQVWMtRtLQ5Se7BRitkPkkqtI9DyVXd800hjZGqsxyae75qOtEgCiiimBIj4qZZPeqtKGIpNAXllp4l4qiJKd5tTygXDLxTGlqt5tNMlHKBM0nvULvmmFiaSqSAKKKKYH/2Q==",
   "base64",
 );
 
@@ -52,7 +64,7 @@ function installAssignmentsRewrite(page, state) {
     const response = await route.fetch({ headers });
     const body = await response.json();
     const today = new URL(route.request().url()).searchParams.get("fromDate");
-    if (today !== new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)) {
+    if (today !== new Date(Date.now() + TZ_OFFSET_MS).toISOString().slice(0, 10)) {
       return route.fulfill({ response, json: body });
     }
     const now = Date.now();
@@ -99,8 +111,17 @@ async function run(size, theme) {
   // TR-08a2 / TR-08b2 / TR-08b3 / TR-08c2 from Something different.
   state.delayMs = 2500;
   await page.getByTestId("diet-something-different").first().click();
-  await page.getByTestId("meal-loading").first().waitFor({ timeout: 5_000 });
-  await shot(page, "TR-08a2", size, theme);
+  const loadingShown = await page
+    .getByTestId("meal-loading")
+    .first()
+    .waitFor({ timeout: 2_000 })
+    .then(() => true, () => false);
+  if (loadingShown) await shot(page, "TR-08a2", size, theme);
+  if (ONLY === "TR-08a2") {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await browser.close();
+    return;
+  }
   await page.getByRole("button", { name: "Changed the portion" }).waitFor({ timeout: 20_000 });
   state.delayMs = 0;
   await page.getByRole("button", { name: "Changed the portion" }).click();
@@ -129,11 +150,19 @@ async function run(size, theme) {
     await page.getByTestId("meal-photo-sheet").waitFor({ timeout: 40_000 });
     await shot(page, "TR-07m", size, theme);
 
-    // TR-07m3: the upload fails; TR-07m2: it is slow.
+    // TR-07m3: the upload fails on the server; then the connection drops
+    // (neutral wait); TR-07m2: it is slow.
     let mode = "fail";
     await page.route("**/files/*/content", async (route) => {
-      if (mode === "fail") return route.abort("failed");
-      await new Promise((r) => setTimeout(r, 5000));
+      if (mode === "fail") {
+        return route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({ error: { code: "INTERNAL_ERROR", message: "Something went wrong." } }),
+        });
+      }
+      if (mode === "offline") return route.abort("internetdisconnected");
+      await new Promise((r) => setTimeout(r, 8000));
       return route.continue();
     });
     const chooser = page.waitForEvent("filechooser", { timeout: 15_000 }).catch(() => null);
@@ -143,9 +172,13 @@ async function run(size, theme) {
       await fc.setFiles({ name: "meal.jpg", mimeType: "image/jpeg", buffer: JPEG });
       await page.getByText(/Photo didn.t upload/).first().waitFor({ timeout: 30_000 }).catch(() => undefined);
       await shot(page, "TR-07m3", size, theme);
-      mode = "slow";
+      mode = "offline";
       await page.getByTestId("meal-photo-retry").click().catch(() => undefined);
-      await page.getByText(/Uploading photo/).first().waitFor({ timeout: 10_000 }).catch(() => undefined);
+      await page.getByText(/The photo is saved on your phone/).first().waitFor({ timeout: 15_000 }).catch(() => undefined);
+      await shot(page, "TR-07m3-offline", size, theme);
+      // Back online: the job sends itself (timer or reachability), slowly here.
+      mode = "slow";
+      await page.getByText(/Uploading photo/).first().waitFor({ timeout: 45_000 }).catch(() => undefined);
       await shot(page, "TR-07m2", size, theme);
     }
   }
