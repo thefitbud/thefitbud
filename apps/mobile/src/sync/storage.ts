@@ -185,18 +185,28 @@ export const DEVICE_DB_NAME = "fitbud-device.db";
 /**
  * `kv` holds the values. `legacy_checked` lists the keys whose keychain copy
  * is settled (moved, replaced, removed or never there), so a key is looked up
- * in the keychain only until then, not on every launch.
+ * in the keychain only until then, not on every launch. `left = 1` marks a
+ * settled key whose keychain copy could not be removed: it is never read
+ * again, and its removal is tried again on the next `set` or `remove`.
  */
 export const DEVICE_DB_SCHEMA = `
 PRAGMA journal_mode = WAL;
 CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY NOT NULL, value TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS legacy_checked (key TEXT PRIMARY KEY NOT NULL);
+CREATE TABLE IF NOT EXISTS legacy_checked (key TEXT PRIMARY KEY NOT NULL, left INTEGER NOT NULL DEFAULT 0);
 `;
 
+/**
+ * - `open`: the keychain may still hold a value for the key; read it.
+ * - `settled`: nothing to read or remove in the keychain.
+ * - `left`: never read the keychain copy again, but remove it when possible.
+ */
+export type LegacyState = "open" | "settled" | "left";
+
 export type SqliteKeyValue = AsyncKeyValue & {
-  /** True once the key's keychain copy no longer needs a look. */
-  legacyChecked(key: string): Promise<boolean>;
+  legacyState(key: string): Promise<LegacyState>;
   markLegacyChecked(key: string): Promise<void>;
+  /** Settled for reads; the keychain copy is still to be removed. */
+  markLegacyLeft(key: string): Promise<void>;
 };
 
 /**
@@ -240,16 +250,23 @@ export function createSqliteKeyValue(
     async remove(key) {
       await (await db()).runAsync("DELETE FROM kv WHERE key = ?", key);
     },
-    async legacyChecked(key) {
-      const row = await (await db()).getFirstAsync<{ key: string }>(
-        "SELECT key FROM legacy_checked WHERE key = ?",
+    async legacyState(key) {
+      const row = await (await db()).getFirstAsync<{ left: number }>(
+        "SELECT left FROM legacy_checked WHERE key = ?",
         key,
       );
-      return row !== null;
+      if (!row) return "open";
+      return row.left ? "left" : "settled";
     },
     async markLegacyChecked(key) {
       await (await db()).runAsync(
-        "INSERT OR IGNORE INTO legacy_checked (key) VALUES (?)",
+        "INSERT INTO legacy_checked (key, left) VALUES (?, 0) ON CONFLICT(key) DO UPDATE SET left = 0",
+        key,
+      );
+    },
+    async markLegacyLeft(key) {
+      await (await db()).runAsync(
+        "INSERT INTO legacy_checked (key, left) VALUES (?, 1) ON CONFLICT(key) DO UPDATE SET left = 1",
         key,
       );
     },
@@ -282,6 +299,11 @@ export type MigratingKeyValueOptions = {
  * A cold start reads the owner, the outbox and the plan before anything else,
  * so those move on the first launch, under exactly the keys the app uses.
  *
+ * Calls on the same key run one at a time, in call order, so a `set` or
+ * `remove` made while a first-launch move is reading the keychain waits for
+ * it: the move can never write the old keychain value over the newer one, or
+ * bring back a removed one.
+ *
  * - `get`: SQLite first. Missing and not yet settled: read the keychain. A
  *   keychain read that fails throws (the caller tries again), so a later write
  *   can never replace a value that could not be read. Found: written to
@@ -291,15 +313,17 @@ export type MigratingKeyValueOptions = {
  * - `set`: SQLite, then the keychain copy is removed (the new value replaces
  *   it). Callers read before they write (the sync store hydrates first), so a
  *   keychain value is never replaced unseen.
- * - `remove`: both. A keychain removal that fails throws, so an owner change
- *   stops and is repeated rather than leaving the previous owner's data.
+ * - `remove`: both. A keychain removal that fails marks the key so the
+ *   keychain copy is never read again (the next `get` returns nothing), and
+ *   throws, so an owner change stops and is repeated; the repeat removes the
+ *   keychain copy rather than leaving the previous owner's data.
  */
 export function createMigratingKeyValue(
   options: MigratingKeyValueOptions,
 ): AsyncKeyValue {
   const { next, legacy } = options;
-  const settled = new Set<string>();
-  const moving = new Map<string, Promise<string | null>>();
+  const known = new Map<string, LegacyState>();
+  const queues = new Map<string, Promise<unknown>>();
   const report = (scope: string, error: unknown) => {
     try {
       options.onError?.(scope, error);
@@ -308,18 +332,31 @@ export function createMigratingKeyValue(
     }
   };
 
-  async function isSettled(key: string): Promise<boolean> {
-    if (settled.has(key)) return true;
-    if (await next.legacyChecked(key)) {
-      settled.add(key);
-      return true;
-    }
-    return false;
+  /** Runs `task` once every earlier call on `key` has finished. */
+  function inOrder<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const run = (queues.get(key) ?? Promise.resolve()).then(task);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    queues.set(key, tail);
+    void tail.then(() => {
+      if (queues.get(key) === tail) queues.delete(key);
+    });
+    return run;
+  }
+
+  async function legacyState(key: string): Promise<LegacyState> {
+    const cached = known.get(key);
+    if (cached) return cached;
+    const state = await next.legacyState(key);
+    if (state !== "open") known.set(key, state);
+    return state;
   }
 
   async function settle(key: string): Promise<void> {
     await next.markLegacyChecked(key);
-    settled.add(key);
+    known.set(key, "settled");
   }
 
   async function move(key: string): Promise<string | null> {
@@ -351,33 +388,45 @@ export function createMigratingKeyValue(
   }
 
   return {
-    async get(key) {
-      const value = await next.get(key);
-      if (value !== null) return value;
-      if (await isSettled(key)) return null;
-      let pending = moving.get(key);
-      if (!pending) {
-        pending = move(key).finally(() => moving.delete(key));
-        moving.set(key, pending);
-      }
-      return pending;
+    get(key) {
+      return inOrder(key, async () => {
+        const value = await next.get(key);
+        if (value !== null) return value;
+        if ((await legacyState(key)) !== "open") return null;
+        return move(key);
+      });
     },
-    async set(key, value) {
-      await next.set(key, value);
-      if (await isSettled(key)) return;
-      try {
-        await legacy.remove(key);
+    set(key, value) {
+      return inOrder(key, async () => {
+        await next.set(key, value);
+        if ((await legacyState(key)) === "settled") return;
+        try {
+          await legacy.remove(key);
+          await settle(key);
+        } catch (error) {
+          // The new value is in SQLite, which `get` reads first.
+          report("storage.migrate.cleanup", error);
+        }
+      });
+    },
+    remove(key) {
+      return inOrder(key, async () => {
+        await next.remove(key);
+        if ((await legacyState(key)) === "settled") return;
+        try {
+          await legacy.remove(key);
+        } catch (error) {
+          // The keychain copy must not come back on the next `get`.
+          try {
+            await next.markLegacyLeft(key);
+            known.set(key, "left");
+          } catch (mark) {
+            report("storage.migrate.cleanup", mark);
+          }
+          throw error;
+        }
         await settle(key);
-      } catch (error) {
-        // The new value is in SQLite, which `get` reads first.
-        report("storage.migrate.cleanup", error);
-      }
-    },
-    async remove(key) {
-      await next.remove(key);
-      if (await isSettled(key)) return;
-      await legacy.remove(key);
-      await settle(key);
+      });
     },
   };
 }

@@ -340,6 +340,101 @@ describe("first launch with SQLite: the keychain outbox moves over", () => {
   });
 });
 
+/**
+ * A keychain whose reads can be held after they have read: the value is
+ * taken, then handed back only when the test releases it, as when the
+ * keychain answers slowly on a cold start.
+ */
+function heldReads(inner: AsyncKeyValue) {
+  let release: () => void = () => undefined;
+  let reached: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const store: AsyncKeyValue = {
+    async get(key) {
+      const value = await inner.get(key);
+      reached();
+      await gate;
+      return value;
+    },
+    set: (key, value) => inner.set(key, value),
+    remove: (key) => inner.remove(key),
+  };
+  return { store, started, release };
+}
+
+const SNAPSHOT_KEY = "fitbud.me.snapshot";
+const OLD_SNAPSHOT = JSON.stringify({ id: AARAV, name: "Aarav Shah", v: 1 });
+const NEW_SNAPSHOT = JSON.stringify({ id: AARAV, name: "Aarav Shah", v: 2 });
+
+describe("writes made while a first-launch move is reading the keychain", () => {
+  it("a save during the move is kept; the old keychain value never overwrites it", async () => {
+    const file = deviceDatabase();
+    const legacy = keychain();
+    await legacy.store.set(SNAPSHOT_KEY, OLD_SNAPSHOT);
+    const held = heldReads(legacy.store);
+    const { device, errors } = launch(file, held.store);
+
+    const read = device.storage.get(SNAPSHOT_KEY);
+    await held.started;
+    const save = device.storage.set(SNAPSHOT_KEY, NEW_SNAPSHOT);
+    held.release();
+    expect(await read).toBe(OLD_SNAPSHOT);
+    await save;
+
+    expect(await device.storage.get(SNAPSHOT_KEY)).toBe(NEW_SNAPSHOT);
+    expect(legacy.map.size).toBe(0);
+    expect(errors).toEqual([]);
+    const relaunched = launch(file, legacy.store);
+    expect(await relaunched.device.storage.get(SNAPSHOT_KEY)).toBe(NEW_SNAPSHOT);
+  });
+
+  it("a clear during the move stays cleared; the old keychain value never comes back", async () => {
+    const file = deviceDatabase();
+    const legacy = keychain();
+    await legacy.store.set(SNAPSHOT_KEY, OLD_SNAPSHOT);
+    const held = heldReads(legacy.store);
+    const { device } = launch(file, held.store);
+
+    const read = device.storage.get(SNAPSHOT_KEY);
+    await held.started;
+    const clear = device.storage.remove(SNAPSHOT_KEY);
+    held.release();
+    await read;
+    await clear;
+
+    expect(await device.storage.get(SNAPSHOT_KEY)).toBeNull();
+    expect(legacy.map.size).toBe(0);
+    expect(rows(file, "kv")).not.toContain(SNAPSHOT_KEY);
+    const relaunched = launch(file, legacy.store);
+    expect(await relaunched.device.storage.get(SNAPSHOT_KEY)).toBeNull();
+  });
+
+  it("a clear whose keychain removal fails throws, and the keychain value is never read back", async () => {
+    const file = deviceDatabase();
+    const legacy = keychain();
+    await legacy.store.set(SNAPSHOT_KEY, OLD_SNAPSHOT);
+    const { device } = launch(file, legacy.store);
+
+    legacy.state.failRemoves = true;
+    await expect(device.storage.remove(SNAPSHOT_KEY)).rejects.toThrow();
+    expect(await device.storage.get(SNAPSHOT_KEY)).toBeNull();
+
+    // Not on the next launch either, and the repeat removes the keychain copy.
+    legacy.state.failRemoves = false;
+    const relaunched = launch(file, legacy.store);
+    const readsBefore = legacy.state.reads;
+    expect(await relaunched.device.storage.get(SNAPSHOT_KEY)).toBeNull();
+    expect(legacy.state.reads).toBe(readsBefore);
+    await relaunched.device.storage.remove(SNAPSHOT_KEY);
+    expect(legacy.map.size).toBe(0);
+  });
+});
+
 describe("owner-scoped keys across the move", () => {
   it("a different user's first open removes the previous owner's keychain and SQLite data", async () => {
     const file = deviceDatabase();
