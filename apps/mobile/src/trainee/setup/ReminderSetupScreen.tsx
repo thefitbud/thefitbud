@@ -2,7 +2,8 @@ import { ThemeScope, createThemedStyles, useTheme } from "../../providers/ThemeP
 import { useMemo, useState } from "react";
 import { Linking, Platform, Pressable, View } from "react-native";
 import { Text } from "../../components/Text";
-import * as Notifications from "expo-notifications";
+import { requestPushPermission } from "../../notifications/register";
+import { usePushPermission } from "../../notifications/usePushPermission";
 import { ChevronRight, Clock, Info } from "lucide-react-native";
 import { zonedDateTimeFormat } from "@fitbud/core";
 import { spacing } from "@fitbud/ui-mobile";
@@ -58,22 +59,22 @@ function ReminderSetupScreenBody({ onDone, onOpenQuietHours }: Props) {
     }
   }, [me?.timezone]);
 
-  async function requestPushPermission() {
+  const { granted: osGranted } = usePushPermission();
+
+  async function askForPushPermission() {
     setPermissionNote(null);
-    const existing = await Notifications.getPermissionsAsync();
-    if (existing.granted) {
+    if (osGranted) {
       setPermissionNote("Notifications are already allowed.");
       setStep(3);
       return;
     }
-    const result = await Notifications.requestPermissionsAsync();
-    if (result.granted) {
-      setStep(3);
-      return;
+    // Registers the phone at once when this turns permission on (Z14-6).
+    const result = await requestPushPermission();
+    if (result !== "granted") {
+      setPermissionNote(
+        "No problem. You can turn notifications on later in Settings.",
+      );
     }
-    setPermissionNote(
-      "No problem. You can turn notifications on later in Settings.",
-    );
     setStep(3);
   }
 
@@ -190,7 +191,7 @@ function ReminderSetupScreenBody({ onDone, onOpenQuietHours }: Props) {
           <Button
             label="Allow notifications"
             onPress={() => {
-              void requestPushPermission();
+              void askForPushPermission();
             }}
           />
           <Button label="Not now" variant="tertiary" onPress={() => setStep(3)} />
