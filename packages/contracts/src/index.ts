@@ -418,6 +418,7 @@ export {
   submitCheckinRequestSchema,
   trainerCheckinInboxItemSchema,
   trainerCheckinInboxResponseSchema,
+  trainerCheckinInboxSegmentSchema,
   trainerNoteListResponseSchema,
   trainerNoteSchema,
   type Checkin,
@@ -454,6 +455,7 @@ export {
   type SubmitCheckinRequest,
   type TrainerCheckinInboxItem,
   type TrainerCheckinInboxResponse,
+  type TrainerCheckinInboxSegment,
   type TrainerNote,
   type TrainerNoteListResponse,
 } from "./checkin.js";

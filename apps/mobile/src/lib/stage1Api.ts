@@ -65,7 +65,12 @@ export type Stage1FitBudClient = FitBudApiClient & {
     rid?: string;
     since?: string;
   }): Promise<ActivityFeedResponse>;
-  listCoachAsks(query?: { status?: string }): Promise<{ items: CoachAsk[] }>;
+  listCoachAsks(query?: {
+    status?: string;
+    /** Z14-20: page size 1–50; omit with `cursor` to get every ask. */
+    limit?: number;
+    cursor?: string;
+  }): Promise<{ items: CoachAsk[]; nextCursor?: string | null }>;
   createCoachAsk(body: CreateCoachAskRequest): Promise<CoachAsk>;
   answerCoachAsk(id: string, body?: { note?: string }): Promise<CoachAsk>;
   getMeDay(date: string): Promise<MeDayResponse>;

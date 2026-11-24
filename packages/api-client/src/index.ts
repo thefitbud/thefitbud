@@ -310,6 +310,7 @@ import {
   type TraineeProfile,
   type UpdateTraineeProfileRequest,
   type TrainerCheckinInboxResponse,
+  type TrainerCheckinInboxSegment,
   type TrainerNote,
   type TrainerNoteListResponse,
   type UpdateExerciseLibraryItemRequest,
@@ -1512,10 +1513,24 @@ export class FitBudApiClient {
     );
   }
 
-  async listTrainerCheckinInbox(): Promise<TrainerCheckinInboxResponse> {
+  /**
+   * Z14-20: with no arguments, every due, overdue and submitted check-in
+   * (`nextCursor: null`), as before. `segment` reads one Check-ins segment;
+   * `limit`/`cursor` page it.
+   */
+  async listTrainerCheckinInbox(query?: {
+    segment?: TrainerCheckinInboxSegment;
+    limit?: number;
+    cursor?: string;
+  }): Promise<TrainerCheckinInboxResponse> {
+    const params = new URLSearchParams();
+    if (query?.segment) params.set("segment", query.segment);
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.cursor) params.set("cursor", query.cursor);
+    const suffix = queryString(params);
     return this.request(
       "GET",
-      "/checkins/inbox",
+      `/checkins/inbox${suffix}`,
       trainerCheckinInboxResponseSchema,
       { auth: true },
     );
@@ -1709,12 +1724,18 @@ export class FitBudApiClient {
     );
   }
 
+  /** Z14-20: with no `query`, every note (`nextCursor: null`), as before. */
   async listTrainerNotes(
     relationshipId: string,
+    query?: { limit?: number; cursor?: string },
   ): Promise<TrainerNoteListResponse> {
+    const params = new URLSearchParams();
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.cursor) params.set("cursor", query.cursor);
+    const suffix = queryString(params);
     return this.request(
       "GET",
-      `/checkins/relationships/${relationshipId}/notes`,
+      `/checkins/relationships/${relationshipId}/notes${suffix}`,
       trainerNoteListResponseSchema,
       { auth: true },
     );
