@@ -1,3 +1,4 @@
+import type { SyncMutationResult } from "@fitbud/contracts";
 import { formatClockTime, formatRelative } from "@fitbud/core";
 
 type Entry = {
@@ -226,6 +227,9 @@ export function failureReason(
   if (row.lastErrorCode === "RELATIONSHIP_ENDED") {
     return "Coaching has ended.";
   }
+  if (row.lastErrorCode === FINISHED_WORKOUT_CODE) {
+    return "This workout was already finished, so nothing was changed.";
+  }
   return row.lastError?.trim() || "Couldn't send.";
 }
 
@@ -280,6 +284,8 @@ export function sheetItems(
   for (const row of rows) {
     const state = rowState(row.status);
     if (!state) continue;
+    // Settled, not refused (Z14-8): the sync status says so in its note.
+    if (isSettledLateWrite(row)) continue;
     const body = payload(row);
     const isWorkout = row.operation.startsWith("workout.");
     const workoutId =
@@ -399,9 +405,11 @@ export function sendOutcomeLine(outcome: {
     case "SERVER":
       return "FitBud didn't respond. We'll keep trying.";
     case "AUTH":
-      return "Couldn't send yet (SYNC-AUTH). We'll keep trying.";
+      // The API turned the whole request away (401/403): say that, no code.
+      return "FitBud couldn't confirm it's you yet. We'll keep trying.";
     case "CLIENT":
-      return "Couldn't send yet (SYNC-PARSE). We'll keep trying.";
+      // The answer could not be read: a client/server disagreement, ours.
+      return "Something went wrong on our side. We'll keep trying.";
     default:
       return "Not sent yet. We'll keep trying.";
   }
@@ -437,4 +445,173 @@ export function conflictSheetCopy(input: {
     keep: "Keep my log",
     see: `See ${coach}'s change`,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Late workout writes, settled (Z14-8, D-W14-12, D-W14-3)
+// ---------------------------------------------------------------------------
+
+/** The server's code for a write that arrived after the workout ended. */
+export const FINISHED_WORKOUT_CODE = "WORKOUT_ALREADY_FINISHED";
+
+/**
+ * The late writes that are settled rather than refused: once the workout is
+ * finished a late set, skip or start no longer matters (Z14-7). A finish with
+ * a different session RPE is not here; that stays a real refusal.
+ */
+export const MOOT_WHEN_FINISHED: ReadonlySet<string> = new Set([
+  "workout.complete_set",
+  "workout.skip",
+  "workout.start",
+]);
+
+/**
+ * A refused row that is really settled: a late set, skip or start the server
+ * turned away because the workout was finished (a verdict stored before
+ * Z14-7 answered these `already_applied`). Nothing was written and nothing
+ * is left to do, so it is never shown as "Couldn't send".
+ */
+export function isSettledLateWrite(row: {
+  status: string;
+  operation: string;
+  lastErrorCode: string | null;
+  lastError?: string | null;
+}): boolean {
+  if (row.status !== "rejected" && row.status !== "conflicted") return false;
+  if (!MOOT_WHEN_FINISHED.has(row.operation)) return false;
+  if (row.lastErrorCode === FINISHED_WORKOUT_CODE) return true;
+  // Before Z14-7 the API refused the same late writes as INVALID_TRANSITION
+  // with these static messages, which only a finished (or discarded) workout
+  // produced. Rows refused then may still be on a phone.
+  return (
+    row.lastErrorCode === "INVALID_TRANSITION" &&
+    row.lastError != null &&
+    LEGACY_FINISHED_MESSAGES.has(row.lastError.trim())
+  );
+}
+
+const LEGACY_FINISHED_MESSAGES: ReadonlySet<string> = new Set([
+  "Sets can only be completed during an open workout.",
+  "Workout already finished and cannot be skipped.",
+]);
+
+export type ResolvedNoteSource = "lock_screen" | "app";
+
+/** One settled late write, or several of the same kind for one workout. */
+export type ResolvedNote = {
+  key: string;
+  operation: string;
+  source: ResolvedNoteSource;
+  workoutName: string | null;
+  count: number;
+};
+
+/**
+ * What the sync status says about a settled late write. Friendly, static
+ * text built from what the phone knows: never a code or a server message.
+ */
+export function resolvedNoteCopy(note: ResolvedNote): string {
+  const workout = note.workoutName?.trim() || null;
+  const ended = workout ? `${workout} ended` : "the workout ended";
+  if (note.operation === "workout.complete_set") {
+    const sets = note.count === 1 ? "1 set" : `${note.count} sets`;
+    const they = note.count === 1 ? "it wasn't" : "they weren't";
+    return note.source === "lock_screen"
+      ? `${sets} logged on your lock screen arrived after ${ended}, so ${they} added.`
+      : `${sets} arrived after ${ended}, so ${they} added.`;
+  }
+  if (note.operation === "workout.skip") {
+    return `${workout ?? "This workout"} was already finished, so it wasn't skipped.`;
+  }
+  return `${workout ?? "This workout"} was already finished.`;
+}
+
+const MAX_RESOLVED_NOTES = 3;
+
+/**
+ * Settled late writes seen since the app started, newest first, so the sync
+ * status can say what happened to them instead of a refusal. Shaped for
+ * `useSyncExternalStore`: `lines()` returns the same array until a change.
+ */
+export function createResolvedNotes() {
+  let notes: ResolvedNote[] = [];
+  let lines: readonly string[] = [];
+  const listeners = new Set<() => void>();
+  function changed(next: ResolvedNote[]) {
+    notes = next.slice(0, MAX_RESOLVED_NOTES);
+    lines = notes.map(resolvedNoteCopy);
+    for (const listener of [...listeners]) listener();
+  }
+  return {
+    add(
+      input: Omit<ResolvedNote, "key" | "count"> & {
+        workoutKey: string;
+        count?: number;
+      },
+    ) {
+      const count = input.count ?? 1;
+      if (count <= 0) return;
+      const key = `${input.workoutKey}|${input.operation}|${input.source}`;
+      const existing = notes.find((note) => note.key === key);
+      const merged: ResolvedNote = {
+        key,
+        operation: input.operation,
+        source: input.source,
+        workoutName: input.workoutName ?? existing?.workoutName ?? null,
+        count:
+          input.operation === "workout.complete_set"
+            ? (existing?.count ?? 0) + count
+            : 1,
+      };
+      changed([merged, ...notes.filter((note) => note.key !== key)]);
+    },
+    list: () => notes,
+    lines: () => lines,
+    clear() {
+      if (notes.length > 0) changed([]);
+    },
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+  };
+}
+
+export type ResolvedNotesStore = ReturnType<typeof createResolvedNotes>;
+
+export const resolvedSyncNotes: ResolvedNotesStore = createResolvedNotes();
+
+/**
+ * Records the settled late writes among a push's results for one action
+ * (Z14-7 answers them `already_applied` with a `WORKOUT_ALREADY_FINISHED`
+ * note). Returns how many it recorded.
+ */
+export function recordFinishedWorkoutNotes(
+  results: readonly SyncMutationResult[],
+  context: {
+    operation: string;
+    workoutKey: string;
+    workoutName: string | null;
+    source?: ResolvedNoteSource;
+  },
+  notes: ResolvedNotesStore = resolvedSyncNotes,
+): number {
+  let recorded = 0;
+  for (const result of results) {
+    if (result.status !== "already_applied") continue;
+    if (result.note?.code !== FINISHED_WORKOUT_CODE) continue;
+    recorded += 1;
+  }
+  if (recorded > 0) {
+    notes.add({
+      workoutKey: context.workoutKey,
+      operation: context.operation,
+      source: context.source ?? "app",
+      workoutName: context.workoutName,
+      count: recorded,
+    });
+  }
+  return recorded;
 }

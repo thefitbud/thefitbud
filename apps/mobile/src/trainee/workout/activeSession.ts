@@ -44,6 +44,15 @@ export function getActiveSession(relationshipId: string): ActiveSession | null {
   return current && current.relationshipId === relationshipId ? current : null;
 }
 
+/**
+ * The open session whoever owns it. Only for callers that match it by its own
+ * ids (the lock-screen drain matches the activity's assignment, Z14-8); a
+ * screen reads `getActiveSession` with its relationship.
+ */
+export function peekActiveSession(): ActiveSession | null {
+  return current;
+}
+
 /** Open a session, replacing any other. */
 export function openActiveSession(input: {
   relationshipId: string;

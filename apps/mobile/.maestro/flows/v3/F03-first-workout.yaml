@@ -141,6 +141,8 @@ tags:
 - tapOn: "Skip rest"
 - assertNotVisible: "Rest, .* left"
 - assertNotVisible: "Rest done"
+# No bracketed support code on the log, ever (D-W14-3, Z14-8).
+- assertNotVisible: ".*\\([A-Z]+-[A-Z]+\\).*"
 - takeScreenshot: W-03-active-mid
 - runFlow: ../../common/assert-no-crash.yaml
 

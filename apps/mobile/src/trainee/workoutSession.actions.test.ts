@@ -34,6 +34,13 @@ import {
   skipSetsLocally,
   skippableSetIds,
   unloggedExercises,
+  finishMutationId,
+  isWorkoutEndedLocally,
+  markWorkoutEndedLocally,
+  resetWorkoutActionsForTests,
+  setLogMutationId,
+  skipMutationId,
+  stableMutationId,
 } from "./workoutSession";
 
 const uuid = (n: number) =>
@@ -374,5 +381,42 @@ describe("what the log shows", () => {
       "romanian deadlift": [{ order: 1, label: "37.5 kg × 10", kg: 37.5 }],
     });
     expect(history.previousByKey).toEqual({ [`${uuid(600)}:1`]: "37.5 × 10" });
+  });
+});
+
+describe("one logical action, one mutation (Z14-8)", () => {
+  const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/;
+
+  it("finish and skip ids come from the execution and the assignment", () => {
+    expect(finishMutationId(uuid(1))).toMatch(UUID_V4);
+    expect(finishMutationId(uuid(1))).toBe(finishMutationId(uuid(1)));
+    expect(finishMutationId(uuid(1))).not.toBe(finishMutationId(uuid(2)));
+    expect(skipMutationId(uuid(2))).not.toBe(finishMutationId(uuid(2)));
+    expect(stableMutationId("a")).not.toBe(stableMutationId("b"));
+  });
+
+  it("the same set values reuse the set's mutation; a correction gets its own, and A→B→A stays three", () => {
+    resetWorkoutActionsForTests();
+    const a = { actualReps: 10, actualLoadKg: 40 };
+    const b = { actualReps: 8, actualLoadKg: 42.5 };
+    const first = setLogMutationId(uuid(1), uuid(10), a);
+    expect(setLogMutationId(uuid(1), uuid(10), { ...a })).toBe(first);
+    const corrected = setLogMutationId(uuid(1), uuid(10), b);
+    expect(corrected).not.toBe(first);
+    // Back to the first values: a new log, or the server would answer the
+    // old id `already_applied` and keep B.
+    const back = setLogMutationId(uuid(1), uuid(10), a);
+    expect(new Set([first, corrected, back]).size).toBe(3);
+    // Another set is its own action.
+    expect(setLogMutationId(uuid(1), uuid(11), a)).not.toBe(back);
+  });
+
+  it("marks a workout ended by execution and by assignment", () => {
+    resetWorkoutActionsForTests();
+    expect(isWorkoutEndedLocally({ executionId: uuid(1) })).toBe(false);
+    markWorkoutEndedLocally({ id: uuid(1), assignmentId: uuid(2) });
+    expect(isWorkoutEndedLocally({ executionId: uuid(1) })).toBe(true);
+    expect(isWorkoutEndedLocally({ assignmentId: uuid(2) })).toBe(true);
+    expect(isWorkoutEndedLocally({ assignmentId: uuid(3), executionId: null })).toBe(false);
   });
 });
