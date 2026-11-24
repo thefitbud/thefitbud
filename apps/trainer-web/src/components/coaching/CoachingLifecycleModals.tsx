@@ -87,7 +87,7 @@ export function CoachingLifecycleModals({
           <h2>End coaching with {traineeName}?</h2>
           <p className="muted">
             {given} keeps {possessive} account and history. You&apos;ll both have
-            read-only access. Plans, reminders and nudges stop today. You can
+            read-only access. Plans and reminders stop today. You can
             reactivate later.
           </p>
           <label className="field">

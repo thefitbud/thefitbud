@@ -839,7 +839,7 @@ describe("Side panel resolve form (Z7-6)", () => {
         "Resolving locks this item, so Rohan can't log Tue 13 Oct late anymore.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Nudge" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remind" })).toBeNull();
   });
 
   it("Save sends the chosen outcome and note to the existing resolve endpoint", async () => {
@@ -995,7 +995,7 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
       new ApiClientError({
         status: 429,
         code: "NUDGE_LIMIT",
-        message: "You can nudge again in 40 min",
+        message: "You can remind again in 40 min",
         requestId: "req-1",
         details: { retryAfter: 2400 },
       }),
@@ -1003,14 +1003,14 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    const nudgeBtn = await screen.findByRole("button", { name: "Nudge" });
+    const nudgeBtn = await screen.findByRole("button", { name: "Remind" });
     fireEvent.click(nudgeBtn);
     const notice = await screen.findByTestId("panel-nudge-limit");
     expect(notice.textContent).toBe(
-      "Nudge limit reached. You can nudge again in 40 min.",
+      "Reminder limit reached. You can remind again in 40 min.",
     );
     // Disabled, not hidden, and says why.
-    const after = screen.getByRole("button", { name: "Nudge" }) as HTMLButtonElement;
+    const after = screen.getByRole("button", { name: "Remind" }) as HTMLButtonElement;
     expect(after.disabled).toBe(true);
     expect(after.getAttribute("aria-describedby")).toBe("sp-nudge-help sp-nudge-why");
     expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
@@ -1031,10 +1031,10 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     );
     const notice = await screen.findByTestId("panel-quiet-hours");
     expect(notice.textContent).toBe(
-      "It's 10:40 pm for Rohan and quiet hours are on. A nudge now arrives after 7:00 am (client's time, IST).",
+      "It's 10:40 pm for Rohan and quiet hours are on. A reminder now arrives after 7:00 am (client's time, IST).",
     );
     // Nudge stays available: the server holds it until quiet hours end.
-    const nudgeBtn = screen.getByRole("button", { name: "Nudge" }) as HTMLButtonElement;
+    const nudgeBtn = screen.getByRole("button", { name: "Remind" }) as HTMLButtonElement;
     expect(nudgeBtn.disabled).toBe(false);
   });
 
@@ -1050,7 +1050,7 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    await screen.findByRole("button", { name: "Nudge" });
+    await screen.findByRole("button", { name: "Remind" });
     await act(async () => {
       await Promise.resolve();
     });
@@ -1068,13 +1068,13 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    const nudgeBtn = await screen.findByRole("button", { name: "Nudge" });
+    const nudgeBtn = await screen.findByRole("button", { name: "Remind" });
     // The client's timezone comes with the workspace header.
     await screen.findByText("Rohan Mehta");
     fireEvent.click(nudgeBtn);
     expect(
       await screen.findByText(
-        "Nudge sent. It arrives after 7:00 am (client's time, IST).",
+        "Reminder sent. It arrives after 7:00 am (client's time, IST).",
       ),
     ).toBeTruthy();
   });
@@ -1676,7 +1676,7 @@ describe("ExceptionDrawer Nudge helper and Reminders details (Z9-14)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    const nudge = await screen.findByRole("button", { name: "Nudge" });
+    const nudge = await screen.findByRole("button", { name: "Remind" });
     await waitFor(() =>
       expect(screen.getByText("Sends Rohan a push notification")).toBeTruthy(),
     );
@@ -1690,7 +1690,7 @@ describe("ExceptionDrawer Nudge helper and Reminders details (Z9-14)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    await screen.findByRole("button", { name: "Nudge" });
+    await screen.findByRole("button", { name: "Remind" });
     await waitFor(() =>
       expect(
         screen.getByText("Sends your client a push notification"),

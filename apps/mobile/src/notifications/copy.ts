@@ -156,7 +156,7 @@ export function notificationRowTitle(
       // without one gets the same line from the coach's name.
       return (
         notification.title ??
-        `${coachOrFallback(context.coachName)} nudged you`
+        `${coachOrFallback(context.coachName)} sent you a reminder`
       );
     case "subscription_renewal_reminder":
       return "Plan renewal coming up";

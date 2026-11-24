@@ -65,7 +65,7 @@ describe("ProfileSettingsPage", () => {
     expect(screen.getByRole("button", { name: "Change photo" })).toBeTruthy();
     expect(screen.getByText("RV")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Save changes" })).toBeTruthy();
-    expect(screen.getByText("Used in reminders: “Rahul nudged you”")).toBeTruthy();
+    expect(screen.getByText("Used in reminders: “Rahul sent you a reminder”")).toBeTruthy();
   });
 
   it("saves seeded profile as India E.164 and IST timezone", async () => {

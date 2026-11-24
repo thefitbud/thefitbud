@@ -214,7 +214,7 @@ describe("refreshSession mid-session (Z11b-7)", () => {
     expect(parsed.success).toBe(false);
     h.client.me.mockRejectedValueOnce(parsed.error);
     await refresh();
-    expect(auth!.errorMessage).toContain("AUTH-PARSE");
+    expect(auth!.errorMessage).toBe("Couldn't finish signing in. Try again.");
     expect(view()).toMatchObject({ view: "error" });
   });
 

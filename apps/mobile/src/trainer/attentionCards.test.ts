@@ -150,7 +150,7 @@ describe("Needs you and Reviewed", () => {
       }),
     ).toEqual({
       issue: "Lunch not logged",
-      chip: "Reviewed, still open",
+      chip: "Noted, still open",
       footer: "Reviewed Sat 17 Oct · 1 of 2 resolved",
       trailing: "chevron",
       expanded: true,

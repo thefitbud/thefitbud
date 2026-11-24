@@ -262,7 +262,7 @@ export function ProfileSettingsPage() {
 
           <SettingsRow
             label="Display name"
-            help={`Used in reminders: “${reminderName} nudged you”`}
+            help={`Used in reminders: “${reminderName} sent you a reminder”`}
           >
             <label className="ui-input">
               <input

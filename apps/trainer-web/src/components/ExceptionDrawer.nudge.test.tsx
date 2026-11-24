@@ -64,7 +64,7 @@ async function renderDrawer() {
       <ExceptionDrawer exceptionId={EXC_ID} onClose={vi.fn()} />
     </MemoryRouter>,
   );
-  return screen.findByRole("button", { name: "Nudge" });
+  return screen.findByRole("button", { name: "Remind" });
 }
 
 describe("ExceptionDrawer nudge (Z12-50)", () => {
@@ -104,8 +104,8 @@ describe("ExceptionDrawer nudge (Z12-50)", () => {
   });
 
   it.each([
-    ["reminders_paused", "Nudge sent to their inbox. Reminders are paused."],
-    ["push_off", "Nudge sent to their inbox. Push is off."],
+    ["reminders_paused", "Reminder sent to their inbox. Reminders are paused."],
+    ["push_off", "Reminder sent to their inbox. Push is off."],
   ])("inbox-only delivery (%s) says so", async (inboxReason, line) => {
     api.nudgeActivity.mockResolvedValue({
       deduped: false,
@@ -117,7 +117,7 @@ describe("ExceptionDrawer nudge (Z12-50)", () => {
     await screen.findByText(line);
   });
 
-  it("a push delivery just says Nudge sent", async () => {
+  it("a push delivery just says Reminder sent", async () => {
     api.nudgeActivity.mockResolvedValue({
       deduped: false,
       delivery: "push",
@@ -125,7 +125,7 @@ describe("ExceptionDrawer nudge (Z12-50)", () => {
     });
     const button = await renderDrawer();
     fireEvent.click(button);
-    await screen.findByText("Nudge sent");
+    await screen.findByText("Reminder sent");
     expect(screen.queryByText(/inbox/)).toBeNull();
   });
 });

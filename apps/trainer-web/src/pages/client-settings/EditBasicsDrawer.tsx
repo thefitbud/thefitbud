@@ -158,7 +158,7 @@ export function EditBasicsDrawer({
     } catch (err) {
       // Only the API's own curated message is shown verbatim (AGENTS.md).
       setSaveError(
-        userFacingMessage(err, { fallback: "Couldn't save. Try again. (CS-SAVE)" }),
+        userFacingMessage(err, { fallback: "Couldn't save. Try again." }),
       );
     } finally {
       savingRef.current = false;

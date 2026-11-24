@@ -186,10 +186,10 @@ function tileForType(type: NotificationType): Tile {
   }
 }
 
-export const INBOX_LOAD_ERROR = "Couldn't load notifications (NOTIF-LOAD). Try again.";
-export const INBOX_READ_ERROR = "Couldn't mark them as read (NOTIF-READ). Try again.";
+export const INBOX_LOAD_ERROR = "Couldn't load notifications. Try again.";
+export const INBOX_READ_ERROR = "Couldn't mark them as read. Try again.";
 export const INBOX_PARSE_ERROR =
-  "Couldn't read the notifications (NOTIF-PARSE). Try again.";
+  "Couldn't read the notifications. Try again.";
 
 /**
  * AGENTS.md "Client error handling": only an ApiClientError's own message is

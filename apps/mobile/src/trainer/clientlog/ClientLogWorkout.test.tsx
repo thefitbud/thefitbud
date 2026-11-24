@@ -395,7 +395,8 @@ describe("ClientLogWorkoutScreen", () => {
     renderForm({ initialDate: "2026-11-02" });
     await screen.findByText("Upper body A");
     await press(await screen.findByRole("button", { name: "Save workout" }));
-    await screen.findByText(/LOG-SAVE/);
+    await screen.findByText(/Not saved\. Something went wrong/);
+    expect(screen.queryByText(/LOG-SAVE/)).toBeNull();
     expect(screen.queryByText(/couldn’t reach FitBud/)).toBeNull();
   });
 });

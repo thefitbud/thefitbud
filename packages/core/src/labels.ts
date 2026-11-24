@@ -344,7 +344,7 @@ const LABELS = {
     checkin_reminder: "Check-in reminder",
     subscription_renewal_reminder: "Renewal reminder",
     daily_summary: "Daily summary",
-    activity_nudge: "Nudge",
+    activity_nudge: "Reminder",
     plan_published: "Plan published",
     checkin_reviewed: "Check-in reviewed",
     coach_answered: "Coach answered",
@@ -436,7 +436,7 @@ const LABELS = {
     expired: "Expired",
   },
   client_chip: {
-    reviewed_still_open: "Reviewed, still open",
+    reviewed_still_open: "Noted, still open",
     checkin_submitted: "Check-in submitted",
     checkin_overdue: "Check-in overdue",
     renewal_due: "Renewal due",

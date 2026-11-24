@@ -48,7 +48,7 @@ describe("resetSendError (startOtp, purpose reset)", () => {
   it("a network failure is AUTH-NET, never the sent copy, and is reported", () => {
     const copy = resetSendError(networkError());
     expect(copy).toBe(NET_COPY);
-    expect(copy).toContain("AUTH-NET");
+    expect(copy).not.toMatch(/AUTH-/);
     expect(reported).toHaveLength(1);
   });
 

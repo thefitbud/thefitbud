@@ -181,7 +181,7 @@ function AskCoachSheetBody({
         await Linking.openURL(url);
       } catch (openErr) {
         reportError("AskCoachSheet.openWhatsApp", openErr);
-        setError("Couldn't open WhatsApp (ASK-WA). Your question was still noted.");
+        setError("Couldn't open WhatsApp. Your question was still noted.");
         setLoading(false);
         return;
       }
@@ -191,7 +191,7 @@ function AskCoachSheetBody({
       // shown as-is; anything else gets a short code and is reported.
       reportError("AskCoachSheet.createAsk", err);
       setError(
-        userFacingMessage(err, { fallback: "Couldn't send your question (ASK-NET). Check your connection and try again." }),
+        userFacingMessage(err, { fallback: "Couldn't send your question. Check your connection and try again." }),
       );
     } finally {
       setLoading(false);

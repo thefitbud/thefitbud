@@ -62,7 +62,7 @@ export function noticeForResult(result: StepsSyncResult, platform: StepsSetupPla
     case "ended":
       return "Your coaching has ended, so steps can't be saved.";
     case "error":
-      return `Something went wrong (${result.code}). Try again.`;
+      return "Something went wrong. Try again.";
   }
 }
 
@@ -105,7 +105,7 @@ export function useStepsSetup(): StepsSetupModel {
     } catch (err) {
       reportError("steps.setup.check", err);
       if (!mounted.current) return;
-      setNotice("Something went wrong (STEPS-NATIVE). Try again.");
+      setNotice("Something went wrong. Try again.");
       setState({ kind: "unavailable" });
     }
   }, []);
@@ -133,7 +133,7 @@ export function useStepsSetup(): StepsSetupModel {
           await Linking.openURL(HEALTH_CONNECT_WEB_URL);
         } catch (err) {
           reportError("steps.setup.install", err);
-          if (mounted.current) setNotice("Couldn't open Play Store (STEPS-LINK). Try again.");
+          if (mounted.current) setNotice("Couldn't open Play Store. Try again.");
         }
       }
     })();

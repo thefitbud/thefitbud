@@ -332,7 +332,7 @@ export function ClientStatusScreen({
           target: nudgeTargetFromException(item),
         }));
       if (items.length === 0) {
-        setToast("Nothing open to nudge about");
+        setToast("Nothing open to remind about");
       } else if (items.length === 1) {
         setNudge({ target: items[0]!.target, items });
       } else {
@@ -340,7 +340,7 @@ export function ClientStatusScreen({
       }
     } catch (err) {
       reportError("client-status.nudge.items", err);
-      setToast("Could not load open items. (NUDGE-ITEMS)");
+      setToast("Could not load open items. Try again.");
     }
   }
 

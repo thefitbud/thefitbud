@@ -68,7 +68,7 @@ export function quietHoursNotice(input: {
   ) {
     return null;
   }
-  return `It's ${formatHhMmTime(local)} for ${input.firstName} and quiet hours are on. A nudge now arrives after ${clientTimeLabel(end, input.timeZone, now)}.`;
+  return `It's ${formatHhMmTime(local)} for ${input.firstName} and quiet hours are on. A reminder now arrives after ${clientTimeLabel(end, input.timeZone, now)}.`;
 }
 
 /** "40 min" under 90 minutes, else whole hours ("4 h"). */
@@ -80,7 +80,7 @@ export function waitLabel(ms: number): string {
 
 /** Frame 131 nudge-limit notice; the wait comes from the API's retryAfter. */
 export function nudgeLimitNotice(remainingMs: number): string {
-  return `Nudge limit reached. You can nudge again in ${waitLabel(remainingMs)}.`;
+  return `Reminder limit reached. You can remind again in ${waitLabel(remainingMs)}.`;
 }
 
 /**

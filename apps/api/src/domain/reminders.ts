@@ -1884,13 +1884,15 @@ export const GENTLE_NUDGE_BODY: Readonly<Record<NudgeActivityType, string>> = {
   checkin: "Your check-in is waiting. Can you send it when you get a moment?",
 };
 
-/** Used when the coach has no display name yet: "Your coach nudged you". */
-const NUDGE_TITLE_FALLBACK_NAME = "Your coach";
+/** Used when the coach has no display name yet. */
+const NUDGE_TITLE_FALLBACK = "Your coach sent you a reminder";
 
-/** "{Coach first name} nudged you" (D-W12-9). The name comes from the coach's profile only. */
+/** "{Coach first name} sent you a reminder" (D-W12-9, D-W14-15). The name comes from the coach's profile only. */
 export function nudgeTitle(coachDisplayName: string | null | undefined): string {
   const first = coachDisplayName?.trim().split(/\s+/)[0];
-  return `${first || NUDGE_TITLE_FALLBACK_NAME} nudged you`.slice(0, 120);
+  return first
+    ? `${first} sent you a reminder`.slice(0, 120)
+    : NUDGE_TITLE_FALLBACK;
 }
 
 /**

@@ -1,4 +1,4 @@
-import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
+import { ApiClientError, UserSafeError, userFacingMessage } from "@fitbud/api-client";
 import type { MeResponse } from "@fitbud/contracts";
 import { archivedPurgeAfter } from "../auth/archivedAccount";
 import { apiClient, cancelTokenRefresh, scheduleTokenRefresh } from "./api";
@@ -10,7 +10,7 @@ import {
 } from "./session";
 import { stage1Api } from "./stage1-api";
 
-export class AuthFlowError extends Error {
+export class AuthFlowError extends UserSafeError {
   readonly code:
     | "credentials"
     | "locked"

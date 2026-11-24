@@ -35,7 +35,7 @@ describe("session expired (TR-24)", () => {
   });
 
   it("any other error stays on the sign-in form", () => {
-    auth.errorMessage = "Couldn't reach FitBud (AUTH-NET). Check your connection and try again.";
+    auth.errorMessage = "Couldn't reach FitBud. Check your connection and try again.";
     render(<AuthScreen />);
     expect(screen.queryByText("Please sign in again")).toBeNull();
     expect(screen.getByText("Sign in with a code instead")).toBeTruthy();

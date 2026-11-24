@@ -162,7 +162,7 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
     });
     await Linking.openURL(href).catch((err: unknown) => {
       reportError("TraineeMore.askCoach", err);
-      setError("Couldn't open WhatsApp (MORE-WA). Try again.");
+      setError("Couldn't open WhatsApp. Try again.");
     });
   }
 

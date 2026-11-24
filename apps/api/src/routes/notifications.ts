@@ -933,10 +933,10 @@ notificationRoutes.post(
   "/relationships/:relationshipId/nudges",
   operation({
     tag: "Notifications",
-    summary: "Trainer nudge for one unresolved activity",
+    summary: "Trainer reminder for one unresolved activity",
     description: [
-      "Sends one activity nudge (Z12-50). Distinct from automatic reminders; it does not change execution or adherence.",
-      "Copy: the title is fixed, \"{Coach first name} nudged you\", from the coach's profile. `body` is optional (trimmed, 1-200 characters, no links, else 400 NUDGE_BODY_HAS_LINK); absent, the server uses the Gentle template for the activity type. The trainee's push and inbox row carry the same title and body; the push data stays routing only.",
+      "Sends one activity reminder (Z12-50; called a nudge in code and routes). Distinct from automatic reminders; it does not change execution or adherence.",
+      "Copy: the title is fixed, \"{Coach first name} sent you a reminder\", from the coach's profile. `body` is optional (trimmed, 1-200 characters, no links, else 400 NUDGE_BODY_HAS_LINK); absent, the server uses the Gentle template for the activity type. The trainee's push and inbox row carry the same title and body; the push data stays routing only.",
       "Delivery: reminders paused (the client paused them) → inbox only, `delivery: \"inbox\"`, `inboxReason: \"reminders_paused\"`. FitBud push off, or no active device token → inbox only, `inboxReason: \"push_off\"`. Otherwise `delivery: \"push\"`; inside the client's quiet hours the push is held until they end (`deferredForQuietHours`, `quietHoursEnd`) while the inbox row is written immediately. Reminder categories do not gate a nudge.",
       "Limits: 2 nudges per client per client civil day (the client's stored zone), across activities and delivery modes → 429 NUDGE_LIMIT (static message, `retryAfter` = seconds to the client's next day). The trainer-wide hourly limit stays → 429 NUDGE_RATE_LIMITED. One nudge per item per client day: a repeat returns the stored nudge with `deduped: true` and does not count again (retry-safe). Ended relationships → 409 RELATIONSHIP_ENDED.",
     ].join("\n\n"),
@@ -956,12 +956,12 @@ notificationRoutes.post(
       await c.req.json().catch(() => null),
     );
     if (!parsed.success) {
-      return fail(c, 400, "INVALID_REQUEST", "Invalid nudge request.", {
+      return fail(c, 400, "INVALID_REQUEST", "Invalid reminder request.", {
         issues: parsed.error.issues,
       });
     }
     if (parsed.data.body !== undefined && nudgeBodyHasLink(parsed.data.body)) {
-      return fail(c, 400, "NUDGE_BODY_HAS_LINK", "Nudges can't include links.");
+      return fail(c, 400, "NUDGE_BODY_HAS_LINK", "Reminders can't include links.");
     }
     const db = createDb(c.env.DB);
     const relationship = await loadAccessibleRelationship(
@@ -1006,16 +1006,16 @@ notificationRoutes.post(
           : null;
       const message =
         result.code === "RELATIONSHIP_ENDED"
-          ? "Ended relationships do not send nudges."
+          ? "Ended relationships do not send reminders."
           : result.code === "ACTIVITY_RESOLVED"
             ? "This activity is already resolved."
             : result.code === "NUDGE_LIMIT"
               ? // D-W12-22: static; the sheet composes the TM-04n line.
-                "You can nudge this client again tomorrow."
+                "You can remind this client again tomorrow."
               : result.code === "NUDGE_RATE_LIMITED"
                 ? retryMins
-                  ? `You can nudge again in ${retryMins} min`
-                  : "Nudge limit reached. Try again later."
+                  ? `You can remind again in ${retryMins} min`
+                  : "Reminder limit reached. Try again later."
                 : "Activity not found.";
       return fail(c, status, result.code, message, {
         retryAfter,

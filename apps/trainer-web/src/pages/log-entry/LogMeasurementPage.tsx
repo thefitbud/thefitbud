@@ -254,7 +254,6 @@ export function LogMeasurementPage({ mode }: { mode: Mode }) {
         <FailureBanner
           failure={failure}
           testId="log-measurement-not-saved"
-          screen="LOG-MEASURE"
         />
       ) : null}
 

@@ -67,7 +67,7 @@ type Props = {
 
 /**
  * TM-04b / TM-04c / TM-04n / TM-04o (Z12-50, D-W12-9, D-W12-10): the nudge is
- * a FitBud push with the fixed title "{Coach} nudged you" and an editable
+ * a FitBud push with the fixed title "{Coach} sent you a reminder" and an editable
  * body. It never opens WhatsApp. The sheet follows the system theme itself, so
  * it reads right over a screen that has not migrated yet.
  */
@@ -94,7 +94,9 @@ function NudgeSheetBody({
   const styles = useStyles();
   const first = firstNameOf(traineeDisplayName) || "your client";
   const coachFirst = firstNameOf(trainerDisplayName);
-  const title = `${coachFirst || "Your coach"} nudged you`;
+  const title = coachFirst
+    ? `${coachFirst} sent you a reminder`
+    : "Your coach sent you a reminder";
 
   const [picked, setPicked] = useState<NudgeTarget | null>(null);
   const target = givenTarget ?? picked;
@@ -202,7 +204,7 @@ function NudgeSheetBody({
         setError("No connection. Try again when you're back online.");
       } else {
         reportError("trainer.nudge.send", err);
-        setError("Could not send the nudge. (NUDGE-ERR)");
+        setError("Could not send the reminder. Try again.");
       }
     } finally {
       sendingRef.current = false;
@@ -231,7 +233,7 @@ function NudgeSheetBody({
       <View style={styles.header}>
         <View style={styles.headerText}>
           <Text variant="title" accessibilityRole="header">
-            {`Nudge ${first}`}
+            {`Remind ${first}`}
           </Text>
           <Text variant="subhead">{nudgeTargetSubtitle(target)}</Text>
         </View>
@@ -277,7 +279,7 @@ function NudgeSheetBody({
             }}
             hint={
               hasLink
-                ? "Nudges can't include links."
+                ? "Reminders can't include links."
                 : `${trimmed.length} of ${NUDGE_BODY_MAX}`
             }
             testID="nudge-body-input"
@@ -338,7 +340,7 @@ function NudgeSheetBody({
       ) : null}
 
       <Button
-        label="Send nudge"
+        label="Send reminder"
         icon={
           <Bell
             size={22}

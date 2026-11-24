@@ -402,7 +402,7 @@ export function ExceptionDrawer({
   const closeRef = useRef<HTMLButtonElement>(null);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const nudgeRef = useRef<() => void>(() => undefined);
-  /** Mirrors `readOnly` for the Nudge shortcut and handlers. */
+  /** Mirrors `readOnly` for the Remind shortcut and handlers. */
   const readOnlyRef = useRef(false);
   const stepRef = useRef<(delta: number) => void>(() => undefined);
   // DR1: set synchronously the moment a close is requested. The parent's
@@ -942,7 +942,7 @@ export function ExceptionDrawer({
     setNudgeHint(null);
     const clientTz = clientHeader?.traineeTimezone ?? null;
     const arrivesAfter = (end: string | null | undefined) =>
-      `Nudge sent. It arrives after ${clientTimeLabel(
+      `Reminder sent. It arrives after ${clientTimeLabel(
         end?.trim() || quietWindow?.end || DEFAULT_QUIET_HOURS_END,
         clientTz,
       )}.`;
@@ -963,17 +963,17 @@ export function ExceptionDrawer({
       if (result.deferredForQuietHours) {
         setNudgeHint(arrivesAfter(result.quietHoursEnd));
       } else if (result.deduped) {
-        setNudgeHint("Already nudged about this today.");
+        setNudgeHint("Already reminded about this today.");
       } else if (result.delivery === "inbox") {
         // D-W12-10: push off or reminders paused: the client sees it in the
         // app's inbox, without a notification.
         setNudgeHint(
           result.inboxReason === "reminders_paused"
-            ? "Nudge sent to their inbox. Reminders are paused."
-            : "Nudge sent to their inbox. Push is off.",
+            ? "Reminder sent to their inbox. Reminders are paused."
+            : "Reminder sent to their inbox. Push is off.",
         );
       } else {
-        setNudgeHint("Nudge sent");
+        setNudgeHint("Reminder sent");
       }
     } catch (err) {
       if (handleWriteCode(err, detail.id)) return;
@@ -993,7 +993,7 @@ export function ExceptionDrawer({
         setNudgeHint(userFacingMessage(err));
         return;
       }
-      setNudgeHint("Could not nudge");
+      setNudgeHint("Could not send the reminder");
     }
   }
 
@@ -1781,7 +1781,7 @@ export function ExceptionDrawer({
                       }
                       onClick={() => void nudge()}
                     >
-                      Nudge
+                      Remind
                     </Button>
                   ) : null}
                   {nudgeLimitText ? (

@@ -152,7 +152,7 @@ export function ClientLogWorkoutScreen({
         .catch((err: unknown) => {
           if (cancelled) return;
           reportError("client-log.execution", err);
-          setSave({ state: "failed", message: "Couldn’t load this entry. LOG-LOAD", stale: true });
+          setSave({ state: "failed", message: "Couldn’t load this entry. Try again.", stale: true });
         });
     } else {
       show(exercisesFromAssignment(assignment));
@@ -245,7 +245,7 @@ export function ClientLogWorkoutScreen({
       } else {
         setSave({
           state: "failed",
-          message: "Not saved. Something went wrong. Your entries are still here. LOG-SAVE",
+          message: "Not saved. Something went wrong. Your entries are still here. Try again.",
           stale: false,
         });
       }

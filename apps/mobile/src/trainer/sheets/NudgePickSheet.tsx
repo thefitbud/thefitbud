@@ -37,7 +37,7 @@ export function NudgePickContent({ traineeDisplayName, items, onNext }: Props) {
     <>
       <View style={styles.head}>
         <Text variant="title" accessibilityRole="header">
-          {`Nudge ${first} about…`}
+          {`Remind ${first} about…`}
         </Text>
         <Text variant="subhead">Pick one open item. The push opens it.</Text>
       </View>

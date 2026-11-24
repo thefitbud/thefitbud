@@ -6,6 +6,7 @@ import {
 } from "./errors.js";
 export {
   ApiClientError,
+  UserSafeError,
   toApiClientError,
   userFacingError,
   userFacingMessage,

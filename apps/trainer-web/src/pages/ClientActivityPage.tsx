@@ -368,7 +368,7 @@ export function ClientActivityPage() {
           ...current,
           [item.id]: {
             kind: "limited",
-            message: `Nudge waits until quiet hours end (${end}).`,
+            message: `The reminder waits until quiet hours end (${end}).`,
           },
         }));
       } else if (
@@ -399,7 +399,7 @@ export function ClientActivityPage() {
         }));
       }
     } catch (err) {
-      setError(userFacingMessage(err, { fallback: "Could not nudge." }));
+      setError(userFacingMessage(err, { fallback: "Could not send the reminder." }));
     } finally {
       setNudgingId(null);
     }
@@ -695,7 +695,7 @@ export function ClientActivityPage() {
 
       {!online ? (
         <p className="muted" role="status">
-          You&apos;re offline. Nudges are unavailable until you reconnect.
+          You&apos;re offline. Reminders are unavailable until you reconnect.
         </p>
       ) : null}
 

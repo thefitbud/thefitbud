@@ -162,7 +162,7 @@ describe("CheckinsList", () => {
   it("Overdue tab offers Nudge, not Review", () => {
     const props = renderList({ segment: "overdue" });
     expect(screen.queryByRole("button", { name: /^Review/ })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Nudge Arjun Kapoor" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remind Arjun Kapoor" }));
     expect(props.onNudge).toHaveBeenCalledWith(model.overdue[0]);
   });
 

@@ -20,7 +20,7 @@ describe("quietHoursNotice", () => {
         now: IST_2240,
       }),
     ).toBe(
-      "It's 10:40 pm for Rohan and quiet hours are on. A nudge now arrives after 7:00 am (client's time, IST).",
+      "It's 10:40 pm for Rohan and quiet hours are on. A reminder now arrives after 7:00 am (client's time, IST).",
     );
   });
 
@@ -65,7 +65,7 @@ describe("nudge limit and wait labels", () => {
     expect(waitLabel(1)).toBe("1 min");
     expect(waitLabel(4 * 3_600_000)).toBe("4 h");
     expect(nudgeLimitNotice(39 * 60_000 + 1)).toBe(
-      "Nudge limit reached. You can nudge again in 40 min.",
+      "Reminder limit reached. You can remind again in 40 min.",
     );
   });
 

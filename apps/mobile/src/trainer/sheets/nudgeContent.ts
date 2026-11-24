@@ -213,8 +213,8 @@ export function remindersPausedLine(first: string): string {
 export function nudgeLimitLine(first: string, at: string | null): string {
   const when = at ? formatClockTime(at) : "";
   return when
-    ? `You nudged ${first} about this at ${when}. You can nudge again tomorrow.`
-    : `You can nudge ${first} again tomorrow.`;
+    ? `You reminded ${first} about this at ${when}. You can remind again tomorrow.`
+    : `You can remind ${first} again tomorrow.`;
 }
 
 export type NudgeOutcome =
@@ -239,8 +239,8 @@ export function nudgeOutcome(
       kind: "inbox",
       toast:
         response.inboxReason === "reminders_paused"
-          ? `Nudge sent to ${first}'s inbox. Reminders are paused`
-          : `Nudge sent to ${first}'s inbox. Push is off`,
+          ? `Reminder sent to ${first}'s inbox. Reminders are paused`
+          : `Reminder sent to ${first}'s inbox. Push is off`,
     };
   }
   if (response.deferredForQuietHours) {
@@ -250,9 +250,9 @@ export function nudgeOutcome(
     return {
       kind: "held",
       toast: end
-        ? `Nudge sent. The push arrives at ${end}`
-        : "Nudge sent. The push arrives after quiet hours",
+        ? `Reminder sent. The push arrives at ${end}`
+        : "Reminder sent. The push arrives after quiet hours",
     };
   }
-  return { kind: "sent", toast: `Nudge sent to ${first}` };
+  return { kind: "sent", toast: `Reminder sent to ${first}` };
 }

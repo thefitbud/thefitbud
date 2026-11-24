@@ -151,7 +151,7 @@ describe("steps setup", () => {
 
   it("shows only fixed text for a failed attempt, with the short code", () => {
     expect(noticeForResult({ kind: "error", code: "STEPS-READ" }, "android")).toBe(
-      "Something went wrong (STEPS-READ). Try again.",
+      "Something went wrong. Try again.",
     );
     expect(noticeForResult({ kind: "synced", syncedAt: "x", savedDays: 1 }, "ios")).toBeNull();
   });

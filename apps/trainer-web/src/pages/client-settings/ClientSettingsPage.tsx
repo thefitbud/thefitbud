@@ -102,7 +102,7 @@ export function ClientSettingsPage() {
       setSettings(await apiClient.getClientSettings(relationshipId));
     } catch (err) {
       setLoadError(
-        userFacingMessage(err, { fallback: "Couldn't load client settings. (CS-LOAD)" }),
+        userFacingMessage(err, { fallback: "Couldn't load client settings." }),
       );
     } finally {
       setLoading(false);

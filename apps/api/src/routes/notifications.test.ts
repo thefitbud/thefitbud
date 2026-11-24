@@ -1205,7 +1205,7 @@ describe("notifications and reminders (D4)", () => {
       ((await limited.json()) as { error: { code: string; message: string } }).error,
     ).toMatchObject({
       code: "NUDGE_LIMIT",
-      message: "You can nudge this client again tomorrow.",
+      message: "You can remind this client again tomorrow.",
     });
     const stillDraft = await db
       .select()

@@ -147,6 +147,38 @@
       "why": "Z12-64: api-client fallback / technical HTTP status copy must never reach a user screen. Use userFacingMessage()."
     },
     {
+      "id": "nudge",
+      "regex": "nudg(?:e|es|ed|ing)\\b",
+      "flags": "i",
+      "scope": "both",
+      "severity": "error",
+      "why": "D-W14-15: the coach action is 'Remind' (verbs: Remind, Reminder sent, Send reminder). 'Nudge' stays only in code, routes and file names."
+    },
+    {
+      "id": "mark-reviewed",
+      "regex": "Mark reviewed",
+      "flags": "",
+      "scope": "web",
+      "severity": "error",
+      "why": "D-W14-29: replaced by 'Noted, keep open' (Z14-26). Web only: the mobile check-in review keeps its own 'Mark reviewed' button, a different action."
+    },
+    {
+      "id": "reviewed-still-open",
+      "regex": "Reviewed, still open",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "D-W14-29: the section is 'Noted, still open'."
+    },
+    {
+      "id": "bracketed-support-code",
+      "regex": "\\([A-Z]{2,6}(?:-[A-Z]{2,10}){1,2}\\)",
+      "flags": "",
+      "scope": "both",
+      "severity": "error",
+      "why": "D-W14-3: no bracketed support codes such as '(WO-SAVE)' or '(AUTH-NET)' on screen. Codes stay in reportError tags and logs."
+    },
+    {
       "id": "help-and-support",
       "regex": "Help\\s*&\\s*Support",
       "flags": "",

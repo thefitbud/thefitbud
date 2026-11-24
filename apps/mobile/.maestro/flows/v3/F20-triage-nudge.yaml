@@ -39,23 +39,23 @@ env:
     commands:
       - takeScreenshot: TM-04c
 - runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Send nudge"
+- tapOn: "Send reminder"
 - extendedWaitUntil:
-    visible: "Nudge sent.*"
+    visible: "Reminder sent.*"
     timeout: 8000
     optional: true
 - runFlow:
     when:
-      visible: "Nudge sent.*"
+      visible: "Reminder sent.*"
     commands:
       - takeScreenshot: TM-04m
 - extendedWaitUntil:
-    visible: "You nudged .* again tomorrow.*"
+    visible: "You reminded .* again tomorrow.*"
     timeout: 6000
     optional: true
 - runFlow:
     when:
-      visible: "You nudged .* again tomorrow.*"
+      visible: "You reminded .* again tomorrow.*"
     commands:
       - takeScreenshot: TM-04n
       - tapOn: "Close"
@@ -65,13 +65,13 @@ env:
 - runFlow: ../../common/assert-no-crash.yaml
 
 - extendedWaitUntil:
-    notVisible: "Nudge sent.*"
+    notVisible: "Reminder sent.*"
     timeout: 15000
 - runFlow: ../../device/z12-50/to-nudge.yaml
 - runFlow: ../../device/z12-50/open-sheet.yaml
-- tapOn: "Send nudge"
+- tapOn: "Send reminder"
 - extendedWaitUntil:
-    visible: "You nudged .* again tomorrow.*"
+    visible: "You reminded .* again tomorrow.*"
     timeout: 20000
 - takeScreenshot: TM-04n
 - runFlow: ../../common/assert-no-crash.yaml
@@ -91,7 +91,7 @@ env:
     timeout: 20000
 - takeScreenshot: TM-04o
 - runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Send nudge"
+- tapOn: "Send reminder"
 - extendedWaitUntil:
     notVisible: "PREVIEW · TAP TO EDIT"
     timeout: 10000

@@ -221,7 +221,7 @@ describe("NotificationsScreen (TR-15a, TR-15b)", () => {
     inbox = [
       row("plan_published", new Date(now - 60_000).toISOString()),
       row("activity_nudge", new Date(now - 120_000).toISOString(), {
-        title: "Rahul nudged you",
+        title: "Rahul sent you a reminder",
         body: "Evening snack is waiting. Log it when you can.",
       }),
       row("checkin_reviewed", new Date(now - 10 * 86_400_000).toISOString(), {
@@ -237,7 +237,7 @@ describe("NotificationsScreen (TR-15a, TR-15b)", () => {
       />,
     );
     expect(await screen.findByText("Rahul changed your plan")).toBeTruthy();
-    expect(screen.getByText("Rahul nudged you")).toBeTruthy();
+    expect(screen.getByText("Rahul sent you a reminder")).toBeTruthy();
     expect(screen.getByText("Evening snack is waiting. Log it when you can.")).toBeTruthy();
     expect(screen.getByText("Check-in reviewed")).toBeTruthy();
     expect(screen.getByText("See Rahul's review.")).toBeTruthy();

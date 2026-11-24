@@ -442,7 +442,7 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
                 ? RELOAD_CODES.has(failure.code)
                   ? `Not saved. ${userFacingMessage(failure)} Reload to see what is saved.`
                   : `Not saved. ${userFacingMessage(failure)} Your entries are still here.`
-                : "Not saved. Something went wrong on our side (LOG-WORKOUT). Your entries are still here. Try again."}
+                : "Not saved. Something went wrong on our side. Your entries are still here. Try again."}
           </p>
         </div>
       ) : null}

@@ -481,9 +481,10 @@ describe("Diet day v3 (Z12-42)", () => {
     await waitFor(() =>
       expect(screen.getByText("Couldn’t load your meals")).toBeTruthy(),
     );
+    // The raw message never reaches the screen (D-W14-3).
     expect(
-      screen.getByText("Cannot read properties of undefined (reading 'items')"),
-    ).toBeTruthy();
+      screen.queryByText("Cannot read properties of undefined (reading 'items')"),
+    ).toBeNull();
     expect(screen.queryByText(CONNECTION_COPY)).toBeNull();
   });
 

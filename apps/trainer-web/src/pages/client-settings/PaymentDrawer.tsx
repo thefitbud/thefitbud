@@ -323,7 +323,7 @@ export function PaymentDrawer({
         });
       } else {
         setSaveError({
-          message: "Couldn't save. Try again. (CS-PAY-SAVE)",
+          message: "Couldn't save. Try again.",
           stale: false,
         });
       }

@@ -245,7 +245,7 @@ export function ActivityRow({
               disabled={!online || nudging}
               onClick={onNudge}
             >
-              {nudging ? "Nudging…" : "Nudge"}
+              {nudging ? "Reminding…" : "Remind"}
             </Button>
           )
         ) : null}

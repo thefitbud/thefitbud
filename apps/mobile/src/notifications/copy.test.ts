@@ -314,14 +314,14 @@ describe("activity_nudge copy (Z12-50, D-W12-9)", () => {
   const nudge: Notification = { ...base, type: "activity_nudge", notificationType: "activity_nudge" };
 
   it("shows the server title and body, as the push carried them", () => {
-    const row = { ...nudge, title: "Rahul nudged you", body: "Lower body A is waiting. Can you fit it in soon?" };
-    expect(notificationRowTitle(row, { coachName: "Rahul Verma" })).toBe("Rahul nudged you");
+    const row = { ...nudge, title: "Rahul sent you a reminder", body: "Lower body A is waiting. Can you fit it in soon?" };
+    expect(notificationRowTitle(row, { coachName: "Rahul Verma" })).toBe("Rahul sent you a reminder");
     expect(notificationRowBody(row)).toBe("Lower body A is waiting. Can you fit it in soon?");
   });
 
-  it("an older row without them still reads '{Coach} nudged you'", () => {
-    expect(notificationRowTitle(nudge, { coachName: "Rahul Verma" })).toBe("Rahul nudged you");
-    expect(notificationRowTitle(nudge)).toBe("Your coach nudged you");
+  it("an older row without them still reads '{Coach} sent you a reminder'", () => {
+    expect(notificationRowTitle(nudge, { coachName: "Rahul Verma" })).toBe("Rahul sent you a reminder");
+    expect(notificationRowTitle(nudge)).toBe("Your coach sent you a reminder");
     expect(notificationRowBody(nudge)).toBe("Log it when you can.");
   });
 });

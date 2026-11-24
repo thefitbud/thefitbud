@@ -44,14 +44,14 @@ export type AuthFailure = {
   kind?: AuthErrorKind;
 };
 
-export const PARSE_COPY = "Couldn't finish signing in (AUTH-PARSE). Try again.";
-export const SESSION_COPY = "Couldn't finish signing in (AUTH-SESSION). Try again.";
+export const PARSE_COPY = "Couldn't finish signing in. Try again.";
+export const SESSION_COPY = "Couldn't finish signing in. Try again.";
 export const NET_COPY =
-  "Couldn't reach FitBud (AUTH-NET). Check your connection and try again.";
+  "Couldn't reach FitBud. Check your connection and try again.";
 export const SRV_COPY =
-  "FitBud had a problem on our side (AUTH-SRV). Try again in a moment.";
-export const UNK_COPY = "Something went wrong (AUTH-UNK). Try again.";
-export const RATE_COPY = "Too many tries (AUTH-RATE). Wait a minute, then try again.";
+  "FitBud had a problem on our side. Try again in a moment.";
+export const UNK_COPY = "Something went wrong. Try again.";
+export const RATE_COPY = "Too many tries. Wait a minute, then try again.";
 export const WRONG_CREDENTIALS_COPY =
   "That mobile number or email and password don't match.";
 /** TR-01e, inline under the password, for a mobile-number identifier. */
@@ -65,7 +65,7 @@ export const WRONG_EMAIL_PASSWORD_COPY = "That email and password don't match.";
 export const LOGIN_RATE_COPY =
   "Too many tries. Wait a few minutes or sign in with a code.";
 export const CODE_SEND_RATE_COPY =
-  "Too many codes requested. Try again in 1 hour or use your password. (AUTH-RATE)";
+  "Too many codes requested. Try again in 1 hour or use your password.";
 export const RESET_CODE_COPY = "That code didn't work. Request a new code.";
 export const INVITE_CODE_COPY =
   "That code didn't work. Check the latest email or resend.";

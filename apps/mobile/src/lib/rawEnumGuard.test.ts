@@ -205,7 +205,7 @@ describe("rawEnumGuard: mobile trainer copy", () => {
       expect(row.severityLabel, severity).toBe(labelOf("exception_severity", severity));
       expect(rawEnumHits(row.severityLabel), severity).toEqual([]);
     }
-    expect(reviewedStillOpenChip()).toBe("Reviewed, still open");
+    expect(reviewedStillOpenChip()).toBe("Noted, still open");
   });
 });
 

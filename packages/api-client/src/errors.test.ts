@@ -5,6 +5,7 @@ import {
   USER_FACING_GENERIC,
   USER_FACING_OFFLINE,
   USER_FACING_SERVER,
+  UserSafeError,
   isNetworkFailure,
   isTechnicalErrorMessage,
   toApiClientError,
@@ -216,5 +217,62 @@ describe("the trainee edit windows (Z14-11)", () => {
         new ApiClientError({ code: "MEAL_EDIT_WINDOW_CLOSED", message: "x", requestId: "r", status: 422 }),
       ).message,
     ).toBe("Logged entries can be changed for 24 hours. Ask your coach to fix it.");
+  });
+});
+
+describe("Z14-15: curated copy only", () => {
+  it("does not pass a plain Error that merely reads like a sentence", () => {
+    expect(userFacingMessage(new Error("database is locked by another process"))).toBe(
+      USER_FACING_GENERIC,
+    );
+    expect(
+      userFacingMessage(new Error("the migrated value did not read back"), {
+        fallback: "Could not save. Try again.",
+      }),
+    ).toBe("Could not save. Try again.");
+  });
+
+  it("keeps the message of an error written for the screen", () => {
+    expect(
+      userFacingMessage(new UserSafeError("Couldn't attach the photo. Try again.")),
+    ).toBe("Couldn't attach the photo. Try again.");
+  });
+
+  it("maps every known cause to its own friendly copy, never the code", () => {
+    const cases: Array<[string, number]> = [
+      ["NETWORK_ERROR", 0],
+      ["UNAUTHENTICATED", 401],
+      ["FORBIDDEN", 403],
+      ["NOT_FOUND", 404],
+      ["CONFLICT", 409],
+      ["RATE_LIMITED", 429],
+      ["RELATIONSHIP_ENDED", 409],
+      ["WORKOUT_ALREADY_FINISHED", 409],
+      ["PAYLOAD_TOO_LARGE", 413],
+      ["REQUEST_TIMEOUT", 408],
+      ["SERVICE_UNAVAILABLE", 503],
+      ["UNKNOWN_ERROR", 500],
+    ];
+    const seen = new Set<string>();
+    for (const [code, status] of cases) {
+      const copy = userFacingMessage(
+        new ApiClientError({ code, message: "raw", requestId: "r", status }),
+      );
+      expect(copy).not.toContain(code);
+      expect(copy).not.toMatch(/[A-Z]{3,}_[A-Z_]+|\(\w+-\w+\)|\b\d{3}\b/);
+      seen.add(copy);
+    }
+    expect(seen.size).toBeGreaterThanOrEqual(9);
+  });
+
+  it("names the cause for statuses without a known code", () => {
+    const mk = (status: number) =>
+      userFacingMessage(
+        new ApiClientError({ code: "SOMETHING_NEW", message: "raw", requestId: "r", status }),
+      );
+    expect(mk(413)).toMatch(/too big/);
+    expect(mk(504)).toMatch(/too long/);
+    expect(mk(503)).toMatch(/busy/);
+    expect(mk(500)).toBe("Something went wrong on our side. Try again.");
   });
 });

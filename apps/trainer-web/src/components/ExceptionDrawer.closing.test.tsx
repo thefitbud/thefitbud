@@ -87,7 +87,7 @@ async function renderStuck(onClose = vi.fn()) {
       <ExceptionDrawer exceptionId={EXC_ID} onClose={onClose} />
     </MemoryRouter>,
   );
-  await screen.findByRole("button", { name: "Nudge" });
+  await screen.findByRole("button", { name: "Remind" });
   return { ...utils, onClose };
 }
 
@@ -251,7 +251,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
         <ExceptionDrawer exceptionId={EXC_ID_2} onClose={onClose} />
       </MemoryRouter>,
     );
-    await screen.findByRole("button", { name: "Nudge" });
+    await screen.findByRole("button", { name: "Remind" });
     await act(async () => {
       fireEvent.keyDown(document.activeElement ?? document.body, { key: "n" });
     });
@@ -322,7 +322,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
         <ExceptionDrawer exceptionId={EXC_ID} openSeq={1} onClose={onClose} />
       </MemoryRouter>,
     );
-    await screen.findByRole("button", { name: "Nudge" });
+    await screen.findByRole("button", { name: "Remind" });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
     rerender(
@@ -370,7 +370,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
         <ReopenParent />
       </MemoryRouter>,
     );
-    await screen.findByRole("button", { name: "Nudge" });
+    await screen.findByRole("button", { name: "Remind" });
     const dialog = screen.getByRole("dialog");
     await act(async () => {
       fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
@@ -407,7 +407,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
       </MemoryRouter>
     );
     const { rerender } = render(tree(1, false));
-    await screen.findByRole("button", { name: "Nudge" });
+    await screen.findByRole("button", { name: "Remind" });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
     await act(async () => {
@@ -442,7 +442,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
           <RouterParent />
         </MemoryRouter>,
       );
-      await screen.findByRole("button", { name: "Nudge" });
+      await screen.findByRole("button", { name: "Remind" });
       let stillMounted = false;
       await act(async () => {
         await path.close(container);

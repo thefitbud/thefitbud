@@ -77,8 +77,8 @@ describe("SignInScreen (TR-01a)", () => {
   });
 
   it("an error without a proven kind stays a banner (no misleading inline text)", () => {
-    renderSignIn({ error: "Couldn't reach FitBud (AUTH-NET). Check your connection and try again." });
-    expect(screen.getByText(/AUTH-NET/)).toBeTruthy();
+    renderSignIn({ error: "Couldn't reach FitBud. Check your connection and try again." });
+    expect(screen.getByText(/Couldn't reach FitBud/)).toBeTruthy();
     expect(screen.queryByText("That number and password don't match.")).toBeNull();
   });
 

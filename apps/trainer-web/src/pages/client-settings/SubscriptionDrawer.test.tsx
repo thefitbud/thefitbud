@@ -323,7 +323,7 @@ describe("SubscriptionDrawer (frames 211 / 211b)", () => {
     const dialog = await openDrawer();
     fireEvent.change(within(dialog).getByLabelText("Plan name"), { target: { value: "Hybrid" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-    expect(await within(dialog).findByText("Couldn't save. Try again. (CS-SUB-SAVE)")).toBeTruthy();
+    expect(await within(dialog).findByText("Couldn't save. Try again.")).toBeTruthy();
     expect(within(dialog).queryByText(/Failed to fetch/)).toBeNull();
     expect(within(dialog).queryByRole("button", { name: "Reload latest" })).toBeNull();
     fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
