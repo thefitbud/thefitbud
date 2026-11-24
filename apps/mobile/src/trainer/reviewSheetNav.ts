@@ -98,7 +98,7 @@ export function reviewSheetOpenItemsLine(count: number): string {
   return count === 1 ? "1 open item" : `${count} open items`;
 }
 
-/** Mark reviewed (acknowledged) and resolve both read as done on this sheet. */
+/** Noted (acknowledged) and resolved both read as done on this sheet. */
 export function reviewSheetItemReviewed(status: string): boolean {
   return status === "acknowledged" || status === "resolved";
 }
@@ -178,18 +178,19 @@ export function reviewSheetItemDate(
 }
 
 /**
- * Banner on a done item. Resolved: "Resolved by you · just now · Talked to
- * client" (frame 31-resolved). Mark reviewed only acknowledges, so it never
- * says resolved (Z12-51): "Reviewed by you · just now".
+ * State line on a done item. Resolved: "Resolved by you · just now · Talked to
+ * Rohan". Noted only acknowledges, so it never says resolved: "Noted · still
+ * open" (D-W14-29).
  */
 export function reviewSheetResolvedBanner(
   outcome: string | null,
   justNow: boolean,
   status: string = "resolved",
 ): string {
-  const parts = [status === "resolved" ? "Resolved by you" : "Reviewed by you"];
+  if (status !== "resolved") return "Noted · still open";
+  const parts = ["Resolved by you"];
   if (justNow) parts.push("just now");
-  if (outcome && status === "resolved") parts.push(outcome);
+  if (outcome) parts.push(outcome);
   return parts.join(" · ");
 }
 
@@ -200,45 +201,28 @@ export function reviewSheetAllResolved(
   return items.length > 0 && items.every((item) => item.status === "resolved");
 }
 
-/** Primary button under a resolved item that still has a following item. */
-export function reviewSheetNextItemLabel(
-  index: number,
-  total: number,
-): string | null {
-  if (!canGoNextReviewSheet(index, total)) return null;
-  return `Next item · ${index + 2} of ${total}`;
+/** Summary title on the all-done screen (RP-05). */
+export function reviewSheetAllResolvedTitle(firstName: string): string {
+  return `All done for ${firstName}`;
 }
 
-/**
- * Summary title. "All 3 resolved for Rohan" only when every item is resolved;
- * when some were only marked reviewed it says reviewed (Z12-51).
- */
-export function reviewSheetAllResolvedTitle(
-  count: number,
-  firstName: string,
-  allResolved: boolean = true,
+/** "2 resolved · 1 noted, still open"; a count of zero is left out. */
+export function reviewSheetSummaryLine(
+  items: ReadonlyArray<{ status: string }>,
 ): string {
-  return `All ${count} ${allResolved ? "resolved" : "reviewed"} for ${firstName}`;
-}
-
-/**
- * Summary line. Frame 31's "his History" assumed a gender; this one does
- * not. A client with reviewed-but-open items moves to Reviewed, not out.
- */
-export function reviewSheetAllResolvedLeaveLine(
-  firstName: string,
-  allResolved: boolean = true,
-): string {
-  return allResolved
-    ? `${firstName} leaves Needs you. You'll find these in History.`
-    : `${firstName} moves to Reviewed until every item is resolved.`;
+  const resolved = items.filter((item) => item.status === "resolved").length;
+  const noted = items.length - resolved;
+  const parts: string[] = [];
+  if (resolved > 0) parts.push(`${resolved} resolved`);
+  if (noted > 0) parts.push(`${noted} noted, still open`);
+  return parts.join(" · ");
 }
 
 export function reviewSheetResolvedRowLabel(
   outcome: string | null,
   status: string = "resolved",
 ): string {
-  if (status !== "resolved") return "Reviewed";
+  if (status !== "resolved") return "Noted, still open";
   return outcome ? `Resolved · ${outcome}` : "Resolved";
 }
 
@@ -267,7 +251,7 @@ export function reviewSheetNextClientLabel(displayName: string): string {
   return `Next client: ${displayName}`;
 }
 
-export const REVIEW_SHEET_BACK_LABEL = "Back to Needs you";
+export const REVIEW_SHEET_BACK_LABEL = "Back to Attention";
 
 /**
  * Next Needs you client. Prefers the card after the current one. When the

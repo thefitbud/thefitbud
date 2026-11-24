@@ -47,7 +47,6 @@ import {
   scheduleUndoable,
   type UndoableAction,
   buildClientAttentionCards,
-  markReviewedToastMessage,
   partitionAttentionGroups,
   restoreAttentionItems,
   unreviewedItemsForRelationship,
@@ -74,13 +73,18 @@ import {
 import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
 import { dropReviewItem } from "./reviewItemCache";
 import { clientStatusApi } from "./clientStatus/api";
-import { MoreSheet } from "./sheets/MoreSheet";
 import { NoteSheet, type NoteSaveInput } from "./sheets/NoteSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
 import { firstNameOf } from "./sheets/exceptionSheetContent";
 import { offlineBannerText } from "./sheets/exceptionStateContent";
 import { nudgeTargetFromException } from "./sheets/nudgeContent";
+
+/** Toast after "Noted, keep open" from a row (D-W14-29): the client stays open. */
+function notedToastMessage(displayName: string, stillNeedYou: number): string {
+  const first = firstNameOf(displayName) || "Client";
+  return `${first} noted, still open · ${stillNeedYou} still need you`;
+}
 
 type ReviewSheetState = {
   relationshipId: string;
@@ -95,7 +99,6 @@ type AttentionGroupItem = AttentionGroup["items"][number];
 type ReviewSubSheet =
   | { kind: "nudge"; detail: ExceptionDetail; clientTimeZone: string | null }
   | { kind: "resolve"; item: AttentionGroupItem }
-  | { kind: "more" }
   | { kind: "note" };
 type Props = {
   /** False while another tab is showing; the tab stays mounted (Z14-3). */
@@ -386,7 +389,7 @@ export function AttentionTab({
     setLists(next);
     setUndoTarget(targets);
     setToast(
-      markReviewedToastMessage(card.traineeDisplayName, next.needsYou.length),
+      notedToastMessage(card.traineeDisplayName, next.needsYou.length),
     );
     try {
       for (const target of targets) {
@@ -425,7 +428,7 @@ export function AttentionTab({
         prior.groups.find((group) =>
           group.items.some((item) => item.id === targets[0]?.id),
         )?.traineeDisplayName ?? "Client";
-      setToast(markReviewedToastMessage(name, prior.needsYou.length));
+      setToast(notedToastMessage(name, prior.needsYou.length));
       setError(
         userFacingMessage(err, { fallback: "Couldn't load. Pull to try again." }),
       );
@@ -904,7 +907,7 @@ export function AttentionTab({
         }}
         onShowSummary={() => setReviewBrowsing(false)}
         onDismiss={leaveReviewSheet}
-        onMarkReviewed={(exceptionId) => {
+        onNoted={(exceptionId) => {
           void markReviewedInSheet(exceptionId);
         }}
         onUndo={(exceptionId) => {
@@ -915,7 +918,22 @@ export function AttentionTab({
           openSubSheet({ kind: "nudge", detail, clientTimeZone })
         }
         onResolve={(item) => openSubSheet({ kind: "resolve", item })}
-        onMore={() => openSubSheet({ kind: "more" })}
+        onAddNote={() => openSubSheet({ kind: "note" })}
+        onWhatsApp={() => {
+          // A wa.me chat with no template; the trainer sends it.
+          void openContextualWhatsApp({
+            phoneE164: reviewSheet?.clientWhatsappE164 ?? null,
+          });
+        }}
+        onOpenProfile={
+          onOpenClient && reviewSheet
+            ? () => {
+                const relationshipId = reviewSheet.relationshipId;
+                leaveReviewSheet();
+                onOpenClient(relationshipId);
+              }
+            : undefined
+        }
       >
         {reviewSheet ? (
           <>
@@ -951,23 +969,6 @@ export function AttentionTab({
                 }}
               />
             ) : null}
-            <MoreSheet
-              visible={subSheet?.kind === "more"}
-              traineeDisplayName={reviewSheet.traineeDisplayName}
-              onDismiss={() => setSubSheet(null)}
-              onAddNote={() => openSubSheet({ kind: "note" })}
-              onMessageOnWhatsApp={() => {
-                // A wa.me chat with no template (TM-04j); the trainer sends it.
-                void openContextualWhatsApp({
-                  phoneE164: reviewSheet.clientWhatsappE164,
-                });
-              }}
-              onOpenProfile={() => {
-                const relationshipId = reviewSheet.relationshipId;
-                leaveReviewSheet();
-                onOpenClient?.(relationshipId);
-              }}
-            />
             <NoteSheet
               visible={subSheet?.kind === "note"}
               traineeDisplayName={reviewSheet.traineeDisplayName}

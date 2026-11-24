@@ -3,14 +3,13 @@ import { ApiClientError } from "@fitbud/api-client";
 import { fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
 import {
   endedBannerText,
-  exceptionFooterActions,
   exceptionHeaderSubtitle,
   isNetworkFailure,
   isNotFound,
   offlineBannerText,
   resolvedBannerText,
   resolvedOutcomePhrase,
-  reviewedBannerText,
+  notedStateLine,
 } from "./sheets/exceptionStateContent";
 import { exceptionWeekModel } from "./sheets/exceptionWeek";
 
@@ -22,6 +21,7 @@ const api = {
   listWorkoutAssignments: vi.fn(),
   listMealAssignments: vi.fn(),
   acknowledgeException: vi.fn(),
+  undoExceptionAcknowledge: vi.fn(),
   resolveException: vi.fn(),
   createTrainerNote: vi.fn(),
   getResponsiveness: vi.fn(),
@@ -106,35 +106,38 @@ describe("ExceptionReviewScreen states", () => {
     expect(screen.getByLabelText("Loading exception")).toBeTruthy();
   });
 
-  it("TM-04g: a 404 shows the not-found state with Back to Needs you and nothing live", async () => {
+  it("TM-04g: a 404 shows the not-found state with Back to Attention and nothing live", async () => {
     api.getException.mockRejectedValue(
       new ApiClientError({ code: "NOT_FOUND", message: "x", requestId: "r", status: 404 }),
     );
     const { onBack } = renderScreen();
     await screen.findByText("This item is no longer available");
-    fireEvent.click(button("Back to Needs you"));
+    fireEvent.click(button("Back to Attention"));
     expect(onBack).toHaveBeenCalled();
-    expect(screen.queryByText("Mark reviewed")).toBeNull();
+    expect(screen.queryByText("Noted, keep open")).toBeNull();
     expect(screen.queryByLabelText("More actions")).toBeNull();
   });
 
-  it("TM-04a: an open item offers Mark reviewed and Nudge, the ⋯ menu, and no Resolve", async () => {
+  it("RP-06: an open item offers Remind, Noted keep open, Resolve…, Add note and WhatsApp; no ⋯, no caption", async () => {
     api.getException.mockResolvedValue(exception());
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     renderScreen();
     await screen.findByText("Kavya Nair");
     expect(screen.getByRole("heading", { name: "Missed workout" })).toBeTruthy();
     expect(screen.getByText("Critical")).toBeTruthy();
-    expect(screen.getByText("Open")).toBeTruthy();
-    expect(screen.getByText("What happened")).toBeTruthy();
-    expect(button("Mark reviewed")).toBeTruthy();
-    expect(button("Nudge")).toBeTruthy();
-    expect(screen.getByLabelText("More actions")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Resolve" })).toBeNull();
+    expect(button("Remind Kavya")).toBeTruthy();
+    expect(button("Noted, keep open")).toBeTruthy();
+    expect(button("Resolve…")).toBeTruthy();
+    expect(button("Add note")).toBeTruthy();
+    expect(button("WhatsApp")).toBeTruthy();
+    expect(screen.queryByLabelText("More actions")).toBeNull();
+    expect(screen.queryByText(/Mark reviewed|Nudge|keeps .* in Reviewed/)).toBeNull();
+    // Empty rows are left out, never a dash.
+    expect(screen.queryByText("—")).toBeNull();
     expect(screen.queryByText(/workout_assignment|mvp\.v2/)).toBeNull();
   });
 
-  it("Mark reviewed acknowledges and lands on TM-04e with Resolve primary", async () => {
+  it("Noted, keep open acknowledges and shows the state line with Undo; Remind and Resolve… stay", async () => {
     api.getException.mockResolvedValueOnce(exception());
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     renderScreen();
@@ -143,13 +146,54 @@ describe("ExceptionReviewScreen states", () => {
     api.getException.mockResolvedValue(
       exception({ status: "acknowledged", acknowledgedAt: "2026-10-20T04:22:00.000Z" }),
     );
-    fireEvent.click(button("Mark reviewed"));
-    await screen.findByText(/^Reviewed by you at .* It stays in Needs you until it's resolved\.$/);
+    fireEvent.click(button("Noted, keep open"));
+    await screen.findByText(/^Noted by you at .* · still open$/);
     expect(api.acknowledgeException).toHaveBeenCalledWith(ID, {}, expect.any(String));
-    expect(screen.getByText("Reviewed")).toBeTruthy();
-    expect(button("Resolve")).toBeTruthy();
-    expect(button("Nudge")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
+    expect(button("Resolve…")).toBeTruthy();
+    expect(button("Remind Kavya")).toBeTruthy();
+    expect(button("Undo")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Noted, keep open" })).toBeNull();
+  });
+
+  it("Undo puts a noted item back to open", async () => {
+    api.getException.mockResolvedValueOnce(
+      exception({ status: "acknowledged", acknowledgedAt: "2026-10-20T04:22:00.000Z" }),
+    );
+    api.getClientWorkspace.mockResolvedValue(workspace(null));
+    renderScreen();
+    await screen.findByText(/^Noted by you at .* · still open$/);
+    api.undoExceptionAcknowledge.mockResolvedValue({});
+    api.getException.mockResolvedValue(exception());
+    fireEvent.click(button("Undo"));
+    await screen.findByRole("button", { name: "Noted, keep open" });
+    expect(api.undoExceptionAcknowledge).toHaveBeenCalledWith(ID, expect.any(String));
+  });
+
+  it("Resolve… on an open item notes it first, then resolves with the outcome", async () => {
+    api.getException.mockResolvedValueOnce(exception());
+    api.getClientWorkspace.mockResolvedValue(workspace(null));
+    renderScreen();
+    await screen.findByText("Kavya Nair");
+    fireEvent.click(button("Resolve…"));
+    await screen.findByText("Note (only you)");
+    fireEvent.click(screen.getByText("No action needed"));
+    api.acknowledgeException.mockResolvedValue({});
+    api.resolveException.mockResolvedValue({});
+    api.getException.mockResolvedValue(
+      exception({
+        status: "resolved",
+        resolvedAt: "2026-10-17T04:35:00.000Z",
+        closedReason: "trainer",
+      }),
+    );
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    await screen.findByText(/^Resolved by you · /);
+    expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
+    expect(api.resolveException).toHaveBeenCalledWith(
+      ID,
+      { note: null, interventionKind: "resolve", outcome: "no_action" },
+      expect.any(String),
+    );
   });
 
   it("Resolve → TM-04d sends the trainer's outcome and note → TM-04f read only", async () => {
@@ -157,7 +201,7 @@ describe("ExceptionReviewScreen states", () => {
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     renderScreen();
     await screen.findByText("Kavya Nair");
-    fireEvent.click(button("Resolve"));
+    fireEvent.click(button("Resolve…"));
     await screen.findByText("Note (only you)");
     fireEvent.click(screen.getByText("Talked to Kavya"));
     fireEvent.change(screen.getByLabelText("Note (only you)"), {
@@ -178,10 +222,9 @@ describe("ExceptionReviewScreen states", () => {
       { note: "Travelling till Fri", interventionKind: "resolve", outcome: "talked" },
       expect.any(String),
     );
-    expect(screen.getByText("Resolved")).toBeTruthy();
-    // happy-dom never ends the sheet's slide-out, so check the footer by id.
+    // Read only: no actions (the sheet's slide-out never ends in happy-dom).
     expect(screen.queryByTestId("exception-resolve")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Nudge" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remind Kavya" })).toBeNull();
     expect(screen.queryByLabelText("More actions")).toBeNull();
   });
 
@@ -190,7 +233,7 @@ describe("ExceptionReviewScreen states", () => {
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     renderScreen();
     await screen.findByText("Kavya Nair");
-    fireEvent.click(button("Resolve"));
+    fireEvent.click(button("Resolve…"));
     api.resolveException.mockRejectedValue(
       new ApiClientError({
         code: "INVALID_TRANSITION",
@@ -208,7 +251,7 @@ describe("ExceptionReviewScreen states", () => {
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     renderScreen();
     await screen.findByText("Kavya Nair");
-    fireEvent.click(button("Resolve"));
+    fireEvent.click(button("Resolve…"));
     await screen.findByText("Note (only you)");
     fireEvent.click(screen.getByText("Talked to Kavya"));
     api.resolveException.mockRejectedValue(
@@ -239,15 +282,14 @@ describe("ExceptionReviewScreen states", () => {
     api.getClientWorkspace.mockResolvedValue(workspace("2026-10-03T12:30:00.000Z"));
     renderScreen();
     await screen.findByText(/This is read only\./);
-    expect(screen.getByText("Ended")).toBeTruthy();
     expect(screen.getByText(/Fat loss · ended /)).toBeTruthy();
-    for (const name of ["Mark reviewed", "Nudge", "Resolve"]) {
+    for (const name of ["Noted, keep open", "Remind Kavya", "Resolve…", "Add note", "WhatsApp"]) {
       expect(screen.queryByRole("button", { name })).toBeNull();
     }
     expect(screen.queryByLabelText("More actions")).toBeNull();
   });
 
-  it("Nudge is offered for unlogged items only, not for logged meals or skips", async () => {
+  it("Remind is offered for unlogged items only, not for logged meals or skips", async () => {
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     const cases: Array<[string, string]> = [
       ["meal_deviation", "meal_assignment"],
@@ -262,8 +304,8 @@ describe("ExceptionReviewScreen states", () => {
         <ExceptionReviewScreen exceptionId={ID} onBack={() => {}} onOpenClient={() => {}} />,
       );
       await screen.findByText("Kavya Nair");
-      expect(screen.queryByRole("button", { name: "Nudge" })).toBeNull();
-      expect(button("Mark reviewed")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Remind Kavya" })).toBeNull();
+      expect(button("Noted, keep open")).toBeTruthy();
       view.unmount();
     }
   });
@@ -272,9 +314,9 @@ describe("ExceptionReviewScreen states", () => {
     api.getException.mockResolvedValue(exception());
     api.getClientWorkspace.mockRejectedValue(new Error("boom"));
     renderScreen();
-    await screen.findByText("Could not check the client's status. (EXC-WS)");
-    expect(screen.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Nudge" })).toBeNull();
+    await screen.findByText("Couldn't check the client's status. Try again.");
+    expect(screen.queryByRole("button", { name: "Noted, keep open" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remind Kavya" })).toBeNull();
     expect(button("Try again")).toBeTruthy();
   });
 
@@ -292,26 +334,25 @@ describe("ExceptionReviewScreen states", () => {
     expect(screen.queryByText(/offline/i)).toBeNull();
   });
 
-  it("TM-04h: going offline keeps the item and disables Mark reviewed and Nudge", async () => {
+  it("TM-04h: going offline keeps the item and disables Noted and Remind", async () => {
     api.getException.mockResolvedValue(exception());
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     renderScreen();
     await screen.findByText("Kavya Nair");
     api.acknowledgeException.mockRejectedValueOnce(new TypeError("Failed to fetch"));
-    fireEvent.click(button("Mark reviewed"));
-    await screen.findByText("You're offline. Reviewing and nudging need a connection.");
-    expect(button("Mark reviewed").getAttribute("aria-disabled")).toBe("true");
-    expect(button("Nudge").getAttribute("aria-disabled")).toBe("true");
+    fireEvent.click(button("Noted, keep open"));
+    await screen.findByText("You're offline. Reviewing and reminding need a connection.");
+    expect(button("Noted, keep open").getAttribute("aria-disabled")).toBe("true");
+    expect(button("Remind Kavya").getAttribute("aria-disabled")).toBe("true");
     expect(screen.getByText("Kavya Nair")).toBeTruthy();
   });
 
-  it("⋯ → Add note saves through the note contract with one key", async () => {
+  it("Add note saves through the note contract with one key", async () => {
     api.getException.mockResolvedValue(exception());
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     renderScreen();
     await screen.findByText("Kavya Nair");
-    fireEvent.click(screen.getByLabelText("More actions"));
-    fireEvent.click(await screen.findByText("Add note"));
+    fireEvent.click(button("Add note"));
     await screen.findByRole("heading", { name: "Note for Kavya" });
     fireEvent.change(screen.getByLabelText("Note"), { target: { value: "Shorter sessions" } });
     api.createTrainerNote.mockResolvedValue({});
@@ -325,16 +366,14 @@ describe("ExceptionReviewScreen states", () => {
     );
   });
 
-  it("⋯ → WhatsApp opens a wa.me chat with no template; ⋯ → profile opens the client", async () => {
+  it("WhatsApp opens a wa.me chat with no template; the name and avatar open the profile", async () => {
     api.getException.mockResolvedValue(exception());
     api.getClientWorkspace.mockResolvedValue(workspace(null));
     const { onOpenClient } = renderScreen();
     await screen.findByText("Kavya Nair");
-    fireEvent.click(screen.getByLabelText("More actions"));
-    fireEvent.click(await screen.findByText("Message on WhatsApp"));
+    fireEvent.click(button("WhatsApp"));
     expect(openContextualWhatsApp).toHaveBeenCalledWith({ phoneE164: "919800000001" });
-    fireEvent.click(screen.getByLabelText("More actions"));
-    fireEvent.click(await screen.findByText("Open Kavya's profile"));
+    fireEvent.click(screen.getByTestId("client-name-link"));
     expect(onOpenClient).toHaveBeenCalledWith(REL);
   });
 });
@@ -360,11 +399,12 @@ describe("state copy and predicates", () => {
         resolvedOutcomePhrase("talked", "Rohan"),
       ),
     ).toBe("Resolved by you · Sat 17 Oct, 10:05 am · Talked to Rohan.");
-    expect(reviewedBannerText("2026-10-20T04:22:00.000Z", "Asia/Kolkata")).toBe(
-      "Reviewed by you at 9:52 am. It stays in Needs you until it's resolved.",
+    expect(notedStateLine("2026-10-20T04:22:00.000Z", "Asia/Kolkata")).toBe(
+      "Noted by you at 9:52 am · still open",
     );
+    expect(notedStateLine(null, "Asia/Kolkata")).toBe("Noted · still open");
     expect(offlineBannerText(true)).toBe(
-      "You're offline. Reviewing and nudging need a connection.",
+      "You're offline. Reviewing and reminding need a connection.",
     );
     expect(
       exceptionHeaderSubtitle({
@@ -374,23 +414,6 @@ describe("state copy and predicates", () => {
         endedDay: null,
       }),
     ).toBe("Fat loss · week 6 · since 5 d");
-  });
-
-  it("footer actions follow TM-04a and TM-04e; resolved and ended have none", () => {
-    expect(exceptionFooterActions("open", true)).toEqual({
-      secondary: "markReviewed",
-      primary: "nudge",
-    });
-    expect(exceptionFooterActions("reviewed", true)).toEqual({
-      secondary: "nudge",
-      primary: "resolve",
-    });
-    expect(exceptionFooterActions("reviewed", false)).toEqual({
-      secondary: null,
-      primary: "resolve",
-    });
-    expect(exceptionFooterActions("resolved", true)).toEqual({ secondary: null, primary: null });
-    expect(exceptionFooterActions("ended", true)).toEqual({ secondary: null, primary: null });
   });
 
   it("builds This week from persisted assignments, as counts", () => {

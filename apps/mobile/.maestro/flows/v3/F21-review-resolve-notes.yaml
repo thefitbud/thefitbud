@@ -12,10 +12,9 @@ env:
 # DEVICE_THEME.
 #
 # Resolve finding (device run 44898344946): NOT a product regression. TM-04a open
-# item shows Mark reviewed + Nudge + ⋯ only; Resolve appears after Mark reviewed
-# (TM-04e) per Z12-51 and the ExceptionReviewScreen states tests. Open profile
-# is in the ⋯ menu (more-profile). Assert menu rows by testID — Android splits
-# "Open Rohan's profile" so "Open .*profile" never matches one node.
+# item (Z14-23, D-W14-29) shows Remind, Noted keep open and Resolve… with Add note
+# and WhatsApp as text actions; there is no ⋯ menu. Noted keep open shows the
+# state line with Undo and the item stays open. Assert by testID.
 #
 # Screens: TM-04a, TM-04j, TM-04k, TM-04e, TM-04d, TM-04f; then Needs you
 # review-sheet-* when Rohan still has open items.
@@ -52,29 +51,25 @@ env:
           id: "client-review-exception"
 - extendedWaitUntil:
     visible:
-      id: "exception-more"
+      id: "exception-review"
     timeout: 30000
 - runFlow: ../../common/assert-no-crash.yaml
 - runFlow:
     when:
       visible:
-        id: "exception-markReviewed"
+        id: "exception-noted"
     commands:
       - takeScreenshot: TM-04a
 
-- tapOn:
+- assertVisible:
+    id: "exception-whatsapp"
+- assertVisible:
+    id: "exception-add-note"
+- assertNotVisible:
     id: "exception-more"
-- extendedWaitUntil:
-    visible:
-      id: "more-profile"
-    timeout: 10000
-- assertVisible:
-    id: "more-whatsapp"
-- assertVisible:
-    id: "more-add-note"
 - takeScreenshot: TM-04j
 - tapOn:
-    id: "more-add-note"
+    id: "exception-add-note"
 - extendedWaitUntil:
     visible: "Note for .*"
     timeout: 10000
@@ -91,16 +86,16 @@ env:
 - runFlow:
     when:
       visible:
-        id: "exception-markReviewed"
+        id: "exception-noted"
     commands:
       - tapOn:
-          id: "exception-markReviewed"
+          id: "exception-noted"
 - extendedWaitUntil:
     visible:
       id: "exception-resolve"
     timeout: 20000
 - assertNotVisible:
-    id: "exception-markReviewed"
+    id: "exception-noted"
 - takeScreenshot: TM-04e
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -120,7 +115,7 @@ env:
 - assertNotVisible:
     id: "exception-resolve"
 - assertNotVisible:
-    id: "exception-more"
+    id: "exception-add-note"
 - takeScreenshot: TM-04f
 - runFlow: ../../common/assert-no-crash.yaml
 
@@ -158,20 +153,20 @@ env:
         id: "review-sheet-resolve"
     commands:
       - assertVisible:
-          id: "review-sheet-more"
+          id: "review-sheet-add-note"
       - takeScreenshot: review-sheet
       - runFlow: ../../common/assert-no-crash.yaml
       - runFlow:
           when:
             visible:
-              id: "review-sheet-nudge"
+              id: "review-sheet-remind"
           commands:
             - tapOn:
-                id: "review-sheet-nudge"
+                id: "review-sheet-remind"
             - extendedWaitUntil:
                 visible: "PREVIEW · TAP TO EDIT"
                 timeout: 20000
-            - takeScreenshot: review-sheet-nudge
+            - takeScreenshot: review-sheet-remind
             - tapOn: "Close"
             - extendedWaitUntil:
                 notVisible: "PREVIEW · TAP TO EDIT"
@@ -191,10 +186,10 @@ env:
 - runFlow:
     when:
       visible:
-        id: "exception-markReviewed"
+        id: "exception-noted"
     commands:
       - tapOn:
-          id: "exception-markReviewed"
+          id: "exception-noted"
       - extendedWaitUntil:
           visible:
             id: "exception-resolve"
