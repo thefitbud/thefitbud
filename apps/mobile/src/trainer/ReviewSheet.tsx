@@ -4,8 +4,6 @@ import { Check, ChevronLeft, ChevronRight, Ellipsis } from "lucide-react-native"
 import type {
   AttentionGroupsResponse,
   ExceptionDetail,
-  MealAssignment,
-  WorkoutAssignment,
 } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
@@ -48,6 +46,18 @@ import {
   reviewSheetStepLabel,
   type ReviewSheetDashState,
 } from "./reviewSheetNav";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  trainerCacheEpoch,
+  writeClientMeta,
+} from "./cache";
+import {
+  loadReviewItem,
+  prefetchReviewItem,
+  readReviewItem,
+  type ReviewItemBundle,
+} from "./reviewItemCache";
 import { isNudgeableExceptionType } from "./sheets/nudgeContent";
 
 type AttentionGroupItem =
@@ -58,6 +68,17 @@ type ClientMeta = {
   weekNumber: number | null;
   timeZone: string | null;
 };
+
+function metaFromCache(relationshipId: string | null): ClientMeta {
+  const cached = relationshipId ? readClientMeta(relationshipId) : null;
+  return {
+    goalShort: cached?.goalShort ?? null,
+    weekNumber: cached?.startedAt
+      ? coachingWeekNumber(cached.startedAt)
+      : (cached?.week ?? null),
+    timeZone: cached?.timeZone ?? null,
+  };
+}
 
 type Props = {
   visible: boolean;
@@ -164,11 +185,11 @@ function ReviewSheetBody({
   const itemReviewed = item?.status === "acknowledged";
   const nudgeable = item ? isNudgeableExceptionType(item.type) : false;
 
-  const [clientMeta, setClientMeta] = useState<ClientMeta>({
-    goalShort: null,
-    weekNumber: null,
-    timeZone: null,
-  });
+  // Z14-3: the header paints from the per-client cache at once; the workspace
+  // read below only fills what the cache lacks.
+  const [clientMeta, setClientMeta] = useState<ClientMeta>(() =>
+    metaFromCache(relationshipId),
+  );
   const [card, setCard] = useState<ReviewSheetCardModel | null>(null);
   const [detail, setDetail] = useState<ExceptionDetail | null>(null);
   const [cardLoading, setCardLoading] = useState(false);
@@ -176,9 +197,20 @@ function ReviewSheetBody({
   useEffect(() => {
     if (!visible || !relationshipId) return;
     let cancelled = false;
+    const cached = readClientMeta(relationshipId);
+    setClientMeta(metaFromCache(relationshipId));
+    // A full entry (it has the time zone, which only a workspace read stores)
+    // needs no read: the sheet never waits on the whole workspace.
+    if (cached && cached.timeZone != null) return;
+    const epoch = trainerCacheEpoch();
     void (async () => {
       try {
         const workspace = await api.getClientWorkspace(relationshipId);
+        writeClientMeta(
+          relationshipId,
+          clientMetaFromWorkspaceHeader(workspace.header),
+          epoch,
+        );
         if (cancelled) return;
         setClientMeta({
           goalShort: workspace.header.goalShort ?? null,
@@ -188,9 +220,6 @@ function ReviewSheetBody({
       } catch {
         // The subtitle and clock times are context: without them the sheet
         // shows the item and its actions, and nothing claims a cause.
-        if (!cancelled) {
-          setClientMeta({ goalShort: null, weekNumber: null, timeZone: null });
-        }
       }
     })();
     return () => {
@@ -206,80 +235,83 @@ function ReviewSheetBody({
       return;
     }
     let cancelled = false;
-    setCardLoading(true);
-    setDetail((current) => (current?.id === item.id ? current : null));
-    void (async () => {
-      let loaded: ExceptionDetail | null = null;
-      let workout: WorkoutAssignment | null = null;
-      let meal: MealAssignment | null = null;
-      try {
-        loaded = await api.getException(item.id);
-      } catch {
-        // A resolved item may already be gone for this trainer; the card
-        // falls back to the item's own summary below.
-        loaded = null;
-      }
-      if (loaded?.sourceEntityType === "workout_assignment") {
-        try {
-          workout = await api.getWorkoutAssignment(loaded.sourceEntityId);
-        } catch {
-          workout = null;
-        }
-      } else if (loaded?.sourceEntityType === "meal_assignment") {
-        try {
-          meal = await api.getMealAssignment(loaded.sourceEntityId);
-        } catch {
-          meal = null;
-        }
-      }
-      if (cancelled) return;
-      setDetail(loaded);
-      if (!loaded) {
-        const localDate =
-          typeof item.details?.localDate === "string"
-            ? item.details.localDate
-            : null;
-        setCard({
-          title: reviewSheetCardTitle({
-            type: item.type,
-            localDate,
-            summary: item.summary,
-          }),
-          body: null,
-          planned: null,
-          logged: "Nothing logged",
-          reminder: null,
-          localDate,
-          severity: item.severity,
-          ageMinutes: item.ageMinutes,
-        });
-        setCardLoading(false);
-        return;
-      }
-      const mealKcalSum = meal
-        ? plannedRowsFromAssignment(meal).reduce(
+    const timeZone = clientMeta.timeZone ?? undefined;
+    const showBundle = (bundle: ReviewItemBundle) => {
+      const mealKcalSum = bundle.meal
+        ? plannedRowsFromAssignment(bundle.meal).reduce(
             (sum, row) => sum + (row.kcalPreview ?? 0),
             0,
           )
         : 0;
-      const mealKcal = mealKcalSum > 0 ? mealKcalSum : null;
+      setDetail(bundle.detail);
       setCard(
         buildReviewSheetCardModel({
-          detail: loaded,
+          detail: bundle.detail,
           ageMinutes: item.ageMinutes,
-          workout,
-          meal,
-          mealKcal,
-          timeZone: clientMeta.timeZone ?? undefined,
+          workout: bundle.workout,
+          meal: bundle.meal,
+          mealKcal: mealKcalSum > 0 ? mealKcalSum : null,
+          timeZone,
         }),
       );
       setCardLoading(false);
-    })();
+    };
+    // A seen or prefetched item shows at once (Z14-3); a stale one refreshes
+    // underneath.
+    const kept = readReviewItem(item.id);
+    if (kept) {
+      showBundle(kept.bundle);
+      if (!kept.stale) return;
+    } else {
+      setCardLoading(true);
+      setDetail((current) => (current?.id === item.id ? current : null));
+    }
+    void loadReviewItem(api, item.id, (loadedDetail) => {
+      // The exception is in: paint the card now; the Planned row follows.
+      if (cancelled || kept) return;
+      showBundle({ detail: loadedDetail, workout: null, meal: null });
+    }).then((bundle) => {
+      if (cancelled) return;
+      if (bundle) {
+        showBundle(bundle);
+        return;
+      }
+      if (kept) return;
+      // A resolved item may already be gone for this trainer; the card
+      // falls back to the item's own summary.
+      setDetail(null);
+      const localDate =
+        typeof item.details?.localDate === "string"
+          ? item.details.localDate
+          : null;
+      setCard({
+        title: reviewSheetCardTitle({
+          type: item.type,
+          localDate,
+          summary: item.summary,
+        }),
+        body: null,
+        planned: null,
+        logged: "Nothing logged",
+        reminder: null,
+        localDate,
+        severity: item.severity,
+        ageMinutes: item.ageMinutes,
+      });
+      setCardLoading(false);
+    });
     return () => {
       cancelled = true;
     };
     // `item` changes identity on every list update; the fetch follows its id.
   }, [api, clientMeta.timeZone, itemId, relationshipId, visible]);
+
+  // Prefetch the next item while this one is read, so stepping on is instant.
+  const nextItemId = items[index + 1]?.id ?? null;
+  useEffect(() => {
+    if (!visible || !nextItemId) return;
+    prefetchReviewItem(api, nextItemId);
+  }, [api, nextItemId, visible]);
 
   const subtitle = reviewSheetClientSubtitle({
     goalShort: clientMeta.goalShort,
