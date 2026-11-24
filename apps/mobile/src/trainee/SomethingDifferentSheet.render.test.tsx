@@ -18,13 +18,28 @@ const auth = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => auth.current }));
 
 const deviate = vi.hoisted(() => vi.fn(async () => undefined));
+const photo = vi.hoisted(() => ({
+  pick: vi.fn(),
+  prepare: vi.fn(),
+  send: vi.fn(),
+}));
 vi.mock("./mealActions", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("./mealActions");
-  return { ...actual, deviateMealAssignment: deviate };
+  return {
+    ...actual,
+    deviateMealAssignment: deviate,
+    pickMealPhoto: photo.pick,
+    prepareMealPhoto: photo.prepare,
+    uploadAndAttachMealPhoto: photo.send,
+  };
 });
 
 import { SomethingDifferentSheet } from "./SomethingDifferentSheet";
 import { peekMealSaved, resetMealSavedNotice } from "./food/mealSavedNotice";
+import { currentMealPhotoJobs, resetMealPhotoJobsForTests } from "./food/mealPhotoJobs";
+import { resetDeviceStorageForTests } from "../sync/storage";
+
+const USER = "a0a69e20-297d-4101-a5e2-ecce9b8491cb";
 
 const REL = "1b65e3ad-84cf-4fe1-a546-0d62656c2c79";
 const DATE = "2026-11-13";
@@ -196,5 +211,65 @@ describe("SomethingDifferentSheet sheet variant sub-screens", () => {
     fireEvent.click(screen.getByRole("button", { name: "Changed the portion" }));
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("button", { name: "Ate out" })).toBeTruthy();
+  });
+});
+
+describe("Ate out screen (TR-08c2)", () => {
+  beforeEach(() => {
+    deviate.mockClear();
+    resetMealSavedNotice();
+    resetMealPhotoJobsForTests();
+    resetDeviceStorageForTests();
+    window.localStorage.clear();
+    photo.pick.mockReset();
+    photo.prepare.mockReset();
+    photo.send.mockReset();
+    photo.pick.mockResolvedValue({ uri: "file:///cache/menu.jpg", width: 3000, height: 4000 });
+    photo.prepare.mockResolvedValue({ uri: "file:///cache/menu-small.jpg", bytes: new Uint8Array([7, 8, 9]) });
+    auth.current = mockAuth({
+      api: {},
+      me: { userId: USER, timezone: "Asia/Kolkata" },
+    });
+  });
+
+  it("asks what you had, with the trainee's label, and offers an optional photo", () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+    expect(screen.getByText("What did you have? (optional)")).toBeTruthy();
+    expect(screen.queryByText(/Note for/)).toBeNull();
+    expect(screen.getByText("Add a photo")).toBeTruthy();
+    expect(screen.getByText("Optional · the menu or your plate")).toBeTruthy();
+  });
+
+  it("a photo picked here becomes a durable photo job once the meal is saved", async () => {
+    const onDone = renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a photo" }));
+    // The same choice as Diet's Add photo, without the coach's prompt.
+    expect(screen.queryByText(/asks for a photo/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Choose from gallery" }));
+    expect(await screen.findByTestId("ate-out-photo-added")).toBeTruthy();
+    expect(photo.prepare).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText("Kcal"), { target: { value: "380" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save · 380 kcal" }));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(deviate).toHaveBeenCalledTimes(1);
+    const job = currentMealPhotoJobs()?.snapshot()[assignment.id];
+    expect(job).toMatchObject({ relationshipId: REL, localDate: DATE });
+    // The log was only queued: the photo waits for its server entry id.
+    expect(job?.state === "waiting" || job?.state === "uploading").toBe(true);
+    expect(photo.send).not.toHaveBeenCalled();
+    const stored = Object.keys(window.localStorage).filter((key) => key.includes("mealPhotoJobs"));
+    expect(stored.some((key) => key.includes(".job."))).toBe(true);
+    expect(stored.some((key) => key.includes(".jpeg."))).toBe(true);
+  });
+
+  it("Remove drops the picked photo before saving", async () => {
+    renderSheet();
+    fireEvent.click(screen.getByRole("button", { name: "Ate out" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Take photo" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Remove photo" }));
+    expect(screen.getByRole("button", { name: "Add a photo" })).toBeTruthy();
   });
 });

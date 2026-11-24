@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "@fitbud/api-client";
 import { coachingRelationshipSchema } from "@fitbud/contracts";
-import { mockAuth, render, screen, waitFor } from "../test/render";
+import { fireEvent, mockAuth, render, screen, waitFor } from "../test/render";
+import { localDateInTimezone } from "../lib/dates";
+import { clearDayViews, dayViewKey, setCached } from "../trainee/dataCache";
 
 vi.mock("../lib/reportError", () => ({ reportError: vi.fn() }));
 vi.mock("expo-modules-core", () => ({
@@ -29,6 +31,7 @@ vi.mock("../auth/AuthProvider", async () => {
 });
 
 const { TraineeOverlayHost } = await import("./TraineeOverlay");
+const MEAL_ID = "b2222222-2222-4222-8222-222222222222";
 
 const relationship = coachingRelationshipSchema.parse({
   id: "1b65e3ad-84cf-4fe1-a546-0d62656c2c79",
@@ -44,10 +47,13 @@ const relationship = coachingRelationshipSchema.parse({
   trainerDisplayName: "Rahul Verma",
 });
 
-function renderOverlay(presentation: "sheet" | "fullscreen" = "sheet") {
+function renderOverlay(
+  presentation: "sheet" | "fullscreen" = "sheet",
+  opened: { mealName?: string; planKcal?: number } = {},
+) {
   return render(
     <TraineeOverlayHost
-      overlay={{ screen: "something_different", assignmentId: "b2222222-2222-4222-8222-222222222222" }}
+      overlay={{ screen: "something_different", assignmentId: MEAL_ID, ...opened }}
       relationship={relationship}
       effectivePlan={null}
       planState={{ kind: "loading" } as never}
@@ -96,5 +102,54 @@ describe("meal overlay while the meal loads (TR-08a2)", () => {
     await waitFor(() => expect(screen.queryByTestId("meal-loading")).toBeNull());
     expect(screen.queryByText(/TypeError|Network request failed|404/)).toBeNull();
     expect(screen.getByText(/offline|connection/i)).toBeTruthy();
+  });
+});
+
+describe("meal overlay from the phone's copy (offline first)", () => {
+  it("opens from the cached Diet day with no answer from the server", async () => {
+    clearDayViews();
+    const today = localDateInTimezone("Asia/Kolkata");
+    setCached(dayViewKey("diet", relationship.id, today), {
+      meals: [{ id: MEAL_ID, mealName: "Evening snack", localDate: today }],
+      day: null,
+    });
+    load.list = async () => {
+      throw new TypeError("Network request failed");
+    };
+    load.get = async () => null;
+    renderOverlay();
+    expect(await screen.findByTestId("sheet-ready")).toBeTruthy();
+    // The failed refresh keeps the phone's copy.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByTestId("sheet-ready")).toBeTruthy();
+    expect(screen.queryByText(/isn.t available|can.t be opened/i)).toBeNull();
+    clearDayViews();
+  });
+
+  it("shows the meal and plan kcal while it loads (TR-08a2)", () => {
+    clearDayViews();
+    load.list = () => new Promise(() => undefined);
+    load.get = async () => null;
+    renderOverlay("sheet", { mealName: "Evening snack", planKcal: 220 });
+    expect(screen.getByText("Evening snack \u00b7 plan 220 kcal")).toBeTruthy();
+    expect(screen.getByTestId("meal-loading")).toBeTruthy();
+  });
+
+  it("with nothing cached and no connection: says so, offers Try again, promises no retry", async () => {
+    clearDayViews();
+    let calls = 0;
+    load.list = async () => {
+      calls += 1;
+      if (calls === 1) throw new TypeError("Network request failed");
+      return { items: [{ id: MEAL_ID, mealName: "Lunch", localDate: "2026-11-24" }], nextCursor: null };
+    };
+    load.get = async () => null;
+    renderOverlay("sheet", { mealName: "Lunch", planKcal: 610 });
+    expect(await screen.findByText(/You're offline, and this meal isn't saved on your phone yet/)).toBeTruthy();
+    expect(screen.queryByText(/retry when you're back/i)).toBeNull();
+    expect(screen.queryByText(/isn.t available/i)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByTestId("sheet-ready")).toBeTruthy();
+    expect(calls).toBe(2);
   });
 });

@@ -1,4 +1,4 @@
-import { userFacingMessage, type FitBudApiClient } from "@fitbud/api-client";
+import { isNetworkFailure, userFacingMessage, type FitBudApiClient } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { enqueueAndPush } from "../sync/actions";
@@ -78,9 +78,26 @@ export async function pickMealPhoto(
   return { uri: asset.uri, width: asset.width, height: asset.height };
 }
 
-function base64ToBytes(base64: string): Uint8Array {
-  const alphabet =
-    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const BASE64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/** The prepared JPEG as text, for the device store (a photo waiting to send). */
+export function bytesToBase64(bytes: Uint8Array): string {
+  let out = "";
+  for (let i = 0; i < bytes.length; i += 3) {
+    const a = bytes[i]!;
+    const b = i + 1 < bytes.length ? bytes[i + 1]! : -1;
+    const c = i + 2 < bytes.length ? bytes[i + 2]! : -1;
+    out += BASE64_ALPHABET[a >> 2];
+    out += BASE64_ALPHABET[((a & 3) << 4) | (b < 0 ? 0 : b >> 4)];
+    out += b < 0 ? "=" : BASE64_ALPHABET[((b & 15) << 2) | (c < 0 ? 0 : c >> 6)];
+    out += c < 0 ? "=" : BASE64_ALPHABET[c & 63];
+  }
+  return out;
+}
+
+export function base64ToBytes(base64: string): Uint8Array {
+  const alphabet = BASE64_ALPHABET;
   const clean = base64.replace(/[^A-Za-z0-9+/]/g, "");
   const out = new Uint8Array(Math.floor((clean.length * 3) / 4));
   let o = 0;
@@ -129,6 +146,8 @@ export async function uploadMealPhotoFile(
   relationshipId: string,
   assignmentId: string,
   bytes: Uint8Array,
+  /** The photo job's upload key: a retry gets the same media asset back. */
+  uploadKey: string = createIdempotencyKey(),
 ): Promise<string> {
   const target = await api.createUploadTarget(
     {
@@ -137,7 +156,7 @@ export async function uploadMealPhotoFile(
       contentType: MEAL_PHOTO_CONTENT_TYPE,
       originalFilename: `meal-${assignmentId}.jpg`,
     },
-    createIdempotencyKey(),
+    uploadKey,
   );
   await api.uploadMediaContent(
     target.mediaAsset.id,
@@ -160,7 +179,11 @@ export async function uploadAndAttachMealPhoto(
     entryId: string;
     bytes: Uint8Array;
     attachKey: string;
+    /** Reused on a retry so the upload target is the same media asset. */
+    uploadKey?: string;
     mediaAssetId?: string | null;
+    /** Called once the file is up, before the attach: the job keeps the id. */
+    onUploaded?: (mediaAssetId: string) => Promise<void> | void;
   },
 ): Promise<{ mediaAssetId: string }> {
   let mediaAssetId = input.mediaAssetId ?? null;
@@ -171,10 +194,12 @@ export async function uploadAndAttachMealPhoto(
         input.relationshipId,
         input.assignmentId,
         input.bytes,
+        input.uploadKey,
       );
     } catch (err) {
       throw new MealPhotoError("upload", mealPhotoFailureCopy(err), err);
     }
+    await input.onUploaded?.(mediaAssetId);
   }
   try {
     await api.attachMealPhoto(
@@ -190,11 +215,14 @@ export async function uploadAndAttachMealPhoto(
   return { mediaAssetId };
 }
 
-/** What went wrong, in words: a connection problem says so, anything else stays general. */
+/**
+ * What went wrong, in words: a connection problem says so (the photo job
+ * then waits instead of failing); anything else is TR-07m3's copy, which
+ * also says the meal itself is safe.
+ */
 export function mealPhotoFailureCopy(err: unknown): string {
-  return userFacingMessage(err, {
-    fallback: "Photo didn't upload. Your meal is still logged.",
-  });
+  if (isNetworkFailure(err)) return userFacingMessage(err);
+  return "Photo didn't upload. Your meal is still logged.";
 }
 
 /**

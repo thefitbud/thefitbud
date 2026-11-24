@@ -8,16 +8,20 @@ import type {
 
 type CoachAskItemType = CreateCoachAskRequest["itemType"];
 import type { CoachingRelationship } from "@fitbud/contracts";
-import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
-import { formatCivilDate } from "@fitbud/core";
+import { ApiClientError, isNetworkFailure, userFacingMessage } from "@fitbud/api-client";
+import { formatCivilDate, formatNumber } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { BottomSheet } from "../components/BottomSheet";
+import { ErrorBanner } from "../components/ErrorBanner";
+import { OfflineBanner } from "../components/OfflineBanner";
+import { Button } from "../components/Button";
 import { Screen } from "../components/Screen";
 import { createThemedStyles } from "../providers/ThemeProvider";
 import { addDays, localDateInTimezone } from "../lib/dates";
 import { reportError } from "../lib/reportError";
 import type { NotificationDeepLink } from "../notifications/routing";
 import { AssignedMealPlanScreen } from "../trainee/AssignedMealPlanScreen";
+import { cacheKey, dayViewKey, getCached } from "../trainee/dataCache";
 import type { EffectivePlanState } from "../trainee/TodayTab";
 import { AskCoachSheet } from "../trainee/ask/AskCoachSheet";
 import { DeepLinkUnavailableScreen } from "../trainee/DeepLinkUnavailableScreen";
@@ -50,7 +54,13 @@ export type TraineeOverlay =
   | { screen: "meal_times" }
   | { screen: "sync" }
   | { screen: "food_search"; assignmentId: string }
-  | { screen: "something_different"; assignmentId: string }
+  | {
+      screen: "something_different";
+      assignmentId: string;
+      /** Shown at once while the meal loads (TR-08a2): "{Meal} · plan N kcal". */
+      mealName?: string;
+      planKcal?: number;
+    }
   | { screen: "meal_plan" }
   | {
       screen: "workout_overview";
@@ -92,22 +102,69 @@ export type TraineeOverlay =
   | { screen: "account" }
   | { screen: "help" };
 
-/** Why a meal screen has no meal: said in words, never as a code (D-W14-3). */
-export function mealUnavailableReason(err: unknown): string {
+const MEAL_GONE_REASON = "This meal isn't on your plan any more.";
+/** No promise of a retry on its own: the trainee taps Try again. */
+const MEAL_OFFLINE_REASON =
+  "You're offline, and this meal isn't saved on your phone yet. Try again when you're connected.";
+const MEAL_SERVER_REASON = "Something went wrong on our side. Try again.";
+
+/**
+ * Why a meal screen has no meal: said in words, never as a code (D-W14-3).
+ * Only a real not-found says the meal is gone; anything else can be tried
+ * again.
+ */
+export function mealLoadFailure(err: unknown): MealLoadState {
   if (err instanceof ApiClientError && err.status === 404) {
-    return "This meal isn't on your plan any more.";
+    return { kind: "unavailable", reason: MEAL_GONE_REASON };
   }
-  return userFacingMessage(err, {
-    fallback: "Something went wrong on our side. Try again.",
-  });
+  if (isNetworkFailure(err)) {
+    return { kind: "failed", reason: MEAL_OFFLINE_REASON, offline: true };
+  }
+  // A refusal keeps the server's own words (known codes, curated bodies).
+  return {
+    kind: "failed",
+    reason: userFacingMessage(err, { fallback: MEAL_SERVER_REASON }),
+    offline: false,
+  };
 }
 
-const MEAL_GONE_REASON = "This meal isn't on your plan any more.";
+/** Days around today a meal overlay looks at (the same window as its fetch). */
+const MEAL_LOOKBACK_DAYS = 14;
+const MEAL_LOOKAHEAD_DAYS = 7;
+
+/**
+ * The meal as this phone already has it: a Diet or Today day seen this
+ * session (or restored from the offline snapshot), or the meals read for a
+ * day. Lets the overlay open at once, offline too, and refresh behind it.
+ */
+export function cachedMealAssignment(
+  relationshipId: string,
+  assignmentId: string,
+  today: string,
+): MealAssignment | null {
+  for (let offset = -MEAL_LOOKBACK_DAYS; offset <= MEAL_LOOKAHEAD_DAYS; offset += 1) {
+    const date = addDays(today, offset);
+    for (const screen of ["diet", "today"]) {
+      const view = getCached<{ meals?: MealAssignment[] }>(
+        dayViewKey(screen, relationshipId, date),
+      );
+      const hit = view?.meals?.find((meal) => meal.id === assignmentId);
+      if (hit) return hit;
+    }
+    const listed = getCached<{ items?: MealAssignment[] }>(
+      cacheKey("meals", relationshipId, date, date),
+    );
+    const hit = listed?.items?.find((meal) => meal.id === assignmentId);
+    if (hit) return hit;
+  }
+  return null;
+}
 
 type MealLoadState =
   | { kind: "loading" }
   | { kind: "ready" }
-  | { kind: "unavailable"; reason: string };
+  | { kind: "unavailable"; reason: string }
+  | { kind: "failed"; reason: string; offline: boolean };
 
 /** A load answer tagged with the meal it is for, so a stale one is never shown. */
 type MealLoadResult = { id: string; state: MealLoadState };
@@ -155,7 +212,43 @@ const useLoadingStyles = createThemedStyles((t) => ({
   line: { backgroundColor: t.colors.fill, borderRadius: 8, height: 12 },
   lineShort: { width: "52%" },
   lineLong: { width: "86%" },
+  failed: { gap: 16, paddingBottom: 24, paddingTop: 8 },
 }));
+
+/** A meal that could not be loaded and is not on the phone: says why, with Try again. */
+function MealLoadFailed({
+  reason,
+  offline,
+  onRetry,
+  onClose,
+}: {
+  reason: string;
+  offline: boolean;
+  onRetry: () => void;
+  onClose: () => void;
+}) {
+  const styles = useLoadingStyles();
+  return (
+    <View style={styles.failed} testID="meal-load-failed">
+      {offline ? (
+        <OfflineBanner message={reason} />
+      ) : (
+        <ErrorBanner message={reason} offline={false} />
+      )}
+      <Button label="Try again" onPress={onRetry} />
+      <Button label="Close" variant="text" onPress={onClose} />
+    </View>
+  );
+}
+
+/** "{Meal} · plan N kcal" as the opener knew it, or nothing. */
+function mealLoadingSubtitle(overlay: TraineeOverlay): string | undefined {
+  if (overlay.screen !== "something_different" || !overlay.mealName) return undefined;
+  const kcal = overlay.planKcal ?? 0;
+  return kcal > 0
+    ? `${overlay.mealName} \u00b7 plan ${formatNumber(kcal)} kcal`
+    : overlay.mealName;
+}
 
 export type TraineeOverlayOpener = (overlay: TraineeOverlay) => void;
 
@@ -215,10 +308,14 @@ export function TraineeOverlayHost({
         setMealAssignment(meal);
         setLoadResult({ id: assignmentId, state: next });
       };
+      // The phone's copy first, so the screen opens at once (offline too);
+      // the server's copy replaces it when it arrives.
+      const cached = cachedMealAssignment(relationship.id, assignmentId, today);
+      if (cached) settle({ kind: "ready" }, cached);
       try {
         const listed = await api.listMealAssignments(relationship.id, {
-          fromDate: addDays(today, -14),
-          toDate: addDays(today, 7),
+          fromDate: addDays(today, -MEAL_LOOKBACK_DAYS),
+          toDate: addDays(today, MEAL_LOOKAHEAD_DAYS),
         });
         const match = listed.items.find((item) => item.id === assignmentId);
         if (match) {
@@ -230,7 +327,11 @@ export function TraineeOverlayHost({
         else settle({ kind: "unavailable", reason: MEAL_GONE_REASON }, null);
       } catch (err) {
         reportError("TraineeOverlay.loadMeal", err);
-        settle({ kind: "unavailable", reason: mealUnavailableReason(err) }, null);
+        const failure = mealLoadFailure(err);
+        // A refresh that fails keeps the phone's copy; only a real
+        // not-found takes it away.
+        if (cached && failure.kind === "failed") return;
+        settle(failure, null);
       }
     },
     [api, me?.timezone, relationship.id],
@@ -247,6 +348,12 @@ export function TraineeOverlayHost({
       ? loadResult.state
       : { kind: "loading" };
 
+  const [retryCount, setRetryCount] = useState(0);
+  const retryMealLoad = useCallback(() => {
+    setLoadResult(null);
+    setRetryCount((n) => n + 1);
+  }, []);
+
   useEffect(() => {
     if (
       overlay.screen === "something_different" ||
@@ -259,7 +366,7 @@ export function TraineeOverlayHost({
       loadToken.current += 1;
       setMealAssignment(null);
     }
-  }, [overlay, loadMealAssignment]);
+  }, [overlay, loadMealAssignment, retryCount]);
 
   switch (overlay.screen) {
     case "notifications":
@@ -310,6 +417,18 @@ export function TraineeOverlayHost({
             </Screen>
           );
         }
+        if (mealLoad.kind === "failed") {
+          return (
+            <Screen v3 chrome="app" title="Log it myself">
+              <MealLoadFailed
+                reason={mealLoad.reason}
+                offline={mealLoad.offline}
+                onRetry={retryMealLoad}
+                onClose={onClose}
+              />
+            </Screen>
+          );
+        }
         return (
           <DeepLinkUnavailableScreen
             reason={
@@ -331,6 +450,16 @@ export function TraineeOverlayHost({
     case "something_different":
       if (!mealAssignment) {
         const loading = mealLoad.kind === "loading";
+        const subtitle = mealLoadingSubtitle(overlay);
+        const failedBody =
+          mealLoad.kind === "failed" ? (
+            <MealLoadFailed
+              reason={mealLoad.reason}
+              offline={mealLoad.offline}
+              onRetry={retryMealLoad}
+              onClose={onClose}
+            />
+          ) : null;
         const reason =
           mealLoad.kind === "unavailable" ? mealLoad.reason : MEAL_GONE_REASON;
         if (presentation === "sheet") {
@@ -338,25 +467,27 @@ export function TraineeOverlayHost({
             <BottomSheet
               visible
               title="What did you have instead?"
-              subtitle={loading ? undefined : "This meal can't be opened"}
+              subtitle={subtitle}
               onDismiss={onClose}
             >
               {loading ? (
                 <MealLoadingRows />
               ) : (
-                <DeepLinkUnavailableScreen reason={reason} onGoToday={goToday} />
+                (failedBody ?? (
+                  <DeepLinkUnavailableScreen reason={reason} onGoToday={goToday} />
+                ))
               )}
             </BottomSheet>
           );
         }
-        if (loading) {
+        if (loading || failedBody) {
           return (
             <Screen
               v3
               title="What did you have instead?"
-              subtitle="Loading meal"
+              subtitle={subtitle}
             >
-              <MealLoadingRows />
+              {failedBody ?? <MealLoadingRows />}
             </Screen>
           );
         }

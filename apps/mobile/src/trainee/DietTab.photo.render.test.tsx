@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import { clearDayViews } from "./dataCache";
 import {
   coachingRelationshipSchema,
@@ -97,7 +97,10 @@ const api = new Proxy(
     },
   },
 );
-const auth = mockAuth({ api, me: { id: USER, email: "aarav.ontrack@demo.fitbud.test", timezone: TZ } });
+const auth = mockAuth({
+  api,
+  me: { id: USER, userId: USER, email: "aarav.ontrack@demo.fitbud.test", timezone: TZ },
+});
 
 vi.mock("../auth/AuthProvider", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("../auth/AuthProvider");
@@ -139,6 +142,44 @@ vi.mock("./mealActions", async () => {
 
 const { DietTab } = await import("./DietTab");
 const { MealPhotoError } = await import("./mealActions");
+const { resetMealPhotoJobsForTests } = await import("./food/mealPhotoJobs");
+const { announceMealSaved, resetMealSavedNotice } = await import("./food/mealSavedNotice");
+const { resetDeviceStorageForTests } = await import("../sync/storage");
+
+const networkDown = () =>
+  new MealPhotoError(
+    "upload",
+    "You're offline. We'll retry when you're back.",
+    new TypeError("Network request failed"),
+  );
+
+/** A log saved on the phone and not yet answered by the server. */
+async function queueLog(status: "pending" | "in_flight" = "pending") {
+  await syncEngine.store.enqueueOutbox({
+    mutationId: "f0f0f0f0-0000-4000-8000-000000000001",
+    idempotencyKey: "f0f0f0f0-0000-4000-8000-000000000001",
+    entityType: "meal_assignment" as never,
+    recordId: MEAL_ID,
+    operation: "meal.confirm",
+    expectedServerVersion: null,
+    clientOccurredAt: new Date().toISOString(),
+    payloadJson: JSON.stringify({ assignmentId: MEAL_ID, mealName: "Evening snack", body: { photoIntent: null } }),
+  });
+  if (status === "in_flight") {
+    await syncEngine.store.updateOutboxStatus("f0f0f0f0-0000-4000-8000-000000000001", "in_flight");
+  }
+}
+
+/** The phone lost and regained its connection (the web build's events). */
+function goOffline(offline: boolean) {
+  Object.defineProperty(window.navigator, "onLine", { configurable: true, value: !offline });
+  act(() => {
+    window.dispatchEvent(new Event(offline ? "offline" : "online"));
+  });
+}
+
+const OFFLINE_PHOTO_COPY =
+  "You're offline. The photo is saved on your phone and sends when you're back.";
 
 const relationship = coachingRelationshipSchema.parse({
   id: REL,
@@ -165,8 +206,14 @@ function renderDiet() {
   );
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   clearDayViews();
+  resetMealPhotoJobsForTests();
+  resetMealSavedNotice();
+  resetDeviceStorageForTests();
+  window.localStorage.clear();
+  await syncEngine.store.clear();
+  Object.defineProperty(window.navigator, "onLine", { configurable: true, value: true });
   photo.pick.mockReset();
   photo.prepare.mockReset();
   photo.send.mockReset();
@@ -267,6 +314,126 @@ describe("DietTab meal photo (D-W14-11, D-W14-19)", () => {
     renderDiet();
     await waitFor(() => expect(screen.getByText("1 of 1 logged")).toBeTruthy());
     expect(screen.queryByRole("button", { name: "Add photo" })).toBeNull();
+  });
+});
+
+describe("DietTab meal photo offline (durable jobs)", () => {
+  it("a photo-required meal logged offline gets the sheet; the photo waits for the server entry id", async () => {
+    server.items = [meal({ logged: false, photoRequired: true })];
+    // Eaten as planned while the log cannot be sent: it waits in the outbox.
+    photo.confirm.mockImplementation(async () => {
+      await queueLog();
+    });
+    renderDiet();
+    fireEvent.click(await screen.findByRole("button", { name: "Eaten as planned" }));
+    expect(await screen.findByText("Rahul asks for a photo of this meal.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Take photo" }));
+    expect(
+      await screen.findByText("The photo sends as soon as your meal is saved."),
+    ).toBeTruthy();
+    // Even when the server's day already carries an id, nothing attaches while
+    // the log is still in the outbox.
+    server.items = [meal({ logged: true, photoRequired: true })];
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(photo.send).not.toHaveBeenCalled();
+
+    // The server takes the log: the photo goes, to the server's entry.
+    await act(async () => {
+      await syncEngine.store.removeOutbox("f0f0f0f0-0000-4000-8000-000000000001");
+    });
+    await waitFor(() => expect(photo.send).toHaveBeenCalledTimes(1));
+    expect((photo.send.mock.calls[0]?.[1] as { entryId: string }).entryId).toBe(ENTRY_ID);
+    expect(await screen.findByText("Photo added for Rahul")).toBeTruthy();
+  });
+
+  it("a connection failure reads neutral, keeps the photo and sends itself once back online", async () => {
+    server.items = [meal({ logged: true })];
+    photo.send.mockRejectedValueOnce(networkDown());
+    renderDiet();
+    fireEvent.click(await screen.findByRole("button", { name: "Add photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Take photo" }));
+    const copy = await screen.findByText(OFFLINE_PHOTO_COPY);
+    expect(copy.getAttribute("style") ?? "").not.toMatch(/crit/);
+    // A wait, not a failure: no Try again / Remove photo, no error copy.
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByText(/We'll retry when you're back/)).toBeNull();
+    goOffline(true);
+    goOffline(false);
+    expect(await screen.findByText("Photo added for Rahul")).toBeTruthy();
+    expect(photo.send).toHaveBeenCalledTimes(2);
+  });
+
+  it("the waiting photo survives Diet unmounting and an app restart", async () => {
+    server.items = [meal({ logged: true })];
+    photo.send.mockRejectedValue(networkDown());
+    const first = renderDiet();
+    fireEvent.click(await screen.findByRole("button", { name: "Add photo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Choose from gallery" }));
+    expect(await screen.findByText(OFFLINE_PHOTO_COPY)).toBeTruthy();
+    const attachKey = (photo.send.mock.calls[0]?.[1] as { attachKey: string }).attachKey;
+
+    // Diet unmounts (bell, cover, a notification), then comes back.
+    first.unmount();
+    const second = renderDiet();
+    expect(await screen.findByText(OFFLINE_PHOTO_COPY)).toBeTruthy();
+    second.unmount();
+
+    // The app is killed: no runner in memory, only the device store.
+    resetMealPhotoJobsForTests();
+    photo.send.mockReset();
+    photo.send.mockResolvedValue({ mediaAssetId: "00000000-0000-4000-8000-0000000000d1" });
+    renderDiet();
+    expect(await screen.findByText("Photo added for Rahul")).toBeTruthy();
+    expect(photo.send).toHaveBeenCalledTimes(1);
+    const input = photo.send.mock.calls[0]?.[1] as {
+      attachKey: string;
+      entryId: string;
+      bytes: Uint8Array;
+    };
+    expect(input.attachKey).toBe(attachKey);
+    expect(input.entryId).toBe(ENTRY_ID);
+    expect([...input.bytes]).toEqual([1, 2]);
+  });
+});
+
+describe("DietTab photo sheet after other logs (D-W14-19)", () => {
+  it("opens after a changed portion, ate out or log-it-myself save when the plan asks", async () => {
+    server.items = [meal({ logged: true, photoRequired: true })];
+    renderDiet();
+    await screen.findByText("1 of 1 logged");
+    act(() => {
+      announceMealSaved({
+        relationshipId: REL,
+        assignmentId: MEAL_ID,
+        localDate: DATE,
+        mealName: "Evening snack",
+        kcal: 380,
+        kind: "restaurant",
+      });
+    });
+    expect(await screen.findByText("Rahul asks for a photo of this meal.")).toBeTruthy();
+  });
+
+  it("stays shut after such a save when the plan does not ask", async () => {
+    server.items = [meal({ logged: true, photoRequired: false })];
+    renderDiet();
+    await screen.findByText("1 of 1 logged");
+    act(() => {
+      announceMealSaved({
+        relationshipId: REL,
+        assignmentId: MEAL_ID,
+        localDate: DATE,
+        mealName: "Evening snack",
+        kcal: 300,
+        kind: "portion_adjustment",
+      });
+    });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+    expect(screen.queryByTestId("meal-photo-sheet")).toBeNull();
   });
 });
 

@@ -26,7 +26,9 @@ import { useDeviceOffline } from "../today/queuedLogs";
 import { deviateMealAssignment } from "../mealActions";
 import { cleanFoodLabel } from "../mealHelpers";
 import { nutrientsFromMealPrescription } from "../nutrition";
+import { AteOutPhotoRow, type AteOutPhoto } from "./AteOutPhotoRow";
 import { FoodNavHeader } from "./FoodNavHeader";
+import { currentMealPhotoJobs } from "./mealPhotoJobs";
 import { announceMealSaved } from "./mealSavedNotice";
 
 /** The deviate body for an ate-out log: the kcal as one line, the note as notes. */
@@ -241,6 +243,9 @@ export function AteOutForm({
   const isCoach = authorMode === "coach";
   const [kcalText, setKcalText] = useState("");
   const [note, setNote] = useState("");
+  /** TR-08c2's optional photo (screen layout, trainee only). */
+  const [photo, setPhoto] = useState<AteOutPhoto | null>(null);
+  const showPhotoRow = layout === "screen" && !isCoach;
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const planKcal = nutrientsFromMealPrescription(assignment).kcal;
@@ -269,6 +274,23 @@ export function AteOutForm({
         });
       } else {
         await deviateMealAssignment(sync, assignment, body, coachName, relationshipId);
+        if (photo) {
+          // The photo is a file job of its own (AGENTS.md: files upload
+          // separately): kept on the phone, attached once the log is on the
+          // server, online or not.
+          const jobs = currentMealPhotoJobs();
+          if (jobs) {
+            await jobs.addPrepared({
+              assignmentId: assignment.id,
+              relationshipId,
+              localDate: assignment.localDate,
+              uri: photo.uri,
+              bytes: photo.bytes,
+            });
+          } else {
+            reportError("AteOutForm.photo", new Error("photo runner not started"));
+          }
+        }
         announceMealSaved({
           relationshipId,
           assignmentId: assignment.id,
@@ -317,18 +339,21 @@ export function AteOutForm({
           </Text>
         ) : null}
         <Text variant="bodyStrong" style={styles.noteLabel}>
-          {isCoach ? "Note (optional)" : `Note for ${coachShort} (optional)`}
+          {isCoach ? "Note (optional)" : "What did you have? (optional)"}
         </Text>
         <TextInput
           value={note}
           onChangeText={setNote}
           placeholder={isCoach ? "Where, and what they had" : "Where, and what you had"}
           placeholderTextColor={theme.colors.ink4}
-          accessibilityLabel={isCoach ? "Note" : `Note for ${coachShort}`}
+          accessibilityLabel={isCoach ? "Note" : "What did you have?"}
           maxLength={500}
           style={styles.noteInput}
           testID="ate-out-note"
         />
+        {showPhotoRow ? (
+          <AteOutPhotoRow mealName={mealName} value={photo} onChange={setPhoto} />
+        ) : null}
         {error ? <ErrorBanner message={error} /> : null}
     </>
   );

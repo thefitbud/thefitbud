@@ -34,7 +34,6 @@ import {
   useTheme,
 } from "../providers/ThemeProvider";
 import { useAuth } from "../auth/AuthProvider";
-import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { FutureDayBanner } from "./FutureDayBanner";
 import { PlannedMealSheet } from "./PlannedMealSheet";
@@ -55,7 +54,6 @@ import {
   pendingMealLogIds,
   pickMealPhoto,
   prepareMealPhoto,
-  uploadAndAttachMealPhoto,
   type MealPhotoSource,
 } from "./mealActions";
 import {
@@ -93,6 +91,8 @@ import { CoachLogBadge } from "./coach-log/CoachLogBadge";
 import { deviationLabel, LoggedMealSheet } from "./food/LoggedMealSheet";
 import { formatAmount } from "./food/logLines";
 import { MealPhotoSheet } from "./food/MealPhotoSheet";
+import { serverEntryId } from "./food/mealPhotoJobs";
+import { useMealPhotoJobs } from "./food/useMealPhotoJobs";
 import {
   takeMealSaved,
   useMealSavedNotice,
@@ -377,17 +377,6 @@ function StateCard({
     </View>
   );
 }
-/** A picked meal photo on its way to the server (TR-07m2 / TR-07m3). */
-type PhotoJob = {
-  uri: string;
-  status: "preparing" | "waiting" | "uploading" | "failed" | "done";
-  message: string | null;
-  /** The failure was the connection: shown neutral, not as an error (D-W14-9). */
-  offline?: boolean;
-  attachKey: string;
-  mediaAssetId: string | null;
-};
-
 type MeDay = Awaited<ReturnType<ReturnType<typeof stage1Api>["getMeDay"]>>;
 
 /** One day of Diet as cached per relationship and civil date (Z12-40). */
@@ -625,18 +614,11 @@ function DietTabBody({
     coachAsks: boolean;
   } | null>(null);
   /**
-   * A picked photo on its way to the server (TR-07m2 / TR-07m3). It waits for
-   * the log to be on the server and for a connection, then uploads and attaches.
+   * Picked photos on their way to the server (TR-07m2 / TR-07m3): durable
+   * jobs in the device store that outlive this screen and a restart, and
+   * attach once the log has a server entry id (`mealPhotoJobs.ts`).
    */
-  const [photoJobs, setPhotoJobs] = useState<Record<string, PhotoJob>>({});
-  const photoBytes = useRef(new Map<string, Uint8Array>());
-  const photoRunning = useRef(new Set<string>());
-  /**
-   * A meal eaten as planned here: its photo prompt shows once the server has
-   * the log (a photo can only follow a sent log), if that happens soon. A log
-   * held up offline gets no prompt, as before.
-   */
-  const photoAfterSend = useRef<{ id: string; at: number } | null>(null);
+  const { jobs: photoJobs, runner: photoRunner } = useMealPhotoJobs();
   const coachName =
     relationship.trainerDisplayName?.split(/\s+/)[0] ?? "Your coach";
 
@@ -652,28 +634,32 @@ function DietTabBody({
     });
   }, [bundle, selectedDate, optimisticVersion, overlay]);
 
+  /** Meals whose log the server has not answered yet (pending or in flight). */
+  const unsentIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const [id, entry] of overlay.meals) {
+      if (entry.unsent) ids.add(id);
+    }
+    return ids;
+  }, [overlay]);
+
+  // The photo runner looks here first for a meal's entry id, and tries again
+  // whenever the day or the outbox changes (a log that just reached the server).
   useEffect(() => {
-    const waitingFor = photoAfterSend.current;
-    if (!waitingFor) return;
-    if (Date.now() - waitingFor.at > 30_000) {
-      photoAfterSend.current = null;
-      return;
-    }
-    const entry = overlay.meals.get(waitingFor.id);
-    if (entry?.unsent) {
-      if (entry.waiting) photoAfterSend.current = null;
-      return;
-    }
-    const meal = bundle?.meals.find((item) => item.id === waitingFor.id);
-    if (entry || (meal && isMealLoggedForCount(meal.status))) {
-      photoAfterSend.current = null;
-      // D-W14-19: the sheet opens only when the plan asks for a photo of
-      // this meal. Otherwise the card keeps a small Add photo.
-      if (meal?.photoRequired) {
-        setPhotoSheet({ id: waitingFor.id, coachAsks: true });
+    if (!photoRunner) return;
+    photoRunner.setHints(assignments);
+    void photoRunner.kick();
+  }, [photoRunner, assignments, showOffline]);
+
+  // A photo that is on the server's copy of the log needs no job any more.
+  useEffect(() => {
+    if (!photoRunner) return;
+    for (const meal of assignments) {
+      if (meal.compliance?.mediaAssetId && photoJobs[meal.id]?.state === "done") {
+        photoRunner.forget(meal.id);
       }
     }
-  }, [overlay, bundle]);
+  }, [photoRunner, assignments, photoJobs]);
 
   // After each load of the day: read which logs still wait in the outbox,
   // and drop optimistic statuses the server now has (or the outbox lost).
@@ -771,6 +757,12 @@ function DietTabBody({
     // the outbox overlay; the notice only brings the toast.
     takeMealSaved(savedNotice.id);
     setSavedToast(savedNotice);
+    // D-W14-19: a changed portion, ate out or log-it-myself save asks for the
+    // photo too when the plan wants one (unless a photo is already on its way).
+    const saved = bundle?.meals.find((m) => m.id === savedNotice.assignmentId);
+    if (saved?.photoRequired && !photoRunner?.snapshot()[saved.id]) {
+      setPhotoSheet({ id: saved.id, coachAsks: true });
+    }
   }, [savedNotice]);
 
   async function confirmMeal(assignment: MealAssignment) {
@@ -786,9 +778,12 @@ function DietTabBody({
         coachName,
       );
       // The log is on the phone and shows as logged now (D-W14-6); the push
-      // and the day's refresh run behind it. A photo can follow once the
-      // server has the log (`photoAfterSend`).
-      photoAfterSend.current = { id: assignment.id, at: Date.now() };
+      // and the day's refresh run behind it. D-W14-19: when the plan asks for
+      // a photo, the sheet opens now, online or not; the photo waits on the
+      // phone for the log's server entry id.
+      if (assignment.photoRequired) {
+        setPhotoSheet({ id: assignment.id, coachAsks: true });
+      }
       invalidateRelationshipDayData(relationship.id);
     } catch (err) {
       // `MealSyncError` carries the app's own static text; anything else is
@@ -806,18 +801,13 @@ function DietTabBody({
     }
   }
 
-  function patchJob(id: string, patch: Partial<PhotoJob>) {
-    setPhotoJobs((jobs) => {
-      const job = jobs[id];
-      return job ? { ...jobs, [id]: { ...job, ...patch } } : jobs;
-    });
-  }
-
-  /** Camera or gallery, then resize to 1600 px JPEG; the upload follows on its own. */
+  /** Camera or gallery, then resize to 1600 px JPEG; the job sends itself. */
   async function choosePhoto(source: MealPhotoSource) {
     const sheet = photoSheet;
     setPhotoSheet(null);
-    if (!sheet) return;
+    if (!sheet || !photoRunner) return;
+    const meal = assignments.find((m) => m.id === sheet.id);
+    if (!meal) return;
     let picked;
     try {
       picked = await pickMealPhoto(source);
@@ -831,100 +821,34 @@ function DietTabBody({
       return;
     }
     if (!picked) return;
-    const id = sheet.id;
-    setPhotoJobs((jobs) => ({
-      ...jobs,
-      [id]: {
-        uri: picked.uri,
-        status: "preparing",
-        message: null,
-        attachKey: createIdempotencyKey(),
-        mediaAssetId: null,
-      },
-    }));
-    try {
-      const prepared = await prepareMealPhoto(picked);
-      photoBytes.current.set(id, prepared.bytes);
-      patchJob(id, { uri: prepared.uri, status: "waiting" });
-    } catch (err) {
-      reportError("DietTab.preparePhoto", err);
-      patchJob(id, {
-        status: "failed",
-        message:
-          err instanceof MealPhotoError
-            ? err.message
-            : "Photo didn't upload. Your meal is still logged.",
-      });
-    }
-  }
-
-  async function sendPhoto(meal: MealAssignment, entryId: string) {
-    const job = photoJobs[meal.id];
-    const bytes = photoBytes.current.get(meal.id);
-    if (!job || !bytes || photoRunning.current.has(meal.id)) return;
-    photoRunning.current.add(meal.id);
-    patchJob(meal.id, { status: "uploading", message: null });
-    try {
-      await uploadAndAttachMealPhoto(api, {
-        relationshipId: relationship.id,
+    const chosen = picked;
+    await photoRunner.addPicked(
+      {
         assignmentId: meal.id,
-        entryId,
-        bytes,
-        attachKey: job.attachKey,
-        mediaAssetId: job.mediaAssetId,
-      });
-      photoBytes.current.delete(meal.id);
-      patchJob(meal.id, { status: "done" });
-      invalidateRelationshipDayData(relationship.id);
-    } catch (err) {
-      reportError("DietTab.sendPhoto", err);
-      patchJob(meal.id, {
-        status: "failed",
-        offline: isNetworkFailure(err instanceof MealPhotoError ? err.cause : err),
-        message:
-          err instanceof MealPhotoError
-            ? err.message
-            : "Photo didn't upload. Your meal is still logged.",
-        mediaAssetId:
-          err instanceof MealPhotoError ? err.mediaAssetId : job.mediaAssetId,
-      });
-    } finally {
-      photoRunning.current.delete(meal.id);
-    }
-  }
-
-  function retryPhoto(id: string) {
-    patchJob(id, { status: "waiting", message: null });
-  }
-
-  function removePhotoJob(id: string) {
-    photoBytes.current.delete(id);
-    setPhotoJobs((jobs) =>
-      Object.fromEntries(Object.entries(jobs).filter(([key]) => key !== id)),
+        relationshipId: relationship.id,
+        localDate: meal.localDate,
+        uri: chosen.uri,
+      },
+      () => prepareMealPhoto(chosen),
     );
   }
 
-  /** The server's entry id for a logged meal; not known while the log is still on the phone. */
+  /**
+   * The server's entry id for a logged meal; null while the log is only on
+   * the phone (a `local-` id) or still in the outbox. Add photo waits for it.
+   */
   function entryIdOf(meal: MealAssignment): string | null {
-    const id = meal.compliance?.id;
-    if (!id || id.startsWith("local-") || pendingSendIds.has(meal.id)) return null;
-    return id;
+    return serverEntryId(meal, unsentIds);
   }
 
-  // A picked photo goes up once its log is on the server and there is a
-  // connection: a meal logged offline attaches when the phone is back online.
-  useEffect(() => {
-    if (showOffline) return;
-    for (const meal of assignments) {
-      const job = photoJobs[meal.id];
-      if (job?.status !== "waiting") continue;
-      const entryId = entryIdOf(meal);
-      if (entryId) void sendPhoto(meal, entryId);
-    }
-  }, [photoJobs, assignments, showOffline, pendingSendIds]);
-
+  // The overlay opens at once with the meal's name and plan kcal (TR-08a2).
   const openSomethingDifferent = (meal: MealAssignment) =>
-    onOpenOverlay({ screen: "something_different", assignmentId: meal.id });
+    onOpenOverlay({
+      screen: "something_different",
+      assignmentId: meal.id,
+      mealName: cleanFoodLabel(meal.mealName),
+      planKcal: nutrientsFromMealPrescription(meal).kcal,
+    });
 
   /**
    * D-W12-7 (TR-07k): on a future day a meal is a planned row. Tapping it
@@ -982,19 +906,25 @@ function DietTabBody({
       name: string;
     },
   ) {
-    if (!ctx.isLogged || ctx.isSkipped || ctx.waiting) return null;
     const job = photoJobs[meal.id];
-    if (job && job.status !== "done") {
-      const failed = job.status === "failed";
+    // A photo on its way shows even while the log itself waits to send: the
+    // photo is kept on the phone and attaches once the log has reached the
+    // server (`mealPhotoJobs.ts`).
+    if (job && job.state !== "done" && !ctx.isSkipped) {
+      const failed = job.state === "failed";
       const entryReady = entryIdOf(meal) != null;
-      const queued = job.status === "waiting" && (showOffline || !entryReady);
+      const offline = showOffline || job.offline;
+      const queued =
+        job.state === "waiting" && (offline || !entryReady || ctx.waiting);
       const text = failed
         ? (job.message ?? "Photo didn't upload. Your meal is still logged.")
         : queued
-          ? showOffline
+          ? offline
             ? "You're offline. The photo is saved on your phone and sends when you're back."
             : "The photo sends as soon as your meal is saved."
-          : "Uploading photo\u2026";
+          : job.state === "preparing"
+            ? "Getting the photo ready\u2026"
+            : "Uploading photo\u2026";
       return (
         <View style={styles.photoArea} testID="meal-photo-status">
           <View style={styles.photoStatus}>
@@ -1006,7 +936,7 @@ function DietTabBody({
             <View style={styles.photoStatusText}>
               <Text
                 variant="subhead"
-                tone={failed && !job.offline ? "crit" : "ink2"}
+                tone={failed ? "crit" : "ink2"}
               >
                 {text}
               </Text>
@@ -1020,7 +950,7 @@ function DietTabBody({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Try again"
-                onPress={() => retryPhoto(meal.id)}
+                onPress={() => photoRunner?.retry(meal.id)}
                 style={styles.photoBtn}
                 testID="meal-photo-retry"
               >
@@ -1030,7 +960,7 @@ function DietTabBody({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Remove photo"
-                onPress={() => removePhotoJob(meal.id)}
+                onPress={() => void photoRunner?.remove(meal.id)}
                 style={styles.photoBtn}
                 testID="meal-photo-remove"
               >
@@ -1041,7 +971,8 @@ function DietTabBody({
         </View>
       );
     }
-    if (job?.status === "done" || meal.compliance?.mediaAssetId) {
+    if (!ctx.isLogged || ctx.isSkipped || ctx.waiting) return null;
+    if (job?.state === "done" || meal.compliance?.mediaAssetId) {
       return (
         <View style={styles.photoArea} testID="meal-photo-added">
           <View style={styles.photoStatus}>

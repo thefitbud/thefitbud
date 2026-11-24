@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { ApiClientError } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import { NUTRIENT_SCALE, type MeDayResponse } from "@fitbud/contracts";
 import { dayKcalSummary } from "./nutrition";
@@ -6,7 +7,10 @@ import { enqueueAndPush } from "../sync/actions";
 import { createMemorySyncStore, createSyncEngine, type SyncEngine } from "../sync/engine";
 import {
   MealPhotoError,
+  base64ToBytes,
+  bytesToBase64,
   isMealLogPending,
+  mealPhotoFailureCopy,
   mealPhotoResize,
   pendingMealLogIds,
   plannedUntilSentNote,
@@ -135,6 +139,49 @@ describe("meal photo (D-W14-11)", () => {
     expect(mealPhotoResize(3024, 4032)).toEqual({ height: 1600 });
     expect(mealPhotoResize(1600, 900)).toBeNull();
     expect(mealPhotoResize(800, 600)).toBeNull();
+  });
+
+  it("keeps the JPEG bytes intact through the device store's text form", () => {
+    for (const length of [0, 1, 2, 3, 4, 5, 255]) {
+      const bytes = Uint8Array.from({ length }, (_, i) => (i * 37 + 11) % 256);
+      expect([...base64ToBytes(bytesToBase64(bytes))]).toEqual([...bytes]);
+    }
+    expect(bytesToBase64(new Uint8Array([255, 216, 255]))).toBe("/9j/");
+  });
+
+  it("reuses the job's upload key and keeps the asset id before the attach", async () => {
+    const keys: string[] = [];
+    const order: string[] = [];
+    const api = {
+      createUploadTarget: vi.fn(async (_body: unknown, key: string) => {
+        keys.push(key);
+        return { mediaAsset: { id: "00000000-0000-4000-8000-0000000000d1" } };
+      }),
+      uploadMediaContent: vi.fn(async () => undefined),
+      attachMealPhoto: vi.fn(async () => {
+        order.push("attach");
+      }),
+    };
+    await uploadAndAttachMealPhoto(api as never, {
+      relationshipId: SLOT,
+      assignmentId: SLOT,
+      entryId: SLOT,
+      bytes: new Uint8Array([1]),
+      attachKey: "attach-key",
+      uploadKey: "upload-key",
+      onUploaded: (id) => {
+        order.push(`uploaded:${id}`);
+      },
+    });
+    expect(keys).toEqual(["upload-key"]);
+    expect(order).toEqual(["uploaded:00000000-0000-4000-8000-0000000000d1", "attach"]);
+  });
+
+  it("a server failure reads as TR-07m3; only a lost connection says offline", () => {
+    expect(
+      mealPhotoFailureCopy(new ApiClientError({ status: 500, code: "INTERNAL_ERROR", message: "x" } as never)),
+    ).toBe("Photo didn't upload. Your meal is still logged.");
+    expect(mealPhotoFailureCopy(new TypeError("Network request failed"))).toMatch(/offline/);
   });
 
   it("no longer uploads a placeholder image", async () => {
