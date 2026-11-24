@@ -186,5 +186,5 @@ Totals (frames only): 13 MATCH, 79 CLOSE, 13 GAP, 46 not audited (re-graded by Z
 |---|---|
 | 27-trainee-lock-live-activity-ios.png, 27b-…, 27c-…, 27-android-trainee-workout-notif.png, 27-android-rest.png | Live Activity / ongoing notification: native surfaces, not on Expo web. |
 | 28-trainee-lock-meal-push-ios.png, 30-trainee-lock-coach-ios.png, 105–112, 116–122, 124 (notif-*) | OS lock screen, shade and banner renderings of pushes; not app screens. |
-| 200-trainer-web-calendar-v3-web.png, 201–207, 203, 204, IP-05, IP-09, IP-11–IP-14, IP-16, DS6-*, DS8-b*, DS8-c* | Phase 10 sessions/calendar and live logging: parked (W14, PLAN-v2 D-P2-21). |
+| 200-trainer-web-calendar-v3-web.png, 201–207, 203, 204, IP-05, IP-09, IP-11–IP-14, IP-16, DS6-*, DS8-b*, DS8-c* | Phase 10 sessions/calendar and live logging: parked (W16, PLAN-v2 D-P2-21). |
 | IP-03, IP-04, IP-06, IP-10, 149-trainer-web-configure-active-ref-web.png | Reference frames, out of MVP scope. |

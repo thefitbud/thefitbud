@@ -5,7 +5,7 @@
 **Repo rules:** `CLAUDE.md`, `AGENTS.md`. Design: `docs/design/v3/` (mocks win over older frames; record departures).
 **Branch prefix:** new Cursor tasks use `cursor/<task>-<slug>-db78`. Handed Claude PRs keep their `claude/...` branch names and existing PRs (no new PRs for those). Z12-57 / Z12-60: `cursor/z12-57-native-db78`, `cursor/z12-60-report-db78`.
 **Concurrency:** at most **2** Cursor tasks at once. Never cancel or force-cancel any Actions run.
-**Claude fence (narrowed, D-W12C-22):** may push, review, rebase and merge `claude/Z12-45-active-workout` (#484), `claude/Z12-46-today-progress` (#483), `claude/Z12-51-review-sheet` (#486), `claude/Z12-44-flows-weekday` (#485). Still never touch other `claude/` work (#177, #307, Z10-7, Z14-*).
+**Claude fence (narrowed, D-W12C-22):** may push, review, rebase and merge `claude/Z12-45-active-workout` (#484), `claude/Z12-46-today-progress` (#483), `claude/Z12-51-review-sheet` (#486), `claude/Z12-44-flows-weekday` (#485). Still never touch other `claude/` work (#177, #307, Z10-7, Z16-*).
 **W12.md edits (D-W12C-1 narrowed):** only the status of handed tasks and Z12-60’s Report section.
 **JS only:** native / Swift / Expo-SDK changes go under **Native items for Z12-57** below, except Z12-57 itself. No deploy. No repo-settings changes.
 **Models:** D-W12C-17 (subscription-included / Auto only; supersedes D-W12C-3).

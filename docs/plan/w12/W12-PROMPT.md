@@ -33,7 +33,7 @@ Repo: `thefitbud/thefitbud`, from `main` (at `6ed1410e` or later). Follow CLAUDE
 - No production deploy. **Hold the staging deploy until the end and deploy once** (Z12-59).
 - Keep the repo public. Any change to repo settings (branch protection, required checks, visibility, secrets, Actions settings) needs Firoz's OK first. Ask in the PR and park it.
 - Never print, log, screenshot or commit credentials, tokens, keys, `.p8` files or `.env` values. Seed and demo passwords come from the existing env vars only.
-- Don't touch #177, #307, Z10-7 (parked) or Z14-*.
+- Don't touch #177, #307, Z10-7 (parked) or Z16-*.
 - **Decisions:** don't wait for a human. Pick your recommended option, carry on, and record the decision and the reason in the PR and the report.
 - **Models:**
   - Opus is the default.
@@ -535,5 +535,5 @@ If two tasks turn out to own the same file, serialise them and note it. Don't wi
 - Store submission.
 - The Expo SDK upgrade.
 - Trainer web gap buckets Z12-1 to Z12-17 (unless the usage rule in section 0 allows).
-- Z10-7, Z14-*, #177, #307.
+- Z10-7, Z16-*, #177, #307.
 - The client-view switch sheet (no frame).
