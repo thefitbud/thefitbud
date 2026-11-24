@@ -3,6 +3,7 @@ import { spacing } from "@fitbud/ui-mobile";
 import { accountDeletionCopy } from "@fitbud/core";
 import { Text } from "../../components/Text";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { LegalDocumentList, useLegalDocument } from "../../screens/LegalDocumentScreen";
 import { M2Group, M2Row, M2Section, M2Page } from "./m2";
 
 type Props = {
@@ -26,6 +27,7 @@ export function PrivacyScreen({ onBack, onDeleteAccount }: Props) {
 function PrivacyContent({ onDeleteAccount }: { onDeleteAccount: () => void }) {
   const theme = useTheme();
   const styles = useStyles();
+  const legal = useLegalDocument();
   return (
     <>
       <View style={styles.stack}>
@@ -39,6 +41,9 @@ function PrivacyContent({ onDeleteAccount }: { onDeleteAccount: () => void }) {
           your trainer.
         </Text>
       </View>
+      <M2Section label="Legal" />
+      <LegalDocumentList onOpen={legal.open} />
+      {legal.modal}
       <M2Section label="Your account" />
       <M2Group>
         <M2Row

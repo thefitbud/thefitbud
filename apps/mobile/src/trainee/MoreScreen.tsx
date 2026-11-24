@@ -33,7 +33,6 @@ import { ErrorBanner } from "../components/ErrorBanner";
 import { Text } from "../components/Text";
 import { useAuth } from "../auth/AuthProvider";
 import { isStepsEnabled } from "../lib/config";
-import { legalUrl } from "../lib/legalLinks";
 import { reportError } from "../lib/reportError";
 import type { TraineeOverlayOpener } from "../navigation/TraineeOverlay";
 import { mobilePermittedRoles } from "../navigation/resolveRoute";
@@ -43,6 +42,7 @@ import {
   createThemedStyles,
   useTheme,
 } from "../providers/ThemeProvider";
+import { useLegalDocument } from "../screens/LegalDocumentScreen";
 import { SwitchRoleSheet } from "../screens/RoleSelectScreen";
 import { androidTopInset } from "../screens/auth/authParts";
 import { useSyncEngine } from "../sync/SyncProvider";
@@ -123,6 +123,7 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
   const coachFirst = coachName.split(/\s+/)[0] || "your coach";
   // The profile's name; the email's local part only if the profile can't load,
   // so the card never flashes a made-up name first.
+  const legal = useLegalDocument();
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -384,26 +385,28 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
           </Text>
           <FooterLink
             label="Terms"
-            a11y="Terms of use, opens in your browser"
-            path="/terms"
+            a11y="Terms of Service, opens in the app"
+            onPress={() => legal.open("/terms")}
           />
           <Text tone="ink3" style={styles.footerText}>
             {" · "}
           </Text>
           <FooterLink
             label="Privacy"
-            a11y="Privacy policy, opens in your browser"
-            path="/privacy"
+            a11y="Privacy Policy, opens in the app"
+            onPress={() => legal.open("/privacy")}
           />
           <Text tone="ink3" style={styles.footerText}>
             {" · "}
           </Text>
           <FooterLink
-            label="Credits"
-            a11y="Credits and licences, opens in your browser"
-            path="/credits"
+            label="Legal"
+            a11y="All legal documents, opens in the app"
+            onPress={legal.openIndex}
           />
         </View>
+
+        {legal.modal}
 
         <SignOutSheet
           count={signOutCount}
@@ -441,22 +444,18 @@ function MoreBody({ relationship, onOpenOverlay }: Props) {
 function FooterLink({
   label,
   a11y,
-  path,
+  onPress,
 }: {
   label: string;
   a11y: string;
-  path: Parameters<typeof legalUrl>[0];
+  onPress: () => void;
 }) {
   const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="link"
       accessibilityLabel={a11y}
-      onPress={() => {
-        void Linking.openURL(legalUrl(path)).catch((err: unknown) =>
-          reportError("TraineeMore.legal", err),
-        );
-      }}
+      onPress={onPress}
       style={styles.footerLink}
     >
       <Text tone="ink2" style={styles.footerText}>

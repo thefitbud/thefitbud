@@ -218,8 +218,10 @@ export function PrivacyDataPage() {
           </li>
         </ul>
         <p className="muted">
-          We do not sell personal data. Export and deletion policies are being
-          finalised with our legal review.
+          We do not sell personal data. Read the{" "}
+          <Link to="/privacy">Privacy Policy</Link>, including{" "}
+          <Link to="/privacy#delete-account">how deleting your account works</Link>
+          , and the <Link to="/terms">Terms of Service</Link>.
         </p>
       </section>
       <section className="privacy-card">
