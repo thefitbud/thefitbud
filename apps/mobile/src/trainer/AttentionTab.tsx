@@ -21,17 +21,17 @@ import {
   AttentionErrorState,
   AttentionOfflineBanner,
 } from "./attention/states";
+import { AttentionList } from "./attention/AttentionList";
+import { SectionAllScreen } from "./attention/SectionAllScreen";
 import {
   NeedsYouHeader,
   NeedsYouListSkeleton,
-  NeedsYouSections,
-  NeedsYouSummaryGrid,
 } from "./attention/NeedsYouView";
 import {
   buildNeedsYouScreenModel,
   type NeedsYouCardModel,
+  type NeedsYouSectionId,
 } from "./attention/needsYouModel";
-import { Screen } from "../components/Screen";
 import { useRealtimeHints } from "../realtime/useRealtimeHints";
 import { reportError } from "../lib/reportError";
 import { createIdempotencyKey } from "../lib/idempotency";
@@ -46,7 +46,6 @@ import {
   restoreAskAt,
   scheduleUndoable,
   type UndoableAction,
-  ATTENTION_SCREEN_TITLE,
   buildClientAttentionCards,
   markReviewedToastMessage,
   partitionAttentionGroups,
@@ -166,6 +165,20 @@ export function AttentionTab({
     initialSnapshot?.clientNames ?? {},
   );
   const [updating, setUpdating] = useState(false);
+  // D-W14-25: collapsed sections last for the session (this tab stays mounted);
+  // "See all" opens one section as its own list over Attention.
+  const [collapsed, setCollapsed] = useState<ReadonlySet<NeedsYouSectionId>>(
+    () => new Set(),
+  );
+  const [seeAllId, setSeeAllId] = useState<NeedsYouSectionId | null>(null);
+  const toggleSection = useCallback((id: NeedsYouSectionId) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const lastLoadedAt = useRef(0);
   const pendingAnswer = useRef<{
     ask: CoachAsk;
@@ -330,6 +343,7 @@ export function AttentionTab({
         offlineClock: offlineAt
           ? formatClockTime(offlineAt, trainerZone)
           : null,
+        timeZone: trainerZone,
       }),
     [
       lists.needsYou,
@@ -780,24 +794,31 @@ export function AttentionTab({
     }
   }
 
-  return (
-    <Screen
-      v3
-      title={ATTENTION_SCREEN_TITLE}
-      showHeader={false}
-      chrome="app"
+  const toast_ = toast;
+  const body = (
+    <AttentionList
+      model={screenModel}
+      offline={offline}
+      tilesLoading={loading && lists.groups.length === 0}
+      showTiles={!loadFailed}
+      collapsed={collapsed}
+      onToggleSection={toggleSection}
+      onSeeAll={setSeeAllId}
+      onCardAction={handleCardAction}
+      onMarkReviewed={handleMarkReviewed}
+      onOpenProfile={onOpenClient}
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);
         void refreshSession?.();
         void load().finally(() => setRefreshing(false));
       }}
-      footerVariant={toast ? "toast" : "bar"}
+      footerVariant={toast_ ? "toast" : "bar"}
       footer={
-        toast ? (
+        toast_ ? (
           <Snackbar
             key={toastSeq}
-            message={toast}
+            message={toast_}
             leadingCheck={markReviewedToast || answerUndo}
             actionLabel={undoTarget || answerUndo ? "Undo" : undefined}
             onAction={
@@ -815,49 +836,52 @@ export function AttentionTab({
           />
         ) : undefined
       }
-    >
-      <View testID="attention-screen">
-      {offline ? (
-        <AttentionOfflineBanner
-          updatedAt={formatClockTime(offlineAt!, trainerZone)}
-        />
-      ) : null}
-      <NeedsYouHeader eyebrow={screenModel.eyebrow} onSearch={onOpenClients} />
-      <UpdatingLine visible={updating && !refreshing && !offline} />
-
-      {error ? <ErrorBanner message={error} /> : null}
-
-      {loadFailed && !loading ? (
-        <AttentionErrorState
-          onRetry={() => {
-            setLoading(true);
-            void load();
-          }}
-        />
-      ) : null}
-
-      {!loadFailed ? (
+      top={
         <>
-          <NeedsYouSummaryGrid
-            tiles={screenModel.tiles}
-            loading={loading && lists.groups.length === 0}
-          />
-          {loading && lists.groups.length === 0 ? (
-            <NeedsYouListSkeleton />
+          {offline ? (
+            <AttentionOfflineBanner
+              updatedAt={formatClockTime(offlineAt!, trainerZone)}
+            />
           ) : null}
-          {!loading ? (
-            <NeedsYouSections
-              model={screenModel}
-              offline={offline}
-              emptySlot={showEmpty ? <AttentionEmptyState /> : null}
-              onCardAction={handleCardAction}
-              onMarkReviewed={handleMarkReviewed}
+          <NeedsYouHeader eyebrow={screenModel.eyebrow} onSearch={onOpenClients} />
+          <UpdatingLine visible={updating && !refreshing && !offline} />
+          {error ? <ErrorBanner message={error} /> : null}
+          {loadFailed && !loading ? (
+            <AttentionErrorState
+              onRetry={() => {
+                setLoading(true);
+                void load();
+              }}
             />
           ) : null}
         </>
-      ) : null}
-      </View>
+      }
+      state={
+        !loadFailed ? (
+          loading && lists.groups.length === 0 ? (
+            <NeedsYouListSkeleton />
+          ) : !loading && showEmpty ? (
+            <AttentionEmptyState />
+          ) : null
+        ) : null
+      }
+    />
+  );
 
+  return (
+    <View style={{ flex: 1 }}>
+      {body}
+      {seeAllId ? (
+        <SectionAllScreen
+          sectionId={seeAllId}
+          section={screenModel.sections.find((item) => item.id === seeAllId) ?? null}
+          offline={offline}
+          onBack={() => setSeeAllId(null)}
+          onCardAction={handleCardAction}
+          onMarkReviewed={handleMarkReviewed}
+          onOpenProfile={onOpenClient}
+        />
+      ) : null}
       <ReviewSheet
         visible={reviewSheet != null && reviewItems.length > 0}
         relationshipId={reviewSheet?.relationshipId ?? null}
@@ -965,6 +989,6 @@ export function AttentionTab({
           </>
         ) : null}
       </ReviewSheet>
-    </Screen>
+    </View>
   );
 }
