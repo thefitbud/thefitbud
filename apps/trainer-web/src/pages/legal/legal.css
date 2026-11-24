@@ -10,7 +10,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 40px;
-  background: #fff;
+  background: var(--surface-card, #fff);
   border-bottom: 1px solid var(--border-default, #e7e9f2);
 }
 .legal-brand {
@@ -99,7 +99,7 @@
   line-height: 44px;
 }
 .legal-doc {
-  background: #fff;
+  background: var(--surface-card, #fff);
   border: 1px solid var(--border-default, #e7e9f2);
   border-radius: 16px;
   box-shadow: 0 8px 24px rgb(26 18 72 / 5%);
@@ -244,6 +244,88 @@
 }
 .legal-card-line {
   color: var(--ink-700, #3d4350);
+}
+
+/* Published document text (Z14-27): headings, paragraphs, lists, tables, quotes. */
+.legal-md {
+  font-size: 15px;
+  line-height: 24px;
+}
+.legal-md h2 {
+  margin: 32px 0 0;
+  font-size: 18px;
+  line-height: 26px;
+  font-weight: 700;
+  color: var(--brand-deep-navy, #1a1248);
+  scroll-margin-top: 16px;
+}
+.legal-md h3 {
+  margin: 24px 0 0;
+  font-size: 16px;
+  line-height: 24px;
+  font-weight: 700;
+  color: var(--brand-deep-navy, #1a1248);
+  scroll-margin-top: 16px;
+}
+.legal-md h4 {
+  margin: 20px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--brand-deep-navy, #1a1248);
+}
+.legal-md p {
+  margin: 10px 0 0;
+}
+.legal-md ul,
+.legal-md ol {
+  margin: 10px 0 0;
+  padding-left: 22px;
+}
+.legal-md li {
+  margin-top: 6px;
+}
+.legal-md code {
+  font-size: 13px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--ink-200, #e4e6ec);
+}
+.legal-quote {
+  margin: 14px 0 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--brand-pale-lavender, #f3f0ff);
+  border: 1px solid var(--semantic-brand-selected-fill, #ece8fb);
+}
+.legal-rule {
+  margin: 24px 0 0;
+  border: 0;
+  border-top: 1px solid var(--border-default, #e7e9f2);
+}
+/* A value still "To be confirmed": highlighted, with the words themselves as the cue. */
+.legal-tbc {
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--semantic-attention-fill, #fff6dc);
+  color: var(--semantic-attention-text, #a24b00);
+  font-weight: 600;
+}
+.legal-md-table td:nth-child(3) {
+  white-space: normal;
+}
+.legal-md-table th,
+.legal-md-table td {
+  vertical-align: top;
+}
+.legal-md-table th {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+}
+.legal-md a {
+  display: inline-block;
+  min-height: 0;
+  line-height: inherit;
 }
 
 /* Sign-in footer: Privacy, Terms, Credits and licences (ds5-web-signin-footer.png). */

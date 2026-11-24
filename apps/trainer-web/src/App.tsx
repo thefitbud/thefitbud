@@ -42,7 +42,16 @@ import { SettingsLayout } from "./pages/settings/SettingsLayout";
 import { UnitsLanguagePage } from "./pages/settings/UnitsLanguagePage";
 import { SpecimensPage } from "./pages/SpecimensPage";
 import { DesignSystemPage } from "./pages/DesignSystemPage";
-import { CreditsPage, PrivacyPage, TermsPage } from "./pages/legal/LegalPage";
+import {
+  AcceptableUsePage,
+  BetaTermsPage,
+  CreditsPage,
+  HealthPage,
+  PrivacyPage,
+  TermsPage,
+  TraineeTermsPage,
+  TrainerTermsPage,
+} from "./pages/legal/LegalPage";
 
 export function App() {
   return (
@@ -56,6 +65,11 @@ export function App() {
         {import.meta.env.DEV ? <Route path="/__ds" element={<DesignSystemPage />} /> : null}
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/terms/trainer" element={<TrainerTermsPage />} />
+        <Route path="/terms/trainee" element={<TraineeTermsPage />} />
+        <Route path="/health" element={<HealthPage />} />
+        <Route path="/acceptable-use" element={<AcceptableUsePage />} />
+        <Route path="/beta" element={<BetaTermsPage />} />
         <Route path="/credits" element={<CreditsPage />} />
         <Route element={<RequireAuth />}>
           <Route path="/welcome" element={<WelcomePage />} />

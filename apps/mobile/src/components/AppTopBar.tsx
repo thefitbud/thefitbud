@@ -1,7 +1,7 @@
-import { Pressable, View } from "react-native";
-import { Bell } from "lucide-react-native";
+import { View } from "react-native";
+import { BellButton } from "./BellButton";
 import { Text } from "./Text";
-import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { createThemedStyles } from "../providers/ThemeProvider";
 import { SyncIndicator } from "./SyncIndicator";
 
 type Props = {
@@ -40,7 +40,6 @@ export function AppTopBar({
   onOpenNotifications,
   onOpenSync,
 }: Props) {
-  const theme = useTheme();
   const styles = useStyles();
   return (
     <View style={styles.wrap}>
@@ -51,21 +50,7 @@ export function AppTopBar({
       <View style={styles.actions}>
         <SyncIndicator onPress={onOpenSync} />
         {onOpenNotifications ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Notifications"
-            onPress={onOpenNotifications}
-            style={styles.bell}
-          >
-            <Bell
-              size={22}
-              color={theme.colors.ink}
-              strokeWidth={2}
-              accessibilityElementsHidden
-              importantForAccessibility="no"
-            />
-            {unreadNotifications > 0 ? <View style={styles.unreadDot} /> : null}
-          </Pressable>
+          <BellButton unread={unreadNotifications} onPress={onOpenNotifications} />
         ) : null}
       </View>
     </View>
@@ -111,24 +96,5 @@ const useStyles = createThemedStyles((t) => ({
     alignItems: "center",
     flexDirection: "row",
     gap: t.spacing.sm,
-  },
-  bell: {
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: t.touchTarget,
-    minWidth: t.touchTarget,
-    position: "relative",
-  },
-  // Kit `.circbtn .dot`: coral-strong with a 2 pt card ring (coral = new/due, never an error).
-  unreadDot: {
-    backgroundColor: t.colors.coralStrong,
-    borderColor: t.colors.card,
-    borderRadius: 6,
-    borderWidth: 2,
-    height: 12,
-    position: "absolute",
-    right: 7,
-    top: 7,
-    width: 12,
   },
 }));

@@ -903,7 +903,7 @@ describe("Today header, past notice and done card (Z10-20)", () => {
     expect(screen.getByRole("heading", { name: "Today" })).toBeTruthy();
     // TR-06a: today's eyebrow is the long date alone.
     expect(screen.getByTestId("day-eyebrow").textContent).toBe(longDayLabel(TODAY));
-    fireEvent.click(screen.getByRole("button", { name: "Notifications" }));
+    fireEvent.click(screen.getByRole("button", { name: "Notifications, 2 unread" }));
     expect(openOverlay).toHaveBeenCalledWith({ screen: "notifications" });
   });
 

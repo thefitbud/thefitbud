@@ -13,6 +13,7 @@ import {
   spacing,
 } from "@fitbud/ui-mobile";
 import { Text } from "../Text";
+import { inputSelectionProps } from "../Field";
 import { createThemedStyles, shadowColor, useTheme } from "../../providers/ThemeProvider";
 
 export function M2Field({
@@ -71,7 +72,7 @@ export function M2InputRow({
           value={value}
           onChangeText={onChangeText}
           placeholderTextColor={theme.colors.ink3}
-          selectionColor={theme.colors.brand}
+          {...inputSelectionProps(theme.colors)}
           keyboardAppearance={theme.scheme}
           style={styles.inputText}
           {...inputProps}

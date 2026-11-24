@@ -2,6 +2,16 @@ import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Linking } from "react-native";
 
+// Z14-27: the footer links open documents inside the app, so the hook that does
+// that is replaced by spies here. Its own behaviour is covered by
+// screens/LegalDocumentScreen.render.test.tsx.
+const legal = vi.hoisted(() => ({ open: vi.fn(), openIndex: vi.fn(), modal: null }));
+vi.mock("../screens/LegalDocumentScreen", () => ({
+  useLegalDocument: () => legal,
+  LegalEntryLinks: "LegalEntryLinks",
+  LegalDocumentList: "LegalDocumentList",
+}));
+
 // Render the screens as plain functions: hooks are stubbed, no React renderer needed.
 // apps/mobile's vitest environment is `node` and the repo adds no renderer dependency,
 // so this is the same pattern trainer/MoreScreen.test.ts already uses.
@@ -14,6 +24,7 @@ vi.mock("react", async (importOriginal) => ({
 
 vi.mock("react-native", () => ({
   Linking: { openURL: vi.fn(), openSettings: vi.fn() },
+  Modal: "Modal",
   Platform: { OS: "ios", select: (options: Record<string, unknown>) => options.ios ?? options.default },
   Appearance: { getColorScheme: () => "light", addChangeListener: () => ({ remove: () => undefined }) },
   StyleSheet: { create: (styles: unknown) => styles, hairlineWidth: 1 },
@@ -105,6 +116,7 @@ vi.mock("expo-constants", () => ({
 
 import {
   DEFAULT_TRAINER_WEB_URL,
+  LEGAL_DOC_LIST,
   legalUrl,
   legalUrlHint,
   trainerWebUrl,
@@ -168,6 +180,8 @@ function press(tree: unknown, match: (element: Element) => boolean): void {
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.mocked(Linking.openURL).mockClear();
+  legal.open.mockClear();
+  legal.openIndex.mockClear();
 });
 
 describe("legalLinks URLs", () => {
@@ -178,6 +192,11 @@ describe("legalLinks URLs", () => {
     expect(legalUrl("/privacy")).toBe("https://app.thefitbud.com/privacy");
     expect(legalUrl("/terms")).toBe("https://app.thefitbud.com/terms");
     expect(legalUrl("/credits")).toBe("https://app.thefitbud.com/credits");
+    expect(legalUrl("/terms/trainer")).toBe("https://app.thefitbud.com/terms/trainer");
+    expect(legalUrl("/terms/trainee")).toBe("https://app.thefitbud.com/terms/trainee");
+    expect(legalUrl("/health")).toBe("https://app.thefitbud.com/health");
+    expect(legalUrl("/acceptable-use")).toBe("https://app.thefitbud.com/acceptable-use");
+    expect(legalUrl("/beta")).toBe("https://app.thefitbud.com/beta");
   });
 
   it("falls back to the default for a blank env var", () => {
@@ -190,6 +209,8 @@ describe("legalLinks URLs", () => {
     expect(legalUrl("/privacy")).toBe("https://app-staging.thefitbud.com/privacy");
     expect(legalUrl("/terms")).toBe("https://app-staging.thefitbud.com/terms");
     expect(legalUrl("/credits")).toBe("https://app-staging.thefitbud.com/credits");
+    expect(legalUrl("/terms/trainee")).toBe("https://app-staging.thefitbud.com/terms/trainee");
+    expect(legalUrl("/health")).toBe("https://app-staging.thefitbud.com/health");
   });
 
   it("does not double the slash when the base URL has a trailing one", () => {
@@ -197,13 +218,14 @@ describe("legalLinks URLs", () => {
     expect(legalUrl("/terms")).toBe("https://app-staging.thefitbud.com/terms");
   });
 
-  it("matches the three public web routes BT3 added", () => {
+  it("matches every public web route the trainer web app serves", () => {
     vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
     const routes = readFileSync(
       new URL("../../../trainer-web/src/App.tsx", import.meta.url),
       "utf8",
     );
-    for (const path of ["/privacy", "/terms", "/credits"] as const) {
+    expect(LEGAL_DOC_LIST).toHaveLength(8);
+    for (const { path } of LEGAL_DOC_LIST) {
       expect(routes).toContain(`path="${path}"`);
       expect(legalUrl(path).endsWith(path)).toBe(true);
     }
@@ -247,23 +269,21 @@ describe("trainer More legal rows", () => {
     });
   }
 
-  // Z12-53: Legal group is gone; Terms/Privacy live in the footer as short
-  // labels with the full browser a11y name. Credits stays on the web only.
+  // Z14-27: Terms and Privacy in the footer open the in-app documents; "Legal"
+  // opens the list of all of them. Nothing leaves the app.
   it.each([
-    ["Privacy policy, opens in your browser", "https://app.thefitbud.com/privacy"],
-    ["Terms of use, opens in your browser", "https://app.thefitbud.com/terms"],
-  ])("%s opens %s", (a11y, url) => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", undefined);
+    ["Terms of Service, opens in the app", "/terms"],
+    ["Privacy Policy, opens in the app", "/privacy"],
+  ])("%s opens the in-app document %s", (a11y, path) => {
     press(trainerMore(), byA11y(a11y));
-    expect(Linking.openURL).toHaveBeenCalledWith(url);
+    expect(legal.open).toHaveBeenCalledWith(path);
+    expect(Linking.openURL).not.toHaveBeenCalled();
   });
 
-  it("follows the env var on staging builds for footer Privacy", () => {
-    vi.stubEnv("EXPO_PUBLIC_TRAINER_WEB_URL", "https://app-staging.thefitbud.com");
-    press(trainerMore(), byA11y("Privacy policy, opens in your browser"));
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://app-staging.thefitbud.com/privacy",
-    );
+  it("the footer Legal link opens the list of every document", () => {
+    press(trainerMore(), byA11y("All legal documents, opens in the app"));
+    expect(legal.openIndex).toHaveBeenCalledTimes(1);
+    expect(Linking.openURL).not.toHaveBeenCalled();
   });
 
   it("still opens the plain trainer web URL for Open FitBud on web", () => {
@@ -272,12 +292,8 @@ describe("trainer More legal rows", () => {
     expect(Linking.openURL).toHaveBeenCalledWith("https://app.thefitbud.com");
   });
 
-  it.each([
-    "Privacy policy, opens in your browser",
-    "Terms of use, opens in your browser",
-    "Open FitBud on web, opens in your browser",
-  ])("%s is announced as leaving the app", (a11y) => {
-    expect(find(trainerMore(), byA11y(a11y))).toBeTruthy();
+  it("announces Open FitBud on web as leaving the app", () => {
+    expect(find(trainerMore(), byA11y("Open FitBud on web, opens in your browser"))).toBeTruthy();
   });
 
   it("leaves the in-app Help row announced as itself", () => {
@@ -305,6 +321,9 @@ describe("new legal copy against docs/spec/banned-strings.json", () => {
     "Privacy policy, opens in your browser",
     "Terms of use, opens in your browser",
     "Credits and licences, opens in your browser",
+    "Terms of Service, opens in the app",
+    "Privacy Policy, opens in the app",
+    "All legal documents, opens in the app",
   ];
 
   const banned = JSON.parse(
