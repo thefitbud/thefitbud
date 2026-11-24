@@ -6,6 +6,7 @@
  * the readable name is fixed text so it never depends on the runtime's ICU.
  */
 
+import { zonedDateTimeFormat } from "@fitbud/core";
 import { EXTRA_ZONES } from "./ianaZones";
 
 export type TimeZoneRegion =
@@ -195,12 +196,16 @@ export function canonicalZoneId(id: string): string {
 
 const formatters = new Map<string, Intl.DateTimeFormat | null>();
 
-/** One formatter per zone for the app's life; building them is the slow part. */
+/**
+ * One formatter per zone for the app's life; building them is the slow part.
+ * Built through core's resolver (CU17): a zone this engine cannot format (it
+ * throws) is cached as null, so the row shows no offset but stays selectable.
+ */
 function formatterFor(zone: string): Intl.DateTimeFormat | null {
   if (formatters.has(zone)) return formatters.get(zone) ?? null;
   let formatter: Intl.DateTimeFormat | null = null;
   try {
-    formatter = new Intl.DateTimeFormat("en-US", {
+    formatter = zonedDateTimeFormat("en-US", {
       timeZone: zone,
       hourCycle: "h23",
       year: "numeric",

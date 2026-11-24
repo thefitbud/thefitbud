@@ -89,6 +89,26 @@ describe("TimeZoneScreen", () => {
     fireEvent.click(screen.getByRole("button", { name: /^New York,/ }));
     expect(onPick).toHaveBeenCalledWith("America/New_York");
   });
+
+  it("a zone the platform cannot format still lists, without an offset, and can be saved", () => {
+    const RealFormat = Intl.DateTimeFormat;
+    const guarded = function (this: unknown, locales?: unknown, options?: { timeZone?: string }) {
+      if (options?.timeZone === "Pacific/Kiritimati") throw new RangeError("Invalid time zone");
+      return new RealFormat(locales as string, options as Intl.DateTimeFormatOptions);
+    } as unknown as typeof Intl.DateTimeFormat;
+    guarded.supportedLocalesOf = RealFormat.supportedLocalesOf;
+    vi.spyOn(Intl, "DateTimeFormat").mockImplementation(guarded);
+    try {
+      const { onPick } = renderList();
+      search("Kiritimati");
+      const row = screen.getByRole("button", { name: /^Kiritimati,/ });
+      expect(row.getAttribute("aria-label") ?? row.textContent).not.toMatch(/UTC/);
+      fireEvent.click(row);
+      expect(onPick).toHaveBeenCalledWith("Pacific/Kiritimati");
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 });
 
 describe("TimeZoneScreen theme scope", () => {
