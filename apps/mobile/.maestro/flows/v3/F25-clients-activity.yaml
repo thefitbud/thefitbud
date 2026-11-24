@@ -91,6 +91,11 @@ env:
           timeout: 30000
       - takeScreenshot: TM-09a
       - runFlow: ../../common/assert-no-crash.yaml
+      # Z14-21: the feed pages as it scrolls; two scrolls past the first page
+      # must not crash or leave the screen blank.
+      - scroll
+      - scroll
+      - runFlow: ../../common/assert-no-crash.yaml
       - runFlow:
           when:
             visible: "All clients|Filter|Client"
