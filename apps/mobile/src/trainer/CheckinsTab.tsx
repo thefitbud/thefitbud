@@ -52,9 +52,16 @@ type Props = {
   /** Bumped when a detail screen closes: refresh underneath whatever the age. */
   returnNonce?: number;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
+  /** Avatar tap on a row: opens the client's profile (Z14-19). */
+  onOpenClient?: (relationshipId: string) => void;
 };
 
-export function CheckinsTab({ active = true, returnNonce = 0, onReviewCheckin }: Props) {
+export function CheckinsTab({
+  active = true,
+  returnNonce = 0,
+  onReviewCheckin,
+  onOpenClient,
+}: Props) {
 
   const styles = useStyles();
   const { api, refreshSession } = useAuth();
@@ -306,6 +313,7 @@ export function CheckinsTab({ active = true, returnNonce = 0, onReviewCheckin }:
         }}
         onReview={(row) => onReviewCheckin(row.item)}
         onNudge={(row) => void nudge(row)}
+        onOpenClient={onOpenClient}
         footerHint={overdueHint}
         onMarkReviewed={markReviewedFromList}
       />

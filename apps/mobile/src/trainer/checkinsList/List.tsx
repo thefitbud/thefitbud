@@ -9,7 +9,7 @@ import {
 import type { ColorTokens } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
-import { initialsFromName } from "../../components/m2";
+import { ClientAvatar } from "../ClientAvatar";
 import {
   emptyCopy,
   type CheckinListModel,
@@ -44,6 +44,8 @@ type Props = {
   onNudge: (row: CheckinListRow) => void;
   /** Swipe-right shortcut on To review (TM-05a / TM-06c). */
   onMarkReviewed?: (row: CheckinListRow) => void;
+  /** Avatar tap: opens the client's profile (Z14-19). */
+  onOpenClient?: (relationshipId: string) => void;
   /** Optional footer under the list (reminders paused, swipe hint). */
   footerHint?: string | null;
 };
@@ -56,6 +58,7 @@ export function CheckinsList({
   onReview,
   onNudge,
   onMarkReviewed,
+  onOpenClient,
   footerHint,
 }: Props) {
 
@@ -105,6 +108,7 @@ export function CheckinsList({
                 onReview={onReview}
                 onNudge={onNudge}
                 onMarkReviewed={onMarkReviewed}
+                onOpenClient={onOpenClient}
               />
             </View>
           ))}
@@ -158,12 +162,14 @@ function Row({
   onReview,
   onNudge,
   onMarkReviewed,
+  onOpenClient,
 }: {
   row: CheckinListRow;
   segment: CheckinListSegment;
   onReview: (row: CheckinListRow) => void;
   onNudge: (row: CheckinListRow) => void;
   onMarkReviewed?: (row: CheckinListRow) => void;
+  onOpenClient?: ((relationshipId: string) => void) | undefined;
 }) {
 
   const theme = useTheme();
@@ -173,14 +179,24 @@ function Row({
   const reviewed = segment === "reviewed";
   const openable = !overdue;
 
-  const body = (
-    <View style={styles.row}>
-      <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
-        <Text style={[styles.avatarText, { color: tone.color }]}>
-          {initialsFromName(row.name)}
-        </Text>
-      </View>
-      <View style={styles.body}>
+  // The avatar is its own button, a sibling of the row body (not inside it),
+  // so there are no nested buttons on web.
+  const avatar = (
+    <ClientAvatar
+      name={row.name}
+      size={48}
+      fontSize={14}
+      tone={tone}
+      onPress={
+        onOpenClient
+          ? () => onOpenClient(row.item.coachingRelationshipId)
+          : undefined
+      }
+    />
+  );
+
+  const content = (
+    <>
         <Text style={styles.name}>{row.name}</Text>
         <Text style={styles.line}>{row.line}</Text>
         <View style={styles.foot}>
@@ -224,25 +240,32 @@ function Row({
             <ChevronRight color={theme.colors.ink3} size={18} />
           )}
         </View>
-      </View>
-    </View>
+    </>
   );
 
-  const openableRow = openable ? (
-    <Pressable
-      testID="checkin-row"
-      accessibilityRole="button"
-      accessibilityLabel={
-        reviewed
-          ? `Open ${row.name}'s reviewed check-in`
-          : `Review ${row.name}'s check-in`
-      }
-      onPress={() => onReview(row)}
-    >
-      {body}
-    </Pressable>
-  ) : (
-    <View testID="checkin-row">{body}</View>
+  const openableRow = (
+    <View style={styles.row}>
+      {avatar}
+      {openable ? (
+        <Pressable
+          testID="checkin-row"
+          accessibilityRole="button"
+          accessibilityLabel={
+            reviewed
+              ? `Open ${row.name}'s reviewed check-in`
+              : `Review ${row.name}'s check-in`
+          }
+          onPress={() => onReview(row)}
+          style={styles.body}
+        >
+          {content}
+        </Pressable>
+      ) : (
+        <View testID="checkin-row" style={styles.body}>
+          {content}
+        </View>
+      )}
+    </View>
   );
 
   if (segment === "to_review" && onMarkReviewed) {

@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
-import type { CoachAsk, TrainerCheckinInboxItem } from "@fitbud/contracts";
+import type {
+  CoachAsk,
+  OnboardingStatus,
+  TrainerCheckinInboxItem,
+} from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
 import { spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
@@ -14,6 +18,13 @@ import { CheckinsTab } from "./CheckinsTab";
 import { onboardingStatusLabel,
   type ClientDirectoryRow,
 } from "./clients";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  trainerCacheEpoch,
+  writeClientMeta,
+} from "./cache";
+import { reportError } from "../lib/reportError";
 import { ClientsTab } from "./ClientsTab";
 import { ClientStatusScreen } from "./ClientStatusScreen";
 import { ExceptionReviewScreen } from "./ExceptionReviewScreen";
@@ -169,19 +180,40 @@ function TrainerShellBody() {
   ) {
     let displayName = "Client";
     let statusLabelText = "Unknown";
-    try {
-      const page = await api.listClients({ limit: 50 });
-      const match = page.items.find(
-        (item) => item.relationshipId === relationshipId,
-      );
-      if (match) {
-        displayName = formatPersonName(match.traineeDisplayName);
-        statusLabelText = onboardingStatusLabel(match.status);
+    // Z14-19: the name and status come from the client-meta cache, then from
+    // this one client's workspace header, never from a page of the list (a
+    // client past the first 50 would open as "Client"). Offline, or on a miss,
+    // the page still opens: it paints its own cached snapshot or its offline
+    // state.
+    const cached = readClientMeta(relationshipId);
+    if (cached?.name) {
+      displayName = formatPersonName(cached.name);
+      if (cached.status) {
+        statusLabelText = onboardingStatusLabel(
+          cached.status as OnboardingStatus,
+        );
       }
-    } catch {
-      const relationship = relationships.find((item) => item.id === relationshipId);
-      if (relationship) {
-        statusLabelText = onboardingStatusLabel(relationship.onboardingStatus);
+    } else {
+      const cacheEpoch = trainerCacheEpoch();
+      try {
+        const workspace = await api.getClientWorkspace(relationshipId);
+        displayName = formatPersonName(workspace.header.traineeDisplayName);
+        statusLabelText = onboardingStatusLabel(
+          workspace.header.onboardingStatus,
+        );
+        writeClientMeta(
+          relationshipId,
+          clientMetaFromWorkspaceHeader(workspace.header),
+          cacheEpoch,
+        );
+      } catch (err) {
+        reportError("trainer-shell.client-header", err);
+        const relationship = relationships.find(
+          (item) => item.id === relationshipId,
+        );
+        if (relationship) {
+          statusLabelText = onboardingStatusLabel(relationship.onboardingStatus);
+        }
       }
     }
     // A newer push opened something else while the client list loaded.
@@ -381,6 +413,7 @@ function TrainerShellBody() {
         displayName={overlay.displayName}
         onBack={() => goBack()}
         onAnswered={() => goBack()}
+        onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
   } else if (overlay?.kind === "session") {
@@ -391,6 +424,7 @@ function TrainerShellBody() {
         relationshipId={overlay.relationshipId}
         displayName={overlay.displayName}
         onBack={() => goBack()}
+        onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
   } else if (overlay?.kind === "notifications") {
@@ -460,6 +494,9 @@ function TrainerShellBody() {
             active={atTabs && tab === "clients"}
             returnNonce={returnNonce}
             onOpenClient={openClientFromRow}
+            onOpenClientProfile={(relationshipId) =>
+              openClientById(relationshipId)
+            }
             initialSegment={clientsSegment}
             onOpenAsk={(askId, relationshipId, displayName) =>
               startAt({
@@ -488,6 +525,7 @@ function TrainerShellBody() {
               active={atTabs && tab === "checkins"}
               returnNonce={returnNonce}
               onReviewCheckin={openCheckin}
+              onOpenClient={(relationshipId) => openClientById(relationshipId)}
             />
           </View>
         ) : null}

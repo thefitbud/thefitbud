@@ -21,7 +21,7 @@ import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { initialsFromName } from "../components/m2";
+import { ClientAvatar } from "./ClientAvatar";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
@@ -83,6 +83,8 @@ type Props = {
   relationshipId?: string;
   clients?: ActivityClientOption[];
   onOpenClient?: (relationshipId: string, displayName: string) => void;
+  /** Avatar tap: opens the client's profile on top of this screen (Z14-19). */
+  onOpenProfile?: (relationshipId: string) => void;
   onOpenAsk?: (
     askId: string,
     relationshipId: string,
@@ -101,6 +103,7 @@ export function ActivityFeedScreen({
   relationshipId: lockedRid,
   clients = [],
   onOpenClient,
+  onOpenProfile,
   onOpenAsk,
   onOpenSession,
   refreshToken = 0,
@@ -384,7 +387,15 @@ export function ActivityFeedScreen({
                 {dayEvents.map((event, index) => (
                   <View key={event.id}>
                     {index > 0 ? <View style={styles.divider} /> : null}
-                    <EventRow event={event} onPress={() => openEvent(event)} />
+                    <EventRow
+                      event={event}
+                      onPress={() => openEvent(event)}
+                      onOpenProfile={
+                        onOpenProfile
+                          ? () => onOpenProfile(event.relationshipId)
+                          : undefined
+                      }
+                    />
                   </View>
                 ))}
               </View>
@@ -454,9 +465,11 @@ export function ActivityFeedScreen({
 function EventRow({
   event,
   onPress,
+  onOpenProfile,
 }: {
   event: ActivityFeedEvent;
   onPress: () => void;
+  onOpenProfile?: (() => void) | undefined;
 }) {
 
   const theme = useTheme();
@@ -465,17 +478,19 @@ function EventRow({
   const tone = avatarTone(name, theme.colors);
   const tag = activityTag(event);
   return (
-    <Pressable
-      accessibilityRole="button"
-      onPress={onPress}
-      style={styles.row}
-    >
-      <View style={[styles.avatar, { backgroundColor: tone.backgroundColor }]}>
-        <Text style={[styles.avatarText, { color: tone.color }]}>
-          {initialsFromName(name)}
-        </Text>
-      </View>
-      <View style={styles.body}>
+    <View style={styles.row}>
+      <ClientAvatar
+        name={name}
+        size={40}
+        fontSize={13}
+        tone={tone}
+        onPress={onOpenProfile}
+      />
+      <Pressable
+        accessibilityRole="button"
+        onPress={onPress}
+        style={styles.body}
+      >
         <Text style={styles.summary}>
           <Text style={styles.who}>{firstName(name)}</Text>
           {` · ${event.summary}`}
@@ -485,8 +500,8 @@ function EventRow({
           <TagPill kind={tag.kind} label={tag.label} />
           <Text style={styles.time}>{activityTimeLine(event)}</Text>
         </View>
-      </View>
-    </Pressable>
+      </Pressable>
+    </View>
   );
 }
 
