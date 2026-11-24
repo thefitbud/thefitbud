@@ -72,10 +72,10 @@ test("home mark reviewed then resolve", async ({ page }) => {
     .find((i) => i.status === "active" || i.status === "detected");
   expect(active?.id).toBeTruthy();
   await page.goto(`/?exception=${active!.id}`);
-  // v3 panel (frame 02): "Mark reviewed" replaced Acknowledge.
+  // v3 panel (frame 02): "Noted, keep open" replaced Acknowledge.
   await page
     .getByTestId("screen-TW-05")
-    .getByRole("button", { name: /^mark reviewed$/i })
+    .getByRole("button", { name: /^noted, keep open$/i })
     .click();
   // Frame 02: "Resolve…" opens the resolve form (outcome + note); the
   // footer "Resolve item" saves it.
@@ -154,8 +154,8 @@ test("share a client-visible note", async ({ page }) => {
     await page.getByRole("button", { name: /^add note$/i }).click();
   }
   await page.getByTestId("screen-TW-34").waitFor();
-  // Z12-7: switch label is “Visible to {firstName}” (frame 188).
-  await page.getByLabel(/visible to rohan/i).check();
+  // Z12-7: Z14-26: radio “{firstName} too”.
+  await page.getByRole("radio", { name: /rohan too/i }).check();
   await page.locator("textarea").first().fill("E2E visible note for client");
   await page.getByRole("button", { name: /save note/i }).click();
   // Seeded history already has client-visible notes (answered coach asks); assert on the new one.

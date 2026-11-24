@@ -351,8 +351,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           testMode,
         });
       }
-    } catch {
-      // Push registration is best-effort.
+    } catch (error) {
+      // Push registration is best-effort: never an error on screen.
+      reportError("auth-push-register", error);
     }
   }, [tokens]);
 
@@ -393,8 +394,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (role === "trainee" || role === "trainer") {
         await loadRelationships(client);
         // Both roles may register a device (D-B9); the route allows trainer
-        // and trainee once a role is selected.
-        await registerPushToken(client);
+        // and trainee once a role is selected. Z14-3: not awaited, so the first
+        // screen renders without waiting on permission prompts and token calls.
+        void registerPushToken(client).catch((error: unknown) => {
+          reportError("auth-push-register", error);
+        });
       } else {
         // Dual-role awaiting explicit selection.
         setRelationships([]);

@@ -1,0 +1,130 @@
+appId: com.thefitbud.mobile.staging
+name: F30 Trainer back on both platforms (Z14-18)
+tags:
+  - device
+  - trainer
+  - z14-18
+env:
+  CLIENT_SLUG: rohan-mehta
+---
+# F30 (Z14-18, D-W14-24): Android back (Maestro `back`) always does what the
+# on-screen back would; iOS swipes back from the left edge. The back target for
+# each screen is the table in docs/specs/Z14-18.md.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- runFlow: ../../common/wait-attention-loaded.yaml
+
+# Clients tab -> back -> Attention (Android).
+- tapOn:
+    id: "tab-clients"
+- extendedWaitUntil:
+    visible:
+      id: "client-row-${CLIENT_SLUG}"
+    timeout: 60000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+      - extendedWaitUntil:
+          visible:
+            id: "attention-screen"
+          timeout: 15000
+
+# A client page -> back -> Clients.
+- tapOn:
+    id: "tab-clients"
+- scrollUntilVisible:
+    element:
+      id: "client-row-${CLIENT_SLUG}"
+    direction: DOWN
+    timeout: 60000
+- tapOn:
+    id: "client-row-${CLIENT_SLUG}"
+- extendedWaitUntil:
+    visible:
+      id: "client-status"
+    timeout: 30000
+- takeScreenshot: BK-client-page
+
+# Android: the ⋯ menu closes alone, then Log workout -> back -> client page.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "More"
+      - extendedWaitUntil:
+          visible: "Log in person for.*"
+          timeout: 15000
+      - back
+      - extendedWaitUntil:
+          visible:
+            id: "client-status"
+          timeout: 15000
+      - assertNotVisible: "Log in person for.*"
+      - tapOn: "More"
+      - tapOn: "Log in person for.*"
+      - tapOn: "Log workout"
+      - extendedWaitUntil:
+          visible: "Log workout"
+          timeout: 15000
+      - back
+      - extendedWaitUntil:
+          visible:
+            id: "client-status"
+          timeout: 15000
+      - back
+      - extendedWaitUntil:
+          visible:
+            id: "client-row-${CLIENT_SLUG}"
+          timeout: 15000
+
+# iOS: swipe from the left edge on the client page; Clients is underneath.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - swipe:
+          start: 2%,50%
+          end: 80%,50%
+      - extendedWaitUntil:
+          visible:
+            id: "client-row-${CLIENT_SLUG}"
+          timeout: 15000
+
+# Attention -> Review -> Remind -> back closes only Remind, then the review.
+- tapOn:
+    id: "tab-attention"
+- runFlow: ../../common/wait-attention-loaded.yaml
+- tapOn:
+    id: "needs-you-action"
+    index: 0
+- extendedWaitUntil:
+    visible: "Remind.*"
+    timeout: 30000
+- takeScreenshot: BK-review
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "Remind.*"
+      - extendedWaitUntil:
+          visible: "Send|Cancel|Close"
+          timeout: 15000
+      - back
+      - extendedWaitUntil:
+          visible: "Remind.*"
+          timeout: 15000
+      - back
+      - extendedWaitUntil:
+          visible:
+            id: "attention-screen"
+          timeout: 15000
+- runFlow: ../../common/assert-no-crash.yaml

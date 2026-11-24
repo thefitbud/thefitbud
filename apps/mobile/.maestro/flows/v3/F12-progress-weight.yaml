@@ -60,6 +60,9 @@ tags:
 # tapping the field instead would put the cursor inside the old value.
 - eraseText: 6
 - inputText: "78.3"
+# Z14-9: the typed value and Save stay visible above the keyboard (Android and iOS).
+- assertVisible: ".*78\\.3.*"
+- assertVisible: "Save weight"
 - tapOn: "Save weight"
 # The sheet closes and the card shows the new value.
 - extendedWaitUntil:

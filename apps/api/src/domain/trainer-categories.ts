@@ -8,6 +8,7 @@ export function defaultTrainerCategories(): TrainerCategories {
     intakeSubmitted: true,
     renewalsDue: true,
     mealTimesChanged: true,
+    clientLogEdits: true,
     morningSummary: false,
   };
 }

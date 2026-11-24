@@ -126,6 +126,33 @@ export const mealComplianceSchema = z.object({
   loggedByRole: z.enum(["trainee", "coach"]).optional(),
   /** Set when a coach edited the entry ("Edited by your coach"). */
   lastEditedByRole: z.enum(["trainee", "coach"]).nullable().optional(),
+  /** When the entry was last edited (Z14-11, D-W14-23); null when never edited. */
+  lastEditedAt: isoDateTimeSchema.nullable().optional(),
+  /**
+   * Z14-11 / D-W14-22: only on reads for the trainee. The instant the trainee's
+   * 24 h edit window closes (their `loggedAt` + 24 h), or `null` when the entry
+   * cannot be edited at all (logged or edited by the coach, ended relationship).
+   * The app shows its hint and buttons from this, never from its own rule.
+   */
+  editableUntil: isoDateTimeSchema.nullable().optional(),
+  /**
+   * Z14-11 / D-W14-22 (c): only on reads for the trainee. True only while
+   * `editableUntil` is in the future and the meal could still be logged again.
+   */
+  canRemove: z.boolean().optional(),
+  /**
+   * Z14-11 / D-W14-23: only on coach reads, when the trainee edited the entry.
+   * What the entry said before that edit.
+   */
+  previousValue: z
+    .object({
+      outcome: mealComplianceOutcomeSchema,
+      deviationKind: mealDeviationKindSchema.nullable(),
+      notes: z.string().max(500).nullable(),
+      kcal: z.number().int().nonnegative().nullable(),
+    })
+    .nullable()
+    .optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });
@@ -213,6 +240,68 @@ export const skipMealRequestSchema = z.object({
   clientLoggedAt: isoDateTimeSchema.optional(),
 });
 export type SkipMealRequest = z.infer<typeof skipMealRequestSchema>;
+
+/**
+ * `PATCH /meals/logs/:id` (trainee, Idempotency-Key). Replaces the outcome,
+ * amounts and note of the trainee's own entry for 24 h after it was logged
+ * (Z14-11, D-W14-22). `items` carry the portion lines, food-search items or an
+ * ate-out kcal line, as at log time. `recordVersion` is the version edited.
+ */
+export const traineeEditMealRequestSchema = z
+  .object({
+    // D-W14-22 (b): as planned, changed portion, log it myself, ate out. Never "skipped".
+    outcome: mealComplianceOutcomeSchema.exclude(["skipped"]),
+    deviationKind: mealDeviationKindSchema.nullable().optional(),
+    notes: z.string().trim().max(500).nullable().optional(),
+    items: z.array(loggedFoodItemSchema).max(20).optional(),
+    recordVersion: z.number().int().nonnegative(),
+  })
+  .superRefine((body, ctx) => {
+    if (body.outcome === "modified" && !body.deviationKind) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deviationKind"],
+        message: "A changed meal needs a deviation kind.",
+      });
+    }
+    if (body.outcome !== "modified" && body.deviationKind) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deviationKind"],
+        message: "Only a changed meal has a deviation kind.",
+      });
+    }
+    if (body.outcome !== "modified" && body.items && body.items.length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["items"],
+        message: "Only a changed meal carries food items.",
+      });
+    }
+  });
+export type TraineeEditMealRequest = z.infer<typeof traineeEditMealRequestSchema>;
+
+/** `DELETE /meals/logs/:id` (trainee, Idempotency-Key): the version being removed. */
+export const traineeRemoveMealRequestSchema = z.object({
+  recordVersion: z.number().int().nonnegative(),
+});
+export type TraineeRemoveMealRequest = z.infer<typeof traineeRemoveMealRequestSchema>;
+
+/** `POST /meals/logs/:id/photo` (trainee, Idempotency-Key). */
+export const attachMealPhotoRequestSchema = z.object({
+  mediaAssetId: uuidSchema,
+});
+export type AttachMealPhotoRequest = z.infer<typeof attachMealPhotoRequestSchema>;
+
+/** Response of `DELETE /meals/logs/:id`: the meal is not logged again. */
+export const removeMealLogResponseSchema = z.object({
+  /** The removed entry's id (sync reads it as the record id). */
+  id: uuidSchema,
+  assignmentId: uuidSchema,
+  coachingRelationshipId: uuidSchema,
+  removed: z.literal(true),
+});
+export type RemoveMealLogResponse = z.infer<typeof removeMealLogResponseSchema>;
 
 export const mealComplianceItemSchema = z.object({
   assignmentId: uuidSchema,

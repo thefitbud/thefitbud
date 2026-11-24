@@ -27,9 +27,9 @@ import { DEFAULT_SUPPORT_EMAIL } from "../lib/support";
 import { HelpSheet } from "./HelpSheet";
 import {
   DEFAULT_TRAINER_WEB_URL,
-  legalUrl,
   trainerWebUrl,
 } from "../lib/legalLinks";
+import { useLegalDocument } from "../screens/LegalDocumentScreen";
 import { M2Card, M2Group, M2Row } from "../trainee/settings/m2";
 import { mobilePermittedRoles } from "../navigation/resolveRoute";
 import { isEndedClient } from "./clients";
@@ -97,6 +97,7 @@ export function TrainerMoreScreen({
   const { api, me, signOut, requestRoleSelect } = useAuth();
   const { config } = useConfig();
   const supportEmail = config?.supportEmail ?? DEFAULT_SUPPORT_EMAIL;
+  const legal = useLegalDocument();
   const [helpOpen, setHelpOpen] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [activeCount, setActiveCount] = useState<number | null>(null);
@@ -247,17 +248,24 @@ export function TrainerMoreScreen({
           <Text style={styles.footerText}>{versionLabel()} · </Text>
           <FooterLink
             label="Terms"
-            a11y="Terms of use, opens in your browser"
-            path="/terms"
+            a11y="Terms of Service, opens in the app"
+            onPress={() => legal.open("/terms")}
           />
           <Text style={styles.footerText}> · </Text>
           <FooterLink
             label="Privacy"
-            a11y="Privacy policy, opens in your browser"
-            path="/privacy"
+            a11y="Privacy Policy, opens in the app"
+            onPress={() => legal.open("/privacy")}
+          />
+          <Text style={styles.footerText}> · </Text>
+          <FooterLink
+            label="Legal"
+            a11y="All legal documents, opens in the app"
+            onPress={legal.openIndex}
           />
         </View>
       </View>
+      {legal.modal}
       <HelpSheet
         visible={helpOpen}
         onDismiss={() => setHelpOpen(false)}
@@ -279,22 +287,15 @@ export function TrainerMoreScreen({
 function FooterLink({
   label,
   a11y,
-  path,
+  onPress,
 }: {
   label: string;
   a11y: string;
-  path: Parameters<typeof legalUrl>[0];
+  onPress: () => void;
 }) {
-
   const styles = useStyles();
   return (
-    <Pressable
-      accessibilityRole="link"
-      accessibilityLabel={a11y}
-      onPress={() => {
-        void Linking.openURL(legalUrl(path));
-      }}
-    >
+    <Pressable accessibilityRole="link" accessibilityLabel={a11y} onPress={onPress}>
       <Text style={styles.footerLink}>{label}</Text>
     </Pressable>
   );

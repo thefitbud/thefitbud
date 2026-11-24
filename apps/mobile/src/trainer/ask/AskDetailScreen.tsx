@@ -26,6 +26,12 @@ import { initialsFromName } from "../../components/m2";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import { reportError } from "../../lib/reportError";
 import { stage1Api } from "../../lib/stage1Api";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  trainerCacheEpoch,
+  writeClientMeta,
+} from "../cache";
 import { openContextualWhatsApp } from "../whatsapp";
 import {
   askMentionsPain,
@@ -78,10 +84,20 @@ export function AskDetailScreen({
   const { api } = useAuth();
   const s1 = stage1Api(api);
   const [ask, setAsk] = useState<CoachAsk | null>(initialAsk);
-  const [name, setName] = useState(nameProp?.trim() || "Client");
-  const [whatsapp, setWhatsapp] = useState<string | null>(null);
-  const [goalShort, setGoalShort] = useState<string | null>(null);
-  const [weekNumber, setWeekNumber] = useState<number | null>(null);
+  // Z14-3: the header paints from the per-client cache at once.
+  const [meta] = useState(() => (ridProp ? readClientMeta(ridProp) : null));
+  const [name, setName] = useState(
+    nameProp?.trim() || (meta?.name ? formatPersonName(meta.name) : "Client"),
+  );
+  const [whatsapp, setWhatsapp] = useState<string | null>(
+    meta?.whatsappE164 ?? null,
+  );
+  const [goalShort, setGoalShort] = useState<string | null>(
+    meta?.goalShort ?? null,
+  );
+  const [weekNumber, setWeekNumber] = useState<number | null>(
+    meta?.startedAt ? coachingWeekNumber(meta.startedAt) : (meta?.week ?? null),
+  );
   const [assignment, setAssignment] = useState<WorkoutAssignment | null>(null);
   const [execution, setExecution] = useState<WorkoutExecution | null>(null);
   const [meal, setMeal] = useState<MealAssignment | null>(null);
@@ -93,7 +109,18 @@ export function AskDetailScreen({
 
   const load = useCallback(async () => {
     setError(null);
+    const cacheEpoch = trainerCacheEpoch();
     try {
+      // The header read starts beside the ask lookup when the client is known
+      // up front (always, except a cold push); a full cache entry needs none.
+      const knownMeta = ridProp ? readClientMeta(ridProp) : null;
+      const earlyWorkspace =
+        ridProp && knownMeta?.timeZone == null
+          ? api.getClientWorkspace(ridProp).then(
+              (ws) => ({ ws }) as const,
+              (workspaceError: unknown) => ({ workspaceError }) as const,
+            )
+          : null;
       let found = initialAsk?.id === askId ? initialAsk : null;
       if (!found) {
         const open = await s1.listCoachAsks({ status: "open" });
@@ -116,14 +143,28 @@ export function AskDetailScreen({
       let nextWa: string | null = null;
       let nextGoal: string | null = null;
       let nextWeek: number | null = null;
-      try {
-        const ws = await api.getClientWorkspace(rid);
-        nextName = formatPersonName(ws.header.traineeDisplayName);
-        nextWa = ws.header.clientWhatsappE164 ?? null;
-        nextGoal = ws.header.goalShort ?? null;
-        nextWeek = coachingWeekNumber(ws.header.startedAt);
-      } catch (workspaceError) {
-        reportError("askDetail.workspace", workspaceError);
+      if (knownMeta && knownMeta.timeZone != null) {
+        nextName = nameProp?.trim() || formatPersonName(knownMeta.name ?? "Client");
+        nextWa = knownMeta.whatsappE164;
+        nextGoal = knownMeta.goalShort;
+        nextWeek = coachingWeekNumber(knownMeta.startedAt);
+      } else {
+        const read =
+          (await earlyWorkspace) ??
+          (await api.getClientWorkspace(rid).then(
+            (ws) => ({ ws }) as const,
+            (workspaceError: unknown) => ({ workspaceError }) as const,
+          ));
+        if ("ws" in read) {
+          const ws = read.ws;
+          writeClientMeta(rid, clientMetaFromWorkspaceHeader(ws.header), cacheEpoch);
+          nextName = formatPersonName(ws.header.traineeDisplayName);
+          nextWa = ws.header.clientWhatsappE164 ?? null;
+          nextGoal = ws.header.goalShort ?? null;
+          nextWeek = coachingWeekNumber(ws.header.startedAt);
+        } else {
+          reportError("askDetail.workspace", read.workspaceError);
+        }
       }
       setName(nextName);
       setWhatsapp(nextWa);

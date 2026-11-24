@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Modal,
   Pressable,
@@ -56,7 +56,16 @@ import {
 import { isMealLoggedForCount } from "../trainee/nutrition";
 import { reportError } from "../lib/reportError";
 import { trainerWebUrl } from "../lib/legalLinks";
-import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
+import {
+  clientMetaFromWorkspaceHeader,
+  readClientMeta,
+  readTrainerCache,
+  trainerCacheEpoch,
+  writeClientMeta,
+  writeTrainerCache,
+} from "./cache";
+import { UpdatingLine } from "./keptTab";
+import { onboardingStatusLabel } from "./clients";
 import { ClientLogWorkoutScreen } from "./clientlog/ClientLogWorkoutScreen";
 import { ClientLogMealScreen } from "./clientlog/meal/ClientLogMealScreen";
 import { ClientLogMeasurementScreen } from "./clientlog/measurement/ClientLogMeasurementScreen";
@@ -84,11 +93,23 @@ import {
   type NudgeTarget,
 } from "./sheets/nudgeContent";
 import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
+import { HeaderBack } from "../components/HeaderBack";
+import { HIDDEN_FROM_READERS, PushedScreen } from "../components/PushedScreen";
+import { useHardwareBack } from "../lib/useHardwareBack";
+import { DiscardDialog } from "./clientlog/useDiscardGuard";
 
 type Props = {
   relationshipId: string;
   displayName: string;
   onboardingStatusLabelText?: string;
+  /** Short name of the screen below (BK-01), shown beside the iOS back chevron. */
+  backLabel?: string;
+  /**
+   * False while another screen is pushed above this one (an exception or check-in
+   * opened from the client page): its hardware-back handlers then stay quiet so
+   * back pops the visible screen, not a hidden note form.
+   */
+  active?: boolean;
   onBack: () => void;
   onOpenException: (exceptionId: string) => void;
   onOpenCheckin: (checkinId: string) => void;
@@ -122,6 +143,9 @@ function isOfflineError(err: unknown): boolean {
 export function ClientStatusScreen({
   relationshipId,
   displayName,
+  onboardingStatusLabelText,
+  backLabel,
+  active = true,
   onBack,
   onOpenException,
   onOpenCheckin,
@@ -134,8 +158,14 @@ export function ClientStatusScreen({
   const today = localDateInTimezone(zone);
   const weekStart = startOfWeekMonday(today);
   const weekEnd = addDays(weekStart, 6);
-  const [data, setData] = useState<Snapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Z14-3: paint the last snapshot of this client at once, refresh underneath.
+  const [initialSnapshot] = useState(() =>
+    readTrainerCache<Snapshot>(`trainer:client:${relationshipId}`),
+  );
+  const [data, setData] = useState<Snapshot | null>(initialSnapshot);
+  const hasData = useRef(initialSnapshot != null);
+  const [updating, setUpdating] = useState(false);
+  const [loading, setLoading] = useState(initialSnapshot == null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
@@ -161,37 +191,76 @@ export function ClientStatusScreen({
     // Captured before the fetch: if the trainer changes while it is in
     // flight, the late write is dropped (Z12-33).
     const cacheEpoch = trainerCacheEpoch();
+    if (hasData.current) setUpdating(true);
     try {
-      const [workspace, workoutPage, mealPage, notePage] = await Promise.all([
-        api.getClientWorkspace(relationshipId),
-        api.listWorkoutAssignments(relationshipId, {
-          fromDate: weekStart,
-          toDate: weekEnd,
-        }),
-        api.listMealAssignments(relationshipId, {
-          fromDate: weekStart,
-          toDate: weekEnd,
-        }),
-        api.listTrainerNotes(relationshipId),
-      ]);
+      // One parallel round. The week and responsiveness reads are live-only,
+      // so they run beside the workspace when the client is already known to
+      // be coaching (header cache, last snapshot or the row that opened this
+      // page), and skip when known ended. Only a client never seen before
+      // waits for the workspace to say which.
+      const hintStatus =
+        readClientMeta(relationshipId)?.status ??
+        initialSnapshot?.workspace.header.onboardingStatus ??
+        null;
+      const knownState: "ended" | "live" | "unknown" =
+        hintStatus != null
+          ? hintStatus === "ended"
+            ? "ended"
+            : "live"
+          : onboardingStatusLabelText === onboardingStatusLabel("ended")
+            ? "ended"
+            : onboardingStatusLabelText && onboardingStatusLabelText !== "Unknown"
+              ? "live"
+              : "unknown";
+      let responsivenessFailed = false;
+      const readLive = () =>
+        Promise.all([
+          clientStatusApi(api)
+            .getWorkspaceWeek(relationshipId, weekStart)
+            .catch((err: unknown) => {
+              reportError("client-status.week", err);
+              return null;
+            }),
+          clientStatusApi(api)
+            .getResponsiveness(relationshipId)
+            .catch((err: unknown) => {
+              reportError("client-status.responsiveness", err);
+              responsivenessFailed = true;
+              return null;
+            }),
+        ]);
+      const [workspace, workoutPage, mealPage, notePage, liveRead] =
+        await Promise.all([
+          api.getClientWorkspace(relationshipId),
+          api.listWorkoutAssignments(relationshipId, {
+            fromDate: weekStart,
+            toDate: weekEnd,
+          }),
+          api.listMealAssignments(relationshipId, {
+            fromDate: weekStart,
+            toDate: weekEnd,
+          }),
+          api.listTrainerNotes(relationshipId),
+          knownState === "live"
+            ? readLive()
+            : Promise.resolve([null, null] as [WeekReadModel | null, ResponsivenessResponse | null]),
+        ]);
+      writeClientMeta(
+        relationshipId,
+        clientMetaFromWorkspaceHeader(workspace.header),
+        cacheEpoch,
+      );
       const isEnded =
         workspace.header.onboardingStatus === "ended" || Boolean(workspace.header.endedAt);
-      let week: WeekReadModel | null = null;
-      let responsiveness: ResponsivenessResponse | null = null;
-      let responsivenessFailed = false;
-      if (!isEnded) {
-        [week, responsiveness] = await Promise.all([
-          clientStatusApi(api).getWorkspaceWeek(relationshipId, weekStart).catch((err: unknown) => {
-            reportError("client-status.week", err);
-            return null;
-          }),
-          clientStatusApi(api).getResponsiveness(relationshipId).catch((err: unknown) => {
-            reportError("client-status.responsiveness", err);
-            responsivenessFailed = true;
-            return null;
-          }),
-        ]);
+      let [week, responsiveness] = liveRead;
+      if (isEnded) {
+        week = null;
+        responsiveness = null;
+        responsivenessFailed = false;
+      } else if (knownState === "unknown") {
+        [week, responsiveness] = await readLive();
       }
+      hasData.current = true;
       const snapshot: Snapshot = {
         workspace,
         workouts: workoutPage.items,
@@ -212,11 +281,13 @@ export function ClientStatusScreen({
         setOfflineAt(cached.savedAt);
         setError(null);
       } else {
-        setData(null);
+        // A snapshot already on screen stays; the banner says the refresh failed.
+        if (!hasData.current) setData(null);
         setError("Couldn't load. Pull to try again.");
       }
     } finally {
       setLoading(false);
+      setUpdating(false);
     }
   }, [api, relationshipId, weekStart, weekEnd]);
 
@@ -363,6 +434,32 @@ export function ClientStatusScreen({
     nutrition?.assigned != null &&
     nutrition.logged.kcal > nutrition.assigned.kcal;
 
+  // Z14-18: hardware back for the client page's own inner views. A log screen
+  // registers its own handler (it is mounted later, so it answers first); sheets
+  // are Modals that close themselves. Anything left falls through to the shell.
+  const [discardNoteAsk, setDiscardNoteAsk] = useState(false);
+  useHardwareBack(() => {
+    if (discardNoteAsk) {
+      setDiscardNoteAsk(false);
+      return true;
+    }
+    if (dietDayOpen) {
+      setDietDayOpen(false);
+      void load();
+      return true;
+    }
+    if (infoOpen) {
+      setInfoOpen(false);
+      return true;
+    }
+    if (noteOpen) {
+      if (noteBody.trim()) setDiscardNoteAsk(true);
+      else setNoteOpen(false);
+      return true;
+    }
+    return false;
+  }, active);
+
   async function copyPlanLink() {
     const url = `${trainerWebUrl()}/clients/${relationshipId}`;
     try {
@@ -436,9 +533,15 @@ export function ClientStatusScreen({
     }
   }
 
+  // Z14-18: a sub-screen is a layer over the client page, which stays mounted
+  // (and scrolled) beneath it; the iOS edge swipe shows it.
+  let subScreen: ReactNode = null;
+  const subKey = loggingOther ?? (dietDayOpen ? "diet" : logging ? "log" : infoOpen ? "info" : "none");
+  let closeSubScreen: (() => void) | null = null;
   if (loggingOther) {
     const Other = loggingOther === "meal" ? ClientLogMealScreen : ClientLogMeasurementScreen;
-    return (
+    closeSubScreen = () => setLoggingOther(null);
+    subScreen = (
       <Other
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -452,10 +555,12 @@ export function ClientStatusScreen({
         }}
       />
     );
-  }
-
-  if (dietDayOpen) {
-    return (
+  } else if (dietDayOpen) {
+    closeSubScreen = () => {
+      setDietDayOpen(false);
+      void load();
+    };
+    subScreen = (
       <DietDayReviewScreen
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -467,10 +572,9 @@ export function ClientStatusScreen({
         }}
       />
     );
-  }
-
-  if (logging) {
-    return (
+  } else if (logging) {
+    closeSubScreen = () => setLogging(null);
+    subScreen = (
       <ClientLogWorkoutScreen
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -486,10 +590,9 @@ export function ClientStatusScreen({
         }}
       />
     );
-  }
-
-  if (infoOpen) {
-    return (
+  } else if (infoOpen) {
+    closeSubScreen = () => setInfoOpen(false);
+    subScreen = (
       <ClientInfoScreen
         relationshipId={relationshipId}
         displayName={header?.traineeDisplayName || displayName}
@@ -502,20 +605,14 @@ export function ClientStatusScreen({
   const actionsDisabled = ended || offline;
   const loadFailed = !loading && !data && Boolean(error);
 
+  let mainView: ReactNode = null;
   if (loadFailed) {
     const failName = formatPersonName(displayName);
     const failFirst = failName.split(" ")[0] || failName;
-    return (
+    mainView = (
       <Screen v3 title="" showHeader={false} chrome="app">
         <View style={styles.nav}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-            onPress={onBack}
-            style={styles.navBtn}
-          >
-            <Text style={styles.navChevron}>‹</Text>
-          </Pressable>
+          <HeaderBack onPress={onBack} label={backLabel} />
           <View style={styles.navBtn} />
         </View>
         <View style={styles.loadError}>
@@ -544,7 +641,7 @@ export function ClientStatusScreen({
     );
   }
 
-  return (
+  if (!loadFailed) mainView = (
     <Screen
       v3
       title=""
@@ -558,14 +655,7 @@ export function ClientStatusScreen({
     >
       <View testID="client-status">
       <View style={styles.nav}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back"
-          onPress={onBack}
-          style={styles.navBtn}
-        >
-          <Text style={styles.navChevron}>‹</Text>
-        </Pressable>
+        <HeaderBack onPress={onBack} label={backLabel} />
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="More"
@@ -582,6 +672,7 @@ export function ClientStatusScreen({
         </Text>
       ) : null}
       {error && data ? <ErrorBanner message={error} /> : null}
+      <UpdatingLine visible={updating && !refreshing && !offline} />
       {loading && !data ? (
         <View>
           <View style={styles.skeleton} />
@@ -1186,9 +1277,38 @@ export function ClientStatusScreen({
         </View>
       </Modal>
 
+      <DiscardDialog
+        title="Discard this note?"
+        body="What you typed won’t be saved."
+        keepLabel="Keep writing"
+        visible={discardNoteAsk}
+        onKeep={() => setDiscardNoteAsk(false)}
+        onDiscard={() => {
+          setDiscardNoteAsk(false);
+          setNoteBody("");
+          setNoteOpen(false);
+        }}
+      />
+
       {toast ? <Snackbar message={toast} onDismiss={() => setToast(null)} /> : null}
       </View>
     </Screen>
+  );
+
+  return (
+    <View style={styles.stack}>
+      <View
+        style={styles.stack}
+        {...(subScreen ? HIDDEN_FROM_READERS : {})}
+      >
+        {mainView}
+      </View>
+      {subScreen && closeSubScreen ? (
+        <PushedScreen key={subKey} onBack={closeSubScreen}>
+          {subScreen}
+        </PushedScreen>
+      ) : null}
+    </View>
   );
 }
 
@@ -1228,6 +1348,7 @@ function MenuRow({
 }
 
 const useStyles = createThemedStyles((t) => ({
+  stack: { flex: 1 },
   nav: {
     alignItems: "center",
     flexDirection: "row",

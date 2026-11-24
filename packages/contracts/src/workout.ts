@@ -113,6 +113,12 @@ export const workoutExecutionSchema = z.object({
    * refused with 409 `WORKOUT_ALREADY_FINISHED` instead.
    */
   alreadyCompleted: z.boolean().optional(),
+  /**
+   * Z14-11 / D-W14-20: the instant the trainee's 48 h rating window closes
+   * (`completedAt` + 48 h); null when the workout is not finished or was logged
+   * by the coach. Present on trainee reads; the app never computes the rule.
+   */
+  feedbackEditableUntil: isoDateTimeSchema.nullable().optional(),
   exercises: z.array(exerciseExecutionSchema),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
@@ -194,6 +200,24 @@ export type CompleteSetRequest = z.infer<typeof completeSetRequestSchema>;
 export const completeWorkoutRequestSchema = z.object({
   sessionRpe: z.number().min(1).max(10).nullable().optional(),
 });
+/**
+ * `PATCH /workouts/executions/:id/feedback` (trainee, Idempotency-Key): sets or
+ * clears the session RPE of the trainee's own finished workout for 48 h after
+ * it finished (Z14-11, D-W14-20). `recordVersion` is the version edited.
+ * The note is not here: `workout_executions` has no note column and D-W14-18
+ * allows no other migration (see the Z14-11 report).
+ */
+export const traineeWorkoutFeedbackRequestSchema = z
+  .object({
+    rpe: z.number().int().min(1).max(10).nullable(),
+    recordVersion: z.number().int().nonnegative(),
+  })
+  // Strict: a `note` (or any other key) is refused, never silently dropped.
+  .strict();
+export type TraineeWorkoutFeedbackRequest = z.infer<
+  typeof traineeWorkoutFeedbackRequestSchema
+>;
+
 export type CompleteWorkoutRequest = z.infer<typeof completeWorkoutRequestSchema>;
 
 /**

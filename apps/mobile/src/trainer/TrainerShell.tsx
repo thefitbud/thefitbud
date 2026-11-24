@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Pressable, StyleSheet, View } from "react-native";
 import { Text } from "../components/Text";
 import type { CoachAsk, TrainerCheckinInboxItem } from "@fitbud/contracts";
 import { formatPersonName } from "@fitbud/core";
@@ -25,6 +25,8 @@ import { isCaptureModeEnabled,
 import { stage1Api } from "../lib/stage1Api";
 import { roleForLinkKind } from "../navigation/resolveRoute";
 import { backOverlays, pushOverlay, startOverlays } from "./overlayStack";
+import { HIDDEN_FROM_READERS, PushedScreen } from "../components/PushedScreen";
+import { useHardwareBack } from "../lib/useHardwareBack";
 import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
 
 type TrainerTab = "attention" | "clients" | "checkins" | "more";
@@ -89,12 +91,26 @@ function TrainerShellBody() {
   } = useAuth();
   const s1 = stage1Api(api);
   const [tab, setTab] = useState<TrainerTab>("attention");
+  // Z14-3: a tab stays mounted once visited, so switching back shows its last
+  // data at once instead of a skeleton and a refetch.
+  const [visited, setVisited] = useState<ReadonlySet<TrainerTab>>(
+    () => new Set<TrainerTab>(["attention"]),
+  );
+  if (!visited.has(tab)) setVisited(new Set([...visited, tab]));
   // Back stack of detail screens over the current tab (see overlayStack.ts).
   const [overlays, setOverlays] = useState<Overlay[]>([]);
-  const overlay: Overlay | null = overlays[overlays.length - 1] ?? null;
   const open = (next: Overlay) => setOverlays((stack) => pushOverlay(stack, next));
   const startAt = (next: Overlay) => setOverlays(startOverlays(next));
   const closeAll = () => setOverlays([]);
+  // Z14-3: bumped when the detail stack empties, so the tab underneath
+  // refreshes in the background (the trainer may have written something).
+  const [returnNonce, setReturnNonce] = useState(0);
+  // Derived in the same render the tabs wake in, so they see both together.
+  const [hadOverlays, setHadOverlays] = useState(false);
+  if (hadOverlays !== overlays.length > 0) {
+    setHadOverlays(overlays.length > 0);
+    if (hadOverlays) setReturnNonce((n) => n + 1);
+  }
   const goBack = (resolvedRelationshipId?: string) => {
     const result = backOverlays(overlays, resolvedRelationshipId);
     if (result.kind === "client") {
@@ -102,6 +118,30 @@ function TrainerShellBody() {
       return;
     }
     setOverlays(result.stack);
+  };
+  // Back from the top screen: the iOS edge swipe, the hardware back and each
+  // screen's own back all land here. A cold check-in (opened from a push, with
+  // nothing below it) goes to its client's page, so the client is looked up
+  // the way the review screen itself reads it.
+  const overlaysRef = useRef(overlays);
+  overlaysRef.current = overlays;
+  const backFromTop = () => {
+    const top = overlays[0];
+    if (overlays.length === 1 && top?.kind === "checkin" && top.cold) {
+      const at = overlays;
+      api.getCheckinReviewContext(top.checkinId).then(
+        (context) => {
+          if (overlaysRef.current === at) {
+            goBack(context.checkin.coachingRelationshipId);
+          }
+        },
+        () => {
+          if (overlaysRef.current === at) goBack();
+        },
+      );
+      return;
+    }
+    goBack();
   };
   const [clientsSegment, setClientsSegment] = useState<"clients" | "activity">(
     "clients",
@@ -263,8 +303,35 @@ function TrainerShellBody() {
     return () => registerTrainerCaptureNav(null);
   }, [api, s1, signOut]);
 
+  // Z14-18: every open detail screen is its own layer over the tabs, which
+  // stay mounted and visible underneath (as does each screen lower in the
+  // stack), so Back and the iOS edge swipe show the same data, unchanged.
+  // Short name of the screen below an overlay, for the iOS back label (BK-01).
+  function parentLabel(index: number): string {
+    const below = overlays[index - 1];
+    if (!below) return TABS.find((item) => item.id === tab)?.label ?? "Back";
+    switch (below.kind) {
+      case "client":
+        return below.displayName.split(" ")[0] || "Back";
+      case "exception":
+        return "Review";
+      case "checkin":
+        return "Check-in";
+      case "ask":
+        return "Ask";
+      case "session":
+        return "Session";
+      case "notifications":
+        return "Notifications";
+      default:
+        return "Back";
+    }
+  }
+
+  function renderOverlay(overlay: Overlay, index: number): ReactNode {
+    let overlayNode: ReactNode = null;
   if (overlay?.kind === "exception") {
-    return (
+    overlayNode = (
       <ExceptionReviewScreen
         key={refreshNonce}
         exceptionId={overlay.exceptionId}
@@ -272,15 +339,15 @@ function TrainerShellBody() {
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
-  }
-
-  if (overlay?.kind === "client") {
-    return (
+  } else if (overlay?.kind === "client") {
+    overlayNode = (
       <ClientStatusScreen
         key={refreshNonce}
         relationshipId={overlay.relationshipId}
         displayName={overlay.displayName}
         onboardingStatusLabelText={overlay.onboardingStatusLabelText}
+        backLabel={parentLabel(index)}
+        active={index === overlays.length - 1}
         onBack={() => goBack()}
         onOpenException={(exceptionId) =>
           open({ kind: "exception", exceptionId })
@@ -294,10 +361,8 @@ function TrainerShellBody() {
         }
       />
     );
-  }
-
-  if (overlay?.kind === "checkin") {
-    return (
+  } else if (overlay?.kind === "checkin") {
+    overlayNode = (
       <CheckinReviewScreen
         key={refreshNonce}
         checkinId={overlay.checkinId}
@@ -306,10 +371,8 @@ function TrainerShellBody() {
         onOpenClient={(relationshipId) => openClientById(relationshipId)}
       />
     );
-  }
-
-  if (overlay?.kind === "ask") {
-    return (
+  } else if (overlay?.kind === "ask") {
+    overlayNode = (
       <AskDetailScreen
         key={refreshNonce}
         askId={overlay.askId}
@@ -320,10 +383,8 @@ function TrainerShellBody() {
         onAnswered={() => goBack()}
       />
     );
-  }
-
-  if (overlay?.kind === "session") {
-    return (
+  } else if (overlay?.kind === "session") {
+    overlayNode = (
       <SessionDetailScreen
         key={refreshNonce}
         executionId={overlay.executionId}
@@ -332,24 +393,45 @@ function TrainerShellBody() {
         onBack={() => goBack()}
       />
     );
-  }
-
-  if (overlay?.kind === "notifications") {
-    return (
+  } else if (overlay?.kind === "notifications") {
+    overlayNode = (
       <TrainerNotificationSettingsScreen onBack={() => goBack()} />
     );
+  } else if (overlay?.kind === "profile") {
+    overlayNode = <TrainerProfileScreen onBack={() => goBack()} />;
+  }
+    return overlayNode;
   }
 
-  if (overlay?.kind === "profile") {
-    return <TrainerProfileScreen onBack={() => goBack()} />;
-  }
-
+  const atTabs = overlays.length === 0;
+  // Z14-18: Android back and the back gesture. One handler for the shell; it
+  // goes through the same `backFromTop` as the iOS edge swipe. Sheets are
+  // Modals that close themselves first (onRequestClose); a client page's
+  // sub-screens register their own handlers, which run before this one.
+  useHardwareBack(() => {
+    if (overlays.length > 0) {
+      backFromTop();
+      return true;
+    }
+    if (tab !== "attention") {
+      setTab("attention");
+      return true;
+    }
+    return false; // Attention tab, nothing open: leave the app.
+  });
   return (
     <View style={styles.root}>
+      <View
+        style={styles.root}
+        {...(atTabs ? {} : HIDDEN_FROM_READERS)}
+      >
       <View style={styles.content}>
-        {tab === "attention" ? (
+        {visited.has("attention") ? (
+          <View style={tab === "attention" ? styles.content : styles.hidden}>
           <AttentionTab
             key={refreshNonce}
+            active={atTabs && tab === "attention"}
+            returnNonce={returnNonce}
             onReviewException={(exceptionId) =>
               startAt({ kind: "exception", exceptionId })
             }
@@ -368,11 +450,15 @@ function TrainerShellBody() {
               })
             }
           />
+          </View>
         ) : null}
 
-        {tab === "clients" ? (
+        {visited.has("clients") ? (
+          <View style={tab === "clients" ? styles.content : styles.hidden}>
           <ClientsTab
-            key={refreshNonce}
+            key={`${refreshNonce}:${clientsSegment}`}
+            active={atTabs && tab === "clients"}
+            returnNonce={returnNonce}
             onOpenClient={openClientFromRow}
             initialSegment={clientsSegment}
             onOpenAsk={(askId, relationshipId, displayName) =>
@@ -392,10 +478,18 @@ function TrainerShellBody() {
               })
             }
           />
+          </View>
         ) : null}
 
-        {tab === "checkins" ? (
-          <CheckinsTab key={refreshNonce} onReviewCheckin={openCheckin} />
+        {visited.has("checkins") ? (
+          <View style={tab === "checkins" ? styles.content : styles.hidden}>
+            <CheckinsTab
+              key={refreshNonce}
+              active={atTabs && tab === "checkins"}
+              returnNonce={returnNonce}
+              onReviewCheckin={openCheckin}
+            />
+          </View>
         ) : null}
 
         {tab === "more" ? (
@@ -416,6 +510,7 @@ function TrainerShellBody() {
               accessibilityRole="tab"
               accessibilityLabel={item.label}
               accessibilityState={{ selected }}
+              aria-selected={selected}
               onPress={() => setTab(item.id)}
               style={styles.tab}
             >
@@ -432,8 +527,38 @@ function TrainerShellBody() {
           );
         })}
       </View>
+      </View>
+      {overlays.map((item, index) => {
+        const isTop = index === overlays.length - 1;
+        return (
+          <View
+            key={`${index}:${overlayKey(item)}`}
+            style={[StyleSheet.absoluteFill, { pointerEvents: isTop ? "auto" : "none" }]}
+            {...(isTop ? {} : HIDDEN_FROM_READERS)}
+          >
+            <PushedScreen onBack={backFromTop}>{renderOverlay(item, index)}</PushedScreen>
+          </View>
+        );
+      })}
     </View>
   );
+}
+
+function overlayKey(item: Overlay): string {
+  switch (item.kind) {
+    case "exception":
+      return `exception:${item.exceptionId}`;
+    case "client":
+      return `client:${item.relationshipId}`;
+    case "checkin":
+      return `checkin:${item.checkinId}`;
+    case "ask":
+      return `ask:${item.askId}`;
+    case "session":
+      return `session:${item.executionId}`;
+    default:
+      return item.kind;
+  }
 }
 
 const useStyles = createThemedStyles((t) => ({
@@ -443,6 +568,9 @@ const useStyles = createThemedStyles((t) => ({
   },
   content: {
     flex: 1,
+  },
+  hidden: {
+    display: "none",
   },
   banner: {
     backgroundColor: t.colors.brandTint,

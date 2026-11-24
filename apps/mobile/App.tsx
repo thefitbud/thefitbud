@@ -13,8 +13,11 @@ import { SyncProvider } from "./src/sync/SyncProvider";
 import { ensureAndroidNotificationChannels } from "./src/notifications/androidChannels";
 import { ensureMealNotificationActions } from "./src/notifications/nativeActions";
 import { NotificationOpenListener } from "./src/notifications/openListener";
+import { installForegroundNotificationHandler } from "./src/notifications/foregroundHandler";
+import { PushPermissionRegistrar } from "./src/notifications/usePushPermission";
 
 initSentry();
+installForegroundNotificationHandler();
 
 /**
  * Primitive gallery for the Z12-36 device check (src/providers/qaGallery.ts).
@@ -69,6 +72,7 @@ function App() {
               <AuthProvider>
                 <CaptureBridgeActivator />
                 <NotificationOpenListener />
+                <PushPermissionRegistrar />
                 <SyncProvider>
                   <AppRouter />
                 </SyncProvider>

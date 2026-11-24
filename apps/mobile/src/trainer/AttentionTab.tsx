@@ -67,7 +67,15 @@ import {
 } from "./reviewSheetNav";
 import { localDateInTimezone } from "../lib/dates";
 import { openContextualWhatsApp } from "./whatsapp";
-import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
+import {
+  clientMetaFromDirectoryItem,
+  readTrainerCache,
+  trainerCacheEpoch,
+  writeClientMeta,
+  writeTrainerCache,
+} from "./cache";
+import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
+import { dropReviewItem } from "./reviewItemCache";
 import { clientStatusApi } from "./clientStatus/api";
 import { MoreSheet } from "./sheets/MoreSheet";
 import { NoteSheet, type NoteSaveInput } from "./sheets/NoteSheet";
@@ -93,6 +101,10 @@ type ReviewSubSheet =
   | { kind: "more" }
   | { kind: "note" };
 type Props = {
+  /** False while another tab is showing; the tab stays mounted (Z14-3). */
+  active?: boolean;
+  /** Bumped when a detail screen closes: refresh underneath whatever the age. */
+  returnNonce?: number;
   onReviewException: (exceptionId: string) => void;
   onReviewCheckin: (item: TrainerCheckinInboxItem) => void;
   onOpenClients: () => void;
@@ -129,6 +141,8 @@ function listsFromSnapshot(snapshot: Snapshot): AttentionLists {
 const CACHE_KEY = "trainer:attention";
 
 export function AttentionTab({
+  active = true,
+  returnNonce = 0,
   onReviewException,
   onReviewCheckin,
   onOpenClients,
@@ -141,23 +155,33 @@ export function AttentionTab({
   // unresolvable still surfaces a named error from the resolver.
   const trainerZone = deviceTimeZone();
   const s1 = stage1Api(api);
-  const [lists, setLists] = useState<AttentionLists>(EMPTY_LISTS);
-  const [asks, setAsks] = useState<CoachAsk[]>([]);
-  const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>([]);
-  const [clientNames, setClientNames] = useState<Record<string, string>>({});
+  // Z14-3: paint from the last snapshot at once, refresh underneath.
+  const [initialSnapshot] = useState(() => readTrainerCache<Snapshot>(CACHE_KEY));
+  const [lists, setLists] = useState<AttentionLists>(() =>
+    initialSnapshot ? listsFromSnapshot(initialSnapshot) : EMPTY_LISTS,
+  );
+  const [asks, setAsks] = useState<CoachAsk[]>(initialSnapshot?.asks ?? []);
+  const [checkins, setCheckins] = useState<TrainerCheckinInboxItem[]>(
+    initialSnapshot?.checkins ?? [],
+  );
+  const [clientNames, setClientNames] = useState<Record<string, string>>(
+    initialSnapshot?.clientNames ?? {},
+  );
+  const [updating, setUpdating] = useState(false);
+  const lastLoadedAt = useRef(0);
   const pendingAnswer = useRef<{
     ask: CoachAsk;
     index: number;
     action: UndoableAction;
   } | null>(null);
   const [answerUndo, setAnswerUndo] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialSnapshot == null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [offlineAt, setOfflineAt] = useState<string | null>(null);
   // No data on screen and the load failed: the frame 45 state with Retry.
   const [loadFailed, setLoadFailed] = useState(false);
-  const hasData = useRef(false);
+  const hasData = useRef(initialSnapshot != null);
   const [toast, setToastText] = useState<string | null>(null);
   // Each toast request gets its own Snackbar instance. The shared notice queue
   // can drop a toast early (a tap outside it, a cap), and a second request
@@ -204,6 +228,7 @@ export function AttentionTab({
 
   const load = useCallback(async () => {
     setError(null);
+    if (hasData.current) setUpdating(true);
     // Captured before the fetch: if the trainer changes while it is in
     // flight, the late write is dropped (Z12-33).
     const cacheEpoch = trainerCacheEpoch();
@@ -225,6 +250,11 @@ export function AttentionTab({
       for (const client of directory?.items ?? []) {
         if (client.relationshipId) {
           names[client.relationshipId] = client.traineeDisplayName;
+          writeClientMeta(
+            client.relationshipId,
+            clientMetaFromDirectoryItem(client),
+            cacheEpoch,
+          );
         }
       }
       const nextCheckins = inbox.items.filter(
@@ -244,6 +274,7 @@ export function AttentionTab({
       };
       applySnapshot(snapshot);
       hasData.current = true;
+      lastLoadedAt.current = Date.now();
       writeTrainerCache(CACHE_KEY, snapshot, cacheEpoch);
       setOfflineAt(null);
       setLoadFailed(false);
@@ -270,12 +301,17 @@ export function AttentionTab({
       }
     } finally {
       setLoading(false);
+      setUpdating(false);
     }
   }, [api, s1, applySnapshot]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  useRefreshWhenActive(active, lastLoadedAt, () => {
+    void load();
+  }, returnNonce);
 
   useRealtimeHints(
     api,
@@ -351,6 +387,7 @@ export function AttentionTab({
     try {
       for (const target of targets) {
         await api.acknowledgeException(target.id, {}, createIdempotencyKey());
+        dropReviewItem(target.id);
       }
     } catch (err) {
       setLists(prior);
@@ -375,6 +412,7 @@ export function AttentionTab({
     try {
       for (const target of targets) {
         await api.undoExceptionAcknowledge(target.id, createIdempotencyKey());
+        dropReviewItem(target.id);
       }
     } catch (err) {
       setLists(prior);
@@ -434,6 +472,7 @@ export function AttentionTab({
     setReviewActing(true);
     try {
       await api.acknowledgeException(exceptionId, {}, createIdempotencyKey());
+      dropReviewItem(exceptionId);
       const items = reviewSheetItemsForRelationship(
         next.groups,
         reviewSheet.relationshipId,
@@ -474,6 +513,7 @@ export function AttentionTab({
         exceptionId,
         createIdempotencyKey(),
       );
+      dropReviewItem(exceptionId);
       if (
         (restored.status === "detected" || restored.status === "active") &&
         restored.status !== known
@@ -530,6 +570,7 @@ export function AttentionTab({
 
   function finishResolved(item: AttentionGroupItem, outcome: ResolveOutcome | null) {
     resolveKeys.current = null;
+    dropReviewItem(item.id);
     const resolved: AttentionGroupItem = {
       ...item,
       status: "resolved",
@@ -580,6 +621,7 @@ export function AttentionTab({
         .find((entry) => entry.id === item.id)?.status;
       if (status === "detected" || status === "active") {
         await api.acknowledgeException(item.id, {}, keys.ack);
+        dropReviewItem(item.id);
         setLists((current) =>
           partitionAttentionGroups(acknowledgeAttentionItem(current.groups, item.id)),
         );
@@ -791,6 +833,7 @@ export function AttentionTab({
         />
       ) : null}
       <NeedsYouHeader eyebrow={screenModel.eyebrow} onSearch={onOpenClients} />
+      <UpdatingLine visible={updating && !refreshing && !offline} />
 
       {error ? <ErrorBanner message={error} /> : null}
 

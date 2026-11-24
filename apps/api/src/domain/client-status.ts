@@ -22,7 +22,7 @@ export async function deriveOnboardingStatusForRelationships(
   if (rows.length === 0) return result;
 
   const ids = rows.map((row) => row.id);
-  const [responses, reviews, configurations] = await Promise.all([
+  const [responses, reviews, configurations] = await db.batch([
     db
       .select({
         coachingRelationshipId: onboardingFormResponses.coachingRelationshipId,
@@ -44,7 +44,17 @@ export async function deriveOnboardingStatusForRelationships(
       .from(coachingConfigurations)
       .where(inArray(coachingConfigurations.coachingRelationshipId, ids)),
   ]);
+  return statusesFromRows(rows, responses, reviews, configurations);
+}
 
+/** Pure status rule, shared by the batched helper and the relationships list. */
+export function statusesFromRows(
+  rows: readonly RelationshipStatusRow[],
+  responses: readonly { coachingRelationshipId: string; status: string }[],
+  reviews: readonly { coachingRelationshipId: string }[],
+  configurations: readonly { coachingRelationshipId: string; status: string }[],
+): Map<string, OnboardingStatus> {
+  const result = new Map<string, OnboardingStatus>();
   const submitted = new Set(
     responses
       .filter((row) => row.status === "submitted")

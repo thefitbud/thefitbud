@@ -1,5 +1,6 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -28,6 +29,30 @@ type Props = {
   children: ReactNode;
 };
 
+/**
+ * Android: a spacer as tall as the keyboard while it is up. A `statusBarTranslucent` modal is
+ * not resized by `adjustResize`, so the keyboard covered the weight value and
+ * Save on Android (Z14-9); iOS is handled by `KeyboardAvoidingView` padding.
+ */
+function AndroidKeyboardSpacer({ active }: { active: boolean }) {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!active) {
+      setHeight(0);
+      return;
+    }
+    const show = Keyboard.addListener("keyboardDidShow", (e) => setHeight(e.endCoordinates.height));
+    const hide = Keyboard.addListener("keyboardDidHide", () => setHeight(0));
+    return () => {
+      show.remove();
+      hide.remove();
+      setHeight(0);
+    };
+  }, [active]);
+  // The root is bottom-anchored, so a spacer under the sheet lifts it above the keyboard.
+  return height > 0 ? <View style={{ height }} testID="sheet-keyboard-spacer" /> : null;
+}
+
 export function BottomSheet({
   visible,
   title,
@@ -50,7 +75,7 @@ export function BottomSheet({
       onDismiss={onClosed}
     >
       {/* iOS does not resize a transparent modal for the keyboard, so pad the
-          bottom-anchored sheet by the keyboard height (ate out, portion, resolve and note sheets). */}
+          bottom-anchored sheet by the keyboard height (Android uses the spacer below; ate out, portion, resolve and note sheets). */}
       <KeyboardAvoidingView
         accessibilityViewIsModal
         behavior={isIos ? "padding" : undefined}
@@ -78,6 +103,7 @@ export function BottomSheet({
             {children}
           </ScrollView>
         </View>
+        {Platform.OS === "android" ? <AndroidKeyboardSpacer active={visible} /> : null}
       </KeyboardAvoidingView>
     </Modal>
   );

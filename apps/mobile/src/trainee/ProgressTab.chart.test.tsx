@@ -85,3 +85,31 @@ describe("weightSeriesLast12Weeks", () => {
     expect(series).toEqual([{ date: ymd, value: 81 }]);
   });
 });
+
+const { formatChartTick, weightChartBox } = await import("./ProgressTab");
+
+describe("formatChartTick", () => {
+  it("shows the full value: whole numbers bare, halves with one decimal", () => {
+    expect(formatChartTick(77)).toBe("77");
+    expect(formatChartTick(76.5)).toBe("76.5");
+    expect(formatChartTick(76.04)).toBe("76");
+    expect(formatChartTick(100.25)).toBe("100.3");
+  });
+});
+
+describe("weightChartBox (Z14-9)", () => {
+  const labels = ["104.5", "98", "91.5"];
+  for (const width of [320 - 32, 360 - 32, 393 - 32, 430 - 32]) {
+    it(`keeps every y label inside the SVG at ${width} pt`, () => {
+      const box = weightChartBox(width, labels);
+      // Labels are right-aligned at labelX; their left edge stays right of the plot.
+      expect(box.labelX).toBeLessThanOrEqual(width);
+      expect(box.labelLeft).toBeGreaterThanOrEqual(box.plotRight);
+      expect(box.plotWidth).toBeGreaterThan(150);
+      expect(box.plotRight).toBeLessThan(width);
+    });
+  }
+  it("reserves more room for longer labels", () => {
+    expect(weightChartBox(300, ["100.5"]).padRight).toBeGreaterThan(weightChartBox(300, ["77"]).padRight);
+  });
+});

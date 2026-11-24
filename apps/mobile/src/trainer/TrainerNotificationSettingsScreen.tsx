@@ -6,12 +6,12 @@ import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { NotificationPreferences } from "@fitbud/contracts";
 import { semantic } from "@fitbud/tokens";
 import { colors, spacing } from "@fitbud/ui-mobile";
-import * as Notifications from "expo-notifications";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Snackbar } from "../components/Snackbar";
 import { reportError } from "../lib/reportError";
 import { requestPushPermission } from "../notifications/register";
+import { usePushPermission } from "../notifications/usePushPermission";
 import { PrimaryButton } from "../components/PrimaryButton";
 import { Screen } from "../components/Screen";
 import { QuietHoursScreen } from "../trainee/settings/QuietHoursScreen";
@@ -103,9 +103,7 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
   const [offline, setOffline] = useState(false);
   const [snack, setSnack] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [osPermission, setOsPermission] = useState<
-    "granted" | "denied" | "undetermined"
-  >("undetermined");
+  const { state: osPermission, refresh: refreshPermission } = usePushPermission();
   const [quietOpen, setQuietOpen] = useState(false);
 
   const load = useCallback(async () => {
@@ -124,9 +122,6 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
 
   useEffect(() => {
     void load();
-    void Notifications.getPermissionsAsync().then((settings) => {
-      setOsPermission(settings.status);
-    });
   }, [load]);
 
   // Optimistic: the switch flips at once and goes back if the save fails
@@ -144,7 +139,7 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
     if (enabled && osPermission !== "granted") {
       // Android 13+ asks here (frame 54); a refusal leaves the switch off.
       const result = await requestPushPermission();
-      if (result === "granted") setOsPermission("granted");
+      if (result === "granted") void refreshPermission();
       else {
         if (result === "blocked") void Linking.openSettings();
         setSaving(false);
@@ -218,7 +213,7 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
         <Text style={styles.muted}>Loading…</Text>
       ) : (
         <View style={styles.stack}>
-          {osPermission !== "granted" ? (
+          {osPermission === "denied" || osPermission === "undetermined" ? (
             <View style={styles.statusCard}>
               <Text style={styles.statusTitle}>
                 Notifications: Off in phone settings

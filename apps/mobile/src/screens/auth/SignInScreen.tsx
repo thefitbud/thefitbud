@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { Linking, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { Mail } from "lucide-react-native";
 import { Button } from "../../components/Button";
 import { ErrorBanner } from "../../components/ErrorBanner";
 import { Field } from "../../components/Field";
 import { Text } from "../../components/Text";
-import { legalUrl } from "../../lib/legalLinks";
 import { wrongPasswordCopy, type AuthErrorKind } from "../../lib/authErrors";
 import { createThemedStyles, useTheme } from "../../providers/ThemeProvider";
+import { LegalEntryLinks, useLegalDocument } from "../LegalDocumentScreen";
 import {
   AuthPage,
   InlineError,
@@ -162,40 +162,14 @@ function CodeInsteadButton({ onPress }: { onPress: () => void }) {
 
 function SignInFooter() {
   const styles = useStyles();
+  const legal = useLegalDocument();
   return (
     <View style={styles.footer}>
       <Text tone="ink3" style={styles.footerText}>
         New to FitBud? Open the invite link your coach sent you.
       </Text>
-      <View style={styles.legal}>
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel="Terms of use, opens in your browser"
-          style={styles.legalLink}
-          onPress={() => {
-            void Linking.openURL(legalUrl("/terms"));
-          }}
-        >
-          <Text tone="ink3" style={styles.footerText}>
-            Terms
-          </Text>
-        </Pressable>
-        <Text tone="ink3" style={styles.footerText}>
-          ·
-        </Text>
-        <Pressable
-          accessibilityRole="link"
-          accessibilityLabel="Privacy policy, opens in your browser"
-          style={styles.legalLink}
-          onPress={() => {
-            void Linking.openURL(legalUrl("/privacy"));
-          }}
-        >
-          <Text tone="ink3" style={styles.footerText}>
-            Privacy
-          </Text>
-        </Pressable>
-      </View>
+      <LegalEntryLinks onOpen={legal.open} />
+      {legal.modal}
     </View>
   );
 }
@@ -203,6 +177,4 @@ function SignInFooter() {
 const useStyles = createThemedStyles(() => ({
   footer: { alignItems: "center", gap: 0 },
   footerText: { fontSize: 14, lineHeight: 19, textAlign: "center" },
-  legal: { alignItems: "center", flexDirection: "row", gap: 4 },
-  legalLink: { justifyContent: "center", minHeight: 44, paddingHorizontal: 4 },
 }));
