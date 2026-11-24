@@ -294,6 +294,25 @@ export const pushPayloadSchema = z
   .strict();
 export type PushPayload = z.infer<typeof pushPayloadSchema>;
 
+/**
+ * `payloadJson` of a `trainer_client_log_edited` notification (Z14-11,
+ * D-W14-23 b). Coaching detail lives here, in the stored inbox row the trainer
+ * reads; the push itself carries routing only (plus the shared lock-screen
+ * copy). `fields` names what changed.
+ */
+export const clientLogEditPayloadSchema = z.object({
+  entryId: uuidSchema,
+  action: z.enum(["edited", "removed"]),
+  mealName: z.string().min(1).max(120),
+  mealDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  fromKcal: z.number().int().nonnegative().nullable(),
+  toKcal: z.number().int().nonnegative().nullable(),
+  fromOutcome: z.string().min(1).max(32),
+  toOutcome: z.string().min(1).max(32).nullable(),
+  fields: z.array(z.enum(["outcome", "portion", "foods", "kcal", "note"])).max(5),
+});
+export type ClientLogEditPayload = z.infer<typeof clientLogEditPayloadSchema>;
+
 export const notificationSchema = z.object({
   id: uuidSchema,
   recipientUserId: uuidSchema,
@@ -315,6 +334,12 @@ export const notificationSchema = z.object({
    * Omitted for trainee reminders and multi-client digests.
    */
   clientDisplayName: z.string().min(1).max(320).optional(),
+  /**
+   * Z14-16: on a `trainer_client_log_edited` row, what the client changed or
+   * removed (from the stored payload), so the trainer inbox and bell show the
+   * shared copy and open the right day and meal. Never on other types.
+   */
+  logEdit: clientLogEditPayloadSchema.optional(),
   /**
    * Server display copy, stored when the notification was created (Z12-50).
    * Present on `activity_nudge`: title "{Coach first name} nudged you" and the
@@ -429,22 +454,3 @@ export const nudgeActivityResponseSchema = z.object({
   quietHoursEnd: z.string().nullable().optional(),
 });
 export type NudgeActivityResponse = z.infer<typeof nudgeActivityResponseSchema>;
-
-/**
- * `payloadJson` of a `trainer_client_log_edited` notification (Z14-11,
- * D-W14-23 b). Coaching detail lives here, in the stored inbox row the trainer
- * reads; the push itself carries routing only (plus the shared lock-screen
- * copy). `fields` names what changed.
- */
-export const clientLogEditPayloadSchema = z.object({
-  entryId: uuidSchema,
-  action: z.enum(["edited", "removed"]),
-  mealName: z.string().min(1).max(120),
-  mealDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  fromKcal: z.number().int().nonnegative().nullable(),
-  toKcal: z.number().int().nonnegative().nullable(),
-  fromOutcome: z.string().min(1).max(32),
-  toOutcome: z.string().min(1).max(32).nullable(),
-  fields: z.array(z.enum(["outcome", "portion", "foods", "kcal", "note"])).max(5),
-});
-export type ClientLogEditPayload = z.infer<typeof clientLogEditPayloadSchema>;

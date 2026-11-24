@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Pressable, View } from "react-native";
 import {
   Ban,
-  Bell,
   Check,
   ChevronLeft,
-  CircleAlert,
+  ChevronRight,
   CircleCheck,
-  ClipboardCheck,
-  Ellipsis,
-  Eye,
   Minus,
   WifiOff,
   X,
@@ -42,7 +44,6 @@ import {
   createThemedStyles,
   useTheme,
 } from "../providers/ThemeProvider";
-import { formatAttentionAge } from "./attentionCards";
 import { clientStatusApi } from "./clientStatus/api";
 import { labelFor } from "./labels";
 import {
@@ -50,7 +51,8 @@ import {
   coachingWeekNumber,
   type ReviewSheetCardModel,
 } from "./reviewSheetContent";
-import { MoreSheet } from "./sheets/MoreSheet";
+import { ReviewActions, type ReviewActionsState } from "./review/ReviewActions";
+import { ReviewCard } from "./review/ReviewCard";
 import { NoteSheet, type NoteSaveInput } from "./sheets/NoteSheet";
 import { NudgeSheet } from "./sheets/NudgeSheet";
 import { ResolveSheet, type ResolveOutcome } from "./sheets/ResolveSheet";
@@ -63,20 +65,20 @@ import {
   civilDayLine,
   endedBannerText,
   exceptionAgeMinutes,
-  exceptionFooterActions,
   exceptionHeaderSubtitle,
   exceptionReviewStatus,
-  exceptionStatusChipLabel,
   isNetworkFailure,
   isNotFound,
   offlineBannerText,
   resolvedBannerText,
   resolvedOutcomePhrase,
-  reviewedBannerText,
-  type ExceptionFooterAction,
+  notedStateLine,
   type ExceptionReviewStatus,
 } from "./sheets/exceptionStateContent";
-import { exceptionWeekModel, type ExceptionWeekModel } from "./sheets/exceptionWeek";
+import {
+  exceptionWeekModel,
+  type ExceptionWeekModel,
+} from "./sheets/exceptionWeek";
 import {
   isNudgeableExceptionType,
   nudgeTargetFromException,
@@ -195,12 +197,11 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
   const [resolveOpen, setResolveOpen] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [nudgeOpen, setNudgeOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
   // One idempotency key per composer session, reused when Save is retried.
   const noteKey = useRef<string | null>(null);
-  // One key per Mark reviewed / Resolve attempt, reused on a retry of the same press.
+  // One key per Noted / Resolve attempt, reused on a retry of the same press.
   const ackKey = useRef<string | null>(null);
   const resolveKey = useRef<string | null>(null);
 
@@ -225,7 +226,9 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.load", err);
         }
         setError(
-          userFacingMessage(err, { fallback: "Could not load exception. (EXC-LOAD)" }),
+          userFacingMessage(err, {
+            fallback: "Something went wrong on our side. Try again.",
+          }),
         );
       }
       setLoading(false);
@@ -266,7 +269,8 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
             };
           }
         } catch (err) {
-          if (!isNetworkFailure(err)) reportError("trainer.exception.source", err);
+          if (!isNetworkFailure(err))
+            reportError("trainer.exception.source", err);
         }
         return { workout: null, meal: null };
       })(),
@@ -282,14 +286,19 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
               toDate: weekTo,
             }),
           ]).catch((err: unknown) => {
-            if (!isNetworkFailure(err)) reportError("trainer.exception.week", err);
+            if (!isNetworkFailure(err))
+              reportError("trainer.exception.week", err);
             return null;
           }),
     ]);
     let info: ClientInfo | null = null;
     if (workspaceRead.ok) {
       const header = workspaceRead.workspace.header;
-      writeClientMeta(relationshipId, clientMetaFromWorkspaceHeader(header), cacheEpoch);
+      writeClientMeta(
+        relationshipId,
+        clientMetaFromWorkspaceHeader(header),
+        cacheEpoch,
+      );
       info = {
         name: header.traineeDisplayName,
         zone: header.traineeTimezone ?? null,
@@ -307,7 +316,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
         setOffline(true);
       } else {
         reportError("trainer.exception.workspace", workspaceRead.err);
-        setError("Could not check the client's status. (EXC-WS)");
+        setError("Couldn't check the client's status. Try again.");
       }
     }
     storeReviewItem(
@@ -347,7 +356,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
     void load();
   }, [load]);
 
-  async function markReviewed() {
+  async function noted() {
     setActing(true);
     setError(null);
     ackKey.current ??= createIdempotencyKey();
@@ -364,7 +373,34 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.acknowledge", err);
         }
         setError(
-          userFacingMessage(err, { fallback: "Could not mark reviewed. (ACK-ERR)" }),
+          userFacingMessage(err, {
+            fallback: "Something went wrong on our side. Try again.",
+          }),
+        );
+      }
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function undoNoted() {
+    setActing(true);
+    setError(null);
+    try {
+      await api.undoExceptionAcknowledge(exceptionId, createIdempotencyKey());
+      dropReviewItem(exceptionId);
+      await load();
+    } catch (err) {
+      if (isNetworkFailure(err)) {
+        setOffline(true);
+      } else {
+        if (!(err instanceof ApiClientError)) {
+          reportError("trainer.exception.undo", err);
+        }
+        setError(
+          userFacingMessage(err, {
+            fallback: "Something went wrong on our side. Try again.",
+          }),
         );
       }
     } finally {
@@ -380,7 +416,17 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
     setError(null);
     setResolveError(null);
     resolveKey.current ??= createIdempotencyKey();
+    ackKey.current ??= createIdempotencyKey();
     try {
+      // The API resolves an acknowledged item only: an item still open is
+      // noted first, as the review sheet does. Both calls reuse their keys.
+      if (
+        detail &&
+        (detail.status === "detected" || detail.status === "active")
+      ) {
+        await api.acknowledgeException(exceptionId, {}, ackKey.current);
+        ackKey.current = null;
+      }
       await api.resolveException(
         exceptionId,
         {
@@ -414,7 +460,9 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.resolve", err);
         }
         setResolveError(
-          userFacingMessage(err, { fallback: "Could not resolve. (RES-ERR)" }),
+          userFacingMessage(err, {
+            fallback: "Something went wrong on our side. Try again.",
+          }),
         );
       }
     } finally {
@@ -449,7 +497,9 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
           reportError("trainer.exception.note", err);
         }
         setNoteError(
-          userFacingMessage(err, { fallback: "Could not save note. (NOTE-ERR)" }),
+          userFacingMessage(err, {
+            fallback: "Something went wrong on our side. Try again.",
+          }),
         );
       }
     } finally {
@@ -463,9 +513,17 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
         <TopBar title={null} onBack={onBack} />
         <View style={styles.gone} testID="exception-not-found">
           <View style={styles.goneIcon}>
-            <CircleCheck size={32} color={theme.colors.ink} strokeWidth={1.75} />
+            <CircleCheck
+              size={32}
+              color={theme.colors.ink}
+              strokeWidth={1.75}
+            />
           </View>
-          <Text variant="title" style={styles.center} accessibilityRole="header">
+          <Text
+            variant="title"
+            style={styles.center}
+            accessibilityRole="header"
+          >
             {NOT_FOUND_TITLE}
           </Text>
           <Text variant="body" tone="ink2" style={styles.center}>
@@ -490,75 +548,45 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
   const first = firstNameOf(client?.name);
   const nudgeable = detail ? isNudgeableExceptionType(detail.type) : false;
   const live = coaching === "active" && status != null && status !== "resolved";
-  const footer =
-    detail && live ? exceptionFooterActions(status!, nudgeable) : null;
   const disabled = offline || acting;
   const title = detail ? labelFor("exception_type", detail.type) : null;
-
-  const runAction = (action: ExceptionFooterAction) => {
-    if (action === "markReviewed") void markReviewed();
-    else if (action === "nudge") setNudgeOpen(true);
-    else {
-      setResolveError(null);
-      resolveKey.current = null;
-      setResolveOpen(true);
-    }
+  const actionsState: ReviewActionsState | null =
+    status === "open"
+      ? "open"
+      : status === "reviewed"
+        ? "noted"
+        : status === "resolved"
+          ? "resolved"
+          : status === "ended"
+            ? "ended"
+            : null;
+  const openNudge = () => setNudgeOpen(true);
+  const openResolve = () => {
+    setResolveError(null);
+    resolveKey.current = null;
+    setResolveOpen(true);
   };
-  const footerButton = (action: ExceptionFooterAction, primary: boolean) => (
-    <Button
-      key={action}
-      label={
-        action === "markReviewed"
-          ? "Mark reviewed"
-          : action === "nudge"
-            ? "Nudge"
-            : "Resolve"
-      }
-      variant={primary ? "primary" : "secondary"}
-      icon={
-        action === "nudge" ? (
-          <Bell
-            size={20}
-            strokeWidth={1.75}
-            color={
-              disabled
-                ? theme.colors.ink4
-                : primary
-                  ? theme.colors.onBrand
-                  : theme.colors.ink
-            }
-          />
-        ) : undefined
-      }
-      disabled={disabled}
-      loading={acting && action === "markReviewed"}
-      onPress={() => runAction(action)}
-      testID={`exception-${action}`}
-      style={primary ? styles.footerPrimary : styles.footerSecondary}
-    />
-  );
+  const openNote = () => {
+    setNoteError(null);
+    noteKey.current = null;
+    setNoteOpen(true);
+  };
+  const stateLine =
+    detail && status === "resolved"
+      ? resolvedBannerText(
+          detail,
+          trainerZone,
+          undefined,
+          resolvedOutcomePhrase(resolvedOutcome, first),
+        )
+      : status === "reviewed"
+        ? notedStateLine(detail?.acknowledgedAt ?? null, trainerZone)
+        : null;
 
   return (
-    <Screen
-      v3
-      chrome="app"
-      title={title ?? "Exception"}
-      showHeader={false}
-      footer={
-        footer && (footer.primary || footer.secondary) ? (
-          <View style={styles.footerRow}>
-            {footer.secondary ? footerButton(footer.secondary, false) : null}
-            {footer.primary ? footerButton(footer.primary, true) : null}
-          </View>
-        ) : undefined
-      }
-    >
+    <Screen v3 chrome="app" title={title ?? "Exception"} showHeader={false}>
       <View testID="exception-review">
-        <TopBar
-          title={title}
-          onBack={onBack}
-          onMore={detail && live ? () => setMoreOpen(true) : undefined}
-        />
+        <TopBar title={title} onBack={onBack} />
 
         {offline ? (
           <StateBanner
@@ -576,25 +604,6 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
             tone="neutral"
             icon={(c) => <Ban size={20} color={c} strokeWidth={1.75} />}
             text={endedBannerText(first, client?.endedAt ?? null, trainerZone)}
-          />
-        ) : null}
-        {detail && status === "reviewed" && !offline ? (
-          <StateBanner
-            tone="neutral"
-            icon={(c) => <Eye size={20} color={c} strokeWidth={1.75} />}
-            text={reviewedBannerText(detail.acknowledgedAt, trainerZone)}
-          />
-        ) : null}
-        {detail && status === "resolved" ? (
-          <StateBanner
-            tone="done"
-            icon={(c) => <CircleCheck size={20} color={c} strokeWidth={1.75} />}
-            text={resolvedBannerText(
-              detail,
-              trainerZone,
-              undefined,
-              resolvedOutcomePhrase(resolvedOutcome, first),
-            )}
           />
         ) : null}
         {error ? <ErrorBanner message={error} /> : null}
@@ -615,10 +624,7 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
               subtitle={exceptionHeaderSubtitle({
                 goalShort: client?.goalShort ?? null,
                 weekNumber: coachingWeekNumber(client?.startedAt),
-                ageLabel:
-                  status === "resolved"
-                    ? null
-                    : formatAttentionAge(exceptionAgeMinutes(detail)),
+                ageLabel: null,
                 endedDay:
                   ended && client?.endedAt
                     ? civilDayLine(client.endedAt, trainerZone)
@@ -629,22 +635,43 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
             />
 
             {card ? (
-              <View style={[styles.card, ended ? styles.cardMuted : null]}>
-                <Text variant="label">What happened</Text>
-                <Text variant="headline" style={styles.cardTitle}>
-                  {card.title}
-                </Text>
-                {card.body ? (
-                  <Text variant="body" tone="ink2">
-                    {card.body}
-                  </Text>
-                ) : null}
-                <View style={styles.kv}>
-                  {card.planned ? <KvRow label="Planned" value={card.planned} /> : null}
-                  <KvRow label="Logged" value={card.logged} />
-                  {card.reminder ? <KvRow label="Reminder" value={card.reminder} /> : null}
-                </View>
-              </View>
+              <ReviewCard
+                card={card}
+                noted={status === "reviewed"}
+                resolved={status === "resolved"}
+                muted={ended}
+              />
+            ) : null}
+
+            {actionsState && (live || actionsState === "resolved") ? (
+              <ReviewActions
+                state={actionsState}
+                firstName={first}
+                remindable={nudgeable}
+                disabled={disabled}
+                acting={acting}
+                stateLine={stateLine}
+                onRemind={openNudge}
+                onNoted={() => {
+                  void noted();
+                }}
+                onResolve={openResolve}
+                onUndo={
+                  actionsState === "noted"
+                    ? () => {
+                        void undoNoted();
+                      }
+                    : undefined
+                }
+                onAddNote={openNote}
+                onWhatsApp={() => {
+                  // A wa.me chat with no template; the trainer sends it.
+                  void openContextualWhatsApp({
+                    phoneE164: client?.whatsappE164 ?? null,
+                  });
+                }}
+                testIdPrefix="exception"
+              />
             ) : null}
 
             {week && !ended ? <WeekCard week={week} /> : null}
@@ -675,23 +702,6 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
               void resolve(input);
             }}
           />
-          <MoreSheet
-            visible={moreOpen}
-            traineeDisplayName={client?.name ?? ""}
-            onDismiss={() => setMoreOpen(false)}
-            onAddNote={() => {
-              setNoteError(null);
-              noteKey.current = null;
-              setNoteOpen(true);
-            }}
-            onMessageOnWhatsApp={() => {
-              // A wa.me chat with no template (TM-04j); the trainer sends it.
-              void openContextualWhatsApp({
-                phoneE164: client?.whatsappE164 ?? null,
-              });
-            }}
-            onOpenProfile={() => onOpenClient(detail.coachingRelationshipId)}
-          />
           <NoteSheet
             visible={noteOpen}
             traineeDisplayName={client?.name ?? ""}
@@ -718,7 +728,11 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
         </>
       ) : null}
       {toast ? (
-        <Snackbar message={toast} leadingCheck onDismiss={() => setToast(null)} />
+        <Snackbar
+          message={toast}
+          leadingCheck
+          onDismiss={() => setToast(null)}
+        />
       ) : null}
     </Screen>
   );
@@ -727,11 +741,9 @@ function ExceptionReviewBody({ exceptionId, onBack, onOpenClient }: Props) {
 function TopBar({
   title,
   onBack,
-  onMore,
 }: {
   title: string | null;
   onBack: () => void;
-  onMore?: () => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -754,19 +766,7 @@ function TopBar({
       >
         {title ?? ""}
       </Text>
-      {onMore ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="More actions"
-          onPress={onMore}
-          style={[styles.topBtn, styles.moreBtn]}
-          testID="exception-more"
-        >
-          <Ellipsis size={22} color={theme.colors.ink} strokeWidth={2} />
-        </Pressable>
-      ) : (
-        <View style={styles.topBtn} />
-      )}
+      <View style={styles.topBtn} />
     </View>
   );
 }
@@ -793,85 +793,31 @@ function Identity({
       : severity === "critical"
         ? { bg: c.critTint, ink: c.crit }
         : { bg: c.warnTint, ink: c.warn };
-  const showSeverity = status === "open" || status === "reviewed";
   return (
     <View style={styles.identity}>
       <ClientAvatar
         name={name}
-        size={68}
-        fontSize={24}
-        fontWeight="700"
+        size={40}
+        fontSize={13}
+        fontWeight="600"
         tone={{ backgroundColor: avatar.bg, color: avatar.ink }}
         onPress={onOpenProfile}
       />
       <View style={styles.identityText}>
-        <ClientNameLink name={name} variant="title" onPress={onOpenProfile}>
-          {name}
-        </ClientNameLink>
-        {subtitle ? <Text variant="subhead">{subtitle}</Text> : null}
-        <View style={styles.tags}>
-          {showSeverity ? (
-            <Tag
-              label={labelFor("exception_severity", severity)}
-              bg={severity === "critical" ? c.critTint : c.warnTint}
-              ink={severity === "critical" ? c.crit : c.warn}
-              icon={(color) => <CircleAlert size={16} color={color} strokeWidth={2} />}
-            />
+        <View style={styles.nameRow}>
+          <ClientNameLink
+            name={name}
+            variant="headline"
+            onPress={onOpenProfile}
+          >
+            {name}
+          </ClientNameLink>
+          {onOpenProfile ? (
+            <ChevronRight size={16} color={c.ink3} strokeWidth={2} />
           ) : null}
-          <Tag
-            label={exceptionStatusChipLabel(status)}
-            bg={status === "resolved" ? c.doneTint : c.fill}
-            ink={status === "resolved" ? c.done : c.ink2}
-            icon={(color) =>
-              status === "resolved" ? (
-                <Check size={16} color={color} strokeWidth={2.25} />
-              ) : status === "reviewed" ? (
-                <Eye size={16} color={color} strokeWidth={2} />
-              ) : status === "ended" ? (
-                <Ban size={16} color={color} strokeWidth={2} />
-              ) : (
-                <ClipboardCheck size={16} color={color} strokeWidth={2} />
-              )
-            }
-          />
         </View>
+        {subtitle ? <Text variant="caption">{subtitle}</Text> : null}
       </View>
-    </View>
-  );
-}
-
-function Tag({
-  label,
-  bg,
-  ink,
-  icon,
-}: {
-  label: string;
-  bg: string;
-  ink: string;
-  icon: (color: string) => ReactNode;
-}) {
-  const styles = useStyles();
-  return (
-    <View style={[styles.tag, { backgroundColor: bg }]}>
-      {icon(ink)}
-      <Text variant="bodyStrong" style={[styles.tagText, { color: ink }]}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function KvRow({ label, value }: { label: string; value: string }) {
-  const styles = useStyles();
-  return (
-    <View style={styles.kvRow}>
-      <Text variant="body" tone="ink2">
-        {label}
-      </Text>
-      <Text variant="bodyStrong" style={styles.kvValue}>
-        {value}
-      </Text>
     </View>
   );
 }
@@ -1053,7 +999,13 @@ const useStyles = createThemedStyles((t) => ({
   },
   avatarText: { fontSize: 24, fontWeight: "700" },
   identityText: { flex: 1, gap: 2 },
-  tags: { flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm, marginTop: t.spacing.xs },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 2 },
+  tags: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: t.spacing.sm,
+    marginTop: t.spacing.xs,
+  },
   tag: {
     alignItems: "center",
     borderRadius: t.radii.tag,
@@ -1102,7 +1054,11 @@ const useStyles = createThemedStyles((t) => ({
     justifyContent: "center",
     width: 36,
   },
-  weekTotals: { flexDirection: "row", gap: t.spacing.xl, marginTop: t.spacing.sm },
+  weekTotals: {
+    flexDirection: "row",
+    gap: t.spacing.xl,
+    marginTop: t.spacing.sm,
+  },
   footerRow: { flexDirection: "row", gap: t.spacing.md },
   footerSecondary: { flex: 1 },
   footerPrimary: { flex: 1.25 },

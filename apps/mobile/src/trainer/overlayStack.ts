@@ -13,6 +13,7 @@
 export type OverlayKind =
   | "exception"
   | "client"
+  | "clientDiet"
   | "checkin"
   | "ask"
   | "session"

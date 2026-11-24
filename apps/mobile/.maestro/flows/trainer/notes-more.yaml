@@ -37,17 +37,15 @@ env:
     timeout: 20000
 - tapOn: "Add note"
 - extendedWaitUntil:
-    visible: "Save note"
+    visible: "Note for .*"
     timeout: 10000
-- tapOn: "Note"
+# Z14-24: one note sheet (Cancel / Save, "Only me" by default); the field has focus.
 - inputText: "QA nightly note. Safe to delete."
-# Dismiss the keyboard by tapping inert text: the "Coach notes" section title is a
-# plain Text inside Screen's keyboardShouldPersistTaps="handled" ScrollView
-# (ClientStatusScreen.tsx). hideKeyboard cannot dismiss the iOS keyboard (Z5-5, #241).
-- tapOn: "Coach notes"
 - takeScreenshot: trainer-notes__composer
 - runFlow: ../../common/assert-no-crash.yaml
-- tapOn: "Save note"
+# Save is in the sheet header, above the keyboard.
+- tapOn:
+    id: "note-save"
 - extendedWaitUntil:
     visible: "Note saved"
     timeout: 20000

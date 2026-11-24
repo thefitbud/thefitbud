@@ -58,15 +58,13 @@ export function resolvedOutcomePhrase(
   return null;
 }
 
-/** TM-04e banner: Mark reviewed keeps the item open in Needs you. */
-export function reviewedBannerText(
+/** State line on a noted item (RP-02): the item stays open until resolved. */
+export function notedStateLine(
   acknowledgedAt: string | null,
   timeZone: string,
 ): string {
   const at = acknowledgedAt ? formatClockTime(acknowledgedAt, timeZone) : "";
-  return at
-    ? `Reviewed by you at ${at}. It stays in Needs you until it's resolved.`
-    : "Reviewed by you. It stays in Needs you until it's resolved.";
+  return at ? `Noted by you at ${at} · still open` : "Noted · still open";
 }
 
 /** TM-04i banner. */
@@ -89,7 +87,7 @@ export function endedBannerText(
  */
 export function offlineBannerText(hasItem: boolean): string {
   return hasItem
-    ? "You're offline. Reviewing and nudging need a connection."
+    ? "You're offline. Reviewing and reminding need a connection."
     : "You're offline. Reconnect and try again.";
 }
 
@@ -100,7 +98,7 @@ export function offlineBannerText(hasItem: boolean): string {
 export const NOT_FOUND_TITLE = "This item is no longer available";
 export const NOT_FOUND_BODY =
   "It may have been resolved elsewhere or replaced by a plan change. Nothing else to do here.";
-export const BACK_TO_NEEDS_YOU = "Back to Needs you";
+export const BACK_TO_NEEDS_YOU = "Back to Attention";
 
 /** Header subtitle: "Fat loss · week 6 · since 5 d", or "Fat loss · ended 30 Oct". */
 export function exceptionHeaderSubtitle(input: {
@@ -134,14 +132,6 @@ export function exceptionReviewStatus(
   return "open";
 }
 
-/** Status chip label (TM-04a Open, TM-04e Reviewed, TM-04f Resolved, TM-04i Ended). */
-export function exceptionStatusChipLabel(status: ExceptionReviewStatus): string {
-  if (status === "reviewed") return "Reviewed";
-  if (status === "resolved") return "Resolved";
-  if (status === "ended") return "Ended";
-  return "Open";
-}
-
 /** Minutes since the item was raised, for the "since 5 d" fragment. */
 export function exceptionAgeMinutes(
   detail: Pick<ExceptionDetail, "activatedAt" | "detectedAt">,
@@ -150,30 +140,4 @@ export function exceptionAgeMinutes(
   const from = Date.parse(detail.activatedAt ?? detail.detectedAt);
   if (!Number.isFinite(from)) return 0;
   return Math.max(0, Math.round((nowMs - from) / 60000));
-}
-
-export type ExceptionFooterAction = "markReviewed" | "nudge" | "resolve";
-
-/**
- * TM-04a / TM-04e footer: open items offer Mark reviewed and Nudge (Nudge
- * primary); reviewed items offer Nudge and Resolve (Resolve primary). The API
- * resolves only an acknowledged item, so an open item has no Resolve here.
- * Items that cannot be nudged (logged meals, skips) drop the Nudge button.
- * Resolved and ended items have no footer.
- */
-export function exceptionFooterActions(
-  status: ExceptionReviewStatus,
-  nudgeable: boolean,
-): { secondary: ExceptionFooterAction | null; primary: ExceptionFooterAction | null } {
-  if (status === "open") {
-    return nudgeable
-      ? { secondary: "markReviewed", primary: "nudge" }
-      : { secondary: null, primary: "markReviewed" };
-  }
-  if (status === "reviewed") {
-    return nudgeable
-      ? { secondary: "nudge", primary: "resolve" }
-      : { secondary: null, primary: "resolve" };
-  }
-  return { secondary: null, primary: null };
 }

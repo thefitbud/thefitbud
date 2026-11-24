@@ -1,4 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// copy.ts reads the v2 channel ids from androidChannels.ts, which imports the native modules.
+vi.mock("react-native", () => ({ Platform: { OS: "android" } }));
+vi.mock("expo-notifications", () => ({
+  setNotificationChannelAsync: vi.fn(),
+  deleteNotificationChannelAsync: vi.fn(),
+  AndroidImportance: { DEFAULT: 3, HIGH: 4 },
+}));
+
 import { notificationTypeSchema, type Notification, type NotificationType } from "@fitbud/contracts";
 import {
   PUSH_BODY_MAX,
@@ -12,6 +21,10 @@ import {
   notificationRowBody,
   notificationRowTitle,
 } from "./copy";
+import {
+  ANDROID_CHANNEL_ID_BY_GROUP,
+  LEGACY_ANDROID_CHANNEL_IDS,
+} from "./androidChannels";
 
 const base: Notification = {
   id: "11111111-1111-4111-8111-111111111111",
@@ -100,6 +113,45 @@ describe("notificationRowTitle", () => {
         ),
       ).toBe(title);
     }
+  });
+
+  it("uses the shared copy for a client's meal-log change (Z14-16)", () => {
+    const edit = {
+      entryId: "99999999-9999-4999-8999-999999999999",
+      action: "edited" as const,
+      mealName: "Lunch",
+      mealDate: "2026-11-14",
+      fromKcal: 610,
+      toKcal: 690,
+      fromOutcome: "modified",
+      toOutcome: "modified",
+      fields: ["portion" as const],
+    };
+    const row = {
+      ...base,
+      type: "trainer_client_log_edited" as const,
+      notificationType: "trainer_client_log_edited" as const,
+      clientDisplayName: "Aarav Mehta",
+      logEdit: edit,
+    };
+    const context = { today: "2026-11-14" };
+    expect(notificationRowTitle(row, context)).toBe("Aarav edited lunch");
+    expect(notificationRowBody(row, context)).toBe("610 → 690 kcal · changed portion");
+    expect(notificationRowTitle(row, { today: "2026-11-16" })).toBe(
+      "Aarav edited lunch · Sat 14 Nov",
+    );
+    const removed = {
+      ...row,
+      logEdit: { ...edit, action: "removed" as const, toKcal: null, toOutcome: null, fields: [] },
+    };
+    expect(notificationRowTitle(removed, context)).toBe("Aarav removed their lunch log");
+    expect(notificationRowBody(removed, context)).toBe(
+      "Today · was 610 kcal. It's back to not logged.",
+    );
+    // An older row without the payload keeps a plain line.
+    expect(notificationRowTitle({ ...row, logEdit: undefined })).toBe(
+      "Aarav changed a meal log",
+    );
   });
 
   it("does not show a raw enum when the client name is missing", () => {
@@ -239,7 +291,13 @@ describe("every push type reads well on the lock screen (Z12-47, TR-15c, TM-13a)
     }
     const categories = new Set<string>();
     for (const group of PUSH_GROUPS) {
-      expect(group.channelId).toBe(group.id);
+      // Z14-6 deleted the old ids; the group's channel is the v2 id the app creates.
+      expect(group.channelId).toBe(ANDROID_CHANNEL_ID_BY_GROUP[group.id]);
+      expect(LEGACY_ANDROID_CHANNEL_IDS as readonly string[]).not.toContain(
+        group.channelId,
+      );
+      expect(pushGroupFor("meal_reminder").channelId).toBe("meal_v2");
+      expect(pushGroupFor("trainer_client_log_edited").channelId).toBe("clients_v2");
       // Expo category ids cannot contain ":" or "-".
       expect(group.categoryId).toMatch(/^[a-z_]+$/);
       expect(group.summary).toMatch(/^%u more /);

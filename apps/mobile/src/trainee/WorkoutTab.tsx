@@ -66,6 +66,7 @@ import {
   type EffectivePlanState,
 } from "./TodayTab";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
+import { saveWorkoutRating } from "./workout/rpeRating";
 import {
   durationMinutesFromExecution,
   elapsedSeconds,
@@ -266,6 +267,9 @@ export function WorkoutTab({
     useState<WorkoutAssignment | null>(null);
   const [summaryExecution, setSummaryExecution] =
     useState<WorkoutExecution | null>(null);
+  // True when the summary shows a workout that was already finished (View
+  // summary, W-17c): read-only with Done, never "Save and share" (Z14-12).
+  const [summaryIsView, setSummaryIsView] = useState(false);
   const [actingId, setActingId] = useState<string | null>(null);
   /**
    * In-flight locks (Z14-8). `actingId` disables the buttons from the next
@@ -647,6 +651,7 @@ export function WorkoutTab({
     try {
       const execution = await api.getWorkoutExecution(assignment.execution.id);
       setActiveAssignment(assignment);
+      setSummaryIsView(true);
       setSummaryExecution(
         enrichExecutionFromAssignmentDay(execution, assignment),
       );
@@ -794,6 +799,18 @@ export function WorkoutTab({
         timeZone={timeZone}
         today={today}
         offline={offline}
+        mode={summaryIsView ? "view" : "after_finish"}
+        // One rating change (Z14-12, D-W14-20). The version is read from the
+        // server after the finish landed, never guessed (fix round 1).
+        onSaveRpe={(rpe, progress) =>
+          saveWorkoutRating({
+            sync,
+            api,
+            executionId: summaryExecution.id,
+            rpe,
+            progress,
+          })
+        }
         onDone={() => {
           markFinished(summaryExecution);
           setSummaryExecution(null);
@@ -880,6 +897,7 @@ export function WorkoutTab({
         onFinished={(execution) => {
           setActiveAssignment(sessionAssignment ?? null);
           closeActiveSession(relationship.id);
+          setSummaryIsView(false);
           setSummaryExecution(execution);
         }}
         onExit={() => {
@@ -1070,6 +1088,7 @@ export function WorkoutTab({
           onFinished={(execution, assignment) => {
             closeActiveSession(relationship.id);
             setActiveAssignment(assignment);
+            setSummaryIsView(false);
             setSummaryExecution(execution);
           }}
           onDiscarded={() => {

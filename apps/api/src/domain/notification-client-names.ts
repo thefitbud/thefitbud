@@ -1,6 +1,6 @@
 import { inArray } from "drizzle-orm";
 import { isTrainerClientNotificationType } from "@fitbud/core";
-import type { NotificationType } from "@fitbud/contracts";
+import { clientLogEditPayloadSchema, type NotificationType } from "@fitbud/contracts";
 import type { Db } from "../db/client.js";
 import { coachingRelationships, traineeProfiles } from "../db/schema.js";
 import { mapNotification } from "./mappers.js";
@@ -27,6 +27,7 @@ type NamedNotificationRow = {
   dedupeKey: string;
   createdAt: string;
   readAt: string | null;
+  payloadJson?: string | null;
 };
 
 export async function traineeDisplayNamesByRelationship(
@@ -90,10 +91,27 @@ export async function presentNotifications(
       return mapped;
     }
     const clientDisplayName = names.get(row.coachingRelationshipId)?.trim();
-    if (!clientDisplayName) return mapped;
+    // Z14-16: a client's meal-log change carries its stored payload, so the
+    // inbox and bell can show the shared copy and open the day and meal.
+    const logEdit =
+      row.notificationType === "trainer_client_log_edited"
+        ? parseLogEdit(row.payloadJson)
+        : undefined;
+    const withEdit = logEdit ? { ...mapped, logEdit } : mapped;
+    if (!clientDisplayName) return withEdit;
     return {
-      ...mapped,
+      ...withEdit,
       clientDisplayName: clientDisplayName.slice(0, 320),
     };
   });
+}
+
+function parseLogEdit(json: string | null | undefined) {
+  if (!json) return undefined;
+  try {
+    const parsed = clientLogEditPayloadSchema.safeParse(JSON.parse(json));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
 }
