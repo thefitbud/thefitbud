@@ -6,6 +6,8 @@ import {
   type WorkspaceActivityType,
 } from "@fitbud/contracts";
 import {
+  mealEditedByLine,
+  mealWasLine,
   addDaysToLocalDate,
   dayMacrosFromScaledItems,
   formatCivilDate,
@@ -317,4 +319,43 @@ export function parseItemParam(
   const match = /^(meal|workout):([0-9a-f-]{36})$/i.exec(raw.trim());
   if (!match) return null;
   return { type: match[1]!.toLowerCase() as "meal" | "workout", id: match[2]! };
+}
+
+type ClientEditFields = {
+  lastEditedByRole?: "trainee" | "coach" | null;
+  lastEditedAt?: string | null;
+  updatedAt: string;
+  previousValue?: {
+    outcome: string;
+    deviationKind: string | null;
+    kcal: number | null;
+  } | null;
+};
+
+/** Z14-16 (D-W14-23 a): the client changed this entry; a coach edit is not this. */
+export function isClientEdited(
+  compliance: Pick<ClientEditFields, "lastEditedByRole"> | null | undefined,
+): boolean {
+  return compliance?.lastEditedByRole === "trainee";
+}
+
+/**
+ * The two quiet lines of the meal panel for a client's edit (TM-09f):
+ * "Edited by Aarav · Sat 14 Nov, 2:05 pm" and "Was 610 kcal · as planned".
+ * Null for an entry the client never edited, and for a coach edit.
+ */
+export function clientEditLines(
+  compliance: ClientEditFields | null | undefined,
+  clientName: string,
+  clientTimezone: string,
+): { by: string; was: string | null } | null {
+  if (!compliance || !isClientEdited(compliance)) return null;
+  return {
+    by: mealEditedByLine({
+      clientName,
+      editedAt: compliance.lastEditedAt ?? compliance.updatedAt,
+      zone: clientTimezone,
+    }),
+    was: compliance.previousValue ? mealWasLine(compliance.previousValue) : null,
+  };
 }

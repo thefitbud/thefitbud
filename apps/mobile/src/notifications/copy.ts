@@ -15,6 +15,8 @@ export type NotificationCopyContext = {
   clientName?: string | null;
   /** Lock screen only. The inbox keeps the full sentence. */
   hideLockDetails?: boolean;
+  /** Civil date today in the trainer's zone: names the meal day in a log-edit title. */
+  today?: string | null;
 };
 
 /**
@@ -181,15 +183,12 @@ export function notificationRowTitle(
     case "trainer_intake_submitted":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
       return trainerNotificationCopy(
         type,
         trainerClientName(notification, context),
+        { logEdit: notification.logEdit, today: context.today },
       ).title;
-    case "trainer_client_log_edited": {
-      // Z14-11 fallback; the shared copy ("{First} edited lunch") arrives with Z14-16.
-      const client = trainerClientName(notification, context);
-      return client ? `${client} changed a meal log` : "A client changed a meal log";
-    }
     case "trainer_critical_digest":
       return "Clients need attention";
     case "admin_whatsapp_budget":
@@ -245,9 +244,11 @@ export function notificationRowBody(
     case "trainer_intake_submitted":
     case "trainer_renewal":
     case "trainer_meal_times_changed":
+    case "trainer_client_log_edited":
       return trainerNotificationCopy(
         notification.type,
         trainerClientName(notification, context),
+        { logEdit: notification.logEdit, today: context.today },
       ).body;
     case "trainer_critical_digest":
       return "Open Attention to see who needs you.";
@@ -279,29 +280,46 @@ export type PushGroupId =
 
 export type PushGroup = {
   id: PushGroupId;
-  /** Android channel id (androidChannels.ts registers every one). */
-  channelId: PushGroupId;
+  /** Android channel id: the v2 id (Z14-6), never the deleted old one. */
+  channelId: string;
   /** iOS category id: letters and underscores only (Expo rejects ":" and "-"). */
   categoryId: string;
   /** iOS stack summary, "%u" = the number of other notifications. */
   summary: string;
 };
 
+/**
+ * The v2 Android channel ids (Z14-6): the same table as
+ * `ANDROID_CHANNEL_ID_BY_GROUP` in androidChannels.ts, repeated here because that
+ * file imports the native modules and this one is read by node-only code and
+ * tests. `copy.test.ts` fails if the two tables differ.
+ */
+const ANDROID_CHANNEL_ID_BY_GROUP: Readonly<Record<PushGroupId, string>> = {
+  workout: "workout_v2",
+  meal: "meal_v2",
+  checkin: "checkin_v2",
+  summary: "summary",
+  coach: "coach_v2",
+  plan: "plan_v2",
+  account: "account_v2",
+  clients: "clients_v2",
+};
+
 const GROUPS: Record<PushGroupId, PushGroup> = {
   meal: {
     id: "meal",
-    channelId: "meal",
+    channelId: ANDROID_CHANNEL_ID_BY_GROUP.meal,
     // The meal category also carries the Open and Snooze 30 min buttons.
     categoryId: "meal_actions",
     summary: "%u more meal reminders",
   },
-  workout: { id: "workout", channelId: "workout", categoryId: "fitbud_workout", summary: "%u more workout reminders" },
-  checkin: { id: "checkin", channelId: "checkin", categoryId: "fitbud_checkin", summary: "%u more check-in reminders" },
-  summary: { id: "summary", channelId: "summary", categoryId: "fitbud_summary", summary: "%u more daily summaries" },
-  coach: { id: "coach", channelId: "coach", categoryId: "fitbud_coach", summary: "%u more from your coach" },
-  plan: { id: "plan", channelId: "plan", categoryId: "fitbud_plan", summary: "%u more plan updates" },
-  account: { id: "account", channelId: "account", categoryId: "fitbud_account", summary: "%u more coaching updates" },
-  clients: { id: "clients", channelId: "clients", categoryId: "fitbud_clients", summary: "%u more client updates" },
+  workout: { id: "workout", channelId: ANDROID_CHANNEL_ID_BY_GROUP.workout, categoryId: "fitbud_workout", summary: "%u more workout reminders" },
+  checkin: { id: "checkin", channelId: ANDROID_CHANNEL_ID_BY_GROUP.checkin, categoryId: "fitbud_checkin", summary: "%u more check-in reminders" },
+  summary: { id: "summary", channelId: ANDROID_CHANNEL_ID_BY_GROUP.summary, categoryId: "fitbud_summary", summary: "%u more daily summaries" },
+  coach: { id: "coach", channelId: ANDROID_CHANNEL_ID_BY_GROUP.coach, categoryId: "fitbud_coach", summary: "%u more from your coach" },
+  plan: { id: "plan", channelId: ANDROID_CHANNEL_ID_BY_GROUP.plan, categoryId: "fitbud_plan", summary: "%u more plan updates" },
+  account: { id: "account", channelId: ANDROID_CHANNEL_ID_BY_GROUP.account, categoryId: "fitbud_account", summary: "%u more coaching updates" },
+  clients: { id: "clients", channelId: ANDROID_CHANNEL_ID_BY_GROUP.clients, categoryId: "fitbud_clients", summary: "%u more client updates" },
 };
 
 export const PUSH_GROUPS: readonly PushGroup[] = Object.values(GROUPS);
@@ -383,6 +401,8 @@ export function notificationTypeIcon(type: NotificationType): string {
       return "!";
     case "trainer_meal_times_changed":
       return "🕐";
+    case "trainer_client_log_edited":
+      return "✎";
     case "admin_whatsapp_budget":
       return "⚙";
     default:

@@ -1,13 +1,14 @@
 /**
  * TM-12a: trainer diet-day review — planned vs actual per meal, day ring + macros.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import {
   Check,
   ChevronLeft,
   ChevronRight,
   Clock,
+  Pencil,
   RefreshCw,
   UtensilsCrossed,
 } from "lucide-react-native";
@@ -37,6 +38,7 @@ import {
   createThemedStyles,
   useTheme,
 } from "../../providers/ThemeProvider";
+import { isClientEdited } from "../activity/model";
 import { DietMealSheet } from "./DietMealSheet";
 import {
   dietMealBadge,
@@ -55,6 +57,12 @@ type Props = {
   whatsappE164?: string | null;
   /** Civil date to open on (defaults to today in the client's zone). */
   initialDate?: string;
+  /**
+   * Z14-16: open the meal sheet on the entry (a meal compliance id) once the
+   * day loads, e.g. from a "client edited a meal" notification. An entry that is
+   * no longer on the day (removed) opens the day with nothing selected.
+   */
+  initialEntryId?: string | null;
   onBack: () => void;
 };
 
@@ -182,6 +190,7 @@ export function DietDayReviewScreen({
   clientZone,
   whatsappE164,
   initialDate,
+  initialEntryId,
   onBack,
 }: Props) {
   const theme = useTheme();
@@ -223,6 +232,14 @@ export function DietDayReviewScreen({
     setLoading(true);
     void load();
   }, [load]);
+
+  const entryOpened = useRef(false);
+  useEffect(() => {
+    if (!initialEntryId || entryOpened.current || !meals) return;
+    entryOpened.current = true;
+    const match = meals.find((meal) => meal.compliance?.id === initialEntryId);
+    if (match) setPicked(match);
+  }, [initialEntryId, meals]);
 
   const dayMeals = useMemo(
     () =>
@@ -404,6 +421,17 @@ export function DietDayReviewScreen({
                     {badge.label}
                   </Text>
                 </View>
+                {isClientEdited(meal.compliance) ? (
+                  <View
+                    style={[styles.mealBadge, { backgroundColor: theme.colors.fill }]}
+                    testID="diet-meal-edited-tag"
+                  >
+                    <Pencil size={12} strokeWidth={2.2} color={theme.colors.ink2} />
+                    <Text style={[styles.mealBadgeText, { color: theme.colors.ink2 }]}>
+                      Edited
+                    </Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={styles.mealKcal}>
                 {logged != null
@@ -420,6 +448,7 @@ export function DietDayReviewScreen({
         meal={picked}
         displayName={name}
         whatsappE164={whatsappE164}
+        clientZone={clientZone}
         onDismiss={() => setPicked(null)}
         onAddNote={() => setNoteOpen(true)}
       />

@@ -247,8 +247,9 @@ describe("WorkoutTab pendingSummaryExecutionId (Z10-20, D-W10-9)", () => {
       />,
     );
     expect(
-      await screen.findByRole("button", { name: "Save and share with Rahul" }, { timeout: 5000 }),
+      await screen.findByRole("button", { name: "Done" }, { timeout: 5000 }),
     ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save and share with Rahul" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Notifications" })).toBeNull();
     await waitFor(() => expect(consumed).toHaveBeenCalledTimes(1));
   });
@@ -308,9 +309,9 @@ describe("WorkoutTab after a finish, before the reload answers (Z12-44 review)",
         pendingSummaryExecutionId={uuid(8001)}
       />,
     );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Save and share with Rahul" }, { timeout: 5000 }),
-    );
+    // View summary is read-only with one Done (Z14-12), never "Save and share".
+    expect(await screen.findByRole("button", { name: "Done" }, { timeout: 5000 })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Save and share with Rahul" })).toBeNull();
     // Leaving the summary reloads the week; hold that read in flight.
     let release!: () => void;
     holdList = new Promise<void>((resolve) => {
@@ -355,9 +356,7 @@ describe("WorkoutTab after a finish, before the reload answers (Z12-44 review)",
         pendingSummaryExecutionId={uuid(8001)}
       />,
     );
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Save and share with Rahul" }, { timeout: 5000 }),
-    );
+    expect(await screen.findByRole("button", { name: "Done" }, { timeout: 5000 })).toBeTruthy();
     let release!: () => void;
     holdList = new Promise<void>((resolve) => {
       release = resolve;

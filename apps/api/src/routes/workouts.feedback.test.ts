@@ -511,6 +511,39 @@ describe("the trainee rates a finished workout for 48 hours (Z14-11)", () => {
     expect(row!.sessionRpe).toBe(8);
   });
 
+  it("tolerates a 5-minute device clock skew before finishing: 1 s and 4 min early are applied, 6 min early is refused", async () => {
+    const cases = [
+      { id: "fb9a", n: 91, early: 1_000, status: "applied" },
+      { id: "fb9b", n: 92, early: 4 * 60_000, status: "applied" },
+      { id: "fb9c", n: 93, early: 6 * 60_000, status: "rejected" },
+    ] as const;
+    for (const { id, n, early, status } of cases) {
+      const { trainee, execution, completedAt } = await finished(id);
+      vi.setSystemTime(Date.parse(completedAt) + 2_000);
+      const madeAt = new Date(Date.parse(completedAt) - early).toISOString();
+      const [result] = await push(trainee, [
+        mutationAt(
+          n,
+          "workout.feedback",
+          execution.id,
+          { executionId: execution.id, body: { rpe: 7, recordVersion: execution.recordVersion } },
+          madeAt,
+        ),
+      ]);
+      expect(result!.status).toBe(status);
+      const [row] = await db
+        .select()
+        .from(schema.workoutExecutions)
+        .where(eq(schema.workoutExecutions.id, execution.id));
+      if (status === "applied") {
+        expect(row!.sessionRpe).toBe(7);
+      } else {
+        expect(result).toMatchObject({ error: { code: "FEEDBACK_EDIT_WINDOW_CLOSED" } });
+        expect(row!.sessionRpe).toBeNull();
+      }
+    }
+  });
+
   it("refuses a note (or any unknown key) instead of silently dropping it, over REST and sync", async () => {
     const { trainee, execution } = await finished("fb8");
     const rest = await patchFeedback(trainee, execution.id, {

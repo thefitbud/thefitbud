@@ -35,6 +35,13 @@ const FRAME_ROWS: Array<{
     description: "As they arrive.",
   },
   {
+    // Z14-16 (D-W14-23 c): on by default; off means no push and no inbox row,
+    // and the Edited/Removed tags still show in Activity.
+    key: "clientLogEdits",
+    label: "Client log edits",
+    description: "When a client edits or removes a meal log.",
+  },
+  {
     key: "intakeSubmitted",
     label: "Intake submitted",
     description: "As they arrive.",
@@ -110,7 +117,7 @@ export function NotificationSettingsPage() {
       setQuietEnd(end);
       setQuietOn(true);
       if (result.trainerCategories) {
-        setCategories(result.trainerCategories);
+        setCategories({ ...defaultTrainerCategories(), ...result.trainerCategories });
       }
       setError(null);
     } catch (err) {
@@ -253,7 +260,7 @@ export function NotificationSettingsPage() {
             inline
           >
             <Toggle
-              checked={categories[item.key]}
+              checked={categories[item.key] ?? true}
               disabled={!online}
               labelledBy={`notif-label-${item.key}`}
               onChange={() => toggleCategory(item.key)}
@@ -272,7 +279,7 @@ export function NotificationSettingsPage() {
             inline
           >
             <Toggle
-              checked={categories[item.key]}
+              checked={categories[item.key] ?? true}
               disabled={!online}
               labelledBy={`notif-label-${item.key}`}
               onChange={() => toggleCategory(item.key)}

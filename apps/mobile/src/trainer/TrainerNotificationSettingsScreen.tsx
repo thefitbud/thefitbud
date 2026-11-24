@@ -35,6 +35,13 @@ const TRAINER_CATEGORY_ROWS: Array<{
     description: "One push per check-in, merged within 15 min",
   },
   {
+    // Z14-16 (D-W14-23 c, TM-07b2): on by default; off means no push and no
+    // inbox row, and the Edited/Removed tags still show.
+    key: "clientLogEdits",
+    label: "Client log edits",
+    description: "When a client edits or removes a meal log",
+  },
+  {
     key: "criticalDigest",
     label: "Critical items",
     description: "At most one summary an hour",
@@ -244,7 +251,7 @@ export function TrainerNotificationSettingsScreen({ onBack }: Props) {
                   accessibilityLabel={row.label}
                   trackColor={{ true: theme.colors.brand, false: "#E5E7EB" }}
                   thumbColor={theme.colors.card}
-                  value={prefs.trainerCategories[row.key]}
+                  value={prefs.trainerCategories[row.key] ?? true}
                   disabled={saving}
                   onValueChange={(value) => {
                     void toggleTrainerCategory(row.key, value);

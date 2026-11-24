@@ -1,18 +1,17 @@
-import { useEffect, useState } from "react";
-import { Pressable, Switch, TextInput, View } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { PanResponder, Pressable, TextInput, View } from "react-native";
+import { Lock, Eye } from "lucide-react-native";
 import type { CreateTrainerNoteRequest } from "@fitbud/contracts";
 import { BottomSheet } from "../../components/BottomSheet";
 import { Text } from "../../components/Text";
+import { useHardwareBack } from "../../lib/useHardwareBack";
 import {
   ThemeScope,
   createThemedStyles,
   useTheme,
 } from "../../providers/ThemeProvider";
-import {
-  NOTE_MAX_LENGTH,
-  firstNameOf,
-  notePrivateLine,
-} from "./exceptionSheetContent";
+import { DiscardDialog } from "../clientlog/useDiscardGuard";
+import { NOTE_MAX_LENGTH, firstNameOf } from "./exceptionSheetContent";
 
 type TrainerNoteVisibility = NonNullable<CreateTrainerNoteRequest["visibility"]>;
 
@@ -24,17 +23,41 @@ type Props = {
   /** Kept for callers; the TM-04k composer shows no "From …" preview. */
   trainerDisplayName?: string | null;
   acting?: boolean;
+  /**
+   * False while another screen is pushed above the page that owns this sheet:
+   * hardware back then goes to that screen first (D-W14-24, top layer first).
+   */
+  active?: boolean;
   /** Static, curated error text shown inside the sheet. */
   errorMessage?: string | null;
   onDismiss: () => void;
   onSave: (input: NoteSaveInput) => void;
 };
 
+/** TM-04k2/3: the two choices and the one line that says what each means. */
+export function noteVisibilityLabels(first: string): {
+  only: string;
+  also: string;
+} {
+  return { only: "Only me", also: first ? `${first} too` : "Them too" };
+}
+
+export function noteConsequenceLine(
+  visibility: TrainerNoteVisibility,
+  first: string,
+): string {
+  if (visibility === "private") return "Only you can see this note.";
+  // No pronoun: the client's gender is free text, so never infer one.
+  return first
+    ? `${first} sees it on Today and gets one notification.`
+    : "They see it on Today and get one notification.";
+}
+
 /**
- * TM-04k: note composer with Cancel and Save in the header. Uses the existing
- * trainer-note contract: "Show on {First}'s Today" maps to `visibility`
- * ("client" shows it on their Today, "private" keeps it to the trainer).
- * Defaults to shown, as in the mock.
+ * TM-04k (Z14-24): one note composer for every Add note. Cancel and Save in
+ * the header; a two-option control, "Only me" (default, `visibility` private)
+ * or "{first} too" (client); Cancel, swipe down, tapping outside and Android
+ * back all ask "Discard this note?" only when something was typed.
  */
 export function NoteSheet(props: Props) {
   return (
@@ -48,6 +71,7 @@ function NoteSheetBody({
   visible,
   traineeDisplayName,
   acting = false,
+  active = true,
   errorMessage,
   onDismiss,
   onSave,
@@ -55,26 +79,61 @@ function NoteSheetBody({
   const theme = useTheme();
   const styles = useStyles();
   const [body, setBody] = useState("");
-  const [shared, setShared] = useState(true);
+  const [shared, setShared] = useState(false);
+  const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setBody("");
-      setShared(true);
+      setShared(false);
+      setAsking(false);
     }
   }, [visible]);
 
   const first = firstNameOf(traineeDisplayName);
   const trimmed = body.trim();
   const canSave = Boolean(trimmed) && !acting;
-  const toggleLabel = first ? `Show on ${first}'s Today` : "Show on their Today";
+  const visibility: TrainerNoteVisibility = shared ? "client" : "private";
+  const labels = noteVisibilityLabels(first);
+
+  // Every way out of the sheet comes here.
+  const requestClose = () => {
+    if (acting) return;
+    if (trimmed) setAsking(true);
+    else onDismiss();
+  };
+  // Android back answers for the visible sheet, so a press never skips it and
+  // closes the page underneath. Asking "Discard?" is answered first.
+  useHardwareBack(() => {
+    if (asking) {
+      setAsking(false);
+      return true;
+    }
+    requestClose();
+    return true;
+  }, visible && active);
+  const closeRef = useRef(requestClose);
+  closeRef.current = requestClose;
+
+  // Swipe down on the header closes it (the BottomSheet has no drag of its own).
+  const pan = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_e, g) =>
+          g.dy > 10 && Math.abs(g.dy) > Math.abs(g.dx) * 1.5,
+        onPanResponderRelease: (_e, g) => {
+          if (g.dy > 60 || g.vy > 0.6) closeRef.current();
+        },
+      }),
+    [],
+  );
 
   return (
-    <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
-      <View style={styles.header}>
+    <BottomSheet visible={visible} headerless onDismiss={requestClose}>
+      <View style={styles.header} {...pan.panHandlers}>
         <Pressable
           accessibilityRole="button"
-          onPress={onDismiss}
+          onPress={requestClose}
           style={styles.headerBtn}
         >
           <Text variant="body">Cancel</Text>
@@ -87,9 +146,7 @@ function NoteSheetBody({
           accessibilityLabel="Save"
           accessibilityState={{ disabled: !canSave, busy: acting }}
           disabled={!canSave}
-          onPress={() =>
-            onSave({ body: trimmed, visibility: shared ? "client" : "private" })
-          }
+          onPress={() => onSave({ body: trimmed, visibility })}
           style={[styles.headerBtn, styles.headerBtnEnd]}
           testID="note-save"
         >
@@ -101,6 +158,7 @@ function NoteSheetBody({
 
       <TextInput
         accessibilityLabel="Note"
+        placeholder={first ? `Write a note for ${first}` : "Write a note"}
         multiline
         autoFocus
         value={body}
@@ -110,20 +168,37 @@ function NoteSheetBody({
         style={styles.input}
       />
 
-      <View style={styles.shareRow}>
-        <View style={styles.shareText}>
-          <Text variant="body">{toggleLabel}</Text>
-          <Text variant="subhead">
-            {notePrivateLine()}
-          </Text>
+      <View style={styles.who}>
+        <Text variant="caption" tone="ink3" accessibilityRole="header">
+          WHO CAN SEE IT
+        </Text>
+        <View accessibilityRole="radiogroup" style={styles.seg}>
+          <Pressable
+            accessibilityRole="radio"
+            accessibilityLabel={labels.only}
+            accessibilityState={{ checked: !shared }}
+            onPress={() => setShared(false)}
+            style={[styles.segment, !shared ? styles.segmentOn : null]}
+            testID="note-vis-private"
+          >
+            <Lock color={theme.colors.ink} size={14} strokeWidth={2.2} />
+            <Text style={styles.segText}>{labels.only}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="radio"
+            accessibilityLabel={labels.also}
+            accessibilityState={{ checked: shared }}
+            onPress={() => setShared(true)}
+            style={[styles.segment, shared ? styles.segmentOn : null]}
+            testID="note-vis-client"
+          >
+            <Eye color={theme.colors.ink} size={14} strokeWidth={2.2} />
+            <Text style={styles.segText}>{labels.also}</Text>
+          </Pressable>
         </View>
-        <Switch
-          accessibilityLabel={toggleLabel}
-          value={shared}
-          onValueChange={setShared}
-          trackColor={{ true: theme.colors.done, false: theme.colors.fill2 }}
-          thumbColor="#FFFFFF"
-        />
+        <Text variant="subhead" testID="note-consequence">
+          {noteConsequenceLine(visibility, first)}
+        </Text>
       </View>
 
       {errorMessage ? (
@@ -131,6 +206,19 @@ function NoteSheetBody({
           {errorMessage}
         </Text>
       ) : null}
+
+      <DiscardDialog
+        title="Discard this note?"
+        body={first ? `Your note for ${first} won’t be saved.` : "Your note won’t be saved."}
+        keepLabel="Keep writing"
+        visible={asking}
+        onKeep={() => setAsking(false)}
+        onDiscard={() => {
+          setAsking(false);
+          setBody("");
+          onDismiss();
+        }}
+      />
     </BottomSheet>
   );
 }
@@ -159,7 +247,24 @@ const useStyles = createThemedStyles((t) => ({
     padding: t.spacing.md,
     textAlignVertical: "top",
   },
-  shareRow: { alignItems: "center", flexDirection: "row", gap: t.spacing.md },
-  shareText: { flex: 1, gap: 2 },
+  who: { gap: t.spacing.sm },
+  seg: {
+    backgroundColor: t.colors.fill,
+    borderRadius: t.radii.segment,
+    flexDirection: "row",
+    gap: 2,
+    padding: 2,
+  },
+  segment: {
+    alignItems: "center",
+    borderRadius: t.radii.segment - 2,
+    flex: 1,
+    flexDirection: "row",
+    gap: 6,
+    justifyContent: "center",
+    minHeight: 44,
+  },
+  segmentOn: { backgroundColor: t.colors.card },
+  segText: { color: t.colors.ink, fontSize: 14, fontWeight: "600" },
   error: { color: t.colors.crit, fontSize: 14 },
 }));

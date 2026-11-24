@@ -118,7 +118,7 @@ const press = (): boolean => {
 };
 
 describe("hardware back with a client page under an overlay", () => {
-  it("pops the Exception overlay and leaves the open note form underneath", async () => {
+  it("pops the Exception overlay and leaves the open note sheet underneath", async () => {
     render(<TrainerShell />);
     fireEvent.click(screen.getByLabelText("Clients"));
     fireEvent.click(screen.getByText("open-client-row"));
@@ -129,11 +129,16 @@ describe("hardware back with a client page under an overlay", () => {
 
     expect(press()).toBe(true);
     await waitFor(() => expect(screen.queryByTestId("exception-screen")).toBeNull());
-    // The note form was not touched while it was hidden.
+    // The note sheet was not touched while it was hidden.
     expect(screen.getByLabelText("Note")).toBeTruthy();
-    // Now the client page is on top again: back closes the note form.
+    // D-W14-24: the note sheet is now the top visible layer, so back closes it
+    // and the client page stays.
     expect(press()).toBe(true);
-    await waitFor(() => expect(screen.queryByLabelText("Note")).toBeNull());
+    // The client page is still there (the press did not skip the sheet) ...
     expect(screen.getByTestId("client-status")).toBeTruthy();
+    // ... and with the sheet closed, the next press is the client page's.
+    // (react-native-web keeps a closed Modal's content in the DOM in jsdom.)
+    expect(press()).toBe(true);
+    await waitFor(() => expect(screen.queryByTestId("client-status")).toBeNull());
   });
 });

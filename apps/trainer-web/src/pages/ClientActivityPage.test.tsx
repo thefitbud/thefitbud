@@ -10,6 +10,9 @@ const REL_ID = "c422296e-ed7b-4196-a2b4-647096af3002";
 const api = vi.hoisted(() => ({
   listWorkspaceActivity: vi.fn(),
   getMealAssignment: vi.fn(),
+  listNotifications: vi.fn(),
+  getActivityFeed: vi.fn(),
+  markNotificationRead: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({ apiClient: api }));
@@ -19,7 +22,7 @@ vi.mock("../auth/AuthProvider", () => ({
 
 import { ClientActivityPage } from "./ClientActivityPage";
 
-function pageTree() {
+function pageTree(query = "type=meal") {
   const context = {
     workspace: {
       header: {
@@ -44,7 +47,7 @@ function pageTree() {
     ended: false,
   };
   return (
-    <MemoryRouter initialEntries={[`/clients/${REL_ID}/activity?type=meal`]}>
+    <MemoryRouter initialEntries={[`/clients/${REL_ID}/activity?${query}`]}>
       <Routes>
         <Route path="/clients/:relationshipId" element={<Outlet context={context} />}>
           <Route path="activity" element={<ClientActivityPage />} />
@@ -55,6 +58,9 @@ function pageTree() {
 }
 
 beforeEach(() => {
+  api.listNotifications.mockResolvedValue({ items: [] });
+  api.getActivityFeed.mockResolvedValue({ events: [] });
+  api.markNotificationRead.mockResolvedValue({});
   api.listWorkspaceActivity.mockResolvedValue({
     items: [
       {
@@ -88,6 +94,7 @@ beforeEach(() => {
     compliance: id.startsWith("aa")
       ? null
       : {
+          id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
           notes: "Ate out",
           loggedAt: "2026-11-12T08:00:00.000Z",
           loggedItems: [{ name: "Rajma chawal", servingLabel: "1 plate", energyKcal: 640 }],
@@ -117,5 +124,55 @@ describe("ClientActivityPage (Z12-8)", () => {
     expect(
       screen.getByText("Changed", { selector: ".activity-status span" }),
     ).toBeTruthy();
+  });
+
+  it("opens the meal panel for ?date=&entry= (the web bell's link) and shows the day", async () => {
+    render(pageTree("date=2026-11-12&entry=cccccccc-cccc-4ccc-8ccc-cccccccccccc"));
+    expect(await screen.findByTestId("activity-drawer")).toBeTruthy();
+    await waitFor(() =>
+      expect(api.listWorkspaceActivity).toHaveBeenCalledWith(
+        REL_ID,
+        expect.objectContaining({ occurredFrom: "2026-11-12", occurredTo: "2026-11-12" }),
+      ),
+    );
+    expect(await screen.findByTestId("meal-panel")).toBeTruthy();
+  });
+
+  it("marks the client's unread log-edit notification read when its panel opens", async () => {
+    const entryId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    api.listNotifications.mockResolvedValue({
+      items: [
+        {
+          id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+          type: "trainer_client_log_edited",
+          coachingRelationshipId: REL_ID,
+          readAt: null,
+          logEdit: { entryId, action: "edited", mealName: "Lunch", mealDate: "2026-11-12" },
+        },
+      ],
+    });
+    render(pageTree(`date=2026-11-12&entry=${entryId}`));
+    await waitFor(() =>
+      expect(api.markNotificationRead).toHaveBeenCalledWith("dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+    );
+  });
+
+  it("lists a removed meal log on its day with the Removed tag", async () => {
+    api.getActivityFeed.mockResolvedValue({
+      events: [
+        {
+          id: "log_edit:1",
+          type: "client_removed",
+          summary: "Removed the dinner log",
+          occurredAt: "2026-11-12T09:00:00.000Z",
+          traineeDisplayName: "Rohan Mehta",
+          mealDate: "2026-11-12",
+          previousKcal: 1120,
+        },
+      ],
+    });
+    render(pageTree("date=2026-11-12"));
+    expect(await screen.findByTestId("removed-tag")).toBeTruthy();
+    expect(screen.getByText(/Rohan removed their dinner log \(Thu 12 Nov\) · was 1,120 kcal/)).toBeTruthy();
   });
 });

@@ -242,6 +242,8 @@ export function coachPushSubject(pushType: string): string {
       return "a client's intake form";
     case "trainer_meal_times_changed":
       return "a client's meal times";
+    case "trainer_client_log_edited":
+      return "a client's meal log";
     default:
       return "a coach screen";
   }
