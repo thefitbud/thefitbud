@@ -1,10 +1,21 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { ApiClientError } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import { NUTRIENT_SCALE, type MeDayResponse } from "@fitbud/contracts";
 import { dayKcalSummary } from "./nutrition";
 import { enqueueAndPush } from "../sync/actions";
 import { createMemorySyncStore, createSyncEngine, type SyncEngine } from "../sync/engine";
-import { isMealLogPending, pendingMealLogIds, plannedUntilSentNote } from "./mealActions";
+import {
+  MealPhotoError,
+  base64ToBytes,
+  bytesToBase64,
+  isMealLogPending,
+  mealPhotoFailureCopy,
+  mealPhotoResize,
+  pendingMealLogIds,
+  plannedUntilSentNote,
+  uploadAndAttachMealPhoto,
+} from "./mealActions";
 
 const SLOT = "00000000-0000-4000-8000-0000000000a1";
 
@@ -119,5 +130,137 @@ describe("isMealLogPending", () => {
       },
     } as unknown as SyncEngine;
     expect(await isMealLogPending(broken, "m1")).toBe(false);
+  });
+});
+
+describe("meal photo (D-W14-11)", () => {
+  it("resizes only past 1600 px, on the long edge", () => {
+    expect(mealPhotoResize(4032, 3024)).toEqual({ width: 1600 });
+    expect(mealPhotoResize(3024, 4032)).toEqual({ height: 1600 });
+    expect(mealPhotoResize(1600, 900)).toBeNull();
+    expect(mealPhotoResize(800, 600)).toBeNull();
+  });
+
+  it("keeps the JPEG bytes intact through the device store's text form", () => {
+    for (const length of [0, 1, 2, 3, 4, 5, 255]) {
+      const bytes = Uint8Array.from({ length }, (_, i) => (i * 37 + 11) % 256);
+      expect([...base64ToBytes(bytesToBase64(bytes))]).toEqual([...bytes]);
+    }
+    expect(bytesToBase64(new Uint8Array([255, 216, 255]))).toBe("/9j/");
+  });
+
+  it("reuses the job's upload key and keeps the asset id before the attach", async () => {
+    const keys: string[] = [];
+    const order: string[] = [];
+    const api = {
+      createUploadTarget: vi.fn(async (_body: unknown, key: string) => {
+        keys.push(key);
+        return { mediaAsset: { id: "00000000-0000-4000-8000-0000000000d1" } };
+      }),
+      uploadMediaContent: vi.fn(async () => undefined),
+      attachMealPhoto: vi.fn(async () => {
+        order.push("attach");
+      }),
+    };
+    await uploadAndAttachMealPhoto(api as never, {
+      relationshipId: SLOT,
+      assignmentId: SLOT,
+      entryId: SLOT,
+      bytes: new Uint8Array([1]),
+      attachKey: "attach-key",
+      uploadKey: "upload-key",
+      onUploaded: (id) => {
+        order.push(`uploaded:${id}`);
+      },
+    });
+    expect(keys).toEqual(["upload-key"]);
+    expect(order).toEqual(["uploaded:00000000-0000-4000-8000-0000000000d1", "attach"]);
+  });
+
+  it("a server failure reads as TR-07m3; only a lost connection says offline", () => {
+    expect(
+      mealPhotoFailureCopy(new ApiClientError({ status: 500, code: "INTERNAL_ERROR", message: "x" } as never)),
+    ).toBe("Photo didn't upload. Your meal is still logged.");
+    expect(mealPhotoFailureCopy(new TypeError("Network request failed"))).toMatch(/offline/);
+  });
+
+  it("no longer uploads a placeholder image", async () => {
+    const actions = (await import("./mealActions")) as Record<string, unknown>;
+    expect(actions.uploadMealPhoto).toBeUndefined();
+    expect(actions.attachMealPhotoBestEffort).toBeUndefined();
+  });
+
+  it("uploads the JPEG through the files flow, then attaches it to the entry", async () => {
+    const calls: string[] = [];
+    const api = {
+      createUploadTarget: vi.fn(async (body: { contentType: string; mediaType: string }) => {
+        calls.push(`target:${body.mediaType}:${body.contentType}`);
+        return { mediaAsset: { id: "00000000-0000-4000-8000-0000000000d1" } };
+      }),
+      uploadMediaContent: vi.fn(async (_id: string, bytes: Uint8Array, type: string) => {
+        calls.push(`upload:${bytes.length}:${type}`);
+      }),
+      attachMealPhoto: vi.fn<(entryId: string, body: { mediaAssetId: string }, key: string) => Promise<void>>(async (entryId, body) => {
+        calls.push(`attach:${entryId}:${body.mediaAssetId}`);
+      }),
+    };
+    const out = await uploadAndAttachMealPhoto(api as never, {
+      relationshipId: "rel",
+      assignmentId: "asg",
+      entryId: "entry-1",
+      bytes: new Uint8Array([1, 2, 3]),
+      attachKey: "key-1",
+    });
+    expect(out.mediaAssetId).toBe("00000000-0000-4000-8000-0000000000d1");
+    expect(calls).toEqual([
+      "target:meal_photo:image/jpeg",
+      "upload:3:image/jpeg",
+      "attach:entry-1:00000000-0000-4000-8000-0000000000d1",
+    ]);
+    expect(api.attachMealPhoto.mock.calls[0]?.[2]).toBe("key-1");
+  });
+
+  it("an upload failure is a friendly error, never silent", async () => {
+    const api = {
+      createUploadTarget: vi.fn(async () => {
+        throw new Error("boom");
+      }),
+    };
+    const err = await uploadAndAttachMealPhoto(api as never, {
+      relationshipId: "rel",
+      assignmentId: "asg",
+      entryId: "entry-1",
+      bytes: new Uint8Array([1]),
+      attachKey: "k",
+    }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(MealPhotoError);
+    expect((err as MealPhotoError).step).toBe("upload");
+    expect((err as MealPhotoError).message).not.toMatch(/boom/);
+  });
+
+  it("a retry after a failed attach reuses the uploaded asset and the same key", async () => {
+    const api = {
+      createUploadTarget: vi.fn(),
+      uploadMediaContent: vi.fn(),
+      attachMealPhoto: vi
+        .fn<(entryId: string, body: unknown, key: string) => Promise<void>>()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValueOnce(undefined),
+    };
+    const input = {
+      relationshipId: "rel",
+      assignmentId: "asg",
+      entryId: "entry-1",
+      bytes: new Uint8Array([1]),
+      attachKey: "k",
+      mediaAssetId: "00000000-0000-4000-8000-0000000000d2",
+    };
+    const first = await uploadAndAttachMealPhoto(api as never, input).catch((e: unknown) => e);
+    expect(first).toBeInstanceOf(MealPhotoError);
+    expect((first as MealPhotoError).step).toBe("attach");
+    await uploadAndAttachMealPhoto(api as never, input);
+    expect(api.createUploadTarget).not.toHaveBeenCalled();
+    expect(api.attachMealPhoto).toHaveBeenCalledTimes(2);
+    expect(api.attachMealPhoto.mock.calls[1]?.[2]).toBe("k");
   });
 });

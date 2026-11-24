@@ -14,7 +14,11 @@ import type {
 import { formatClockTime, formatHhMmTime, labelFor } from "@fitbud/core";
 import { ActivityDayGroup } from "../components/activity/ActivityDayGroup";
 import { ActivityDrawer } from "../components/activity/ActivityDrawer";
-import type { NudgeUiState } from "../components/activity/ActivityRow";
+import {
+  ActivityRemovedRow,
+  type NudgeUiState,
+} from "../components/activity/ActivityRow";
+import { UnreadLogEditsContext } from "../components/activity/unreadLogEdits";
 import {
   type DateRangeMode,
   type MealStateFilter,
@@ -30,10 +34,22 @@ import {
 import { Button } from "../components/Button";
 import { EmptyState, ErrorState, LoadingBlock } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
+import { stage1Api } from "../lib/stage1-api";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
 import { useAuth } from "../auth/AuthProvider";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import "../components/activity/activity.css";
+
+/** The parts of a feed event the removed-log rows read (activityFeedEventSchema). */
+type FeedEvent = {
+  id: string;
+  type: string;
+  summary: string;
+  occurredAt: string;
+  traineeDisplayName: string | null;
+  mealDate?: string | null;
+  previousKcal?: number | null;
+};
 
 const MEAL_PILLS: Array<{ value: MealStateFilter; label: string }> = [
   { value: "", label: "All" },
@@ -113,10 +129,14 @@ export function ClientActivityPage() {
   const activityType = (searchParams.get("type") ??
     "meal") as WorkspaceActivityType;
   const stateFilter = searchParams.get("state") ?? "";
+  // Z14-16: `?date=&entry=` (the web bell's link for a client's meal-log
+  // change) shows that day and opens the entry's meal panel.
+  const dateParam = searchParams.get("date");
+  const entryParam = searchParams.get("entry");
   const rangeMode = (searchParams.get("range") ??
-    "this_week") as DateRangeMode;
-  const customFrom = searchParams.get("from") ?? "";
-  const customTo = searchParams.get("to") ?? "";
+    (dateParam ? "custom" : "this_week")) as DateRangeMode;
+  const customFrom = searchParams.get("from") ?? dateParam ?? "";
+  const customTo = searchParams.get("to") ?? dateParam ?? "";
   const itemParam = searchParams.get("item");
 
   const today = useMemo(() => todayInTimezone(clientTimezone), [clientTimezone]);
@@ -228,6 +248,101 @@ export function ClientActivityPage() {
     if (parsed) setDrawer(parsed);
   }, [itemParam]);
 
+  // Z14-16: unread "client changed a meal log" notifications for this client
+  // (entry id -> notification id) and the client's removed meal logs. Both are
+  // extras on top of the feed: if they cannot be read, the feed still shows.
+  const [unreadEdits, setUnreadEdits] = useState<Map<string, string>>(
+    () => new Map(),
+  );
+  const [removals, setRemovals] = useState<FeedEvent[]>([]);
+  useEffect(() => {
+    if (!relationshipId) return;
+    let cancelled = false;
+    void apiClient.listNotifications().then(
+      (inbox) => {
+        if (cancelled) return;
+        const next = new Map<string, string>();
+        for (const row of inbox.items) {
+          if (
+            row.type === "trainer_client_log_edited" &&
+            row.coachingRelationshipId === relationshipId &&
+            !row.readAt &&
+            row.logEdit?.action === "edited"
+          ) {
+            next.set(row.logEdit.entryId, row.id);
+          }
+        }
+        setUnreadEdits(next);
+      },
+      () => undefined,
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [relationshipId, refreshEpoch]);
+  useEffect(() => {
+    if (!relationshipId || activityType !== "meal") {
+      setRemovals([]);
+      return;
+    }
+    let cancelled = false;
+    void stage1Api.getActivityFeed({ rid: relationshipId, limit: 50 }).then(
+      (feed) => {
+        if (cancelled) return;
+        const events = (feed as unknown as { events: FeedEvent[] }).events;
+        setRemovals(
+          events.filter(
+            (event) =>
+              event.type === "client_removed" &&
+              event.mealDate != null &&
+              event.mealDate >= range.from &&
+              event.mealDate <= range.to,
+          ),
+        );
+      },
+      () => {
+        if (!cancelled) setRemovals([]);
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [relationshipId, activityType, range.from, range.to, refreshEpoch]);
+
+  const markEntryRead = useCallback(
+    (entryId: string | undefined) => {
+      const notificationId = entryId ? unreadEdits.get(entryId) : undefined;
+      if (!notificationId) return;
+      setUnreadEdits((current) => {
+        const next = new Map(current);
+        next.delete(entryId!);
+        return next;
+      });
+      void (
+        apiClient as unknown as {
+          markNotificationRead: (id: string) => Promise<unknown>;
+        }
+      )
+        .markNotificationRead(notificationId)
+        .catch(() => undefined); // the dot is a convenience; the next load shows it again
+    },
+    [unreadEdits],
+  );
+
+  useEffect(() => {
+    if (!entryParam) return;
+    for (const assignment of mealAssignments.values()) {
+      if (assignment.compliance?.id !== entryParam) continue;
+      setDrawer({ type: "meal", id: assignment.id });
+      const next = new URLSearchParams(searchParams);
+      next.delete("entry");
+      next.set("item", `meal:${assignment.id}`);
+      setSearchParams(next, { replace: true });
+      markEntryRead(entryParam);
+      return;
+    }
+  }, [entryParam, mealAssignments]);
+
   function patchParams(patch: Record<string, string | null>) {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(patch)) {
@@ -298,6 +413,9 @@ export function ClientActivityPage() {
       return;
     }
     const target = { type: item.type, id: item.id };
+    if (item.type === "meal") {
+      markEntryRead(mealAssignments.get(item.id)?.compliance?.id);
+    }
     setDrawer(target);
     patchParams({ item: `${item.type}:${item.id}` });
   }
@@ -333,6 +451,10 @@ export function ClientActivityPage() {
     !error &&
     rangeMode === "this_week";
 
+  const unreadEntryIds = useMemo(
+    () => new Set(unreadEdits.keys()),
+    [unreadEdits],
+  );
   const cardTitle = feedCardTitle(activityType, rangeMode);
   const plannedMeta =
     activityType === "meal" ? plannedDailyKcalMeta(mealAssignments) : null;
@@ -499,7 +621,7 @@ export function ClientActivityPage() {
         </ul>
       ) : null}
 
-      {!loading && !emptyCopy && groups.length > 0 ? (
+      {!loading && !emptyCopy && (groups.length > 0 || removals.length > 0) ? (
         <section className="activity-feed-card" aria-labelledby="activity-feed-title">
           <div className="activity-feed-card-head">
             <h2 id="activity-feed-title" className="activity-feed-card-title">
@@ -509,6 +631,7 @@ export function ClientActivityPage() {
               <p className="activity-feed-card-meta">{plannedMeta}</p>
             ) : null}
           </div>
+          <UnreadLogEditsContext.Provider value={unreadEntryIds}>
           {groups.map((group) => (
             <ActivityDayGroup
               key={group.date}
@@ -530,6 +653,26 @@ export function ClientActivityPage() {
               onView={openPanel}
             />
           ))}
+          </UnreadLogEditsContext.Provider>
+          {removals.length > 0 ? (
+            <section className="activity-day-group" data-testid="activity-removals">
+              <h2 className="activity-day-header">Removed logs</h2>
+              <ul className="activity-feed-list">
+                {removals.map((event) => (
+                  <ActivityRemovedRow
+                    key={event.id}
+                    clientName={header?.traineeDisplayName ?? event.traineeDisplayName}
+                    summary={event.summary}
+                    mealDate={event.mealDate ?? null}
+                    previousKcal={event.previousKcal ?? null}
+                    occurredAt={event.occurredAt}
+                    clientTimezone={clientTimezone}
+                    trainerTimezone={trainerTimezone}
+                  />
+                ))}
+              </ul>
+            </section>
+          ) : null}
         </section>
       ) : null}
 

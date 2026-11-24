@@ -108,6 +108,7 @@ describe("notification open controller", () => {
       "trainer_critical_digest",
       "trainer_renewal",
       "trainer_meal_times_changed",
+      "trainer_client_log_edited",
       "admin_whatsapp_budget",
     ] as const) {
       expect(c.receive(tap(type, payload(type, "coaching_relationship")))).toBe(
@@ -545,6 +546,7 @@ describe("every push type from cold start, background and foreground (Z12-47)", 
     ["trainer_checkin_submitted", "checkin", { role: "trainer", route: { kind: "checkin", checkinId: ID } }],
     ["trainer_intake_submitted", "coaching_relationship", { role: "trainer", route: { kind: "client", relationshipId: ID } }],
     ["trainer_meal_times_changed", "coaching_relationship", { role: "trainer", route: { kind: "client", relationshipId: ID } }],
+    ["trainer_client_log_edited", "coaching_relationship", { role: "trainer", route: { kind: "clientDiet", relationshipId: ID, notificationId: "11111111-1111-4111-8111-111111111111", date: null, entryId: null } }],
   ];
 
   function landing(data: unknown, role: "trainee" | "trainer") {

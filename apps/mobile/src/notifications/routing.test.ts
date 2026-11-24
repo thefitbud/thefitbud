@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NotificationType, PushPayload } from "@fitbud/contracts";
 import {
+  deepLinkFromNotification,
   deepLinkFromNotificationPayload,
   notificationAudience,
   TRAINEE_NOTIFICATION_TYPES,
@@ -131,6 +132,50 @@ describe("notification routing", () => {
           relationshipId: base.domainEntityId,
         });
       }
+    });
+
+    it("a client's meal-log change opens their diet day (Z14-16)", () => {
+      expect(
+        route("trainer_client_log_edited", "coaching_relationship")?.trainerRoute,
+      ).toEqual({
+        kind: "clientDiet",
+        relationshipId: base.domainEntityId,
+        notificationId: base.notificationId,
+        date: null,
+        entryId: null,
+      });
+      expect(
+        route("trainer_client_log_edited", "checkin")?.trainerRoute,
+      ).toEqual({ kind: "attention" });
+    });
+
+    it("an inbox row adds the day and entry; a removed entry opens the day alone (Z14-16)", () => {
+      const edit = {
+        entryId: "99999999-9999-4999-8999-999999999999",
+        action: "edited" as const,
+        mealName: "Lunch",
+        mealDate: "2026-11-14",
+        fromKcal: 610,
+        toKcal: 690,
+        fromOutcome: "modified",
+        toOutcome: "modified",
+        fields: ["portion" as const],
+      };
+      const routing = {
+        ...base,
+        notificationType: "trainer_client_log_edited" as const,
+        domainEntityType: "coaching_relationship" as const,
+      };
+      expect(
+        deepLinkFromNotification({ routing, route: "/x", logEdit: edit })?.trainerRoute,
+      ).toMatchObject({ kind: "clientDiet", date: "2026-11-14", entryId: edit.entryId });
+      expect(
+        deepLinkFromNotification({
+          routing,
+          route: "/x",
+          logEdit: { ...edit, action: "removed", toKcal: null, toOutcome: null, fields: [] },
+        })?.trainerRoute,
+      ).toMatchObject({ kind: "clientDiet", date: "2026-11-14", entryId: null });
     });
 
     it("ask opens the Attention tab, where asks are answered", () => {
