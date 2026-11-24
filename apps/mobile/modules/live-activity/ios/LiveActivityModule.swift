@@ -4,7 +4,8 @@ import ExpoModulesCore
 // Local updates only (D-B7, D-W2-5): no push token, no APNs, no network.
 //
 // KEEP IN SYNC: this is a copy of FitBudWorkoutAttributes in
-// apps/mobile/targets/FitBudLiveActivity/FitBudLiveActivity.swift.
+// apps/mobile/targets/FitBudLiveActivity/_shared/LiveActivityIntents.swift
+// (compiled into the widget and the app target; app.config.test.ts compares them).
 // ActivityKit matches the app's and the widget's types by type name and
 // Codable shape, so every field name and type must stay identical.
 @available(iOS 16.1, *)
@@ -99,21 +100,35 @@ struct WorkoutStateRecord: Record {
 }
 
 /// Rows the lock-screen "Log set" button appended to the shared App Group
-/// (targets/FitBudLiveActivity/FitBudLiveActivity.swift writes them). The app
-/// drains them into the sync outbox when it becomes active (LA2); the widget
-/// never talks to the API.
+/// (LogSetIntent in targets/FitBudLiveActivity/_shared/LiveActivityIntents.swift
+/// writes them). The app drains them into the sync outbox when it becomes
+/// active (LA2), and at once when `onOutboxRow` fires (Z14-8 wires that);
+/// the widget never talks to the API.
 enum LiveActivityOutboxStore {
   static let key = "liveActivityOutbox"
 
   /// Per-variant App Group, written to the app's Info.plist by
-  /// plugins/withLiveActivity.js. Nil in Expo Go or a build without it: the
-  /// read and the clear then do nothing.
-  static var defaults: UserDefaults? {
+  /// plugins/withLiveActivity.js. Nil in Expo Go or a build without it.
+  static var suite: String? {
     guard
       let suite = Bundle.main.object(forInfoDictionaryKey: "FitBudAppGroup") as? String,
       !suite.isEmpty
     else { return nil }
+    return suite
+  }
+
+  /// The read and the clear do nothing without an App Group.
+  static var defaults: UserDefaults? {
+    guard let suite else { return nil }
     return UserDefaults(suiteName: suite)
+  }
+
+  /// KEEP IN SYNC with `LiveActivityOutbox.appendedNotificationName` in
+  /// targets/FitBudLiveActivity/_shared/LiveActivityIntents.swift: the Darwin
+  /// notification the intent posts after appending a row.
+  static var appendedNotificationName: String? {
+    guard let suite else { return nil }
+    return "\(suite).liveActivityOutbox.appended"
   }
 
   static func rows() -> [[String: Any]] {
@@ -135,9 +150,42 @@ enum LiveActivityOutboxStore {
   }
 }
 
+/// Darwin notification callback. A C function pointer cannot capture, so the
+/// module comes back through the observer pointer it registered with.
+private func liveActivityOutboxAppended(
+  _ center: CFNotificationCenter?,
+  _ observer: UnsafeMutableRawPointer?,
+  _ name: CFNotificationName?,
+  _ object: UnsafeRawPointer?,
+  _ userInfo: CFDictionary?
+) {
+  guard let observer else { return }
+  Unmanaged<LiveActivityModule>.fromOpaque(observer).takeUnretainedValue().outboxRowAppended()
+}
+
 public class LiveActivityModule: Module {
+  private var observingOutbox = false
+
   public func definition() -> ModuleDefinition {
     Name("LiveActivity")
+
+    /// `{ count }` after LogSetIntent appended a row to the App Group (Z14-5,
+    /// D-W14-12). The intent runs in the app's process (it is compiled into the
+    /// app target too) or in the widget's, and posts a Darwin notification
+    /// either way. Rows themselves are still read with `readOutbox`.
+    Events("onOutboxRow")
+
+    OnStartObserving {
+      self.startObservingOutbox()
+    }
+
+    OnStopObserving {
+      self.stopObservingOutbox()
+    }
+
+    OnDestroy {
+      self.stopObservingOutbox()
+    }
 
     /// False below iOS 16.2 or when the user turned Live Activities off.
     Function("isSupported") { () -> Bool in
@@ -233,6 +281,35 @@ public class LiveActivityModule: Module {
         await activity.end(content, dismissalPolicy: .immediate)
       }
     }
+  }
+
+  private func startObservingOutbox() {
+    guard !observingOutbox, let name = LiveActivityOutboxStore.appendedNotificationName else {
+      return
+    }
+    CFNotificationCenterAddObserver(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      Unmanaged.passUnretained(self).toOpaque(),
+      liveActivityOutboxAppended,
+      name as CFString,
+      nil,
+      .deliverImmediately
+    )
+    observingOutbox = true
+  }
+
+  private func stopObservingOutbox() {
+    guard observingOutbox else { return }
+    CFNotificationCenterRemoveEveryObserver(
+      CFNotificationCenterGetDarwinNotifyCenter(),
+      Unmanaged.passUnretained(self).toOpaque()
+    )
+    observingOutbox = false
+  }
+
+  /// Tells JS a row is waiting. Only the count: no workout data in the event.
+  fileprivate func outboxRowAppended() {
+    sendEvent("onOutboxRow", ["count": LiveActivityOutboxStore.rows().count])
   }
 
   /// The running activity's `fitbud://?workout=<assignmentId>` link, which is

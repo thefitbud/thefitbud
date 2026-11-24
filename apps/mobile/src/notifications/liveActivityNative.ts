@@ -27,9 +27,10 @@ export type LiveActivityNativePayload = NativeWorkoutContentState & {
  *
  * - iOS 16.2+ with Live Activities on: the local `LiveActivity` module shows
  *   the Live Activity.
- * - Android with notifications and the `workout` channel on: the same module
- *   name, the same calls, an ongoing notification instead (LA3), with its own
- *   rest countdown and Skip rest (LA3c).
+ * - Android with notifications and the "Live workout" channel (`workout_live`,
+ *   Z14-5) on: the same module name, the same calls, an ongoing notification
+ *   instead (LA3, TR-15d layout), with its own rest countdown and Skip rest
+ *   (LA3c).
  * - Web, older iOS, Live Activities or notifications off, or a build without
  *   the module: every call does nothing (the module is never loaded off the
  *   two native platforms, and `isSupported` decides the rest).
@@ -105,7 +106,7 @@ export type LiveActivityModuleAccess = {
   get(): LiveActivityNativeModule | null;
   /**
    * The module only while it can show the activity now: iOS Live Activities
-   * on, or Android notifications and the `workout` channel on. Null otherwise.
+   * on, or Android notifications and the `workout_live` channel on. Null otherwise.
    */
   supported(): LiveActivityNativeModule | null;
 };
@@ -265,6 +266,50 @@ export function createLiveActivityNative(deps: LiveActivityNativeDeps): LiveActi
 }
 
 /**
+ * Calls `listener` with the number of waiting rows each time a lock-screen
+ * Log button appends one (Z14-5, D-W14-12): iOS LogSetIntent (now compiled
+ * into the app target too), Android's notification button. Returns the
+ * unsubscribe.
+ *
+ * Listens through `access.get()`, not `supported()`, like the drain: a row is
+ * drained even with the activity turned off. Off the native platforms, or in
+ * a build without the event, it never calls back. Never throws.
+ *
+ * Surface only: Z14-8 wires it to the drain (and drops rows for a workout that
+ * has already finished, D-W14-12).
+ */
+export function subscribeLiveActivityOutbox(
+  access: LiveActivityModuleAccess,
+  listener: (count: number) => void,
+  warn: (message: string) => void = (message) => console.warn(message),
+): () => void {
+  const mod = access.get();
+  if (!mod || typeof mod.addListener !== "function") return () => undefined;
+  let subscription: { remove(): void } | null = null;
+  try {
+    subscription = mod.addListener("onOutboxRow", (event) => {
+      const count = typeof event?.count === "number" ? event.count : 0;
+      try {
+        listener(count);
+      } catch (error) {
+        warn(`[liveActivity] outbox listener failed: ${errorName(error)}`);
+      }
+    });
+  } catch (error) {
+    warn(`[liveActivity] addListener failed: ${errorName(error)}`);
+    return () => undefined;
+  }
+  return () => {
+    try {
+      subscription?.remove();
+    } catch (error) {
+      warn(`[liveActivity] removeListener failed: ${errorName(error)}`);
+    }
+    subscription = null;
+  };
+}
+
+/**
  * The app's handle on the native module, shared with the outbox drain so the
  * guard and the load exist once per app, not once per caller (LA3b).
  */
@@ -273,6 +318,11 @@ export const liveActivityModuleAccess: LiveActivityModuleAccess =
     platformOS: Platform.OS,
     loadModule: loadLiveActivityModule,
   });
+
+/** The app's `onOutboxRow` subscription (see `subscribeLiveActivityOutbox`). */
+export function onLiveActivityOutboxRow(listener: (count: number) => void): () => void {
+  return subscribeLiveActivityOutbox(liveActivityModuleAccess, listener);
+}
 
 /** The app's instance. LA1b's liveActivitySession.ts is its only caller. */
 export const liveActivityNative: LiveActivityNative = createLiveActivityNative({

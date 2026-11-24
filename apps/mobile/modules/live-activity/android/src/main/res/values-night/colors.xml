@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Dark shade of frame 27-android-trainee-workout-notif.png. -->
+<!--
+  Dark shade of the workout notification (TR-15d in docs/design/v3/png-dark):
+  the Log button stays navy with white text, Open is a raised grey, Target is
+  a light coach lavender.
+-->
 <resources>
-    <color name="fitbud_workout_accent">#C3B1FF</color>
-    <color name="fitbud_workout_on_accent">#1A1248</color>
+    <color name="fitbud_workout_accent">#1A1248</color>
+    <color name="fitbud_workout_on_accent">#FFFFFF</color>
     <color name="fitbud_workout_group">#3A3744</color>
+    <color name="fitbud_workout_coach">#B4A8FF</color>
+    <color name="fitbud_workout_coral">#EE456E</color>
+    <color name="fitbud_workout_coral_track">#40FFFFFF</color>
 </resources>

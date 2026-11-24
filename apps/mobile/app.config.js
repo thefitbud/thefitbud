@@ -113,6 +113,37 @@ const BUILD_PROPERTIES_PLUGIN = [
   },
 ];
 
+/**
+ * Meal photos (Z14-5, D-W14-11): Camera and Gallery open expo-image-picker.
+ * The words are the ones the spec fixes; iOS shows them in the permission
+ * prompt. No microphone: FitBud never records video or sound, so
+ * RECORD_AUDIO is blocked on Android and NSMicrophoneUsageDescription is left
+ * out on iOS. Android keeps only what the picker's own manifest declares
+ * (CAMERA, and storage for the camera on Android 9 and older); the gallery uses
+ * the system photo picker, which needs no permission.
+ */
+const CAMERA_USAGE =
+  "FitBud uses the camera so you can add a photo of your meal for your coach.";
+const PHOTOS_USAGE =
+  "FitBud opens your photos so you can add a picture of your meal for your coach.";
+const IMAGE_PICKER_PLUGIN = [
+  "expo-image-picker",
+  {
+    cameraPermission: CAMERA_USAGE,
+    photosPermission: PHOTOS_USAGE,
+    microphonePermission: false,
+  },
+];
+
+/**
+ * The device store (Z14-5, D-W14-7): src/sync/storage.ts keeps the outbox and
+ * the trainee snapshots in SQLite. Default build flags (no FTS, no SQLCipher).
+ * The date of birth picker (@react-native-community/datetimepicker, D-W14-17)
+ * and the photo resize (expo-image-manipulator, D-W14-11) need no config
+ * plugin: autolinking adds them.
+ */
+const SQLITE_PLUGIN = "expo-sqlite";
+
 const READ_STEPS_PERMISSION = "android.permission.health.READ_STEPS";
 /** Needed by expo-haptics and the Vibration fallback (Z12-45 / Z12-57). */
 const VIBRATE_PERMISSION = "android.permission.VIBRATE";
@@ -239,6 +270,9 @@ function createExpoConfig({ config }) {
       plugins: [
         ...(config.plugins ?? []),
         ["expo-notifications", { mode: variant.apsEnvironment }],
+        // Z14-5: the SQLite device store and the meal photo picker.
+        SQLITE_PLUGIN,
+        IMAGE_PICKER_PLUGIN,
         // Steps (Z9-9): HealthKit (iOS), Health Connect with its permissions-
         // rationale activity (Android), and minSdkVersion 26 for Health Connect.
         // Placed before the existing tail so @bacons/apple-targets and Sentry
@@ -263,3 +297,5 @@ module.exports = createExpoConfig;
 module.exports.disableSentryGradleUpload = disableSentryGradleUpload;
 module.exports.disableSentryXcodeShellScript = disableSentryXcodeShellScript;
 module.exports.VIBRATE_PERMISSION = VIBRATE_PERMISSION;
+module.exports.CAMERA_USAGE = CAMERA_USAGE;
+module.exports.PHOTOS_USAGE = PHOTOS_USAGE;
