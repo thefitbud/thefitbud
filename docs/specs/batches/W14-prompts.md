@@ -2,7 +2,7 @@
 
 One self-contained prompt per task. Paste one into a fresh Claude Code session at the repo root (or say "start batch W14 task N"). Each session does one task end to end and never waits for a person (D-W14-4).
 
-Start order: see `W14.md` → Order. Z14-2 may start before Z14-5 merges (it merges after). Any other task whose dependencies have not merged stops at step 2 and records that in the Report.
+Start order: see `W14.md` → Order (Firoz list 2 tasks Z14-17…Z14-24 are in item 4; Z14-22…Z14-24 also wait for the trainer mocks, D-W14-28). Z14-2 may start before Z14-5 merges (it merges after). Any other task whose dependencies have not merged stops at step 2 and records that in the Report.
 
 ## Z14-1: API latency: Needs you off the read path, one-query auth, batched hot paths, in-process sync dispatch
 Model: **opus** · Size: L · Depends on: none
@@ -47,7 +47,7 @@ Done when: every acceptance box in docs/specs/Z14-2.md is met, the PR is merged 
 ```
 
 ## Z14-3: Trainer app instant paint: kept tabs, cached snapshots, one-round client page, parallel cold start
-Model: **sonnet** · Size: M · Depends on: none
+Model: **sonnet** · Size: L (was M; review and detail screens added 24 Nov 2026) · Depends on: none
 
 ```text
 You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-3, "Trainer app instant paint: kept tabs, cached snapshots, one-round client page, parallel cold start", batch W14.
@@ -217,13 +217,13 @@ Done when: every acceptance box in docs/specs/Z14-10.md is met, the PR is merged
 ```
 
 ## Z14-11: API: trainee sets RPE and note after finishing, attaches a meal photo, and edits or removes a logged meal for 24 hours (trainer notified)
-Model: **sonnet** · Size: L (was M) · Depends on: Z14-7
+Model: **sonnet** · Size: L (was M) · Depends on: Z14-7, Z14-20 (shared packages/api-client)
 
 ```text
 You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-11, "API: trainee sets RPE and note after finishing, attaches a meal photo, and edits or removes a logged meal for 24 hours (trainer notified)", batch W14.
 
 1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..23 apply), docs/specs/Z14-11.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
-2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-7) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-11-report, open a PR titled "Z14-11: report blocked on dependencies", merge it per the merge rules, and end.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-7, Z14-20) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-11-report, open a PR titled "Z14-11: report blocked on dependencies", merge it per the merge rules, and end.
 3. Branch: git checkout -b claude/Z14-11-rpe-meal-photo-api from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-11/). If you must touch another task's file, stop and follow the spec's stop conditions.
 4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
 5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
@@ -325,13 +325,13 @@ Done when: every acceptance box in docs/specs/Z14-14.md is met, the PR is merged
 ```
 
 ## Z14-16: Trainer sees an 'Edited'/'Removed' marker on client meal entries and is notified (copy, tap opens the diet day, settings toggle)
-Model: **sonnet** · Size: M (was S) · Depends on: D-W14-14, Z14-11, Z14-3, Z14-6
+Model: **sonnet** · Size: M (was S) · Depends on: D-W14-14, Z14-11, Z14-3, Z14-6, Z14-19
 
 ```text
 You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-16, "Trainer sees an 'Edited'/'Removed' marker on client meal entries and is notified (copy, tap opens the diet day, settings toggle)", batch W14.
 
 1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..23 apply), docs/specs/Z14-16.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
-2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (D-W14-14, Z14-11, Z14-3, Z14-6) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-16-report, open a PR titled "Z14-16: report blocked on dependencies", merge it per the merge rules, and end.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (D-W14-14, Z14-11, Z14-3, Z14-6, Z14-19) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-16-report, open a PR titled "Z14-16: report blocked on dependencies", merge it per the merge rules, and end.
 3. Branch: git checkout -b claude/Z14-16-trainer-edited-marker from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-16/). If you must touch another task's file, stop and follow the spec's stop conditions.
 4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
 5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
@@ -344,14 +344,187 @@ You are working in the GitHub repo thefitbud/thefitbud (local checkout at the re
 
 Done when: every acceptance box in docs/specs/Z14-16.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
 ```
+## Z14-17: Mocks: trainer Attention sections and jump pills, review panel, client profile, note sheet
+Model: **opus** · Size: M · Depends on: none
+
+**Done by FitBud UI, do not run in Claude Code:** FitBud UI draws these mocks on the resequence branch (`docs/design/mockups/z14-17/`) and records Firoz's answer as D-W14-28 in `W14.md`. Kept so the batch has one prompt per task.
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-17, "Mocks: trainer Attention sections and jump pills, review panel, client profile, note sheet", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-17.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (none) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-17-report, open a PR titled "Z14-17: report blocked on dependencies", merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-17-trainer-mocks from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-17/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-17/.
+7. Push and open a PR titled "Z14-17: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-17.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
+## Z14-18: Trainer app: Android back goes to the previous screen on every trainer screen and sheet
+Model: **sonnet** · Size: M · Depends on: Z14-3
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-18, "Trainer app: Android back goes to the previous screen on every trainer screen and sheet", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-18.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-3) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-18-report, open a PR titled "Z14-18: report blocked on dependencies", merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-18-trainer-android-back from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-18/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-18/.
+7. Push and open a PR titled "Z14-18: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-18.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
+## Z14-19: Trainer app: tapping a client's picture or name opens their profile
+Model: **sonnet** · Size: S · Depends on: Z14-18
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-19, "Trainer app: tapping a client's picture or name opens their profile", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-19.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-18) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-19-report, open a PR titled "Z14-19: report blocked on dependencies", merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-19-client-avatar-profile from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-19/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-19/.
+7. Push and open a PR titled "Z14-19: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-19.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
+## Z14-20: API: cursor pages for the check-in inbox, coach notes and coach asks (additive)
+Model: **sonnet** · Size: S · Depends on: Z14-1
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-20, "API: cursor pages for the check-in inbox, coach notes and coach asks (additive)", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-20.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-1) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-20-report, open a PR titled "Z14-20: report blocked on dependencies", merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-20-trainer-list-paging-api from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-20/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-20/.
+7. Push and open a PR titled "Z14-20: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-20.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
+## Z14-21: Trainer app: Clients, Activity and Check-ins load more as you scroll
+Model: **sonnet** · Size: M · Depends on: Z14-3, Z14-19, Z14-20
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-21, "Trainer app: Clients, Activity and Check-ins load more as you scroll", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-21.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-3, Z14-19, Z14-20) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-21-report, open a PR titled "Z14-21: report blocked on dependencies", merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-21-trainer-infinite-lists from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-21/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-21/.
+7. Push and open a PR titled "Z14-21: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-21.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
+## Z14-22: Attention: jump pills, capped sections with See all, collapsible headers, aligned rows
+Model: **sonnet** · Size: M · Depends on: D-W14-28, Z14-3, Z14-19, Z14-21
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-22, "Attention: jump pills, capped sections with See all, collapsible headers, aligned rows", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-22.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (D-W14-28, Z14-3, Z14-19, Z14-21) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-22-report, open a PR titled "Z14-22: report blocked on dependencies", merge it per the merge rules, and end.
+- **Mock gate:** open `docs/specs/batches/W14.md` and read D-W14-28. If it does not read "Approved by Firoz, <date>", stop now: append a Report row "blocked on mock approval (D-W14-28)" on a branch `claude/Z14-22-report`, open a PR titled `Z14-22: report blocked on mocks`, merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-22-attention-sections from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-22/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-22/.
+7. Push and open a PR titled "Z14-22: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-22.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
+## Z14-23: Review panel: clear actions (Remind, Seen keep open, Resolve), one way to move, no ⋯ menu, same review from the profile
+Model: **sonnet** · Size: M · Depends on: D-W14-28, Z14-19, Z14-22
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-23, "Review panel: clear actions (Remind, Seen keep open, Resolve), one way to move, no ⋯ menu, same review from the profile", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-23.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (D-W14-28, Z14-19, Z14-22) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-23-report, open a PR titled "Z14-23: report blocked on dependencies", merge it per the merge rules, and end.
+- **Mock gate:** open `docs/specs/batches/W14.md` and read D-W14-28. If it does not read "Approved by Firoz, <date>", stop now: append a Report row "blocked on mock approval (D-W14-28)" on a branch `claude/Z14-23-report`, open a PR titled `Z14-23: report blocked on mocks`, merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-23-review-panel from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-23/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-23/.
+7. Push and open a PR titled "Z14-23: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-23.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
+## Z14-24: Client profile: loading in place, refreshed layout, one note sheet that closes, clear note visibility, deduped ⋯ menu, See all notes
+Model: **sonnet** · Size: M · Depends on: D-W14-28, Z14-3, Z14-18, Z14-20, Z14-21
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-24, "Client profile: loading in place, refreshed layout, one note sheet that closes, clear note visibility, deduped ⋯ menu, See all notes", batch W14.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..29 apply), docs/specs/Z14-24.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (D-W14-28, Z14-3, Z14-18, Z14-20, Z14-21) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-24-report, open a PR titled "Z14-24: report blocked on dependencies", merge it per the merge rules, and end.
+- **Mock gate:** open `docs/specs/batches/W14.md` and read D-W14-28. If it does not read "Approved by Firoz, <date>", stop now: append a Report row "blocked on mock approval (D-W14-28)" on a branch `claude/Z14-24-report`, open a PR titled `Z14-24: report blocked on mocks`, merge it per the merge rules, and end.
+3. Branch: git checkout -b claude/Z14-24-client-profile-notes from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-24/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
+6. Run pnpm lint, pnpm typecheck and pnpm test (and the package-level tests the spec names) until green. For mobile tasks, do the scoped device run from the spec: gh workflow run device.yml with flows=launch plus only the flows the spec lists (only the changed screens plus the launch smoke test), and attach the captures under docs/qa/Z14-24/.
+7. Push and open a PR titled "Z14-24: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, test and device-run evidence, follow-ups.
+8. Required checks: ci, e2e and banned-strings must be green. Wait for them; if one fails, fix and push again. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+9. Review: start a fresh reviewer session (Opus, no shared context) with the spec and the PR diff; fix every blocking finding, then at most one fix round; if it still fails, stop per the spec's stop conditions and record why in the Report.
+10. Merge with a merge commit (never squash or rebase-merge), bottom-up if stacked; you have standing authorization to merge your own PR once checks are green and review passes. Delete the branch after merge.
+11. Append your row to the Report table in docs/specs/batches/W14.md (task, PR, merged SHA, model used, decide-and-note choices, device run link, notes including any Firoz steps) in the same PR or a small follow-up PR merged the same way.
+
+Done when: every acceptance box in docs/specs/Z14-24.md is met, the PR is merged with ci, e2e and banned-strings green and a passing fresh review, and the Report row is in W14.md.
+```
+
 ## Z14-15: Wording and error-code audit: Nudge becomes Remind, no codes on screen, errors that say what went wrong
-Model: **sonnet** · Size: M · Depends on: Z14-1, Z14-2, Z14-3, Z14-4, Z14-5, Z14-6, Z14-7, Z14-8, Z14-9, Z14-10, Z14-11, Z14-12, Z14-13, Z14-13b, Z14-14, Z14-16
+Model: **sonnet** · Size: M · Depends on: Z14-1, Z14-2, Z14-3, Z14-4, Z14-5, Z14-6, Z14-7, Z14-8, Z14-9, Z14-10, Z14-11, Z14-12, Z14-13, Z14-13b, Z14-14, Z14-16, Z14-18, Z14-19, Z14-20, Z14-21, Z14-22, Z14-23, Z14-24
 
 ```text
 You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-15, "Wording and error-code audit: Nudge becomes Remind, no codes on screen, errors that say what went wrong", batch W14.
 
 1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..23 apply), docs/specs/Z14-15.md (your spec: outcome, files you own, acceptance, tests, visual, device run, stop conditions, merge), and the matching sections of docs/specs/batches/W14-diagnosis.md.
-2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-1, Z14-2, Z14-3, Z14-4, Z14-5, Z14-6, Z14-7, Z14-8, Z14-9, Z14-10, Z14-11, Z14-12, Z14-13, Z14-13b, Z14-14, Z14-16) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-15-report, open a PR titled "Z14-15: report blocked on dependencies", merge it per the merge rules, and end.
+2. git fetch origin && git checkout main && git pull. Check that every task in depends_on (Z14-1, Z14-2, Z14-3, Z14-4, Z14-5, Z14-6, Z14-7, Z14-8, Z14-9, Z14-10, Z14-11, Z14-12, Z14-13, Z14-13b, Z14-14, Z14-16, Z14-18, Z14-19, Z14-20, Z14-21, Z14-22, Z14-23, Z14-24) has merged to main (gh pr list --state merged --search "Z14- in:title" --limit 50; count only PRs titled "Z14-<n>: …" merged on or after 24 Nov 2026, since before that date Z14-* meant the old Phase 10 IDs, now Z16-*). If one has not, do not start: append a Report row to W14.md saying which dependency was missing, push it on branch claude/Z14-15-report, open a PR titled "Z14-15: report blocked on dependencies", merge it per the merge rules, and end.
 3. Branch: git checkout -b claude/Z14-15-wording-audit from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-15/). If you must touch another task's file, stop and follow the spec's stop conditions.
 4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Report row (decide and note; never wait for a person, never ask a question and pause).
 5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps for Firoz in the Report instead.
