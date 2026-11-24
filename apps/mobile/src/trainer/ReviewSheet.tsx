@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Pressable, View, type StyleProp, type ViewStyle } from "react-native";
-import { Check, ChevronLeft, ChevronRight, Ellipsis } from "lucide-react-native";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react-native";
 import type {
   AttentionGroupsResponse,
   ExceptionDetail,
@@ -9,16 +9,16 @@ import { formatPersonName } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { BottomSheet } from "../components/BottomSheet";
 import { Button } from "../components/Button";
-import { StatusChip } from "../components/StatusChip";
 import { Text } from "../components/Text";
-import { initialsFromName } from "../components/m2";
 import { plannedRowsFromAssignment } from "../lib/plannedMealItems";
 import {
   ThemeScope,
   createThemedStyles,
   useTheme,
 } from "../providers/ThemeProvider";
-import { formatAttentionAge } from "./attentionCards";
+import { ClientAvatar, ClientNameLink } from "./ClientAvatar";
+import { ReviewActions } from "./review/ReviewActions";
+import { ReviewCard } from "./review/ReviewCard";
 import {
   buildReviewSheetCardModel,
   coachingWeekNumber,
@@ -30,9 +30,8 @@ import {
   REVIEW_SHEET_BACK_LABEL,
   canGoNextReviewSheet,
   canGoPrevReviewSheet,
-  reviewSheetAllResolved,
-  reviewSheetAllResolvedLeaveLine,
   reviewSheetAllResolvedTitle,
+  reviewSheetSummaryLine,
   reviewSheetAllReviewed,
   reviewSheetDashStates,
   reviewSheetFooterMode,
@@ -40,7 +39,6 @@ import {
   reviewSheetItemOutcome,
   reviewSheetItemReviewed,
   reviewSheetNextClientLabel,
-  reviewSheetNextItemLabel,
   reviewSheetResolvedBanner,
   reviewSheetResolvedRowLabel,
   reviewSheetStepLabel,
@@ -98,23 +96,29 @@ type Props = {
   onBrowseItem: (index: number) => void;
   onShowSummary: () => void;
   onDismiss: () => void;
-  onMarkReviewed: (exceptionId: string) => void;
+  /** "Noted, keep open": the existing acknowledge. */
+  onNoted: (exceptionId: string) => void;
   onUndo: (exceptionId: string) => void;
   onNextClient: () => void;
-  /** The FitBud nudge sheet for this item (never WhatsApp; that is in ⋯). */
+  /** The FitBud reminder sheet for this item (never WhatsApp). */
   onNudge: (detail: ExceptionDetail, clientTimeZone: string | null) => void;
   /** The TM-04d resolve sheet for this item. */
   onResolve: (item: AttentionGroupItem) => void;
-  /** The TM-04j ⋯ menu for this client. */
-  onMore: () => void;
-  /** Sheets opened from this one (nudge, resolve, ⋯, note), stacked over it. */
+  /** The note sheet for this client. */
+  onAddNote: () => void;
+  /** A wa.me chat with no template; the trainer sends it. */
+  onWhatsApp: () => void;
+  /** The client's profile (avatar and name). */
+  onOpenProfile?: (() => void) | undefined;
+  /** Sheets opened from this one (remind, resolve, note), stacked over it. */
   children?: ReactNode;
 };
 
 /**
- * Needs you review sheet (frame 31, wired by Z12-51): one client's open items
- * with Mark reviewed, Nudge…, Resolve… and ⋯. Resolved items stay on the
- * sheet (read only) for this session, then the all-resolved summary shows.
+ * Attention review sheet (RP-01…RP-05, D-W14-29): one client's open items
+ * with Remind, Noted keep open and Resolve…, moved between only by the
+ * "1 of 3" stepper. Resolved items stay on the sheet (read only) for this
+ * session, then the all-done summary shows.
  * The sheet follows the system theme itself.
  */
 export function ReviewSheet(props: Props) {
@@ -140,12 +144,14 @@ function ReviewSheetBody({
   onBrowseItem,
   onShowSummary,
   onDismiss,
-  onMarkReviewed,
+  onNoted,
   onUndo,
   onNextClient,
   onNudge,
   onResolve,
-  onMore,
+  onAddNote,
+  onWhatsApp,
+  onOpenProfile,
   children,
 }: Props) {
   const { api } = useAuth();
@@ -161,12 +167,13 @@ function ReviewSheetBody({
     reviewSheetItemReviewed(entry.status),
   );
   const allReviewed = reviewSheetAllReviewed(items);
-  const allResolved = reviewSheetAllResolved(items);
   const returnToSummary =
     allReviewed && browsingItem && !canGoNextReviewSheet(index, total);
   const canPrev = showSummary ? total > 0 : canGoPrevReviewSheet(index);
+  // The stepper is the only way between items; on the summary it has nowhere
+  // further to go (Next client is its own button, RP-05).
   const canNext = showSummary
-    ? Boolean(nextClientName)
+    ? false
     : canGoNextReviewSheet(index, total) || returnToSummary;
   const dashes = reviewSheetDashStates(index, total, reviewedFlags);
   const label = reviewSheetStepLabel(index, total, showSummary);
@@ -174,13 +181,7 @@ function ReviewSheetBody({
   const nextClientLabel = nextClientName
     ? reviewSheetNextClientLabel(formatPersonName(nextClientName))
     : null;
-  const nextItemLabel =
-    item && mode === "resolved" ? reviewSheetNextItemLabel(index, total) : null;
-  const nextStepLabel = showSummary
-    ? (nextClientLabel ?? "Next client")
-    : returnToSummary
-      ? "Done"
-      : "Next item";
+  const nextStepLabel = returnToSummary ? "Done" : "Next item";
   const itemResolved = item?.status === "resolved";
   const itemReviewed = item?.status === "acknowledged";
   const nudgeable = item ? isNudgeableExceptionType(item.type) : false;
@@ -319,31 +320,37 @@ function ReviewSheetBody({
     openCount: items.filter((entry) => entry.status !== "resolved").length,
   });
   const actionsDisabled = offline || acting;
-  const canNudgeNow = Boolean(detail && detail.id === item?.id) && !actionsDisabled;
+  const canNudgeNow =
+    Boolean(detail && detail.id === item?.id) && !actionsDisabled;
 
   return (
     <BottomSheet visible={visible} headerless onDismiss={onDismiss}>
       <View style={styles.header}>
         <View style={styles.identity}>
-          <View style={styles.avatar} accessibilityLabel={name}>
-            <Text style={styles.avatarText}>{initialsFromName(name)}</Text>
-          </View>
+          <ClientAvatar
+            name={name}
+            size={40}
+            fontSize={13}
+            fontWeight="600"
+            tone={{ backgroundColor: c.brandTint, color: c.brandInk }}
+            onPress={onOpenProfile}
+          />
           <View style={styles.identityText}>
-            <Text variant="headline">{name}</Text>
+            <View style={styles.nameRow}>
+              <ClientNameLink
+                name={name}
+                variant="headline"
+                onPress={onOpenProfile}
+              >
+                {name}
+              </ClientNameLink>
+              {onOpenProfile ? (
+                <ChevronRight size={16} color={c.ink3} strokeWidth={2} />
+              ) : null}
+            </View>
             <Text variant="caption">{subtitle}</Text>
           </View>
         </View>
-        {!showSummary && item && !offline ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="More actions"
-            onPress={onMore}
-            style={styles.moreBtn}
-            testID="review-sheet-more"
-          >
-            <Ellipsis size={20} color={c.ink} strokeWidth={2} />
-          </Pressable>
-        ) : null}
         <View style={styles.stepper} accessibilityLabel={`Item ${label}`}>
           <Pressable
             accessibilityRole="button"
@@ -408,23 +415,7 @@ function ReviewSheetBody({
       </View>
 
       {item && !showSummary && card ? (
-        <View style={styles.card}>
-          <View style={styles.cardMeta}>
-            <StatusChip kind="severity" value={card.severity} />
-            <Text variant="caption">{formatAttentionAge(card.ageMinutes)}</Text>
-          </View>
-          <Text variant="headline">{card.title}</Text>
-          {card.body ? (
-            <Text variant="subhead" tone="ink2">
-              {card.body}
-            </Text>
-          ) : null}
-          <View style={styles.kv}>
-            <KvRow label="Planned" value={card.planned ?? "—"} />
-            <KvRow label="Logged" value={card.logged} />
-            <KvRow label="Reminder" value={card.reminder ?? "—"} />
-          </View>
-        </View>
+        <ReviewCard card={card} noted={itemReviewed} resolved={itemResolved} />
       ) : item && !showSummary && cardLoading ? (
         <Text variant="body" tone="ink3" style={styles.empty}>
           Loading item…
@@ -437,81 +428,32 @@ function ReviewSheetBody({
         </Text>
       ) : null}
 
-      {item && mode === "actions" ? (
-        <View style={styles.actionsRow}>
-          {nudgeable ? (
-            <Button
-              label="Nudge…"
-              variant="secondary"
-              disabled={!canNudgeNow}
-              onPress={() => {
-                if (detail) onNudge(detail, clientMeta.timeZone);
-              }}
-              style={styles.half}
-              testID="review-sheet-nudge"
-            />
-          ) : null}
-          <Button
-            label="Mark reviewed"
-            variant="tint"
-            disabled={actionsDisabled}
-            loading={acting}
-            onPress={() => onMarkReviewed(item.id)}
-            style={styles.half}
-            testID="review-sheet-mark-reviewed"
-          />
-        </View>
-      ) : null}
-
-      {item && (mode === "actions" || (mode === "resolved" && itemReviewed)) ? (
-        <Button
-          label="Resolve…"
-          variant="primary"
+      {item && (mode === "actions" || mode === "resolved") ? (
+        <ReviewActions
+          state={itemResolved ? "resolved" : itemReviewed ? "noted" : "open"}
+          firstName={firstName}
+          remindable={nudgeable}
           disabled={actionsDisabled}
-          onPress={() => onResolve(item)}
-          style={styles.resolveBtn}
-          testID="review-sheet-resolve"
-        />
-      ) : null}
-
-      {item && mode === "resolved" ? (
-        <DoneBanner
-          status={item.status}
-          outcome={reviewSheetItemOutcome(item.details)}
-          justNow={justResolvedIds.includes(item.id)}
-          disabled={actionsDisabled}
-          onUndo={itemReviewed ? () => onUndo(item.id) : undefined}
-        />
-      ) : null}
-
-      {item && mode === "resolved" && itemReviewed && nudgeable ? (
-        <Button
-          label="Nudge…"
-          variant="secondary"
-          disabled={!canNudgeNow}
-          onPress={() => {
-            if (detail) onNudge(detail, clientMeta.timeZone);
+          acting={acting}
+          stateLine={
+            mode === "resolved"
+              ? reviewSheetResolvedBanner(
+                  reviewSheetItemOutcome(item.details),
+                  justResolvedIds.includes(item.id),
+                  item.status,
+                )
+              : null
+          }
+          onRemind={() => {
+            if (detail && canNudgeNow) onNudge(detail, clientMeta.timeZone);
           }}
-          style={styles.resolveBtn}
-          testID="review-sheet-nudge"
+          onNoted={() => onNoted(item.id)}
+          onResolve={() => onResolve(item)}
+          onUndo={itemReviewed ? () => onUndo(item.id) : undefined}
+          onAddNote={onAddNote}
+          onWhatsApp={onWhatsApp}
+          testIdPrefix="review-sheet"
         />
-      ) : null}
-
-      {nextItemLabel ? (
-        <ChevronPrimaryButton
-          label={nextItemLabel}
-          disabled={acting}
-          onPress={() => onChangeIndex(index + 1)}
-          testID="review-sheet-next-item"
-          style={styles.nextItemBtn}
-        />
-      ) : null}
-
-      {(mode === "actions" || mode === "resolved") && !itemResolved ? (
-        <Text variant="caption" style={styles.helper}>
-          Mark reviewed keeps {firstName} in Reviewed until every item is
-          resolved.
-        </Text>
       ) : null}
 
       {showSummary ? (
@@ -520,17 +462,26 @@ function ReviewSheetBody({
             <Check color={c.done} size={28} strokeWidth={2.5} />
           </View>
           <Text variant="title" style={styles.center}>
-            {reviewSheetAllResolvedTitle(total, firstName, allResolved)}
+            {reviewSheetAllResolvedTitle(firstName)}
           </Text>
-          <Text variant="body" tone="ink3" style={[styles.center, styles.doneLeave]}>
-            {reviewSheetAllResolvedLeaveLine(firstName, allResolved)}
+          <Text
+            variant="body"
+            tone="ink3"
+            style={[styles.center, styles.doneLeave]}
+          >
+            {reviewSheetSummaryLine(items)}
           </Text>
           <View style={styles.doneList}>
             {items.map((entry) => {
               const when = reviewSheetItemDate(entry.details);
               return (
                 <View key={entry.id} style={styles.doneRow}>
-                  <Text variant="body" tone="ink3" style={styles.doneWhen} numberOfLines={1}>
+                  <Text
+                    variant="body"
+                    tone="ink3"
+                    style={styles.doneWhen}
+                    numberOfLines={1}
+                  >
                     {when ?? entry.summary}
                   </Text>
                   <Text variant="bodyStrong" style={styles.doneOutcome}>
@@ -562,73 +513,6 @@ function ReviewSheetBody({
       ) : null}
       {children}
     </BottomSheet>
-  );
-}
-
-function KvRow({ label, value }: { label: string; value: string }) {
-  const styles = useStyles();
-  return (
-    <View style={styles.kvRow}>
-      <Text variant="subhead" tone="ink3" style={styles.kvLabel}>
-        {label}
-      </Text>
-      <Text variant="subhead" tone="ink" style={styles.kvValue}>
-        {value}
-      </Text>
-    </View>
-  );
-}
-
-function DoneBanner({
-  status,
-  outcome,
-  justNow,
-  disabled,
-  onUndo,
-}: {
-  status: string;
-  outcome: string | null;
-  justNow: boolean;
-  disabled: boolean;
-  onUndo?: () => void;
-}) {
-  const theme = useTheme();
-  const styles = useStyles();
-  const resolved = status === "resolved";
-  const banner = reviewSheetResolvedBanner(outcome, justNow, status);
-  const ink = resolved ? theme.colors.done : theme.colors.ink2;
-  return (
-    <View
-      style={[
-        styles.resolvedBanner,
-        { backgroundColor: resolved ? theme.colors.doneTint : theme.colors.fill },
-      ]}
-      accessibilityLabel={banner}
-      testID="review-sheet-resolved-banner"
-    >
-      <Check color={ink} size={16} strokeWidth={2.5} />
-      <Text variant="body" style={[styles.resolvedBannerText, { color: ink }]}>
-        {banner}
-      </Text>
-      {onUndo ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Undo"
-          accessibilityState={{ disabled }}
-          disabled={disabled}
-          onPress={onUndo}
-          style={styles.undoHit}
-          testID="review-sheet-undo"
-        >
-          <Text
-            variant="bodyStrong"
-            style={[{ color: ink }, disabled ? styles.undoDisabled : null]}
-          >
-            Undo
-          </Text>
-        </Pressable>
-      ) : null}
-    </View>
   );
 }
 
@@ -692,28 +576,8 @@ const useStyles = createThemedStyles((t) => ({
     gap: t.spacing.md,
     minWidth: 0,
   },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: t.colors.brandTint,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: {
-    color: t.colors.brandInk,
-    fontSize: 13,
-    fontWeight: "600",
-  },
   identityText: { flex: 1, minWidth: 0, gap: 2 },
-  moreBtn: {
-    width: t.touchTarget,
-    height: t.touchTarget,
-    borderRadius: 999,
-    backgroundColor: t.colors.fill,
-    alignItems: "center",
-    justifyContent: "center",
-  },
+  nameRow: { flexDirection: "row", alignItems: "center", gap: 2 },
   stepper: {
     flexDirection: "row",
     alignItems: "center",
@@ -745,37 +609,7 @@ const useStyles = createThemedStyles((t) => ({
   },
   dashOn: { backgroundColor: t.colors.brand },
   dashOk: { backgroundColor: t.colors.done },
-  card: {
-    backgroundColor: t.colors.card,
-    borderWidth: 1,
-    borderColor: t.colors.line2,
-    borderRadius: t.radii.card,
-    padding: t.spacing.md,
-    gap: t.spacing.sm,
-    marginBottom: t.spacing.sm,
-  },
-  cardMeta: { flexDirection: "row", alignItems: "center", gap: t.spacing.sm },
-  kv: { marginTop: t.spacing.xs, gap: 6 },
-  kvRow: { flexDirection: "row", gap: t.spacing.md },
-  kvLabel: { width: 96 },
-  kvValue: { flex: 1 },
   empty: { marginBottom: t.spacing.md },
-  actionsRow: { flexDirection: "row", gap: t.spacing.sm, marginTop: t.spacing.xs },
-  half: { flex: 1 },
-  resolveBtn: { marginTop: t.spacing.sm },
-  helper: { textAlign: "center", marginTop: t.spacing.sm },
-  resolvedBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: t.spacing.sm,
-    borderRadius: 12,
-    paddingHorizontal: t.spacing.md,
-    paddingVertical: t.spacing.sm,
-    marginTop: t.spacing.xs,
-  },
-  resolvedBannerText: { flex: 1 },
-  undoHit: { minHeight: t.touchTarget, justifyContent: "center", paddingLeft: t.spacing.sm },
-  undoDisabled: { opacity: 0.4 },
   primaryBtn: {
     minHeight: t.touchTarget,
     borderRadius: t.radii.button,
@@ -788,7 +622,6 @@ const useStyles = createThemedStyles((t) => ({
     paddingVertical: t.spacing.md,
   },
   primaryBtnDisabled: { opacity: 0.5 },
-  nextItemBtn: { marginTop: t.spacing.sm },
   center: { textAlign: "center" },
   doneMark: {
     width: 64,

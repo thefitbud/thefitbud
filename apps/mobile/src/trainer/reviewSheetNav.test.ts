@@ -6,7 +6,7 @@ import {
   clampReviewSheetIndex,
   nextReviewClientName,
   reviewSheetAllResolved,
-  reviewSheetAllResolvedLeaveLine,
+  reviewSheetSummaryLine,
   reviewSheetAllResolvedTitle,
   reviewSheetAllReviewed,
   reviewSheetDashStates,
@@ -17,7 +17,6 @@ import {
   reviewSheetItemOutcome,
   reviewSheetItemsForRelationship,
   reviewSheetNextClientLabel,
-  reviewSheetNextItemLabel,
   reviewSheetOpenItemsLine,
   reviewSheetOutcomePhrase,
   reviewSheetResolvedBanner,
@@ -129,7 +128,7 @@ describe("review sheet resolved and all-resolved", () => {
     { status: "acknowledged" },
   ];
 
-  it("shows Resolved by you with Undo copy and Next item after Mark reviewed", () => {
+  it("shows Resolved by you with Undo copy and Next item after Noted", () => {
     expect(reviewSheetFooterMode(firstResolved, 0, false)).toBe("resolved");
     expect(reviewSheetResolvedBanner("Talked to client", true)).toBe(
       "Resolved by you · just now · Talked to client",
@@ -137,7 +136,6 @@ describe("review sheet resolved and all-resolved", () => {
     expect(reviewSheetResolvedBanner(null, true)).toBe(
       "Resolved by you · just now",
     );
-    expect(reviewSheetNextItemLabel(0, 3)).toBe("Next item · 2 of 3");
     expect(reviewSheetStepLabel(0, 3, false)).toBe("1 of 3");
     expect(reviewSheetDashStates(0, 3, [true, false, false])).toEqual([
       "ok",
@@ -161,7 +159,6 @@ describe("review sheet resolved and all-resolved", () => {
     expect(stepReviewSheetIndex(1, 3, 1)).toBe(2);
     expect(stepReviewSheetIndex(1, 3, -1)).toBe(0);
     expect(reviewSheetFooterMode(firstResolved, 0, false)).toBe("resolved");
-    expect(reviewSheetNextItemLabel(2, 3)).toBeNull();
   });
 
   it("matches the all-resolved frame once every item is acknowledged", () => {
@@ -178,25 +175,22 @@ describe("review sheet resolved and all-resolved", () => {
       "ok",
       "ok",
     ]);
-    expect(reviewSheetAllResolvedTitle(3, "Rohan")).toBe(
-      "All 3 resolved for Rohan",
-    );
-    expect(reviewSheetAllResolvedLeaveLine("Rohan")).toBe(
-      "Rohan leaves Needs you. You'll find these in History.",
-    );
-    // Only marked reviewed: the summary never says resolved (Z12-51).
+    expect(reviewSheetAllResolvedTitle("Rohan")).toBe("All done for Rohan");
+    expect(
+      reviewSheetSummaryLine([
+        { status: "resolved" },
+        { status: "resolved" },
+        { status: "acknowledged" },
+      ]),
+    ).toBe("2 resolved · 1 noted, still open");
+    expect(reviewSheetSummaryLine(allAcknowledged)).toBe("3 noted, still open");
+    // Only noted: the summary never says resolved (Z12-51).
     expect(reviewSheetAllResolved(allAcknowledged)).toBe(false);
-    expect(reviewSheetAllResolvedTitle(3, "Rohan", false)).toBe(
-      "All 3 reviewed for Rohan",
-    );
-    expect(reviewSheetAllResolvedLeaveLine("Rohan", false)).toBe(
-      "Rohan moves to Reviewed until every item is resolved.",
-    );
     expect(reviewSheetResolvedRowLabel("Talked to client", "acknowledged")).toBe(
-      "Reviewed",
+      "Noted, still open",
     );
     expect(reviewSheetResolvedBanner("Talked to client", true, "acknowledged")).toBe(
-      "Reviewed by you · just now",
+      "Noted · still open",
     );
     expect(
       reviewSheetAllResolved([{ status: "resolved" }, { status: "resolved" }]),
@@ -213,7 +207,7 @@ describe("review sheet resolved and all-resolved", () => {
     expect(reviewSheetNextClientLabel("Arjun Kapoor")).toBe(
       "Next client: Arjun Kapoor",
     );
-    expect(REVIEW_SHEET_BACK_LABEL).toBe("Back to Needs you");
+    expect(REVIEW_SHEET_BACK_LABEL).toBe("Back to Attention");
   });
 
   it("reads frame outcome phrases and item dates from exception details", () => {

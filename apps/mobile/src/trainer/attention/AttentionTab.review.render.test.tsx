@@ -1,7 +1,7 @@
 /**
  * Needs you review sheet wiring and the Asked toast (Z12-51): Resolve… goes
- * through the resolve sheet with the trainer's outcome, Nudge… opens the
- * FitBud nudge sheet (never WhatsApp) and only for items that can be nudged,
+ * through the resolve sheet with the trainer's outcome, Remind opens the
+ * FitBud reminder sheet (never WhatsApp) and only for items that can be nudged,
  * and "Marked answered" for a second client shows its own toast and Undo even
  * after the first one's left early.
  */
@@ -167,7 +167,7 @@ async function openSheet() {
   fireEvent.click(
     await screen.findByRole("button", { name: /^Review Rohan Mehta/ }),
   );
-  await screen.findByTestId("review-sheet-mark-reviewed");
+  await screen.findByTestId("review-sheet-noted");
 }
 
 beforeEach(() => {
@@ -180,18 +180,18 @@ beforeEach(() => {
 });
 
 describe("AttentionTab review sheet (Z12-51)", () => {
-  it("Nudge… opens the FitBud nudge sheet, never WhatsApp", async () => {
+  it("Remind opens the FitBud reminder sheet, never WhatsApp", async () => {
     loadOk();
     mount();
     await openSheet();
-    const nudge = await screen.findByTestId("review-sheet-nudge");
+    const nudge = await screen.findByTestId("review-sheet-remind");
     await waitFor(() => expect(nudge.getAttribute("aria-disabled")).not.toBe("true"));
     fireEvent.click(nudge);
     await screen.findByText(/nudged you/);
     expect(openContextualWhatsApp).not.toHaveBeenCalled();
   });
 
-  it("Z14-3: Mark reviewed and Resolve… drop the kept item so it is read fresh next time", async () => {
+  it("Z14-3: Noted, keep open and Resolve… drop the kept item so it is read fresh next time", async () => {
     loadOk();
     mount();
     await openSheet();
@@ -199,7 +199,7 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     await waitFor(() => expect(readReviewItem(EX_ID)?.stale).toBe(false));
 
     api.acknowledgeException.mockResolvedValue({});
-    fireEvent.click(screen.getByTestId("review-sheet-mark-reviewed"));
+    fireEvent.click(screen.getByTestId("review-sheet-noted"));
     await waitFor(() => expect(api.acknowledgeException).toHaveBeenCalled());
     await waitFor(() => expect(readReviewItem(EX_ID)?.stale).toBe(true));
   });
@@ -214,15 +214,15 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     api.acknowledgeException.mockResolvedValue({});
     api.resolveException.mockResolvedValue({});
     fireEvent.click(screen.getByTestId("resolve-confirm"));
-    await screen.findByText("All 1 resolved for Rohan");
+    await screen.findByText("All done for Rohan");
     expect(readReviewItem(EX_ID)?.stale).toBe(true);
   });
 
-  it("does not offer Nudge… for a logged meal", async () => {
+  it("does not offer Remind for a logged meal", async () => {
     loadOk("meal_deviation", "meal_assignment");
     mount();
     await openSheet();
-    expect(screen.queryByTestId("review-sheet-nudge")).toBeNull();
+    expect(screen.queryByTestId("review-sheet-remind")).toBeNull();
     expect(screen.getByTestId("review-sheet-resolve")).toBeTruthy();
   });
 
@@ -235,7 +235,7 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     api.acknowledgeException.mockResolvedValue({});
     api.resolveException.mockResolvedValue({});
     fireEvent.click(screen.getByTestId("resolve-confirm"));
-    await screen.findByText("All 1 resolved for Rohan");
+    await screen.findByText("All done for Rohan");
     // Open item: marked reviewed first (the API resolves acknowledged items),
     // then resolved with the outcome the trainer chose. Nothing auto-resolves.
     expect(api.acknowledgeException).toHaveBeenCalledWith(EX_ID, {}, expect.any(String));
@@ -252,7 +252,7 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     expect(screen.queryByTestId("review-sheet-resolve")).toBeNull();
   });
 
-  it("keeps the same resolve key on a retry after a failed resolve, and never re-marks reviewed", async () => {
+  it("keeps the same resolve key on a retry after a failed resolve, and never re-notes", async () => {
     loadOk();
     mount();
     await openSheet();
@@ -273,8 +273,8 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
     expect(api.resolveException).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByTestId("resolve-confirm"));
-    await screen.findByText("All 1 resolved for Rohan");
-    // Mark reviewed already succeeded: not sent again. Resolve retries on its key.
+    await screen.findByText("All done for Rohan");
+    // Noted already succeeded: not sent again. Resolve retries on its key.
     expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
     expect(api.resolveException).toHaveBeenCalledTimes(2);
     const resolveKeys = api.resolveException.mock.calls.map((call) => call[2]);
@@ -308,7 +308,7 @@ describe("AttentionTab review sheet (Z12-51)", () => {
       closedReason: "trainer",
     });
     fireEvent.click(screen.getByTestId("resolve-confirm"));
-    await screen.findByText("All 1 resolved for Rohan");
+    await screen.findByText("All done for Rohan");
     expect(
       screen.queryByText("Exception must be acknowledged before it can be resolved."),
     ).toBeNull();
@@ -331,7 +331,7 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     );
     fireEvent.click(screen.getByTestId("resolve-confirm"));
     await screen.findByText("Idempotency key was reused with a different request.");
-    expect(screen.queryByText("All 1 resolved for Rohan")).toBeNull();
+    expect(screen.queryByText("1 resolved")).toBeNull();
   });
 
   it("a repeated in-sheet toast line is a new toast request, not a no-op", async () => {
@@ -341,8 +341,7 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     mount();
     await openSheet();
     for (let n = 0; n < 2; n += 1) {
-      fireEvent.click(screen.getByTestId("review-sheet-more"));
-      fireEvent.click(await screen.findByTestId("more-add-note"));
+      fireEvent.click(screen.getByTestId("review-sheet-add-note"));
       fireEvent.change(await screen.findByLabelText("Note"), {
         target: { value: `Note ${n}` },
       });
@@ -354,6 +353,52 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     const shown = () =>
       showToast.mock.calls.filter((call) => call[0].message === "Shown on Rohan's Today");
     await waitFor(() => expect(shown()).toHaveLength(2));
+  });
+});
+
+describe("AttentionTab review sheet actions (Z14-23)", () => {
+  it("shows Remind, Noted keep open, Resolve…, Add note and WhatsApp; no ⋯ menu, no caption, no Next item", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    expect(screen.getByRole("button", { name: "Remind Rohan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noted, keep open" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resolve…" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add note" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "WhatsApp" })).toBeTruthy();
+    expect(screen.queryByTestId("review-sheet-more")).toBeNull();
+    expect(screen.queryByLabelText("More actions")).toBeNull();
+    expect(screen.queryByText(/Mark reviewed|Nudge/)).toBeNull();
+    expect(screen.queryByTestId("review-sheet-next-item")).toBeNull();
+    expect(screen.queryByText("—")).toBeNull();
+  });
+
+  it("Noted, keep open shows the state line with Undo and keeps Remind and Resolve…", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    api.acknowledgeException.mockResolvedValue({});
+    fireEvent.click(screen.getByTestId("review-sheet-noted"));
+    // One item, now noted: the all-done summary says it is still open.
+    await screen.findByText("All done for Rohan");
+    expect(screen.getByText("1 noted, still open")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Back to Attention" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous item" }));
+    await screen.findByText("Noted · still open");
+    expect(screen.getByTestId("review-sheet-undo")).toBeTruthy();
+    expect(screen.getByTestId("review-sheet-remind")).toBeTruthy();
+    expect(screen.getByTestId("review-sheet-resolve")).toBeTruthy();
+    expect(screen.queryByTestId("review-sheet-noted")).toBeNull();
+  });
+
+  it("Add note opens the note sheet and WhatsApp opens a wa.me chat", async () => {
+    loadOk();
+    mount();
+    await openSheet();
+    fireEvent.click(screen.getByTestId("review-sheet-whatsapp"));
+    expect(openContextualWhatsApp).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByTestId("review-sheet-add-note"));
+    expect(await screen.findByLabelText("Note")).toBeTruthy();
   });
 });
 
