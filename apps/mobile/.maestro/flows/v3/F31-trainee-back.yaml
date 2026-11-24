@@ -1,0 +1,103 @@
+appId: com.thefitbud.mobile.staging
+name: F31 Trainee back on both platforms (Z14-25)
+tags:
+  - device
+  - trainee
+  - z14-25
+---
+# F31 (Z14-25, D-W14-24): Android back (Maestro `back`) does what the on-screen
+# back would; on iOS the left-edge swipe does. The back target for each screen
+# is the table in docs/specs/Z14-25.md. Tab testIDs are `tab-<id>`.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_ONTRACK_EMAIL}
+- runFlow: ../../common/wait-trainee-today-ready.yaml
+
+# Diet tab -> back -> Today (Android).
+- tapOn:
+    id: "tab-diet"
+- extendedWaitUntil:
+    visible:
+      id: "trainee-pane-diet"
+    timeout: 30000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+      - extendedWaitUntil:
+          visible:
+            id: "trainee-today"
+          timeout: 15000
+
+# More -> Account -> Password -> back -> Account -> back -> More -> back -> Today.
+- tapOn:
+    id: "tab-more"
+- tapOn: "Account"
+- extendedWaitUntil:
+    visible: "Password"
+    timeout: 15000
+- tapOn: "Password"
+- extendedWaitUntil:
+    visible: "Change password"
+    timeout: 15000
+- takeScreenshot: BK-trainee-password
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+      - extendedWaitUntil:
+          visible: "Time zone"
+          timeout: 15000
+      - back
+      - extendedWaitUntil:
+          visible: "Account"
+          timeout: 15000
+      - back
+      - extendedWaitUntil:
+          visible:
+            id: "trainee-today"
+          timeout: 15000
+
+# A log sheet closes alone: Progress -> Log weight -> back -> Progress.
+- tapOn:
+    id: "tab-progress"
+- tapOn: "Log weight"
+- extendedWaitUntil:
+    visible: "Dismiss sheet"
+    timeout: 15000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - back
+      - assertNotVisible: "Dismiss sheet"
+      - assertVisible:
+          id: "trainee-pane-progress"
+
+# iOS: swipe from the left edge on Account; More is underneath.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          id: "tab-more"
+      - tapOn: "Account"
+      - extendedWaitUntil:
+          visible: "Time zone"
+          timeout: 15000
+      - swipe:
+          start: 2%,50%
+          end: 80%,50%
+      - extendedWaitUntil:
+          visible:
+            id: "tab-more"
+          timeout: 15000
+- runFlow: ../../common/assert-no-crash.yaml
