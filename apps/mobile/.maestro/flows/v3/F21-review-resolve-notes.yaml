@@ -79,7 +79,7 @@ env:
     visible: "Note for .*"
     timeout: 10000
 - inputText: "Two shorter sessions this week."
-- assertVisible: "Show on .*Today"
+- assertVisible: "Only me"
 - takeScreenshot: TM-04k
 - tapOn:
     id: "note-save"

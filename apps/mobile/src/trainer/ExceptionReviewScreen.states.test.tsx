@@ -319,7 +319,7 @@ describe("ExceptionReviewScreen states", () => {
     await waitFor(() =>
       expect(api.createTrainerNote).toHaveBeenCalledWith(
         REL,
-        { body: "Shorter sessions", visibility: "client" },
+        { body: "Shorter sessions", visibility: "private" },
         expect.any(String),
       ),
     );
