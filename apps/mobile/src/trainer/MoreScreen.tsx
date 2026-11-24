@@ -32,7 +32,7 @@ import {
 import { useLegalDocument } from "../screens/LegalDocumentScreen";
 import { M2Card, M2Group, M2Row } from "../trainee/settings/m2";
 import { mobilePermittedRoles } from "../navigation/resolveRoute";
-import { isEndedClient } from "./clients";
+import { countsFromFacets } from "./clientCounts";
 import {
   ThemeScope,
   createThemedStyles,
@@ -105,9 +105,9 @@ export function TrainerMoreScreen({
 
   const load = useCallback(async () => {
     try {
-      const page = await api.listClients({ limit: 50 });
-      const active = page.items.filter((item) => !isEndedClient(item)).length;
-      setActiveCount(active);
+      // One row is enough: the active count is in the list's facets (Z14-21).
+      const page = await api.listClients({ limit: 1 });
+      if (page.facets) setActiveCount(countsFromFacets(page.facets).all);
       setOffline(false);
     } catch (err) {
       if (isNetworkFailure(err)) {

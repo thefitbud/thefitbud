@@ -1,32 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Platform, View } from "react-native";
+import { useCallback, useMemo, useRef, useState } from "react";
+import { Platform } from "react-native";
 import { Text } from "../components/Text";
-import { userFacingMessage } from "@fitbud/api-client";
-import type { TrainerCheckinInboxItem } from "@fitbud/contracts";
-import { addDaysToLocalDate,
-  deviceTimeZone,
-  formatCivilDate,
-  formatLocalDate,
-} from "@fitbud/core";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
+import type {
+  TrainerCheckinInboxItem,
+  TrainerCheckinInboxSegment,
+} from "@fitbud/contracts";
+import { deviceTimeZone, formatCivilDate } from "@fitbud/core";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
-import { Screen } from "../components/Screen";
 import { Snackbar } from "../components/Snackbar";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { localDateInTimezone } from "../lib/dates";
 import { reportError } from "../lib/reportError";
 import { scheduleUndoable, type UndoableAction } from "./attentionCards";
 import { CheckinsList } from "./checkinsList/List";
-import { buildCheckinListModel,
-  coachingWeekAt,
-  inboxItemFromCheckin,
+import {
+  buildCheckinListModel,
   type CheckinListRow,
   type CheckinListSegment,
-  type WeekLookup,
 } from "./checkinsList/model";
 import {
-  clientMetaFromDirectoryItem,
   clientMetaFromWorkspaceHeader,
   readClientMeta,
   readTrainerCache,
@@ -35,14 +30,32 @@ import {
   writeTrainerCache,
 } from "./cache";
 import { UpdatingLine, useRefreshWhenActive } from "./keptTab";
+import { usePagedList } from "./usePagedList";
 import { openContextualWhatsApp } from "./whatsapp";
 import { createThemedStyles } from "../providers/ThemeProvider";
 
+/**
+ * The first page of To review and Overdue (Z14-3). `inbox` holds both lists
+ * (a row's own status says which); later pages and Reviewed are not cached.
+ */
 type CheckinsSnapshot = {
   inbox: TrainerCheckinInboxItem[];
-  weeks: Array<[string, number]>;
+  cursors?: { to_review: string | null; overdue: string | null };
   savedAt: string;
 };
+
+/** D-W14-26: 30 per page, the next one at half a screen from the end. */
+const PAGE_SIZE = 30;
+
+function isOfflineError(err: unknown): boolean {
+  if (err instanceof TypeError) return true;
+  if (err instanceof ApiClientError) return err.status === 0;
+  return false;
+}
+
+function inboxKey(item: TrainerCheckinInboxItem): string {
+  return item.checkin.id;
+}
 
 const CACHE_KEY = "trainer:checkins";
 
@@ -70,135 +83,158 @@ export function CheckinsTab({
   const [initialSnapshot] = useState(() =>
     readTrainerCache<CheckinsSnapshot>(CACHE_KEY),
   );
-  const [updating, setUpdating] = useState(false);
   const lastLoadedAt = useRef(0);
-  const hasData = useRef(initialSnapshot != null);
-  const [inboxItems, setInboxItems] = useState<TrainerCheckinInboxItem[]>(
-    initialSnapshot?.inbox ?? [],
-  );
-  const [reviewedItems, setReviewedItems] = useState<TrainerCheckinInboxItem[]>(
-    [],
-  );
-  const [weeksByRelationship, setWeeksByRelationship] = useState<WeekLookup>(
-    () => new Map(initialSnapshot?.weeks ?? []),
-  );
-  const [loading, setLoading] = useState(initialSnapshot == null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [segment, setSegment] = useState<CheckinListSegment>("to_review");
+  // Reviewed loads the first time it is opened, not before.
+  const [reviewedOpened, setReviewedOpened] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [heldIds, setHeldIds] = useState<ReadonlySet<string>>(new Set());
   const undoRef = useRef<UndoableAction | null>(null);
   const heldRowRef = useRef<CheckinListRow | null>(null);
+  // The two snapshot halves are written together once both first pages are in.
+  const firstPages = useRef<{
+    to_review?: { items: TrainerCheckinInboxItem[]; nextCursor: string | null };
+    overdue?: { items: TrainerCheckinInboxItem[]; nextCursor: string | null };
+  }>({});
 
-  const load = useCallback(async () => {
-    setError(null);
-    const cacheEpoch = trainerCacheEpoch();
-    if (hasData.current) setUpdating(true);
-    try {
-      const [inbox, clients] = await Promise.all([
-        api.listTrainerCheckinInbox(),
-        api.listClients({ limit: 100 }),
-      ]);
-      setInboxItems(inbox.items);
-
-      const weeks = new Map<string, number>();
-      const now = Date.now();
-      for (const client of clients.items) {
-        if (!client.relationshipId || client.status === "ended") continue;
-        // Directory items do not carry startedAt; week labels stay optional.
-        const week = coachingWeekAt(
-          (client as { startedAt?: string | null }).startedAt,
-          now,
-        );
-        if (week != null) weeks.set(client.relationshipId, week);
-      }
-      setWeeksByRelationship(weeks);
-      for (const client of clients.items) {
-        if (client.relationshipId) {
-          writeClientMeta(
-            client.relationshipId,
-            clientMetaFromDirectoryItem(client),
-            cacheEpoch,
-          );
+  const fetchSegment = useCallback(
+    (which: TrainerCheckinInboxSegment) =>
+      async (cursor: string | null) => {
+        const cacheEpoch = trainerCacheEpoch();
+        const page = await api.listTrainerCheckinInbox({
+          segment: which,
+          limit: PAGE_SIZE,
+          ...(cursor ? { cursor } : {}),
+        });
+        if (cursor === null && which !== "reviewed") {
+          lastLoadedAt.current = Date.now();
+          firstPages.current[which] = {
+            items: page.items,
+            nextCursor: page.nextCursor,
+          };
+          const { to_review, overdue } = firstPages.current;
+          if (to_review && overdue) {
+            writeTrainerCache(
+              CACHE_KEY,
+              {
+                inbox: [...to_review.items, ...overdue.items],
+                cursors: {
+                  to_review: to_review.nextCursor,
+                  overdue: overdue.nextCursor,
+                },
+                savedAt: new Date().toISOString(),
+              } satisfies CheckinsSnapshot,
+              cacheEpoch,
+            );
+            firstPages.current = {};
+          }
         }
-      }
-      hasData.current = true;
-      lastLoadedAt.current = Date.now();
-      writeTrainerCache(
-        CACHE_KEY,
-        {
-          inbox: inbox.items,
-          weeks: [...weeks.entries()],
-          savedAt: new Date().toISOString(),
-        } satisfies CheckinsSnapshot,
-        cacheEpoch,
-      );
+        return { items: page.items, nextCursor: page.nextCursor };
+      },
+    [api],
+  );
+  const fetchToReview = useMemo(() => fetchSegment("to_review"), [fetchSegment]);
+  const fetchOverdue = useMemo(() => fetchSegment("overdue"), [fetchSegment]);
+  const fetchReviewed = useMemo(() => fetchSegment("reviewed"), [fetchSegment]);
 
-      if (segment === "reviewed") {
-        const since = addDaysToLocalDate(
-          formatLocalDate(new Date(), "UTC"),
-          -30,
+  const [firstError, setFirstError] = useState<string | null>(null);
+  const onPageError = useCallback(
+    (which: string) => (err: unknown, phase: "first" | "more") => {
+      if (phase === "first") {
+        setFirstError(
+          userFacingMessage(err, { fallback: "Could not load check-ins." }),
         );
-        const active = clients.items.filter(
-          (row) => row.relationshipId && row.status !== "ended",
-        );
-        const lists = await Promise.all(
-          active.slice(0, 24).map(async (client) => {
-            if (!client.relationshipId) return [] as TrainerCheckinInboxItem[];
-            try {
-              const list = await api.listCheckins(client.relationshipId, {
-                fromDate: since,
-                limit: 20,
-              });
-              return list.items
-                .filter((checkin) => checkin.status === "reviewed")
-                .map((checkin) =>
-                  inboxItemFromCheckin(checkin, {
-                    relationshipId: client.relationshipId!,
-                    traineeDisplayName: client.traineeDisplayName ?? "Client",
-                  }),
-                );
-            } catch (err) {
-              reportError("trainer.checkins.reviewed", err);
-              return [];
-            }
-          }),
-        );
-        setReviewedItems(lists.flat());
       }
-    } catch (err) {
-      setError(
-        userFacingMessage(err, { fallback: "Could not load check-ins." }),
-      );
-    } finally {
-      setLoading(false);
-      setUpdating(false);
+      if (!isOfflineError(err)) reportError(`trainer.checkins.${which}.${phase}`, err);
+    },
+    [],
+  );
+  const toReviewList = usePagedList<TrainerCheckinInboxItem>({
+    queryKey: "to_review",
+    fetchPage: fetchToReview,
+    getKey: inboxKey,
+    initial: initialSnapshot
+      ? {
+          items: initialSnapshot.inbox.filter(
+            (item) => item.checkin.status === "submitted",
+          ),
+          nextCursor: initialSnapshot.cursors?.to_review ?? null,
+        }
+      : null,
+    isOffline: isOfflineError,
+    onError: onPageError("to_review"),
+  });
+  const overdueList = usePagedList<TrainerCheckinInboxItem>({
+    queryKey: "overdue",
+    fetchPage: fetchOverdue,
+    getKey: inboxKey,
+    initial: initialSnapshot
+      ? {
+          items: initialSnapshot.inbox.filter(
+            (item) => item.checkin.status === "overdue",
+          ),
+          nextCursor: initialSnapshot.cursors?.overdue ?? null,
+        }
+      : null,
+    isOffline: isOfflineError,
+    onError: onPageError("overdue"),
+  });
+  const reviewedList = usePagedList<TrainerCheckinInboxItem>({
+    queryKey: "reviewed",
+    fetchPage: fetchReviewed,
+    getKey: inboxKey,
+    enabled: reviewedOpened,
+    isOffline: isOfflineError,
+    onError: onPageError("reviewed"),
+  });
+  const lists = {
+    to_review: toReviewList,
+    overdue: overdueList,
+    reviewed: reviewedList,
+  } as const;
+  const current = lists[segment];
+
+  const refreshAllQuietly = () => {
+    toReviewList.refreshQuietly();
+    overdueList.refreshQuietly();
+    if (reviewedOpened) reviewedList.refreshQuietly();
+  };
+  useRefreshWhenActive(active, lastLoadedAt, refreshAllQuietly, returnNonce);
+
+  function selectSegment(next: CheckinListSegment) {
+    setSegment(next);
+    if (next === "reviewed") {
+      if (reviewedOpened) reviewedList.refreshQuietly();
+      else setReviewedOpened(true);
     }
-  }, [api, segment]);
+  }
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useRefreshWhenActive(active, lastLoadedAt, () => {
-    void load();
-  }, returnNonce);
+  const error = current.error ? firstError : null;
 
   const today = localDateInTimezone(trainerZone);
-  const visibleInbox = useMemo(
-    () => inboxItems.filter((item) => !heldIds.has(item.checkin.id)),
-    [inboxItems, heldIds],
-  );
-  const model = useMemo(
-    () =>
-      buildCheckinListModel([...visibleInbox, ...reviewedItems], {
-        trainerZone,
-        today,
-        weeksByRelationship,
-      }),
-    [visibleInbox, reviewedItems, trainerZone, today, weeksByRelationship],
-  );
+  const model = useMemo(() => {
+    // Each check-in sits in one segment; a repeat (a row that moved between
+    // two reads) counts once.
+    const seen = new Set<string>();
+    const loaded: TrainerCheckinInboxItem[] = [];
+    for (const item of [
+      ...toReviewList.items,
+      ...overdueList.items,
+      ...reviewedList.items,
+    ]) {
+      if (heldIds.has(item.checkin.id) || seen.has(item.checkin.id)) continue;
+      seen.add(item.checkin.id);
+      loaded.push(item);
+    }
+    return buildCheckinListModel(loaded, { trainerZone, today });
+  }, [
+    toReviewList.items,
+    overdueList.items,
+    reviewedList.items,
+    heldIds,
+    trainerZone,
+    today,
+  ]);
 
   async function nudge(row: CheckinListRow) {
     // The client header cache has the number once any workspace read stored it.
@@ -236,7 +272,9 @@ export function CheckinsTab({
           { outcome: "acknowledged", notes: null },
           createIdempotencyKey(),
         );
-        setInboxItems((prev) => prev.filter((item) => item.checkin.id !== row.id));
+        toReviewList.removeWhere((item) => item.checkin.id === row.id);
+        // It now belongs under Reviewed: that list reads fresh when opened.
+        if (reviewedOpened) reviewedList.refreshQuietly();
         setHeldIds((prev) => {
           const next = new Set(prev);
           next.delete(row.id);
@@ -281,55 +319,62 @@ export function CheckinsTab({
         ? "Some clients may have reminders paused."
         : null;
 
+  const loadingFirst = current.loading;
   return (
-    <Screen
-      v3
-      title="Check-ins"
-      chrome="app"
-      showHeader={false}
-      refreshing={refreshing}
-      onRefresh={() => {
-        setRefreshing(true);
-        void refreshSession?.();
-        void load().finally(() => setRefreshing(false));
+    <CheckinsList
+      testID="checkins-screen"
+      loading={loadingFirst}
+      model={model}
+      segment={segment}
+      onSegmentChange={selectSegment}
+      onReview={(row) => onReviewCheckin(row.item)}
+      onNudge={(row) => void nudge(row)}
+      onOpenClient={onOpenClient}
+      onMarkReviewed={markReviewedFromList}
+      footerHint={overdueHint}
+      moreBySegment={{
+        to_review: toReviewList.hasMore,
+        overdue: overdueList.hasMore,
       }}
-    >
-      {Platform.OS === "android" ? null : (
-        <Text style={styles.eyebrow}>{formatCivilDate(today)}</Text>
-      )}
-      <View testID="checkins-screen">
-      <Text style={styles.title} accessibilityRole="header">
-        Check-ins
-      </Text>
-      {error ? <ErrorBanner message={error} /> : null}
-      <UpdatingLine visible={updating && !refreshing} />
-      <CheckinsList
-        loading={loading}
-        model={model}
-        segment={segment}
-        onSegmentChange={(next) => {
-          setSegment(next);
-          if (next === "reviewed") setLoading(true);
-        }}
-        onReview={(row) => onReviewCheckin(row.item)}
-        onNudge={(row) => void nudge(row)}
-        onOpenClient={onOpenClient}
-        footerHint={overdueHint}
-        onMarkReviewed={markReviewedFromList}
-      />
-      {toast ? (
-        <Snackbar
-          leadingCheck
-          message={toast}
-          actionLabel={heldRowRef.current ? "Undo" : undefined}
-          onAction={heldRowRef.current ? undoMarkReviewed : undefined}
-          onDismiss={() => {
-            if (!heldRowRef.current) setToast(null);
-          }}
-        />
-      ) : null}
-      </View>
-    </Screen>
+      paging={{
+        loadingMore: current.loadingMore,
+        failure: current.moreError,
+        onRetry: current.retryMore,
+        onEndReached: current.loadMore,
+      }}
+      refreshing={current.refreshing}
+      onRefresh={() => {
+        void refreshSession?.();
+        toReviewList.refresh();
+        overdueList.refresh();
+        if (reviewedOpened) reviewedList.refresh();
+      }}
+      header={
+        <>
+          {Platform.OS === "android" ? null : (
+            <Text style={styles.eyebrow}>{formatCivilDate(today)}</Text>
+          )}
+          <Text style={styles.title} accessibilityRole="header">
+            Check-ins
+          </Text>
+          {error ? <ErrorBanner message={error} /> : null}
+          <UpdatingLine visible={current.updating && !current.refreshing} />
+        </>
+      }
+      toast={
+        toast ? (
+          <Snackbar
+            leadingCheck
+            message={toast}
+            actionLabel={heldRowRef.current ? "Undo" : undefined}
+            onAction={heldRowRef.current ? undoMarkReviewed : undefined}
+            onDismiss={() => {
+              if (!heldRowRef.current) setToast(null);
+            }}
+          />
+        ) : null
+      }
+    />
   );
 }
 
