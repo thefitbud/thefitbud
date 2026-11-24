@@ -80,21 +80,14 @@ async function resolveItemMeta(
   return { itemLabel: null, itemDate: null };
 }
 
-async function mapAsk(
-  db: Db,
+type AskItemMeta = { itemLabel: string | null; itemDate: string | null };
+
+function buildAsk(
   row: AskRow,
+  meta: AskItemMeta,
+  answerVisibleToClient: boolean | undefined,
   opts?: { forTrainee?: boolean },
 ) {
-  const meta = await resolveItemMeta(db, row);
-  let answerVisibleToClient: boolean | undefined;
-  if (row.trainerNoteId) {
-    const [note] = await db
-      .select({ visibility: trainerNotes.visibility })
-      .from(trainerNotes)
-      .where(eq(trainerNotes.id, row.trainerNoteId))
-      .limit(1);
-    answerVisibleToClient = note?.visibility === "client";
-  }
   return {
     id: row.id,
     relationshipId: row.relationshipId,
@@ -113,6 +106,24 @@ async function mapAsk(
       ? answerVisibleToClient === true
       : answerVisibleToClient,
   };
+}
+
+async function mapAsk(
+  db: Db,
+  row: AskRow,
+  opts?: { forTrainee?: boolean },
+) {
+  const meta = await resolveItemMeta(db, row);
+  let answerVisibleToClient: boolean | undefined;
+  if (row.trainerNoteId) {
+    const [note] = await db
+      .select({ visibility: trainerNotes.visibility })
+      .from(trainerNotes)
+      .where(eq(trainerNotes.id, row.trainerNoteId))
+      .limit(1);
+    answerVisibleToClient = note?.visibility === "client";
+  }
+  return buildAsk(row, meta, answerVisibleToClient, opts);
 }
 
 coachAskRoutes.post(
@@ -233,31 +244,76 @@ coachAskRoutes.get(
     }
     const status = c.req.query("status") ?? "open";
     const db = createDb(c.env.DB);
-    const rels = await db.select().from(coachingRelationships);
     const forTrainee = actor.selectedRole === "trainee";
-    const allowed = rels.filter((rel) =>
-      forTrainee
-        ? rel.traineeUserId === actor.userId
-        : rel.trainerUserId === actor.userId,
+    // Z14-1: one batch. The asks are scoped through a subquery on the actor's
+    // own relationships (as trainee or as trainer); the plan-item labels and
+    // note visibilities come from the same batch, keyed by those asks.
+    const askScope = and(
+      eq(coachAsks.status, status as "open"),
+      inArray(
+        coachAsks.relationshipId,
+        db
+          .select({ id: coachingRelationships.id })
+          .from(coachingRelationships)
+          .where(
+            forTrainee
+              ? eq(coachingRelationships.traineeUserId, actor.userId)
+              : eq(coachingRelationships.trainerUserId, actor.userId),
+          ),
+      ),
     );
-    const relIds = allowed.map((rel) => rel.id);
-    if (relIds.length === 0) {
-      return ok(c, coachAskListResponseSchema.parse({ items: [] }));
-    }
-    const rows = await db
-      .select()
-      .from(coachAsks)
-      .where(
-        and(
-          eq(coachAsks.status, status as "open"),
-          inArray(coachAsks.relationshipId, relIds),
-        ),
-      )
-      .orderBy(desc(coachAsks.lastAskedAt));
-    const items = [];
-    for (const row of rows) {
-      items.push(await mapAsk(db, row, { forTrainee }));
-    }
+    const scopedAsks = (column: typeof coachAsks.itemId | typeof coachAsks.trainerNoteId) =>
+      db.select({ v: column }).from(coachAsks).where(askScope);
+    const [rows, meals, workouts, checkinRows, notes] = await db.batch([
+      db.select().from(coachAsks).where(askScope).orderBy(desc(coachAsks.lastAskedAt)),
+      db
+        .select({
+          id: mealAssignments.id,
+          mealName: mealAssignments.mealName,
+          localDate: mealAssignments.localDate,
+        })
+        .from(mealAssignments)
+        .where(inArray(mealAssignments.id, scopedAsks(coachAsks.itemId))),
+      db
+        .select({
+          id: workoutAssignments.id,
+          workoutDayName: workoutAssignments.workoutDayName,
+          localDate: workoutAssignments.localDate,
+        })
+        .from(workoutAssignments)
+        .where(inArray(workoutAssignments.id, scopedAsks(coachAsks.itemId))),
+      db
+        .select({ id: checkins.id, localDate: checkins.localDate })
+        .from(checkins)
+        .where(inArray(checkins.id, scopedAsks(coachAsks.itemId))),
+      db
+        .select({ id: trainerNotes.id, visibility: trainerNotes.visibility })
+        .from(trainerNotes)
+        .where(inArray(trainerNotes.id, scopedAsks(coachAsks.trainerNoteId))),
+    ]);
+    const mealById = new Map(meals.map((r) => [r.id, r]));
+    const workoutById = new Map(workouts.map((r) => [r.id, r]));
+    const checkinById = new Map(checkinRows.map((r) => [r.id, r]));
+    const noteById = new Map(notes.map((r) => [r.id, r]));
+    const items = rows.map((row) => {
+      let meta: AskItemMeta = { itemLabel: null, itemDate: null };
+      if (row.itemType === "meal_assignment") {
+        const found = mealById.get(row.itemId);
+        meta = { itemLabel: found?.mealName ?? null, itemDate: found?.localDate ?? null };
+      } else if (row.itemType === "workout_assignment") {
+        const found = workoutById.get(row.itemId);
+        meta = {
+          itemLabel: found?.workoutDayName ?? "Workout",
+          itemDate: found?.localDate ?? null,
+        };
+      } else if (row.itemType === "checkin") {
+        meta = { itemLabel: "Check-in", itemDate: checkinById.get(row.itemId)?.localDate ?? null };
+      }
+      const answerVisibleToClient = row.trainerNoteId
+        ? noteById.get(row.trainerNoteId)?.visibility === "client"
+        : undefined;
+      return buildAsk(row, meta, answerVisibleToClient, { forTrainee });
+    });
     return ok(c, coachAskListResponseSchema.parse({ items }));
   },
 );

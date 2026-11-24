@@ -846,9 +846,17 @@ describe("intervention loop", () => {
         }>;
       };
     };
-    const bySource = new Map(
-      evaluateBody.data.exceptions.map((item) => [item.sourceEntityId, item]),
+    // Z14-1 / D-W14-8: the trainee's skip and deviate writes evaluated their
+    // relationship as they landed, so this evaluate adds only the items that
+    // come from time passing. Check every stored open item.
+    expect(evaluateBody.data.exceptions.map((item) => item.sourceEntityId).sort()).toEqual(
+      [conditioning!.id, dinner!.id].sort(),
     );
+    const storedOpen = await db
+      .select()
+      .from(schema.exceptions)
+      .where(eq(schema.exceptions.coachingRelationshipId, relationshipId));
+    const bySource = new Map(storedOpen.map((item) => [item.sourceEntityId, item]));
     expect(bySource.get(strength!.id)).toMatchObject({
       type: "skipped_workout",
       severity: "attention",

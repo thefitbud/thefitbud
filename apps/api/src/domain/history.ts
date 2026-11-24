@@ -8,6 +8,7 @@ import {
   sql,
   type SQL,
 } from "drizzle-orm";
+import type { BatchItem } from "drizzle-orm/batch";
 import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
 import {
   compareHistoryItemsNewestFirst,
@@ -48,6 +49,39 @@ export type HistoryReadFilter = {
   occurredTo?: string;
 };
 
+type SourceQuery = readonly [HistoryItemKind, PromiseLike<unknown>];
+
+/**
+ * Runs every history source in one D1 round trip (`db.batch`). A source the
+ * `kind` filter excludes is not sent and yields `[]`.
+ *
+ * Joined sources alias the joined table's columns (`.as(...)`): D1 batch
+ * results are mapped by position over object values, so two result columns
+ * with the same SQL name would collapse.
+ */
+async function batchSources<T extends readonly SourceQuery[]>(
+  db: Db,
+  kind: HistoryItemKind | undefined,
+  sources: T,
+): Promise<{ [K in keyof T]: Awaited<T[K][1]> }> {
+  const wanted = sources.filter(([sourceKind]) => !kind || kind === sourceKind);
+  const results =
+    wanted.length > 0
+      ? await db.batch(
+          wanted.map(([, query]) => query) as unknown as [
+            BatchItem<"sqlite">,
+            ...BatchItem<"sqlite">[],
+          ],
+        )
+      : [];
+  const byKind = new Map<HistoryItemKind, unknown>(
+    wanted.map(([sourceKind], i) => [sourceKind, results[i]]),
+  );
+  return sources.map(([sourceKind]) => byKind.get(sourceKind) ?? []) as {
+    [K in keyof T]: Awaited<T[K][1]>;
+  };
+}
+
 /** Date bounds applied inside each source query, before that source's row cap. */
 function occurredBounds(
   expression: SQL,
@@ -80,14 +114,6 @@ export async function assembleRelationshipHistory(
   const items: HistoryItem[] = [];
   const filter = options.filter;
 
-  function loadSource<T>(
-    kind: HistoryItemKind,
-    load: () => Promise<T[]>,
-  ): Promise<T[]> {
-    if (filter?.kind && filter.kind !== kind) return Promise.resolve([]);
-    return load();
-  }
-
   const [
     onboardingRows,
     subscriptionRows,
@@ -104,8 +130,9 @@ export async function assembleRelationshipHistory(
     exceptionRows,
     noteRows,
     interventionRows,
-  ] = await Promise.all([
-    loadSource("onboarding_submitted", () =>
+  ] = await batchSources(db, filter?.kind, [
+    [
+      "onboarding_submitted",
       db
         .select()
         .from(onboardingFormResponses)
@@ -121,8 +148,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(onboardingFormResponses.submittedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("subscription_revision", () =>
+    ],
+    [
+      "subscription_revision",
       db
         .select()
         .from(subscriptionVersions)
@@ -134,8 +162,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(subscriptionVersions.createdAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("onboarding_reviewed", () =>
+    ],
+    [
+      "onboarding_reviewed",
       db
         .select()
         .from(onboardingReviews)
@@ -147,8 +176,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(onboardingReviews.createdAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("configuration_activated", () =>
+    ],
+    [
+      "configuration_activated",
       db
         .select()
         .from(coachingConfigurations)
@@ -164,12 +194,13 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(coachingConfigurations.activatedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("plan_version", () =>
+    ],
+    [
+      "plan_version",
       db
         .select({
           version: planVersions,
-          planTitle: plans.title,
+          planTitle: sql<string>`${plans.title}`.as("history_plan_title"),
         })
         .from(planVersions)
         .innerJoin(plans, eq(planVersions.planId, plans.id))
@@ -190,13 +221,18 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(planVersions.updatedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("workout_execution", () =>
+    ],
+    [
+      "workout_execution",
       db
         .select({
           execution: workoutExecutions,
-          workoutDayName: workoutAssignments.workoutDayName,
-          localDate: workoutAssignments.localDate,
+          workoutDayName: sql<string>`${workoutAssignments.workoutDayName}`.as(
+            "history_workout_day_name",
+          ),
+          localDate: sql<string>`${workoutAssignments.localDate}`.as(
+            "history_workout_local_date",
+          ),
         })
         .from(workoutExecutions)
         .innerJoin(
@@ -219,13 +255,18 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(workoutExecutions.completedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("meal_compliance", () =>
+    ],
+    [
+      "meal_compliance",
       db
         .select({
           compliance: mealCompliance,
-          mealName: mealAssignments.mealName,
-          localDate: mealAssignments.localDate,
+          mealName: sql<string>`${mealAssignments.mealName}`.as(
+            "history_meal_name",
+          ),
+          localDate: sql<string>`${mealAssignments.localDate}`.as(
+            "history_meal_local_date",
+          ),
         })
         .from(mealCompliance)
         .innerJoin(
@@ -240,8 +281,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(mealCompliance.loggedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("checkin_submitted", () =>
+    ],
+    [
+      "checkin_submitted",
       db
         .select()
         .from(checkins)
@@ -254,8 +296,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(checkins.submittedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("checkin_reviewed", () =>
+    ],
+    [
+      "checkin_reviewed",
       db
         .select()
         .from(checkinReviews)
@@ -267,8 +310,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(checkinReviews.createdAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("measurement", () =>
+    ],
+    [
+      "measurement",
       db
         .select()
         .from(measurements)
@@ -280,8 +324,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(measurements.observedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("progress_entry", () =>
+    ],
+    [
+      "progress_entry",
       db
         .select()
         .from(progressEntries)
@@ -293,8 +338,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(progressEntries.observedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("progress_photo", () =>
+    ],
+    [
+      "progress_photo",
       db
         .select()
         .from(mediaAssets)
@@ -311,8 +357,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(mediaAssets.uploadedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("exception", () =>
+    ],
+    [
+      "exception",
       db
         .select()
         .from(exceptions)
@@ -324,8 +371,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(exceptions.detectedAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("trainer_note", () =>
+    ],
+    [
+      "trainer_note",
       db
         .select()
         .from(trainerNotes)
@@ -337,8 +385,9 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(trainerNotes.createdAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-    loadSource("intervention", () =>
+    ],
+    [
+      "intervention",
       db
         .select()
         .from(interventions)
@@ -351,8 +400,8 @@ export async function assembleRelationshipHistory(
         )
         .orderBy(desc(interventions.createdAt))
         .limit(SOURCE_FETCH_LIMIT),
-    ),
-  ]);
+    ],
+  ] as const);
 
   for (const row of onboardingRows) {
     if (!row.submittedAt) continue;
@@ -424,9 +473,7 @@ export async function assembleRelationshipHistory(
       occurredAt,
       title: `Plan “${row.planTitle}” v${row.version.versionNumber} ${statusLabel}`,
       summary: `Plan version ${row.version.versionNumber} is ${statusLabel}${
-        row.version.creationSource === "adjustment"
-          ? " (adjustment)."
-          : "."
+        row.version.creationSource === "adjustment" ? " (adjustment)." : "."
       }`,
       sourceEntityType: "plan_version",
       sourceEntityId: row.version.id,
@@ -435,9 +482,11 @@ export async function assembleRelationshipHistory(
   }
 
   for (const row of workoutRows) {
-    const occurredAt =
-      row.execution.completedAt ?? row.execution.startedAt;
-    const statusLabel = labelFor("workout_execution_status", row.execution.status);
+    const occurredAt = row.execution.completedAt ?? row.execution.startedAt;
+    const statusLabel = labelFor(
+      "workout_execution_status",
+      row.execution.status,
+    );
     items.push({
       id: row.execution.id,
       kind: "workout_execution",

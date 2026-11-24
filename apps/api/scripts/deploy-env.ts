@@ -12,10 +12,15 @@
  * A deploy also passes `--var SENTRY_RELEASE:<commit sha>` so the Worker's Sentry
  * events carry the release (`sentryRelease` in src/lib/sentry.ts reads that var).
  * No SHA (not a checkout, or the VCS binary missing) means no var, with a warning.
+ *
+ * A migrate runs `PRAGMA optimize` on the same database right after the
+ * migrations apply (Z14-4), so D1 keeps the statistics the query planner needs
+ * (without them the current-plan lookup scans every plan version).
  */
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { optimizeSql } from "./lib/d1-optimize.js";
 import { formatCommand, runCommandSync } from "./lib/run-command.js";
 
 export const ENVS = ["staging", "production"] as const;
@@ -111,6 +116,17 @@ export function wranglerArgs(args: DeployArgs, release?: string | null): string[
   ];
 }
 
+/** `PRAGMA optimize` on the env's remote D1 (Wrangler argv after `pnpm exec`). */
+export function optimizeArgs(env: DeployEnv, platform: NodeJS.Platform = process.platform): string[] {
+  return ["wrangler", "d1", "execute", D1_DATABASE[env], "--env", env, "--remote", "--command", optimizeSql(platform)];
+}
+
+/** Every Wrangler command the action runs, in order (argv after `pnpm`). */
+export function plannedCommands(args: DeployArgs, release?: string | null): string[][] {
+  const main = ["exec", ...wranglerArgs(args, release)];
+  return args.action === "migrate" ? [main, ["exec", ...optimizeArgs(args.env)]] : [main];
+}
+
 /** Runs the action; returns the process exit code. */
 export function runDeployEnv(
   argv: string[],
@@ -128,24 +144,27 @@ export function runDeployEnv(
   if (args.action === "deploy" && !release) {
     console.warn("No commit found: deploying without SENTRY_RELEASE.");
   }
-  const command = ["exec", ...wranglerArgs(args, release)];
-  const printed = formatCommand("pnpm", command);
+  const commands = plannedCommands(args, release);
+  const printed = commands.map((command) => formatCommand("pnpm", command));
 
   if (args.action === "deploy" && args.dryRun) {
-    runCommandSync("pnpm", command, { cwd });
+    runCommandSync("pnpm", commands[0]!, { cwd });
     return 0;
   }
   if (args.action === "migrate" && args.dryRun) {
-    console.log(`Migrations have no dry run. Would run: ${printed}`);
+    console.log(`Migrations have no dry run. Would run: ${printed.join(" && ")}`);
     return 0;
   }
   if (!args.yes) {
-    console.error(`Refusing to run against ${args.env} without --yes. Command:`);
-    console.error(`  ${printed}`);
+    console.error(`Refusing to run against ${args.env} without --yes. ${printed.length > 1 ? "Commands" : "Command"}:`);
+    for (const line of printed) console.error(`  ${line}`);
     return 1;
   }
-  console.log(`→ ${printed}`);
-  runCommandSync("pnpm", command, { cwd });
+  commands.forEach((command, i) => {
+    console.log(`→ ${printed[i]}`);
+    // runCommandSync exits the process on failure, so a failed migration never optimizes.
+    runCommandSync("pnpm", command, { cwd });
+  });
   return 0;
 }
 

@@ -17,6 +17,18 @@ export type ClientDirectoryNextCheckin = z.infer<
   typeof clientDirectoryNextCheckinSchema
 >;
 
+export const clientDirectoryAttentionSchema = z.object({
+  needsYouCount: z.number().int().nonnegative(),
+  notedCount: z.number().int().nonnegative(),
+  mostSevere: z.enum(["critical", "attention"]).nullable(),
+  /** An open (not noted) item other than a meal deviation. */
+  hasOpenMissed: z.boolean(),
+  /** An open (not noted) meal deviation. */
+  hasOpenOffPlan: z.boolean(),
+  hasOpenAsk: z.boolean(),
+});
+export type ClientDirectoryAttention = z.infer<typeof clientDirectoryAttentionSchema>;
+
 export const clientDirectoryItemSchema = z.object({
   relationshipId: uuidSchema.nullable(),
   invitationId: uuidSchema.nullable(),
@@ -42,6 +54,12 @@ export const clientDirectoryItemSchema = z.object({
   /** City label only when the trainee timezone differs from the trainer. */
   city: z.string().max(80).nullable().optional(),
   updatedAt: isoDateTimeSchema,
+  /**
+   * Z14-1: stored open exceptions and open asks for this client, so the
+   * Clients list badges need no attention call. Needs you = detected or
+   * active items; noted = acknowledged. Absent on invited rows.
+   */
+  attention: clientDirectoryAttentionSchema.optional(),
 });
 export type ClientDirectoryItem = z.infer<typeof clientDirectoryItemSchema>;
 

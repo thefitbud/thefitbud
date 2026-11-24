@@ -35,7 +35,7 @@ The API goes first: the web Worker's service binding needs `fitbud-api-<env>` to
 
 ```bash
 # from the repo root
-pnpm --filter @fitbud/api db:migrate:staging --yes        # D1 migrations
+pnpm --filter @fitbud/api db:migrate:staging --yes        # D1 migrations, then PRAGMA optimize (Z14-4)
 pnpm --filter @fitbud/api seed:library:staging --yes      # exercise library (I2d)
 pnpm --filter @fitbud/api deploy:staging --yes            # API Worker + api-staging.thefitbud.com
 pnpm --filter @fitbud/trainer-web deploy:staging             # builds dist/, then web Worker + app-staging.thefitbud.com

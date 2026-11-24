@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, lte, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import {
   clientWorkspaceSchema,
@@ -7,10 +7,14 @@ import {
   workspaceActivityQuerySchema,
 } from "@fitbud/contracts";
 import { addDaysToLocalDate, formatLocalDate, weekdayFromLocalDate } from "@fitbud/core";
-import { loadTraineeTimezone } from "../domain/assignment-schedule.js";
 import { buildWeekReadModel } from "../domain/week-read-model.js";
 import { createDb } from "../db/client";
-import { coachingRelationships } from "../db/schema";
+import {
+  coachingRelationships,
+  planVersions,
+  plans,
+  users,
+} from "../db/schema";
 import {
   listRelationshipActivity,
   loadClientWorkspace,
@@ -56,6 +60,36 @@ async function loadTrainerRelationship(
   return row;
 }
 
+/**
+ * The relationship row plus both timezones ("UTC" when unset), as one statement.
+ * Pass the result of running it to `trainerOwnedRelationship`.
+ */
+function relationshipWithTimezonesQuery(db: Db, relationshipId: string) {
+  return db
+    .select({
+      relationship: coachingRelationships,
+      traineeTimezone: sql<string | null>`(select ${users.timezone} from ${users} where ${users.id} = ${coachingRelationships.traineeUserId})`,
+      trainerTimezone: sql<string | null>`(select ${users.timezone} from ${users} where ${users.id} = ${coachingRelationships.trainerUserId})`,
+    })
+    .from(coachingRelationships)
+    .where(eq(coachingRelationships.id, relationshipId))
+    .limit(1);
+}
+
+/** Same access check as `loadTrainerRelationship`, on rows already read. */
+function trainerOwnedRelationship(
+  rows: Awaited<ReturnType<typeof relationshipWithTimezonesQuery>>,
+  actor: ActorContext,
+) {
+  const row = rows[0];
+  if (!row || !canAccessRelationship(actor, row.relationship)) return null;
+  return {
+    relationship: row.relationship,
+    traineeTimezone: row.traineeTimezone ?? "UTC",
+    trainerTimezone: row.trainerTimezone ?? "UTC",
+  };
+}
+
 workspaceRoutes.get(
   "/relationships/:relationshipId",
   operation({
@@ -76,12 +110,32 @@ workspaceRoutes.get(
     }
 
     const db = createDb(c.env.DB);
-    const relationship = await loadTrainerRelationship(
-      db,
-      c.req.param("relationshipId"),
-      actor,
-    );
-    if (!relationship) {
+    const relationshipId = c.req.param("relationshipId");
+    const now = nowIso();
+    // One round trip: the access check's read, and whether a scheduled plan
+    // version has come due (promotion is a write, so it only runs when needed).
+    const [relationshipRows, dueRows] = await db.batch([
+      relationshipWithTimezonesQuery(db, relationshipId),
+      db
+        .select({ id: planVersions.id })
+        .from(planVersions)
+        .where(
+          and(
+            eq(planVersions.status, "scheduled"),
+            lte(planVersions.effectiveFrom, now),
+            inArray(
+              planVersions.planId,
+              db
+                .select({ id: plans.id })
+                .from(plans)
+                .where(eq(plans.coachingRelationshipId, relationshipId)),
+            ),
+          ),
+        )
+        .limit(1),
+    ]);
+    const owned = trainerOwnedRelationship(relationshipRows, actor);
+    if (!owned) {
       return fail(
         c,
         404,
@@ -89,10 +143,15 @@ workspaceRoutes.get(
         "Coaching relationship not found.",
       );
     }
+    const { relationship } = owned;
 
-    const now = nowIso();
-    await promoteDueScheduledVersions(db, relationship.id, now, c.env);
-    const workspace = await loadClientWorkspace(db, relationship, now);
+    if (dueRows.length > 0) {
+      await promoteDueScheduledVersions(db, relationship.id, now, c.env);
+    }
+    const workspace = await loadClientWorkspace(db, relationship, now, {
+      trainer: owned.trainerTimezone,
+      trainee: owned.traineeTimezone,
+    });
     return ok(c, workspace);
   },
 );
@@ -121,15 +180,15 @@ workspaceRoutes.get(
       return fail(c, parsedStart.status, parsedStart.code, parsedStart.message);
     }
     const db = createDb(c.env.DB);
-    const relationship = await loadTrainerRelationship(
-      db,
-      c.req.param("relationshipId"),
+    // Ownership check and the trainee's timezone in one statement.
+    const owned = trainerOwnedRelationship(
+      await relationshipWithTimezonesQuery(db, c.req.param("relationshipId")),
       actor,
     );
-    if (!relationship) {
+    if (!owned) {
       return fail(c, 404, "RELATIONSHIP_NOT_FOUND", "Coaching relationship not found.");
     }
-    const timeZone = await loadTraineeTimezone(db, relationship.traineeUserId);
+    const { relationship, traineeTimezone: timeZone } = owned;
     const today = formatLocalDate(new Date(nowIso()), timeZone);
     const weekday = weekdayFromLocalDate(today); // 0 Sun … 6 Sat
     const mondayOffset = weekday === 0 ? -6 : 1 - weekday;

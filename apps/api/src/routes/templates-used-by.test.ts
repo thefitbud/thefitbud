@@ -394,7 +394,8 @@ describe("template list usedBy", () => {
       const detail = (explained.results ?? [])
         .map((row) => row.detail)
         .join("\n");
-      expect(detail).toMatch(/USING INDEX \S*(coaching_relationships_trainer_idx|plan_versions_)/);
+      // 0042 (Z14-4) dropped coaching_relationships_trainer_idx; the (trainer, trainee) unique index leads with the same column.
+      expect(detail).toMatch(/USING INDEX \S*(coaching_relationships_trainer_trainee_uidx|plan_versions_)/);
 
       const draftId = await addClient(coachA.cookie, "draft");
       await applyTemplate(coachA.cookie, draftId, sharedId, "apply-draft");
