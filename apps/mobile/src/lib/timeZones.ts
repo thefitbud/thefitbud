@@ -193,13 +193,14 @@ export function canonicalZoneId(id: string): string {
   return ID_ALIASES[id] ?? id;
 }
 
-/**
- * UTC offset of `zone` at `at`, in minutes, from Intl. `null` when the runtime
- * does not know the zone.
- */
-export function zoneOffsetMinutes(zone: string, at: Date = new Date()): number | null {
+const formatters = new Map<string, Intl.DateTimeFormat | null>();
+
+/** One formatter per zone for the app's life; building them is the slow part. */
+function formatterFor(zone: string): Intl.DateTimeFormat | null {
+  if (formatters.has(zone)) return formatters.get(zone) ?? null;
+  let formatter: Intl.DateTimeFormat | null = null;
   try {
-    const parts = new Intl.DateTimeFormat("en-US", {
+    formatter = new Intl.DateTimeFormat("en-US", {
       timeZone: zone,
       hourCycle: "h23",
       year: "numeric",
@@ -208,7 +209,23 @@ export function zoneOffsetMinutes(zone: string, at: Date = new Date()): number |
       hour: "numeric",
       minute: "numeric",
       second: "numeric",
-    }).formatToParts(at);
+    });
+  } catch {
+    formatter = null;
+  }
+  formatters.set(zone, formatter);
+  return formatter;
+}
+
+/**
+ * UTC offset of `zone` at `at`, in minutes, from Intl. `null` when the runtime
+ * does not know the zone.
+ */
+export function zoneOffsetMinutes(zone: string, at: Date = new Date()): number | null {
+  const formatter = formatterFor(zone);
+  if (!formatter) return null;
+  try {
+    const parts = formatter.formatToParts(at);
     const get = (type: string) =>
       Number(parts.find((part) => part.type === type)?.value);
     const asUtc = Date.UTC(

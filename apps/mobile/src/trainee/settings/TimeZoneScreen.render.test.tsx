@@ -24,6 +24,9 @@ describe("TimeZoneScreen", () => {
     renderList();
     expect(screen.getByText("Use phone's time zone")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Kolkata, India Standard Time · UTC\+5:30$/ })).toBeTruthy();
+    // The list is virtualised: only the first rows are mounted, not all ~425.
+    expect(screen.queryByRole("button", { name: /^Ushuaia,/ })).toBeNull();
+    search("London");
     expect(screen.getByRole("button", { name: /^London, Greenwich Mean Time/ })).toBeTruthy();
   });
 

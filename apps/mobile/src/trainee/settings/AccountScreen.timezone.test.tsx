@@ -35,10 +35,17 @@ async function pickDubai() {
 }
 
 describe("AccountScreen time zone save", () => {
-  it("shows the set toast after a save that worked", async () => {
-    setup(async () => ({}));
+  it("shows the set toast only after the save has finished", async () => {
+    let finish: (value: unknown) => void = () => undefined;
+    const update = vi.fn(() => new Promise((resolve) => (finish = resolve)));
+    setup(update);
     await pickDubai();
-    expect(await screen.findByText(/^Time zone set to Dubai/, {}, { timeout: 8000 })).toBeTruthy();
+    // Save still pending: sub-view open, no success toast yet.
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(screen.getByTestId("time-zone")).toBeTruthy();
+    expect(screen.queryByText(/Time zone set to/)).toBeNull();
+    finish({});
+    expect(await screen.findByText(/^Time zone set to Dubai/)).toBeTruthy();
   });
 
   it("restores the old zone and shows the banner when the save fails, with no success toast", async () => {
