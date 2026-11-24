@@ -21,6 +21,8 @@ function toSqlValue(value: unknown): SqlValue {
 }
 
 type BoundStatement = {
+  /** True when the statement returns rows (SELECT, or a write with RETURNING). */
+  readonly returnsRows: boolean;
   bind: (...values: unknown[]) => BoundStatement;
   all: <T = Record<string, unknown>>() => Promise<D1Result<T>>;
   first: <T = unknown>(column?: string) => Promise<T | null>;
@@ -43,6 +45,7 @@ function metaFromChanges(meta: StatementResultingChanges): D1Meta {
 function prepareBound(stmt: ReturnType<DatabaseSync["prepare"]>): BoundStatement {
   let bound: SqlValue[] = [];
   const self: BoundStatement = {
+    returnsRows: stmt.columns().length > 0,
     bind(...values: unknown[]) {
       bound = values.map(toSqlValue);
       return self;
@@ -114,7 +117,14 @@ export function createD1Database(sqlite: DatabaseSync): D1Database {
       sqlite.exec("SAVEPOINT d1_batch");
       try {
         for (const statement of statements) {
-          const runResult = await (statement as BoundStatement).run();
+          const bound = statement as unknown as BoundStatement;
+          // Real D1 returns each statement's rows in a batch; reads batched
+          // with `db.batch([...])` (Z14-1) depend on that.
+          if (bound.returnsRows) {
+            results.push(await bound.all());
+            continue;
+          }
+          const runResult = await bound.run();
           results.push({
             success: runResult.success,
             meta: runResult.meta,
