@@ -20,6 +20,11 @@ export const TRAINER_NOTIFICATION_META: Array<{
     description: "When a client submits a check-in for review.",
   },
   {
+    key: "clientLogEdits",
+    label: "Client log edits",
+    description: "When a client edits or removes a meal log.",
+  },
+  {
     key: "criticalDigest",
     label: "Critical items",
     description: "Send at most one summary per hour.",
@@ -54,6 +59,7 @@ export function defaultTrainerCategories(): TrainerNotificationPrefs {
     intakeSubmitted: true,
     renewalsDue: true,
     mealTimesChanged: true,
+    clientLogEdits: true,
     morningSummary: false,
   };
 }

@@ -1,11 +1,16 @@
 import { and, eq } from "drizzle-orm";
-import type { TrainerCategories } from "@fitbud/contracts";
 import {
-  clientDisplayLabel,
+  clientLogEditPayloadSchema,
+  type ClientLogEditPayload,
+  type TrainerCategories,
+} from "@fitbud/contracts";
+import {
   DEFAULT_QUIET_HOURS_END,
   DEFAULT_QUIET_HOURS_START,
   isWithinQuietHours,
+  formatLocalDate,
   localTimeHhMm,
+  trainerNotificationCopy,
 } from "@fitbud/core";
 import type { Db } from "../db/client.js";
 import {
@@ -166,10 +171,9 @@ export async function pushTraineeCoachLogEvent(
 }
 
 /**
- * Lock-screen text for a trainer push that names the client (Z14-11: a client
- * changed a meal log). Plain words, no kcal or meal detail: the detail is in the
- * stored inbox row. Final shared copy arrives with Z14-16; until then this is
- * the fallback its spec names. Other trainer types keep the generic text.
+ * Lock-screen text for a trainer push that names the client (Z14-16: a client
+ * changed a meal log). The shared copy in `@fitbud/core`, the same wording the
+ * inbox and the web bell show (TM-13c). Other trainer types keep the generic text.
  */
 async function trainerPushDisplay(
   db: Db,
@@ -187,11 +191,31 @@ async function trainerPushDisplay(
         .where(eq(coachingRelationships.id, notification.coachingRelationshipId))
         .limit(1)
     : [];
-  const name = clientDisplayLabel(row?.relationshipName || row?.profileName);
-  const first = name?.split(" ")[0];
+  let logEdit: ClientLogEditPayload | null = null;
+  try {
+    const parsed = clientLogEditPayloadSchema.safeParse(
+      JSON.parse(notification.payloadJson ?? "null"),
+    );
+    logEdit = parsed.success ? parsed.data : null;
+  } catch {
+    logEdit = null;
+  }
+  const [trainer] = await db
+    .select({ timezone: users.timezone })
+    .from(users)
+    .where(eq(users.id, notification.recipientUserId))
+    .limit(1);
+  const zone = trainer?.timezone || "Asia/Kolkata";
+  const today = formatLocalDate(new Date(), zone);
+  const copy = trainerNotificationCopy(
+    "trainer_client_log_edited",
+    row?.relationshipName || row?.profileName,
+    { logEdit, today },
+  );
   return {
-    title: first ? `${first} changed a meal log` : "A client changed a meal log",
-    body: "Open FitBud to see what changed.",
+    title: copy.title,
+    body:
+      logEdit?.action === "edited" ? `${copy.body}. Tap to see what changed.` : copy.body,
   };
 }
 

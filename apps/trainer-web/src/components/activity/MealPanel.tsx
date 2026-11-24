@@ -14,7 +14,7 @@ import { LinkedMedia } from "../LinkedMedia";
 import { Button } from "../Button";
 import { WhatsAppGlyph } from "../WhatsAppGlyph";
 import { clientWhatsappHref } from "../../lib/whatsapp";
-import { activityMealChipLabel, planEnergyKcal } from "./activityUtils";
+import { activityMealChipLabel, clientEditLines, planEnergyKcal } from "./activityUtils";
 import "./activity.css";
 
 export function MealPanel({
@@ -35,6 +35,7 @@ export function MealPanel({
   const clientWa = header?.clientWhatsappE164 ?? null;
   const today = formatLocalDate(new Date(), clientTimezone);
   const tag = compliance ? coachEntryTag(compliance, clientTimezone) : null;
+  const clientEdit = clientEditLines(compliance, clientName, clientTimezone);
   // Ended clients are read-only; a trainer logs or edits a meal dated within 7 days (R2).
   const canLogOrEdit =
     !ended &&
@@ -83,6 +84,17 @@ export function MealPanel({
       {tag ? (
         <p className="activity-panel-tag" data-testid="meal-coach-tag">
           <strong>{tag}</strong>
+        </p>
+      ) : null}
+      {clientEdit ? (
+        <p className="activity-panel-tag" data-testid="meal-client-edit">
+          <strong>{clientEdit.by}</strong>
+          {clientEdit.was ? (
+            <>
+              <br />
+              <span className="muted">{clientEdit.was}</span>
+            </>
+          ) : null}
         </p>
       ) : null}
       {canLogOrEdit ? (

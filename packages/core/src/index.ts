@@ -352,6 +352,10 @@ export {
 } from "./labels.js";
 export {
   clientDisplayLabel,
+  clientLogEditCopy,
+  mealEditedByLine,
+  mealRemovedActivityLine,
+  mealWasLine,
   isTrainerClientNotificationType,
   trainerNotificationCopy,
   type TrainerClientNotificationType,

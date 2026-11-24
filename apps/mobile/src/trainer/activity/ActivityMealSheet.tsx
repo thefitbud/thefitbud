@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { NotebookPen, RefreshCw } from "lucide-react-native";
+import { NotebookPen, Pencil, RefreshCw } from "lucide-react-native";
 import type { FitBudApiClient } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import { formatCivilDate, formatClockTime, formatPersonName } from "@fitbud/core";
@@ -9,6 +9,7 @@ import { Text } from "../../components/Text";
 import { reportError } from "../../lib/reportError";
 import {
   activityTag,
+  clientEditMarker,
   firstName,
   parseMealComplianceId,
   type ActivityEventLike,
@@ -93,6 +94,7 @@ function ActivityMealSheetBody({
   const ateKcal =
     assignment?.compliance?.loggedTotals?.energyKcal ?? event.kcal ?? null;
   const foodCount = assignment?.prescription?.items?.length ?? 0;
+  const edit = clientEditMarker(assignment?.compliance, event.traineeDisplayName ?? "Client", zone);
   const changed =
     tag.kind === "changed" ||
     tag.kind === "ate_out" ||
@@ -121,9 +123,19 @@ function ActivityMealSheetBody({
           </View>
           <View style={styles.badge}>
             <RefreshCw color={theme.colors.ink2} size={13} strokeWidth={2.2} />
-            <Text style={styles.badgeText}>{tag.label}</Text>
+            <Text style={styles.badgeText}>{edit ? "Edited" : tag.label}</Text>
           </View>
         </View>
+
+        {edit ? (
+          <View style={styles.editBox} testID="meal-sheet-client-edit">
+            <Pencil color={theme.colors.ink2} size={16} strokeWidth={2.2} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.editBy}>{edit.by}</Text>
+              {edit.was ? <Text style={styles.editWas}>{edit.was}</Text> : null}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.summaryBox}>
           <Text style={styles.summary}>{event.summary}</Text>
@@ -201,6 +213,17 @@ const useStyles = createThemedStyles((t) => ({
     fontFamily: fontFamilySemiBold,
     fontSize: 12,
   },
+  editBox: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 10,
+    padding: 14,
+  },
+  editBy: { color: t.colors.ink, fontFamily: fontFamilySemiBold, fontSize: 15 },
+  editWas: { color: t.colors.ink3, fontSize: 14, marginTop: 2 },
   summaryBox: {
     backgroundColor: t.colors.fill,
     borderRadius: 14,

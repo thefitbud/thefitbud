@@ -340,6 +340,7 @@ describe("coachViewSwitchPrompt (frame 61, Z11-14)", () => {
     expect(coachPushSubject("trainer_ask_coach")).toBe("a client's question");
     expect(coachPushSubject("trainer_intake_submitted")).toBe("a client's intake form");
     expect(coachPushSubject("trainer_meal_times_changed")).toBe("a client's meal times");
+    expect(coachPushSubject("trainer_client_log_edited")).toBe("a client's meal log");
   });
 });
 

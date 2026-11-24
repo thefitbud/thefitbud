@@ -3,7 +3,7 @@
  * WhatsApp is a wa.me prefill the trainer sends — never auto-send.
  */
 import { Modal, Pressable, StyleSheet, View } from "react-native";
-import { NotebookPen, UtensilsCrossed } from "lucide-react-native";
+import { NotebookPen, Pencil, UtensilsCrossed } from "lucide-react-native";
 import type { MealAssignment } from "@fitbud/contracts";
 import { formatCivilDate, formatNumber, formatPersonName } from "@fitbud/core";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
@@ -15,6 +15,7 @@ import {
   useTheme,
 } from "../../providers/ThemeProvider";
 import { openContextualWhatsApp } from "../whatsapp";
+import { clientEditMarker } from "../activity/model";
 import {
   dietMealBadge,
   loggedFoodLine,
@@ -27,6 +28,8 @@ type Props = {
   meal: MealAssignment | null;
   displayName: string;
   whatsappE164?: string | null;
+  /** The client's zone, for the time of an edit (Z14-16). */
+  clientZone?: string;
   onDismiss: () => void;
   onAddNote: () => void;
 };
@@ -44,6 +47,7 @@ function DietMealSheetBody({
   meal,
   displayName,
   whatsappE164,
+  clientZone = "Asia/Kolkata",
   onDismiss,
   onAddNote,
 }: Props) {
@@ -58,6 +62,7 @@ function DietMealSheetBody({
   const ateOut = badge.kind === "ate_out";
   const note = meal.compliance?.notes?.trim() || null;
   const when = formatCivilDate(meal.localDate);
+  const edit = clientEditMarker(meal.compliance, displayName, clientZone);
   const subBits = [when];
   if (ateOut) subBits.push("ate out");
   else if (badge.kind === "changed_portion" || badge.kind === "changed") {
@@ -112,6 +117,16 @@ function DietMealSheetBody({
             </Text>
           </View>
         </View>
+
+        {edit ? (
+          <View style={styles.editBox} testID="diet-sheet-client-edit">
+            <Pencil color={theme.colors.ink2} size={16} strokeWidth={2.2} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.editBy}>{edit.by}</Text>
+              {edit.was ? <Text style={styles.editWas}>{edit.was}</Text> : null}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.compare}>
           <View style={styles.planCard}>
@@ -195,6 +210,17 @@ const useStyles = createThemedStyles((t) => ({
     right: 0,
   },
   head: { flexDirection: "row", gap: 12, marginBottom: 14 },
+  editBox: {
+    alignItems: "center",
+    backgroundColor: t.colors.fill,
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 10,
+    padding: 14,
+  },
+  editBy: { color: t.colors.ink, fontFamily: fontFamilySemiBold, fontSize: 15 },
+  editWas: { color: t.colors.ink3, fontSize: 14, marginTop: 2 },
   title: {
     color: t.colors.ink,
     fontFamily: fontFamilySemiBold,
