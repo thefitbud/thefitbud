@@ -10,8 +10,26 @@ import {
 import { enqueueAndPush } from "../sync/actions";
 import type { SyncEngine, TraineeSyncStore } from "../sync/engine";
 import {
+  isSettledLateWrite,
+  recordFinishedWorkoutNotes,
+  resolvedSyncNotes,
+  type ResolvedNotesStore,
+} from "../sync/outboxCopy";
+import {
+  peekActiveSession,
+  updateActiveSession,
+  type ActiveSession,
+} from "../trainee/workout/activeSession";
+import {
+  isExecutionDone,
+  isWorkoutEndedOnPhone,
+  logSetLocally,
+  stableMutationId,
+} from "../trainee/workoutSession";
+import {
   createLiveActivityModuleAccess,
   liveActivityModuleAccess,
+  subscribeLiveActivityOutbox,
   type LiveActivityModuleAccess,
 } from "./liveActivityNative";
 
@@ -22,11 +40,15 @@ import {
  * Neither the iOS Live Activity widget nor the Android notification's button
  * can reach the API, so a tap only appends a row to native storage: the shared
  * App Group (targets/FitBudLiveActivity) on iOS, SharedPreferences
- * (WorkoutSetStore) on Android. This module drains those rows when the app
- * becomes active and when the trainee opens the workout tab: each row becomes
- * one `workout.complete_set` mutation (D-W3-5) against the running workout,
- * with a mutation UUID derived from the row so a re-drain or a double tap
- * never logs the same set twice.
+ * (WorkoutSetStore) on Android. This module drains those rows at once when the
+ * native module says a row was appended while the app runs (Z14-5's
+ * `onOutboxRow`, D-W14-12), and otherwise when the app becomes active and when
+ * the trainee opens the workout tab: each row becomes one
+ * `workout.complete_set` mutation (D-W3-5) against the running workout, with
+ * a mutation UUID derived from the row so a re-drain or a double tap never
+ * logs the same set twice, and the set shows as logged in the open workout
+ * straight away. A row for a workout that has already ended on this phone is
+ * dropped with a note in the sync status, never sent (Z14-8).
  *
  * Both platforms drain through this one function, over the same module name
  * and the same row shape, so the dedupe keys are identical (LA3b). On web, and
@@ -44,6 +66,11 @@ export type DrainOutcome =
   | "duplicate"
   /** The set was already logged in the app, so there is nothing to send. */
   | "already_logged"
+  /**
+   * The workout already ended on this phone (finished or discarded): never
+   * sent, noted in the sync status instead (Z14-8, D-W14-12).
+   */
+  | "dropped"
   /** No running workout, no matching set, or the enqueue failed: keep it. */
   | "kept";
 
@@ -52,6 +79,7 @@ export type DrainResult = {
   enqueued: number;
   duplicates: number;
   alreadyLogged: number;
+  dropped: number;
   kept: number;
   /** Rows removed from the App Group (the leading non-kept run). */
   cleared: number;
@@ -62,11 +90,10 @@ const EMPTY_RESULT: DrainResult = {
   enqueued: 0,
   duplicates: 0,
   alreadyLogged: 0,
+  dropped: 0,
   kept: 0,
   cleared: 0,
 };
-
-const DONE_EXECUTION_STATUSES = new Set(["completed", "skipped", "modified"]);
 
 /** `fitbud://?workout={assignmentId}` (liveActivitySession.workoutOpenUrl) → the id. */
 export function assignmentIdFromOpenUrl(
@@ -135,31 +162,14 @@ export function outboxRowKey(
   return [executionId, row.setIndex, row.kilograms, row.reps, position].join("|");
 }
 
-function hash32(input: string, seed: number): number {
-  let hash = seed >>> 0;
-  for (let index = 0; index < input.length; index += 1) {
-    hash ^= input.charCodeAt(index);
-    hash = Math.imul(hash, 16777619) >>> 0;
-  }
-  return hash >>> 0;
-}
-
 /**
  * A stable mutation UUID for a row key, so a retry or a re-drain reuses the
- * same mutation and idempotency key (AGENTS.md: one per logical action).
- * Shaped as a version-4 UUID because the sync contract takes a UUID.
+ * same mutation and idempotency key (AGENTS.md: one per logical action). The
+ * same hash the workout log uses for its own stable ids (Z14-8), unchanged,
+ * so a row read before an update keeps its id after it.
  */
 export function mutationIdFromKey(key: string): string {
-  const hex = [0x811c9dc5, 0x01000193, 0x9e3779b9, 0x85ebca6b]
-    .map((seed) => hash32(key, seed).toString(16).padStart(8, "0"))
-    .join("");
-  return [
-    hex.slice(0, 8),
-    hex.slice(8, 12),
-    `4${hex.slice(13, 16)}`,
-    `8${hex.slice(17, 20)}`,
-    hex.slice(20, 32),
-  ].join("-");
+  return stableMutationId(key);
 }
 
 /** Trainee-facing line for rows that could not be matched to a workout yet. */
@@ -237,13 +247,28 @@ function parseLocalExecution(payloadJson: string | null): WorkoutExecution | nul
 export function createRunningWorkoutLookup(input: {
   api: FitBudApiClient;
   store: TraineeSyncStore;
+  /**
+   * The workout open in the app right now (Z14-8). Preferred when it is the
+   * activity's workout: it holds what was logged since the last sync, and
+   * the drained set then shows in it at once.
+   */
+  session?: () => ActiveSession | null;
 }): RunningWorkoutLookup {
+  const session = input.session ?? peekActiveSession;
   return async (assignmentId) => {
+    const open = session();
+    if (
+      open &&
+      !isExecutionDone(open.execution) &&
+      (assignmentId === null || open.execution.assignmentId === assignmentId)
+    ) {
+      return open.execution;
+    }
     if (assignmentId) {
       try {
         const assignment = await input.api.getWorkoutAssignment(assignmentId);
         const summary = assignment.execution;
-        if (summary && !DONE_EXECUTION_STATUSES.has(summary.status)) {
+        if (summary && !isExecutionDone(summary)) {
           return await input.api.getWorkoutExecution(summary.id);
         }
       } catch {
@@ -256,7 +281,7 @@ export function createRunningWorkoutLookup(input: {
         .filter((record) => !record.tombstone)
         .map((record) => parseLocalExecution(record.payloadJson))
         .filter((execution): execution is WorkoutExecution => execution !== null)
-        .filter((execution) => !DONE_EXECUTION_STATUSES.has(execution.status));
+        .filter((execution) => !isExecutionDone(execution));
     } catch {
       return null;
     }
@@ -278,6 +303,24 @@ export type DrainDeps = {
   /** An existing module handle; built from the platform when absent. */
   access?: LiveActivityModuleAccess;
   onKept?: (count: number) => void;
+  /**
+   * True when the rows' workout already ended on this phone (Z14-8). Its rows
+   * are dropped, never sent: the server would only turn them away.
+   */
+  isWorkoutEnded?: (ids: {
+    assignmentId: string | null;
+    executionId: string | null;
+  }) => Promise<boolean> | boolean;
+  /** Rows dropped for an ended workout, for the sync status note. */
+  onDropped?: (count: number, assignmentId: string | null) => void;
+  /** A drained set, applied to the open workout so it shows at once. */
+  applyLocally?: (
+    execution: WorkoutExecution,
+    setExecutionId: string,
+    values: { actualReps: number | null; actualLoadLabel: string | null },
+  ) => void;
+  /** Settled late writes the server answered for a drained row. */
+  notes?: ResolvedNotesStore;
   warn?: (message: string) => void;
 };
 
@@ -335,9 +378,29 @@ export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainRes
   if (observed !== null) liveActivityRowsOrigin.set(observed);
   const execution = running && running.assignmentId === observed ? running : null;
 
+  // The rows' workout already ended on this phone (finished or discarded,
+  // possibly not yet sent): every row is for it, so none is sent. Each is
+  // dropped and counted for the sync status note (D-W14-12).
+  let ended = false;
+  if (observed !== null && deps.isWorkoutEnded) {
+    try {
+      ended = await deps.isWorkoutEnded({
+        assignmentId: observed,
+        executionId: execution?.id ?? null,
+      });
+    } catch (error) {
+      warn(`[liveActivityOutbox] ended check failed: ${errorName(error)}`);
+      ended = false;
+    }
+  }
+
   const outcomes: DrainOutcome[] = [];
+  if (ended) {
+    while (outcomes.length < rows.length) outcomes.push("dropped");
+  }
   const loggedSetIds = new Set<string>();
   for (const [position, row] of rows.entries()) {
+    if (ended) break;
     // A kept row stays where it is, and clearing is a prefix, so every row
     // after it stays too: stop here, or a later row would be enqueued and
     // then re-read at a different position (a different idempotency key).
@@ -363,8 +426,12 @@ export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainRes
       continue;
     }
     const mutationId = mutationIdFromKey(outboxRowKey(execution.id, row, position));
+    const body = {
+      actualReps: Number.isInteger(row.reps) && row.reps > 0 ? row.reps : null,
+      actualLoadLabel: loadLabelFor(row.kilograms),
+    };
     try {
-      await enqueueAndPush(deps.sync, {
+      const queued = await enqueueAndPush(deps.sync, {
         mutationId,
         idempotencyKey: mutationId,
         recordId: execution.id,
@@ -372,16 +439,34 @@ export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainRes
         expectedServerVersion: execution.recordVersion,
         payload: {
           executionId: execution.id,
+          // The plan's own id, so a workout opened with no network (ids the
+          // server has never seen) is still found (Z12-41).
+          assignmentId: execution.assignmentId,
           setExecutionId: match.setExecutionId,
           expectedVersion: execution.recordVersion,
-          body: {
-            actualReps: Number.isInteger(row.reps) && row.reps > 0 ? row.reps : null,
-            actualLoadLabel: loadLabelFor(row.kilograms),
-          },
+          body,
         },
       });
       loggedSetIds.add(match.setExecutionId);
       outcomes.push("enqueued");
+      const assignmentId = execution.assignmentId;
+      void queued.pushed.then((results) =>
+        recordFinishedWorkoutNotes(
+          results,
+          {
+            operation: "workout.complete_set",
+            workoutKey: assignmentId,
+            workoutName: null,
+            source: "lock_screen",
+          },
+          deps.notes,
+        ),
+      );
+      try {
+        deps.applyLocally?.(execution, match.setExecutionId, body);
+      } catch (error) {
+        warn(`[liveActivityOutbox] apply failed: ${errorName(error)}`);
+      }
     } catch (error) {
       warn(`[liveActivityOutbox] enqueue failed: ${errorName(error)}`);
       while (outcomes.length < rows.length) outcomes.push("kept");
@@ -411,17 +496,113 @@ export async function drainLiveActivityOutbox(deps: DrainDeps): Promise<DrainRes
     enqueued: outcomes.filter((outcome) => outcome === "enqueued").length,
     duplicates: outcomes.filter((outcome) => outcome === "duplicate").length,
     alreadyLogged: outcomes.filter((outcome) => outcome === "already_logged").length,
+    dropped: outcomes.filter((outcome) => outcome === "dropped").length,
     kept: outcomes.filter((outcome) => outcome === "kept").length,
     cleared,
   };
+  // Only rows that really left the App Group are reported as dropped; if the
+  // clear failed they are still there and the next drain tries again.
+  if (result.dropped > 0 && cleared > 0) deps.onDropped?.(result.dropped, observed);
   deps.onKept?.(result.kept);
   return result;
 }
 
 /**
- * The trainee shell's only call. Drains when the app becomes active and when
- * `focusKey` changes (the shell passes its tab, so opening the workout tab
- * drains too), one drain at a time.
+ * A drained set shows in the open workout at once (Z14-8): the session store
+ * is what the log, the minimised bar and the Live Activity read.
+ */
+export function applyDrainedSetToSession(
+  execution: WorkoutExecution,
+  setExecutionId: string,
+  values: { actualReps: number | null; actualLoadLabel: string | null },
+): void {
+  const open = peekActiveSession();
+  if (!open || open.execution.id !== execution.id) return;
+  const current = open.execution.exercises
+    .flatMap((exercise) => exercise.sets)
+    .find((set) => set.id === setExecutionId);
+  // Logged in the app meanwhile: the app's own log stands.
+  if (!current || current.status !== "pending") return;
+  updateActiveSession(open.relationshipId, {
+    execution: logSetLocally(open.execution, setExecutionId, values),
+  });
+}
+
+function stringField(json: string | null, key: string): string | null {
+  if (!json) return null;
+  try {
+    const value = (JSON.parse(json) as Record<string, unknown> | null)?.[key];
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The workout's name from what the phone already holds; null if unknown. */
+async function workoutNameOnPhone(
+  store: TraineeSyncStore,
+  assignmentId: string | null,
+): Promise<string | null> {
+  if (!assignmentId) return null;
+  const open = peekActiveSession();
+  if (open?.assignment?.id === assignmentId) {
+    return open.assignment.workoutDayName ?? null;
+  }
+  try {
+    const record = await store.getLocal("workout_assignment", assignmentId);
+    return stringField(record?.payloadJson ?? null, "workoutDayName");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Late workout writes the server turned away before Z14-7 settled them (rows
+ * refused as "workout already finished" may still be on a phone): nothing was
+ * written and nothing is left to do, so each becomes a sync status note and
+ * leaves the outbox, as an `already_applied` answer would (Z14-8). A finish
+ * with a different session RPE is not one of them and stays a refusal.
+ */
+export async function settleFinishedWorkoutRefusals(
+  sync: SyncEngine,
+  notes: ResolvedNotesStore = resolvedSyncNotes,
+): Promise<number> {
+  let rows;
+  try {
+    rows = await sync.store.listOutbox();
+  } catch {
+    return 0;
+  }
+  let settled = 0;
+  for (const row of rows) {
+    if (!isSettledLateWrite(row)) continue;
+    const assignmentId = stringField(row.payloadJson, "assignmentId");
+    const executionId = stringField(row.payloadJson, "executionId");
+    try {
+      await sync.discardEntry(row.mutationId);
+    } catch {
+      continue;
+    }
+    settled += 1;
+    notes.add({
+      workoutKey: assignmentId ?? executionId ?? row.recordId,
+      operation: row.operation,
+      source: "app",
+      workoutName:
+        stringField(row.payloadJson, "workoutName") ??
+        (await workoutNameOnPhone(sync.store, assignmentId)),
+    });
+  }
+  return settled;
+}
+
+/**
+ * The trainee shell's only call. Drains as soon as the native module says a
+ * lock-screen or notification "Log set" row was appended (Z14-5's event, while
+ * the app runs), when the app becomes active, and when `focusKey` changes
+ * (the shell passes its tab, so opening the workout tab drains too). One
+ * drain at a time; a request that arrives during a drain runs right after
+ * it, so a row appended mid-drain is never left until the next foreground.
  */
 export function useLiveActivityOutboxDrain(input: {
   sync: SyncEngine;
@@ -430,20 +611,43 @@ export function useLiveActivityOutboxDrain(input: {
 }): void {
   const { sync, api, focusKey } = input;
   const running = useRef(false);
+  const again = useRef(false);
+  const drainRef = useRef<() => void>(() => undefined);
 
   const drain = useCallback(() => {
-    if (running.current) return;
+    if (running.current) {
+      again.current = true;
+      return;
+    }
     running.current = true;
     void drainLiveActivityOutbox({
       sync,
       findRunningWorkout: createRunningWorkoutLookup({ api, store: sync.store }),
+      isWorkoutEnded: (ids) => isWorkoutEndedOnPhone(sync.store, ids),
+      applyLocally: applyDrainedSetToSession,
       // The app's one handle, so the module is loaded once, not once per drain.
       access: liveActivityModuleAccess,
       onKept: (count) => liveActivityKeptRows.set(count),
+      onDropped: (count, assignmentId) => {
+        void workoutNameOnPhone(sync.store, assignmentId).then((workoutName) =>
+          resolvedSyncNotes.add({
+            workoutKey: assignmentId ?? "unknown",
+            operation: "workout.complete_set",
+            source: "lock_screen",
+            workoutName,
+            count,
+          }),
+        );
+      },
     }).finally(() => {
       running.current = false;
+      if (again.current) {
+        again.current = false;
+        drainRef.current();
+      }
     });
   }, [api, sync]);
+  drainRef.current = drain;
 
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (next) => {
@@ -452,8 +656,39 @@ export function useLiveActivityOutboxDrain(input: {
     return () => subscription.remove();
   }, [drain]);
 
+  // D-W14-12: a running app drains the moment a row is appended. Builds
+  // without the event (or off iOS/Android) subscribe to nothing.
+  useEffect(
+    () => subscribeLiveActivityOutbox(liveActivityModuleAccess, () => drain()),
+    [drain],
+  );
+
   // Runs on mount (app launch) and whenever the shell's focus key changes.
   useEffect(() => {
     drain();
   }, [drain, focusKey]);
+
+  // Late workout writes refused before Z14-7 become notes, not refusals.
+  useEffect(() => {
+    let busy = false;
+    let rerun = false;
+    const settle = () => {
+      if (busy) {
+        rerun = true;
+        return;
+      }
+      busy = true;
+      void settleFinishedWorkoutRefusals(sync).finally(() => {
+        busy = false;
+        // A change during the pass (its own removals included) runs one more
+        // pass, which finds nothing left once every such row is settled.
+        if (rerun) {
+          rerun = false;
+          settle();
+        }
+      });
+    };
+    settle();
+    return typeof sync.subscribe === "function" ? sync.subscribe(settle) : undefined;
+  }, [sync]);
 }

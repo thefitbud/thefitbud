@@ -50,6 +50,7 @@ import {
   useTheme,
 } from "../providers/ThemeProvider";
 import { enqueueAndPush } from "../sync/actions";
+import { recordFinishedWorkoutNotes } from "../sync/outboxCopy";
 import { useSyncEngine } from "../sync/SyncProvider";
 import { useApiReachable } from "../sync/useSyncStatus";
 import {
@@ -125,7 +126,13 @@ import {
   exerciseNameKey,
   findSessionSet,
   finishLocally,
+  finishMutationId,
+  isExecutionDone,
+  isWorkoutEndedLocally,
   logSetLocally,
+  markWorkoutEndedLocally,
+  setLogMutationId,
+  skipMutationId,
   restoreSetsLocally,
   sessionRecordSetIds,
   sessionSetCounts,
@@ -297,8 +304,15 @@ export function ActiveWorkoutScreen({
     else setLocalRest(next);
   };
 
+  /**
+   * The latest execution, also between a change and the render it causes, so
+   * two quick taps never build on the same stale snapshot (Z14-8). Every
+   * local change goes through `apply`, which updates it at once.
+   */
   const executionRef = useRef(execution);
   executionRef.current = execution;
+  /** Finish or discard is under way: a second tap does nothing (Z14-8). */
+  const endingRef = useRef(false);
   const pendingSkipRef = useRef<PendingSkip | null>(null);
   pendingSkipRef.current = pendingSkip;
   const scrollRef = useRef<ScrollView>(null);
@@ -309,7 +323,13 @@ export function ActiveWorkoutScreen({
     execution.exercises.length === 0 ||
     execution.status === "completed" ||
     execution.status === "skipped" ||
-    execution.status === "modified";
+    execution.status === "modified" ||
+    // Finished or discarded on this phone, even if a stale copy reads open:
+    // nothing more can be logged into it (Z14-8).
+    isWorkoutEndedLocally({
+      executionId: execution.id,
+      assignmentId: execution.assignmentId,
+    });
 
   const exercises = useMemo(
     () => [...execution.exercises].sort((a, b) => a.order - b.order),
@@ -485,13 +505,33 @@ export function ActiveWorkoutScreen({
     return () => sub.remove();
   }, []);
 
+  /** A local change: the ref first, so the next tap reads it, then the owner. */
+  function apply(next: WorkoutExecution) {
+    executionRef.current = next;
+    onChange(next);
+  }
+
+  /** Finished or discarded here, or anywhere on this phone (Z14-8). */
+  function endedOnPhone(): boolean {
+    const current = executionRef.current;
+    return (
+      endingRef.current ||
+      isExecutionDone(current) ||
+      isWorkoutEndedLocally({
+        executionId: current.id,
+        assignmentId: current.assignmentId,
+      })
+    );
+  }
+
   function workoutPayload(extra: Record<string, unknown> = {}) {
+    const current = executionRef.current;
     return {
-      executionId: execution.id,
+      executionId: current.id,
       // The plan's own id: a workout opened with no network has ids the
       // server has never seen, and is found by this (Z12-41).
-      assignmentId: execution.assignmentId,
-      expectedVersion: execution.recordVersion,
+      assignmentId: current.assignmentId,
+      expectedVersion: current.recordVersion,
       // What the outbox list calls this row (Z12-41 hand-over).
       workoutName: title,
       ...extra,
@@ -501,6 +541,16 @@ export function ActiveWorkoutScreen({
   function saveFailed(where: string, err: unknown, fallback: string) {
     reportError(where, err);
     setError(userFacingMessage(err, { fallback }));
+  }
+
+  /**
+   * Saving to the phone's outbox failed: that is the cause, and it was
+   * checked, so the screen says exactly that. The storage error's own text is
+   * never shown (D-W14-3); `reportError` keeps it for the logs.
+   */
+  function phoneSaveFailed(where: string, err: unknown, message: string) {
+    reportError(where, err);
+    setError(message);
   }
 
   function startRestForSet(setTargetId: string) {
@@ -520,7 +570,7 @@ export function ActiveWorkoutScreen({
 
   /** Log a set, or log it again with new values (W-13). */
   function commitLog(set: ExecutionSet, exercise: ExerciseExecution, draft: SetDraft) {
-    if (paused) return;
+    if (paused || endedOnPhone()) return;
     settlePendingSkip();
     const repsRaw = draft.reps.trim();
     const parsedReps = repsRaw === "" ? null : Number.parseInt(repsRaw, 10);
@@ -528,13 +578,15 @@ export function ActiveWorkoutScreen({
       parsedReps != null && Number.isFinite(parsedReps) ? parsedReps : null;
     const loadPart = loadBody(draft, set.prescribedLoadLabel);
     const actualLoadLabel = loadLabelForDraft(draft, set.prescribedLoadLabel);
-    const firstLog = set.status === "pending";
+    const base = executionRef.current;
+    const firstLog =
+      (findSessionSet(base, set.id)?.set.status ?? set.status) === "pending";
 
-    const optimistic = logSetLocally(execution, set.id, {
+    const optimistic = logSetLocally(base, set.id, {
       actualReps,
       actualLoadLabel,
     });
-    onChange(optimistic);
+    apply(optimistic);
     setKeypad(null);
     setSheetSetId(null);
     setError(null);
@@ -560,32 +612,53 @@ export function ActiveWorkoutScreen({
       prMomentHaptic();
     }
 
+    const body = { actualReps, ...loadPart };
+    // A repeat of the set's last values (double tap, retry) is the same
+    // mutation; a correction is a new one (workoutSession.setLogMutationId).
+    const mutationId = setLogMutationId(base.id, set.id, body);
     void enqueueAndPush(sync, {
-      recordId: execution.id,
+      mutationId,
+      idempotencyKey: mutationId,
+      recordId: base.id,
       operation: "workout.complete_set",
-      expectedServerVersion: execution.recordVersion,
+      // Read from the ref, never the render closure (diagnosis #13).
+      expectedServerVersion: executionRef.current.recordVersion,
       payload: workoutPayload({
         setExecutionId: set.id,
         setTargetId: set.setTargetId,
-        body: { actualReps, ...loadPart },
+        body,
       }),
-    }).catch((err: unknown) => {
-      saveFailed(
-        "workout.set.save",
-        err,
-        "That set couldn’t be saved on this phone (WO-SAVE). Log it again.",
-      );
-    });
+    }).then(
+      ({ pushed }) => {
+        // Only the save on the phone can fail here; what the server made of
+        // it is read from the push, and a settled late set becomes a note.
+        void pushed.then((results) =>
+          recordFinishedWorkoutNotes(results, {
+            operation: "workout.complete_set",
+            workoutKey: base.assignmentId,
+            workoutName: title,
+          }),
+        );
+      },
+      (err: unknown) => {
+        phoneSaveFailed(
+          "workout.set.save",
+          err,
+          "That set couldn’t be saved on this phone. Log it again.",
+        );
+      },
+    );
   }
 
   /** Skip sets that are still to do, with Undo (W-08, W-09b). */
   function skipWithUndo(setIds: string[], message: string) {
-    if (paused || setIds.length === 0) return;
+    if (paused || setIds.length === 0 || endedOnPhone()) return;
     settlePendingSkip();
+    const base = executionRef.current;
     const previous = setIds
-      .map((id) => findSessionSet(execution, id)?.set)
+      .map((id) => findSessionSet(base, id)?.set)
       .filter((set): set is ExecutionSet => set != null);
-    onChange(skipSetsLocally(execution, setIds));
+    apply(skipSetsLocally(base, setIds));
     setKeypad(null);
     setSheetSetId(null);
     setMenuExerciseId(null);
@@ -597,7 +670,7 @@ export function ActiveWorkoutScreen({
     if (!skip) return;
     pendingSkipRef.current = null;
     setPendingSkip(null);
-    onChange(restoreSetsLocally(executionRef.current, skip.previous));
+    apply(restoreSetsLocally(executionRef.current, skip.previous));
   }
 
   /**
@@ -606,32 +679,34 @@ export function ActiveWorkoutScreen({
    * set stays logged here too.
    */
   function markNotDone(set: ExecutionSet) {
-    if (paused) return;
+    if (paused || endedOnPhone()) return;
     settlePendingSkip();
     const previous = [set];
-    onChange(skipSetsLocally(execution, [set.id]));
+    const executionId = executionRef.current.id;
+    apply(skipSetsLocally(executionRef.current, [set.id]));
     setSheetSetId(null);
     setError(null);
     void (async () => {
       try {
         await sync.pushPending();
-        await api.skipWorkoutSet(execution.id, set.id);
+        await api.skipWorkoutSet(executionId, set.id);
       } catch (err: unknown) {
-        onChange(restoreSetsLocally(executionRef.current, previous));
+        apply(restoreSetsLocally(executionRef.current, previous));
         saveFailed(
           "workout.set.unlog",
           err,
-          "That change didn’t go through, so the set is still logged (WO-UNLOG).",
+          "That change didn’t go through, so the set is still logged. Try again.",
         );
       }
     })();
   }
 
   function setPaused(next: boolean) {
+    if (endedOnPhone()) return;
     settlePendingSkip();
     const at = new Date().toISOString();
-    onChange({
-      ...execution,
+    apply({
+      ...executionRef.current,
       status: next ? "paused" : "started",
       pausedAt: next ? at : null,
     });
@@ -641,20 +716,21 @@ export function ActiveWorkoutScreen({
       setRestDone(null);
     }
     void enqueueAndPush(sync, {
-      recordId: execution.id,
+      recordId: executionRef.current.id,
       operation: next ? "workout.pause" : "workout.resume",
-      expectedServerVersion: execution.recordVersion,
+      expectedServerVersion: executionRef.current.recordVersion,
       payload: workoutPayload(),
     }).catch((err: unknown) => {
-      saveFailed(
+      phoneSaveFailed(
         next ? "workout.pause" : "workout.resume",
         err,
-        "That couldn’t be saved on this phone (WO-SAVE).",
+        "That couldn’t be saved on this phone. Try again.",
       );
     });
   }
 
   function requestFinish() {
+    if (endedOnPhone()) return;
     if (!(notLogged > 0 || execution.requireSessionRpe)) {
       finishWorkout();
       return;
@@ -675,20 +751,35 @@ export function ActiveWorkoutScreen({
     sheetGate.afterClose(() => setFinishOpen(true));
   }
 
+  /**
+   * Finish (W-16). Guarded (Z14-8): the first tap takes the lock and marks the
+   * workout ended on this phone before anything is queued, and the mutation
+   * id comes from the execution, so a second tap, a retry or the resume
+   * dialog's Finish all land on the same single `workout.complete`.
+   */
   function finishWorkout() {
     if (execution.requireSessionRpe && sessionRpe == null) return;
+    if (endedOnPhone()) return;
+    endingRef.current = true;
     settlePendingSkip();
-    const optimistic = finishLocally(executionRef.current, sessionRpe);
-    onChange(optimistic);
+    const base = executionRef.current;
+    markWorkoutEndedLocally(base);
+    const payload = workoutPayload({ body: { sessionRpe } });
+    const optimistic = finishLocally(base, sessionRpe);
+    apply(optimistic);
     setFinishOpen(false);
+    setDiscardOpen(false);
     setRest(null);
+    const mutationId = finishMutationId(base.id);
     void (async () => {
       try {
         await enqueueAndPush(sync, {
-          recordId: execution.id,
+          mutationId,
+          idempotencyKey: mutationId,
+          recordId: base.id,
           operation: "workout.complete",
-          expectedServerVersion: execution.recordVersion,
-          payload: workoutPayload({ body: { sessionRpe } }),
+          expectedServerVersion: base.recordVersion,
+          payload,
         });
       } catch (err: unknown) {
         // The summary still opens; the sync status says what was not sent.
@@ -698,18 +789,36 @@ export function ActiveWorkoutScreen({
     })();
   }
 
+  /**
+   * Discard (W-15): recorded as skipped. Never offered once the workout has
+   * ended on this phone, and a no-op if a tap gets here anyway (Z14-8).
+   */
   function discardWorkout() {
-    settlePendingSkip();
     setDiscardOpen(false);
+    if (endedOnPhone()) return;
+    endingRef.current = true;
+    settlePendingSkip();
     setRest(null);
-    onChange(discardLocally(executionRef.current));
+    const base = executionRef.current;
+    markWorkoutEndedLocally(base);
+    apply(discardLocally(base));
+    const mutationId = skipMutationId(base.assignmentId);
     void (async () => {
       try {
-        await enqueueAndPush(sync, {
-          recordId: execution.assignmentId,
+        const queued = await enqueueAndPush(sync, {
+          mutationId,
+          idempotencyKey: mutationId,
+          recordId: base.assignmentId,
           operation: "workout.skip",
-          payload: { assignmentId: execution.assignmentId, workoutName: title },
+          payload: { assignmentId: base.assignmentId, workoutName: title },
         });
+        void queued.pushed.then((results) =>
+          recordFinishedWorkoutNotes(results, {
+            operation: "workout.skip",
+            workoutKey: base.assignmentId,
+            workoutName: title,
+          }),
+        );
       } catch (err: unknown) {
         reportError("workout.discard", err);
       }
@@ -1099,7 +1208,8 @@ export function ActiveWorkoutScreen({
             variant="dangerQuiet"
             onPress={() => {
               setKeypad(null);
-              setDiscardOpen(true);
+              // Not offered once the workout has ended on this phone (Z14-8).
+              if (!endedOnPhone()) setDiscardOpen(true);
             }}
           />
         </View>

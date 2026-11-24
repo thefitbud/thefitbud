@@ -130,6 +130,8 @@ function dayAssignment(opts: {
 }
 
 let items: WorkoutAssignment[] = [];
+/** Every operation the tab queued, in order (Z14-8). */
+const queuedOperations: string[] = [];
 
 const api = new Proxy(
   {},
@@ -174,18 +176,22 @@ vi.mock("../sync/SyncProvider", async () => {
     ...actual,
     useSyncEngine: () => ({
       pullAndApply: async () => undefined,
+      pushPending: async () => [],
       store: {
         upsertLocal: async () => undefined,
         listLocal: async () => [],
         listOutbox: async () => [],
         getMeta: async () => ({ cursor: null, lastSyncedAt: null }),
       },
-      enqueue: async () => undefined,
+      enqueue: async (row: { operation: string }) => {
+        queuedOperations.push(row.operation);
+      },
     }),
   };
 });
 
 const { WorkoutTab, missedBannerText } = await import("./WorkoutTab");
+const { closeActiveSession } = await import("./workout/activeSession");
 const { cacheKey, invalidateRelationshipDayData, setCached } = await import(
   "./dataCache"
 );
@@ -204,6 +210,26 @@ beforeEach(async () => {
   await act(async () => {});
   invalidateRelationshipDayData(relationship.id);
   items = [];
+  queuedOperations.length = 0;
+  closeActiveSession();
+});
+
+describe("Start can't double-start (Z14-8)", () => {
+  it("a double tap on Start workout queues one start", async () => {
+    items = [
+      dayAssignment({ n: 1, name: "Lower body B", localDate: FOCUS_DATE, status: "assigned", exercises: 2, setsEach: 2 }),
+    ];
+    renderWorkout();
+    const start = await screen.findByRole("button", { name: "Start workout" });
+    await act(async () => {});
+    await act(async () => {
+      fireEvent.click(start);
+      fireEvent.click(start);
+    });
+    expect(queuedOperations.filter((operation) => operation === "workout.start")).toEqual([
+      "workout.start",
+    ]);
+  });
 });
 
 /**

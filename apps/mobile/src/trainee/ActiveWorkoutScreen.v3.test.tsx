@@ -61,7 +61,12 @@ vi.mock("expo-keep-awake", () => ({
 const uuid = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
-const enqueued: Array<{ operation: string; payloadJson: string }> = [];
+const enqueued: Array<{
+  operation: string;
+  payloadJson: string;
+  mutationId?: string;
+  expectedServerVersion?: number | null;
+}> = [];
 /** Every API call the screen made, in order. */
 const apiCalls: Array<{ method: string; args: unknown[] }> = [];
 /** Make the next call of a method reject (a request that did not land). */
@@ -111,7 +116,11 @@ vi.mock("../sync/SyncProvider", async () => {
         listOutbox: async () => [],
         getMeta: async () => ({ cursor: null, lastSyncedAt: null }),
       },
-      enqueue: async (row: { operation: string; payloadJson: string }) => {
+      enqueue: async (row: (typeof enqueued)[number]) => {
+        if (failNext.enqueue) {
+          failNext.enqueue = false;
+          throw new TypeError("Cannot read properties of undefined (reading 'runAsync')");
+        }
         enqueued.push(row);
       },
     }),
@@ -119,6 +128,9 @@ vi.mock("../sync/SyncProvider", async () => {
 });
 
 const { ActiveWorkoutScreen, SKIP_UNDO_MS } = await import("./ActiveWorkoutScreen");
+const { finishMutationId, resetWorkoutActionsForTests, skipMutationId } = await import(
+  "./workoutSession"
+);
 
 const NOW = "2026-11-11T06:00:00.000Z";
 
@@ -237,6 +249,8 @@ type HarnessOptions = {
   onAskCoach?: (exerciseName?: string) => void;
   coachName?: string;
   assignment?: WorkoutAssignment;
+  /** The owner hands back each change with the next server version (Z14-8). */
+  bumpVersion?: boolean;
 };
 
 function Harness({
@@ -251,7 +265,13 @@ function Harness({
     <ActiveWorkoutScreen
       execution={exec}
       assignment={options.assignment ?? null}
-      onChange={setExec}
+      onChange={(next) =>
+        setExec(
+          options.bumpVersion
+            ? { ...next, recordVersion: next.recordVersion + 1 }
+            : next,
+        )
+      }
       onFinished={options.onFinished ?? (() => undefined)}
       onExit={options.onExit ?? (() => undefined)}
       onMinimise={options.onMinimise}
@@ -282,6 +302,7 @@ function lastBody() {
 beforeEach(() => {
   enqueued.length = 0;
   apiCalls.length = 0;
+  resetWorkoutActionsForTests();
   for (const key of Object.keys(failNext)) delete failNext[key];
   strength = null;
 });
@@ -738,6 +759,123 @@ describe("finish, pause, minimise and discard (W-14, W-15, W-16, W-19)", () => {
     expect(row.operation).toBe("workout.skip");
     expect(JSON.parse(row.payloadJson)).toMatchObject({ assignmentId: uuid(2) });
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("no double save (Z14-8)", () => {
+  const ops = (operation: string) => enqueued.filter((row) => row.operation === operation);
+
+  it("a triple tap on Finish anyway queues exactly one finish, with the execution's stable id", async () => {
+    const onFinished = vi.fn();
+    renderScreen("20 kg", execution("20 kg"), { onFinished });
+    tap("Finish workout");
+    const finish = screen.getAllByRole("button", { name: "Finish anyway" }).at(-1)!;
+    await act(async () => {
+      fireEvent.click(finish);
+      fireEvent.click(finish);
+      fireEvent.click(finish);
+    });
+    expect(ops("workout.complete")).toHaveLength(1);
+    expect(ops("workout.complete")[0]!.mutationId).toBe(finishMutationId(uuid(1)));
+    expect(onFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it("a double tap on the nav Finish with everything logged finishes once", async () => {
+    const done = twoExercises();
+    for (const exercise of done.exercises) {
+      exercise.sets = exercise.sets.map((x) => ({
+        ...x,
+        status: "completed" as const,
+        actualReps: 10,
+        actualLoadLabel: "20 kg",
+        completedAt: NOW,
+      }));
+    }
+    const onFinished = vi.fn();
+    renderScreen("20 kg", done, { onFinished });
+    const finish = screen.getByRole("button", { name: "Finish workout" });
+    await act(async () => {
+      fireEvent.click(finish);
+      fireEvent.click(finish);
+    });
+    expect(ops("workout.complete")).toHaveLength(1);
+    expect(onFinished).toHaveBeenCalledTimes(1);
+  });
+
+  it("Discard is not offered after Finish, and a Discard left open is a no-op", async () => {
+    const onExit = vi.fn();
+    renderScreen("20 kg", execution("20 kg"), { onExit });
+    // The dialog is open when the workout ends elsewhere on this phone (the
+    // Workout tab's Finish now): confirming it queues nothing.
+    tap("Discard workout");
+    expect(screen.getByText("Discard this workout?")).toBeTruthy();
+    const { markWorkoutEndedLocally } = await import("./workoutSession");
+    markWorkoutEndedLocally({ id: uuid(1), assignmentId: uuid(2) });
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole("button", { name: "Discard workout" }).at(-1)!);
+    });
+    expect(ops("workout.skip")).toHaveLength(0);
+    expect(onExit).not.toHaveBeenCalled();
+    // And the log now reads as done: nothing more to log, finish or discard.
+    expect(screen.getByText("This workout is already done")).toBeTruthy();
+  });
+
+  it("a discard queues one skip with the assignment's stable id", async () => {
+    renderScreen("20 kg", execution("20 kg"));
+    fireEvent.click(screen.getAllByRole("button", { name: "Discard workout" })[0]!);
+    const confirm = screen.getAllByRole("button", { name: "Discard workout" }).at(-1)!;
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    expect(ops("workout.skip")).toHaveLength(1);
+    expect(ops("workout.skip")[0]!.mutationId).toBe(skipMutationId(uuid(2)));
+  });
+
+  it("two quick sets in one tick both stay logged, each its own mutation", () => {
+    renderScreen("20 kg");
+    act(() => {
+      tap(/^Log set 1/);
+      tap(/^Log set 2/);
+    });
+    const sets = ops("workout.complete_set");
+    expect(sets.map((row) => JSON.parse(row.payloadJson).setExecutionId)).toEqual([
+      uuid(10),
+      uuid(11),
+    ]);
+    expect(new Set(sets.map((row) => row.mutationId)).size).toBe(2);
+    expect(sets.map((row) => row.expectedServerVersion)).toEqual([1, 1]);
+    // The second log built on the first, not on the stale render: both sets
+    // are logged, so the exercise folds as done.
+    expect(screen.getByRole("button", { name: /^Romanian deadlift, 2 sets/ })).toBeTruthy();
+  });
+
+  it("sets and a correction send the version the screen holds now, not the first render's", () => {
+    renderScreen("20 kg", execution("20 kg"), { bumpVersion: true });
+    tap(/^Log set 1/);
+    tap(/^Set 1, 20 kg × 10, logged/);
+    fireEvent.change(screen.getByLabelText("Reps you did"), { target: { value: "8" } });
+    tap("Save changes");
+    tap(/^Log set 2/);
+    const sets = ops("workout.complete_set");
+    expect(sets.map((row) => row.expectedServerVersion)).toEqual([1, 2, 3]);
+    expect(sets.map((row) => JSON.parse(row.payloadJson).expectedVersion)).toEqual([1, 2, 3]);
+    // The correction is new values, so a new mutation (the first one may
+    // already be applied; reusing its id would drop the correction).
+    expect(new Set(sets.map((row) => row.mutationId)).size).toBe(3);
+  });
+
+  it("a set that can't be saved on the phone says so, with no code (D-W14-3)", async () => {
+    failNext.enqueue = true;
+    renderScreen("20 kg");
+    await act(async () => {
+      tap(/^Log set 1/);
+    });
+    // Mapped through userFacingMessage: the phone-save fallback, never the
+    // error's own text or a bracketed support code.
+    expect(screen.getByText("That set couldn’t be saved on this phone. Log it again.")).toBeTruthy();
+    expect(screen.queryByText(/\([A-Z]+-[A-Z]+\)/)).toBeNull();
+    expect(screen.queryByText(/runAsync/)).toBeNull();
   });
 });
 
