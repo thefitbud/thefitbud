@@ -27,6 +27,7 @@ This folder holds FitBud's legal documentation. It has two levels, and the diffe
 | 11 | [`11-store-privacy-disclosures.md`](drafts/11-store-privacy-disclosures.md) | Answers for Play Data safety and Apple App Privacy, traced to code | Owner |
 | 12 | [`12-in-app-notices.md`](drafts/12-in-app-notices.md) | The consent and notice strings the app itself must show, per screen | Owner + counsel |
 | 13 | [`13-counsel-positions.md`](drafts/13-counsel-positions.md) | A drafted position on every open question (P1–P16), for counsel to confirm or overrule | Counsel |
+| 14 | [`14-compliance-and-contract-review.md`](drafts/14-compliance-and-contract-review.md) | Pre-beta compliance check and clause-by-clause review: conditions for 1 Dec, redlines, inconsistencies | Owner + counsel |
 
 Read 00 first. Read 09 before 04 — the privacy policy is only as true as the inventory behind it.
 
