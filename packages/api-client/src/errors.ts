@@ -86,7 +86,7 @@ const KNOWN_CODE_COPY: Record<string, UserFacingError> = {
   },
   MEAL_LOG_NOT_FOUND: { message: "We couldn't find that meal log. It may have been removed." },
   FEEDBACK_EDIT_WINDOW_CLOSED: {
-    message: "Ratings can be changed for 48 hours after a workout.",
+    message: "Ratings and notes can be changed for 48 hours after a workout.",
   },
   PAYLOAD_TOO_LARGE: {
     message: "That file is too big. Choose a smaller one and try again.",

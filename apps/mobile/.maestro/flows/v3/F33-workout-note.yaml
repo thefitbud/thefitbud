@@ -1,0 +1,94 @@
+appId: com.thefitbud.mobile.staging
+name: F33 Workout note (type a note on the summary, save it, see it)
+tags:
+  - device
+  - trainee
+  - z14-42
+---
+# F33 (Z14-42): the trainee's note for the coach on a finished workout (Z14-32).
+# Rohan Mehta (slipping, local demo seed) signs in. When today is not done yet,
+# the flow finishes a session the way F06c's light path does (ist-days.js picks
+# the workout; Rest days have nothing to finish and fail the View summary step,
+# which is a seed/day mismatch, not an app fault). It then opens the day's
+# "View summary", taps "Change", types into `workout-note-input`, saves with
+# `workout-note-save`, and asserts the note is shown on the summary
+# (`workout-note-text`) with no error line.
+#
+# Writes a fixed QA string, never client data; the nightly reset restores the seed.
+# The sheet's Save sits under the note field: the keyboard is dismissed by tapping
+# the sheet's inert subtitle text, never hideKeyboard (Z5-5, #241).
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_SLIPPING_EMAIL}
+- extendedWaitUntil:
+    notVisible: ".*Loading your day.*"
+    timeout: 120000
+
+# ---- Finish a session first when today has no summary yet --------------------------
+- runFlow:
+    when:
+      notVisible: "View summary"
+    commands:
+      - runFlow: ../../device/z12-44/ist-days.yaml
+      - runFlow: ../../device/z12-44/open-workout-tab.yaml
+      - runFlow:
+          when:
+            true: ${output.fwKind != 'none'}
+          file: ../../device/z12-44/finish-session.yaml
+      - tapOn: "Continue workout"
+      - extendedWaitUntil:
+          visible: "Minimise workout"
+          timeout: 30000
+      - tapOn: "Finish workout"
+      - assertVisible: "Finish early\\?"
+      - runFlow:
+          when:
+            visible: "How hard was the session\\?"
+          commands:
+            - tapOn: "RPE 7.*"
+      - tapOn: "Finish anyway"
+      - extendedWaitUntil:
+          visible: "Workout done"
+          timeout: 30000
+      - tapOn: "Save and share with .*"
+      - extendedWaitUntil:
+          visible: "This week"
+          timeout: 15000
+      - tapOn: "Done"
+      - extendedWaitUntil:
+          visible: "View summary"
+          timeout: 30000
+
+# ---- Open the summary and add the note ---------------------------------------------
+- tapOn: "View summary"
+- extendedWaitUntil:
+    visible: "Change your rating and note"
+    timeout: 30000
+- tapOn: "Change your rating and note"
+- extendedWaitUntil:
+    visible:
+      id: "workout-note-input"
+    timeout: 10000
+- tapOn:
+    id: "workout-note-input"
+- inputText: "QA workout note. Safe to delete."
+- takeScreenshot: F33-workout-note-typed
+- tapOn: ".* sees the change"
+- tapOn:
+    id: "workout-note-save"
+- extendedWaitUntil:
+    visible:
+      id: "workout-note-text"
+    timeout: 20000
+- assertVisible: "QA workout note\\. Safe to delete\\."
+# Saved, not refused: no sync error line, no bracketed support code (D-W14-3).
+- assertNotVisible: "Couldn't send"
+- assertNotVisible: ".*\\([A-Z]+-[A-Z]+\\).*"
+- takeScreenshot: F33-workout-note-saved
+- runFlow: ../../common/assert-no-crash.yaml
