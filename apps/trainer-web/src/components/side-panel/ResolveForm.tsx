@@ -7,13 +7,15 @@ export type ResolveOutcomeOption<T extends string> = {
 };
 
 /**
- * Frame 02 resolve form: outcome chips (one always chosen) and a private,
- * optional note. Save lives in the panel footer ("Resolve item").
+ * Frame 02 / RP-03 resolve form: outcome chips and a private, optional note.
+ * The single item's outcome is optional with nothing preselected (D-W14-43);
+ * the bulk form keeps one chosen. Save lives in the footer ("Resolve item").
  */
 export function ResolveForm<T extends string>({
   outcomes,
   outcome,
   onOutcome,
+  onClear,
   note,
   onNote,
   autoFocus,
@@ -21,8 +23,11 @@ export function ResolveForm<T extends string>({
   plain = false,
 }: {
   outcomes: readonly ResolveOutcomeOption<T>[];
-  outcome: T;
+  /** Null: nothing chosen yet (D-W14-43, the single item's outcome is optional). */
+  outcome: T | null;
   onOutcome: (id: T) => void;
+  /** Given: pressing the chosen outcome again clears it (optional outcome). */
+  onClear?: () => void;
   note: string;
   onNote: (value: string) => void;
   /** Focus the chosen chip on open so the keyboard lands in the form. */
@@ -35,14 +40,21 @@ export function ResolveForm<T extends string>({
   const outcomeLabelId = useId();
   const noteId = useId();
   const chosenRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    // Only on open: later chip clicks keep their own focus.
-    if (autoFocus) chosenRef.current?.focus();
+    // Only on open: later chip clicks keep their own focus. With nothing
+    // chosen, the first outcome takes focus.
+    if (!autoFocus) return;
+    const target =
+      chosenRef.current ??
+      rootRef.current?.querySelector<HTMLButtonElement>(".sp-outcome");
+    target?.focus();
   }, []);
 
   return (
     <section
+      ref={rootRef}
       className={plain ? "sp-resolve-form is-plain" : "sp-resolve-form"}
       aria-label="Resolve"
     >
@@ -63,7 +75,7 @@ export function ResolveForm<T extends string>({
               type="button"
               className={on ? "sp-outcome is-on" : "sp-outcome"}
               aria-pressed={on}
-              onClick={() => onOutcome(o.id)}
+              onClick={() => (on && onClear ? onClear() : onOutcome(o.id))}
             >
               {on ? <Check size={16} strokeWidth={2} aria-hidden /> : null}
               {o.label}

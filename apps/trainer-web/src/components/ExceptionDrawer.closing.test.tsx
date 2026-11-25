@@ -87,8 +87,13 @@ async function renderStuck(onClose = vi.fn()) {
       <ExceptionDrawer exceptionId={EXC_ID} onClose={onClose} />
     </MemoryRouter>,
   );
-  await screen.findByRole("button", { name: "Remind" });
+  await screen.findByRole("button", { name: /^Remind/ });
   return { ...utils, onClose };
+}
+
+/** The avatar and name link to the client page (D-W13-21). */
+async function clientLink(): Promise<HTMLElement> {
+  return screen.findByRole("link", { name: /Rohan Mehta/ });
 }
 
 type ClosePath = {
@@ -115,25 +120,8 @@ const CLOSE_PATHS: ClosePath[] = [
       fireEvent.click(container.querySelector(".drawer-backdrop")!);
     },
   },
-  // Resolve is not a close path since frame 02 (resolved banner + Undo +
-  // Next item stays in the drawer; see ExceptionDrawer.test.tsx).
-];
-
-const NAV_PATHS: ClosePath[] = [
-  {
-    name: "overflow Adjust plan",
-    close: () => {
-      fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-      fireEvent.click(screen.getByRole("menuitem", { name: "Adjust plan" }));
-    },
-  },
-  {
-    name: "overflow Open client",
-    close: () => {
-      fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-      fireEvent.click(screen.getByRole("menuitem", { name: "Open client" }));
-    },
-  },
+  // Resolve is not a close path since frame 02 (resolved banner + Undo
+  // stays in the drawer; see ExceptionDrawer.test.tsx).
 ];
 
 describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () => {
@@ -210,18 +198,6 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
     });
   }
 
-  for (const path of NAV_PATHS) {
-    it(`${path.name}: keys after leaving the page do nothing`, async () => {
-      const { container, onClose } = await renderStuck();
-      await path.close(container);
-      expect(assignSpy).toHaveBeenCalledTimes(1);
-      expect(pressAll()).toBe(true);
-      await act(async () => {});
-      expect(api.nudgeActivity).not.toHaveBeenCalled();
-      expect(onClose).not.toHaveBeenCalled();
-    });
-  }
-
   it("error state Close button: a later Escape doesn't close again", async () => {
     api.getException.mockRejectedValue(new Error("gone"));
     const onClose = vi.fn();
@@ -251,21 +227,19 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
         <ExceptionDrawer exceptionId={EXC_ID_2} onClose={onClose} />
       </MemoryRouter>,
     );
-    await screen.findByRole("button", { name: "Remind" });
+    await screen.findByRole("button", { name: /^Remind/ });
     await act(async () => {
       fireEvent.keyDown(document.activeElement ?? document.body, { key: "n" });
     });
     expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
   });
 
-  // DR1 QA F1: the footer "Open client" link is an in-app navigation; it
-  // must mark the drawer as closing just like the overflow "Open client".
-  it("footer Open client link: keys after the click do nothing", async () => {
+  // DR1 QA F1 / D-W13-21: the client name in the header is an in-app link
+  // to the client page; a plain click marks the drawer as closing.
+  it("header client link: keys after the click do nothing", async () => {
     const { onClose } = await renderStuck();
-    const footer = screen
-      .getAllByRole("link", { name: "Open client" })
-      .find((a) => a.getAttribute("href") === `/clients/${REL_ID}`)!;
-    expect(footer).toBeTruthy();
+    const footer = await clientLink();
+    expect(footer.getAttribute("href")).toBe(`/clients/${REL_ID}`);
     fireEvent.click(footer, { button: 0 });
     expect(pressAll()).toBe(true);
     await act(async () => {});
@@ -273,9 +247,9 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
     expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("footer Open client link: a Ctrl/Cmd click (new tab) keeps the shortcuts working", async () => {
+  it("header client link: a Ctrl/Cmd click (new tab) keeps the shortcuts working", async () => {
     await renderStuck();
-    const footer = screen.getByRole("link", { name: "Open client" });
+    const footer = await clientLink();
     // Stop the environment's own default action; React Router skips its
     // navigation for modified clicks either way.
     footer.addEventListener("click", (e) => e.preventDefault());
@@ -295,12 +269,9 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
     ["Alt", { button: 0, altKey: true }],
     ["middle-button (button 1)", { button: 1 }],
   ] as const) {
-    it(`footer Open client link: ${name}-click keeps the shortcuts working`, async () => {
+    it(`header client link: ${name}-click keeps the shortcuts working`, async () => {
       const { onClose } = await renderStuck();
-      const footer = screen
-        .getAllByRole("link", { name: "Open client" })
-        .find((a) => a.getAttribute("href") === `/clients/${REL_ID}`)!;
-      expect(footer).toBeTruthy();
+      const footer = await clientLink();
       footer.addEventListener("click", (e) => e.preventDefault());
       fireEvent.click(footer, init);
       await act(async () => {
@@ -322,7 +293,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
         <ExceptionDrawer exceptionId={EXC_ID} openSeq={1} onClose={onClose} />
       </MemoryRouter>,
     );
-    await screen.findByRole("button", { name: "Remind" });
+    await screen.findByRole("button", { name: /^Remind/ });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
     rerender(
@@ -370,7 +341,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
         <ReopenParent />
       </MemoryRouter>,
     );
-    await screen.findByRole("button", { name: "Remind" });
+    await screen.findByRole("button", { name: /^Remind/ });
     const dialog = screen.getByRole("dialog");
     await act(async () => {
       fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
@@ -407,7 +378,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
       </MemoryRouter>
     );
     const { rerender } = render(tree(1, false));
-    await screen.findByRole("button", { name: "Remind" });
+    await screen.findByRole("button", { name: /^Remind/ });
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
     await act(async () => {
@@ -442,7 +413,7 @@ describe("ExceptionDrawer ignores shortcut keys once closing starts (DR1)", () =
           <RouterParent />
         </MemoryRouter>,
       );
-      await screen.findByRole("button", { name: "Remind" });
+      await screen.findByRole("button", { name: /^Remind/ });
       let stillMounted = false;
       await act(async () => {
         await path.close(container);

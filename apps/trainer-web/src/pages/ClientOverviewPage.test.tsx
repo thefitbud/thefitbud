@@ -48,6 +48,10 @@ vi.mock("../components/ExceptionDrawer", () => ({
 }));
 
 import { ClientOverviewPage } from "./ClientOverviewPage";
+import {
+  REVIEW_ORDER_IDS,
+  REVIEW_ORDER_ROWS,
+} from "../components/side-panel/reviewOrder.fixture";
 
 type Lifecycle = "ended" | "active" | "coaching_ready";
 type Renewal = "current" | "upcoming" | "due" | "expired" | null;
@@ -846,6 +850,24 @@ describe("ClientOverviewPage review modal (W13-6)", () => {
     expect(stub.getAttribute("data-variant")).toBe("modal");
     expect(stub.getAttribute("data-rid")).toBe(REL_ID);
     expect(stub.getAttribute("data-eid")).toBe(item(2, "critical").id);
+  });
+
+  it("card order matches the review panel's order (shared fixture, D-W13-21)", async () => {
+    api.listExceptions.mockResolvedValue({
+      items: REVIEW_ORDER_ROWS,
+      nextCursor: null,
+    });
+    renderPage("active", "current");
+    const reviews = await screen.findAllByRole("button", { name: "Review" });
+    expect(reviews).toHaveLength(REVIEW_ORDER_IDS.length);
+    // Row k's Review opens the item the panel shows as "k+1 of n".
+    for (let k = 0; k < REVIEW_ORDER_IDS.length; k += 1) {
+      fireEvent.click(screen.getAllByRole("button", { name: "Review" })[k]!);
+      const stub = await screen.findByTestId("drawer-stub");
+      expect(stub.getAttribute("data-eid")).toBe(REVIEW_ORDER_IDS[k]);
+      fireEvent.click(screen.getByRole("button", { name: "Close stub" }));
+      await waitFor(() => expect(screen.queryByTestId("drawer-stub")).toBeNull());
+    }
   });
 
   it("closing the modal returns focus to the Review button that opened it", async () => {

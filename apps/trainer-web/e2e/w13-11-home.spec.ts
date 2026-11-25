@@ -101,17 +101,39 @@ async function openClient(page: Page, name: string) {
 }
 
 /**
- * Step to the item matching `text` when the client has one; other specs in the
- * same run may have resolved it, so fall back to the item already shown
- * instead of waiting on a row that will never appear.
+ * Step with the pager (the only item navigation, W13-13) to the item matching
+ * `text` when the client has one; other specs in the same run may have
+ * resolved it, so stop at the last item instead of waiting forever.
  */
 async function stepToItem(page: Page, text: RegExp) {
   const panel = page.getByTestId("screen-TW-05");
   await expect(panel.locator(".sp-title")).toBeVisible({ timeout: 20_000 });
-  if (await panel.locator(".sp-title").filter({ hasText: text }).count()) return;
-  const row = panel.locator(".sp-also-row").filter({ hasText: text }).first();
-  if ((await row.count()) === 0) return;
-  await row.click({ timeout: 15_000 });
+  for (let k = 0; k < 10; k += 1) {
+    if (await panel.locator(".sp-title").filter({ hasText: text }).count()) return;
+    const next = panel.getByRole("button", { name: "Next item" });
+    if (!(await next.count()) || !(await next.isEnabled())) return;
+    await next.click();
+    await expect(panel.locator(".sp-title")).toBeVisible({ timeout: 15_000 });
+  }
+}
+
+/**
+ * W13-13: the review panel shows Remind only on items with something left to
+ * remind about, so step to the first such item (or stay put when none has it).
+ */
+async function stepToRemindable(page: Page) {
+  const panel = page.getByTestId("screen-TW-05");
+  await panelLoaded(page);
+  const remind = panel.getByRole("button", { name: /^remind/i });
+  for (let k = 0; k < 10; k += 1) {
+    if (await remind.count()) return remind;
+    const next = panel.getByRole("button", { name: "Next item" });
+    if (!(await next.count()) || !(await next.isEnabled())) break;
+    await next.click();
+    await expect(panel.locator(".sp-title")).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(300);
+  }
+  return (await remind.count()) ? remind : null;
 }
 
 test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
@@ -123,10 +145,9 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await openClient(page, "Neha");
     const panel = page.getByTestId("screen-TW-05");
-    await expect(panel.getByText(/^1 of 2$/)).toBeVisible();
-    await expect(panel.getByRole("heading", { name: /also open for neha/i })).toBeVisible();
+    await expect(panel.getByText(/^1 of \d+$/)).toBeVisible();
     await panel.getByRole("button", { name: /^noted, keep open$/i }).click();
-    await expect(panel.locator(".sp-noted-state")).toBeVisible({ timeout: 15_000 });
+    await expect(panel.getByTestId("panel-noted-state")).toBeVisible({ timeout: 15_000 });
     await panel.getByRole("button", { name: /^resolve…?$/i }).click();
     await panel.getByRole("button", { name: /^resolve item$/i }).click();
     const banner = page.getByTestId("exception-resolve-banner");
@@ -187,21 +208,15 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       const panel = page.getByTestId("screen-TW-05");
       await shot(page, "W-02-home-side-panel", size);
 
-      console.log("STEP W-02a more menu");
-      await panel.getByRole("button", { name: /more actions/i }).click();
-      await expect(page.getByRole("menu")).toBeVisible();
-      await shot(page, "W-02a-panel-more-menu", size);
-      await page.keyboard.press("Escape");
-
       console.log("STEP W-02b remind states");
       await openClient(page, pass.nudge);
       if (pass.nudge === "Rohan") await stepToItem(page, /Missed workout/i);
-      const remind = panel.getByRole("button", { name: /^remind$/i });
-      if (await remind.isEnabled()) {
+      const remind = await stepToRemindable(page);
+      if (remind && (await remind.isEnabled())) {
         await remind.click();
         await page.waitForTimeout(1200);
         await shot(page, "W-02b-panel-nudge-states", size);
-        if (await remind.isEnabled()) {
+        if ((await remind.count()) && (await remind.isEnabled())) {
           await remind.click();
           await page.waitForTimeout(1200);
         }
@@ -216,7 +231,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       await panel.getByRole("button", { name: /^resolve…?$/i }).click();
       await expect(panel.getByRole("button", { name: /^resolve item$/i })).toBeVisible();
       await shot(page, "W-02c-panel-resolve-form", size);
-      await panel.getByRole("button", { name: /talked to client/i }).click();
+      await panel.getByRole("button", { name: /^talked to /i }).click();
       await panel.getByRole("button", { name: /^resolve item$/i }).click();
       await expect(page.getByTestId("exception-resolve-banner")).toBeVisible();
       await shot(page, "W-02d-panel-resolved-undo", size);
@@ -234,8 +249,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
 
       console.log("STEP W-02f / g / h resolve several");
       await openClient(page, "Farhan");
-      await page.getByTestId("screen-TW-05").getByRole("button", { name: /more actions/i }).click();
-      await page.getByRole("menuitem", { name: /resolve several/i }).click();
+      await page.getByTestId("screen-TW-05").getByRole("button", { name: /resolve several/i }).click();
       await expect(page.getByTestId("bulk-select-list")).toBeVisible();
       await shot(page, "W-02f-panel-resolve-several", size);
       const boxes = page.getByTestId("bulk-select-list").getByRole("checkbox");
@@ -244,7 +258,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       const confirm = page.getByTestId("bulk-confirm");
       await expect(confirm).toBeVisible();
       await shot(page, "W-02g-panel-resolve-several-confirm", size);
-      await confirm.getByRole("button", { name: /talked to client/i }).click();
+      await confirm.getByRole("button", { name: /^talked to /i }).click();
       await confirm.getByRole("button", { name: /^resolve 5 items$/i }).click();
       await expect(page.getByTestId("bulk-undo-toast")).toBeVisible({ timeout: 15_000 });
       await shot(page, "W-02h-panel-resolve-several-undo", size);

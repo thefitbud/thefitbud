@@ -230,7 +230,7 @@ describe("Esc then browser Back reopens a usable drawer (DR2 / DR1 QA F-C)", () 
     );
     await screen.findByText("Rohan Mehta");
     const dialog = await screen.findByRole("dialog");
-    await within(dialog).findByRole("button", { name: "Remind" });
+    await within(dialog).findByRole("button", { name: /^Remind/ });
     await escThenBack();
     await expectUsable(dialog);
   });
@@ -249,7 +249,7 @@ describe("Esc then browser Back reopens a usable drawer (DR2 / DR1 QA F-C)", () 
     await screen.findByText("Rohan Mehta");
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     const dialog = await screen.findByRole("dialog");
-    await within(dialog).findByRole("button", { name: "Remind" });
+    await within(dialog).findByRole("button", { name: /^Remind/ });
     expect(new URLSearchParams(window.location.search).get("client")).toBe(REL);
     expect(new URLSearchParams(window.location.search).get("exception")).toBeNull();
     await act(async () => {
@@ -278,7 +278,7 @@ describe("Esc then browser Back reopens a usable drawer (DR2 / DR1 QA F-C)", () 
     );
     fireEvent.click(await screen.findByRole("button", { name: "Review" }));
     const dialog = await screen.findByRole("dialog");
-    await within(dialog).findByRole("button", { name: "Remind" });
+    await within(dialog).findByRole("button", { name: /^Remind/ });
     expect(window.location.pathname).toBe(`/clients/${REL}`);
     await escThenBack();
     await expectUsable(dialog);
@@ -296,7 +296,7 @@ describe("Esc then browser Back reopens a usable drawer (DR2 / DR1 QA F-C)", () 
           <ExceptionDrawer exceptionId={EXC} onClose={onClose} />
         </BrowserRouter>,
       );
-      await screen.findByRole("button", { name: "Remind" });
+      await screen.findByRole("button", { name: /^Remind/ });
       press("Escape");
       expect(onClose).toHaveBeenCalledTimes(1);
       return onClose;
