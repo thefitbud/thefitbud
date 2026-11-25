@@ -16,14 +16,17 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await signIn(page);
   });
 
-  test("TW-21 history: All events, absolute times, empty copy", async ({ page }) => {
+  test("TW-21 history: type and date menus, day headings, times, no clinical copy", async ({ page }) => {
     await page.goto(`/clients/${ROHAN}/history`);
     await expect(page.getByTestId("screen-TW-21")).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByLabel("All events")).toBeVisible({ timeout: 20_000 });
-    await expect(page.locator(".history-timeline-item").first()).toBeVisible({
-      timeout: 20_000,
-    });
-    await expect(page.locator(".history-timeline-when").first()).toContainText(/[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}/);
+    await expect(page.getByRole("button", { name: /^Type/ })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("history-row").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("history-day").first().getByRole("heading")).toContainText(
+      /Today|Yesterday|[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}/,
+    );
+    await expect(page.locator(".history-row-time").first()).toContainText(/\d{1,2}:\d{2} [ap]m/);
+    await page.getByRole("button", { name: /^Date range/ }).click();
+    await page.getByRole("menuitemradio", { name: "Custom range" }).click();
     await expect(page.getByText("Choose a date").first()).toBeVisible();
     await expect(page.getByText("clinical intervention")).toHaveCount(0);
   });

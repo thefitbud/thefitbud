@@ -58,7 +58,7 @@ test.describe("TW-E activity, progress, check-ins", () => {
     // Prefer an unreviewed inbox item so Save review is shown; fall back to known seed id.
     await page.goto("/checkins");
     await expect(page.getByTestId("screen-TW-22")).toBeVisible();
-    const reviewLink = page.locator('a.button-primary', { hasText: "Review" }).first();
+    const reviewLink = page.getByRole("link", { name: "Review", exact: true }).first();
     if (await reviewLink.isVisible().catch(() => false)) {
       await reviewLink.click();
     } else {
@@ -82,20 +82,20 @@ test.describe("TW-E activity, progress, check-ins", () => {
   test("TW-22 inbox: tabs and default to review", async ({ page }) => {
     await page.goto("/checkins");
     await expect(page.getByTestId("screen-TW-22")).toBeVisible();
-    await expect(page.locator('[data-filter="submitted"]')).toHaveAttribute(
+    await expect(page.getByRole("tab", { name: /^to review/i })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    await expect(page.locator('[data-filter="due"]')).toBeVisible();
-    await expect(page.locator('[data-filter="overdue"]')).toBeVisible();
-    await expect(page.locator('[data-filter="reviewed"]')).toBeVisible();
+    await expect(page.getByRole("tab", { name: /^due/i })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /^overdue/i })).toBeVisible();
+    await expect(page.getByRole("tab", { name: /^reviewed/i })).toBeVisible();
   });
 
   test("TW-22 inbox: Review reachable at 768", async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 900 });
     await page.goto("/checkins");
     await expect(page.getByTestId("screen-TW-22")).toBeVisible();
-    await expect(page.locator(".inbox-card-list a.button-primary").first()).toBeVisible();
+    await expect(page.locator(".inbox-card-list").getByRole("link", { name: "Review" }).first()).toBeVisible();
     const scroll = await page.evaluate(() => {
       const doc = document.documentElement;
       return doc.scrollWidth > doc.clientWidth + 1;

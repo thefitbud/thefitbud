@@ -114,6 +114,11 @@ type Props = {
   onOpenClient?: (relationshipId: string) => void;
   /** TM-10 ask detail (Needs you Reply / card). */
   onOpenAsk?: (ask: CoachAsk, displayName: string) => void;
+  /**
+   * Z14-36: true while a section's See all page is open, so the shell can drop
+   * its tab bar (TM-01a6 draws the page full screen).
+   */
+  onFullScreenChange?: (open: boolean) => void;
 };
 
 type Snapshot = {
@@ -150,6 +155,7 @@ export function AttentionTab({
   onOpenClients,
   onOpenClient,
   onOpenAsk,
+  onFullScreenChange,
 }: Props) {
   const { api, me, relationships, refreshSession } = useAuth();
   // The trainer's device zone, falling back to Asia/Kolkata when it cannot be
@@ -176,6 +182,14 @@ export function AttentionTab({
     () => new Set(),
   );
   const [seeAllId, setSeeAllId] = useState<NeedsYouSectionId | null>(null);
+  const onFullScreenChangeRef = useRef(onFullScreenChange);
+  onFullScreenChangeRef.current = onFullScreenChange;
+  const seeAllOpen = seeAllId != null;
+  useEffect(() => {
+    if (!seeAllOpen) return undefined;
+    onFullScreenChangeRef.current?.(true);
+    return () => onFullScreenChangeRef.current?.(false);
+  }, [seeAllOpen]);
   const toggleSection = useCallback((id: NeedsYouSectionId) => {
     setCollapsed((current) => {
       const next = new Set(current);

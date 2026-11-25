@@ -6,6 +6,8 @@ import {
 } from "./durableStore";
 import { createMemorySyncStore, type TraineeSyncStore } from "./engine";
 import { deviceStorage, type AsyncKeyValue } from "./storage";
+import { discardHeldFeedback } from "../trainee/workout/pendingFeedbackStore";
+import { discardSheetDrafts } from "../trainee/workout/sheetDrafts";
 
 /**
  * One sync store per signed-in user (Z12-41).
@@ -102,6 +104,10 @@ export async function clearSyncDataOnSignOut(): Promise<void> {
   } catch (error) {
     reportError("sync.signOut.clear", error);
   }
+  // Held workout ratings and notes and Workout-tab drafts (Z14-37): dropped
+  // with the unsent logs. Both never throw.
+  await discardHeldFeedback();
+  await discardSheetDrafts();
 }
 
 /** Tests only. */

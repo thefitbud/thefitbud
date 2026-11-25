@@ -32,6 +32,11 @@ import {
   type FeedbackChange,
   type RatingOutcome,
 } from "./workout/rpeRating";
+import { useSheetDraft, type SheetDraftHandle } from "./workout/sheetDrafts";
+
+/** What the rating-and-note draft keeps (Z14-37). */
+type FeedbackDraft = { rpe: number | null; note: string };
+type FeedbackDraftHandle = SheetDraftHandle<FeedbackDraft>;
 
 /**
  * The workout summary (v3 W-17a), then the shared confirmation (W-17b).
@@ -55,6 +60,11 @@ import {
  * in the future one "Change" opens the sheet with the grid and the note
  * (W-17c2), afterwards the group is plain text (W-17c3). Records are not
  * computed.
+ *
+ * Z14-37: the rating and note typed but not yet saved are kept as a device
+ * draft (`useSheetDraft`, keyed by the signed-in user and the workout), so a
+ * cover unmounting the tab or a restart does not lose them. Nothing on screen
+ * says so: the fields simply still hold what was typed.
  */
 export function WorkoutSummaryScreen({
   execution,
@@ -69,6 +79,7 @@ export function WorkoutSummaryScreen({
   mode = "after_finish",
   onSaveFeedback,
   now,
+  draftOwnerId = null,
 }: {
   execution: WorkoutExecution;
   assignment?: WorkoutAssignment | null;
@@ -86,6 +97,8 @@ export function WorkoutSummaryScreen({
   ) => Promise<RatingOutcome> | void;
   /** The clock for the 48 h rule (tests). */
   now?: Date;
+  /** The signed-in user; drafts are kept for this user only (Z14-37). */
+  draftOwnerId?: string | null;
   coachName?: string;
   weekAssignments?: readonly WorkoutAssignment[];
   weekStart?: string;
@@ -115,6 +128,38 @@ export function WorkoutSummaryScreen({
       mountedRef.current = false;
     };
   }, []);
+
+  // Z14-37: typing not yet saved survives an unmount or a restart.
+  const feedbackDraft = useSheetDraft<FeedbackDraft>({
+    ownerId: draftOwnerId,
+    sheet: "workoutFeedback",
+    entityId: execution.id,
+  });
+  const touchedRef = useRef(false);
+  const typedRef = useRef<FeedbackDraft>({ rpe, note });
+  typedRef.current = { rpe, note };
+  useEffect(() => {
+    if (mode !== "after_finish") return;
+    let live = true;
+    void feedbackDraft.read().then((draft) => {
+      if (!live || !draft || touchedRef.current) return;
+      setRpe(draft.rpe);
+      setNote(draft.note);
+    });
+    return () => {
+      live = false;
+    };
+  }, [feedbackDraft, mode]);
+  function pickRpe(next: number | null) {
+    touchedRef.current = true;
+    setRpe(next);
+    feedbackDraft.schedule({ rpe: next, note: typedRef.current.note });
+  }
+  function changeNote(next: string) {
+    touchedRef.current = true;
+    setNote(next);
+    feedbackDraft.schedule({ rpe: typedRef.current.rpe, note: next });
+  }
 
   /**
    * One send at a time: a change made while another is being sent is merged
@@ -178,6 +223,7 @@ export function WorkoutSummaryScreen({
 
   /** "Save and share": rating and note together, then the shared step. */
   function saveAndShare() {
+    feedbackDraft.clear();
     const change = changeSinceConfirmed({ rpe, note });
     if (Object.keys(change).length === 0) {
       setShared(true);
@@ -235,6 +281,7 @@ export function WorkoutSummaryScreen({
           onBack={onDone}
           onSave={saveFromSheet}
           onRetry={retry}
+          draftStore={feedbackDraft}
         />
       </Screen>
     );
@@ -273,8 +320,8 @@ export function WorkoutSummaryScreen({
           confirmedRpe={confirmedRef.current.rpe}
           rating={rating}
           windowClosed={windowClosed}
-          onPickRpe={setRpe}
-          onChangeNote={setNote}
+          onPickRpe={pickRpe}
+          onChangeNote={changeNote}
           onRetry={retry}
         />
       )}
@@ -590,6 +637,7 @@ function ViewBody({
   onBack,
   onSave,
   onRetry,
+  draftStore,
 }: {
   execution: WorkoutExecution;
   assignment: WorkoutAssignment | null;
@@ -603,12 +651,31 @@ function ViewBody({
   onBack: () => void;
   onSave: (next: { rpe: number | null; note: string }) => void;
   onRetry: (change: FeedbackChange) => void;
+  draftStore: FeedbackDraftHandle;
 }) {
   const theme = useTheme();
   const styles = useStyles();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<number | null>(rpe);
   const [draftNote, setDraftNote] = useState(note);
+  // Z14-37: the sheet's typing is kept until Save or Cancel.
+  const sheetTouchedRef = useRef(false);
+  const sheetTypedRef = useRef<FeedbackDraft>({ rpe: draft, note: draftNote });
+  sheetTypedRef.current = { rpe: draft, note: draftNote };
+  function pickInSheet(next: number | null) {
+    sheetTouchedRef.current = true;
+    setDraft(next);
+    draftStore.schedule({ rpe: next, note: sheetTypedRef.current.note });
+  }
+  function typeInSheet(next: string) {
+    sheetTouchedRef.current = true;
+    setDraftNote(next);
+    draftStore.schedule({ rpe: sheetTypedRef.current.rpe, note: next });
+  }
+  function closeSheet() {
+    draftStore.clear();
+    setEditing(false);
+  }
   const shownNote = normalizeNote(note);
   const counts = sessionSetCounts(execution);
   const volume = sessionVolumeKg(execution);
@@ -739,7 +806,14 @@ function ViewBody({
             onPress={() => {
               setDraft(rpe);
               setDraftNote(note);
+              sheetTouchedRef.current = false;
               setEditing(true);
+              // What was typed before a cover or a restart comes back.
+              void draftStore.read().then((saved) => {
+                if (!saved || sheetTouchedRef.current) return;
+                setDraft(saved.rpe);
+                setDraftNote(saved.note);
+              });
             }}
             hitSlop={12}
             style={styles.changeHit}
@@ -786,15 +860,15 @@ function ViewBody({
         visible={editing}
         title="Your rating and note"
         subtitle={`${sessionTitle}${dateShort ? ` · ${dateShort}` : ""} · ${coachFirst === "your coach" ? "Your coach" : coachFirst} sees the change`}
-        onDismiss={() => setEditing(false)}
+        onDismiss={closeSheet}
       >
         <RpePicker
           value={draft}
-          onChange={setDraft}
+          onChange={pickInSheet}
           required={execution.requireSessionRpe}
           coachFirst={coachFirst}
         />
-        <NoteField value={draftNote} onChange={setDraftNote} coachFirst={coachFirst} />
+        <NoteField value={draftNote} onChange={typeInSheet} coachFirst={coachFirst} />
         <View style={styles.sheetActions}>
           <Button
             label="Save"
@@ -802,10 +876,10 @@ function ViewBody({
             disabled={execution.requireSessionRpe && draft == null}
             onPress={() => {
               onSave({ rpe: draft, note: draftNote });
-              setEditing(false);
+              closeSheet();
             }}
           />
-          <Button label="Cancel" variant="secondary" onPress={() => setEditing(false)} />
+          <Button label="Cancel" variant="secondary" onPress={closeSheet} />
         </View>
       </BottomSheet>
     </View>

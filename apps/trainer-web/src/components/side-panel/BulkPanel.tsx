@@ -36,7 +36,6 @@ import {
   bulkResultSummary,
   bulkRowSubline,
   compatibleIds,
-  individualOnlyHint,
   isBulkCompatible,
   itemsLabel,
   stillOpenText,
@@ -154,7 +153,6 @@ export function BulkPanel<T extends BulkResolveOutcome>({
   );
   const count = selectedIds.length;
   const allSelected = compatible.length > 0 && count === compatible.length;
-  const hint = individualOnlyHint(items);
   // DS2: compatible items first, individual-only rows last (stable order).
   const orderedItems = useMemo(
     () => [
@@ -532,7 +530,6 @@ export function BulkPanel<T extends BulkResolveOutcome>({
                 {count} of {compatible.length} selected
               </span>
             </label>
-            {hint ? <span className="sp-bulk-hint">{hint}</span> : null}
           </div>
           <ul className="sp-bulk-list" data-testid="bulk-select-list">
             {orderedItems.map((item) => {

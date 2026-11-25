@@ -167,6 +167,9 @@ function TrainerShellBody() {
     }
     goBack();
   };
+  // Z14-36: Attention reports a full-screen child (a section's See all page);
+  // the tab bar is not rendered while it is open (TM-01a6).
+  const [attentionFullScreen, setAttentionFullScreen] = useState(false);
   const [clientsSegment, setClientsSegment] = useState<"clients" | "activity">(
     "clients",
   );
@@ -549,6 +552,7 @@ function TrainerShellBody() {
             }
             onReviewCheckin={openCheckin}
             onOpenClients={() => setTab("clients")}
+            onFullScreenChange={setAttentionFullScreen}
             onOpenClient={(relationshipId) => {
               void openClientById(relationshipId, undefined, "start");
             }}
@@ -616,6 +620,7 @@ function TrainerShellBody() {
         ) : null}
       </View>
 
+      {attentionFullScreen && tab === "attention" ? null : (
       <View accessibilityRole="tablist" style={styles.tabBar}>
         {TABS.map((item) => {
           const selected = item.id === tab;
@@ -643,6 +648,7 @@ function TrainerShellBody() {
           );
         })}
       </View>
+      )}
       </View>
       {overlays.map((item, index) => {
         const isTop = index === overlays.length - 1;

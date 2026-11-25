@@ -12,6 +12,7 @@ import {
 } from "@fitbud/core";
 import { Button } from "../components/Button";
 import { StatusChip } from "../components/StatusChip";
+import { Tabs } from "../components/ui";
 import {
   ErrorState,
   LoadingBlock,
@@ -77,6 +78,7 @@ export function CheckinsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [nudgingId, setNudgingId] = useState<string | null>(null);
+  const [remindNotice, setRemindNotice] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const load = useCallback(async () => {
@@ -218,13 +220,26 @@ export function CheckinsPage() {
 
   async function nudge(row: Row) {
     setNudgingId(row.checkin.id);
+    setRemindNotice(null);
+    const first = row.traineeDisplayName.split(/\s+/)[0] ?? "your client";
     try {
-      await apiClient.nudgeActivity(row.coachingRelationshipId, {
+      const result = await apiClient.nudgeActivity(row.coachingRelationshipId, {
         activityType: "checkin",
         activityId: row.checkin.id,
       });
-    } catch {
-      /* optional */
+      setRemindNotice(
+        result.deduped
+          ? `Already reminded ${first} about this today.`
+          : result.delivery === "inbox"
+            ? `Reminder sent to ${first}'s inbox.`
+            : `Reminder sent to ${first}.`,
+      );
+    } catch (err) {
+      setRemindNotice(
+        userFacingMessage(err, {
+          fallback: "Could not send the reminder right now.",
+        }),
+      );
     } finally {
       setNudgingId(null);
     }
@@ -234,14 +249,14 @@ export function CheckinsPage() {
     if (row.checkin.status === "submitted") {
       return (
         <Link
-          className="button-primary"
+          className="button-tinted"
           to={`/clients/${row.coachingRelationshipId}/check-ins/${row.checkin.id}?from=inbox`}
         >
           Review
         </Link>
       );
     }
-    if (row.checkin.status === "overdue") {
+    if (row.checkin.status === "overdue" || row.checkin.status === "due") {
       return (
         <>
           <Button
@@ -283,31 +298,23 @@ export function CheckinsPage() {
         </div>
       </header>
 
-      <div className="roster-toolbar">
-        <div className="segment-control" role="tablist" aria-label="Check-in inbox tabs">
-          {(
-            [
-              ["to-review", "To review"],
-              ["due", "Due"],
-              ["overdue", "Overdue"],
-              ["reviewed", "Reviewed"],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={tab === value}
-              className={tab === value ? "segment-tab is-selected" : "segment-tab"}
-              data-filter={apiTabParam(value)}
-              onClick={() => setTab(value)}
-            >
-              {label}{" "}
-              <span className="segment-count">{counts[value]}</span>
-            </button>
-          ))}
-        </div>
-      </div>
+      <Tabs
+        aria-label="Check-in inbox tabs"
+        value={tab}
+        onChange={(id) => setTab(id as InboxTab)}
+        items={[
+          { id: "to-review", label: "To review", count: counts["to-review"] },
+          { id: "due", label: "Due", count: counts.due },
+          { id: "overdue", label: "Overdue", count: counts.overdue },
+          { id: "reviewed", label: "Reviewed", count: counts.reviewed },
+        ]}
+      />
+
+      {remindNotice ? (
+        <p className="inbox-notice" role="status" data-testid="inbox-remind-notice">
+          {remindNotice}
+        </p>
+      ) : null}
 
       <div className="roster-card">
         {loading ? <LoadingBlock label="Loading check-ins…" /> : null}

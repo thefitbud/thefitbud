@@ -965,6 +965,22 @@ describe("Side panel resolve form (Z7-6)", () => {
       "Client settings",
     ]);
   });
+
+  it("the ⋯ menu shows an icon on every entry and a divider before Open client (W-02a)", async () => {
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    for (const item of screen.getAllByRole("menuitem")) {
+      expect(item.querySelector(".overflow-menu-item-icon svg")).not.toBeNull();
+    }
+    const open = screen.getByRole("menuitem", { name: "Open client" });
+    const sep = open.closest("li")!.previousElementSibling!;
+    expect(sep.getAttribute("role")).toBe("separator");
+    const whatsapp = screen.getByRole("menuitem", { name: "Message on WhatsApp" });
+    expect(whatsapp.closest("li")!.nextElementSibling).toBe(sep);
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+  });
 });
 
 describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
@@ -1377,7 +1393,8 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
     )!;
     expect(mealChange.querySelector("input")).toBeNull();
     expect(mealChange.textContent).toMatch(/resolve on its own/);
-    expect(screen.getByText("Meal change · resolved on its own")).toBeTruthy();
+    // The row says it; the header no longer repeats it (FLOW 6.8).
+    expect(screen.queryByText("Meal change · resolved on its own")).toBeNull();
     // DS2: compatible rows first, the individual-only row last.
     const rowsText = Array.from(list.querySelectorAll("li")).map((li) => li.textContent ?? "");
     expect(rowsText.at(-1)).toMatch(/Meal change/);

@@ -1,10 +1,12 @@
 import type { MealAssignment } from "@fitbud/contracts";
 import type { WorkspaceActivityItem } from "@fitbud/contracts";
 import { ActivityRow, type NudgeUiState } from "./ActivityRow";
-import { dayHeaderLabel } from "./activityUtils";
+import { dayHeading } from "./activityUtils";
 
 type Props = {
   date: string;
+  /** The client’s today, so the heading can read "Today · Wed 18 Nov". */
+  today?: string;
   headerSuffix: string | null;
   items: WorkspaceActivityItem[];
   clientTimezone: string;
@@ -20,6 +22,7 @@ type Props = {
 
 export function ActivityDayGroup({
   date,
+  today,
   headerSuffix,
   items,
   clientTimezone,
@@ -34,9 +37,12 @@ export function ActivityDayGroup({
 }: Props) {
   return (
     <section className="activity-day-group" data-testid="activity-day-group">
-      <h2 className="activity-day-header">
-        {dayHeaderLabel(date, headerSuffix)}
-      </h2>
+      <header className="activity-day-head">
+        <h2 className="activity-day-header">{dayHeading(date, today)}</h2>
+        {headerSuffix ? (
+          <p className="activity-day-meta">{headerSuffix}</p>
+        ) : null}
+      </header>
       <ul className="activity-feed-list">
         {items.map((item) => (
           <ActivityRow
