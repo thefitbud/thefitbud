@@ -420,7 +420,7 @@ describe("the trainee rates a finished workout for 48 hours (Z14-11)", () => {
     expect(late.status).toBe(422);
     expect(late.error).toEqual({
       code: "FEEDBACK_EDIT_WINDOW_CLOSED",
-      message: "Ratings can be changed for 48 hours after a workout.",
+      message: "Ratings and notes can be changed for 48 hours after a workout.",
       requestId: expect.any(String),
     });
     const [stored] = await db
@@ -871,7 +871,7 @@ describe("the trainee rates a finished workout for 48 hours (Z14-11)", () => {
     const [late] = await send(102, { note: "Too late", recordVersion: execution.recordVersion + 1 });
     expect(late).toMatchObject({ status: "rejected", error: { code: "FEEDBACK_EDIT_WINDOW_CLOSED" } });
     expect((late as { error?: { message?: string } }).error?.message).toBe(
-      "Ratings can be changed for 48 hours after a workout.",
+      "Ratings and notes can be changed for 48 hours after a workout.",
     );
     // A too-long note through sync is refused with friendly copy, nothing stored.
     vi.setSystemTime(Date.parse(completedAt) + HOUR);

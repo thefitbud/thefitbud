@@ -88,7 +88,7 @@ function fakeServer(initial: { recordVersion: number; sessionRpe: number | null;
                 status: "rejected",
                 error: {
                   code: "FEEDBACK_EDIT_WINDOW_CLOSED",
-                  message: "Ratings can be changed for 48 hours after a workout.",
+                  message: "Ratings and notes can be changed for 48 hours after a workout.",
                 },
               });
             }
@@ -217,7 +217,7 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
     expect(outcome).toEqual({
       kind: "refused",
       reason: "window_closed",
-      message: "Ratings can be changed for 48 hours after a workout.",
+      message: "Ratings and notes can be changed for 48 hours after a workout.",
     });
     expect(await sync.store.listOutbox()).toEqual([]);
   });
