@@ -120,6 +120,7 @@ function TemplateBuilder({
       tab={templateType === "nutrition" ? "nutrition" : "workout"}
       save={save}
       readOnly={isGlobal}
+      versionPill={isGlobal ? null : { state: "draft" }}
       readOnlyNote={
         isGlobal ? (
           <>

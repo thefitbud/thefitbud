@@ -39,14 +39,14 @@ env:
     visible: "Review"
     timeout: 30000
 - tapOn: "Review"
-# The v3 exception review (Z12-51): Nudge is a footer button once the item and the
+# The v3 exception review (Z12-51): Remind is a footer button once the item and the
 # client's status have loaded.
 - extendedWaitUntil:
     visible:
-      id: "exception-nudge"
+      id: "exception-remind"
     timeout: 30000
 - tapOn:
-    id: "exception-nudge"
+    id: "exception-remind"
 - extendedWaitUntil:
     visible: "PREVIEW · TAP TO EDIT"
     timeout: 20000

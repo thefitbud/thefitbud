@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import type { PlanContent } from "@fitbud/contracts";
 import { PlanBuilder } from "./PlanBuilder";
@@ -184,5 +184,146 @@ describe("PlanBuilder Z12-12 iPad", () => {
     expect(titleInput.disabled).toBe(true);
     expect(screen.queryByRole("tab", { name: /Tue · Lower A/i })).toBeNull();
     expect(save).not.toHaveBeenCalled();
+  });
+});
+
+describe("PlanBuilder W13-3 fix round", () => {
+  it("day tabs: every weekday is a tab; rest days show only the weekday", () => {
+    renderBuilder();
+    const tabs = screen.getAllByRole("tab").filter((tab) =>
+      tab.closest('[aria-label="Training days"]'),
+    );
+    expect(tabs).toHaveLength(7);
+    expect(tabs.map((tab) => tab.textContent)).toEqual([
+      "Mon",
+      "Tue · Lower A",
+      "Wed",
+      "Thu",
+      "Fri",
+      "Sat",
+      "Sun",
+    ]);
+    const wed = screen.getByRole("tab", { name: "Wed · Rest, add a training day" });
+    expect(wed.className).toMatch(/is-rest/);
+    fireEvent.click(wed);
+    expect(screen.getByRole("tab", { name: /^Wed · Day/ }).getAttribute("aria-selected")).toBe(
+      "true",
+    );
+  });
+
+  it("status pill follows the version state", () => {
+    renderBuilder({ versionPill: { state: "draft", versionNumber: 3 } });
+    const draft = screen.getAllByTestId("builder-version-pill")[0]!;
+    expect(draft.textContent).toBe("Draft · v3");
+    expect(draft.querySelector(".ui-p-neutral")).toBeTruthy();
+    cleanup();
+
+    renderBuilder({ versionPill: { state: "published", versionNumber: 2 }, readOnly: true });
+    const published = screen.getAllByTestId("builder-version-pill")[0]!;
+    expect(published.textContent).toBe("Published · v2");
+    expect(published.querySelector(".ui-p-done")).toBeTruthy();
+    expect(published.querySelector("svg")).toBeTruthy();
+    expect(screen.queryByText("Draft")).toBeNull();
+    cleanup();
+
+    renderBuilder({ versionPill: null, readOnly: true });
+    expect(screen.queryByTestId("builder-version-pill")).toBeNull();
+  });
+
+  it("Duplicate day copies the day onto the next free weekday and selects it", () => {
+    renderBuilder();
+    fireEvent.click(screen.getByRole("button", { name: "Duplicate day" }));
+    const copy = screen.getByRole("tab", { name: "Mon · Lower A" });
+    expect(copy.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByTestId("exercise-properties").textContent).toMatch(/Back squat/);
+  });
+
+  it("Duplicate day is hidden when read-only or every weekday has a day", () => {
+    renderBuilder({ readOnly: true });
+    expect(screen.queryByRole("button", { name: "Duplicate day" })).toBeNull();
+    cleanup();
+
+    const base = workoutContent.workoutDays[0]!;
+    const fullWeek: PlanContent = {
+      ...workoutContent,
+      workoutDays: [0, 1, 2, 3, 4, 5, 6].map((weekday, index) => ({
+        ...base,
+        id: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa${index}`,
+        order: index + 1,
+        weekday,
+        exercises: [],
+      })),
+    };
+    renderBuilder({ initialContent: fullWeek });
+    expect(screen.queryByRole("button", { name: "Duplicate day" })).toBeNull();
+  });
+
+  it("reps is a 1-100 stepper that can be cleared and added back", () => {
+    renderBuilder();
+    const props = screen.getByTestId("exercise-properties");
+    const reps = within(props).getByLabelText("Reps", { selector: ".ui-stepper" });
+    expect(reps.textContent).toBe("6");
+    fireEvent.click(within(props).getByRole("button", { name: "Increase Reps" }));
+    expect(within(props).getByLabelText("Reps", { selector: ".ui-stepper" }).textContent).toBe(
+      "7",
+    );
+    expect(screen.getByText(/× 7 reps/)).toBeTruthy();
+
+    fireEvent.click(within(props).getByRole("button", { name: "Clear reps" }));
+    expect(within(props).queryByLabelText("Reps", { selector: ".ui-stepper" })).toBeNull();
+    fireEvent.click(within(props).getByRole("button", { name: "Add reps" }));
+    expect(within(props).getByLabelText("Reps", { selector: ".ui-stepper" }).textContent).toBe(
+      "10",
+    );
+  });
+
+  it("diet day row: Every day only without workouts; Training and Rest days split meals", () => {
+    const breakfast = {
+      ...workoutContent.mealPrescriptions[0]!,
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      name: "Pre-workout banana",
+      localTime: "07:00",
+      applicableWeekdays: [2],
+    };
+    const restSnack = {
+      ...workoutContent.mealPrescriptions[0]!,
+      id: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+      name: "Rest day poha",
+      localTime: "10:00",
+      applicableWeekdays: [0, 3],
+    };
+    const content: PlanContent = {
+      ...workoutContent,
+      mealPrescriptions: [...workoutContent.mealPrescriptions, breakfast, restSnack],
+    };
+    renderBuilder({ initialContent: content }, "nutrition");
+    const row = screen.getByTestId("meal-day-tabs");
+    expect(within(row).getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "Every day",
+      "Training days",
+      "Rest days",
+    ]);
+    const board = screen.getByTestId("meals-board");
+    expect(board.textContent).toMatch(/Pre-workout banana/);
+    expect(board.textContent).toMatch(/Rest day poha/);
+
+    fireEvent.click(within(row).getByRole("tab", { name: "Training days" }));
+    expect(within(row).getByRole("tab", { name: "Training days" }).getAttribute("aria-selected")).toBe("true");
+    expect(board.textContent).toMatch(/Pre-workout banana/);
+    expect(board.textContent).toMatch(/Lunch/);
+    expect(board.textContent).not.toMatch(/Rest day poha/);
+
+    fireEvent.click(within(row).getByRole("tab", { name: "Rest days" }));
+    expect(board.textContent).not.toMatch(/Pre-workout banana/);
+    expect(board.textContent).toMatch(/Rest day poha/);
+    cleanup();
+
+    renderBuilder(
+      { initialContent: { workoutDays: [], mealPrescriptions: content.mealPrescriptions } },
+      "nutrition",
+    );
+    expect(
+      within(screen.getByTestId("meal-day-tabs")).getAllByRole("tab").map((tab) => tab.textContent),
+    ).toEqual(["Every day"]);
   });
 });

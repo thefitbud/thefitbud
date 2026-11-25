@@ -1,5 +1,6 @@
 import type { PlanContent, WorkoutDay, WorkoutExercise } from "@fitbud/contracts";
 import { OverflowMenu } from "../OverflowMenu";
+import { Button, Field, LibraryThumb, Stepper } from "../ui";
 import {
   duplicateExercise,
   moveExercise,
@@ -13,6 +14,11 @@ import {
   parseRestLabel,
 } from "./formatters";
 import { applyExercisePrescription } from "./prescription";
+
+/** Reps start here when a trainer adds a rep target to an empty one. */
+export const DEFAULT_REPS = 10;
+export const REPS_MIN = 1;
+export const REPS_MAX = 100;
 
 export function ExerciseProperties({
   day,
@@ -70,7 +76,8 @@ export function ExerciseProperties({
   return (
     <aside className="builder-props" aria-label="Exercise properties" data-testid="exercise-properties">
       <header className="builder-props-head">
-        <div>
+        <LibraryThumb name={selected.name || "Exercise"} kind="exercise" />
+        <div className="builder-props-title">
           <h2 className="builder-pane-title">{selected.name || "Exercise"}</h2>
           {meta ? <p className="builder-props-meta">{meta}</p> : null}
         </div>
@@ -110,67 +117,91 @@ export function ExerciseProperties({
         )}
       </header>
 
-      <label className="field">
-        <span>Sets</span>
-        <input
-          type="number"
-          min={1}
-          max={30}
-          inputMode="numeric"
-          value={setCount}
-          disabled={readOnly}
-          onChange={(event) => patch({ setCount: Number(event.target.value) || 1 })}
-        />
-      </label>
-      <label className="field">
-        <span>Reps</span>
-        <input
-          type="number"
-          min={1}
-          max={100}
-          inputMode="numeric"
-          value={sample?.reps ?? ""}
-          disabled={readOnly}
-          onChange={(event) => {
-            const raw = event.target.value.trim();
-            patch({ reps: raw === "" ? null : Number(raw) });
-          }}
-        />
-      </label>
-      <label className="field">
-        <span>Weight</span>
-        <input
-          type="text"
-          maxLength={80}
-          placeholder="60 kg"
-          value={sample?.loadLabel ?? ""}
-          disabled={readOnly}
-          onChange={(event) => patch({ loadLabel: event.target.value || null })}
-        />
-      </label>
-      <label className="field">
-        <span>Rest</span>
-        <input
-          type="text"
-          maxLength={40}
-          placeholder="2 min"
-          value={restLabel}
-          disabled={readOnly}
-          onChange={(event) => patch({ restSeconds: parseRestLabel(event.target.value) })}
-        />
-      </label>
-      <label className="field">
-        <span>Coach cue</span>
+      <Field label="Sets">
+        {readOnly ? (
+          <p className="builder-props-value">{setCount}</p>
+        ) : (
+          <Stepper
+            aria-label="Sets"
+            value={setCount}
+            min={1}
+            max={30}
+            onChange={(next) => patch({ setCount: next })}
+          />
+        )}
+      </Field>
+      <div className="builder-props-pair">
+        <Field label="Reps">
+          {readOnly ? (
+            <p className="builder-props-value">{sample?.reps ?? "—"}</p>
+          ) : sample?.reps == null ? (
+            <Button
+              variant="secondary"
+              className="builder-reps-add"
+              onClick={() => patch({ reps: DEFAULT_REPS })}
+            >
+              Add reps
+            </Button>
+          ) : (
+            <div className="builder-reps">
+              <Stepper
+                aria-label="Reps"
+                value={sample.reps}
+                min={REPS_MIN}
+                max={REPS_MAX}
+                onChange={(next) => patch({ reps: next })}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="builder-reps-clear"
+                aria-label="Clear reps"
+                onClick={() => patch({ reps: null })}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+        </Field>
+        <Field label="Weight">
+          <span className="ui-input">
+            <input
+              type="text"
+              maxLength={80}
+              placeholder="60 kg"
+              aria-label="Weight"
+              value={sample?.loadLabel ?? ""}
+              disabled={readOnly}
+              onChange={(event) => patch({ loadLabel: event.target.value || null })}
+            />
+          </span>
+        </Field>
+      </div>
+      <Field label="Rest">
+        <span className="ui-input">
+          <input
+            type="text"
+            maxLength={40}
+            placeholder="2 min"
+            aria-label="Rest"
+            value={restLabel}
+            disabled={readOnly}
+            onChange={(event) => patch({ restSeconds: parseRestLabel(event.target.value) })}
+          />
+        </span>
+      </Field>
+      <Field label="Coach cue" help="Shown on the client's set screen.">
         <textarea
+          className="ui-textarea"
           rows={3}
           maxLength={2000}
+          aria-label="Coach cue"
           placeholder="Brace, sit between the hips, knees out."
           value={selected.instructions ?? ""}
           disabled={readOnly}
           onChange={(event) => patch({ instructions: event.target.value || null })}
         />
-      </label>
-      <p className="builder-props-note">Shown on the client&apos;s set screen.</p>
+      </Field>
     </aside>
   );
 }

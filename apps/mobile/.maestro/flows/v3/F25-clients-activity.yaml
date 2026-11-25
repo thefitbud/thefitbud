@@ -49,7 +49,7 @@ env:
       - tapOn:
           id: "client-nudge"
       - extendedWaitUntil:
-          visible: "about|Send nudge|Close|Cancel"
+          visible: "about|Send reminder|Close|Cancel"
           timeout: 15000
       - takeScreenshot: TM-03j
       - tapOn: "Close|Cancel|Dismiss"
