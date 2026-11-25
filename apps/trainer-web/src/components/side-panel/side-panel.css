@@ -517,9 +517,19 @@
 }
 
 .sp-actions .overflow-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   min-height: 44px;
   font-size: 14px;
   white-space: nowrap;
+}
+
+.sp-actions .overflow-menu-divider {
+  height: 1px;
+  margin: 4px 8px;
+  background: var(--line2);
+  list-style: none;
 }
 
 /* Frames 131 / 199: nudge limit and client quiet hours, inline notices. */

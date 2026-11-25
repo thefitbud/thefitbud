@@ -22,4 +22,16 @@ describe("Home styles (W13-11, D-W13-9)", () => {
     expect(open).toContain("var(--row-sel)");
     expect(open).toContain("inset 3px 0 0 var(--brand)");
   });
+
+  it("stacks the name over the issue in one column", () => {
+    const tx = rule(".home-who-tx");
+    expect(tx).toMatch(/flex-direction:\s*column/);
+    expect(rule(".home-row")).toMatch(/grid-template-columns:\s*minmax\(0, 1fr\) minmax\(112px/);
+  });
+
+  it("stacks the ask row's button and chip under the text beside a docked panel", () => {
+    expect(css).toMatch(/\.home-triage\.has-panel \.home-li-ask \{[^}]*grid-template-areas:/);
+    expect(css).toMatch(/\.home-triage\.has-panel \.home-li-ask > \.button-sm[^{]*\{[^}]*grid-area:\s*act/);
+    expect(css).toMatch(/\.home-triage\.has-panel \.home-ask-inline \{[^}]*display:\s*flex/);
+  });
 });

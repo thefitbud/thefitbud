@@ -249,7 +249,7 @@ a.home-tile:focus-visible {
 
 .home-row {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr) minmax(112px, 124px) minmax(76px, 84px) auto 44px;
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 124px) minmax(76px, 84px) auto 44px;
   align-items: center;
   gap: 8px;
   min-height: 60px;
@@ -311,6 +311,13 @@ a.home-tile:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+}
+
+.home-who-tx {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -829,7 +836,7 @@ a.home-tile:focus-visible {
 /* Rail beside the list: give the issue text room back (name and gaps tighten). */
 @media (min-width: 1024px) and (max-width: 1599px) {
   .home-row {
-    grid-template-columns: minmax(148px, 152px) minmax(0, 1fr) 96px 76px auto 44px;
+    grid-template-columns: minmax(0, 1fr) 96px 76px auto 44px;
     gap: 8px;
   }
 }
@@ -864,7 +871,7 @@ a.home-tile:focus-visible {
   }
 
   .home-row {
-    grid-template-columns: 146px minmax(0, 1fr) 92px 60px auto 44px;
+    grid-template-columns: minmax(0, 1fr) 92px 60px auto 44px;
     gap: 6px;
     padding: 8px 8px 8px 12px;
   }
@@ -886,7 +893,6 @@ a.home-tile:focus-visible {
     grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
       "who chip menu"
-      "issue issue issue"
       "age action action";
     gap: 6px 8px;
     padding: 12px 14px;
@@ -898,24 +904,20 @@ a.home-tile:focus-visible {
   }
 
   .home-row > :nth-child(2) {
-    grid-area: issue;
-  }
-
-  .home-row > :nth-child(3) {
     grid-area: chip;
     justify-self: end;
   }
 
-  .home-row > :nth-child(4) {
+  .home-row > :nth-child(3) {
     grid-area: age;
   }
 
-  .home-row > :nth-child(5) {
+  .home-row > :nth-child(4) {
     grid-area: action;
     justify-self: end;
   }
 
-  .home-row > :nth-child(6) {
+  .home-row > :nth-child(5) {
     grid-area: menu;
     justify-self: end;
   }
@@ -1044,7 +1046,7 @@ a.home-tile:focus-visible {
   }
 
   .home-triage.has-panel .home-row {
-    grid-template-columns: minmax(120px, 148px) minmax(0, 1fr) 96px 76px 44px;
+    grid-template-columns: minmax(0, 1fr) 96px 76px 44px;
   }
 
   .home-triage.has-panel .home-review-cell,
@@ -1064,7 +1066,7 @@ a.home-tile:focus-visible {
     grid-template-columns: minmax(0, 1fr) auto 44px;
     grid-template-areas:
       "who chip menu"
-      "issue age age";
+      "who age age";
     gap: 4px 8px;
   }
 
@@ -1074,20 +1076,54 @@ a.home-tile:focus-visible {
   }
 
   .home-triage.has-panel .home-row > :nth-child(2) {
-    grid-area: issue;
-  }
-
-  .home-triage.has-panel .home-row > :nth-child(3) {
     grid-area: chip;
   }
 
-  .home-triage.has-panel .home-row > :nth-child(4) {
+  .home-triage.has-panel .home-row > :nth-child(3) {
     grid-area: age;
     justify-self: end;
   }
 
-  .home-triage.has-panel .home-row > :nth-child(6) {
+  .home-triage.has-panel .home-row > :nth-child(5) {
     grid-area: menu;
+  }
+
+  /* Ask rows: the narrow column leaves no room for text, chip and button
+     side by side, so the text takes the width and the chip and the
+     "Mark answered" button stack under it. */
+  .home-triage.has-panel .home-li-ask {
+    display: grid;
+    grid-template-columns: 32px minmax(0, 1fr) 44px;
+    grid-template-areas:
+      "av tx menu"
+      ". act act";
+    align-items: start;
+    gap: 8px 12px;
+  }
+
+  .home-triage.has-panel .home-li-ask > :nth-child(1) {
+    grid-area: av;
+  }
+
+  .home-triage.has-panel .home-li-ask > .home-li-tx {
+    grid-area: tx;
+  }
+
+  .home-triage.has-panel .home-li-ask > .button-sm,
+  .home-triage.has-panel .home-li-ask > a.button-secondary {
+    grid-area: act;
+    justify-self: start;
+  }
+
+  .home-triage.has-panel .home-li-ask > .overflow-menu {
+    grid-area: menu;
+    justify-self: end;
+  }
+
+  .home-triage.has-panel .home-ask-inline {
+    display: flex;
+    width: fit-content;
+    margin: 6px 0 0;
   }
 }
 

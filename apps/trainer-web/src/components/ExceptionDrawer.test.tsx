@@ -965,6 +965,22 @@ describe("Side panel resolve form (Z7-6)", () => {
       "Client settings",
     ]);
   });
+
+  it("the ⋯ menu shows an icon on every entry and a divider before Open client (W-02a)", async () => {
+    render(
+      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
+    for (const item of screen.getAllByRole("menuitem")) {
+      expect(item.querySelector(".overflow-menu-item-icon svg")).not.toBeNull();
+    }
+    const open = screen.getByRole("menuitem", { name: "Open client" });
+    const sep = open.closest("li")!.previousElementSibling!;
+    expect(sep.getAttribute("role")).toBe("separator");
+    const whatsapp = screen.getByRole("menuitem", { name: "Message on WhatsApp" });
+    expect(whatsapp.closest("li")!.nextElementSibling).toBe(sep);
+    expect(screen.getAllByRole("separator")).toHaveLength(1);
+  });
 });
 
 describe("Side panel nudge limited and quiet hours (Z7-6)", () => {

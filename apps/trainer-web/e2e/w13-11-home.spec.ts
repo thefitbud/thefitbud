@@ -74,6 +74,17 @@ async function shot(page: Page, name: string, size: Size) {
   expect.soft(problems.clip, `${name} ${size.w}`).toEqual([]);
 }
 
+/** The deep-linked panel is loaded: real client name, meta line, no placeholder, Home behind it ready. */
+async function panelLoaded(page: Page) {
+  const panel = page.getByTestId("screen-TW-05");
+  await expect(panel.locator(".sp-name")).not.toHaveText(/^(Client|)$/, { timeout: 20_000 });
+  await expect(panel.locator(".sp-meta")).toBeVisible({ timeout: 20_000 });
+  await expect(panel.getByText("Loading")).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.getByText("Loading your day…")).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.locator(".home-skel")).toHaveCount(0, { timeout: 20_000 });
+  await page.waitForTimeout(500);
+}
+
 async function openClient(page: Page, name: string) {
   await page.goto("/");
   await expect(page.getByTestId("screen-TW-04")).toBeVisible({ timeout: 30_000 });
@@ -214,6 +225,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       console.log("STEP W-02e resolved read-only");
       await page.goto(`/?exception=${rohanResolved}`);
       await expect(page.getByTestId("panel-readonly-line")).toBeVisible({ timeout: 20_000 });
+      await panelLoaded(page);
       await shot(page, "W-02e-panel-resolved-readonly", size);
 
       console.log("STEP W-02f / g / h resolve several");
@@ -238,6 +250,8 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       console.log("STEP W-02i ended client");
       await page.goto(`/?exception=${kavyaResolved}`);
       await expect(page.getByTestId("panel-readonly-foot")).toBeVisible({ timeout: 20_000 });
+      await panelLoaded(page);
+      await expect(page.getByTestId("panel-readonly-foot")).not.toContainText("with Client");
       await shot(page, "W-02i-panel-ended-readonly", size);
 
       console.log("STEP W-166 inbox");

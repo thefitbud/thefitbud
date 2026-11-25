@@ -234,6 +234,20 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     expect(screen.getAllByRole("row")[0]!.className).not.toContain("is-focused");
   });
 
+  it("stacks the issue line under the client name in one column (W-02)", async () => {
+    await renderHome();
+    const grid = screen.getByRole("grid", { name: "Needs attention" });
+    const row = within(grid).getByRole("button", { name: "More actions for Rohan Mehta" }).closest("[role=row]")!;
+    const who = row.querySelector(".home-who")!;
+    const tx = who.querySelector(".home-who-tx")!;
+    expect(tx.children[0]!.tagName).toBe("B");
+    expect(tx.children[0]!.textContent).toBe("Rohan Mehta");
+    expect(tx.children[1]!.classList.contains("home-issue")).toBe(true);
+    expect(tx.children[1]!.querySelector(".home-issue-txt")).not.toBeNull();
+    // name+issue, chip, age, review, menu: five cells, the issue is not its own cell.
+    expect(row.children).toHaveLength(5);
+  });
+
   it("clicking the open overflow menu's own padding does not open the client panel", async () => {
     await renderHome();
     const grid = screen.getByRole("grid", { name: "Needs attention" });

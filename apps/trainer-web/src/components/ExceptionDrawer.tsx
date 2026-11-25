@@ -19,7 +19,13 @@ import {
   Dumbbell,
   Inbox,
   Info,
+  ListChecks,
+  MessageCircle,
   Moon,
+  Settings,
+  SlidersHorizontal,
+  StickyNote,
+  User,
   Utensils,
 } from "lucide-react";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
@@ -1820,6 +1826,7 @@ export function ExceptionDrawer({
                       {
                         id: "note",
                         label: "Add note",
+                        icon: <StickyNote size={16} strokeWidth={1.75} />,
                         onSelect: openResolveForm,
                       },
                       ...(bulkAvailable
@@ -1827,6 +1834,7 @@ export function ExceptionDrawer({
                             {
                               id: "bulk",
                               label: "Resolve several…",
+                              icon: <ListChecks size={16} strokeWidth={1.75} />,
                               onSelect: enterBulk,
                             },
                           ]
@@ -1834,6 +1842,7 @@ export function ExceptionDrawer({
                       {
                         id: "plan",
                         label: "Adjust plan",
+                        icon: <SlidersHorizontal size={16} strokeWidth={1.75} />,
                         onSelect: () => {
                           // Leaving the page: treat as closing (DR1).
                           markClosing();
@@ -1845,6 +1854,7 @@ export function ExceptionDrawer({
                       {
                         id: "whatsapp",
                         label: "Message on WhatsApp",
+                        icon: <MessageCircle size={16} strokeWidth={1.75} />,
                         onSelect: () => {
                           if (whatsappHref) {
                             window.open(
@@ -1859,6 +1869,8 @@ export function ExceptionDrawer({
                       {
                         id: "client",
                         label: "Open client",
+                        icon: <User size={16} strokeWidth={1.75} />,
+                        dividerBefore: true,
                         onSelect: () => {
                           markClosing();
                           window.location.assign(
@@ -1869,6 +1881,7 @@ export function ExceptionDrawer({
                       {
                         id: "settings",
                         label: "Client settings",
+                        icon: <Settings size={16} strokeWidth={1.75} />,
                         onSelect: () => {
                           markClosing();
                           window.location.assign(
