@@ -892,6 +892,60 @@ describe("trainee edits, removes and adds a photo to a logged meal (Z14-11)", ()
     });
   });
 
+  describe("the feed carries unread, notificationId and previousAteOut (Z14-33)", () => {
+    type FeedEvent = {
+      type: string;
+      unread?: boolean;
+      notificationId?: string;
+      previousAteOut?: boolean;
+    };
+    async function feedEvents() {
+      const feed = await call("/activity/feed", { headers: f.trainer });
+      return feed.body.data.events as FeedEvent[];
+    }
+
+    it("an edit and a removal of an ate-out meal are unread with the inbox row id until it is read", async () => {
+      const entry = await confirm();
+      await patchLog(entry.id, { ...ATE_OUT, recordVersion: 0 });
+      let edited = (await feedEvents()).find((e) => e.type === "client_edited");
+      const [row] = await trainerNotifications();
+      expect(edited).toMatchObject({ unread: true, notificationId: row!.id, previousAteOut: false });
+
+      // The edit made it an ate-out meal; removing it now reports the previous kind.
+      at(Date.now() + 11 * 60_000);
+      await removeLog(entry.id, 1);
+      const events = await feedEvents();
+      const removed = events.find((e) => e.type === "client_removed");
+      expect(removed).toMatchObject({ unread: true, previousAteOut: true });
+      expect(removed!.notificationId).toEqual(expect.any(String));
+
+      const read = await call(`/notifications/${removed!.notificationId}/read`, {
+        method: "POST",
+        headers: f.trainer,
+        body: {},
+      });
+      expect(read.status).toBe(200);
+      const after = await feedEvents();
+      const removedAfter = after.find((e) => e.type === "client_removed");
+      expect(removedAfter).toMatchObject({ unread: false, previousAteOut: true });
+      expect(removedAfter!.notificationId).toBeUndefined();
+      // The dot belongs to the entry: its latest inbox row decides, for both items.
+      edited = after.find((e) => e.type === "client_edited");
+      expect(edited!.unread).toBe(false);
+    });
+
+    it("other event types never carry the new fields, and another trainer's inbox is not read", async () => {
+      const entry = await confirm();
+      await patchLog(entry.id, { ...ATE_OUT, recordVersion: 0 });
+      const events = await feedEvents();
+      for (const event of events.filter((e) => !e.type.startsWith("client_"))) {
+        expect(event).not.toHaveProperty("unread");
+        expect(event).not.toHaveProperty("notificationId");
+        expect(event).not.toHaveProperty("previousAteOut");
+      }
+    });
+  });
+
   describe("offline: sync/push (D-W14-22 f)", () => {
     async function push(
       operation: string,
