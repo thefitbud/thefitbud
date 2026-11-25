@@ -446,3 +446,23 @@
     min-width: 2.75rem;
   }
 }
+
+/* The seven days always fit the card: columns may shrink (no clipped Sunday at iPad widths). */
+.overview-grid .ov-week {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--s1);
+  padding-inline: var(--s3);
+}
+
+.overview-grid .ov-day {
+  padding-inline: 0;
+  min-width: 0;
+}
+
+/* Workout labels wrap to two lines instead of truncating. */
+.overview-grid .ov-wl {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
