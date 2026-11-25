@@ -6,6 +6,7 @@ import {
   MealPhotoError,
   base64ToBytes,
   bytesToBase64,
+  hasQueuedMealEdit,
   pendingMealLogIds,
 } from "../mealActions";
 
@@ -22,7 +23,9 @@ import {
  *   written before the job counts as waiting, so it survives Diet unmounting
  *   and an app restart;
  * - the job attaches only once the log has a server entry id (`serverEntryId`:
- *   never a `local-` id, never while the log is still in the outbox);
+ *   never a `local-` id, never while the log is still in the outbox) and the
+ *   entry has no edit or removal waiting in the outbox (Z14-34); a meal that
+ *   was removed drops its job without a word;
  * - a failure for lack of connection puts it back to `waiting`, and it sends
  *   itself once the API is reachable again (reachability, an outbox change, or
  *   a backed-off timer);
@@ -121,29 +124,62 @@ export function pendingMealLogIdsAll(rows: ReadonlyArray<OutboxRowLike>): Set<st
   return ids;
 }
 
+/** The meal is gone (removed): the job has nothing to attach to and is dropped. */
+export const MEAL_ENTRY_GONE: unique symbol = Symbol("mealEntryGone");
+
 /**
  * Where a job's entry id comes from: the meal as a screen last showed it,
  * then the server's copy of that day. Both go through `serverEntryId` with
- * the outbox as it is now. Throws when the server could not be reached.
+ * the outbox as it is now, and an entry with an edit or removal still in the
+ * outbox is not ready (the photo must not attach ahead of it). Returns
+ * `MEAL_ENTRY_GONE` when the entry was removed (a settled removal, or the
+ * server's day has no log for a meal whose log is not waiting in the outbox).
+ * Throws when the server could not be reached.
  */
 export async function resolveMealEntryId(input: {
   job: Pick<MealPhotoJob, "assignmentId">;
   hint: Pick<MealAssignment, "id" | "compliance"> | undefined;
   listOutbox: () => Promise<ReadonlyArray<OutboxRowLike>>;
   fetchMeal: () => Promise<Pick<MealAssignment, "id" | "compliance"> | null>;
-}): Promise<string | null> {
-  const pending = pendingMealLogIdsAll(await input.listOutbox());
+}): Promise<string | typeof MEAL_ENTRY_GONE | null> {
+  const rows = await input.listOutbox();
+  const pending = pendingMealLogIdsAll(rows);
+  const removedAlready = (entryId: string) =>
+    rows.some(
+      (row) =>
+        row.operation === "meal.remove" && row.status === "sent" && row.recordId === entryId,
+    );
+  const readyOrWait = (entryId: string) => {
+    if (removedAlready(entryId)) return MEAL_ENTRY_GONE;
+    return hasQueuedMealEdit(rows, entryId) ? null : entryId;
+  };
   const fromHint = serverEntryId(input.hint, pending);
-  if (fromHint) return fromHint;
-  return serverEntryId(await input.fetchMeal(), pending);
+  if (fromHint) return readyOrWait(fromHint);
+  const meal = await input.fetchMeal();
+  const fromServer = serverEntryId(meal, pending);
+  if (fromServer) return readyOrWait(fromServer);
+  // The server's day has the meal but no log, and no log of ours is waiting
+  // (a phone-made `local-` id on screen means one is on its way): removed.
+  if (
+    meal &&
+    !meal.compliance &&
+    !pending.has(meal.id) &&
+    !input.hint?.compliance?.id?.startsWith("local-")
+  ) {
+    return MEAL_ENTRY_GONE;
+  }
+  return null;
 }
 
 export type MealPhotoJobDeps = {
-  /** The server entry id for the job's meal, or null while there is none. */
+  /**
+   * The server entry id for the job's meal, null while there is none or an
+   * edit/removal of it is still waiting, `MEAL_ENTRY_GONE` once it was removed.
+   */
   resolveEntryId: (
     job: MealPhotoJob,
     hint: MealAssignment | undefined,
-  ) => Promise<string | null>;
+  ) => Promise<string | typeof MEAL_ENTRY_GONE | null>;
   /** Upload (unless `mediaAssetId` is set) and attach; `onUploaded` keeps the asset id. */
   send: (
     job: MealPhotoJob,
@@ -206,8 +242,39 @@ export type MealPhotoJobs = {
   remove(assignmentId: string): Promise<void>;
   /** Drops a finished job from memory (the server's copy shows the photo now). */
   forget(assignmentId: string): void;
+  /** Stops the runner; the stored jobs stay (a session the server ended). */
   dispose(): void;
+  /**
+   * Explicit sign-out: stops the runner, then deletes every job record, the
+   * index and every stored byte. Nothing sends or is written afterwards, even
+   * from an upload that was already running.
+   */
+  discard(): Promise<void>;
 };
+
+/** Deletes every stored job, whoever owns it, and the index (sign-out). */
+async function removeAllStoredJobs(
+  storage: AsyncKeyValue,
+  extra: { ownerId: string; ids: string[] } | null,
+): Promise<void> {
+  let index: StoredIndex | null = null;
+  try {
+    const raw = await storage.get(INDEX_KEY);
+    index = raw ? (JSON.parse(raw) as StoredIndex) : null;
+  } catch {
+    index = null;
+  }
+  const targets: Array<[string, string]> = [];
+  if (index && typeof index.ownerId === "string" && Array.isArray(index.ids)) {
+    for (const id of index.ids) targets.push([index.ownerId, id]);
+  }
+  if (extra) for (const id of extra.ids) targets.push([extra.ownerId, id]);
+  for (const [owner, id] of targets) {
+    await storage.remove(jobKey(owner, id));
+    await storage.remove(bytesKey(owner, id));
+  }
+  await storage.remove(INDEX_KEY);
+}
 
 export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJobs {
   const { storage, ownerId } = options;
@@ -228,6 +295,8 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
   let deps: MealPhotoJobDeps | null = null;
   let started: Promise<void> | null = null;
   let disposed = false;
+  /** Set by `discard`: no store write happens after it, so nothing comes back. */
+  let discarded = false;
   let unsubscribers: Array<() => void> = [];
   let running = false;
   let again = false;
@@ -254,7 +323,11 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
   }
 
   function write(work: () => Promise<void>): Promise<void> {
-    const next = writes.then(work, work);
+    const guarded = async () => {
+      if (discarded) return;
+      await work();
+    };
+    const next = writes.then(guarded, guarded);
     writes = next.catch(() => undefined);
     return next;
   }
@@ -425,7 +498,7 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
   async function sendOne(job: MealPhotoJob): Promise<"sent" | "wait" | "offline" | "failed"> {
     const current = deps;
     if (!current) return "wait";
-    let entryId: string | null;
+    let entryId: string | typeof MEAL_ENTRY_GONE | null;
     try {
       entryId = await current.resolveEntryId(job, hints.get(job.assignmentId));
     } catch (err) {
@@ -437,8 +510,15 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
       return "wait";
     }
     // A runner replaced while it looked (another user, a test restart) sends nothing.
-    if (!entryId || disposed) return "wait";
+    if (disposed) return "wait";
+    if (entryId === MEAL_ENTRY_GONE) {
+      // The trainee removed the meal: its photo goes with it, quietly.
+      await remove(job.assignmentId);
+      return "wait";
+    }
+    if (!entryId) return "wait";
     const data = await bytesFor(job);
+    if (disposed) return "wait";
     if (!data) {
       patch(job.assignmentId, { state: "failed", message: FAILED_COPY, offline: false });
       return "failed";
@@ -487,7 +567,7 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
       patch(job.assignmentId, { state: "done", offline: false, message: null });
     }
     await unpersistJob(job.assignmentId).catch((err) => report("mealPhoto.unpersist", err));
-    current.onSent?.(job);
+    if (!discarded) current.onSent?.(job);
     return "sent";
   }
 
@@ -523,6 +603,7 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
     uri: string;
     bytes: Uint8Array;
   }) {
+    if (discarded) return;
     const id = input.assignmentId;
     const previous = jobs[id];
     const job: MealPhotoJob = {
@@ -673,6 +754,23 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
       unsubscribers = [];
       listeners.clear();
     },
+    async discard() {
+      // Stop first, so nothing can write in between, then records, then bytes.
+      discarded = true;
+      disposed = true;
+      cancelRetry();
+      for (const off of unsubscribers) off();
+      unsubscribers = [];
+      const ids = Object.keys(jobs);
+      bytes.clear();
+      fileUris.clear();
+      pickedUris.clear();
+      jobs = {};
+      emit();
+      listeners.clear();
+      await writes;
+      await removeAllStoredJobs(storage, { ownerId, ids });
+    },
   };
 }
 
@@ -695,6 +793,23 @@ export function mealPhotoJobsFor(
 /** The runner a screen already started (`useMealPhotoJobs`), if any. */
 export function currentMealPhotoJobs(): MealPhotoJobs | null {
   return current;
+}
+
+/** A session the server ended: the runner stops, the stored jobs stay for the same user. */
+export function stopMealPhotoJobs(): void {
+  current?.dispose();
+  current = null;
+}
+
+/**
+ * Explicit sign-out: the runner stops first, then every stored job and its
+ * bytes are deleted (also when no runner was started in this process).
+ */
+export async function discardMealPhotoJobs(storage: AsyncKeyValue): Promise<void> {
+  const active = current;
+  current = null;
+  if (active) await active.discard();
+  await removeAllStoredJobs(storage, null);
 }
 
 /** Tests only: forget the runner (a fresh process over the same storage). */

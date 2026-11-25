@@ -51,6 +51,8 @@ import {
   type MeSnapshot,
 } from "./meSnapshot";
 import { clearSyncDataOnSignOut } from "../sync/userStore";
+import { deviceStorage } from "../sync/storage";
+import { discardMealPhotoJobs, stopMealPhotoJobs } from "../trainee/food/mealPhotoJobs";
 import {
   coachViewSwitchPrompt,
   mobilePermittedRoles,
@@ -858,6 +860,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * sign-in and nobody else can read them (Z12-41).
    */
   const endSession = useCallback((unsentLogs: "drop" | "keep") => {
+    // Meal photos still waiting to upload: the runner stops before anything
+    // else, so no upload or attach happens as someone else or signed out.
+    // A server-ended session keeps the stored jobs for the same user.
+    if (unsentLogs === "drop") {
+      void discardMealPhotoJobs(deviceStorage().storage).catch((error) =>
+        reportError("mealPhoto.signOut.clear", error),
+      );
+    } else {
+      stopMealPhotoJobs();
+    }
     // Clear push state and unregister this installation before the session is
     // cleared. The revoke runs on a client that holds the current token and
     // role, so the request is authenticated whatever order the promises settle

@@ -6,7 +6,11 @@ import { MealPhotoError } from "../mealActions";
 import {
   MEAL_PHOTO_JOBS_PREFIX,
   createMealPhotoJobs,
+  discardMealPhotoJobs,
+  mealPhotoJobsFor,
+  resetMealPhotoJobsForTests,
   resolveMealEntryId,
+  stopMealPhotoJobs,
   serverEntryId,
   type MealPhotoJobDeps,
   type MealPhotoJob,
@@ -320,5 +324,184 @@ describe("meal photo jobs survive a restart", () => {
     expect(other.snapshot()).toEqual({});
     expect(server.send).not.toHaveBeenCalled();
     expect([...map.keys()].filter((key) => key.startsWith(`${MEAL_PHOTO_JOBS_PREFIX}.${OWNER}`))).toEqual([]);
+  });
+});
+
+function storedKeys(map: Map<string, string>) {
+  return [...map.keys()].filter((key) => key.startsWith(MEAL_PHOTO_JOBS_PREFIX));
+}
+
+describe("meal photo jobs: sign-out (Z14-34)", () => {
+  beforeEach(() => resetMealPhotoJobsForTests());
+
+  it("explicit sign-out deletes every job and byte, and a running upload cannot bring them back", async () => {
+    const { map, storage } = memory();
+    const jobs = mealPhotoJobsFor(OWNER, () => ({ storage, ownerId: OWNER, setTimer: () => null }));
+    const server = fakeServer();
+    server.state.meal = mealWith(ENTRY);
+    let uploaded: ((id: string) => Promise<void>) | null = null;
+    let finish: () => void = () => undefined;
+    const sendStarted = new Promise<void>((resolve) => {
+      jobs.configure({
+        ...server.deps,
+        send: async (_job, input) => {
+          uploaded = input.onUploaded;
+          resolve();
+          await new Promise<void>((done) => {
+            finish = done;
+          });
+        },
+      });
+    });
+    await addPhoto(jobs);
+    await sendStarted;
+    expect(storedKeys(map).length).toBeGreaterThan(1);
+
+    await discardMealPhotoJobs(storage);
+    expect(storedKeys(map)).toEqual([]);
+    expect(jobs.snapshot()).toEqual({});
+
+    // The upload that was already running finishes after sign-out.
+    await uploaded!(ASSET);
+    finish();
+    await settle();
+    expect(storedKeys(map)).toEqual([]);
+    expect(jobs.snapshot()).toEqual({});
+    // Nothing is sent from a cleared queue, and a new photo is refused too.
+    await addPhoto(jobs);
+    await jobs.kick();
+    await settle();
+    expect(storedKeys(map)).toEqual([]);
+  });
+
+  it("sign-out clears stored jobs even when no runner was started in this process", async () => {
+    const { map, storage } = memory();
+    const before = runner(storage);
+    before.configure(fakeServer().deps);
+    await addPhoto(before);
+    before.dispose();
+    expect(storedKeys(map).length).toBeGreaterThan(1);
+    await discardMealPhotoJobs(storage);
+    expect(storedKeys(map)).toEqual([]);
+  });
+
+  it("a session the server ended keeps the jobs for the same user, and nobody else gets them", async () => {
+    const { map, storage } = memory();
+    const first = mealPhotoJobsFor(OWNER, () => ({ storage, ownerId: OWNER, setTimer: () => null }));
+    first.configure(fakeServer().deps);
+    await addPhoto(first);
+    stopMealPhotoJobs();
+    expect(storedKeys(map).length).toBeGreaterThan(1);
+
+    const server = fakeServer();
+    server.state.meal = mealWith(ENTRY);
+    const again = mealPhotoJobsFor(OWNER, () => ({ storage, ownerId: OWNER, setTimer: () => null }));
+    expect(again).not.toBe(first);
+    again.configure(server.deps);
+    await again.start();
+    await settle();
+    expect(server.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("a different user after a server-ended session never sends or sees them", async () => {
+    const { map, storage } = memory();
+    const first = mealPhotoJobsFor(OWNER, () => ({ storage, ownerId: OWNER, setTimer: () => null }));
+    first.configure(fakeServer().deps);
+    await addPhoto(first);
+    stopMealPhotoJobs();
+    const other = "c0c0c0c0-0000-4000-8000-000000000001";
+    const second = mealPhotoJobsFor(other, () => ({ storage, ownerId: other, setTimer: () => null }));
+    const server = fakeServer();
+    server.state.meal = mealWith(ENTRY);
+    second.configure(server.deps);
+    await second.start();
+    await settle();
+    expect(second.snapshot()).toEqual({});
+    expect(server.send).not.toHaveBeenCalled();
+    expect(storedKeys(map).filter((key) => key.includes(OWNER))).toEqual([]);
+  });
+});
+
+describe("meal photo jobs: wait for pending edits and removals (Z14-34)", () => {
+  const edit = (status = "pending") => ({ status, operation: "meal.edit", recordId: ENTRY });
+  const removal = (status = "pending") => ({ status, operation: "meal.remove", recordId: ENTRY });
+
+  it("does not attach ahead of a pending meal.edit, and goes when the outbox drains", async () => {
+    const server = fakeServer();
+    const jobs = runner();
+    jobs.configure(server.deps);
+    server.state.meal = mealWith(ENTRY);
+    server.state.outbox = [edit("in_flight")];
+    await addPhoto(jobs);
+    await jobs.kick();
+    await settle();
+    expect(server.send).not.toHaveBeenCalled();
+    expect(jobs.snapshot()[MEAL]?.state).toBe("waiting");
+
+    server.state.outbox = [];
+    await jobs.kick();
+    await settle();
+    expect(server.send).toHaveBeenCalledTimes(1);
+    expect(server.send.mock.calls[0]?.[1].entryId).toBe(ENTRY);
+  });
+
+  it("waits behind a pending meal.remove, then drops the job quietly once the removal settled", async () => {
+    const server = fakeServer();
+    const jobs = runner();
+    jobs.configure(server.deps);
+    server.state.meal = mealWith(ENTRY);
+    server.state.outbox = [removal()];
+    await addPhoto(jobs);
+    await jobs.kick();
+    await settle();
+    expect(server.send).not.toHaveBeenCalled();
+    expect(jobs.snapshot()[MEAL]?.state).toBe("waiting");
+
+    // The server applied the removal: the day has the meal but no log.
+    server.state.outbox = [];
+    server.state.meal = mealWith(null);
+    await jobs.kick();
+    await settle();
+    expect(server.send).not.toHaveBeenCalled();
+    expect(jobs.snapshot()).toEqual({});
+  });
+
+  it("a sent removal seen through a stale hint drops the job, bytes included", async () => {
+    const { map, storage } = memory();
+    const server = fakeServer();
+    const jobs = runner(storage);
+    jobs.configure(server.deps);
+    jobs.setHints([mealWith(ENTRY) as MealAssignment]);
+    server.state.outbox = [removal("sent")];
+    await addPhoto(jobs);
+    await jobs.kick();
+    await settle();
+    expect(server.send).not.toHaveBeenCalled();
+    expect(jobs.snapshot()).toEqual({});
+    expect(storedKeys(map).filter((key) => key !== `${MEAL_PHOTO_JOBS_PREFIX}.index`)).toEqual([]);
+  });
+
+  it("re-checks when the outbox changes, not on a timer", async () => {
+    const server = fakeServer();
+    const jobs = runner();
+    jobs.configure(server.deps);
+    let notify: () => void = () => undefined;
+    jobs.connect({
+      outbox: {
+        subscribe: (listener) => {
+          notify = () => listener();
+          return () => undefined;
+        },
+      },
+    });
+    server.state.meal = mealWith(ENTRY);
+    server.state.outbox = [edit()];
+    await addPhoto(jobs);
+    await settle();
+    expect(server.send).not.toHaveBeenCalled();
+    server.state.outbox = [];
+    notify();
+    await settle();
+    expect(server.send).toHaveBeenCalledTimes(1);
   });
 });
