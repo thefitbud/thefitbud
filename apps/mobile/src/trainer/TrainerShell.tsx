@@ -612,11 +612,14 @@ function TrainerShellBody() {
           </View>
         ) : null}
 
-        {tab === "more" ? (
-          <TrainerMoreScreen
-            onOpenNotifications={() => startAt({ kind: "notifications" })}
-            onOpenProfile={() => startAt({ kind: "profile" })}
-          />
+        {visited.has("more") ? (
+          <View style={tab === "more" ? styles.content : styles.hidden}>
+            <TrainerMoreScreen
+              active={atTabs && tab === "more"}
+              onOpenNotifications={() => startAt({ kind: "notifications" })}
+              onOpenProfile={() => startAt({ kind: "profile" })}
+            />
+          </View>
         ) : null}
       </View>
 
