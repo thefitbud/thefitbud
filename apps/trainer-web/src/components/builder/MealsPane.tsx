@@ -8,7 +8,7 @@ import {
 import { formatHhMmTime, formatNumber, formatScaledQuantity } from "@fitbud/core";
 import { Plus } from "lucide-react";
 import { OverflowMenu } from "../OverflowMenu";
-import { LibraryThumb } from "../ui";
+import { Button, LibraryThumb } from "../ui";
 import {
   PLAN_COMPOSITION_LIMITS,
   addMeal,
@@ -67,6 +67,30 @@ export function appliesOn(
   if (day === "training") return applicable.some((weekday) => training.includes(weekday));
   if (day === "rest") return applicable.some((weekday) => !training.includes(weekday));
   return applicable.includes(day);
+}
+
+/**
+ * A meal counts toward the "Every day" totals only when it applies on all seven
+ * days. A meal with no day list at all has no restriction, so it counts.
+ */
+export function appliesEveryDay(meal: MealPrescription): boolean {
+  const applicable = meal.applicableWeekdays;
+  if (applicable == null) return true;
+  return ALL_DAYS.every((weekday) => applicable.includes(weekday));
+}
+
+/**
+ * The meals behind the tiles: the Every day view counts only the meals that
+ * apply every day (D-W13-29); Training days, Rest days and a weekday count what
+ * is listed. `narrowed` is true when the Every day view leaves a listed meal out.
+ */
+export function tileMeals(
+  visible: readonly MealPrescription[],
+  day: MealDay,
+): { meals: readonly MealPrescription[]; narrowed: boolean } {
+  if (day !== "all") return { meals: visible, narrowed: false };
+  const meals = visible.filter(appliesEveryDay);
+  return { meals, narrowed: meals.length < visible.length };
 }
 
 const DAY_ROW: Array<{ id: "all" | "training" | "rest"; label: string }> = [
@@ -263,7 +287,8 @@ export function MealsPane({
     previousCount.current = meals.length;
   }, [meals, onSelectMeal]);
 
-  const dayItems = visible.flatMap((meal) => meal.items ?? []);
+  const tiles = tileMeals(visible, shownDay);
+  const dayItems = tiles.meals.flatMap((meal) => meal.items ?? []);
   const planKcal = mealKcal(content.mealPrescriptions.flatMap((meal) => meal.items ?? []));
 
   return (
@@ -294,6 +319,11 @@ export function MealsPane({
       ) : null}
       {/* Totals for the meals on screen: a filtered day with no meals reads 0. */}
       <MacroTiles items={dayItems} />
+      {tiles.narrowed ? (
+        <p className="builder-tiles-note" data-testid="tiles-every-day-note">
+          Counts the meals that apply every day.
+        </p>
+      ) : null}
 
       <div className="meals-scroll">
         {visible.length === 0 ? (
@@ -421,9 +451,14 @@ export function MealsPane({
           </button>
         )}
         {showLibraryToggle && onOpenLibrary ? (
-          <button type="button" className="button-link" onClick={onOpenLibrary}>
+          <Button
+            variant="quiet"
+            size="sm"
+            className="meals-open-library"
+            onClick={onOpenLibrary}
+          >
             Open food library
-          </button>
+          </Button>
         ) : null}
       </div>
 
