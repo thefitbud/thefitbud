@@ -466,7 +466,7 @@ export function CheckinReviewScreen({
             style={[styles.nudgeBtn, offline ? styles.disabled : null]}
           >
             <Bell color={theme.colors.card} size={18} strokeWidth={2.2} />
-            <Text style={styles.nudgeBtnText}>Nudge</Text>
+            <Text style={styles.nudgeBtnText}>Remind</Text>
           </Pressable>
           <Text style={styles.nudgeCaption}>
             {`Sends ${first} a push notification.`}

@@ -50,8 +50,8 @@ function renderSheet(api: NudgeApi, onSent = vi.fn()) {
 describe("NudgeSheet", () => {
   it("shows the fixed title and the Gentle body, and never mentions WhatsApp", () => {
     renderSheet(makeApi());
-    expect(screen.getByText("Nudge Rohan")).toBeTruthy();
-    expect(screen.getByText("Rahul nudged you")).toBeTruthy();
+    expect(screen.getByText("Remind Rohan")).toBeTruthy();
+    expect(screen.getByText("Rahul sent you a reminder")).toBeTruthy();
     expect(
       screen.getByText("Lower body A is waiting. Can you fit it in soon?"),
     ).toBeTruthy();
@@ -71,8 +71,8 @@ describe("NudgeSheet", () => {
   it("Send posts the body to the nudge endpoint and reports the toast", async () => {
     const api = makeApi();
     const onSent = renderSheet(api);
-    fireEvent.click(screen.getByText("Send nudge"));
-    await waitFor(() => expect(onSent).toHaveBeenCalledWith("Nudge sent to Rohan"));
+    fireEvent.click(screen.getByText("Send reminder"));
+    await waitFor(() => expect(onSent).toHaveBeenCalledWith("Reminder sent to Rohan"));
     expect(api.nudgeActivity).toHaveBeenCalledWith(REL, {
       activityType: "workout",
       activityId: target.activityId,
@@ -96,9 +96,9 @@ describe("NudgeSheet", () => {
     });
     const onSent = renderSheet(api);
     await screen.findByText(/has turned off FitBud notifications/);
-    fireEvent.click(screen.getByText("Send nudge"));
+    fireEvent.click(screen.getByText("Send reminder"));
     await waitFor(() =>
-      expect(onSent).toHaveBeenCalledWith("Nudge sent to Rohan's inbox. Push is off"),
+      expect(onSent).toHaveBeenCalledWith("Reminder sent to Rohan's inbox. Push is off"),
     );
   });
 
@@ -108,14 +108,14 @@ describe("NudgeSheet", () => {
         throw new ApiClientError({
           status: 429,
           code: "NUDGE_LIMIT",
-          message: "You can nudge this client again tomorrow.",
+          message: "You can remind this client again tomorrow.",
           requestId: "req-1",
         });
       }),
     });
     const onSent = renderSheet(api);
-    fireEvent.click(screen.getByText("Send nudge"));
-    await screen.findByText("You can nudge Rohan again tomorrow.");
+    fireEvent.click(screen.getByText("Send reminder"));
+    await screen.findByText("You can remind Rohan again tomorrow.");
     expect(onSent).not.toHaveBeenCalled();
     const send = screen.getByTestId("nudge-send") as HTMLButtonElement;
     expect(send.getAttribute("aria-disabled") === "true" || send.disabled).toBe(true);
@@ -132,7 +132,7 @@ describe("NudgeSheet", () => {
       })),
     });
     renderSheet(api);
-    fireEvent.click(screen.getByText("Send nudge"));
+    fireEvent.click(screen.getByText("Send reminder"));
     await screen.findByText("Earlier today: please log Dinner.");
     expect(
       screen.queryByText("Lower body A is waiting. Can you fit it in soon?"),
@@ -146,8 +146,8 @@ describe("NudgeSheet", () => {
     fireEvent.change(screen.getByTestId("nudge-body-input"), {
       target: { value: "Book at wa.me/9199" },
     });
-    expect(screen.getByText("Nudges can't include links.")).toBeTruthy();
-    fireEvent.click(screen.getByText("Send nudge"));
+    expect(screen.getByText("Reminders can't include links.")).toBeTruthy();
+    fireEvent.click(screen.getByText("Send reminder"));
     expect(api.nudgeActivity).not.toHaveBeenCalled();
   });
 
@@ -176,10 +176,10 @@ describe("NudgeSheet", () => {
         onSent={() => {}}
       />,
     );
-    expect(screen.getByText("Nudge Rohan about…")).toBeTruthy();
+    expect(screen.getByText("Remind Rohan about…")).toBeTruthy();
     fireEvent.click(screen.getByTestId("nudge-pick-b"));
     fireEvent.click(screen.getByText("Next"));
-    expect(screen.getByText("Nudge Rohan")).toBeTruthy();
+    expect(screen.getByText("Remind Rohan")).toBeTruthy();
     expect(
       screen.getByText("Dinner wasn't logged on Fri. Can you add it, even roughly?"),
     ).toBeTruthy();

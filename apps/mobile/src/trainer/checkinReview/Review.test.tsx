@@ -353,7 +353,7 @@ describe("CheckinReviewScreen on the demo seed's form", () => {
     render(<CheckinReviewScreen checkinId={CHECKIN} relationshipId={REL} onBack={vi.fn()} onOpenClient={vi.fn()} />);
     expect(await screen.findByText("Due Mon 16 Nov · not submitted yet")).toBeTruthy();
     expect(screen.getByText(/has started but not sent it/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Nudge" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remind" })).toBeTruthy();
     expect(screen.queryByText("Mark reviewed")).toBeNull();
     expect(screen.queryByText("Reply")).toBeNull();
     expect(screen.queryByLabelText("Add a note for Rohan")).toBeNull();

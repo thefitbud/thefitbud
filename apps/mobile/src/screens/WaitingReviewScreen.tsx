@@ -127,7 +127,7 @@ function WaitingReviewScreenBody({ relationship }: { relationship: CoachingRelat
       await refreshSession();
     } catch (err) {
       reportError("WaitingReview.refresh", err);
-      setError("Couldn't check for your plan (WAIT-REFRESH). Pull to try again.");
+      setError("Couldn't check for your plan. Pull to try again.");
     } finally {
       setRefreshing(false);
     }

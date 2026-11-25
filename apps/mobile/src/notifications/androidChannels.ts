@@ -59,7 +59,7 @@ const CHANNELS: Array<{
   {
     id: "coach",
     name: "Coach updates",
-    description: "Nudges, notes, and check-in reviews from your coach.",
+    description: "Reminders, notes, and check-in reviews from your coach.",
   },
   {
     id: "plan",

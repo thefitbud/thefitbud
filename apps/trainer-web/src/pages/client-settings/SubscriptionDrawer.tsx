@@ -303,7 +303,7 @@ export function SubscriptionDrawer({
       if (err instanceof ApiClientError) {
         setSaveError({ message: userFacingMessage(err), stale: STALE_CODES.has(err.code) });
       } else {
-        setSaveError({ message: "Couldn't save. Try again. (CS-SUB-SAVE)", stale: false });
+        setSaveError({ message: "Couldn't save. Try again.", stale: false });
       }
     } finally {
       savingRef.current = false;

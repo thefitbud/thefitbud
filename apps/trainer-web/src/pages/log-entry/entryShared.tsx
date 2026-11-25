@@ -161,11 +161,9 @@ export function EndedState({
 export function FailureBanner({
   failure,
   testId,
-  screen,
 }: {
   failure: SaveFailure;
   testId: string;
-  screen: string;
 }) {
   return (
     <div className="lw-banner is-error" role="alert" data-testid={testId}>
@@ -178,7 +176,7 @@ export function FailureBanner({
               ? // The API's message already says what to do; the button reads Reload.
                 `Not saved. ${userFacingMessage(failure)}`
               : `Not saved. ${userFacingMessage(failure)} Your entries are still here.`
-            : `Not saved. Something went wrong on our side (${screen}). Your entries are still here. Try again.`}
+            : `Not saved. Something went wrong on our side. Your entries are still here. Try again.`}
       </p>
     </div>
   );

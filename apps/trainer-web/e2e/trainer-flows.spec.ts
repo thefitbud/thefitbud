@@ -59,7 +59,7 @@ test("email OTP sign-in via dev mail sink", async ({ page }) => {
   await expect(page).toHaveURL("/");
 });
 
-test("home mark reviewed then resolve", async ({ page }) => {
+test("home note, keep open then resolve", async ({ page }) => {
   await signIn(page);
   const token = await apiToken(page);
   const attention = unwrap<{ groups: Array<{ items: Array<{ id: string; status: string }> }> }>(

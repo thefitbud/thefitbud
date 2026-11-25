@@ -248,15 +248,15 @@ describe("ClientStatusScreen", () => {
     renderScreen();
     await screen.findByText("410 of 1,950");
     fireEvent.click(screen.getByText("Remind…"));
-    await screen.findByText("Nothing open to nudge about");
-    expect(screen.queryByText("Nudge Kavya")).toBeNull();
+    await screen.findByText("Nothing open to remind about");
+    expect(screen.queryByText("Remind Kavya")).toBeNull();
 
     api.listExceptions.mockResolvedValue({
       items: [item("e1", "meal_deviation", "Dinner"), item("e3", "missed_workout", "Lower body A")],
       nextCursor: null,
     });
     fireEvent.click(screen.getByText("Remind…"));
-    await screen.findByText("Nudge Kavya");
+    await screen.findByText("Remind Kavya");
     // Body is filled in a useEffect one tick after the heading (NudgeSheet).
     expect(
       await screen.findByText("Lower body A is waiting. Can you fit it in soon?"),

@@ -537,9 +537,9 @@ export function HomePage() {
         activityType,
         activityId: detail.sourceEntityId,
       });
-      showToast("Nudge queued");
+      showToast("Reminder sent");
     } catch {
-      showToast("Could not nudge right now");
+      showToast("Could not send the reminder right now");
     }
   }
 
@@ -724,7 +724,7 @@ export function HomePage() {
     .map((r) => r.group.traineeDisplayName.split(" ")[0])
     .filter(Boolean);
   // Z7-4 / frame 135: nothing in any "needs you" list. Getting started and
-  // Reviewed, still open can still show below; a failed section never reads
+  // Noted, still open can still show below; a failed section never reads
   // as all clear.
   const allClear =
     !loading &&
@@ -1154,7 +1154,7 @@ export function HomePage() {
                             },
                             {
                               id: "nudge",
-                              label: "Nudge",
+                              label: "Remind",
                               disabled: !online,
                               onSelect: () =>
                                 void nudgeClient(

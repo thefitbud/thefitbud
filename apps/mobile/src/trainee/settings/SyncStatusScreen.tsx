@@ -286,7 +286,7 @@ export function SyncStatusContent({
           Sync status
         </Text>
         <Text variant="body" tone="ink2">
-          Couldn't read what's saved on this phone (SYNC-STORE). Close this and
+          Couldn't read what's saved on this phone. Close this and
           open it again.
         </Text>
       </View>

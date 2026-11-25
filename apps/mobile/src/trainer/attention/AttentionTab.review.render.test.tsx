@@ -187,7 +187,7 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     const nudge = await screen.findByTestId("review-sheet-remind");
     await waitFor(() => expect(nudge.getAttribute("aria-disabled")).not.toBe("true"));
     fireEvent.click(nudge);
-    await screen.findByText(/nudged you/);
+    await screen.findByText(/sent you a reminder/);
     expect(openContextualWhatsApp).not.toHaveBeenCalled();
   });
 

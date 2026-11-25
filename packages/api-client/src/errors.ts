@@ -88,6 +88,20 @@ const KNOWN_CODE_COPY: Record<string, UserFacingError> = {
   FEEDBACK_EDIT_WINDOW_CLOSED: {
     message: "Ratings can be changed for 48 hours after a workout.",
   },
+  PAYLOAD_TOO_LARGE: {
+    message: "That file is too big. Choose a smaller one and try again.",
+  },
+  FILE_TOO_LARGE: {
+    message: "That file is too big. Choose a smaller one and try again.",
+  },
+  REQUEST_TIMEOUT: {
+    message: "That took too long. Check your connection and try again.",
+    action: "retry",
+  },
+  SERVICE_UNAVAILABLE: {
+    message: "FitBud is busy right now. Try again in a moment.",
+    action: "retry",
+  },
   UNKNOWN_ERROR: { message: USER_FACING_SERVER, action: "retry" },
 };
 
@@ -95,6 +109,23 @@ const TECHNICAL_MESSAGE =
   /Request failed with status|\bStatus:\s*\d{3}\b|\bat\s+\S+\s+\(|\bECONNREFUSED\b|\bENOTFOUND\b|\bfetch failed\b|\bFailed to fetch\b|\bNetworkError\b|\bAbortError\b|\bTimeoutError\b|\bZodError\b|\b\[object Object\]\b/i;
 
 const BARE_ERROR_CODE = /^\s*[A-Z][A-Z0-9_]{2,}\s*$/;
+
+/**
+ * An Error whose `message` is static, user-facing copy written for a screen
+ * (for example a failed meal photo step). Only these, and ApiClientError with a
+ * curated API body, may pass their message through `userFacingError`; any other
+ * Error (a database lock, a library failure) maps to the friendly fallbacks.
+ */
+export class UserSafeError extends Error {
+  readonly userSafe = true as const;
+}
+
+function isUserSafeError(err: unknown): err is Error {
+  return (
+    err instanceof Error &&
+    (err as { userSafe?: unknown }).userSafe === true
+  );
+}
 
 export class ApiClientError extends Error {
   readonly code: string;
@@ -239,6 +270,21 @@ export function userFacingError(
         action: "retry",
       };
     }
+    if (err.status === 413) {
+      return { message: "That file is too big. Choose a smaller one and try again." };
+    }
+    if (err.status === 408 || err.status === 504) {
+      return {
+        message: "That took too long. Check your connection and try again.",
+        action: "retry",
+      };
+    }
+    if (err.status === 503) {
+      return {
+        message: "FitBud is busy right now. Try again in a moment.",
+        action: "retry",
+      };
+    }
     if (err.status >= 500) {
       return { message: USER_FACING_SERVER, action: "retry" };
     }
@@ -259,13 +305,13 @@ export function userFacingError(
     return { message: fallback, action: "retry" };
   }
 
-  // Domain errors with curated copy (e.g. MealSyncError). Never ZodError /
-  // TypeError / stack-like messages.
+  // Domain errors that carry curated copy (UserSafeError, e.g. MealSyncError).
+  // Any other Error ("database is locked", ZodError, TypeError) gets the fallback.
   if (err instanceof Error) {
     if (err.name === "ZodError") {
       return { message: fallback, action: "retry" };
     }
-    if (looksHumanCopy(err.message)) {
+    if (isUserSafeError(err) && looksHumanCopy(err.message)) {
       return { message: err.message.trim(), action: "retry" };
     }
   }

@@ -216,7 +216,7 @@ describe("NotificationsScreen (TR-15a, TR-15b)", () => {
     expect(screen.queryByText("No notifications yet.")).toBeNull();
   });
 
-  it("shows groups, coach copy, the server's own title, Read all and the 30-day line", async () => {
+  it("shows groups, coach copy, the reminder row title, Read all and the 30-day line", async () => {
     const now = Date.now();
     inbox = [
       row("plan_published", new Date(now - 60_000).toISOString()),
@@ -237,7 +237,8 @@ describe("NotificationsScreen (TR-15a, TR-15b)", () => {
       />,
     );
     expect(await screen.findByText("Rahul changed your plan")).toBeTruthy();
-    expect(screen.getByText("Rahul nudged you")).toBeTruthy();
+    expect(screen.getByText("Reminder from Rahul")).toBeTruthy();
+    expect(screen.queryByText("Rahul nudged you")).toBeNull();
     expect(screen.getByText("Evening snack is waiting. Log it when you can.")).toBeTruthy();
     expect(screen.getByText("Check-in reviewed")).toBeTruthy();
     expect(screen.getByText("See Rahul's review.")).toBeTruthy();

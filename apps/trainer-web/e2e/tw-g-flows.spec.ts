@@ -103,7 +103,7 @@ test.describe("TW-G history, settings, ended, reminders", () => {
 
     await page.goto(`/clients/${KAVYA}/activity`);
     await expect(page.getByTestId("screen-TW-17")).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole("button", { name: /^Nudge$/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Remind$/i })).toHaveCount(0);
 
     await page.goto(`/clients/${KAVYA}/check-ins`);
     await expect(page.getByTestId("screen-TW-19")).toBeVisible({ timeout: 20_000 });
@@ -131,7 +131,7 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await page.getByRole("menuitem", { name: /End coaching/i }).click();
     await expect(page.getByRole("heading", { name: /End coaching with/i })).toBeVisible();
     await expect(page.getByText(/keeps .* account and history/i)).toBeVisible();
-    await expect(page.getByText(/Plans, reminders and nudges stop today/i)).toBeVisible();
+    await expect(page.getByText(/Plans and reminders stop today/i)).toBeVisible();
     const endBtn = page.getByRole("button", { name: /^End coaching$/i });
     await expect(endBtn).toBeVisible();
     await page.getByRole("button", { name: /^Cancel$/i }).click();

@@ -276,7 +276,7 @@ export function SessionDetailScreen({
       setNoteError(
         err instanceof ApiClientError
           ? err.message
-          : "Could not save note. (NOTE-ERR)",
+          : "Could not save note. Try again.",
       );
     } finally {
       setNoteActing(false);

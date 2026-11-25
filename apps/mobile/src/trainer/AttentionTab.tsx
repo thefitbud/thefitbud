@@ -83,7 +83,9 @@ import { nudgeTargetFromException } from "./sheets/nudgeContent";
 /** Toast after "Noted, keep open" from a row (D-W14-29): the client stays open. */
 function notedToastMessage(displayName: string, stillNeedYou: number): string {
   const first = firstNameOf(displayName) || "Client";
-  return `${first} noted, still open · ${stillNeedYou} still need you`;
+  return stillNeedYou > 0
+    ? `${first} · Noted · still open · ${stillNeedYou} still need you`
+    : `${first} · Noted · still open`;
 }
 
 type ReviewSheetState = {
@@ -655,7 +657,7 @@ export function AttentionTab({
       } else {
         if (!(err instanceof ApiClientError)) reportError("attention.resolve", err);
         setSubSheetError(
-          userFacingMessage(err, { fallback: "Could not resolve. (RES-ERR)" }),
+          userFacingMessage(err, { fallback: "Could not resolve. Try again." }),
         );
       }
     } finally {
@@ -683,7 +685,7 @@ export function AttentionTab({
       } else {
         if (!(err instanceof ApiClientError)) reportError("attention.note", err);
         setSubSheetError(
-          userFacingMessage(err, { fallback: "Could not save note. (NOTE-ERR)" }),
+          userFacingMessage(err, { fallback: "Could not save note. Try again." }),
         );
       }
     } finally {

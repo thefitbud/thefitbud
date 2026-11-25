@@ -171,7 +171,7 @@ export function DesignSystemPage() {
                 Unchecked
               </Checkbox>
               <Radio checked={nudge === "push"} onChange={() => setNudge("push")}>
-                Push nudge
+                Push reminder
               </Radio>
               <Radio checked={nudge === "note"} onChange={() => setNudge("note")}>
                 Note only

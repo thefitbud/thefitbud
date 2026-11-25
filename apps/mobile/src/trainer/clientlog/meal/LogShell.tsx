@@ -57,7 +57,7 @@ export function useLogSave(scope: string) {
       } else {
         setSave({
           state: "failed",
-          message: "Not saved. Something went wrong. Your entries are still here. LOG-SAVE",
+          message: "Not saved. Something went wrong. Your entries are still here. Try again.",
           stale: false,
         });
       }

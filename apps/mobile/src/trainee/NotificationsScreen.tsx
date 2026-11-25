@@ -186,10 +186,10 @@ function tileForType(type: NotificationType): Tile {
   }
 }
 
-export const INBOX_LOAD_ERROR = "Couldn't load notifications (NOTIF-LOAD). Try again.";
-export const INBOX_READ_ERROR = "Couldn't mark them as read (NOTIF-READ). Try again.";
+export const INBOX_LOAD_ERROR = "Couldn't load notifications. Try again.";
+export const INBOX_READ_ERROR = "Couldn't mark them as read. Try again.";
 export const INBOX_PARSE_ERROR =
-  "Couldn't read the notifications (NOTIF-PARSE). Try again.";
+  "Couldn't read the notifications. Try again.";
 
 /**
  * AGENTS.md "Client error handling": only an ApiClientError's own message is
@@ -331,8 +331,13 @@ export function NotificationsScreen({ onBack, coachName, onNavigate }: Props) {
   ) {
     const unread = item.readAt == null;
     const { Icon, fg, bg } = tileForType(item.type);
-    // Server display copy wins where the record carries it (a nudge, Z12-50).
-    const title = item.title ?? notificationRowTitle(item, copyContext);
+    // Server display copy wins where the record carries it, except a coach
+    // reminder: its row always reads "Reminder from {Coach}" (D-W14-15), so
+    // an old stored "...nudged you" title never shows.
+    const title =
+      item.type === "activity_nudge"
+        ? notificationRowTitle(item, copyContext)
+        : (item.title ?? notificationRowTitle(item, copyContext));
     const body = item.body ?? notificationRowBody(item, copyContext);
     const when = inboxTimeLabel(item.createdAt, today, timeZone);
     const alreadyLogged = item.state === "suppressed";

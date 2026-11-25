@@ -442,7 +442,7 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Add record" }));
     expect(
       await within(dialog).findByText(
-        "Couldn't save. Try again. (CS-PAY-SAVE)",
+        "Couldn't save. Try again.",
       ),
     ).toBeTruthy();
     expect(within(dialog).queryByText(/Failed to fetch/)).toBeNull();
@@ -468,7 +468,7 @@ describe("Payment records (frames 209 / IP-08, tracking only)", () => {
     fireEvent.click(
       within(dialog).getByRole("button", { name: "Save changes" }),
     );
-    await within(dialog).findByText(/CS-PAY-SAVE/);
+    await within(dialog).findByText("Couldn't save. Try again.");
     fireEvent.change(note, { target: { value: "B" } });
     fireEvent.click(
       within(dialog).getByRole("button", { name: "Save changes" }),

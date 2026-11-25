@@ -244,7 +244,7 @@ describe("coach nudges (Z12-50)", () => {
       expect(res.status, body).toBe(400);
       expect(((await res.json()) as { error: unknown }).error).toMatchObject({
         code: "NUDGE_BODY_HAS_LINK",
-        message: "Nudges can't include links.",
+        message: "Reminders can't include links.",
       });
     }
     expect(await nudgeRows(rohan.relationshipId)).toHaveLength(0);
@@ -270,7 +270,7 @@ describe("coach nudges (Z12-50)", () => {
     expect(data.notification.body).toBe(exact.trim());
   });
 
-  it("sends a push titled '{Coach first name} nudged you' with the coach's body; the inbox row matches and the push data stays routing only", async () => {
+  it("sends a push titled '{Coach first name} sent you a reminder' with the coach's body; the inbox row matches and the push data stays routing only", async () => {
     await registerRohanDevice();
     const rahul = await login("rahul.coach@demo.fitbud.test", "trainer");
     const rohan = await client("rohan.slipping@demo.fitbud.test");
@@ -296,14 +296,14 @@ describe("coach nudges (Z12-50)", () => {
     expect(data.notification).toMatchObject({
       type: "activity_nudge",
       state: "delivered",
-      title: "Rahul nudged you",
+      title: "Rahul sent you a reminder",
       body: "Lunch wasn't logged. Can you add it, even roughly?",
     });
 
     expect(expoCalls).toHaveLength(1);
     expect(expoCalls[0]).toMatchObject({
       to: "ExponentPushToken[rohan-z12-50]",
-      title: "Rahul nudged you",
+      title: "Rahul sent you a reminder",
       body: "Lunch wasn't logged. Can you add it, even roughly?",
     });
     expect(Object.keys(expoCalls[0]!.data).sort()).toEqual([...SAFE_PUSH_PAYLOAD_KEYS].sort());
@@ -313,7 +313,7 @@ describe("coach nudges (Z12-50)", () => {
       (item) => item.id === data.notification.id,
     );
     expect(row).toMatchObject({
-      title: "Rahul nudged you",
+      title: "Rahul sent you a reminder",
       body: "Lunch wasn't logged. Can you add it, even roughly?",
     });
 
@@ -327,7 +327,7 @@ describe("coach nudges (Z12-50)", () => {
     expect(((await gentle.json()) as { data: NudgeData }).data.notification.body).toBe(
       GENTLE_NUDGE_BODY.meal,
     );
-    expect(expoCalls[1]).toMatchObject({ title: "Rahul nudged you", body: GENTLE_NUDGE_BODY.meal });
+    expect(expoCalls[1]).toMatchObject({ title: "Rahul sent you a reminder", body: GENTLE_NUDGE_BODY.meal });
   });
 
   it("caps nudges at 2 per client civil day across items, at the client's midnight; a retry is not counted again", async () => {
@@ -388,7 +388,7 @@ describe("coach nudges (Z12-50)", () => {
     }).error;
     expect(thirdError).toMatchObject({
       code: "NUDGE_LIMIT",
-      message: "You can nudge this client again tomorrow.",
+      message: "You can remind this client again tomorrow.",
     });
     // 15 minutes to the client's midnight.
     expect(thirdError.details?.retryAfter).toBe(15 * 60);
@@ -437,7 +437,7 @@ describe("coach nudges (Z12-50)", () => {
       (item) => item.id === data.notification.id,
     );
     expect(row).toMatchObject({
-      title: "Rahul nudged you",
+      title: "Rahul sent you a reminder",
       body: "Dinner wasn't logged on Friday. Can you add it, even roughly?",
       state: "delivered",
     });
@@ -479,7 +479,7 @@ describe("coach nudges (Z12-50)", () => {
     expect(data).toMatchObject({ delivery: "inbox", inboxReason: "reminders_paused" });
     expect(data.notification).toMatchObject({
       state: "delivered",
-      title: "Rahul nudged you",
+      title: "Rahul sent you a reminder",
       body: GENTLE_NUDGE_BODY.meal,
     });
     expect(await deliveriesFor(data.notification.id)).toHaveLength(0);
@@ -518,7 +518,7 @@ describe("coach nudges (Z12-50)", () => {
     const held = (await inbox("rohan.slipping@demo.fitbud.test")).find(
       (item) => item.id === data.notification.id,
     );
-    expect(held).toMatchObject({ title: "Rahul nudged you", body: "Can you log lunch when you wake up?" });
+    expect(held).toMatchObject({ title: "Rahul sent you a reminder", body: "Can you log lunch when you wake up?" });
 
     // The cron after quiet hours end releases the same row as the push.
     vi.setSystemTime(new Date(clientClock(rohan.timeZone, 1, 7, 0)));
@@ -535,7 +535,7 @@ describe("coach nudges (Z12-50)", () => {
     const pushed = expoCalls.filter((call) => call.data.notificationId === data.notification.id);
     expect(pushed).toHaveLength(1);
     expect(pushed[0]).toMatchObject({
-      title: "Rahul nudged you",
+      title: "Rahul sent you a reminder",
       body: "Can you log lunch when you wake up?",
     });
     const [released] = await db
@@ -572,7 +572,7 @@ describe("coach nudges (Z12-50)", () => {
     }).error;
     expect(error).toMatchObject({
       code: "NUDGE_RATE_LIMITED",
-      message: "You can nudge again in 60 min",
+      message: "You can remind again in 60 min",
       details: { retryAfter: 3600 },
     });
     expect(await nudgeRows(rohan.relationshipId)).toHaveLength(1);
@@ -664,7 +664,7 @@ describe("coach nudges (Z12-50)", () => {
     const row = (await inbox("rohan.slipping@demo.fitbud.test")).find(
       (item) => item.id === data.notification.id,
     );
-    expect(row).toMatchObject({ title: "Rahul nudged you", body: "Can you log lunch when you wake up?" });
+    expect(row).toMatchObject({ title: "Rahul sent you a reminder", body: "Can you log lunch when you wake up?" });
     return deliveriesFor(data.notification.id);
   }
 

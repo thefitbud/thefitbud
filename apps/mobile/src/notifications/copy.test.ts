@@ -313,15 +313,15 @@ describe("every push type reads well on the lock screen (Z12-47, TR-15c, TM-13a)
 describe("activity_nudge copy (Z12-50, D-W12-9)", () => {
   const nudge: Notification = { ...base, type: "activity_nudge", notificationType: "activity_nudge" };
 
-  it("shows the server title and body, as the push carried them", () => {
+  it("the row reads 'Reminder from {Coach}' whatever title is stored; the body is the server's", () => {
     const row = { ...nudge, title: "Rahul nudged you", body: "Lower body A is waiting. Can you fit it in soon?" };
-    expect(notificationRowTitle(row, { coachName: "Rahul Verma" })).toBe("Rahul nudged you");
+    expect(notificationRowTitle(row, { coachName: "Rahul Verma" })).toBe("Reminder from Rahul");
     expect(notificationRowBody(row)).toBe("Lower body A is waiting. Can you fit it in soon?");
   });
 
-  it("an older row without them still reads '{Coach} nudged you'", () => {
-    expect(notificationRowTitle(nudge, { coachName: "Rahul Verma" })).toBe("Rahul nudged you");
-    expect(notificationRowTitle(nudge)).toBe("Your coach nudged you");
+  it("an older row without them still reads 'Reminder from {Coach}'", () => {
+    expect(notificationRowTitle(nudge, { coachName: "Rahul Verma" })).toBe("Reminder from Rahul");
+    expect(notificationRowTitle(nudge)).toBe("Reminder from your coach");
     expect(notificationRowBody(nudge)).toBe("Log it when you can.");
   });
 });

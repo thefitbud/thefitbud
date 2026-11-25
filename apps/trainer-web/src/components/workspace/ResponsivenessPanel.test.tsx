@@ -72,11 +72,11 @@ describe("ResponsivenessPanel on a workspace refresh", () => {
   it("recovers from a failed first load on the next refresh", async () => {
     stage1.getResponsiveness.mockRejectedValueOnce(new Error("Network blip"));
     const view = render(<ResponsivenessPanel relationshipId={REL_ID} refreshEpoch={0} />);
-    expect(await screen.findByText("Network blip")).toBeTruthy();
+    expect(await screen.findByText("Could not load reminders data.")).toBeTruthy();
 
     stage1.getResponsiveness.mockResolvedValueOnce(RESPONSIVE);
     view.rerender(<ResponsivenessPanel relationshipId={REL_ID} refreshEpoch={1} />);
-    await waitFor(() => expect(screen.queryByText("Network blip")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Could not load reminders data.")).toBeNull());
     expect(screen.queryByText(/Loading reminder responsiveness/)).toBeNull();
   });
 });

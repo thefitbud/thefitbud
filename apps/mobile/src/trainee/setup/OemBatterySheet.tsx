@@ -87,7 +87,7 @@ function OemBatterySheetBody({ onDone }: Props) {
   return (
     <Screen
       title="Keep reminders working"
-      subtitle="Some Android makers pause apps in the background. These steps help FitBud nudges reach you."
+      subtitle="Some Android makers pause apps in the background. These steps help FitBud reminders reach you."
     >
       <ScrollView style={styles.scroll}>
         {guide ? (

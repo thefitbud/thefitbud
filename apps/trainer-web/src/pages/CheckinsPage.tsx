@@ -250,7 +250,7 @@ export function CheckinsPage() {
             disabled={nudgingId === row.checkin.id}
             onClick={() => void nudge(row)}
           >
-            Nudge
+            Remind
           </Button>
           {row.clientWhatsappE164 ? (
             <a

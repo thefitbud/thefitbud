@@ -152,12 +152,9 @@ export function notificationRowTitle(
     case "daily_summary":
       return "Things left today";
     case "activity_nudge":
-      // The server's title (D-W12-9) is what the push carried; an older row
-      // without one gets the same line from the coach's name.
-      return (
-        notification.title ??
-        `${coachOrFallback(context.coachName)} nudged you`
-      );
+      // D-W14-15: the inbox row reads "Reminder from {Coach}" whatever title
+      // the row stored (the push title stays "{Coach} sent you a reminder").
+      return `Reminder from ${coachGivenName(context.coachName) ?? "your coach"}`;
     case "subscription_renewal_reminder":
       return "Plan renewal coming up";
     case "plan_published":

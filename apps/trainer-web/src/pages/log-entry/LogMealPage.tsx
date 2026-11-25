@@ -206,7 +206,7 @@ export function LogMealPage() {
       ) : null}
 
       {failure ? (
-        <FailureBanner failure={failure} testId="log-meal-not-saved" screen="LOG-MEAL" />
+        <FailureBanner failure={failure} testId="log-meal-not-saved" />
       ) : null}
 
       <section aria-labelledby="le-meal-label">

@@ -309,11 +309,11 @@ function Row({
           {overdue ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Nudge ${row.name}`}
+              accessibilityLabel={`Remind ${row.name}`}
               onPress={() => onNudge(row)}
               style={styles.nudge}
             >
-              <Text style={styles.nudgeText}>Nudge</Text>
+              <Text style={styles.nudgeText}>Remind</Text>
             </Pressable>
           ) : (
             <ChevronRight color={theme.colors.ink3} size={18} />

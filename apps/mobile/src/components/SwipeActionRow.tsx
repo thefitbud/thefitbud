@@ -12,13 +12,13 @@ type Props = {
 };
 
 /**
- * Swipe left to Mark reviewed (v3 Needs you). Opening the right action
+ * Swipe left to note an item and keep it open (v3 Needs you). Opening the right action
  * commits; the revealed button is a fallback tap target.
  */
 export function SwipeActionRow({
   children,
   onMarkReviewed,
-  markLabel = "Mark reviewed",
+  markLabel = "Noted, keep open",
 }: Props) {
   const theme = useTheme();
   const styles = useStyles();

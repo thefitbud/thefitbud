@@ -1,4 +1,4 @@
-import { isNetworkFailure, userFacingMessage, type FitBudApiClient } from "@fitbud/api-client";
+import { isNetworkFailure, UserSafeError, userFacingMessage, type FitBudApiClient } from "@fitbud/api-client";
 import type {
   MealAssignment,
   MealCompliance,
@@ -13,7 +13,7 @@ import { enqueueAndPush } from "../sync/actions";
 import type { SyncEngine } from "../sync/engine";
 import { invalidateRelationshipDayData, messageFromSyncResults } from "./dataCache";
 
-export class MealSyncError extends Error {
+export class MealSyncError extends UserSafeError {
   constructor(message: string) {
     super(message);
     this.name = "MealSyncError";
@@ -34,7 +34,7 @@ export type MealPhotoFailure = "permission" | "prepare" | "upload" | "attach";
  * A meal photo step that failed. `message` is static trainee-facing copy
  * (AGENTS.md: never the raw error); the cause goes to `reportError`.
  */
-export class MealPhotoError extends Error {
+export class MealPhotoError extends UserSafeError {
   readonly step: MealPhotoFailure;
   /** Set when the upload worked and only the attach failed: a retry skips the upload. */
   mediaAssetId: string | null = null;

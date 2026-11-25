@@ -150,7 +150,7 @@ describe("outcomes", () => {
     );
     expect(out.kind).toBe("limit");
     expect(nudgeLimitLine("Rohan", "2026-11-13T04:42:00.000Z")).toMatch(
-      /^You nudged Rohan about this at .* You can nudge again tomorrow\.$/,
+      /^You reminded Rohan about this at .* You can remind again tomorrow\.$/,
     );
   });
   it("inbox, held and push", () => {
@@ -159,7 +159,7 @@ describe("outcomes", () => {
         { notification, deduped: false, delivery: "inbox", inboxReason: "push_off" },
         "Ishita",
       ),
-    ).toEqual({ kind: "inbox", toast: "Nudge sent to Ishita's inbox. Push is off" });
+    ).toEqual({ kind: "inbox", toast: "Reminder sent to Ishita's inbox. Push is off" });
     expect(
       nudgeOutcome(
         {
@@ -171,10 +171,10 @@ describe("outcomes", () => {
         },
         "Rohan",
       ),
-    ).toEqual({ kind: "held", toast: "Nudge sent. The push arrives at 7:00 am" });
+    ).toEqual({ kind: "held", toast: "Reminder sent. The push arrives at 7:00 am" });
     expect(
       nudgeOutcome({ notification, deduped: false, delivery: "push" }, "Rohan"),
-    ).toEqual({ kind: "sent", toast: "Nudge sent to Rohan" });
+    ).toEqual({ kind: "sent", toast: "Reminder sent to Rohan" });
   });
 });
 
