@@ -32,7 +32,6 @@ import {
   formatRelative,
   labelFor,
   planConsistencyWarnings,
-  possessivePronoun,
 } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { WEEK_ORDER, weekdayShort } from "../components/builder/weekdays";
@@ -718,7 +717,6 @@ export function ClientPlanPage() {
   const timezone = header ? resolveTraineeTimezone(header).timezone : "UTC";
   const traineeName = header?.traineeDisplayName ?? "";
   const firstName = traineeName.split(" ")[0] ?? traineeName;
-  const pronoun = possessivePronoun(header?.traineeProfile?.gender);
   const canEdit = online && !ended && !acting;
   const planPath = `/clients/${relationshipId}/plan`;
 
@@ -1040,7 +1038,7 @@ export function ClientPlanPage() {
           <>
             <p className="pp-empty-copy">
               Start from a template or build from scratch. {firstName || "Your client"} sees nothing
-              in the app until you publish. Finish Coaching setup first so {pronoun} expectations are
+              in the app until you publish. Finish Coaching setup first so the expectations are
               set.
             </p>
             <div className="plan-empty-actions">
@@ -1086,7 +1084,7 @@ export function ClientPlanPage() {
                 Effective since {effectiveFromLabel ?? "—"} · v{effectiveVersion.versionNumber} ·{" "}
                 {effectiveToLabel ? `ends ${effectiveToLabel}` : "ongoing"}
               </span>
-              {firstName && !ended ? ` · what ${firstName} sees in ${pronoun} app today` : null}
+              {firstName && !ended ? ` · what ${firstName} sees in the app today` : null}
             </p>
             {dietScope === "today_only" ? (
               <p className="pp-sub" data-testid="today-only-note">

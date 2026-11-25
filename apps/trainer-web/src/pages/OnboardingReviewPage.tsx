@@ -11,7 +11,6 @@ import {
   formatClockTime,
   formatLocalDate,
   formatOnboardingAnswer,
-  possessivePronoun,
 } from "@fitbud/core";
 import { AlertTriangle, Check, ClipboardList, Flag } from "lucide-react";
 import { Button } from "../components/Button";
@@ -136,7 +135,6 @@ export function OnboardingReviewPage() {
   const header = workspace?.header ?? null;
   const displayName = header?.traineeDisplayName ?? "Client";
   const firstName = firstNameOf(displayName);
-  const pronoun = possessivePronoun(header?.traineeProfile.gender);
   const timeZone = header?.traineeTimezone ?? null;
   const clientWhatsapp = header?.clientWhatsappE164 ?? null;
 
@@ -382,13 +380,13 @@ export function OnboardingReviewPage() {
     : null;
 
   const nextStepCopy = emptyNotSubmitted
-    ? `Wait for ${pronoun === "her" ? "her" : pronoun === "his" ? "his" : "their"} intake, then review it and mark ${firstName} ready to coach.`
+    ? `Wait for ${firstName}'s intake, then review it and mark ${firstName} ready to coach.`
     : highlightCount > 0
-      ? `Review the ${highlightCount} flagged answer${highlightCount === 1 ? "" : "s"}, then mark ${firstName} ready to set up ${pronoun} plan and reminders.`
-      : `Review ${firstName}'s intake, then mark ${firstName} ready to set up ${pronoun} plan and reminders.`;
+      ? `Review the ${highlightCount} flagged answer${highlightCount === 1 ? "" : "s"}, then mark ${firstName} ready to set up the plan and reminders.`
+      : `Review ${firstName}'s intake, then mark ${firstName} ready to set up the plan and reminders.`;
 
   const joinedLine = joinedWhen
-    ? `${pronoun === "her" ? "She" : pronoun === "his" ? "He" : "They"} joined ${joinedWhen.split(",")[0]}`
+    ? `${firstName} joined ${joinedWhen.split(",")[0]}`
     : null;
 
   // W13-10 (frame W-146): answers grouped by form section, label-left rows.
@@ -535,14 +533,13 @@ export function OnboardingReviewPage() {
             <ClipboardList size={28} strokeWidth={1.75} />
           </span>
           <h3>
-            {firstName} hasn&apos;t submitted {pronoun} intake yet
+            {firstName} hasn&apos;t submitted the intake yet
           </h3>
           <p>
             {joinedLine ? `${joinedLine} and has ` : ""}
             answered {sectionProgress.answered} of {sectionProgress.total}{" "}
             section{sectionProgress.total === 1 ? "" : "s"}. You can remind{" "}
-            {pronoun === "her" ? "her" : pronoun === "his" ? "him" : "them"}{" "}
-            on WhatsApp.
+            {firstName} on WhatsApp.
           </p>
           {remindHref ? (
             <a

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { AlertTriangle, X } from "lucide-react";
-import { formatCivilDate, possessivePronoun } from "@fitbud/core";
+import { formatCivilDate } from "@fitbud/core";
 
 /**
  * Frame 157: plan published successfully, workout reminders did not set.
@@ -9,7 +9,6 @@ import { formatCivilDate, possessivePronoun } from "@fitbud/core";
 export function AssignPartialFailureModal({
   planTitle,
   traineeFirstName,
-  traineeGender,
   startLocalDate,
   acting = false,
   onLater,
@@ -25,7 +24,6 @@ export function AssignPartialFailureModal({
   onRetry: () => void;
 }) {
   const dialogRef = useRef<HTMLDivElement>(null);
-  const pronoun = possessivePronoun(traineeGender ?? "");
 
   useEffect(() => {
     dialogRef.current?.focus();
@@ -70,11 +68,11 @@ export function AssignPartialFailureModal({
             <AlertTriangle size={16} strokeWidth={2} aria-hidden />
             <span>
               {planTitle} is live for {traineeFirstName} from {startLabel}. We couldn&apos;t set{" "}
-              {pronoun} workout reminders.
+              {traineeFirstName}&apos;s workout reminders.
             </span>
           </p>
           <p className="assign-partial-copy">
-            {traineeFirstName} can still see and log {pronoun} sessions. Try setting reminders again,
+            {traineeFirstName} can still see and log the sessions. Try setting reminders again,
             or set them later from Configuration.
           </p>
         </div>

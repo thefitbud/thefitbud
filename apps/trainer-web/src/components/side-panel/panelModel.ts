@@ -1,4 +1,5 @@
 import type { Exception, WorkspaceHeader } from "@fitbud/contracts";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 
 /** SP1: the panel walks at most this many items; the rest read "n more". */
 export const PANEL_MAX_ITEMS = 10;
@@ -13,23 +14,87 @@ export type PanelList = {
   moreCount: number;
 };
 
+type OrderRow = Pick<Exception, "severity" | "detectedAt">;
+
 /**
- * One client's open coaching-configuration exceptions (D11: asks and renewals
- * stay in their Home sections). The API returns detected/active rows newest
- * first; sort again so the order never depends on the transport.
+ * Review order for one client's items (D-W13-21): Critical first, then newest
+ * first. The Overview "Needs attention" card uses the same comparator on the
+ * same API rows, and `Array.prototype.sort` is stable, so equal rows keep the
+ * API order in both places and the pager's "n of m" equals the card position.
+ */
+export function compareReviewOrder(a: OrderRow, b: OrderRow): number {
+  return (
+    (a.severity === b.severity ? 0 : a.severity === "critical" ? -1 : 1) ||
+    b.detectedAt.localeCompare(a.detectedAt)
+  );
+}
+
+/** Still open: not resolved yet (detected, active or noted). */
+export function isOpenItem(row: Pick<Exception, "status">): boolean {
+  return row.status !== "resolved";
+}
+
+/**
+ * One client's open items (D11: asks and renewals stay in their Home
+ * sections), noted ones included, in review order (D-W13-21).
  */
 export function buildPanelList(rows: readonly Exception[]): PanelList {
-  const open = rows
-    .filter((row) => row.status === "detected" || row.status === "active")
-    .slice()
-    .sort((a, b) => {
-      const byDetected = b.detectedAt.localeCompare(a.detectedAt);
-      return byDetected !== 0 ? byDetected : b.id.localeCompare(a.id);
-    });
+  const open = rows.filter(isOpenItem).slice().sort(compareReviewOrder);
   return {
     items: open.slice(0, PANEL_MAX_ITEMS),
     moreCount: Math.max(0, open.length - PANEL_MAX_ITEMS),
   };
+}
+
+/** Meal or workout name and civil day the item is about, when known. */
+export type ItemSource = { name: string | null; localDate: string | null };
+
+function detailText(
+  details: Record<string, unknown> | null | undefined,
+  key: string,
+): string | null {
+  const value = details?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+/** What the item's own details already say about its meal/workout and day. */
+export function sourceFromDetails(
+  item: Pick<Exception, "details">,
+): ItemSource {
+  return {
+    name:
+      detailText(item.details, "mealName") ??
+      detailText(item.details, "workoutDayName"),
+    localDate: detailText(item.details, "localDate"),
+  };
+}
+
+/**
+ * Item title, the same in the single item and in Resolve several… rows:
+ * "{what happened} · {meal or workout} · {Wed 21 Oct}" (parts left out when
+ * unknown; the name is not repeated when the summary already says it).
+ */
+export function itemTitle(
+  item: Pick<Exception, "type" | "summary" | "details">,
+  source?: Partial<ItemSource> | null,
+): string {
+  const own = sourceFromDetails(item);
+  const name = own.name ?? source?.name ?? null;
+  const localDate = own.localDate ?? source?.localDate ?? null;
+  const base = item.summary?.trim() || labelFor("exception_type", item.type);
+  const parts = [base];
+  if (name && !base.toLowerCase().includes(name.toLowerCase())) parts.push(name);
+  if (localDate) parts.push(formatCivilDate(localDate));
+  return parts.join(" · ");
+}
+
+/** Short row label, e.g. "Missed workout · Thu 15 Oct". */
+export function itemShortLabel(
+  item: Pick<Exception, "type" | "details">,
+): string {
+  const base = labelFor("exception_type", item.type);
+  const localDate = detailText(item.details, "localDate");
+  return localDate ? `${base} · ${formatCivilDate(localDate)}` : base;
 }
 
 export function initials(name: string): string {
@@ -75,7 +140,10 @@ export function headerMeta(
   return parts.join(" · ");
 }
 
-/** "Open 5 d · not reviewed yet" (frame 02). */
+/**
+ * "Open 5 d" / "Open 5 d · noted" (frame 02, RP-02). An item not yet noted
+ * shows its age only: "reviewed" is retired wording (W14 words, D-W13-5).
+ */
 export function itemAgeLine(
   item: Pick<Exception, "detectedAt" | "status">,
   now: number = Date.now(),
@@ -85,9 +153,7 @@ export function itemAgeLine(
     ? 0
     : Math.max(0, Math.floor((now - detected) / DAY_MS));
   const age = days === 0 ? "Open today" : `Open ${days} d`;
-  const review =
-    item.status === "acknowledged" ? "reviewed" : "not reviewed yet";
-  return `${age} · ${review}`;
+  return item.status === "acknowledged" ? `${age} · noted` : age;
 }
 
 /** Source card heading (frame 02): where the expectation came from. */
@@ -106,28 +172,16 @@ export function sourceOrigin(
     : base;
 }
 
-/** "1 of 3 resolved · 2 still open" (frame 02 resolved footer). */
-export function resolvedFooterText(resolved: number, total: number): string {
-  const open = Math.max(0, total - resolved);
-  return open === 0
-    ? `All ${total} resolved`
-    : `${resolved} of ${total} resolved · ${open} still open`;
+/** RP-04: "2 more open for Rohan" under a handled item. */
+export function moreOpenText(count: number, firstName: string): string | null {
+  if (count <= 0) return null;
+  return `${count} more open for ${firstName}`;
 }
 
-/**
- * Next unresolved item after `fromIndex`, wrapping to the start; null when
- * every item is resolved.
- */
-export function nextUnresolvedIndex(
-  items: readonly Pick<Exception, "id">[],
-  fromIndex: number,
-  resolvedIds: ReadonlySet<string>,
-): number | null {
-  const n = items.length;
-  for (let step = 1; step <= n; step += 1) {
-    const idx = (fromIndex + step) % n;
-    const item = items[idx];
-    if (item && !resolvedIds.has(item.id)) return idx;
-  }
-  return null;
+/** RP-05 all-done line: "2 resolved · 1 noted, still open". */
+export function allDoneSummary(resolved: number, noted: number): string {
+  const parts: string[] = [];
+  if (resolved > 0) parts.push(`${resolved} resolved`);
+  if (noted > 0) parts.push(`${noted} noted, still open`);
+  return parts.length > 0 ? parts.join(" · ") : "Nothing left to review";
 }

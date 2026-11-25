@@ -72,6 +72,7 @@ import {
 import { scheduledAssignments } from "./scheduledAssignments";
 import { pickTodayCheckin } from "./pickTodayCheckin";
 import { invalidateRelationshipDayData } from "./dataCache";
+import { applyRealtimeHint } from "./realtimeDayUpdate";
 import { HIDDEN_FROM_READERS, PushedScreen } from "../components/PushedScreen";
 import { useHardwareBack } from "../lib/useHardwareBack";
 import { popOverlay, pushOverlay, resetOverlays } from "./traineeOverlayStack";
@@ -779,9 +780,11 @@ export function TraineeShell({
     setSelectedDate(today);
   }, [today]);
 
-  useRealtimeHints(api, relationship.id, () => {
-    void loadEffectivePlan();
-    void refreshUnread();
+  useRealtimeHints(api, relationship.id, (event) => {
+    applyRealtimeHint(event, relationship.id, {
+      reloadPlan: () => void loadEffectivePlan(),
+      refreshUnread: () => void refreshUnread(),
+    });
   });
 
   useEffect(() => {

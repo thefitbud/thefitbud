@@ -59,9 +59,11 @@ async function textProblems(page: Page) {
   });
 }
 
-async function shot(page: Page, name: string) {
-  await mkdir(OUT, { recursive: true });
-  await page.screenshot({ path: path.join(OUT, name), fullPage: false });
+const OUT16 = path.resolve("qa-captures/w13-16");
+
+async function shot(page: Page, name: string, out = OUT) {
+  await mkdir(out, { recursive: true });
+  await page.screenshot({ path: path.join(out, name), fullPage: false });
   const locked = await windowLocked(page);
   expect.soft(locked.windowScrolls, name).toBe(false);
   expect.soft(locked.mainOverflow, name).toBe("auto");
@@ -417,6 +419,27 @@ test.describe("W13-10 client header, tabs and Settings tab", () => {
       await openSection(page, client, hash, testId);
       await page.waitForTimeout(800);
       await shot(page, `${name}-1440x900.png`);
+    }
+  });
+
+  test("W13-16: Client details and the End coaching card use the first name, captured at three sizes", async ({ page }) => {
+    test.setTimeout(300_000);
+    const sizes: Array<[number, number]> = [
+      [1440, 900],
+      [1180, 820],
+      [1024, 1366],
+    ];
+    for (const [width, height] of sizes) {
+      await page.setViewportSize({ width, height });
+      await openSection(page, ROHAN, "basic", "cs-section-basic");
+      await expect(page.getByText("Reminders follow Rohan's time")).toBeVisible();
+      await page.waitForTimeout(800);
+      await page.evaluate(() => document.querySelector("main.main")?.scrollTo(0, 0));
+      await shot(page, `W-209-${width}x${height}.png`, OUT16);
+      await openSection(page, ROHAN, "danger", "cs-section-danger");
+      await expect(page.getByText("Rohan keeps the account and history.")).toBeVisible();
+      await page.waitForTimeout(800);
+      await shot(page, `nf-danger-zone-${width}x${height}.png`, OUT16);
     }
   });
 });

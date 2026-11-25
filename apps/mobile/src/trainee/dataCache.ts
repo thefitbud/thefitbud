@@ -247,6 +247,32 @@ export function invalidateRelationshipDayData(relationshipId: string): void {
 }
 
 /**
+ * Marks everything already cached for a relationship's days (day views, the
+ * meals, workouts, week and coach-note reads they share) stale, without
+ * dropping any of it (Z14-44). The days on screen keep showing what they have
+ * and the screen refetches them underneath; only days already in the cache
+ * are touched, so nothing cold is fetched. Reads in flight that started
+ * before the mark are retired like after a write.
+ */
+export function markRelationshipDaysStale(relationshipId: string): void {
+  relationshipWrites.set(
+    relationshipId,
+    (relationshipWrites.get(relationshipId) ?? 0) + 1,
+  );
+  anyWrite += 1;
+  for (const [key, entry] of store.entries()) {
+    const dayData =
+      key.startsWith("dayview:") ||
+      key.startsWith("week:") ||
+      key.startsWith("meals:") ||
+      key.startsWith("workouts:") ||
+      key.startsWith("day:");
+    if (dayData && key.split(":").includes(relationshipId)) entry.stale = true;
+  }
+  for (const listener of globalListeners) listener();
+}
+
+/**
  * Drops every per-day screen view (`dayview:` keys) and the day reads they
  * share (meals, workouts, day, week). Used when what is cached can no longer
  * be trusted as a starting point at all, for example a new session; an

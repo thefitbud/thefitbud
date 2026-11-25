@@ -120,21 +120,3 @@ export function nudgeHintTone(text: string): NudgeHintTone {
   if (text.startsWith("Reminder sent")) return "done";
   return "warn";
 }
-
-/**
- * Helper under the Remind button. It follows the client's push state so it
- * never promises a push that will go to the inbox instead.
- */
-export function remindHelper(input: {
-  firstName: string | null;
-  label: string | null;
-}): string {
-  const who = input.firstName ?? "your client";
-  if (input.label === "notifications_off") {
-    return `Push is off for ${who}. A reminder goes to their FitBud inbox.`;
-  }
-  if (input.label === "reminders_paused") {
-    return `Reminders are paused for ${who}. A reminder goes to their FitBud inbox.`;
-  }
-  return `Sends ${who} a push notification`;
-}

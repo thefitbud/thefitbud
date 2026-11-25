@@ -227,7 +227,7 @@ describe("ClientPlanPage current program card (frame 150)", () => {
       "Effective since Mon 21 Sep · v2 · ends Sun 15 Nov",
     );
     expect(card.textContent).toContain("Week 5 of 8 · ");
-    expect(card.textContent).toContain("what Rohan sees in his app today");
+    expect(card.textContent).toContain("what Rohan sees in the app today");
 
     const workout = within(card).getByRole("heading", { level: 3, name: "4 sessions a week" });
     expect(workout).toBeTruthy();
@@ -339,7 +339,7 @@ describe("ClientPlanPage current program card (frame 150)", () => {
     expect(screen.queryByRole("button", { name: "Adjust plan" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Replace from template" })).toBeNull();
     expect(screen.getByText("Coaching has ended. This plan is read-only.")).toBeTruthy();
-    expect(document.body.textContent).not.toContain("sees in his app today");
+    expect(document.body.textContent).not.toContain("sees in the app today");
   });
 });
 
@@ -349,7 +349,7 @@ describe("ClientPlanPage empty state (frame 151)", () => {
     expect(screen.getByRole("heading", { name: "No plan yet" })).toBeTruthy();
     expect(
       screen.getByText(
-        "Start from a template or build from scratch. Rohan sees nothing in the app until you publish. Finish Coaching setup first so his expectations are set.",
+        "Start from a template or build from scratch. Rohan sees nothing in the app until you publish. Finish Coaching setup first so the expectations are set.",
       ),
     ).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start from a template" })).toBeTruthy();
@@ -358,9 +358,16 @@ describe("ClientPlanPage empty state (frame 151)", () => {
     expect(screen.queryByRole("button", { name: "Adjust plan" })).toBeNull();
   });
 
-  it("uses a neutral pronoun when gender is not known", () => {
-    renderPage({ plan: false, gender: "" });
-    expect(document.body.textContent).toContain("so their expectations are set.");
+  it("reads identically for female, male and unset gender", () => {
+    const texts: string[] = [];
+    for (const gender of ["female", "male", ""]) {
+      const view = renderPage({ plan: false, gender });
+      texts.push(document.body.textContent ?? "");
+      view.unmount();
+    }
+    expect(texts[1]).toBe(texts[0]);
+    expect(texts[2]).toBe(texts[0]);
+    expect(texts[0]).toContain("so the expectations are set.");
   });
 
   it("shows no actions for an ended client", () => {

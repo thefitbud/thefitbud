@@ -21,6 +21,8 @@ const api = vi.hoisted(() => ({
   nudgeActivity: vi.fn(),
   bulkResolveExceptions: vi.fn(),
   undoBulkResolveExceptions: vi.fn(),
+  undoExceptionAcknowledge: vi.fn(),
+  getMealAssignment: vi.fn(),
 }));
 
 vi.mock("../lib/api", () => ({
@@ -34,17 +36,40 @@ vi.mock("../lib/api", () => ({
     nudgeActivity: api.nudgeActivity,
     bulkResolveExceptions: api.bulkResolveExceptions,
     undoBulkResolveExceptions: api.undoBulkResolveExceptions,
+    undoExceptionAcknowledge: api.undoExceptionAcknowledge,
+    getMealAssignment: api.getMealAssignment,
   },
+}));
+// The Z14-26 composer has its own tests; here only its wiring matters.
+vi.mock("./NoteComposer", () => ({
+  NoteComposer: (props: {
+    relationshipId: string;
+    onSaved?: (message: string) => void;
+    onClose?: () => void;
+  }) => (
+    <div data-testid="note-composer-stub" data-rid={props.relationshipId}>
+      <button type="button" onClick={() => props.onSaved?.("Saved privately")}>
+        Save stub note
+      </button>
+    </div>
+  ),
 }));
 vi.mock("../lib/stage1-api", () => ({
   stage1Api: { getResponsiveness: api.getResponsiveness },
 }));
 
 import { ApiClientError } from "@fitbud/api-client";
+import {
+  REVIEW_ORDER_IDS,
+  REVIEW_ORDER_ROWS,
+} from "./side-panel/reviewOrder.fixture";
 import { formatCivilDate, formatLocalDate } from "@fitbud/core";
 import {
   ExceptionDrawer,
   formatTimelineDateTime,
+  notedStateText,
+  outcomeChipLabel,
+  outcomeOptions,
   resolvedCloseLabel,
   trainerResolveBannerText,
   trainerResolveTimelineText,
@@ -258,34 +283,48 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     );
   });
 
-  it("builds trainer banner/timeline structure like frames 02 / 132", () => {
+  it("builds trainer banner/timeline structure like RP-04 / frame 132", () => {
+    const sameDay = new Date("2026-10-22T20:00:00.000Z");
     expect(
       trainerResolveBannerText({
         resolvedAt: RESOLVED_AT,
-        outcomeLabel: "Talked to client",
-        justResolved: true,
+        outcomeLabel: "Talked to Rohan",
         timeZone: "UTC",
+        now: sameDay,
       }),
-    ).toBe("Resolved by you · just now · Talked to client");
+    ).toBe("Resolved by you at 8:00 am · Talked to Rohan");
     expect(
       trainerResolveBannerText({
         resolvedAt: RESOLVED_AT,
-        outcomeLabel: "Talked to client",
-        justResolved: false,
+        outcomeLabel: null,
         timeZone: "UTC",
+        now: new Date("2026-10-25T09:00:00.000Z"),
       }),
     ).toBe(
-      `Resolved by you · ${formatCivilDate(formatLocalDate(new Date(RESOLVED_AT), "UTC"))} · Talked to client`,
+      `Resolved by you on ${formatCivilDate(formatLocalDate(new Date(RESOLVED_AT), "UTC"))} at 8:00 am`,
     );
+    expect(
+      notedStateText("2026-10-22T09:52:00.000Z", "UTC", sameDay),
+    ).toBe("Noted by you at 9:52 am · still open");
     expect(
       trainerResolveTimelineText({
         resolvedAt: RESOLVED_AT,
-        outcomeLabel: "Talked to client",
+        outcomeLabel: "Talked to Rohan",
         timeZone: "UTC",
       }),
     ).toBe(
-      `Resolved by you · Talked to client · ${formatTimelineDateTime(RESOLVED_AT, "UTC")}`,
+      `Resolved by you · Talked to Rohan · ${formatTimelineDateTime(RESOLVED_AT, "UTC")}`,
     );
+  });
+
+  it("Talked to {first}; without a name, Talked to the client", () => {
+    expect(outcomeOptions("Rohan").map((o) => o.label)).toEqual([
+      "Talked to Rohan",
+      "Plan adjusted",
+      "No action needed",
+    ]);
+    expect(outcomeOptions(null)[0]!.label).toBe("Talked to the client");
+    expect(outcomeChipLabel("talked", "Rohan")).toBe("Talked to Rohan");
   });
 
   it("shows Closed when coaching ended on the timeline", async () => {
@@ -306,7 +345,7 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
     const banner = await screen.findByTestId("exception-resolve-banner");
-    expect(banner.textContent).toMatch(/Resolved by you ·/);
+    expect(banner.textContent).toMatch(/Resolved by you on /);
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
     const timeline = screen.getByTestId("exception-resolve-timeline");
     expect(timeline.textContent).toMatch(/Resolved by you ·/);
@@ -324,17 +363,20 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     );
     fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
     expect(await screen.findByRole("textbox")).toBeTruthy();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Talked to Rohan" }),
+    );
 
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
 
     const banner = screen.getByTestId("exception-resolve-banner");
-    expect(banner.textContent).toContain(
-      "Resolved by you · just now · Talked to client",
+    expect(banner.textContent).toMatch(
+      /^Resolved by you at \d{1,2}:\d{2} (am|pm) · Talked to Rohan/,
     );
     expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
     const timeline = screen.getByTestId("exception-resolve-timeline");
-    expect(timeline.textContent).toContain("Talked to client");
+    expect(timeline.textContent).toContain("Talked to Rohan");
     expect(api.resolveException).not.toHaveBeenCalled();
 
     api.getException.mockResolvedValue(resolvedDetail("trainer"));
@@ -348,7 +390,7 @@ describe("ExceptionDrawer closedReason label (RL1b)", () => {
     expect(api.resolveException).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
     expect(screen.getByTestId("exception-resolve-banner").textContent).toMatch(
-      /Resolved by you ·/,
+      /^Resolved by you on /,
     );
   });
 
@@ -471,7 +513,7 @@ describe("Modal variant (W13-6)", () => {
     expect(dialog.parentElement?.className).toContain("sp-backdrop-modal");
     expect(screen.getByText(/^1 of 2$/)).toBeTruthy();
     expect(screen.getByRole("button", { name: "Noted, keep open" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Remind" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Remind/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /^Resolve…?$/ })).toBeTruthy();
   });
 
@@ -492,23 +534,31 @@ describe("Side panel v3 list (Z7-5)", () => {
     vi.useRealTimers();
   });
 
-  it("lists only this client's open items, newest first", async () => {
-    // API order is not trusted: oldest first, plus a reviewed and a resolved row.
+  it("lists this client's open and noted items, Critical first then newest", async () => {
+    // API order is not trusted: oldest first, plus a noted and a resolved row.
     const rows = [
       openItem(3),
       openItem(1),
       openItem(4, { status: "acknowledged", acknowledgedAt: "2026-10-22T09:00:00.000Z" }),
       openItem(5, { status: "resolved", resolvedAt: "2026-10-22T09:00:00.000Z" }),
+      openItem(6, { severity: "critical" }),
       openItem(2),
     ];
     renderPanel(rows);
-    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    // Critical first (item 6), then newest first; resolved is left out.
+    expect(await findTitle(/Missed workout 6/)).toBeTruthy();
     expect(api.listExceptions).toHaveBeenCalledWith(REL_ID);
-    expect(screen.getByText("1 of 3")).toBeTruthy();
-    const also = screen.getByRole("region", { name: "Also open for Rohan" });
-    expect(also.textContent).toContain("2 · Missed workout");
-    expect(also.textContent).toContain("3 · Missed workout");
-    expect(also.textContent).not.toContain("4 ·");
+    expect(screen.getByText("1 of 5")).toBeTruthy();
+    const seen: string[] = [];
+    for (let i = 0; i < 5; i += 1) {
+      const title = await screen.findByRole("heading", { level: 3, name: /Missed workout \d/ });
+      seen.push(/Missed workout (\d)/.exec(title.textContent ?? "")![1]!);
+      fireEvent.keyDown(document, { key: "ArrowRight" });
+      if (i < 4) await screen.findByText(`${i + 2} of 5`);
+    }
+    expect(seen).toEqual(["6", "1", "2", "3", "4"]);
+    // No "Also open" list: the pager is the only item navigation.
+    expect(screen.queryByText(/Also open/)).toBeNull();
     expect(screen.getByText(/Rohan Mehta/)).toBeTruthy();
   });
 
@@ -517,7 +567,6 @@ describe("Side panel v3 list (Z7-5)", () => {
     renderPanel(rows);
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     expect(screen.getByText("1 of 10")).toBeTruthy();
-    expect(screen.getByText(/3 more open items/)).toBeTruthy();
     expect(screen.getByText(/13 open items/)).toBeTruthy();
   });
 
@@ -553,13 +602,6 @@ describe("Side panel v3 list (Z7-5)", () => {
   });
 
   it("ignores ←/→ while typing in the note", async () => {
-    renderPanel([
-      openItem(1, { status: "acknowledged", acknowledgedAt: null }),
-      openItem(2),
-    ]);
-    // Acknowledged rows are not open: the client has one walkable item.
-    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
-    cleanup();
     renderPanel([openItem(1), openItem(2)]);
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
@@ -568,15 +610,7 @@ describe("Side panel v3 list (Z7-5)", () => {
     expect(screen.getByText("1 of 2")).toBeTruthy();
   });
 
-  it("an Also open row jumps to that item", async () => {
-    renderPanel([openItem(1), openItem(2), openItem(3)]);
-    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: /^3 · Missed workout/ }));
-    expect(await findTitle(/Missed workout 3/)).toBeTruthy();
-    expect(screen.getByText("3 of 3")).toBeTruthy();
-  });
-
-  it("Resolve shows the resolved state with Undo and Next; Next commits and moves", async () => {
+  it("Resolve shows the resolved state with Undo; the pager commits and moves", async () => {
     const onChanged = vi.fn();
     renderPanel([openItem(1), openItem(2), openItem(3)], { onChanged });
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
@@ -584,17 +618,23 @@ describe("Side panel v3 list (Z7-5)", () => {
     api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Talked to Rohan" }));
     fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
 
-    expect(screen.getByTestId("exception-resolve-banner").textContent).toContain(
-      "Resolved by you · just now · Talked to client",
+    expect(screen.getByTestId("exception-resolve-banner").textContent).toMatch(
+      /^Resolved by you at .* · Talked to Rohan/,
     );
     expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
     expect(screen.getByText("Resolved just now")).toBeTruthy();
-    expect(screen.getByText("1 of 3 resolved · 2 still open")).toBeTruthy();
+    expect(screen.getByTestId("panel-more-open").textContent).toBe(
+      "2 more open for Rohan",
+    );
     expect(screen.getByText("1 of 3 resolved")).toBeTruthy();
     expect(api.resolveException).not.toHaveBeenCalled();
-    const next = screen.getByRole("button", { name: /Next item · 2 of 3/ });
+    // No footer "Next item" button: the pager is the only way on.
+    expect(screen.queryByRole("button", { name: /Next item ·/ })).toBeNull();
+    const next = screen.getByRole("button", { name: "Next item" });
+    expect(next.className).toContain("is-suggested");
 
     fireEvent.click(next);
     expect(await findTitle(/Missed workout 2/)).toBeTruthy();
@@ -603,9 +643,6 @@ describe("Side panel v3 list (Z7-5)", () => {
     expect(api.resolveException.mock.calls[0]![0]).toBe(itemId(1));
     expect(api.acknowledgeException.mock.calls[0]![0]).toBe(itemId(1));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
-    const also = screen.getByRole("region", { name: "Also open for Rohan" });
-    expect(also.textContent).not.toContain("1 · ");
-    expect(also.textContent).toContain("3 · ");
   });
 
   it("Undo within 5 s keeps the item open and never POSTs", async () => {
@@ -614,7 +651,7 @@ describe("Side panel v3 list (Z7-5)", () => {
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
     fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
-    expect(screen.getByText("1 of 2 resolved · 1 still open")).toBeTruthy();
+    expect(screen.getByText("1 more open for Rohan")).toBeTruthy();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3000);
     });
@@ -626,21 +663,37 @@ describe("Side panel v3 list (Z7-5)", () => {
     expect(api.resolveException).not.toHaveBeenCalled();
     expect(api.acknowledgeException).not.toHaveBeenCalled();
     expect(await screen.findByRole("button", { name: "Resolve…" })).toBeTruthy();
-    expect(screen.queryByText(/resolved · /)).toBeNull();
+    expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
   });
 
-  it("after the last item is resolved the footer offers Close", async () => {
+  it("resolving the last item keeps Undo, then shows the all-done summary", async () => {
+    api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
+    api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
     renderPanel([openItem(1)]);
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
     fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
-    expect(screen.getByText("All 1 resolved")).toBeTruthy();
+    // During the Undo window the item stays on screen.
+    expect(screen.getByRole("button", { name: "Undo" })).toBeTruthy();
+    expect(screen.queryByTestId("panel-all-done")).toBeNull();
     expect(screen.queryByRole("button", { name: /Next item ·/ })).toBeNull();
-    const closes = screen.getAllByRole("button", { name: "Close" });
-    expect(closes.length).toBe(2);
-    // Undo so no resolve is left to commit after this test unmounts.
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    expect(api.resolveException).not.toHaveBeenCalled();
+    api.getException.mockResolvedValue(
+      openItem(1, { status: "resolved", resolvedAt: "2026-10-22T12:30:00.000Z", closedReason: "trainer" }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    vi.useRealTimers();
+    const summary = await screen.findByTestId("panel-all-done");
+    expect(summary.textContent).toContain("All done for Rohan");
+    expect(summary.textContent).toContain("1 resolved");
+    // Overview modal / no queue: no Next client, just Back.
+    expect(screen.queryByTestId("panel-next-client")).toBeNull();
+    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
   });
 
   it("Escape closes, clears ?client= and keeps a pending resolve", async () => {
@@ -709,7 +762,7 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
     expect(api.resolveException).not.toHaveBeenCalled();
   });
 
-  it("the 5 s timer commits and moves focus from Undo to Next item", async () => {
+  it("the 5 s timer commits and moves focus from Undo to the pager's next item", async () => {
     api.acknowledgeException.mockResolvedValue(openItem(1, { status: "acknowledged" }));
     api.resolveException.mockResolvedValue(openItem(1, { status: "resolved" }));
     renderPanel([openItem(1), openItem(2)]);
@@ -740,8 +793,9 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
     expect(api.resolveException).toHaveBeenCalledTimes(1);
     expect(api.resolveException.mock.calls[0]![0]).toBe(itemId(1));
     expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    // Focus moves to the pager's next item, the one way on.
     expect(document.activeElement).toBe(
-      screen.getByRole("button", { name: /Next item · 2 of 2/ }),
+      screen.getByRole("button", { name: "Next item" }),
     );
   });
 
@@ -774,15 +828,14 @@ describe("Side panel v3 focus and recovery (Z7-5 fix round)", () => {
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
     fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
-    fireEvent.click(screen.getByRole("button", { name: /Next item · 2 of 3/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Next item" }));
     expect(await findTitle(/Missed workout 2/)).toBeTruthy();
     expect(
       await screen.findByText("Could not resolve item 1. It is still open."),
     ).toBeTruthy();
-    // Item 1 is open again: back in Also open, and nothing reads resolved.
-    const also = screen.getByRole("region", { name: "Also open for Rohan" });
-    expect(also.textContent).toContain("1 · Missed workout");
-    expect(screen.queryByText(/resolved · /)).toBeNull();
+    // Item 1 is open again: no dash reads resolved.
+    expect(screen.queryByText(/of 3 resolved/)).toBeNull();
+    expect(document.querySelectorAll(".sp-dash.is-resolved")).toHaveLength(0);
   });
 
   it("Esc then Back in ?client=-only mode makes the shortcuts work again", async () => {
@@ -849,23 +902,25 @@ describe("Side panel resolve form (Z7-6)", () => {
     await screen.findByText("Rohan Mehta");
     fireEvent.click(resolveBtn);
 
-    const chips = screen.getByRole("group", { name: "Resolve · Outcome" });
+    const chips = screen.getByRole("group", {
+      name: "What was the outcome? · optional",
+    });
     const labels = Array.from(chips.querySelectorAll("button")).map(
       (b) => b.textContent,
     );
     expect(labels).toEqual([
-      "Talked to client",
+      "Talked to Rohan",
       "Plan adjusted",
       "No action needed",
     ]);
-    const talked = screen.getByRole("button", { name: "Talked to client" });
-    expect(talked.getAttribute("aria-pressed")).toBe("true");
-    // Keyboard lands on the chosen chip.
+    const talked = screen.getByRole("button", { name: "Talked to Rohan" });
+    // D-W14-43: optional, nothing preselected; the keyboard lands on the first.
+    expect(talked.getAttribute("aria-pressed")).toBe("false");
     expect(document.activeElement).toBe(talked);
     expect(
       screen.getByRole("textbox", { name: "Note · optional · only you see this" }),
     ).toBeTruthy();
-    // Frame 02 footer: Cancel / Resolve item with the lock helper.
+    // RP-03: Cancel / Resolve item, and the lock line under the outcome.
     expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Resolve item" })).toBeTruthy();
     expect(
@@ -873,7 +928,7 @@ describe("Side panel resolve form (Z7-6)", () => {
         "Resolving locks this item, so Rohan can't log Tue 13 Oct late anymore.",
       ),
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Remind" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remind/ })).toBeNull();
   });
 
   it("Save sends the chosen outcome and note to the existing resolve endpoint", async () => {
@@ -882,6 +937,7 @@ describe("Side panel resolve form (Z7-6)", () => {
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
+    await screen.findByRole("button", { name: "Talked to Rohan" });
     fireEvent.click(screen.getByRole("button", { name: "Plan adjusted" }));
     expect(
       screen
@@ -890,7 +946,7 @@ describe("Side panel resolve form (Z7-6)", () => {
     ).toBe("true");
     expect(
       screen
-        .getByRole("button", { name: "Talked to client" })
+        .getByRole("button", { name: "Talked to Rohan" })
         .getAttribute("aria-pressed"),
     ).toBe("false");
     fireEvent.change(screen.getByRole("textbox"), {
@@ -899,8 +955,8 @@ describe("Side panel resolve form (Z7-6)", () => {
 
     vi.useFakeTimers();
     fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
-    expect(screen.getByTestId("exception-resolve-banner").textContent).toContain(
-      "Resolved by you · just now · Plan adjusted",
+    expect(screen.getByTestId("exception-resolve-banner").textContent).toMatch(
+      /^Resolved by you at .* · Plan adjusted/,
     );
     api.getException.mockResolvedValue(resolvedDetail("trainer"));
     await act(async () => {
@@ -914,7 +970,7 @@ describe("Side panel resolve form (Z7-6)", () => {
     });
   });
 
-  it("an empty note resolves with note null (note is optional)", async () => {
+  it("no outcome and an empty note resolve with note null and no outcome (both optional)", async () => {
     api.resolveException.mockResolvedValue(resolvedDetail("trainer"));
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
@@ -928,7 +984,7 @@ describe("Side panel resolve form (Z7-6)", () => {
     });
     expect(api.resolveException.mock.calls[0]![1]).toEqual({
       note: null,
-      outcome: "talked",
+      outcome: undefined,
     });
   });
 
@@ -983,37 +1039,21 @@ describe("Side panel resolve form (Z7-6)", () => {
     expect(screen.queryByTestId("exception-resolve-banner")).toBeNull();
   });
 
-  it("the ⋯ menu holds the secondary actions", async () => {
+  it("pressing the chosen outcome again clears it", async () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
-    const names = screen
-      .getAllByRole("menuitem")
-      .map((el) => el.textContent?.trim());
-    expect(names).toEqual([
-      "Add note",
-      "Adjust plan",
-      "Message on WhatsApp",
-      "Open client",
-      "Client settings",
-    ]);
-  });
-
-  it("the ⋯ menu shows an icon on every entry and a divider before Open client (W-02a)", async () => {
-    render(
-      inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "More actions" }));
-    for (const item of screen.getAllByRole("menuitem")) {
-      expect(item.querySelector(".overflow-menu-item-icon svg")).not.toBeNull();
-    }
-    const open = screen.getByRole("menuitem", { name: "Open client" });
-    const sep = open.closest("li")!.previousElementSibling!;
-    expect(sep.getAttribute("role")).toBe("separator");
-    const whatsapp = screen.getByRole("menuitem", { name: "Message on WhatsApp" });
-    expect(whatsapp.closest("li")!.nextElementSibling).toBe(sep);
-    expect(screen.getAllByRole("separator")).toHaveLength(1);
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve…" }));
+    const talked = await screen.findByRole("button", { name: "Talked to Rohan" });
+    fireEvent.click(talked);
+    expect(talked.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(talked);
+    expect(talked.getAttribute("aria-pressed")).toBe("false");
+    // Resolve item is never disabled for a missing outcome.
+    expect(
+      (screen.getByRole("button", { name: "Resolve item" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
   });
 });
 
@@ -1053,16 +1093,16 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    const nudgeBtn = await screen.findByRole("button", { name: "Remind" });
+    const nudgeBtn = await screen.findByRole("button", { name: /^Remind/ });
     fireEvent.click(nudgeBtn);
     const notice = await screen.findByTestId("panel-nudge-limit");
     expect(notice.textContent).toBe(
       "Reminder limit reached. You can remind again in 40 min.",
     );
     // Disabled, not hidden, and says why.
-    const after = screen.getByRole("button", { name: "Remind" }) as HTMLButtonElement;
+    const after = screen.getByRole("button", { name: /^Remind/ }) as HTMLButtonElement;
     expect(after.disabled).toBe(true);
-    expect(after.getAttribute("aria-describedby")).toBe("sp-nudge-help sp-nudge-why");
+    expect(after.getAttribute("aria-describedby")).toBe("sp-nudge-why");
     expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
   });
 
@@ -1084,7 +1124,7 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
       "It's 10:40 pm for Rohan and quiet hours are on. A reminder now arrives after 7:00 am (client's time, IST).",
     );
     // Nudge stays available: the server holds it until quiet hours end.
-    const nudgeBtn = screen.getByRole("button", { name: "Remind" }) as HTMLButtonElement;
+    const nudgeBtn = screen.getByRole("button", { name: /^Remind/ }) as HTMLButtonElement;
     expect(nudgeBtn.disabled).toBe(false);
   });
 
@@ -1100,7 +1140,7 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    await screen.findByRole("button", { name: "Remind" });
+    await screen.findByRole("button", { name: /^Remind/ });
     await act(async () => {
       await Promise.resolve();
     });
@@ -1118,7 +1158,7 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    const nudgeBtn = await screen.findByRole("button", { name: "Remind" });
+    const nudgeBtn = await screen.findByRole("button", { name: /^Remind/ });
     // The client's timezone comes with the workspace header.
     await screen.findByText("Rohan Mehta");
     fireEvent.click(nudgeBtn);
@@ -1131,7 +1171,14 @@ describe("Side panel nudge limited and quiet hours (Z7-6)", () => {
 });
 
 describe("Side panel read-only, gone and ended (Z7-7)", () => {
-  const WRITE_NAMES = ["Noted, keep open", "Resolve…", "Nudge", "More actions"];
+  const WRITE_NAMES = [
+    "Noted, keep open",
+    "Resolve…",
+    "Nudge",
+    "More actions",
+    "Add note",
+    "Resolve several…",
+  ];
   function expectNoWriteActions() {
     for (const name of WRITE_NAMES) {
       expect(screen.queryByRole("button", { name })).toBeNull();
@@ -1183,7 +1230,7 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
       /Read-only · a resolved item can't be changed/,
     );
     expect(screen.getByTestId("exception-resolve-banner").textContent).toMatch(
-      /Resolved by you ·/,
+      /^Resolved by you on /,
     );
     expect(screen.getByTestId("panel-resolved-note").textContent).toMatch(
       /Your note · private.*Family dinner out\./,
@@ -1192,7 +1239,7 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
     expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
   });
 
-  it("a deleted item shows the gone state with a way back (frame 133)", async () => {
+  it("a deleted item shows the gone state; the pager leads back (frame 133)", async () => {
     const rows = [openItem(1), openItem(2)];
     api.listExceptions.mockResolvedValue({ items: rows, nextCursor: null });
     api.getException.mockImplementation(async (id: string) => {
@@ -1214,7 +1261,9 @@ describe("Side panel read-only, gone and ended (Z7-7)", () => {
     const gone = await screen.findByTestId("panel-item-gone");
     expect(gone.textContent).toMatch(/This item no longer exists/);
     expectNoWriteActions();
-    fireEvent.click(screen.getByRole("button", { name: /Back to item 1 of 2/ }));
+    // No "Back to item" link: the pager is the only item navigation.
+    expect(screen.queryByRole("button", { name: /Back to item/ })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Previous item" }));
     expect(await findTitle(/Missed workout 1/)).toBeTruthy();
   });
 
@@ -1368,6 +1417,7 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
       openItem(2),
       openItem(3, {
         type: "overdue_meal",
+        summary: "Overdue meal",
         sourceEntityType: "meal_assignment",
         details: { localDate: "2026-10-21", mealName: "Dinner" },
       }),
@@ -1375,6 +1425,7 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
       openItem(5),
       openItem(6, {
         type: "meal_deviation",
+        summary: "Meal change",
         severity: "critical",
         sourceEntityType: "meal_assignment",
         details: { localDate: "2026-10-20" },
@@ -1401,10 +1452,10 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
   }
 
   async function openBulk(rows: ExceptionDetail[] = bulkRows()) {
-    renderPanel(rows);
+    // Item 6 is Critical, so it comes first (D-W13-21); open item 1.
+    renderPanel(rows, { exceptionId: itemId(1) });
     await findTitle(/Missed workout 1/);
-    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Resolve several…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve several…" }));
     return screen.findByTestId("bulk-select-list");
   }
 
@@ -1462,10 +1513,9 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
       resolvedBody([itemId(1), itemId(2)]),
     );
     const onChanged = vi.fn();
-    renderPanel(bulkRows(), { onChanged });
+    renderPanel(bulkRows(), { onChanged, exceptionId: itemId(1) });
     await findTitle(/Missed workout 1/);
-    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Resolve several…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve several…" }));
     await screen.findByTestId("bulk-select-list");
     // Row 1 (on screen) is preselected; add row 2.
     fireEvent.click(screen.getAllByRole("checkbox")[2]!);
@@ -1500,10 +1550,9 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
       resolvedBody([itemId(1), itemId(2), itemId(3), itemId(4), itemId(5)]),
     );
     const onClose = vi.fn();
-    renderPanel(bulkRows(), { onClose });
+    renderPanel(bulkRows(), { onClose, exceptionId: itemId(1) });
     await findTitle(/Missed workout 1/);
-    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Resolve several…" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve several…" }));
     fireEvent.click(
       await screen.findByRole("checkbox", {
         name: "Select all items that can be resolved together",
@@ -1514,7 +1563,7 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
     expect(dialog.textContent).toMatch(/The same outcome and note go on every item/);
     expect(dialog.textContent).toMatch(/You can undo for 5 seconds after/);
     // Focus moves into the dialog on the chosen outcome.
-    expect(document.activeElement?.textContent).toBe("Talked to client");
+    expect(document.activeElement?.textContent).toBe("Talked to Rohan");
 
     fireEvent.keyDown(document, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: /Resolve 5 items/ })).toBeNull();
@@ -1700,9 +1749,8 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
       openItem(2, { type: "meal_deviation", sourceEntityType: "meal_assignment" }),
     ]);
     await findTitle(/Missed workout 1/);
-    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
-    await screen.findByRole("menuitem", { name: "Adjust plan" });
-    expect(screen.queryByRole("menuitem", { name: "Resolve several…" })).toBeNull();
+    await screen.findByRole("button", { name: "Add note" });
+    expect(screen.queryByRole("button", { name: "Resolve several…" })).toBeNull();
   });
 });
 
@@ -1723,30 +1771,21 @@ describe("ExceptionDrawer Nudge helper and Reminders details (Z9-14)", () => {
     vi.clearAllMocks();
   });
 
-  it("Nudge keeps its label and the helper names the client and is linked", async () => {
+  it("Remind {first} has no helper caption (D-W13-21)", async () => {
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    const nudge = await screen.findByRole("button", { name: "Remind" });
-    await waitFor(() =>
-      expect(screen.getByText("Sends Rohan a push notification")).toBeTruthy(),
-    );
-    const helper = screen.getByText("Sends Rohan a push notification");
-    expect(helper.id).toBe("sp-nudge-help");
-    expect(nudge.getAttribute("aria-describedby")).toContain("sp-nudge-help");
+    const nudge = await screen.findByRole("button", { name: "Remind Rohan" });
+    expect(screen.queryByText(/push notification/)).toBeNull();
+    expect(nudge.getAttribute("aria-describedby")).toBeNull();
   });
 
-  it("without a known client the helper says 'your client'", async () => {
+  it("without a known client Remind reads just Remind", async () => {
     api.getClientWorkspace.mockRejectedValue(new Error("no workspace"));
     render(
       inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />),
     );
-    await screen.findByRole("button", { name: "Remind" });
-    await waitFor(() =>
-      expect(
-        screen.getByText("Sends your client a push notification"),
-      ).toBeTruthy(),
-    );
+    expect(await screen.findByRole("button", { name: "Remind" })).toBeTruthy();
   });
 
   it("Details opens the Reminders drawer; Escape closes it, keeps the panel and returns focus", async () => {
@@ -1777,5 +1816,377 @@ describe("ExceptionDrawer Nudge helper and Reminders details (Z9-14)", () => {
     );
     await screen.findByTestId("panel-readonly-line");
     expect(screen.queryByRole("button", { name: "Details" })).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// W13-13 (D-W13-21): the app's Z14-23 review layout on web.
+// ---------------------------------------------------------------------------
+
+describe("Review panel actions per state (W13-13)", () => {
+  function stubHeader(header: Record<string, unknown> = {}) {
+    api.getClientWorkspace.mockResolvedValue({
+      header: {
+        traineeDisplayName: "Rohan Mehta",
+        clientWhatsappE164: "+919812345678",
+        ...header,
+      },
+    });
+  }
+  beforeEach(() => {
+    stubWorkspaceApis();
+    stubHeader();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  function expectNoMenuOrCaption() {
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+    expect(screen.queryByText(/push notification/)).toBeNull();
+    expect(screen.queryByText(/Noted keeps it open/)).toBeNull();
+    expect(screen.queryByText(/leaves Home when/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open client" })).toBeNull();
+    expect(screen.queryByText("Adjust plan")).toBeNull();
+    expect(screen.queryByText("Client settings")).toBeNull();
+  }
+
+  it("open: Remind {first}, Noted, keep open, Resolve… and two text actions", async () => {
+    api.getException.mockResolvedValue(activeDetail);
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    expect(await screen.findByRole("button", { name: "Remind Rohan" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noted, keep open" })).toBeTruthy();
+    const resolveBtn = screen.getByRole("button", { name: "Resolve…" });
+    expect(resolveBtn.className).toContain("button-primary");
+    expect(screen.getByRole("button", { name: "Add note" })).toBeTruthy();
+    const wa = screen.getByRole("link", { name: "WhatsApp Rohan" });
+    // wa.me with the number and no template: the trainer writes and sends.
+    expect(wa.getAttribute("href")).toBe("https://wa.me/919812345678");
+    expect(wa.getAttribute("target")).toBe("_blank");
+    expect(screen.queryByTestId("panel-noted-state")).toBeNull();
+    expectNoMenuOrCaption();
+  });
+
+  it("no WhatsApp action without a number", async () => {
+    stubHeader({ clientWhatsappE164: null });
+    api.getException.mockResolvedValue(activeDetail);
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    await screen.findByRole("button", { name: "Remind Rohan" });
+    expect(screen.queryByRole("link", { name: /WhatsApp/ })).toBeNull();
+  });
+
+  it("non-remindable types (skipped, logged later) have no Remind", async () => {
+    for (const type of ["skipped_meal", "skipped_workout", "meal_logged_later"] as const) {
+      api.getException.mockResolvedValue({ ...activeDetail, type });
+      render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+      await screen.findByRole("button", { name: "Noted, keep open" });
+      await screen.findByText("Rohan Mehta");
+      expect(screen.queryByRole("button", { name: /^Remind/ })).toBeNull();
+      expect(screen.getByRole("button", { name: "Resolve…" })).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("a remindable type keeps Remind (control for the predicate)", async () => {
+    api.getException.mockResolvedValue({ ...activeDetail, type: "overdue_meal" });
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    expect(await screen.findByRole("button", { name: "Remind Rohan" })).toBeTruthy();
+  });
+
+  it("noted: state line with Undo; Remind and Resolve… stay, Noted goes", async () => {
+    api.getException.mockResolvedValue(detail); // acknowledged
+    api.undoExceptionAcknowledge.mockResolvedValue({ ...activeDetail });
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    const state = await screen.findByTestId("panel-noted-state");
+    expect(state.textContent).toMatch(/^Noted by you (at|on) .* · still open/);
+    expect(await screen.findByRole("button", { name: /^Remind/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resolve…" }).className).toContain(
+      "button-primary",
+    );
+    expect(screen.queryByRole("button", { name: "Noted, keep open" })).toBeNull();
+    expectNoMenuOrCaption();
+
+    api.getException.mockResolvedValue(activeDetail);
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(api.undoExceptionAcknowledge).toHaveBeenCalledTimes(1));
+    expect(api.undoExceptionAcknowledge.mock.calls[0]![0]).toBe(EXC_ID);
+    expect(typeof api.undoExceptionAcknowledge.mock.calls[0]![1]).toBe("string");
+    const noted = await screen.findByRole("button", { name: "Noted, keep open" });
+    expect(screen.queryByTestId("panel-noted-state")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(noted));
+  });
+
+  it("Noted, keep open shows the state line (RP-02)", async () => {
+    api.getException.mockResolvedValue(activeDetail);
+    api.acknowledgeException.mockResolvedValue({ ...detail });
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    const noted = await screen.findByRole("button", { name: "Noted, keep open" });
+    api.getException.mockResolvedValue(detail);
+    fireEvent.click(noted);
+    expect(await screen.findByTestId("panel-noted-state")).toBeTruthy();
+    expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolved: read-only outcome line, no actions", async () => {
+    api.getException.mockResolvedValue(resolvedDetail("trainer"));
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    const banner = await screen.findByTestId("exception-resolve-banner");
+    expect(banner.textContent).toMatch(/^Resolved by you (at|on) /);
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+    for (const name of [/^Remind/, /^Noted/, /^Resolve…/, /^Add note/]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expectNoMenuOrCaption();
+  });
+
+  it("ended: read-only, no actions", async () => {
+    stubHeader({ endedAt: "2026-10-03T12:00:00.000Z" });
+    api.getException.mockResolvedValue(activeDetail);
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    await screen.findByText(/Coaching with Rohan has ended/);
+    expect(screen.getByTestId("panel-readonly-line")).toBeTruthy();
+    for (const name of [/^Remind/, /^Noted/, /^Resolve…/, /^Add note/]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.queryByRole("link", { name: /WhatsApp/ })).toBeNull();
+  });
+
+  it("the avatar and name are a focusable link to the client page", async () => {
+    api.getException.mockResolvedValue(activeDetail);
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={() => undefined} />));
+    await screen.findByRole("button", { name: "Remind Rohan" });
+    const link = screen.getByTestId("panel-client-link");
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("href")).toBe(`/clients/${REL_ID}`);
+    expect(link.textContent).toContain("Rohan Mehta");
+    act(() => link.focus());
+    expect(document.activeElement).toBe(link);
+  });
+
+  it("Add note opens the composer in place; saving returns with a notice; Esc backs out first", async () => {
+    api.getException.mockResolvedValue(activeDetail);
+    const onClose = vi.fn();
+    render(inRouter(<ExceptionDrawer exceptionId={EXC_ID} onClose={onClose} />));
+    fireEvent.click(await screen.findByRole("button", { name: "Add note" }));
+    const stub = await screen.findByTestId("note-composer-stub");
+    expect(stub.getAttribute("data-rid")).toBe(REL_ID);
+    expect(screen.getByText("Add note for Rohan")).toBeTruthy();
+    // Esc leaves the composer, not the panel.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("note-composer-stub")).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Add note" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Save stub note" }));
+    expect((await screen.findByTestId("panel-note-saved")).textContent).toBe(
+      "Saved privately",
+    );
+    expect(screen.getByRole("button", { name: "Resolve…" })).toBeTruthy();
+  });
+});
+
+describe("Review pager order and all-done summary (W13-13)", () => {
+  beforeEach(() => {
+    stubWorkspaceApis();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  for (const variant of ["drawer", "modal"] as const) {
+    it(`${variant}: › and → walk the Overview card's order; "n of m" is the card position`, async () => {
+      renderPanel(REVIEW_ORDER_ROWS, { variant });
+      const total = REVIEW_ORDER_IDS.length;
+      for (let k = 0; k < total; k += 1) {
+        await screen.findByText(`${k + 1} of ${total}`);
+        const expected = REVIEW_ORDER_ROWS.find((r) => r.id === REVIEW_ORDER_IDS[k])!;
+        const title = await screen.findByRole("heading", {
+          level: 3,
+          name: new RegExp(`^${expected.summary}`),
+        });
+        expect(title).toBeTruthy();
+        if (k === total - 1) break;
+        if (k % 2 === 0) fireEvent.click(screen.getByRole("button", { name: "Next item" }));
+        else fireEvent.keyDown(document, { key: "ArrowRight" });
+      }
+      // ‹ and ← step back the same way.
+      fireEvent.click(screen.getByRole("button", { name: "Previous item" }));
+      await screen.findByText(`${total - 1} of ${total}`);
+      fireEvent.keyDown(document, { key: "ArrowLeft" });
+      await screen.findByText(`${total - 2} of ${total}`);
+    });
+  }
+
+  it("opening an item shows its card position", async () => {
+    const k = 3;
+    renderPanel(REVIEW_ORDER_ROWS, { exceptionId: REVIEW_ORDER_IDS[k] });
+    expect(await screen.findByText(`${k + 1} of ${REVIEW_ORDER_IDS.length}`)).toBeTruthy();
+  });
+
+  function renderList(
+    items: ExceptionDetail[],
+    props: {
+      nextClient?: { name: string; onOpen: () => void } | null;
+      onClose?: () => void;
+    } = {},
+  ) {
+    api.listExceptions.mockResolvedValue({ items, nextCursor: null });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    api.getException.mockImplementation(async (id: string) => byId.get(id)!);
+    return render(
+      <MemoryRouter initialEntries={[`/?client=${REL_ID}`]}>
+        <ExceptionDrawer
+          onClose={props.onClose ?? (() => undefined)}
+          nextClient={props.nextClient ?? null}
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  async function noteThenResolveLast() {
+    // Item 1: Noted, keep open; item 2: Resolve, then the Undo window ends.
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    api.acknowledgeException.mockResolvedValueOnce(
+      openItem(1, { status: "acknowledged", acknowledgedAt: "2026-10-22T12:10:00.000Z" }),
+    );
+    api.getException.mockImplementation(async (id: string) =>
+      id === itemId(1)
+        ? openItem(1, { status: "acknowledged", acknowledgedAt: "2026-10-22T12:10:00.000Z" })
+        : openItem(2),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Noted, keep open" }));
+    await screen.findByTestId("panel-noted-state");
+    expect(screen.getByTestId("panel-more-open").textContent).toBe("1 more open for Rohan");
+    expect(screen.queryByTestId("panel-all-done")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Next item" }));
+    expect(await findTitle(/Missed workout 2/)).toBeTruthy();
+    api.acknowledgeException.mockResolvedValue(openItem(2, { status: "acknowledged" }));
+    api.resolveException.mockResolvedValue(openItem(2, { status: "resolved" }));
+    vi.useFakeTimers();
+    fireEvent.click(screen.getByRole("button", { name: "Resolve…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Resolve item" }));
+    expect(screen.queryByTestId("panel-all-done")).toBeNull();
+    api.getException.mockResolvedValue(
+      openItem(2, { status: "resolved", resolvedAt: "2026-10-22T12:30:00.000Z", closedReason: "trainer" }),
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000);
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    vi.useRealTimers();
+    return screen.findByTestId("panel-all-done");
+  }
+
+  it("all done: '1 resolved · 1 noted, still open', Next client when one is queued", async () => {
+    const onOpen = vi.fn();
+    renderList([openItem(1), openItem(2)], {
+      nextClient: { name: "Neha Reddy", onOpen },
+    });
+    const summary = await noteThenResolveLast();
+    expect(summary.textContent).toContain("All done for Rohan");
+    expect(summary.textContent).toContain("1 resolved · 1 noted, still open");
+    const next = screen.getByRole("button", { name: "Next client: Neha Reddy" });
+    await waitFor(() => expect(document.activeElement).toBe(next));
+    expect(screen.getByRole("button", { name: "Back" })).toBeTruthy();
+    fireEvent.click(next);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+  });
+
+  it("all done without a queued client: no Next client; Back closes", async () => {
+    const onClose = vi.fn();
+    renderList([openItem(1), openItem(2)], { onClose });
+    await noteThenResolveLast();
+    expect(screen.queryByText(/Next client/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("Next client never shows on an item, only on the summary", async () => {
+    renderList([openItem(1), openItem(2)], {
+      nextClient: { name: "Neha Reddy", onOpen: vi.fn() },
+    });
+    expect(await findTitle(/Missed workout 1/)).toBeTruthy();
+    expect(screen.queryByText(/Next client/)).toBeNull();
+  });
+
+  it("Resolve several… rows name the meal and the day (read from the source when missing)", async () => {
+    const meals = [1, 2, 3].map((n) =>
+      openItem(n, {
+        type: "overdue_meal",
+        summary: "Overdue meal",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: `aaaaaaa${n}-0000-4000-8000-000000000000`,
+        details: null,
+      }),
+    );
+    const byAssignment: Record<string, { mealName: string; localDate: string }> = {
+      "aaaaaaa1-0000-4000-8000-000000000000": { mealName: "Dinner", localDate: "2026-11-24" },
+      "aaaaaaa2-0000-4000-8000-000000000000": { mealName: "Lunch", localDate: "2026-11-24" },
+      "aaaaaaa3-0000-4000-8000-000000000000": { mealName: "Dinner", localDate: "2026-11-23" },
+    };
+    api.getMealAssignment.mockImplementation(async (id: string) => ({
+      ...byAssignment[id]!,
+      windowEndsAt: null,
+    }));
+    renderPanel(meals);
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve several…" }));
+    const list = await screen.findByTestId("bulk-select-list");
+    await waitFor(() => {
+      const titles = Array.from(list.querySelectorAll(".sp-bulk-title")).map(
+        (el) => el.textContent,
+      );
+      expect(titles).toEqual([
+        "Overdue meal · Dinner · Tue 24 Nov",
+        "Overdue meal · Lunch · Tue 24 Nov",
+        "Overdue meal · Dinner · Mon 23 Nov",
+      ]);
+    });
+  });
+
+  it("Resolve several… fills every seeded row, not just the open item; a failed lookup leaves only that row short", async () => {
+    // Seeded items: details null, meal_assignment source. The open item's
+    // source is loaded for its own card first; every other row must still
+    // be read from its assignment (W13-13 fix round 1).
+    const ids = [1, 2, 3, 4].map((n) => `bbbbbbb${n}-0000-4000-8000-000000000000`);
+    const meals = ids.map((id, i) =>
+      openItem(i + 1, {
+        type: "overdue_meal",
+        summary: "Required meal still unlogged",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: id,
+        details: null,
+      }),
+    );
+    const byAssignment: Record<string, { mealName: string; localDate: string }> = {
+      [ids[0]!]: { mealName: "Dinner", localDate: "2026-11-24" },
+      [ids[1]!]: { mealName: "Snack", localDate: "2026-11-24" },
+      [ids[2]!]: { mealName: "Lunch", localDate: "2026-11-24" },
+    };
+    api.getMealAssignment.mockImplementation(async (id: string) => {
+      const meal = byAssignment[id];
+      if (!meal) throw new Error("gone");
+      return { ...meal, windowEndsAt: null };
+    });
+    renderPanel(meals);
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve several…" }));
+    const list = await screen.findByTestId("bulk-select-list");
+    await waitFor(() => {
+      const titles = Array.from(list.querySelectorAll(".sp-bulk-title")).map(
+        (el) => el.textContent,
+      );
+      expect(titles).toEqual([
+        "Required meal still unlogged · Dinner · Tue 24 Nov",
+        "Required meal still unlogged · Snack · Tue 24 Nov",
+        "Required meal still unlogged · Lunch · Tue 24 Nov",
+        "Required meal still unlogged",
+      ]);
+    });
+    const asked = api.getMealAssignment.mock.calls.map((call) => call[0]);
+    for (const id of ids) expect(asked).toContain(id);
   });
 });

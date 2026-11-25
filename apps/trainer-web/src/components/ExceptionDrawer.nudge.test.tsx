@@ -64,7 +64,7 @@ async function renderDrawer() {
       <ExceptionDrawer exceptionId={EXC_ID} onClose={vi.fn()} />
     </MemoryRouter>,
   );
-  return screen.findByRole("button", { name: "Remind" });
+  return screen.findByRole("button", { name: /^Remind/ });
 }
 
 describe("ExceptionDrawer nudge (Z12-50)", () => {
@@ -143,11 +143,11 @@ describe("ExceptionDrawer nudge (Z12-50)", () => {
       </MemoryRouter>,
     );
     await screen.findByRole("button", { name: /resolve/i });
-    expect(screen.queryByRole("button", { name: "Remind" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Remind/ })).toBeNull();
     expect(screen.queryByText(/push notification/)).toBeNull();
   });
 
-  it("the helper under Remind follows the client's push state (FLOW 6.3)", async () => {
+  it("Remind names the client and has no caption under it (D-W13-21)", async () => {
     api.getResponsiveness.mockResolvedValue({
       label: "notifications_off",
       counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
@@ -155,10 +155,11 @@ describe("ExceptionDrawer nudge (Z12-50)", () => {
     });
     await renderDrawer();
     expect(
-      await screen.findByText(
-        "Push is off for Rohan. A reminder goes to their FitBud inbox.",
-      ),
+      await screen.findByRole("button", { name: "Remind Rohan" }),
     ).toBeTruthy();
+    // Push state shows only as a result after Remind (nudgeNotices), never
+    // as a caption before it.
+    expect(screen.queryByText(/Push is off for Rohan/)).toBeNull();
     expect(screen.queryByText(/Sends Rohan a push/)).toBeNull();
   });
 });

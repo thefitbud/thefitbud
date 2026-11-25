@@ -91,13 +91,6 @@ export function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || "your client";
 }
 
-function pronoun(gender: string | null | undefined): string {
-  const value = (gender ?? "").toLowerCase();
-  if (value === "male") return "his";
-  if (value === "female") return "her";
-  return "their";
-}
-
 export function EntryHead({
   title,
   clientName,
@@ -126,14 +119,14 @@ export function EndedState({
   testId,
   head,
   first,
-  gender,
   relationshipId,
   what,
 }: {
   testId: string;
   head: ReactNode;
   first: string;
-  gender: string | null | undefined;
+  /** Unused: copy never guesses from gender (D-W14-37). Kept so callers need no change. */
+  gender?: string | null | undefined;
   relationshipId: string;
   /** "meals" or "measurements". */
   what: string;
@@ -148,7 +141,7 @@ export function EndedState({
         <h2>Coaching with {first} has ended</h2>
         <p>
           Ended clients are read-only, so you can’t log or edit {what} for them.
-          Reactivate coaching from {pronoun(gender)} client page to log again.
+          Reactivate coaching from the client page to log again.
         </p>
         <Link className="button-secondary" to={`/clients/${relationshipId}/overview`}>
           Open {first}’s page
