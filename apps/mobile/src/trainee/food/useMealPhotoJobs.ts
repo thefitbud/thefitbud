@@ -76,7 +76,7 @@ export function useMealPhotoJobs(enabled = true): {
         });
         // The next edit of this meal sends the version the attach produced.
         try {
-          await recordAttachedMealVersion(sync, entry);
+          await recordAttachedMealVersion(sync, entry, input.isDiscarded);
         } catch (err) {
           reportError("mealPhoto.version", err);
         }

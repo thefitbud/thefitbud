@@ -132,7 +132,7 @@ export const MEAL_ENTRY_GONE: unique symbol = Symbol("mealEntryGone");
  * then the server's copy of that day. Both go through `serverEntryId` with
  * the outbox as it is now, and an entry with an edit or removal still in the
  * outbox is not ready (the photo must not attach ahead of it). Returns
- * `MEAL_ENTRY_GONE` when the entry was removed (a settled removal, or the
+ * `MEAL_ENTRY_GONE` when the entry was removed (the
  * server's day has no log for a meal whose log is not waiting in the outbox).
  * Throws when the server could not be reached.
  */
@@ -144,17 +144,13 @@ export async function resolveMealEntryId(input: {
 }): Promise<string | typeof MEAL_ENTRY_GONE | null> {
   const rows = await input.listOutbox();
   const pending = pendingMealLogIdsAll(rows);
-  const removedAlready = (entryId: string) =>
-    rows.some(
-      (row) =>
-        row.operation === "meal.remove" && row.status === "sent" && row.recordId === entryId,
-    );
-  const readyOrWait = (entryId: string) => {
-    if (removedAlready(entryId)) return MEAL_ENTRY_GONE;
-    return hasQueuedMealEdit(rows, entryId) ? null : entryId;
-  };
+  const readyOrWait = (entryId: string) =>
+    hasQueuedMealEdit(rows, entryId) ? null : entryId;
+  // The screen's hint can be stale (a removal may have been applied and
+  // dropped from the outbox since), so it never decides alone: a queued edit
+  // still waits, and otherwise the server's day confirms the entry.
   const fromHint = serverEntryId(input.hint, pending);
-  if (fromHint) return readyOrWait(fromHint);
+  if (fromHint && hasQueuedMealEdit(rows, fromHint)) return null;
   const meal = await input.fetchMeal();
   const fromServer = serverEntryId(meal, pending);
   if (fromServer) return readyOrWait(fromServer);
@@ -187,6 +183,8 @@ export type MealPhotoJobDeps = {
       entryId: string;
       bytes: Uint8Array;
       onUploaded: (mediaAssetId: string) => Promise<void>;
+      /** True once sign-out discarded the runner: write nothing to the user's stores. */
+      isDiscarded: () => boolean;
     },
   ) => Promise<void>;
   /** Re-reads a prepared file when the store could not keep its bytes. */
@@ -528,6 +526,7 @@ export function createMealPhotoJobs(options: MealPhotoJobsOptions): MealPhotoJob
       await current.send(jobs[job.assignmentId] ?? job, {
         entryId,
         bytes: data,
+        isDiscarded: () => discarded,
         onUploaded: async (mediaAssetId) => {
           patch(job.assignmentId, { mediaAssetId });
           const latest = jobs[job.assignmentId];

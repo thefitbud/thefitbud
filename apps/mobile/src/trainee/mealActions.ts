@@ -229,12 +229,16 @@ export async function uploadAndAttachMealPhoto(
  * returned where `nextRecordVersion` looks (the synced `meal_compliance`
  * record), so the next edit or removal carries it instead of the stale one
  * the day's copy still shows (Z14-34). Never lowers a version already held.
+ * Writes nothing once `isDiscarded()` says the user signed out meanwhile.
  */
 export async function recordAttachedMealVersion(
   sync: SyncEngine,
   entry: Pick<MealCompliance, "id" | "recordVersion">,
+  isDiscarded: () => boolean = () => false,
 ): Promise<void> {
+  if (isDiscarded()) return;
   const existing = await sync.store.getLocal("meal_compliance", entry.id);
+  if (isDiscarded()) return;
   const held = existing && !existing.tombstone ? (existing.serverVersion ?? 0) : 0;
   if (held >= entry.recordVersion) return;
   await sync.store.upsertLocal({

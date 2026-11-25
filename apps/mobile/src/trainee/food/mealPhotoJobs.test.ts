@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiClientError } from "@fitbud/api-client";
 import type { MealAssignment } from "@fitbud/contracts";
 import type { AsyncKeyValue } from "../../sync/storage";
-import { MealPhotoError } from "../mealActions";
+import { MealPhotoError, recordAttachedMealVersion } from "../mealActions";
+import { createMemorySyncStore, createSyncEngine } from "../../sync/engine";
 import {
   MEAL_PHOTO_JOBS_PREFIX,
   createMealPhotoJobs,
@@ -466,19 +467,69 @@ describe("meal photo jobs: wait for pending edits and removals (Z14-34)", () => 
     expect(jobs.snapshot()).toEqual({});
   });
 
-  it("a sent removal seen through a stale hint drops the job, bytes included", async () => {
+  it("a stale hint after the removal was applied (empty outbox, no log on the server) drops the job quietly, bytes included", async () => {
     const { map, storage } = memory();
     const server = fakeServer();
     const jobs = runner(storage);
     jobs.configure(server.deps);
+    // The screen still shows the entry; the server applied meal.remove and
+    // the outbox row is gone, so the day has the meal but no log.
     jobs.setHints([mealWith(ENTRY) as MealAssignment]);
-    server.state.outbox = [removal("sent")];
+    server.state.outbox = [];
+    server.state.meal = mealWith(null);
     await addPhoto(jobs);
     await jobs.kick();
     await settle();
     expect(server.send).not.toHaveBeenCalled();
     expect(jobs.snapshot()).toEqual({});
     expect(storedKeys(map).filter((key) => key !== `${MEAL_PHOTO_JOBS_PREFIX}.index`)).toEqual([]);
+  });
+
+  it("a hint is still confirmed against the server: a live entry attaches", async () => {
+    const server = fakeServer();
+    const jobs = runner();
+    jobs.configure(server.deps);
+    jobs.setHints([mealWith(ENTRY) as MealAssignment]);
+    server.state.meal = mealWith(ENTRY);
+    await addPhoto(jobs);
+    await jobs.kick();
+    await settle();
+    expect(server.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("signing out mid-attach writes no version into the sync store", async () => {
+    const sync = createSyncEngine(createMemorySyncStore(), {
+      pushSync: async () => {
+        throw new Error("offline");
+      },
+      pullSync: async () => {
+        throw new Error("offline");
+      },
+    });
+    const server = fakeServer();
+    const jobs = runner();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const entered = vi.fn();
+    jobs.configure({
+      ...server.deps,
+      send: async (_job, input) => {
+        entered();
+        await gate; // the attach is in flight while the user signs out
+        await recordAttachedMealVersion(sync, { id: ENTRY, recordVersion: 5 }, input.isDiscarded);
+      },
+    });
+    server.state.meal = mealWith(ENTRY);
+    await addPhoto(jobs);
+    await jobs.kick();
+    await settle();
+    expect(entered).toHaveBeenCalledTimes(1);
+    await jobs.discard();
+    release();
+    await settle();
+    expect(await sync.store.getLocal("meal_compliance", ENTRY)).toBeNull();
   });
 
   it("re-checks when the outbox changes, not on a timer", async () => {
