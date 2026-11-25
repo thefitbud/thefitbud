@@ -33,24 +33,47 @@ type MealAuditSnapshot = {
   macros?: { kcalScaled?: number | null };
 };
 
-/** The feed item for a client changing the rating of a finished workout. */
+/**
+ * The feed item for a client changing the rating and/or note of a finished
+ * workout (Z14-11, Z14-31 / D-W14-34). The note text is never in the summary.
+ * Rows written before the note existed have no `sessionNote` on either side,
+ * so they read exactly as before ("Rated …: RPE n" / "Cleared the rating …").
+ */
 function describeTraineeWorkoutRating(row: {
   entityType: string;
+  beforeJson: string | null;
   afterJson: string;
 }): { summary: string } | null {
   if (row.entityType !== "workout_execution") return null;
+  type RatingSnapshot = {
+    workoutDayName?: string;
+    sessionRpe?: number | null;
+    sessionNote?: string | null;
+  };
   try {
-    const after = JSON.parse(row.afterJson) as {
-      workoutDayName?: string;
-      sessionRpe?: number | null;
-    };
-    if (typeof after.workoutDayName !== "string") return null;
-    return {
-      summary:
-        after.sessionRpe == null
-          ? `Cleared the rating for ${after.workoutDayName}`
-          : `Rated ${after.workoutDayName}: RPE ${after.sessionRpe}`,
-    };
+    const after = JSON.parse(row.afterJson) as RatingSnapshot;
+    const before = row.beforeJson ? (JSON.parse(row.beforeJson) as RatingSnapshot) : null;
+    const name = after.workoutDayName;
+    if (typeof name !== "string") return null;
+    const ratingSummary =
+      after.sessionRpe == null
+        ? `Cleared the rating for ${name}`
+        : `Rated ${name}: RPE ${after.sessionRpe}`;
+    const beforeNote = before?.sessionNote ?? null;
+    const afterNote = after.sessionNote ?? null;
+    const noteChanged = before !== null && beforeNote !== afterNote;
+    // An old row (no before image) or a rating-only change keeps the old words.
+    const ratingChanged = before === null || (before.sessionRpe ?? null) !== (after.sessionRpe ?? null);
+    if (!noteChanged) return { summary: ratingSummary };
+    if (ratingChanged) {
+      // "left a note" for an added or changed note; a removal says so.
+      return {
+        summary: `${ratingSummary} · ${afterNote === null ? "removed the note" : "left a note"}`,
+      };
+    }
+    if (beforeNote === null) return { summary: `Added a note on ${name}` };
+    if (afterNote === null) return { summary: `Removed the note on ${name}` };
+    return { summary: `Changed the note on ${name}` };
   } catch {
     return null; // an unreadable audit row has no item
   }

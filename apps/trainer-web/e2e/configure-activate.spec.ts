@@ -35,9 +35,9 @@ async function openSetup(page: Page) {
   await expect(page.getByTestId("configure-footer")).toBeVisible();
 }
 
-/** The accordion row whose title is exactly this section name. */
+/** The Settings › Coaching setup row whose title is exactly this section name (W13-10). */
 function section(page: Page, title: string) {
-  return page.locator("details", {
+  return page.getByTestId("configure-row").filter({
     has: page.locator(".configure-accordion-title", { hasText: new RegExp(`^${title}$`) }),
   });
 }
@@ -161,7 +161,6 @@ test.describe("Z8-6 Coaching setup: activate and save as a new version", () => {
     await expect(save).toBeDisabled();
 
     // First edit: Expectations reads Editing, the footer names v(N+1).
-    await section(page, "Expectations").locator("summary").click();
     await page.locator('select[name="sessionsPerWeek"]').selectOption(String(nextSessions));
     await expect(
       section(page, "Expectations").getByTestId("configure-section-badge"),

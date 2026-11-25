@@ -18,8 +18,9 @@ const VIBRATE_PERMISSION = "android.permission.VIBRATE";
 
 const APP_GROUPS = "com.apple.security.application-groups";
 
-function configFor(variant: string | undefined) {
+function configFor(variant: string | undefined, aps?: string) {
   vi.stubEnv("APP_VARIANT", variant);
+  vi.stubEnv("APS_ENVIRONMENT", aps);
   return appConfig({ config: structuredClone(appJson) });
 }
 
@@ -155,6 +156,45 @@ describe("app.config.js variants", () => {
       );
     },
   );
+
+  describe("APS_ENVIRONMENT (Z14-30)", () => {
+    const apsOf = (config: ReturnType<typeof configFor>) => {
+      const entry = config.plugins.find(
+        (p: unknown) => Array.isArray(p) && p[0] === "expo-notifications",
+      );
+      return [config.ios.entitlements["aps-environment"], entry[1].mode];
+    };
+
+    it("staging with production feeds the entitlement and the plugin mode", () => {
+      expect(apsOf(configFor("staging", "production"))).toEqual(["production", "production"]);
+    });
+
+    it("staging unset or development stays development", () => {
+      expect(apsOf(configFor("staging"))).toEqual(["development", "development"]);
+      expect(apsOf(configFor("staging", "development"))).toEqual(["development", "development"]);
+    });
+
+    it("local expo start (no variant, no env) is unchanged", () => {
+      expect(apsOf(configFor(undefined))).toEqual(["development", "development"]);
+    });
+
+    it("production defaults to production and refuses development", () => {
+      expect(apsOf(configFor("production"))).toEqual(["production", "production"]);
+      expect(() => configFor("production", "development")).toThrow(/production APP_VARIANT/);
+    });
+
+    it("throws for a bad value, naming both allowed values", () => {
+      expect(() => configFor("staging", "sandbox")).toThrow(/"development" or "production"/);
+    });
+
+    it("eas.json sets the APNs environment per profile", () => {
+      const profiles = JSON.parse(read("eas.json")).build;
+      expect(profiles.development.env.APS_ENVIRONMENT).toBe("development");
+      expect(profiles.preview.env.APS_ENVIRONMENT).toBe("development");
+      expect(profiles["staging-store"].env.APS_ENVIRONMENT).toBe("production");
+      expect(profiles.production.env.APS_ENVIRONMENT).toBe("production");
+    });
+  });
 
   it("treats an unset APP_VARIANT as development", () => {
     expect(configFor(undefined).ios.bundleIdentifier).toBe("com.thefitbud.mobile.staging");

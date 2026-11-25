@@ -18,17 +18,16 @@ import { GoResolverPage } from "./pages/GoResolverPage";
 import { LogEntryRoutes } from "./pages/log-entry/LogEntryRoutes";
 import { LogWorkoutCreateRoute, LogWorkoutEditRoute } from "./pages/log-workout/LogWorkoutPage";
 import { ClientSettingsPage } from "./pages/client-settings/ClientSettingsPage";
+import { ClientSettingsRedirect } from "./pages/client-settings/SettingsRedirect";
 import { ClientProgressPage } from "./pages/ClientProgressPage";
 import { ClientWorkspaceLayout } from "./pages/ClientWorkspaceLayout";
 import { ClientsPage } from "./pages/ClientsPage";
-import { ConfigureCoachingPage } from "./pages/ConfigureCoachingPage";
 import { ExceptionDetailPage } from "./pages/ExceptionDetailPage";
 import { HomePage } from "./pages/HomePage";
 import { AsksViewPage } from "./pages/home-views/AsksViewPage";
 import { AttentionViewPage } from "./pages/home-views/AttentionViewPage";
 import { RenewalsViewPage } from "./pages/home-views/RenewalsViewPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
-import { OnboardingReviewPage } from "./pages/OnboardingReviewPage";
 import { PendingInvitationPage } from "./pages/PendingInvitationPage";
 import { TemplatesHub } from "./pages/TemplatesHub";
 import { WelcomePage } from "./pages/WelcomePage";
@@ -111,8 +110,9 @@ export function App() {
             <Route path="check-ins" element={<ClientCheckinsPage />} />
             <Route path="check-ins/:checkinId" element={<CheckinReviewPage />} />
             <Route path="history" element={<ClientHistoryPage />} />
-            <Route path="onboarding" element={<OnboardingReviewPage />} />
-            <Route path="configure" element={<ConfigureCoachingPage />} />
+            {/* D-W13-15: the old pages are Settings tab sections now. */}
+            <Route path="onboarding" element={<ClientSettingsRedirect section="onboarding" />} />
+            <Route path="configure" element={<ClientSettingsRedirect section="coaching" />} />
             <Route path="settings" element={<ClientSettingsPage />} />
             <Route path="log-workout" element={<LogWorkoutCreateRoute />} />
             <Route path="log-workout/:assignmentId" element={<LogWorkoutCreateRoute />} />

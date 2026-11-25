@@ -3,6 +3,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import type { ResponsivenessResponse } from "@fitbud/contracts";
 
 const REL_ID = "12121212-1212-4121-8121-121212121212";
@@ -10,7 +11,7 @@ const REL_ID = "12121212-1212-4121-8121-121212121212";
 const stage1 = vi.hoisted(() => ({ getResponsiveness: vi.fn() }));
 vi.mock("../../lib/stage1-api", () => ({ stage1Api: stage1 }));
 
-import { ResponsivenessPanel } from "./ResponsivenessPanel";
+import { RemindersDrawer, ResponsivenessPanel } from "./ResponsivenessPanel";
 
 const RESPONSIVE: ResponsivenessResponse = {
   label: "responds",
@@ -37,14 +38,14 @@ describe("ResponsivenessPanel footer (D-W7-7)", () => {
     expect(screen.queryByText(/switch categories on or off/i)).toBeNull();
   });
 
-  it("active client: the Configure footer is unchanged", async () => {
+  it("active client: the footer points to Settings › Reminders (W13-10)", async () => {
     stage1.getResponsiveness.mockResolvedValueOnce(RESPONSIVE);
     render(
       <ResponsivenessPanel relationshipId={REL_ID} traineeFirstName="Rohan" />,
     );
     expect(
       await screen.findByText(
-        /Switch categories on or off in Plan › Coaching setup/i,
+        /Switch categories on or off in Settings › Reminders/i,
       ),
     ).toBeTruthy();
     expect(
@@ -78,5 +79,42 @@ describe("ResponsivenessPanel on a workspace refresh", () => {
     view.rerender(<ResponsivenessPanel relationshipId={REL_ID} refreshEpoch={1} />);
     await waitFor(() => expect(screen.queryByText("Could not load reminders data.")).toBeNull());
     expect(screen.queryByText(/Loading reminder responsiveness/)).toBeNull();
+  });
+});
+
+describe("RemindersDrawer opened-from line (FLOW §6 item 4)", () => {
+  function renderDrawer(entry: string, openedFrom?: string | null) {
+    stage1.getResponsiveness.mockResolvedValue(RESPONSIVE);
+    render(
+      <MemoryRouter initialEntries={[entry]}>
+        <RemindersDrawer
+          relationshipId={REL_ID}
+          traineeName="Rohan Mehta"
+          timeZone="Asia/Kolkata"
+          openedFrom={openedFrom}
+          onClose={() => undefined}
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  it("reads Overview › Reminders › Details on the client Overview", async () => {
+    renderDrawer(`/clients/${REL_ID}/overview`);
+    expect(await screen.findByText("Opened from Overview › Reminders › Details")).toBeTruthy();
+  });
+
+  it.each([
+    ["Home review panel", "/"],
+    ["review open on the Overview", `/clients/${REL_ID}/overview?exception=abc`],
+    ["Check-ins inbox", "/checkins"],
+  ])("is left out from the %s", async (_label, entry) => {
+    renderDrawer(entry);
+    await screen.findByRole("dialog");
+    expect(screen.queryByText(/^Opened from/)).toBeNull();
+  });
+
+  it("an explicit openedFrom wins", async () => {
+    renderDrawer("/", "Review › Signals › Details");
+    expect(await screen.findByText("Opened from Review › Signals › Details")).toBeTruthy();
   });
 });

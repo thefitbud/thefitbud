@@ -828,6 +828,9 @@ export {
 export {
   traineeWorkoutFeedbackRequestSchema,
   type TraineeWorkoutFeedbackRequest,
+  // Z14-31 (D-W14-34): the workout note sent with the rating.
+  WORKOUT_SESSION_NOTE_MAX_LENGTH,
+  workoutSessionNoteInputSchema,
 } from "./workout.js";
 export {
   clientLogEditPayloadSchema,

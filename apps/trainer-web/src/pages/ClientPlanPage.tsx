@@ -1135,7 +1135,7 @@ export function ClientPlanPage() {
             <ClipboardList size={16} strokeWidth={2} aria-hidden="true" />
             Plans
           </Link>
-          <Link className="pp-segment-item" to={`/clients/${relationshipId}/configure`}>
+          <Link className="pp-segment-item" to={`/clients/${relationshipId}/settings#coaching`}>
             <Target size={16} strokeWidth={2} aria-hidden="true" />
             Coaching setup
           </Link>
@@ -1210,7 +1210,7 @@ export function ClientPlanPage() {
           onAcknowledge={ended ? undefined : () => void acknowledge()}
           onAdjustPlan={() => void adjustPlan()}
           planTo={planPath}
-          configureTo={`/clients/${relationshipId}/configure`}
+          configureTo={`/clients/${relationshipId}/settings#coaching`}
           showPlanLink={!ended}
           showConfigureLink={!ended}
         />

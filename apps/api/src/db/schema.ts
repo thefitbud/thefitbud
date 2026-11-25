@@ -758,6 +758,12 @@ export const workoutExecutions = sqliteTable(
     requireSessionRpe: integer("require_session_rpe", { mode: "boolean" })
       .notNull()
       .default(false),
+    /**
+     * Z14-31 (D-W14-34): the trainee's short note on a finished workout, set and
+     * changed only with the rating (feedback endpoint and its sync mutation),
+     * editable for 48 h. Null when there is none.
+     */
+    sessionNote: text("session_note"),
     loggedLate: integer("logged_late", { mode: "boolean" }).notNull().default(false),
     clientLoggedAt: text("client_logged_at"),
     createdAt: text("created_at").notNull(),
