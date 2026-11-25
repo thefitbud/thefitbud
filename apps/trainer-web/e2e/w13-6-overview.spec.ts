@@ -117,7 +117,7 @@ test.describe("W13-6 Client Overview and review modal", () => {
     const rid = await ridOf("Neha");
     await page.goto(`/clients/${rid}`);
     await overviewLoaded(page);
-    const review = page.locator(".ov-att").getByRole("button", { name: "Review" });
+    const review = page.locator(".ov-att").getByRole("button", { name: "Review" }).first();
     await review.click();
     const panel = await modalLoaded(page);
     await expect(panel).toHaveClass(/sp-panel-modal/);
@@ -136,11 +136,23 @@ test.describe("W13-6 Client Overview and review modal", () => {
   test("?exception= opens the modal; scrim click and browser back close it", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     const rid = await ridOf("Neha");
+    const token = await apiToken();
+    const list = (await (
+      await fetch(`${API}/exceptions/relationships/${rid}`, { headers: { Authorization: `Bearer ${token}` } })
+    ).json()) as { data: { items: Array<{ id: string; status: string }> } };
+    const open = list.data.items.find((i) => i.status !== "resolved")!;
+    await page.goto(`/clients/${rid}?exception=${open.id}`);
+    const panel = await modalLoaded(page);
+    await expect(panel).toHaveClass(/sp-panel-modal/);
+    await expect(panel.getByText(/^\d+ of \d+$/)).toBeVisible();
+    await page.mouse.click(10, 450);
+    await expect(page.getByTestId("screen-TW-05")).toHaveCount(0);
+
     await page.goto(`/clients/${rid}`);
     await overviewLoaded(page);
-    await page.locator(".ov-att").getByRole("button", { name: "Review" }).click();
+    await page.locator(".ov-att").getByRole("button", { name: "Review" }).first().click();
     await modalLoaded(page);
-    await page.mouse.click(10, 450);
+    await page.goBack();
     await expect(page.getByTestId("screen-TW-05")).toHaveCount(0);
   });
 
@@ -159,7 +171,7 @@ test.describe("W13-6 Client Overview and review modal", () => {
       await shot(page, "W-03-client-overview", size);
 
       console.log("STEP W-03x modal");
-      await page.locator(".ov-att").getByRole("button", { name: "Review" }).click();
+      await page.locator(".ov-att").getByRole("button", { name: "Review" }).first().click();
       const panel = await modalLoaded(page);
       await shot(page, "W-03x-exception-modal", size);
 
