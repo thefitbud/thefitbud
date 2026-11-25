@@ -1,12 +1,17 @@
 import { useState, type FormEvent } from "react";
+import { Seg } from "../../components/ui";
 import { formatPointDate } from "./metricKeys";
 import type { MetricRange } from "./useProgressMetrics";
 
-const PRESETS = [
-  ["4w", "4 w"],
-  ["12w", "12 w"],
-  ["all", "All"],
-] as const;
+type Preset = "4w" | "12w" | "6m" | "all";
+type Selected = Preset | "custom";
+
+const PRESETS: Array<{ value: Selected; label: string }> = [
+  { value: "4w", label: "4 wk" },
+  { value: "12w", label: "12 wk" },
+  { value: "6m", label: "6 mo" },
+  { value: "all", label: "All" },
+];
 
 type Props = {
   value: MetricRange;
@@ -14,17 +19,48 @@ type Props = {
   onChange: (next: MetricRange) => void;
 };
 
-/** 4 w / 12 w / All / Custom… (frame 160). Custom asks for two dates, from on or before to. */
+/** The civil date six calendar months before `localDate` (YYYY-MM-DD), clamped to the month's end. */
+export function sixMonthsBefore(localDate: string): string {
+  const [y, m, d] = localDate.split("-").map(Number) as [number, number, number];
+  const target = new Date(Date.UTC(y, m - 1 - 6, 1));
+  const lastDay = new Date(
+    Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0),
+  ).getUTCDate();
+  target.setUTCDate(Math.min(d, lastDay));
+  return target.toISOString().slice(0, 10);
+}
+
+/**
+ * 4 wk / 12 wk / 6 mo / All (frame W-160) and a Custom range. The metrics and strength
+ * endpoints have no six-month preset, so "6 mo" asks for the custom window that ends today.
+ */
 export function RangeControl({ value, today, onChange }: Props) {
   const [open, setOpen] = useState(false);
   const [from, setFrom] = useState(value.range === "custom" ? value.from : "");
   const [to, setTo] = useState(value.range === "custom" ? value.to : today);
   const [problem, setProblem] = useState<string | null>(null);
 
+  const sixMonths = sixMonthsBefore(today);
+  const isSixMonths =
+    value.range === "custom" && value.to === today && value.from === sixMonths;
+  const selected: Selected = isSixMonths
+    ? "6m"
+    : value.range === "custom"
+      ? "custom"
+      : value.range;
+
   const customLabel =
-    value.range === "custom"
+    selected === "custom" && value.range === "custom"
       ? `${formatPointDate(value.from)} to ${formatPointDate(value.to)}`
-      : "Custom…";
+      : "Custom range";
+
+  function choose(next: Selected) {
+    setOpen(false);
+    if (next === "6m") onChange({ range: "custom", from: sixMonths, to: today });
+    else if (next === "4w" || next === "12w" || next === "all") {
+      onChange({ range: next });
+    }
+  }
 
   function apply(event: FormEvent) {
     event.preventDefault();
@@ -43,36 +79,24 @@ export function RangeControl({ value, today, onChange }: Props) {
 
   return (
     <div className="pg-range">
-      <div className="pg-segment" role="group" aria-label="Trend range">
-        {PRESETS.map(([range, label]) => (
-          <button
-            key={range}
-            type="button"
-            className={
-              value.range === range ? "pg-segment-btn is-on" : "pg-segment-btn"
-            }
-            aria-pressed={value.range === range}
-            onClick={() => {
-              setOpen(false);
-              onChange({ range });
-            }}
-          >
-            {label}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={
-            value.range === "custom" ? "pg-segment-btn is-on" : "pg-segment-btn"
-          }
-          aria-pressed={value.range === "custom"}
-          aria-expanded={open}
-          aria-controls="pg-custom-range"
-          onClick={() => setOpen((current) => !current)}
-        >
-          {customLabel}
-        </button>
-      </div>
+      <Seg<Selected>
+        aria-label="Trend range"
+        options={PRESETS}
+        value={selected}
+        onChange={choose}
+      />
+      <button
+        type="button"
+        className={
+          selected === "custom" ? "pg-custom-btn is-on" : "pg-custom-btn"
+        }
+        aria-pressed={selected === "custom"}
+        aria-expanded={open}
+        aria-controls="pg-custom-range"
+        onClick={() => setOpen((current) => !current)}
+      >
+        {customLabel}
+      </button>
       {open ? (
         <form id="pg-custom-range" className="pg-custom" onSubmit={apply}>
           <label className="field">

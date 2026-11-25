@@ -1,4 +1,4 @@
-/** Frame 160i: grey bars where the rail rows and the chart panel will be. */
+/** Frame 160i (W-160 layout): grey bars where the rail rows and the chart panel will be. */
 const RAIL_GROUPS = [1, 4, 4, 2];
 
 function Bar({ className }: { className: string }) {
@@ -23,8 +23,10 @@ export function ProgressSkeleton() {
           </div>
         ))}
       </div>
-      <div className="pg-panel workspace-card" aria-hidden="true">
-        <PanelSkeleton />
+      <div className="pg-panel" aria-hidden="true">
+        <div className="workspace-card pg-card">
+          <PanelSkeleton />
+        </div>
       </div>
     </div>
   );
