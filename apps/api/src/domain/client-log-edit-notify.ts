@@ -91,7 +91,13 @@ export type ClientLogEditEvent = {
   now: string;
 };
 
-function eventPayload(event: ClientLogEditEvent): ClientLogEditPayload {
+function knownDeviationKind(kind: string | null): ClientLogEditPayload["fromDeviationKind"] {
+  return kind === "portion_adjustment" || kind === "restaurant" || kind === "logged_foods"
+    ? kind
+    : null;
+}
+
+export function eventPayload(event: ClientLogEditEvent): ClientLogEditPayload {
   return {
     entryId: event.entryId,
     action: event.action,
@@ -101,6 +107,7 @@ function eventPayload(event: ClientLogEditEvent): ClientLogEditPayload {
     toKcal: event.after ? wholeKcal(event.after.kcalScaled) : null,
     fromOutcome: event.before.outcome,
     toOutcome: event.after ? event.after.outcome : null,
+    fromDeviationKind: knownDeviationKind(event.before.deviationKind),
     fields: event.after ? changedMealFields(event.before, event.after) : [],
   };
 }
@@ -115,6 +122,8 @@ export function mergeClientLogEditPayload(
     ...later,
     fromKcal: stored.fromKcal,
     fromOutcome: stored.fromOutcome,
+    // Keeps the first kind, like fromKcal (an old row without the field stays without it).
+    fromDeviationKind: stored.fromDeviationKind,
     fields: later.action === "removed" ? [] : fields,
   };
 }

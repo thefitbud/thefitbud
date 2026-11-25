@@ -4,7 +4,11 @@ import { reportError } from "../../lib/reportError";
 import { useReachability, useSyncEngine } from "../../sync/SyncProvider";
 import { deviceStorage } from "../../sync/storage";
 import { invalidateRelationshipDayData } from "../dataCache";
-import { prepareMealPhoto, uploadAndAttachMealPhoto } from "../mealActions";
+import {
+  prepareMealPhoto,
+  recordAttachedMealVersion,
+  uploadAndAttachMealPhoto,
+} from "../mealActions";
 import {
   mealPhotoJobsFor,
   resolveMealEntryId,
@@ -60,7 +64,7 @@ export function useMealPhotoJobs(enabled = true): {
           },
         }),
       send: async (job, input) => {
-        await uploadAndAttachMealPhoto(api, {
+        const { entry } = await uploadAndAttachMealPhoto(api, {
           relationshipId: job.relationshipId,
           assignmentId: job.assignmentId,
           entryId: input.entryId,
@@ -70,6 +74,12 @@ export function useMealPhotoJobs(enabled = true): {
           mediaAssetId: job.mediaAssetId,
           onUploaded: input.onUploaded,
         });
+        // The next edit of this meal sends the version the attach produced.
+        try {
+          await recordAttachedMealVersion(sync, entry, input.isDiscarded);
+        } catch (err) {
+          reportError("mealPhoto.version", err);
+        }
       },
       reloadBytes: async (uri) =>
         (await prepareMealPhoto({ uri, width: 0, height: 0 })).bytes,

@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { clientLogEditPayloadSchema } from "@fitbud/contracts";
 import {
   changedMealFields,
   clientLogEditDedupeKey,
+  eventPayload,
   mergeClientLogEditPayload,
   type MealEntryValues,
 } from "./client-log-edit-notify.js";
@@ -74,6 +76,48 @@ describe("one notification per entry per ten minutes (D-W14-23 d)", () => {
     expect(
       mergeClientLogEditPayload(first, { ...first, action: "removed", toKcal: null, toOutcome: null, fields: [] }),
     ).toMatchObject({ action: "removed", fromKcal: 610, toKcal: null, fields: [] });
+  });
+});
+
+describe("the previous deviation kind (Z14-35)", () => {
+  const ateOut: MealEntryValues = { ...plain, deviationKind: "restaurant", kcalScaled: 1_120_000_000 };
+  const removal = {
+    relationshipId: "22222222-2222-4222-8222-222222222222",
+    trainerUserId: "33333333-3333-4333-8333-333333333333",
+    entryId: "11111111-1111-4111-8111-111111111111",
+    action: "removed" as const,
+    mealName: "Dinner",
+    mealDate: "2026-11-02",
+    before: ateOut,
+    after: null,
+    now: "2026-11-02T14:00:00.000Z",
+  };
+
+  it("stores restaurant for the removal of an ate-out entry, null otherwise", () => {
+    expect(eventPayload(removal).fromDeviationKind).toBe("restaurant");
+    expect(eventPayload({ ...removal, before: plain }).fromDeviationKind).toBeNull();
+  });
+
+  it("keeps the first kind when an edit and then a removal land in one bucket", () => {
+    const edit = eventPayload({
+      ...removal,
+      action: "edited",
+      before: ateOut,
+      after: { ...ateOut, deviationKind: "portion_adjustment" },
+    });
+    const later = eventPayload({
+      ...removal,
+      before: { ...ateOut, deviationKind: "portion_adjustment" },
+    });
+    expect(mergeClientLogEditPayload(edit, later).fromDeviationKind).toBe("restaurant");
+  });
+
+  it("still parses a stored payload from before the field existed", () => {
+    const old: Record<string, unknown> = { ...eventPayload(removal) };
+    delete old.fromDeviationKind;
+    const parsed = clientLogEditPayloadSchema.safeParse(old);
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data.fromDeviationKind).toBeUndefined();
   });
 });
 

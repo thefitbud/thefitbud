@@ -21,6 +21,8 @@ import {
   pendingMealLogIds,
   overlayMealEdits,
   plannedUntilSentNote,
+  nextRecordVersion,
+  recordAttachedMealVersion,
   removeMealEntry,
   uploadAndAttachMealPhoto,
 } from "./mealActions";
@@ -407,6 +409,33 @@ describe("edit or remove a logged entry for 24 hours (Z14-13b, D-W14-22)", () =>
     await removeMealEntry(offline, meal, "rel");
     const rows = await sync.store.listOutbox();
     expect(rows.map(versionOf)).toEqual([5, 6]);
+  });
+
+  it("after a photo attach the next edit carries the version the attach returned, not the stale one", async () => {
+    const sync = createSyncEngine(createMemorySyncStore(), {
+      pushSync: async () => {
+        throw new Error("offline");
+      },
+      pullSync: async () => {
+        throw new Error("offline");
+      },
+    });
+    const meal = logged(); // the day still says recordVersion 4
+    const entry = meal.compliance!;
+    // Without the bookkeeping the stale version is what the next edit would send.
+    expect(await nextRecordVersion(sync, entry)).toBe(4);
+
+    await recordAttachedMealVersion(sync, { id: entry.id, recordVersion: 5 });
+    expect(await nextRecordVersion(sync, entry)).toBe(5);
+    const display = { loggedItems: [], kcal: 900 };
+    const body = { outcome: "modified" as const, deviationKind: "restaurant" as const, notes: null };
+    await editMealEntry(sync, meal, { body, display, relationshipId: "rel" });
+    const [row] = await sync.store.listOutbox();
+    expect(versionOf(row!)).toBe(5);
+
+    // An older answer never lowers the version already held.
+    await recordAttachedMealVersion(sync, { id: entry.id, recordVersion: 3 });
+    expect((await sync.store.getLocal("meal_compliance", entry.id))?.serverVersion).toBe(5);
   });
 
   it("knows when a photo is unfinished and when an edit is queued", () => {
