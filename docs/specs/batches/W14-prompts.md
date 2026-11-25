@@ -816,3 +816,158 @@ You are working in the GitHub repo thefitbud/thefitbud (local checkout at the re
 
 Done when: every acceptance box in docs/specs/Z14-37.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-33).
 ```
+
+
+
+## Z14-38: Trainer web: long-lived cache headers for hashed assets
+Model: **sonnet** · Size: S · Depends on: none (follow-up batch, D-W14-39)
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-38, "Trainer web: long-lived cache headers for hashed assets", batch W14 follow-up batch.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..43 apply, especially D-W14-3, D-W14-39 and the "W14 follow-up batch" section), docs/specs/Z14-38.md (your spec: outcome, files you own, gap list, acceptance, decide-and-note, tests, visual, device run, stop conditions, merge).
+2. git fetch origin && git checkout main && git pull. Check that the follow-up docs PR and every task you depend on (none) have merged to main. Re-check the gap-list file:line items on this main and drop what is already done, saying so in the PR. If a dependency has not merged, do not start: say which one is missing in your final message and end. W13 may still be open: do not edit files a still-open W13 task owns.
+3. Branch: git checkout -b claude/Z14-38-<slug> from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-38/). If you must touch another task's file, stop and follow the spec's stop conditions. Do not edit wrangler.toml, worker/index.ts, vite.config.ts, or any W13-owned file.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Follow-up batch Report row (decide and note; never wait for a person, never ask a question and pause). Never trigger device.yml; FitBud UI runs the flows after the wave. Do not split the bundle.
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps in the Report instead. Never write the mention handle. Never cancel a GitHub Actions run.
+6. Run pnpm lint, pnpm typecheck and pnpm test locally until green. Do NOT trigger device runs (device.yml) and do NOT wait for any CI run (D-W14-30).
+7. Push and open a PR titled "Z14-38: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, visual or test evidence (docs/qa/Z14-38/), follow-ups.
+8. Then END the session with a short summary (PR link, what is done, decide-and-note choices). Do not poll CI, device runs or reviews, do not sleep or loop on gh run watch / gh pr checks (D-W14-30). The follow-up coordinator waits for ci, e2e and banned-strings, runs a fresh review, and sends any fix list to a fresh agent.
+9. If you are a fix-round agent given a numbered fix list: fix every item, rerun local lint/typecheck/tests, push to the same branch (merge main, never rebase or force-push), reply with a short summary, and end. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+10. Do not merge. After a reviewer PASS and green checks the coordinator merges with a merge commit (never squash or rebase-merge) and deletes the branch.
+11. Fill your row in the "Follow-up batch Report" table in docs/specs/batches/W14.md (PR, model used, decide-and-note choices, notes including any Firoz or FitBud Tech steps) in the same PR before you end; the coordinator adds the merged SHA, FitBud UI adds the device-run link.
+
+Done when: every acceptance box in docs/specs/Z14-38.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-39).
+```
+
+
+## Z14-39: Trainer More tab stays loaded, like the other tabs
+Model: **sonnet** · Size: S · Depends on: none (follow-up batch, D-W14-39)
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-39, "Trainer More tab stays loaded, like the other tabs", batch W14 follow-up batch.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..43 apply, especially D-W14-3, D-W14-39 and the "W14 follow-up batch" section), docs/specs/Z14-39.md (your spec: outcome, files you own, gap list, acceptance, decide-and-note, tests, visual, device run, stop conditions, merge).
+2. git fetch origin && git checkout main && git pull. Check that the follow-up docs PR and every task you depend on (none) have merged to main. Re-check the gap-list file:line items on this main and drop what is already done, saying so in the PR. If a dependency has not merged, do not start: say which one is missing in your final message and end. W13 may still be open: do not edit files a still-open W13 task owns.
+3. Branch: git checkout -b claude/Z14-39-<slug> from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-39/). If you must touch another task's file, stop and follow the spec's stop conditions.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Follow-up batch Report row (decide and note; never wait for a person, never ask a question and pause). Never trigger device.yml; FitBud UI runs the flows after the wave.
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps in the Report instead. Never write the mention handle. Never cancel a GitHub Actions run.
+6. Run pnpm lint, pnpm typecheck and pnpm test locally until green. Do NOT trigger device runs (device.yml) and do NOT wait for any CI run (D-W14-30).
+7. Push and open a PR titled "Z14-39: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, visual or test evidence (docs/qa/Z14-39/), follow-ups.
+8. Then END the session with a short summary (PR link, what is done, decide-and-note choices). Do not poll CI, device runs or reviews, do not sleep or loop on gh run watch / gh pr checks (D-W14-30). The follow-up coordinator waits for ci, e2e and banned-strings, runs a fresh review, and sends any fix list to a fresh agent.
+9. If you are a fix-round agent given a numbered fix list: fix every item, rerun local lint/typecheck/tests, push to the same branch (merge main, never rebase or force-push), reply with a short summary, and end. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+10. Do not merge. After a reviewer PASS and green checks the coordinator merges with a merge commit (never squash or rebase-merge) and deletes the branch.
+11. Fill your row in the "Follow-up batch Report" table in docs/specs/batches/W14.md (PR, model used, decide-and-note choices, notes including any Firoz or FitBud Tech steps) in the same PR before you end; the coordinator adds the merged SHA, FitBud UI adds the device-run link.
+
+Done when: every acceptance box in docs/specs/Z14-39.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-39).
+```
+
+
+## Z14-40: Startup shows the first screen from the stored relationships, without waiting on the live call
+Model: **sonnet** · Size: M · Depends on: none (follow-up batch, D-W14-39)
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-40, "Startup shows the first screen from the stored relationships, without waiting on the live call", batch W14 follow-up batch.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..43 apply, especially D-W14-3, D-W14-39 and the "W14 follow-up batch" section), docs/specs/Z14-40.md (your spec: outcome, files you own, gap list, acceptance, decide-and-note, tests, visual, device run, stop conditions, merge).
+2. git fetch origin && git checkout main && git pull. Check that the follow-up docs PR and every task you depend on (none) have merged to main. Re-check the gap-list file:line items on this main and drop what is already done, saying so in the PR. If a dependency has not merged, do not start: say which one is missing in your final message and end. W13 may still be open: do not edit files a still-open W13 task owns.
+3. Branch: git checkout -b claude/Z14-40-<slug> from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-40/). If you must touch another task's file, stop and follow the spec's stop conditions. Do not change the API or add a migration.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Follow-up batch Report row (decide and note; never wait for a person, never ask a question and pause). Never trigger device.yml; FitBud UI runs the flows after the wave.
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps in the Report instead. Never write the mention handle. Never cancel a GitHub Actions run.
+6. Run pnpm lint, pnpm typecheck and pnpm test locally until green. Do NOT trigger device runs (device.yml) and do NOT wait for any CI run (D-W14-30).
+7. Push and open a PR titled "Z14-40: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, visual or test evidence (docs/qa/Z14-40/), follow-ups.
+8. Then END the session with a short summary (PR link, what is done, decide-and-note choices). Do not poll CI, device runs or reviews, do not sleep or loop on gh run watch / gh pr checks (D-W14-30). The follow-up coordinator waits for ci, e2e and banned-strings, runs a fresh review, and sends any fix list to a fresh agent.
+9. If you are a fix-round agent given a numbered fix list: fix every item, rerun local lint/typecheck/tests, push to the same branch (merge main, never rebase or force-push), reply with a short summary, and end. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+10. Do not merge. After a reviewer PASS and green checks the coordinator merges with a merge commit (never squash or rebase-merge) and deletes the branch.
+11. Fill your row in the "Follow-up batch Report" table in docs/specs/batches/W14.md (PR, model used, decide-and-note choices, notes including any Firoz or FitBud Tech steps) in the same PR before you end; the coordinator adds the merged SHA, FitBud UI adds the device-run link.
+
+Done when: every acceptance box in docs/specs/Z14-40.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-39).
+```
+
+
+## Z14-41: Held rating and note are sent at app launch and on foreground, not only when Workout opens
+Model: **sonnet** · Size: S · Depends on: none (follow-up batch, D-W14-39)
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-41, "Held rating and note are sent at app launch and on foreground, not only when Workout opens", batch W14 follow-up batch.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..43 apply, especially D-W14-3, D-W14-39 and the "W14 follow-up batch" section), docs/specs/Z14-41.md (your spec: outcome, files you own, gap list, acceptance, decide-and-note, tests, visual, device run, stop conditions, merge).
+2. git fetch origin && git checkout main && git pull. Check that the follow-up docs PR and every task you depend on (none) have merged to main. Re-check the gap-list file:line items on this main and drop what is already done, saying so in the PR. If a dependency has not merged, do not start: say which one is missing in your final message and end. W13 may still be open: do not edit files a still-open W13 task owns.
+3. Branch: git checkout -b claude/Z14-41-<slug> from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-41/). If you must touch another task's file, stop and follow the spec's stop conditions. Prefer not to edit rpeRating.ts (Z14-42 owns the copy there).
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Follow-up batch Report row (decide and note; never wait for a person, never ask a question and pause). Never trigger device.yml; FitBud UI runs the flows after the wave. Keep the 48 h window and the saved idempotency key; do not send twice with the Workout tab call.
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps in the Report instead. Never write the mention handle. Never cancel a GitHub Actions run.
+6. Run pnpm lint, pnpm typecheck and pnpm test locally until green. Do NOT trigger device runs (device.yml) and do NOT wait for any CI run (D-W14-30).
+7. Push and open a PR titled "Z14-41: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, visual or test evidence (docs/qa/Z14-41/), follow-ups.
+8. Then END the session with a short summary (PR link, what is done, decide-and-note choices). Do not poll CI, device runs or reviews, do not sleep or loop on gh run watch / gh pr checks (D-W14-30). The follow-up coordinator waits for ci, e2e and banned-strings, runs a fresh review, and sends any fix list to a fresh agent.
+9. If you are a fix-round agent given a numbered fix list: fix every item, rerun local lint/typecheck/tests, push to the same branch (merge main, never rebase or force-push), reply with a short summary, and end. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+10. Do not merge. After a reviewer PASS and green checks the coordinator merges with a merge commit (never squash or rebase-merge) and deletes the branch.
+11. Fill your row in the "Follow-up batch Report" table in docs/specs/batches/W14.md (PR, model used, decide-and-note choices, notes including any Firoz or FitBud Tech steps) in the same PR before you end; the coordinator adds the merged SHA, FitBud UI adds the device-run link.
+
+Done when: every acceptance box in docs/specs/Z14-41.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-39).
+```
+
+
+## Z14-42: Small fixes: window-closed copy, Z14-36 Resolve wording, APNs docs, workout-note Maestro flow, qa-scripts guard, three failing scripts/qa tests
+Model: **sonnet** · Size: M · Depends on: none (follow-up batch, D-W14-39)
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-42, "Small fixes: window-closed copy, Z14-36 Resolve wording, APNs docs, workout-note Maestro flow, qa-scripts guard, three failing scripts/qa tests", batch W14 follow-up batch.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..43 apply, especially D-W14-3, D-W14-39 and the "W14 follow-up batch" section), docs/specs/Z14-42.md (your spec: outcome, files you own, gap list, acceptance, decide-and-note, tests, visual, device run, stop conditions, merge).
+2. git fetch origin && git checkout main && git pull. Check that the follow-up docs PR and every task you depend on (none) have merged to main. Re-check the gap-list file:line items on this main and drop what is already done, saying so in the PR. If a dependency has not merged, do not start: say which one is missing in your final message and end. W13 may still be open: do not edit files a still-open W13 task owns.
+3. Branch: git checkout -b claude/Z14-42-<slug> from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-42/). If you must touch another task's file, stop and follow the spec's stop conditions. qa-scripts must stay not a required check. No tester emails or credentials. Do not rename existing Maestro flows. Never open the FitBud Credentials or Adtune Credentials Confluence pages.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Follow-up batch Report row (decide and note; never wait for a person, never ask a question and pause). Never trigger device.yml; FitBud UI runs the flows after the wave. Re-run node --test "scripts/qa/**/*.test.mjs" and leave it green.
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps in the Report instead. Never write the mention handle. Never cancel a GitHub Actions run.
+6. Run pnpm lint, pnpm typecheck and pnpm test locally until green. Do NOT trigger device runs (device.yml) and do NOT wait for any CI run (D-W14-30).
+7. Push and open a PR titled "Z14-42: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, visual or test evidence (docs/qa/Z14-42/), follow-ups.
+8. Then END the session with a short summary (PR link, what is done, decide-and-note choices). Do not poll CI, device runs or reviews, do not sleep or loop on gh run watch / gh pr checks (D-W14-30). The follow-up coordinator waits for ci, e2e and banned-strings, runs a fresh review, and sends any fix list to a fresh agent.
+9. If you are a fix-round agent given a numbered fix list: fix every item, rerun local lint/typecheck/tests, push to the same branch (merge main, never rebase or force-push), reply with a short summary, and end. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+10. Do not merge. After a reviewer PASS and green checks the coordinator merges with a merge commit (never squash or rebase-merge) and deletes the branch.
+11. Fill your row in the "Follow-up batch Report" table in docs/specs/batches/W14.md (PR, model used, decide-and-note choices, notes including any Firoz or FitBud Tech steps) in the same PR before you end; the coordinator adds the merged SHA, FitBud UI adds the device-run link.
+
+Done when: every acceptance box in docs/specs/Z14-42.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-39).
+```
+
+
+## Z14-43: Make five flaky render tests deterministic
+Model: **sonnet** · Size: M · Depends on: none (follow-up batch, D-W14-39)
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-43, "Make five flaky render tests deterministic", batch W14 follow-up batch.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..43 apply, especially D-W14-3, D-W14-39 and the "W14 follow-up batch" section), docs/specs/Z14-43.md (your spec: outcome, files you own, gap list, acceptance, decide-and-note, tests, visual, device run, stop conditions, merge).
+2. git fetch origin && git checkout main && git pull. Check that the follow-up docs PR and every task you depend on (none) have merged to main. Re-check the gap-list file:line items on this main and drop what is already done, saying so in the PR. If a dependency has not merged, do not start: say which one is missing in your final message and end. W13 may still be open: do not edit files a still-open W13 task owns.
+3. Branch: git checkout -b claude/Z14-43-<slug> from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-43/). If you must touch another task's file, stop and follow the spec's stop conditions. Do not cancel or re-run GitHub Actions. Do not edit TraineeShell.tsx (Z14-41 owns it in this wave).
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Follow-up batch Report row (decide and note; never wait for a person, never ask a question and pause). Never trigger device.yml; FitBud UI runs the flows after the wave. Do not weaken the five tests; make their waits deterministic.
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps in the Report instead. Never write the mention handle. Never cancel a GitHub Actions run.
+6. Run pnpm lint, pnpm typecheck and pnpm test locally until green. Do NOT trigger device runs (device.yml) and do NOT wait for any CI run (D-W14-30).
+7. Push and open a PR titled "Z14-43: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, visual or test evidence (docs/qa/Z14-43/), follow-ups.
+8. Then END the session with a short summary (PR link, what is done, decide-and-note choices). Do not poll CI, device runs or reviews, do not sleep or loop on gh run watch / gh pr checks (D-W14-30). The follow-up coordinator waits for ci, e2e and banned-strings, runs a fresh review, and sends any fix list to a fresh agent.
+9. If you are a fix-round agent given a numbered fix list: fix every item, rerun local lint/typecheck/tests, push to the same branch (merge main, never rebase or force-push), reply with a short summary, and end. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+10. Do not merge. After a reviewer PASS and green checks the coordinator merges with a merge commit (never squash or rebase-merge) and deletes the branch.
+11. Fill your row in the "Follow-up batch Report" table in docs/specs/batches/W14.md (PR, model used, decide-and-note choices, notes including any Firoz or FitBud Tech steps) in the same PR before you end; the coordinator adds the merged SHA, FitBud UI adds the device-run link.
+
+Done when: every acceptance box in docs/specs/Z14-43.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-39).
+```
+
+
+## Z14-44: Trainee live updates refresh only the affected cached day, not the whole day set
+Model: **sonnet** · Size: M · Depends on: Z14-41 (follow-up batch, D-W14-39)
+
+```text
+You are working in the GitHub repo thefitbud/thefitbud (local checkout at the repo root). Task: Z14-44, "Trainee live updates refresh only the affected cached day, not the whole day set", batch W14 follow-up batch.
+
+1. Read, in order: AGENTS.md, CLAUDE.md, docs/specs/README.md, docs/specs/batches/W14.md (all decisions D-W14-1..43 apply, especially D-W14-3, D-W14-39 and the "W14 follow-up batch" section), docs/specs/Z14-44.md (your spec: outcome, files you own, gap list, acceptance, decide-and-note, tests, visual, device run, stop conditions, merge).
+2. git fetch origin && git checkout main && git pull. Check that the follow-up docs PR and every task you depend on (Z14-41) have merged to main. Re-check the gap-list file:line items on this main and drop what is already done, saying so in the PR. If a dependency has not merged, do not start: say which one is missing in your final message and end. W13 may still be open: do not edit files a still-open W13 task owns.
+3. Branch: git checkout -b claude/Z14-44-<slug> from the latest main. Change only the files listed under files_owned in the spec (plus tests and docs/qa/Z14-44/). If you must touch another task's file, stop and follow the spec's stop conditions. Keep Z14-41's resume-at-launch wiring in TraineeShell. Do not change the realtime contract or add a migration.
+4. Build every acceptance item in the spec. Where the spec leaves a choice, decide, keep going, and write the choice and why in the PR body and in your Follow-up batch Report row (decide and note; never wait for a person, never ask a question and pause). Never trigger device.yml; FitBud UI runs the flows after the wave. Events stay hints, not CRUD payloads.
+5. Standing rules: every error the user can see is friendly, says what actually went wrong and what to do next, and never shows an error code (codes stay in logs). No secrets, tokens or keys in code, docs, logs or PR text. Never run deploy, migrate-remote, EAS build/submit, or any command that changes staging or production; list those as steps in the Report instead. Never write the mention handle. Never cancel a GitHub Actions run.
+6. Run pnpm lint, pnpm typecheck and pnpm test locally until green. Do NOT trigger device runs (device.yml) and do NOT wait for any CI run (D-W14-30).
+7. Push and open a PR titled "Z14-44: <one-line summary>" against main. Body: what changed, how each acceptance item is met, decide-and-note choices, visual or test evidence (docs/qa/Z14-44/), follow-ups.
+8. Then END the session with a short summary (PR link, what is done, decide-and-note choices). Do not poll CI, device runs or reviews, do not sleep or loop on gh run watch / gh pr checks (D-W14-30). The follow-up coordinator waits for ci, e2e and banned-strings, runs a fresh review, and sends any fix list to a fresh agent.
+9. If you are a fix-round agent given a numbered fix list: fix every item, rerun local lint/typecheck/tests, push to the same branch (merge main, never rebase or force-push), reply with a short summary, and end. Never cancel a GitHub Actions run, never merge with --admin, never skip hooks.
+10. Do not merge. After a reviewer PASS and green checks the coordinator merges with a merge commit (never squash or rebase-merge) and deletes the branch.
+11. Fill your row in the "Follow-up batch Report" table in docs/specs/batches/W14.md (PR, model used, decide-and-note choices, notes including any Firoz or FitBud Tech steps) in the same PR before you end; the coordinator adds the merged SHA, FitBud UI adds the device-run link.
+
+Done when: every acceptance box in docs/specs/Z14-44.md is met, the PR is open with local lint, typecheck and tests green and your Report row filled; then end the session (the coordinator reviews and merges, D-W14-39).
+```
