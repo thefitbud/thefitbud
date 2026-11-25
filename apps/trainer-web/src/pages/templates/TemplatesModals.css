@@ -48,7 +48,8 @@
 .tpl-combo-trigger.is-open,
 .tpl-combo-trigger:focus-visible { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
 .tpl-combo-name { font-weight: 500; color: var(--ink); }
-.tpl-combo-status { color: var(--ink3); font: var(--t-meta); }
+.tpl-combo-status { display: inline-flex; align-items: center; gap: 6px; color: var(--ink3); font: var(--t-meta); }
+.tpl-combo-sep { flex: none; }
 .tpl-combo-caret { margin-left: auto; color: var(--ink3); flex: none; }
 .tpl-combo-pop {
   margin-top: 6px;

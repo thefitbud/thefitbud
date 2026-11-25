@@ -209,27 +209,21 @@ describe("CheckinTemplateBuilderPage", () => {
     expect(fields.at(-1)?.id).toBe("went-well");
   });
 
-  it("answer type control has four options and switches the type", async () => {
+  it("has one answer-type control that switches the type and the editor", async () => {
     renderPage();
     const own = await screen.findByRole("list", { name: "Your own questions" });
     fireEvent.click(within(own).getByRole("button", { name: /What went well/ }));
-    const seg = screen.getByRole("radiogroup", { name: "Answer type" });
-    const options = within(seg).getAllByRole("radio");
-    expect(options.map((option) => option.textContent)).toEqual([
-      "Number",
-      "Scale 1–5",
-      "Text",
-      "Photos",
-    ]);
-    // Long text is in the Text family, so it stays selected and keeps its type.
-    expect(within(seg).getByRole("radio", { name: "Text" }).getAttribute("aria-checked")).toBe("true");
-    fireEvent.click(within(seg).getByRole("radio", { name: "Scale 1–5" }));
+    expect(screen.queryByRole("radiogroup", { name: "Answer type" })).toBeNull();
+    expect(screen.getAllByLabelText("Answer type")).toHaveLength(1);
+    const select = screen.getByLabelText("Answer type") as HTMLSelectElement;
+    expect(select.value).toBe("long_text");
+    expect([...select.options].map((option) => option.textContent)).toContain("Yes / no");
+    fireEvent.change(select, { target: { value: "scale_1_5" } });
     expect(screen.getByLabelText("Label for 1")).toBeTruthy();
-    expect((screen.getByLabelText("Type") as HTMLSelectElement).value).toBe("scale_1_5");
-    fireEvent.click(within(seg).getByRole("radio", { name: "Photos" }));
-    expect((screen.getByLabelText("Type") as HTMLSelectElement).value).toBe("photo_intent");
-    fireEvent.click(within(seg).getByRole("radio", { name: "Text" }));
-    expect((screen.getByLabelText("Type") as HTMLSelectElement).value).toBe("short_text");
+    fireEvent.change(select, { target: { value: "photo_intent" } });
+    expect(select.value).toBe("photo_intent");
+    fireEvent.change(select, { target: { value: "short_text" } });
+    expect(select.value).toBe("short_text");
   });
 
   it("v1 fork: own charted measurement is not marked Not charted, and adding the standard one converts it", async () => {
@@ -265,7 +259,7 @@ describe("CheckinTemplateBuilderPage", () => {
   it("own measurement question offers only the Other metric", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /What went well this week/ }));
-    fireEvent.change(screen.getByLabelText("Type"), { target: { value: "measurement" } });
+    fireEvent.change(screen.getByLabelText("Answer type"), { target: { value: "measurement" } });
     const metric = screen.getByLabelText("Metric") as HTMLSelectElement;
     expect([...metric.options].map((option) => option.value)).toEqual(["other"]);
   });
@@ -277,5 +271,26 @@ describe("CheckinTemplateBuilderPage", () => {
     expect(screen.queryByRole("button", { name: "Save version" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add standard measure" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Add your own question/ })).toBeNull();
+  });
+
+  it("below 1024 shows the read-only notice and no Save version", async () => {
+    const original = window.matchMedia;
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes("max-width"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      onchange: null,
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+    try {
+      renderPage();
+      expect(await screen.findByText(/Open on a larger screen to edit/)).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Save version" })).toBeNull();
+    } finally {
+      window.matchMedia = original;
+    }
   });
 });
