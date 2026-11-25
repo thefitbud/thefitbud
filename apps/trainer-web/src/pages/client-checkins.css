@@ -126,6 +126,8 @@
 }
 
 .client-checkins-list {
+  /* Contains the visually hidden header row so it cannot grow the window. */
+  position: relative;
   display: block;
   width: 100%;
   border-collapse: separate;
@@ -175,6 +177,7 @@
 }
 
 .client-checkins-date span {
+  white-space: nowrap;
   font-size: 0.75rem;
   color: var(--ink-500, #5b616b);
 }
@@ -216,9 +219,8 @@
 .client-checkins-note {
   margin-top: 4px;
   color: var(--ink-500, #5b616b);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* Wraps rather than cutting the note off with an ellipsis (W13-7). */
+  overflow-wrap: anywhere;
 }
 
 .client-checkins-status {
