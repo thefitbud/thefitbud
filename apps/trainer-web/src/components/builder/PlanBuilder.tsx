@@ -8,9 +8,22 @@ import type {
 } from "@fitbud/contracts";
 import { formatClockTime, formatHhMmTime } from "@fitbud/core";
 import {
+  ArrowLeft,
+  Check,
+  Dumbbell,
+  Eye,
+  Library as LibraryIcon,
+  Pencil,
+  Undo2,
+  Utensils,
+} from "lucide-react";
+import { Button, Pill } from "../ui";
+import {
+  PLAN_COMPOSITION_LIMITS,
   addExerciseFromLibrary,
   addFoodItemFromLibrary,
   addSetTarget,
+  duplicateWorkoutDay,
   sortedByOrder,
   sortedMealsByTime,
 } from "../plan-composition";
@@ -42,6 +55,39 @@ export type ConflictHandlers = {
   /** Load the other device's content for Compare / Take theirs. */
   loadRemote: () => Promise<{ title: string; content: PlanContent }>;
 };
+
+/**
+ * Version state shown next to the title. An editable client draft is
+ * "Draft · v3" (neutral), a published client version "Published · v3"
+ * (positive, with a check so state is never colour alone). Templates are not
+ * versioned: a trainer's own template reads "Draft", a FitBud template shows
+ * no pill (null).
+ */
+export type BuilderVersionPill = {
+  state: "draft" | "published";
+  versionNumber?: number | null;
+};
+
+function VersionPill({ pill }: { pill: BuilderVersionPill }) {
+  const published = pill.state === "published";
+  return (
+    <span className="builder-draft-pill" data-testid="builder-version-pill">
+      <Pill
+        tone={published ? "done" : "neutral"}
+        icon={
+          published ? (
+            <Check className="ui-i" strokeWidth={2} aria-hidden />
+          ) : (
+            <Pencil className="ui-i" strokeWidth={1.75} aria-hidden />
+          )
+        }
+      >
+        {published ? "Published" : "Draft"}
+        {pill.versionNumber != null ? <span>{` · v${pill.versionNumber}`}</span> : null}
+      </Pill>
+    </span>
+  );
+}
 
 function statusText(state: SaveState): string {
   switch (state.kind) {
@@ -112,10 +158,12 @@ function ReadOnlySummary({
   content,
   title,
   clientName,
+  versionPill,
 }: {
   content: PlanContent;
   title: string;
   clientName?: string;
+  versionPill: BuilderVersionPill | null;
 }) {
   const byWeekday = new Map(
     content.workoutDays
@@ -128,9 +176,7 @@ function ReadOnlySummary({
     <article className="builder-readonly" data-testid="builder-readonly-summary">
       <header className="builder-readonly-head">
         <h2 className="builder-readonly-title">{heading || "Plan"}</h2>
-        <span className="builder-draft-pill">
-          <span aria-hidden="true">✎ </span>Draft
-        </span>
+        {versionPill ? <VersionPill pill={versionPill} /> : null}
       </header>
       <ul className="builder-readonly-week">
         {WEEK_ORDER.map((weekday) => {
@@ -167,6 +213,7 @@ export function PlanBuilder({
   banner,
   screenId,
   conflictHandlers,
+  versionPill = { state: "draft" },
 }: {
   backTo: string;
   backLabel: string;
@@ -187,6 +234,8 @@ export function PlanBuilder({
   banner?: ReactNode;
   screenId: string;
   conflictHandlers?: ConflictHandlers;
+  /** Version state next to the title; null hides it (FitBud templates). */
+  versionPill?: BuilderVersionPill | null;
 }) {
   const mode = useBuilderMode();
   // Portrait / <1024: same as readOnly for edits (frame 195) — no title or draft writes.
@@ -207,7 +256,7 @@ export function PlanBuilder({
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [selectedMealId, setSelectedMealId] = useState<string | null>(null);
-  const [mealDay] = useState<MealDay>("all");
+  const [mealDay, setMealDay] = useState<MealDay>("all");
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [preview, setPreview] = useState<PlanContent | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -240,6 +289,11 @@ export function PlanBuilder({
   const meals = sortedMealsByTime(content.mealPrescriptions);
   const activeMeal = meals.find((meal) => meal.id === selectedMealId) ?? meals[0] ?? null;
   const narrow = mode === "narrow";
+  // A copy lands on the next free weekday, so the week tabs can always show it.
+  const canDuplicateDay =
+    editable &&
+    content.workoutDays.length < PLAN_COMPOSITION_LIMITS.workoutDays &&
+    WEEK_ORDER.some((weekday) => !content.workoutDays.some((day) => day.weekday === weekday));
   const conflict = saveState.kind === "conflict";
 
   useEffect(() => {
@@ -293,6 +347,17 @@ export function PlanBuilder({
     } catch (err) {
       setLibraryError(userFacingMessage(err, { fallback: "Couldn't add that exercise." }));
     }
+  }
+
+  function duplicateDay(dayId: string) {
+    const current = contentRef.current;
+    const next = duplicateWorkoutDay(current, dayId);
+    if (next === current) return;
+    setContent(() => next);
+    const added = next.workoutDays.find(
+      (candidate) => !current.workoutDays.some((existing) => existing.id === candidate.id),
+    );
+    if (added) setSelectedDayId(added.id);
   }
 
   function addFood(item: FoodLibraryItem, servingId: string) {
@@ -380,25 +445,27 @@ export function PlanBuilder({
   const topbar = (
     <>
       <div className="builder-topbar-main">
-        <Link className="builder-back" to={backTo} aria-label={backLabel}>
-          ←
+        <Link className="builder-back" to={backTo} aria-label={backLabel} title={backLabel}>
+          <ArrowLeft className="ui-i" strokeWidth={1.75} aria-hidden />
         </Link>
         <div className="builder-titleline">
           <h1 className="sr-only">
             {tab === "workout" ? "Workout builder" : "Nutrition builder"}
             {title.trim() ? ` · ${title.trim()}` : ""}
           </h1>
-          <label className="field builder-title-field">
-            <span className="sr-only">Plan title</span>
-            <input
-              value={title}
-              maxLength={160}
-              disabled={!editable}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </label>
-          {clientName ? <span className="builder-title-client">· {clientName}</span> : null}
-          <span className="builder-draft-pill">Draft</span>
+          <div className="builder-title-row">
+            <label className="field builder-title-field">
+              <span className="sr-only">Plan title</span>
+              <input
+                value={title}
+                maxLength={160}
+                disabled={!editable}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+            {clientName ? <span className="builder-title-client">· {clientName}</span> : null}
+            {versionPill ? <VersionPill pill={versionPill} /> : null}
+          </div>
           <p
             className={`builder-status is-${saveState.kind}`}
             role="status"
@@ -418,16 +485,21 @@ export function PlanBuilder({
         </div>
       </div>
       {onTabChange && mode !== "small" ? (
-        <div className="builder-tabs" role="tablist" aria-label="Plan section">
+        <div className="builder-tabs ui-seg" role="tablist" aria-label="Plan section">
           {(["workout", "nutrition"] as const).map((value) => (
             <button
               key={value}
               type="button"
               role="tab"
               aria-selected={tab === value}
-              className={tab === value ? "builder-tab is-active" : "builder-tab"}
+              className={tab === value ? "builder-tab is-on is-active" : "builder-tab"}
               onClick={() => onTabChange(value)}
             >
+              {value === "workout" ? (
+                <Dumbbell className="ui-i" strokeWidth={1.75} aria-hidden />
+              ) : (
+                <Utensils className="ui-i" strokeWidth={1.75} aria-hidden />
+              )}
               {value === "workout" ? "Workout" : "Nutrition"}
             </button>
           ))}
@@ -435,44 +507,41 @@ export function PlanBuilder({
       ) : null}
       <div className="builder-topbar-actions">
         {narrow && editable ? (
-          <button
-            type="button"
-            className="button-secondary builder-library-toggle"
+          <Button
+            variant="secondary"
+            className="builder-library-toggle"
+            aria-expanded={libraryOpen}
             onClick={openLibrary}
-            aria-label="Library"
-            title="Library"
           >
-            <span className="builder-library-toggle-icon" aria-hidden="true">
-              ▤
-            </span>
-            <span className="sr-only">Library</span>
-          </button>
+            <LibraryIcon className="ui-i" strokeWidth={1.75} aria-hidden />
+            Library
+          </Button>
         ) : null}
         {mode === "small" ? null : (
-          <button
-            type="button"
-            className="button-ghost"
+          <Button
+            variant="ghost"
             disabled={!canUndo || !editable}
             onClick={undo}
             aria-label="Undo"
           >
+            <Undo2 className="ui-i" strokeWidth={1.75} aria-hidden />
             Undo
-          </button>
+          </Button>
         )}
         {mode === "small" ? null : (
-          <button type="button" className="button-secondary" onClick={() => void openPreview()}>
+          <Button variant="secondary" onClick={() => void openPreview()}>
+            <Eye className="ui-i" strokeWidth={1.75} aria-hidden />
             Preview
-          </button>
+          </Button>
         )}
         {onPublish ? (
-          <button
-            type="button"
-            className="button-primary"
+          <Button
+            variant="primary"
             disabled={!editable || !online || conflict}
             onClick={() => void publish()}
           >
             {publishLabel}
-          </button>
+          </Button>
         ) : null}
       </div>
     </>
@@ -578,12 +647,14 @@ export function PlanBuilder({
           readOnly={!editable}
           onOpenLibrary={openLibrary}
           showLibraryToggle={narrow}
+          onDuplicateDay={canDuplicateDay ? duplicateDay : null}
         />
       </div>
     ) : (
       <MealsPane
         content={content}
         selectedDay={mealDay}
+        onSelectDay={setMealDay}
         selectedMealId={activeMeal?.id ?? null}
         onSelectMeal={setSelectedMealId}
         onChange={setContent}
@@ -625,7 +696,12 @@ export function PlanBuilder({
         right={properties}
         overlay={libraryOverlay}
         smallScreen={
-          <ReadOnlySummary content={content} title={title} clientName={clientName} />
+          <ReadOnlySummary
+            content={content}
+            title={title}
+            clientName={clientName}
+            versionPill={versionPill}
+          />
         }
       />
       {comparing ? (

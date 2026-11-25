@@ -6,10 +6,20 @@ import {
 } from "../plan-composition";
 import { WEEK_ORDER, weekdayShort } from "./weekdays";
 
+/**
+ * Training days read "Mon · Upper body A". Rest days shrink to the weekday
+ * alone so the whole week fits the canvas (W-152 shows every training day
+ * on one line); the accessible name still says it is a rest day.
+ */
 function tabLabel(day: WorkoutDay | null, weekday: number): string {
   const short = weekdayShort(weekday);
-  if (!day) return `${short} · Rest`;
+  if (!day) return short;
   return `${short} · ${day.name}`;
+}
+
+function restLabel(weekday: number, canAdd: boolean): string {
+  const short = weekdayShort(weekday);
+  return canAdd ? `${short} · Rest, add a training day` : `${short} · Rest`;
 }
 
 export function DayTabs({
@@ -38,19 +48,22 @@ export function DayTabs({
   const atLimit = days.length >= PLAN_COMPOSITION_LIMITS.workoutDays;
 
   return (
-    <div className="builder-day-tabs" role="tablist" aria-label="Training days">
+    <div className="builder-day-tabs ui-tabs" role="tablist" aria-label="Training days">
       {WEEK_ORDER.map((weekday) => {
         const day = byWeekday.get(weekday) ?? null;
         const selected = day != null && day.id === selectedId;
+        const restName = day ? undefined : restLabel(weekday, !readOnly && !atLimit);
         return (
           <button
             key={weekday}
             type="button"
             role="tab"
             aria-selected={selected}
+            aria-label={restName}
+            title={restName}
             className={
               selected
-                ? "builder-day-tab is-active"
+                ? "builder-day-tab is-on is-active"
                 : day
                   ? "builder-day-tab"
                   : "builder-day-tab is-rest"
@@ -84,7 +97,9 @@ export function DayTabs({
           type="button"
           role="tab"
           aria-selected={day.id === selectedId}
-          className={day.id === selectedId ? "builder-day-tab is-active" : "builder-day-tab"}
+          className={
+            day.id === selectedId ? "builder-day-tab is-on is-active" : "builder-day-tab"
+          }
           onClick={() => onSelect(day.id)}
         >
           {day.name}

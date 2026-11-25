@@ -1,6 +1,8 @@
 import type { PlanContent, WorkoutDay } from "@fitbud/contracts";
 import { formatNumber } from "@fitbud/core";
+import { Copy, GripVertical, Plus } from "lucide-react";
 import { OverflowMenu } from "../OverflowMenu";
+import { Button, LibraryThumb } from "../ui";
 import {
   duplicateExercise,
   moveExercise,
@@ -9,7 +11,6 @@ import {
   updateWorkoutDay,
 } from "../plan-composition";
 import { exerciseSummaryLine } from "./formatters";
-import { weekdayShort } from "./weekdays";
 
 export function SessionEditor({
   day,
@@ -19,6 +20,7 @@ export function SessionEditor({
   readOnly = false,
   onOpenLibrary,
   showLibraryToggle = false,
+  onDuplicateDay,
 }: {
   day: WorkoutDay | null;
   selectedExerciseId: string | null;
@@ -27,20 +29,23 @@ export function SessionEditor({
   readOnly?: boolean;
   onOpenLibrary?: () => void;
   showLibraryToggle?: boolean;
+  /**
+   * Copies this day and selects the copy. Not given (or null) hides
+   * "Duplicate day": read-only, or the plan is at its day limit.
+   */
+  onDuplicateDay?: ((dayId: string) => void) | null;
 }) {
   if (!day) {
     return (
       <div className="session-empty" data-testid="session-empty">
         <h2>No session selected</h2>
-        <p className="muted">Pick a day above, or tap a Rest tab to add a session.</p>
+        <p className="muted">Pick a day above, or pick a rest day to add a session.</p>
       </div>
     );
   }
 
   const exercises = sortedByOrder(day.exercises);
   const setCount = exercises.reduce((sum, exercise) => sum + exercise.setTargets.length, 0);
-  const dayLabel =
-    day.weekday != null ? `${weekdayShort(day.weekday)} · ${day.name}` : day.name;
   const meta = [
     `${formatNumber(exercises.length)} ${exercises.length === 1 ? "exercise" : "exercises"}`,
     `${formatNumber(setCount)} ${setCount === 1 ? "set" : "sets"}`,
@@ -49,7 +54,7 @@ export function SessionEditor({
   return (
     <div className="session-editor session-board" data-testid="session-board">
       <header className="session-board-head">
-        <div>
+        <div className="session-board-heading">
           <label className="field session-title">
             <span className="sr-only">Session title</span>
             <input
@@ -64,8 +69,19 @@ export function SessionEditor({
               }
             />
           </label>
-          <p className="session-board-meta">{dayLabel} · {meta}</p>
+          <p className="session-board-meta">{meta}</p>
         </div>
+        {readOnly || !onDuplicateDay ? null : (
+          <Button
+            variant="ghost"
+            className="session-board-duplicate"
+            data-testid="duplicate-day"
+            onClick={() => onDuplicateDay(day.id)}
+          >
+            <Copy className="ui-i" strokeWidth={1.75} aria-hidden />
+            Duplicate day
+          </Button>
+        )}
       </header>
 
       {exercises.length === 0 ? (
@@ -85,19 +101,29 @@ export function SessionEditor({
           {exercises.map((exercise, index) => {
             const selected = exercise.id === selectedExerciseId;
             return (
-              <li key={exercise.id}>
+              <li
+                key={exercise.id}
+                className={selected ? "exercise-card-row is-selected" : "exercise-card-row"}
+              >
                 <button
                   type="button"
                   className={selected ? "exercise-card is-selected" : "exercise-card"}
                   aria-current={selected ? "true" : undefined}
                   onClick={() => onSelectExercise(exercise.id)}
                 >
-                  <span className="exercise-card-handle" aria-hidden="true">
-                    ⋮⋮
+                  <GripVertical
+                    className="exercise-card-handle ui-i"
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
+                  <span className="exercise-card-index" aria-hidden="true">
+                    {index + 1}
                   </span>
+                  <LibraryThumb name={exercise.name || "Exercise"} kind="exercise" />
                   <span className="exercise-card-body">
                     <span className="exercise-card-title">
-                      {index + 1}. {exercise.name || "Untitled exercise"}
+                      <span className="sr-only">{index + 1}. </span>
+                      {exercise.name || "Untitled exercise"}
                     </span>
                     <span className="exercise-card-summary">
                       {exerciseSummaryLine(exercise) || "Add sets in properties"}
@@ -154,17 +180,29 @@ export function SessionEditor({
         </ol>
       )}
 
-      <div className="exercise-dropzone" data-testid="exercise-dropzone">
-        {showLibraryToggle && onOpenLibrary ? (
-          <button type="button" className="button-link" onClick={onOpenLibrary}>
-            Drag an exercise here or add one
-          </button>
-        ) : (
+      {onOpenLibrary && !readOnly ? (
+        <button
+          type="button"
+          className="exercise-dropzone"
+          data-testid="exercise-dropzone"
+          onClick={onOpenLibrary}
+        >
+          <Plus className="ui-i" strokeWidth={1.75} aria-hidden />
+          {showLibraryToggle ? (
+            "Drag an exercise here or add one"
+          ) : (
+            <span>
+              Drag an exercise here or <strong>add one</strong>
+            </span>
+          )}
+        </button>
+      ) : (
+        <div className="exercise-dropzone" data-testid="exercise-dropzone">
           <p>
             Drag an exercise here or <strong>add one</strong>
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
