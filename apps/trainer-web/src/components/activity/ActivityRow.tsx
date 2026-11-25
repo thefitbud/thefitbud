@@ -22,6 +22,7 @@ import {
   canNudgeItem,
   chipValueForActivity,
   formatActivityTime,
+  isNotYetDue,
   activityMealChipLabel,
   isClientEdited,
   mealDetailLine,
@@ -155,8 +156,11 @@ export function ActivityRow({
     clientTimezone,
     trainerTimezone,
   );
-  const chipLabel =
-    item.type === "meal"
+  const now = new Date();
+  const planned = isNotYetDue(item, now);
+  const chipLabel = planned
+    ? "Planned"
+    : item.type === "meal"
       ? activityMealChipLabel(item.state)
       : item.type === "workout"
         ? workoutChipLabel(item.state)
@@ -168,7 +172,7 @@ export function ActivityRow({
       : item.type === "workout"
         ? labelFor("workout_assignment_status", item.state)
         : labelFor("checkin_status", item.state));
-  const tone = activityChipTone(item);
+  const tone = activityChipTone(item, now);
   const Icon = TONE_ICON[tone];
   const TileIcon = TYPE_ICON[item.type];
 
@@ -195,7 +199,7 @@ export function ActivityRow({
   const unreadEntries = useContext(UnreadLogEditsContext);
   const editUnread =
     clientEdited && unreadEntries.has(mealAssignment?.compliance?.id ?? "");
-  const showNudge = !readOnly && canNudgeItem(item);
+  const showNudge = !readOnly && canNudgeItem(item, now);
   const title =
     item.type === "meal" ? mealTitleLine(item, mealAssignment) : item.title;
 
