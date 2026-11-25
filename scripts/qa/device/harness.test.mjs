@@ -356,7 +356,7 @@ test("the real launch selection is the two launch smoke flows, and the sign-in w
   assert.match(signIn, /id: "trainee-today"/);
   assert.match(
     signIn,
-    /visible: "Today's workout\.\*\|This week\|Rest day\|Recovery is part of the plan\|View summary\|Needs you\.\*\|Choose mode\|preparing your plan"/,
+    /visible: "Today's workout\.\*\|This week\|Rest day\|Recovery is part of the plan\|View summary\|Needs you\|Choose mode\|preparing your plan"/,
   );
   // Exact email (no trailing .*): "…testntr" must not pass (FitBud #507 dark launch).
   assert.match(signIn, /eraseText: 80/);

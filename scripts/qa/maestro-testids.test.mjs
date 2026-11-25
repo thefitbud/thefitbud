@@ -6,12 +6,12 @@
 // words are "Remind" / "Send reminder" since D-W14-15; internal ids such as
 // `client-nudge` keep their names and are lower case, so they do not match).
 //
-// Node built-ins only. YAML is read with the same js-yaml-or-skip loader as
-// maestro-parse.test.mjs (the qa-scripts job installs nothing; the ci job does).
+// Node built-ins only (Z14-42, D-W14-38): the flows are read with the small block-YAML
+// reader below, never js-yaml, so this test cannot skip in the qa-scripts job, which
+// installs nothing. A flow that uses YAML the reader does not handle makes it throw.
 
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { createRequire } from "node:module";
 import { dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -20,25 +20,105 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const maestroRoot = join(repoRoot, "apps/mobile/.maestro");
 const sourceRoots = [join(repoRoot, "apps/mobile/src"), join(repoRoot, "packages/ui-mobile/src")];
 
-const JS_YAML_SKIP =
-  "js-yaml is not installed (resolved via eslint and @eslint/eslintrc from packages/config). " +
-  "The qa-scripts job does not install dependencies; the ci job runs this test after pnpm install.";
-
-function loadJsYaml() {
-  try {
-    const require = createRequire(join(repoRoot, "packages/config/package.json"));
-    const eslintDir = dirname(require.resolve("eslint/package.json"));
-    const eslintrcDir = dirname(
-      require.resolve("@eslint/eslintrc/package.json", { paths: [eslintDir] }),
-    );
-    return require(require.resolve("js-yaml", { paths: [eslintrcDir] }));
-  } catch (error) {
-    if (error && error.code === "MODULE_NOT_FOUND") return null;
-    throw error;
+/**
+ * A small reader for the block-style YAML the Maestro flows use (Z14-42, D-W14-38):
+ * comments, `- key: value` lists, nested maps and lists, plain and quoted scalars.
+ * Node built-ins only, so the guard runs in the qa-scripts job, which installs
+ * nothing, and cannot skip. Flow-style (`{}` / `[]`), block scalars (`|` / `>`),
+ * anchors and tags are not used by any flow; the reader throws on them rather
+ * than guessing, so a flow that starts using one fails loudly here.
+ */
+function unquote(raw) {
+  const value = raw.trim();
+  if (value.startsWith('"')) {
+    let out = "";
+    for (let i = 1; i < value.length; i++) {
+      const ch = value[i];
+      if (ch === "\\") {
+        const next = value[++i];
+        out += next === "n" ? "\n" : next === "t" ? "\t" : next;
+      } else if (ch === '"') {
+        return out;
+      } else out += ch;
+    }
+    throw new Error(`unterminated double-quoted scalar: ${raw}`);
   }
+  if (value.startsWith("'")) {
+    let out = "";
+    for (let i = 1; i < value.length; i++) {
+      if (value[i] === "'") {
+        if (value[i + 1] === "'") {
+          out += "'";
+          i++;
+        } else return out;
+      } else out += value[i];
+    }
+    throw new Error(`unterminated single-quoted scalar: ${raw}`);
+  }
+  if (/^[{[|>&*!]/.test(value)) throw new Error(`YAML construct the guard does not read: ${raw}`);
+  return value.replace(/\s+#.*$/, "");
 }
 
-const yaml = loadJsYaml();
+function splitKey(text) {
+  const m = /^([^\s"'#:][^:]*?):(?:\s+(.*))?$/.exec(text);
+  return m ? { key: m[1], rest: m[2] ?? "" } : null;
+}
+
+function isItem(line) {
+  return line.text === "-" || line.text.startsWith("- ");
+}
+
+function parseBlock(lines, start, indent) {
+  let i = start;
+  if (isItem(lines[i])) {
+    const items = [];
+    while (i < lines.length && lines[i].indent === indent && isItem(lines[i])) {
+      const rest = lines[i].text.slice(1).trim();
+      if (rest === "") {
+        i++;
+        if (i < lines.length && lines[i].indent > indent) {
+          const [node, next] = parseBlock(lines, i, lines[i].indent);
+          items.push(node);
+          i = next;
+        } else items.push(null);
+      } else if (splitKey(rest)) {
+        const offset = lines[i].text.indexOf(rest);
+        lines[i] = { indent: indent + offset, text: rest };
+        const [node, next] = parseBlock(lines, i, indent + offset);
+        items.push(node);
+        i = next;
+      } else {
+        items.push(unquote(rest));
+        i++;
+      }
+    }
+    return [items, i];
+  }
+  const map = {};
+  while (i < lines.length && lines[i].indent === indent && !isItem(lines[i])) {
+    const kv = splitKey(lines[i].text);
+    if (!kv) throw new Error(`cannot read YAML line: ${lines[i].text}`);
+    i++;
+    if (kv.rest === "") {
+      const child = lines[i];
+      if (child && (child.indent > indent || (child.indent === indent && isItem(child)))) {
+        const [node, next] = parseBlock(lines, i, child.indent);
+        map[kv.key] = node;
+        i = next;
+      } else map[kv.key] = null;
+    } else map[kv.key] = unquote(kv.rest);
+  }
+  return [map, i];
+}
+
+export function parseYamlBlock(text) {
+  const lines = text
+    .split("\n")
+    .map((line) => ({ indent: line.length - line.trimStart().length, text: line.trim() }))
+    .filter((l) => l.text !== "" && !l.text.startsWith("#"));
+  if (lines.length === 0) return null;
+  return parseBlock(lines, 0, lines[0].indent)[0];
+}
 
 /**
  * Ids that a flow may name although no source testID matches. Each entry needs a
@@ -108,8 +188,8 @@ export function collectSelectors(commands) {
 
 /** The command list of a flow document text (the part after the `---` line). */
 export function parseFlowCommands(text) {
-  const docs = yaml.loadAll(text);
-  return docs.length > 1 ? docs.slice(1) : docs;
+  const parts = text.split(/^---\s*$/m);
+  return parseYamlBlock(parts.length > 1 ? parts.slice(1).join("\n") : parts[0]);
 }
 
 function templateToRegex(template, prefixes) {
@@ -190,7 +270,7 @@ export function checkFlowText(text, known) {
   return problems;
 }
 
-test("a flow naming a removed id is rejected (self-test)", { skip: yaml ? false : JS_YAML_SKIP }, () => {
+test("a flow naming a removed id is rejected (self-test)", () => {
   const known = { literals: new Set(["exception-remind"]), templateRegexes: [] };
   const stale = [
     "appId: x",
@@ -210,7 +290,7 @@ test("a flow naming a removed id is rejected (self-test)", { skip: yaml ? false 
   assert.deepEqual(checkFlowText(negative, known), []);
 });
 
-test("slug templates match template testIDs (self-test)", { skip: yaml ? false : JS_YAML_SKIP }, () => {
+test("slug templates match template testIDs (self-test)", () => {
   const known = {
     literals: new Set(),
     templateRegexes: templateToRegex("client-row-${slug}", []),
@@ -221,7 +301,6 @@ test("slug templates match template testIDs (self-test)", { skip: yaml ? false :
 
 test(
   "every id a Maestro flow selects exists as a testID, and no flow says Nudge",
-  { skip: yaml ? false : JS_YAML_SKIP },
   () => {
     const known = collectTestIds();
     assert.ok(known.literals.size > 50, "found too few testIDs; the source scan is broken");

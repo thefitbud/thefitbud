@@ -8,6 +8,7 @@ import path from "node:path";
 import { signIn } from "./support/session";
 
 const OUT = path.resolve("qa-captures/w13-9");
+const OUT_18 = path.resolve("qa-captures/w13-18");
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 
 async function windowLocked(page: Page) {
@@ -58,9 +59,9 @@ async function textProblems(page: Page) {
   });
 }
 
-async function shot(page: Page, name: string) {
-  await mkdir(OUT, { recursive: true });
-  await page.screenshot({ path: path.join(OUT, name), fullPage: false });
+async function shot(page: Page, name: string, dir = OUT) {
+  await mkdir(dir, { recursive: true });
+  await page.screenshot({ path: path.join(dir, name), fullPage: false });
   const locked = await windowLocked(page);
   expect.soft(locked.windowScrolls, name).toBe(false);
   expect.soft(locked.mainOverflow, name).toBe("auto");
@@ -228,6 +229,71 @@ test.describe("W13-9 progress", () => {
       await page.setViewportSize({ width: w, height: h });
       await openProgress(page);
       await shot(page, `W-160-progress-${w}x${h}.png`);
+    }
+  });
+
+  // W13-18: the rail follows the selected range like the KPI row; scope line under the row.
+  test("W13-18: rail and KPI agree at every range, with a scope line; captures", async ({
+    page,
+  }) => {
+    test.setTimeout(300_000);
+    const sizes: Array<[number, number]> = [
+      [1440, 900],
+      [1180, 820],
+      [1024, 1366],
+    ];
+    const scopes: Array<[string, string]> = [
+      ["4 wk", "last 4 weeks"],
+      ["12 wk", "last 12 weeks"],
+      ["6 mo", "last 6 months"],
+      ["All", "all time"],
+    ];
+    for (const [w, h] of sizes) {
+      await page.setViewportSize({ width: w, height: h });
+      await openProgress(page);
+      const rail = page.getByRole("complementary", { name: "Metrics" });
+      for (const [radio, scope] of scopes) {
+        await page.getByRole("radio", { name: radio, exact: true }).click();
+        const done = rail.getByRole("tab", { name: /Workouts done/ });
+        await expect(done.getByTestId("pg-rail-scope")).toHaveText(scope, {
+          timeout: 30_000,
+        });
+        await expect(page.locator(".pg-skel")).toHaveCount(0, { timeout: 30_000 });
+        const kpi = page.getByTestId("pg-kpi-workouts");
+        if (await kpi.count()) {
+          await expect(kpi.locator(".pg-kpi-v")).toHaveText(
+            (await done.locator(".pg-rail-value").textContent()) ?? "",
+          );
+        }
+        // Both sides settle on the new range at their own pace: compare once they agree.
+        const num = (text: string | null) => (text ?? "").replace(/[^−+\d.]/g, "");
+        const railWeight = rail.getByRole("tab", { name: /Weight/ });
+        await expect
+          .poll(
+            async () => {
+              const change = page.getByTestId("pg-kpi-change");
+              const railChange = railWeight.locator(".pg-rail-change");
+              if (!(await change.count()) || !(await railChange.count())) return "n/a";
+              return (
+                num(await railChange.textContent()) ===
+                num(await change.locator(".pg-kpi-v").textContent())
+              );
+            },
+            { message: `${w}x${h} ${radio}: weight change`, timeout: 15_000 },
+          )
+          .not.toBe(false);
+        if (radio === "12 wk") {
+          await shot(page, `W-160-progress-${w}x${h}.png`, OUT_18);
+        }
+      }
+      await page.getByRole("radio", { name: "12 wk", exact: true }).click();
+      await rail.getByRole("tab", { name: /Workouts done/ }).click();
+      await expect(page.getByRole("heading", { name: "Exercise progress", level: 2 })).toBeVisible({
+        timeout: 30_000,
+      });
+      await expect(page.locator(".pg-skel")).toHaveCount(0, { timeout: 30_000 });
+      await expect(page.locator("main.main")).not.toContainText("w/c");
+      await shot(page, `W-160-strength-workouts-${w}x${h}.png`, OUT_18);
     }
   });
 });

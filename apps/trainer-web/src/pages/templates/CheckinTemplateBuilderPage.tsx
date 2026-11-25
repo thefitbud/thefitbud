@@ -12,7 +12,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { Button, Pill, Seg, SidePanel, Toggle } from "../../components/ui";
+import { Button, Pill, SidePanel, Toggle } from "../../components/ui";
 import { BuilderLayout, useBuilderMode } from "../../components/builder/BuilderLayout";
 import "../../components/builder/builder.css";
 import {
@@ -26,10 +26,8 @@ import { createIdempotencyKey } from "../../lib/idempotency";
 import {
   addedStandardKeys,
   addStandardKeys,
-  answerFamilyOf,
   blankCheckinField,
   buildCheckinFields,
-  CHECKIN_ANSWER_FAMILIES,
   CHECKIN_FIELD_TYPES,
   checkinDraftSections,
   checkinFieldTypeLabel,
@@ -44,9 +42,7 @@ import {
   standardKeyCopy,
   STANDARD_CHECKIN_GROUPS,
   STANDARD_KEY_PICKER_COPY,
-  typeForFamily,
   updateStandardGroup,
-  type CheckinAnswerFamily,
   type CheckinFieldDraft,
   type StandardCheckinGroup,
   type StandardCheckinGroupId,
@@ -481,7 +477,6 @@ export function CheckinTemplateBuilderPage() {
     const ownIndex = sections.custom.findIndex((entry) => entry.id === draft.id);
     const invalidLabel =
       !draft.label.trim() || dupLabels.includes(draft.label.trim().toLowerCase());
-    const family = answerFamilyOf(draft.type);
     return (
       <>
         <div className="ck-field">
@@ -502,24 +497,8 @@ export function CheckinTemplateBuilderPage() {
           ) : null}
         </div>
         <div className="ck-field">
-          <span className="ck-lbl">Answer type</span>
-          <Seg<CheckinAnswerFamily | "">
-            full
-            aria-label="Answer type"
-            options={CHECKIN_ANSWER_FAMILIES.map((entry) => ({
-              value: entry.value,
-              label: entry.label,
-            }))}
-            value={family ?? ""}
-            onChange={(next) => {
-              if (readOnly || !next) return;
-              updateDraft(draft.id, { type: typeForFamily(draft.type, next) });
-            }}
-          />
-        </div>
-        <div className="ck-field">
           <label className="ck-lbl" htmlFor={`${panelId}-type`}>
-            Type
+            Answer type
           </label>
           <select
             id={`${panelId}-type`}
@@ -538,7 +517,6 @@ export function CheckinTemplateBuilderPage() {
               </option>
             ))}
           </select>
-          <span className="ck-help">Yes / no and choices are only in this list.</span>
         </div>
         {draft.type === "scale_1_5" ? (
           <div className="ck-pair">
@@ -825,7 +803,7 @@ export function CheckinTemplateBuilderPage() {
             Preview
           </Button>
         ) : null}
-        {readOnly ? (
+        {mode === "small" ? null : readOnly ? (
           <Button variant="primary" onClick={() => setShowFork(true)}>
             Fork to edit
           </Button>

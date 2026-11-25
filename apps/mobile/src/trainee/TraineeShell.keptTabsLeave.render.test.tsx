@@ -282,8 +282,9 @@ describe("TraineeShell kept tabs leave nothing live behind (Z14-2)", () => {
     const view = await openShell();
     fireEvent.click(screen.getByTestId("tab-progress"));
     await waitFor(() => expect(calls.progress).toBe(1));
-    fireEvent.click(await screen.findByRole("button", { name: "Log weight" }));
-    expect(screen.getByRole("button", { name: "Dismiss sheet" })).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: "Log weight" }, { timeout: 4000 }));
+    // Flake trace (CI run 45547489518): wait for the sheet instead of reading it in the click's tick.
+    expect(await screen.findByRole("button", { name: "Dismiss sheet" })).toBeTruthy();
 
     await tapNotification(view, todayLink);
     await waitFor(() =>
@@ -292,8 +293,10 @@ describe("TraineeShell kept tabs leave nothing live behind (Z14-2)", () => {
       ),
     );
     // The sheet left with its tab; it does not float over Today.
-    expect(screen.queryByRole("button", { name: "Dismiss sheet" })).toBeNull();
-    expect(screen.queryByTestId("trainee-pane-progress")).toBeNull();
+    await waitFor(() => {
+      expect(screen.queryByRole("button", { name: "Dismiss sheet" })).toBeNull();
+      expect(screen.queryByTestId("trainee-pane-progress")).toBeNull();
+    });
   });
 });
 
