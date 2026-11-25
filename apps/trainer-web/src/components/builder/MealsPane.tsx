@@ -28,7 +28,7 @@ export type MealDay = number | "all";
 
 function servingText(item: MealFoodItem): string {
   return item.snapshotKind === "calculated"
-    ? `${formatScaledQuantity(item.quantityScaled)} ${item.serving.label}`
+    ? `${formatScaledQuantity(item.quantityScaled)} × ${item.serving.label}`
     : item.serving.label;
 }
 

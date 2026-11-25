@@ -67,7 +67,7 @@ function QuantityField({
     item.snapshotKind === "calculated" ? item.quantityScaled / NUTRIENT_SCALE : 1;
   const display =
     item.snapshotKind === "calculated"
-      ? `${formatScaledQuantity(item.quantityScaled)} ${item.serving.label} · ${itemKcal(item)}`
+      ? `${formatScaledQuantity(item.quantityScaled)} × ${item.serving.label} · ${itemKcal(item)}`
       : `${item.serving.label} · ${itemKcal(item)}`;
 
   function setQuantity(next: number) {

@@ -190,6 +190,25 @@ async function libraryLoaded(page: Page) {
   await expect(page.locator(".builder-library-card").first()).toBeVisible({ timeout: 20_000 });
 }
 
+/** Open the client's plan tab and discard a leftover draft, as tw-d-flows does. */
+async function discardDraftIfAny(page: Page, relationshipId: string) {
+  await page.goto(`/clients/${relationshipId}/plan`);
+  await page.getByTestId("screen-TW-12").waitFor();
+  await expect(
+    page.locator(".current-plan-actions").getByRole("button", { name: /^Adjust plan$/ }),
+  ).toBeVisible({ timeout: 20_000 });
+  // The draft banner loads after the plan; give it a moment before deciding.
+  await page.waitForLoadState("networkidle");
+  const banner = page.getByTestId("draft-banner");
+  await banner.waitFor({ timeout: 5_000 }).catch(() => undefined);
+  const discard = page.getByRole("button", { name: /^discard$/i });
+  if (await discard.isVisible()) {
+    await discard.click();
+    await page.getByRole("button", { name: /^discard draft$/i }).click();
+    await expect(banner).toBeHidden();
+  }
+}
+
 test.describe("W13-3 builder workspace", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -322,17 +341,11 @@ test.describe("W13-3 builder workspace", () => {
     const rohan = clients.items.find((item) => /rohan/i.test(item.traineeDisplayName));
     expect(rohan?.relationshipId).toBeTruthy();
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`/clients/${rohan!.relationshipId}/plan`);
-    await page.getByTestId("screen-TW-12").waitFor();
-    const continueLink = page.getByRole("link", { name: "Continue editing" });
-    if (await continueLink.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await continueLink.click();
-    } else {
-      await page
-        .locator(".current-plan-actions")
-        .getByRole("button", { name: /^Adjust plan$/ })
-        .click();
-    }
+    await discardDraftIfAny(page, rohan!.relationshipId!);
+    await page
+      .locator(".current-plan-actions")
+      .getByRole("button", { name: /^Adjust plan$/ })
+      .click();
     await expect(page.getByTestId("screen-TW-13")).toBeVisible({ timeout: 30_000 });
     await libraryLoaded(page);
     await expectWorkspace(page, "client workout", 3);
@@ -346,13 +359,6 @@ test.describe("W13-3 builder workspace", () => {
     await shot(page, "client-plan-nutrition-1440x900.png");
 
     // Leave no draft behind for later specs.
-    await page.goto(`/clients/${rohan!.relationshipId}/plan`);
-    await page.getByTestId("screen-TW-12").waitFor();
-    const discard = page.getByRole("button", { name: /^discard$/i });
-    if (await discard.isVisible({ timeout: 3_000 }).catch(() => false)) {
-      await discard.click();
-      await page.getByRole("button", { name: /^discard draft$/i }).click();
-      await expect(page.getByTestId("draft-banner")).toBeHidden();
-    }
+    await discardDraftIfAny(page, rohan!.relationshipId!);
   });
 });
