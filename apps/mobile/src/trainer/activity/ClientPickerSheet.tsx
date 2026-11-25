@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Modal, Pressable, ScrollView, StyleSheet, TextInput, View } from "react-native";
 import { Check, Search } from "lucide-react-native";
 import { formatPersonName } from "@fitbud/core";
@@ -30,8 +30,19 @@ function avatarTone(name: string, c: ColorTokens) {
   return list[code % list.length] ?? list[0]!;
 }
 
+/** Z14-33: the server search, classified by the screen that owns the API. */
+export type ClientSearchResult =
+  | { kind: "ok"; clients: ActivityClientOption[] }
+  | { kind: "offline" }
+  | { kind: "error" };
+
+/** How long typing pauses before the picker asks the server. */
+export const CLIENT_SEARCH_DEBOUNCE_MS = 250;
+
 type Props = {
   visible: boolean;
+  /** Searches every client by name; without it the picker filters `clients`. */
+  onSearch?: (query: string) => Promise<ClientSearchResult>;
   clients: ActivityClientOption[];
   selectedId: string | null;
   onSelect: (client: ActivityClientOption | null) => void;
@@ -50,6 +61,7 @@ export function ClientPickerSheet(props: Props) {
 function ClientPickerSheetBody({
   visible,
   clients,
+  onSearch,
   selectedId,
   onSelect,
   onDismiss,
@@ -60,13 +72,48 @@ function ClientPickerSheetBody({
   const [query, setQuery] = useState("");
   const [draftId, setDraftId] = useState<string | null>(selectedId);
 
+  const [remote, setRemote] = useState<ActivityClientOption[] | null>(null);
+  const [searchNote, setSearchNote] = useState<string | null>(null);
+  const trimmed = query.trim();
+
+  useEffect(() => {
+    if (!onSearch || !trimmed) {
+      setRemote(null);
+      setSearchNote(null);
+      return;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      void onSearch(trimmed).then((result) => {
+        if (cancelled) return;
+        if (result.kind === "ok") {
+          setRemote(result.clients);
+          setSearchNote(null);
+        } else {
+          // Keep the loaded clients usable (filtered locally) and say why.
+          setRemote(null);
+          setSearchNote(
+            result.kind === "offline"
+              ? "You're offline. Showing the clients already loaded."
+              : "Couldn't search just now. Try again.",
+          );
+        }
+      });
+    }, CLIENT_SEARCH_DEBOUNCE_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [onSearch, trimmed]);
+
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = trimmed.toLowerCase();
     if (!q) return clients;
+    if (remote) return remote;
     return clients.filter((client) =>
       client.displayName.toLowerCase().includes(q),
     );
-  }, [clients, query]);
+  }, [clients, remote, trimmed]);
 
   return (
     <Modal
@@ -101,8 +148,9 @@ function ClientPickerSheetBody({
             accessibilityRole="button"
             onPress={() => {
               const picked =
-                clients.find((client) => client.relationshipId === draftId) ??
-                null;
+                [...clients, ...(remote ?? [])].find(
+                  (client) => client.relationshipId === draftId,
+                ) ?? null;
               onSelect(picked);
               onDismiss();
             }}
@@ -123,6 +171,11 @@ function ClientPickerSheetBody({
             autoCapitalize="none"
           />
         </View>
+        {searchNote ? (
+          <Text testID="client-search-note" style={styles.searchNote}>
+            {searchNote}
+          </Text>
+        ) : null}
         <ScrollView style={styles.list}>
           {filtered.map((client) => {
             const name = formatPersonName(client.displayName);
@@ -161,6 +214,7 @@ function ClientPickerSheetBody({
 }
 
 const useStyles = createThemedStyles((t) => ({
+  searchNote: { color: t.colors.ink3, fontSize: 13, paddingBottom: 6, paddingHorizontal: 4 },
   scrim: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: t.colors.scrim,

@@ -22,8 +22,6 @@ describe("client info / onboarding model", () => {
       firstName: "Vikram",
       status: "onboarding_pending",
       startedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-      possessive: "his",
-      subject: "He",
     });
     expect(copy.title).toMatch(/Waiting for Vikram/);
     expect(copy.body).toMatch(/intake form/);
@@ -33,6 +31,21 @@ describe("client info / onboarding model", () => {
       { id: "plan", label: "Plan assigned (on web)", done: false },
     ]);
     expect(onboardingChipLabel("onboarding_pending")).toBe("Intake not sent");
+  });
+
+  it("onboarding words use the first name only, whatever the gender field says", () => {
+    const base = { firstName: "Vikram", startedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString() };
+    for (const status of ["onboarding_pending", "onboarding_submitted"]) {
+      const copies = [null, "female", "male"].map(() => onboardingWaitingCopy({ ...base, status }));
+      expect(copies[1]).toEqual(copies[0]);
+      expect(copies[2]).toEqual(copies[0]);
+    }
+    expect(onboardingWaitingCopy({ ...base, status: "onboarding_pending" }).body).toBe(
+      "Vikram accepted your invite 2 days ago but hasn’t sent the intake form, so you can’t plan yet.",
+    );
+    expect(onboardingWaitingCopy({ ...base, status: "onboarding_submitted" }).body).toBe(
+      "Review Vikram’s answers on FitBud web, then assign a plan.",
+    );
   });
 
   it("reads limitations and height from intake answers", () => {

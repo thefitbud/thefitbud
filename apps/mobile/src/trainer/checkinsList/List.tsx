@@ -12,7 +12,7 @@ import { fontFamilySemiBold } from "@fitbud/ui-mobile";
 import { Text } from "../../components/Text";
 import { CardRow, ListScreen, PagedListFooter } from "../../components/ListScreen";
 import type { PagedFailure } from "../usePagedList";
-import { ClientAvatar } from "../ClientAvatar";
+import { ClientAvatar, ClientNameLink } from "../ClientAvatar";
 import {
   emptyCopy,
   type CheckinListModel,
@@ -276,7 +276,7 @@ function Row({
 
   const content = (
     <>
-        <Text style={styles.name}>{row.name}</Text>
+        {onOpenClient ? null : <Text style={styles.name}>{row.name}</Text>}
         <Text style={styles.line}>{row.line}</Text>
         <View style={styles.foot}>
           {reviewed ? (
@@ -325,25 +325,35 @@ function Row({
   const openableRow = (
     <View style={styles.row}>
       {avatar}
-      {openable ? (
-        <Pressable
-          testID="checkin-row"
-          accessibilityRole="button"
-          accessibilityLabel={
-            reviewed
-              ? `Open ${row.name}'s reviewed check-in`
-              : `Review ${row.name}'s check-in`
-          }
-          onPress={() => onReview(row)}
-          style={styles.body}
-        >
-          {content}
-        </Pressable>
-      ) : (
-        <View testID="checkin-row" style={styles.body}>
-          {content}
-        </View>
-      )}
+      <View style={styles.body}>
+        {onOpenClient ? (
+          // Z14-33: the name is its own link above the row body, a sibling of
+          // the review button (no button inside a button on web).
+          <ClientNameLink
+            name={row.name}
+            onPress={() => onOpenClient(row.item.coachingRelationshipId)}
+            style={styles.name}
+          >
+            {row.name}
+          </ClientNameLink>
+        ) : null}
+        {openable ? (
+          <Pressable
+            testID="checkin-row"
+            accessibilityRole="button"
+            accessibilityLabel={
+              reviewed
+                ? `Open ${row.name}'s reviewed check-in`
+                : `Review ${row.name}'s check-in`
+            }
+            onPress={() => onReview(row)}
+          >
+            {content}
+          </Pressable>
+        ) : (
+          <View testID="checkin-row">{content}</View>
+        )}
+      </View>
     </View>
   );
 
