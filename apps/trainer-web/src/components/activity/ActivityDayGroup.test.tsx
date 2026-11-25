@@ -87,4 +87,31 @@ describe("ActivityDayGroup (W13-8)", () => {
     expect(screen.getByTestId("activity-removed-row")).toBeTruthy();
     expect(screen.getByTestId("removed-tag").textContent).toBe("Removed");
   });
+
+  it("reads Planned with no Remind for a meal whose window has not started", () => {
+    const later = {
+      ...item,
+      state: "pending",
+      localDate: "2099-01-01",
+      occurredAt: "2099-01-01T08:00:00.000Z",
+    } as unknown as WorkspaceActivityItem;
+    render(
+      <ActivityDayGroup
+        date="2099-01-01"
+        headerSuffix={null}
+        items={[later]}
+        clientTimezone="Asia/Kolkata"
+        trainerTimezone="Asia/Kolkata"
+        mealAssignments={new Map()}
+        nudgeState={{}}
+        nudgingId={null}
+        online
+        onNudge={() => undefined}
+        onView={() => undefined}
+      />,
+    );
+    expect(screen.getByText("Planned")).toBeTruthy();
+    expect(screen.queryByText("Not logged yet")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Remind" })).toBeNull();
+  });
 });

@@ -21,6 +21,7 @@ import type {
 import {
   checkinAnswerEntries,
   formatCivilDate,
+  formatClockTime,
   formatInstant,
   labelFor,
 } from "@fitbud/core";
@@ -37,6 +38,7 @@ import { LinkedMedia } from "../components/LinkedMedia";
 import { Button } from "../components/Button";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { StatusChip } from "../components/StatusChip";
+import { Checkbox } from "../components/ui/Field";
 import { Pill } from "../components/ui/Pill";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import {
@@ -96,6 +98,17 @@ function optionLabel(
 function looksLikePain(label: string, text: string): boolean {
   const hay = `${label} ${text}`.toLowerCase();
   return /hurt|pain|ache|stiff|sore|injur/.test(hay);
+}
+
+/** "Tue 24 Nov, 9:00 am" in the given zone. */
+function formatDayTime(iso: string, timeZone: string): string {
+  const day = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(iso));
+  return `${formatCivilDate(day)}, ${formatClockTime(iso, timeZone)}`;
 }
 
 export function CheckinReviewPage() {
@@ -338,7 +351,7 @@ export function CheckinReviewPage() {
           Number.parseFloat(String(previous.value));
         if (Number.isFinite(delta)) {
           const sign = delta > 0 ? "+" : delta < 0 ? "−" : "";
-          change = `${sign}${Math.abs(delta).toFixed(1).replace(/\.0$/, "")}`;
+          change = `${sign}${Math.abs(delta).toFixed(1).replace(/\.0$/, "")}${latest.unit ? ` ${latest.unit}` : ""}`;
         }
       }
       return {
@@ -434,7 +447,7 @@ export function CheckinReviewPage() {
   }
 
   const submittedLabel = context?.checkin.submittedAt
-    ? `Submitted ${formatInstant(context.checkin.submittedAt, clientTz)}`
+    ? `Submitted ${formatDayTime(context.checkin.submittedAt, clientTz)}`
     : context
       ? `Due ${formatCivilDate(context.checkin.localDate)}`
       : "Weekly check-in";
@@ -832,14 +845,14 @@ export function CheckinReviewPage() {
                         </p>
                       )}
                     </div>
-                    <label className="checkin-review-visible">
-                      <input
-                        type="checkbox"
+                    <div className="checkin-review-visible">
+                      <Checkbox
                         checked={visibleToClient}
-                        onChange={(e) => setVisibleToClient(e.target.checked)}
-                      />
-                      Visible to client
-                    </label>
+                        onChange={setVisibleToClient}
+                      >
+                        {firstName} can see this note
+                      </Checkbox>
+                    </div>
                     <div className="checkin-review-more">
                       <Button
                         variant="secondary"
@@ -919,7 +932,7 @@ export function CheckinReviewPage() {
                         <StatusChip kind="severity" value={item.severity} />
                       </div>
                       <Link
-                        className="button-ghost"
+                        className="button-tinted button-sm checkin-open-review"
                         to={`/clients/${relationshipId}?exception=${item.id}`}
                       >
                         Review
