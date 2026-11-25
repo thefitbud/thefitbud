@@ -53,6 +53,8 @@ import {
 import { clearSyncDataOnSignOut } from "../sync/userStore";
 import { deviceStorage } from "../sync/storage";
 import { discardMealPhotoJobs, stopMealPhotoJobs } from "../trainee/food/mealPhotoJobs";
+import { discardHeldFeedback } from "../trainee/workout/pendingFeedbackStore";
+import { discardSheetDrafts } from "../trainee/workout/sheetDrafts";
 import {
   coachViewSwitchPrompt,
   mobilePermittedRoles,
@@ -866,6 +868,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (unsentLogs === "drop") {
       void discardMealPhotoJobs(deviceStorage().storage).catch((error) =>
         reportError("mealPhoto.signOut.clear", error),
+      );
+      // Held workout ratings and notes and Workout-tab sheet drafts go with
+      // the unsent logs (Z14-37); a server-ended session keeps them.
+      void discardHeldFeedback().catch((error) =>
+        reportError("workout.feedback.signOut.clear", error),
+      );
+      void discardSheetDrafts().catch((error) =>
+        reportError("workout.sheetDrafts.signOut.clear", error),
       );
     } else {
       stopMealPhotoJobs();
