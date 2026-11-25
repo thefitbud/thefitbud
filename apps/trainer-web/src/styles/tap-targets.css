@@ -1,8 +1,12 @@
 /**
  * Tablet / coarse-pointer hit targets (Apple HIG ≥44×44).
  * Loaded last; !important beats page CSS fixed heights (clients/plan/etc.).
+ * D-W13-28: applies up to 1280 wide, so an 1180 landscape iPad, a 1180 desktop
+ * window and 1280 laptops meet the same rule; 1440 and wider keep the compact
+ * desktop sizes. Visible marks (checkbox, radio, toggle) keep their size; the
+ * control around them is the 44 px hit area.
  */
-@media (max-width: 1024px), (pointer: coarse) {
+@media (max-width: 1280px), (pointer: coarse) {
   /* Shell + primary controls */
   .shell-nav-link,
   .shell-bottom-nav .shell-nav-link,
@@ -187,5 +191,73 @@
     min-width: 44px !important;
     min-height: 44px !important;
     padding: 0.625rem 0.35rem !important;
+  }
+
+  /* W13-22: new design-system controls (components/ui/*). */
+  .ui-btn,
+  a.ui-btn {
+    box-sizing: border-box;
+    height: auto !important;
+    min-height: 44px !important;
+  }
+
+  .ui-btn-icon,
+  .ui-btn-icon.ui-btn-sm {
+    width: 44px !important;
+    min-width: 44px !important;
+  }
+
+  .ui-seg button,
+  .ui-tabs button,
+  .ui-chip {
+    box-sizing: border-box;
+    min-height: 44px !important;
+  }
+
+  /* Visible mark keeps its 18 / 36 px size; the control is the hit area. */
+  .ui-cbx,
+  .ui-rdo,
+  .ui-tgl {
+    box-sizing: border-box;
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  .ui-tgl {
+    justify-content: center;
+  }
+
+  .shell-crumb-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+
+  .builder-day-tab {
+    min-width: 44px !important;
+  }
+
+  /* Fields: the box grows, the text size does not. */
+  input:not([type="checkbox"], [type="radio"], [type="hidden"], [type="file"], [type="range"]),
+  select {
+    box-sizing: border-box;
+    min-height: 44px !important;
+  }
+
+  /* Dense lists: a 44 px box from block padding, cancelled by an equal negative
+     margin, so the rows keep their rhythm. The text is unchanged. */
+  .home-li-name,
+  .templates-hub-row-title a {
+    display: inline-block;
+    box-sizing: border-box;
+    min-height: 44px;
+    padding-block: 12px;
+    margin-block: -12px;
+  }
+
+  .client-checkins-open {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
   }
 }
