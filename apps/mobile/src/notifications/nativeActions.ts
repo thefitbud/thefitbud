@@ -5,6 +5,7 @@ import {
   quietWindow,
   snoozeMeal,
 } from "./actions";
+import { ANDROID_CHANNEL_ID_BY_GROUP } from "./androidChannels";
 import { pushGroupFor, PUSH_GROUPS } from "./copy";
 
 export type MealNotificationResponse = {
@@ -145,7 +146,7 @@ export async function scheduleMealSnoozeNotification(input: {
       type: Notifications.SchedulableTriggerInputTypes.DATE,
       date: input.until,
       // Android: the meal channel, so it stacks with the other meal reminders.
-      channelId: pushGroupFor("meal_reminder").channelId,
+      channelId: ANDROID_CHANNEL_ID_BY_GROUP[pushGroupFor("meal_reminder").id],
     },
   });
   return "scheduled";
