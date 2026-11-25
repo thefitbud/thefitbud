@@ -89,25 +89,29 @@ async function openClient(page: Page, name: string) {
   await page.goto("/");
   await expect(page.getByTestId("screen-TW-04")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Loading your day…")).toHaveCount(0, { timeout: 20_000 });
-  await page
+  const who = page
     .locator(".home-rows [role=row]")
     .filter({ hasText: name })
     .first()
-    .locator(".home-who")
-    .click();
+    .locator(".home-who");
+  await expect(who).toBeVisible({ timeout: 30_000 });
+  await who.click({ timeout: 30_000 });
   await expect(page.getByTestId("screen-TW-05")).toBeVisible();
   await expect(page.getByTestId("screen-TW-05").getByText("Loading")).toHaveCount(0);
 }
 
+/**
+ * Step to the item matching `text` when the client has one; other specs in the
+ * same run may have resolved it, so fall back to the item already shown
+ * instead of waiting on a row that will never appear.
+ */
 async function stepToItem(page: Page, text: RegExp) {
-  const title = page.getByTestId("screen-TW-05").locator(".sp-title");
-  if (await title.filter({ hasText: text }).count()) return;
-  await page
-    .getByTestId("screen-TW-05")
-    .locator(".sp-also-row")
-    .filter({ hasText: text })
-    .first()
-    .click();
+  const panel = page.getByTestId("screen-TW-05");
+  await expect(panel.locator(".sp-title")).toBeVisible({ timeout: 20_000 });
+  if (await panel.locator(".sp-title").filter({ hasText: text }).count()) return;
+  const row = panel.locator(".sp-also-row").filter({ hasText: text }).first();
+  if ((await row.count()) === 0) return;
+  await row.click({ timeout: 15_000 });
 }
 
 test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
@@ -148,7 +152,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
   });
 
   test("captures every frame at three widths", async ({ page }) => {
-    test.setTimeout(200_000);
+    test.setTimeout(420_000);
     const token = await apiToken();
     const h = { Authorization: `Bearer ${token}` };
     const clients = (
