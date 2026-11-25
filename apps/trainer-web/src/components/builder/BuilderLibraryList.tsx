@@ -6,10 +6,10 @@ import {
   type MealPrescription,
   type WorkoutDay,
 } from "@fitbud/contracts";
-import { calculateServingNutrients, formatNumber } from "@fitbud/core";
+import { calculateServingNutrients, formatNumber, labelFor } from "@fitbud/core";
 import { GripVertical, Plus, Search } from "lucide-react";
 import { apiClient } from "../../lib/api";
-import { Button, LibraryThumb } from "../ui";
+import { Button, Chip, LibraryThumb } from "../ui";
 import { PLAN_COMPOSITION_LIMITS } from "../plan-composition";
 import { useCursorPage, useDebounced } from "../../pages/templates/useCursorPage";
 import { exerciseMetaLine } from "./formatters";
@@ -37,6 +37,21 @@ export function foodLibraryMetaLine(item: FoodLibraryItem): string {
   return [serving.label, kcal].filter(Boolean).join(" · ");
 }
 
+/**
+ * Muscle filter chips (W-152's chip row). Values are the stored muscle keys
+ * the library API matches on (primary or secondary); the set is the most
+ * common primary muscles in the exercise library, kept short so the row fits
+ * the 300 px pane in two lines.
+ */
+export const LIBRARY_MUSCLE_CHIPS = [
+  "chest",
+  "upper_back",
+  "shoulders",
+  "quads",
+  "glutes",
+  "abs",
+] as const;
+
 function defaultFoodServingId(item: FoodLibraryItem): string | null {
   return item.servings.find((serving) => serving.conversionScaled != null)?.id ?? null;
 }
@@ -51,12 +66,14 @@ export function BuilderExerciseLibrary({
   searchRef: RefObject<HTMLInputElement>;
 }) {
   const [q, setQ] = useState("");
+  const [muscle, setMuscle] = useState("");
   const nameQuery = useDebounced(q);
-  const page = useCursorPage(nameQuery.trim(), (cursor) =>
+  const page = useCursorPage(JSON.stringify({ q: nameQuery.trim(), muscle }), (cursor) =>
     apiClient.listExerciseLibrary({
       cursor,
       limit: 50,
       q: nameQuery.trim() || undefined,
+      muscleGroup: muscle || undefined,
     }),
   );
   const atLimit =
@@ -84,6 +101,21 @@ export function BuilderExerciseLibrary({
           autoComplete="off"
         />
       </label>
+      <div
+        className="builder-library-chips"
+        role="group"
+        aria-label="Muscle group"
+        data-testid="builder-library-chips"
+      >
+        <Chip selected={muscle === ""} onClick={() => setMuscle("")}>
+          All
+        </Chip>
+        {LIBRARY_MUSCLE_CHIPS.map((value) => (
+          <Chip key={value} selected={muscle === value} onClick={() => setMuscle(value)}>
+            {labelFor("body_part", value)}
+          </Chip>
+        ))}
+      </div>
       {!day ? (
         <p className="muted">Select a session before adding an exercise.</p>
       ) : null}
@@ -104,7 +136,7 @@ export function BuilderExerciseLibrary({
         </p>
       ) : page.items.length === 0 ? (
         <p className="muted" role="status">
-          No exercises match that search.
+          {muscle ? "No exercises match that search and muscle." : "No exercises match that search."}
         </p>
       ) : (
         <ul className="builder-library-list">

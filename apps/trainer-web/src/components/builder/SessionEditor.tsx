@@ -1,8 +1,8 @@
 import type { PlanContent, WorkoutDay } from "@fitbud/contracts";
 import { formatNumber } from "@fitbud/core";
-import { GripVertical, Plus } from "lucide-react";
+import { Copy, GripVertical, Plus } from "lucide-react";
 import { OverflowMenu } from "../OverflowMenu";
-import { LibraryThumb } from "../ui";
+import { Button, LibraryThumb } from "../ui";
 import {
   duplicateExercise,
   moveExercise,
@@ -20,6 +20,7 @@ export function SessionEditor({
   readOnly = false,
   onOpenLibrary,
   showLibraryToggle = false,
+  onDuplicateDay,
 }: {
   day: WorkoutDay | null;
   selectedExerciseId: string | null;
@@ -28,12 +29,17 @@ export function SessionEditor({
   readOnly?: boolean;
   onOpenLibrary?: () => void;
   showLibraryToggle?: boolean;
+  /**
+   * Copies this day and selects the copy. Not given (or null) hides
+   * "Duplicate day": read-only, or the plan is at its day limit.
+   */
+  onDuplicateDay?: ((dayId: string) => void) | null;
 }) {
   if (!day) {
     return (
       <div className="session-empty" data-testid="session-empty">
         <h2>No session selected</h2>
-        <p className="muted">Pick a day above, or tap a Rest tab to add a session.</p>
+        <p className="muted">Pick a day above, or pick a rest day to add a session.</p>
       </div>
     );
   }
@@ -65,6 +71,17 @@ export function SessionEditor({
           </label>
           <p className="session-board-meta">{meta}</p>
         </div>
+        {readOnly || !onDuplicateDay ? null : (
+          <Button
+            variant="ghost"
+            className="session-board-duplicate"
+            data-testid="duplicate-day"
+            onClick={() => onDuplicateDay(day.id)}
+          >
+            <Copy className="ui-i" strokeWidth={1.75} aria-hidden />
+            Duplicate day
+          </Button>
+        )}
       </header>
 
       {exercises.length === 0 ? (

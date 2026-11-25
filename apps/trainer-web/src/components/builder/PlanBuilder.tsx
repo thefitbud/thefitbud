@@ -9,6 +9,7 @@ import type {
 import { formatClockTime, formatHhMmTime } from "@fitbud/core";
 import {
   ArrowLeft,
+  Check,
   Dumbbell,
   Eye,
   Library as LibraryIcon,
@@ -16,11 +17,13 @@ import {
   Undo2,
   Utensils,
 } from "lucide-react";
-import { Button } from "../ui";
+import { Button, Pill } from "../ui";
 import {
+  PLAN_COMPOSITION_LIMITS,
   addExerciseFromLibrary,
   addFoodItemFromLibrary,
   addSetTarget,
+  duplicateWorkoutDay,
   sortedByOrder,
   sortedMealsByTime,
 } from "../plan-composition";
@@ -52,6 +55,39 @@ export type ConflictHandlers = {
   /** Load the other device's content for Compare / Take theirs. */
   loadRemote: () => Promise<{ title: string; content: PlanContent }>;
 };
+
+/**
+ * Version state shown next to the title. An editable client draft is
+ * "Draft · v3" (neutral), a published client version "Published · v3"
+ * (positive, with a check so state is never colour alone). Templates are not
+ * versioned: a trainer's own template reads "Draft", a FitBud template shows
+ * no pill (null).
+ */
+export type BuilderVersionPill = {
+  state: "draft" | "published";
+  versionNumber?: number | null;
+};
+
+function VersionPill({ pill }: { pill: BuilderVersionPill }) {
+  const published = pill.state === "published";
+  return (
+    <span className="builder-draft-pill" data-testid="builder-version-pill">
+      <Pill
+        tone={published ? "done" : "neutral"}
+        icon={
+          published ? (
+            <Check className="ui-i" strokeWidth={2} aria-hidden />
+          ) : (
+            <Pencil className="ui-i" strokeWidth={1.75} aria-hidden />
+          )
+        }
+      >
+        {published ? "Published" : "Draft"}
+        {pill.versionNumber != null ? <span>{` · v${pill.versionNumber}`}</span> : null}
+      </Pill>
+    </span>
+  );
+}
 
 function statusText(state: SaveState): string {
   switch (state.kind) {
@@ -122,10 +158,12 @@ function ReadOnlySummary({
   content,
   title,
   clientName,
+  versionPill,
 }: {
   content: PlanContent;
   title: string;
   clientName?: string;
+  versionPill: BuilderVersionPill | null;
 }) {
   const byWeekday = new Map(
     content.workoutDays
@@ -138,9 +176,7 @@ function ReadOnlySummary({
     <article className="builder-readonly" data-testid="builder-readonly-summary">
       <header className="builder-readonly-head">
         <h2 className="builder-readonly-title">{heading || "Plan"}</h2>
-        <span className="builder-draft-pill">
-          <span aria-hidden="true">✎ </span>Draft
-        </span>
+        {versionPill ? <VersionPill pill={versionPill} /> : null}
       </header>
       <ul className="builder-readonly-week">
         {WEEK_ORDER.map((weekday) => {
@@ -177,6 +213,7 @@ export function PlanBuilder({
   banner,
   screenId,
   conflictHandlers,
+  versionPill = { state: "draft" },
 }: {
   backTo: string;
   backLabel: string;
@@ -197,6 +234,8 @@ export function PlanBuilder({
   banner?: ReactNode;
   screenId: string;
   conflictHandlers?: ConflictHandlers;
+  /** Version state next to the title; null hides it (FitBud templates). */
+  versionPill?: BuilderVersionPill | null;
 }) {
   const mode = useBuilderMode();
   // Portrait / <1024: same as readOnly for edits (frame 195) — no title or draft writes.
@@ -217,7 +256,7 @@ export function PlanBuilder({
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [selectedExerciseId, setSelectedExerciseId] = useState<string | null>(null);
   const [selectedMealId, setSelectedMealId] = useState<string | null>(null);
-  const [mealDay] = useState<MealDay>("all");
+  const [mealDay, setMealDay] = useState<MealDay>("all");
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [preview, setPreview] = useState<PlanContent | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -250,6 +289,11 @@ export function PlanBuilder({
   const meals = sortedMealsByTime(content.mealPrescriptions);
   const activeMeal = meals.find((meal) => meal.id === selectedMealId) ?? meals[0] ?? null;
   const narrow = mode === "narrow";
+  // A copy lands on the next free weekday, so the week tabs can always show it.
+  const canDuplicateDay =
+    editable &&
+    content.workoutDays.length < PLAN_COMPOSITION_LIMITS.workoutDays &&
+    WEEK_ORDER.some((weekday) => !content.workoutDays.some((day) => day.weekday === weekday));
   const conflict = saveState.kind === "conflict";
 
   useEffect(() => {
@@ -303,6 +347,17 @@ export function PlanBuilder({
     } catch (err) {
       setLibraryError(userFacingMessage(err, { fallback: "Couldn't add that exercise." }));
     }
+  }
+
+  function duplicateDay(dayId: string) {
+    const current = contentRef.current;
+    const next = duplicateWorkoutDay(current, dayId);
+    if (next === current) return;
+    setContent(() => next);
+    const added = next.workoutDays.find(
+      (candidate) => !current.workoutDays.some((existing) => existing.id === candidate.id),
+    );
+    if (added) setSelectedDayId(added.id);
   }
 
   function addFood(item: FoodLibraryItem, servingId: string) {
@@ -409,10 +464,7 @@ export function PlanBuilder({
               />
             </label>
             {clientName ? <span className="builder-title-client">· {clientName}</span> : null}
-            <span className="builder-draft-pill ui-pill ui-p-neutral">
-              <Pencil className="ui-i" strokeWidth={1.75} aria-hidden />
-              Draft
-            </span>
+            {versionPill ? <VersionPill pill={versionPill} /> : null}
           </div>
           <p
             className={`builder-status is-${saveState.kind}`}
@@ -595,12 +647,14 @@ export function PlanBuilder({
           readOnly={!editable}
           onOpenLibrary={openLibrary}
           showLibraryToggle={narrow}
+          onDuplicateDay={canDuplicateDay ? duplicateDay : null}
         />
       </div>
     ) : (
       <MealsPane
         content={content}
         selectedDay={mealDay}
+        onSelectDay={setMealDay}
         selectedMealId={activeMeal?.id ?? null}
         onSelectMeal={setSelectedMealId}
         onChange={setContent}
@@ -642,7 +696,12 @@ export function PlanBuilder({
         right={properties}
         overlay={libraryOverlay}
         smallScreen={
-          <ReadOnlySummary content={content} title={title} clientName={clientName} />
+          <ReadOnlySummary
+            content={content}
+            title={title}
+            clientName={clientName}
+            versionPill={versionPill}
+          />
         }
       />
       {comparing ? (

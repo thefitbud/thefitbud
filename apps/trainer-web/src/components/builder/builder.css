@@ -177,9 +177,10 @@
   color: var(--ink);
 }
 
+/* Wrapper around the ui Pill: never shrinks or wraps inside the title row. */
 .builder .builder-draft-pill {
-  min-height: 0;
-  padding: 0 var(--s2);
+  display: inline-flex;
+  flex: none;
 }
 
 .builder .builder-status {
@@ -527,16 +528,20 @@
   min-height: 0;
 }
 
+/* Every day stays visible: rest days shrink to the weekday, and when the
+   training-day names are longer than the canvas the strip wraps to a second
+   row instead of hiding tabs behind a sideways scroll. Each tab carries its
+   own baseline so a wrapped row still reads as one tab strip. */
 .builder .builder-day-tabs.ui-tabs {
   flex: none;
   display: flex;
-  flex-wrap: nowrap;
-  gap: var(--s1);
+  flex-wrap: wrap;
+  gap: 0;
   padding: 0;
+  border-bottom: 0;
   border-radius: 0;
   background: transparent;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  overflow: visible;
 }
 
 .builder .builder-day-tabs .builder-day-tab {
@@ -547,10 +552,23 @@
   border: 0;
   border-radius: 0;
   background: transparent;
-  box-shadow: none;
+  box-shadow: inset 0 -1px 0 var(--line);
   font: var(--t-body);
   font-weight: 500;
   color: var(--ink3);
+}
+
+/* The baseline runs on to the end of the last row. */
+.builder .builder-day-tabs::after {
+  content: "";
+  flex: 1 1 0;
+  min-width: 0;
+  height: 44px;
+  box-shadow: inset 0 -1px 0 var(--line);
+}
+
+.builder .builder-day-tabs .builder-day-tab.is-rest {
+  padding: 0 var(--s2);
 }
 
 .builder .builder-day-tabs .builder-day-tab.is-on::after {
@@ -1444,17 +1462,6 @@
   color: var(--ink);
 }
 
-.builder-v3 .builder-readonly .builder-draft-pill {
-  display: inline-flex;
-  align-items: center;
-  height: 24px;
-  padding: 0 var(--s2);
-  border-radius: var(--r-full);
-  background: var(--fill);
-  color: var(--ink2);
-  font: var(--t-cap);
-}
-
 .builder-v3 .builder-readonly-week {
   list-style: none;
   margin: 0;
@@ -1507,4 +1514,34 @@
   .builder-compare-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Exercise library muscle chips (W-152). */
+.builder .builder-library-chips {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+/* Reps: a Stepper like Sets, with a quiet Clear that leaves reps empty. */
+.builder .builder-reps {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s1);
+}
+
+.builder .builder-reps-clear {
+  padding: 0 var(--s2);
+  margin-left: calc(-1 * var(--s2));
+}
+
+.builder .builder-reps-add {
+  align-self: flex-start;
+}
+
+/* Diet canvas: the day row sits at the top, like the workout day tabs. */
+.builder .meals-pane:has(> .builder-meal-day-tabs) {
+  padding-top: 0;
 }

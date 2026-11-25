@@ -1,6 +1,6 @@
 import type { PlanContent, WorkoutDay, WorkoutExercise } from "@fitbud/contracts";
 import { OverflowMenu } from "../OverflowMenu";
-import { Field, LibraryThumb, Stepper } from "../ui";
+import { Button, Field, LibraryThumb, Stepper } from "../ui";
 import {
   duplicateExercise,
   moveExercise,
@@ -14,6 +14,11 @@ import {
   parseRestLabel,
 } from "./formatters";
 import { applyExercisePrescription } from "./prescription";
+
+/** Reps start here when a trainer adds a rep target to an empty one. */
+export const DEFAULT_REPS = 10;
+export const REPS_MIN = 1;
+export const REPS_MAX = 100;
 
 export function ExerciseProperties({
   day,
@@ -127,21 +132,36 @@ export function ExerciseProperties({
       </Field>
       <div className="builder-props-pair">
         <Field label="Reps">
-          <span className="ui-input">
-            <input
-              type="number"
-              min={1}
-              max={100}
-              inputMode="numeric"
-              aria-label="Reps"
-              value={sample?.reps ?? ""}
-              disabled={readOnly}
-              onChange={(event) => {
-                const raw = event.target.value.trim();
-                patch({ reps: raw === "" ? null : Number(raw) });
-              }}
-            />
-          </span>
+          {readOnly ? (
+            <p className="builder-props-value">{sample?.reps ?? "—"}</p>
+          ) : sample?.reps == null ? (
+            <Button
+              variant="secondary"
+              className="builder-reps-add"
+              onClick={() => patch({ reps: DEFAULT_REPS })}
+            >
+              Add reps
+            </Button>
+          ) : (
+            <div className="builder-reps">
+              <Stepper
+                aria-label="Reps"
+                value={sample.reps}
+                min={REPS_MIN}
+                max={REPS_MAX}
+                onChange={(next) => patch({ reps: next })}
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="builder-reps-clear"
+                aria-label="Clear reps"
+                onClick={() => patch({ reps: null })}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
         </Field>
         <Field label="Weight">
           <span className="ui-input">

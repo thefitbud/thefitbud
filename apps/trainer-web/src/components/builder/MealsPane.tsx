@@ -24,7 +24,22 @@ import { WEEK_ORDER, WEEKDAY_INITIAL, weekdayShort } from "./weekdays";
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
-export type MealDay = number | "all";
+/**
+ * Which meals the diet canvas shows: every meal, the meals on training days or
+ * on rest days (W-154's day row), or one weekday (MealDaysPane).
+ */
+export type MealDay = number | "all" | "training" | "rest";
+
+/** Weekdays that carry a scheduled workout day, from the plan itself. */
+export function trainingWeekdays(content: PlanContent): number[] {
+  return Array.from(
+    new Set(
+      content.workoutDays
+        .map((day) => day.weekday)
+        .filter((weekday): weekday is number => weekday != null),
+    ),
+  );
+}
 
 function servingText(item: MealFoodItem): string {
   return item.snapshotKind === "calculated"
@@ -37,10 +52,28 @@ function itemKcal(item: MealFoodItem): string {
   return scaled == null ? "—" : formatNumber(Math.round(scaled / NUTRIENT_SCALE));
 }
 
-function appliesOn(meal: MealPrescription, day: MealDay): boolean {
+/**
+ * A meal shows under Training days (or Rest days) when it applies on at least
+ * one of those weekdays, so a meal set for one weekday never disappears from
+ * both views.
+ */
+export function appliesOn(
+  meal: MealPrescription,
+  day: MealDay,
+  training: readonly number[] = [],
+): boolean {
   if (day === "all") return true;
-  return (meal.applicableWeekdays ?? []).includes(day);
+  const applicable = meal.applicableWeekdays ?? [];
+  if (day === "training") return applicable.some((weekday) => training.includes(weekday));
+  if (day === "rest") return applicable.some((weekday) => !training.includes(weekday));
+  return applicable.includes(day);
 }
+
+const DAY_ROW: Array<{ id: "all" | "training" | "rest"; label: string }> = [
+  { id: "all", label: "Every day" },
+  { id: "training", label: "Training days" },
+  { id: "rest", label: "Rest days" },
+];
 
 export function MealDaysPane({
   content,
@@ -59,13 +92,7 @@ export function MealDaysPane({
 }) {
   const meals = content.mealPrescriptions;
   const selected = meals.find((meal) => meal.id === selectedMealId) ?? null;
-  const trainingDays = Array.from(
-    new Set(
-      content.workoutDays
-        .map((day) => day.weekday)
-        .filter((weekday): weekday is number => weekday != null),
-    ),
-  );
+  const trainingDays = trainingWeekdays(content);
   const restDays = ALL_DAYS.filter((weekday) => !trainingDays.includes(weekday));
   const applicable = selected?.applicableWeekdays ?? [];
   const sameSet = (a: readonly number[], b: readonly number[]) =>
@@ -199,6 +226,7 @@ export function MealDaysPane({
 export function MealsPane({
   content,
   selectedDay,
+  onSelectDay,
   selectedMealId,
   onSelectMeal,
   onChange,
@@ -208,6 +236,8 @@ export function MealsPane({
 }: {
   content: PlanContent;
   selectedDay: MealDay;
+  /** Every day / Training days / Rest days row; hidden when not given. */
+  onSelectDay?: (day: MealDay) => void;
   selectedMealId: string | null;
   onSelectMeal: (mealId: string) => void;
   onChange: (update: (current: PlanContent) => PlanContent) => void;
@@ -217,7 +247,13 @@ export function MealsPane({
   showLibraryToggle?: boolean;
 }) {
   const meals = sortedMealsByTime(content.mealPrescriptions);
-  const visible = meals.filter((meal) => appliesOn(meal, selectedDay));
+  const training = trainingWeekdays(content);
+  // Training / Rest days only mean something when the plan has both kinds.
+  const splitDays = training.length > 0 && training.length < 7;
+  const dayRow = splitDays ? DAY_ROW : DAY_ROW.slice(0, 1);
+  const shownDay: MealDay =
+    !splitDays && (selectedDay === "training" || selectedDay === "rest") ? "all" : selectedDay;
+  const visible = meals.filter((meal) => appliesOn(meal, shownDay, training));
   const previousCount = useRef(meals.length);
   useEffect(() => {
     if (meals.length > previousCount.current) {
@@ -232,12 +268,45 @@ export function MealsPane({
 
   return (
     <div className="meals-pane meals-board" data-testid="meals-board">
-      <MacroTiles items={dayItems.length > 0 ? dayItems : content.mealPrescriptions.flatMap((m) => m.items ?? [])} />
+      {onSelectDay ? (
+        <div
+          className="builder-day-tabs builder-meal-day-tabs ui-tabs"
+          role="tablist"
+          aria-label="Meal days"
+          data-testid="meal-day-tabs"
+        >
+          {dayRow.map((item) => {
+            const selected = shownDay === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={selected ? "builder-day-tab is-on is-active" : "builder-day-tab"}
+                onClick={() => onSelectDay(item.id)}
+              >
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+      {/* Totals for the meals on screen: a filtered day with no meals reads 0. */}
+      <MacroTiles items={dayItems} />
 
       <div className="meals-scroll">
         {visible.length === 0 ? (
           <div className="session-empty" data-testid="meals-empty">
-            <h2>{meals.length === 0 ? "No meals yet" : "No meals on this day"}</h2>
+            <h2>
+              {meals.length === 0
+                ? "No meals yet"
+                : shownDay === "training"
+                  ? "No meals on training days"
+                  : shownDay === "rest"
+                    ? "No meals on rest days"
+                    : "No meals on this day"}
+            </h2>
             <p className="muted">
               {meals.length === 0
                 ? "Add a meal slot, then add foods from the library."
