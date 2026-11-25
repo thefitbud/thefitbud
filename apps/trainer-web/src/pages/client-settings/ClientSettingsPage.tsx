@@ -1,26 +1,31 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, useLocation, useOutletContext } from "react-router-dom";
+import { useLocation, useNavigate, useOutletContext } from "react-router-dom";
 import {
-  ChevronLeft,
-  CreditCard,
+  Bell,
+  ClipboardCheck,
+  ClipboardList,
   Lock,
   Pencil,
   Plus,
+  Target,
   User,
-  Users,
+  UserX,
+  Wallet,
   type LucideIcon,
 } from "lucide-react";
 import { userFacingMessage } from "@fitbud/api-client";
 import type { ClientSettingsResponse, PaymentRecord } from "@fitbud/contracts";
-import { formatCivilDate, labelFor } from "@fitbud/core";
+import { formatCivilDate, labelFor, possessivePronoun } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
 import { StatusChip } from "../../components/StatusChip";
-import { ReadOnlyField } from "../../components/ReadOnlyField";
 import type { WorkspaceOutletContext } from "../workspaceContext";
+import { ConfigureCoachingPage } from "../ConfigureCoachingPage";
+import { OnboardingReviewPage } from "../OnboardingReviewPage";
 import { EditBasicsDrawer } from "./EditBasicsDrawer";
 import { SubscriptionDrawer } from "./SubscriptionDrawer";
 import { PaymentDrawer } from "./PaymentDrawer";
+import { RemindersSection } from "./RemindersSection";
 import {
   COACHING_MODE_LABELS,
   PAYMENT_METHOD_LABELS,
@@ -32,20 +37,25 @@ import {
   renewalChipLabel,
   weeksSince,
 } from "./clientSettingsFormat";
+import {
+  SETTINGS_SECTIONS,
+  isFirstSectionOfPanel,
+  panelForSection,
+  sectionElementId,
+  sectionFromHash,
+  type SettingsSectionId,
+} from "./settingsSections";
 import "./client-settings.css";
 
-type SectionId = "basic" | "subscription" | "relationship";
-
-const SECTIONS: { id: SectionId; label: string; icon: LucideIcon }[] = [
-  { id: "basic", label: "Basic details", icon: User },
-  { id: "subscription", label: "Subscription & package", icon: CreditCard },
-  { id: "relationship", label: "Coaching relationship", icon: Users },
-];
-
-function sectionFromHash(hash: string): SectionId {
-  const id = hash.replace(/^#/, "");
-  return SECTIONS.some((s) => s.id === id) ? (id as SectionId) : "basic";
-}
+const SECTION_ICONS: Record<SettingsSectionId, LucideIcon> = {
+  basic: User,
+  subscription: Wallet,
+  coaching: Target,
+  checkins: ClipboardCheck,
+  reminders: Bell,
+  onboarding: ClipboardList,
+  danger: UserX,
+};
 
 function titleCase(value: string): string {
   const trimmed = value.trim();
@@ -60,27 +70,68 @@ function sortPayments(payments: PaymentRecord[]): PaymentRecord[] {
   );
 }
 
+/** The newest record marked paid (the list is newest due date first). */
+function lastPaid(payments: PaymentRecord[]): PaymentRecord | null {
+  return (
+    [...payments]
+      .filter((p) => p.status === "paid" && p.paidOn)
+      .sort((a, b) => (b.paidOn ?? "").localeCompare(a.paidOn ?? ""))[0] ?? null
+  );
+}
+
 type PaymentEditor = { record: PaymentRecord | null; returnFocus: HTMLElement | null };
 
-/** One label/value pair (DS7 `ReadOnlyField`, laid out side by side as in frames 209/212). */
-function Row({ label, value, testId }: { label: string; value: ReactNode; testId?: string }) {
-  return <ReadOnlyField label={label} value={value} testId={testId} />;
+/**
+ * One label-left settings row (W-209, DS §5.7): label (and an optional helper
+ * line) on the left, the value on the right.
+ */
+function SettingRow({
+  label,
+  help,
+  value,
+  testId,
+}: {
+  label: string;
+  help?: ReactNode;
+  value: ReactNode;
+  testId?: string;
+}) {
+  return (
+    <div className="cs-row" data-testid={testId}>
+      <dt>
+        <span className="cs-row-label">{label}</span>
+        {help ? <span className="cs-row-help">{help}</span> : null}
+      </dt>
+      <dd className="cs-row-value">{value}</dd>
+    </div>
+  );
 }
 
 /**
- * Client settings (`/clients/:relationshipId/settings`), frames 209 / 209b.
- * Basic details, subscription, payment records (tracking only) and the coaching
- * relationship. The trainer-owned name and contact phone are edited in frame
- * 210 (D-W8-10); the subscription in frames 211/211b, each save a new version
- * (Z8-3). An ended client sees every section read-only (frame 212). Session
- * packages and collect/pay parts of the frames are not built (D-W8-2). Payment
- * records are added and edited in a drawer (Z8-4): amount, due date,
- * Paid/Unpaid, method and note, for the trainer's own tracking only.
+ * The client Settings tab (`/clients/:relationshipId/settings`), W13-10 /
+ * D-WEB-3, frames W-209 (+ iPad), W-IP07, W-181 and W-146.
+ *
+ * A sub-nav of seven sections, each deep-linkable by hash (see
+ * `settingsSections.ts`). Client details, Package and payments and the Danger
+ * zone share one panel; Coaching setup and Check-ins are the Coaching setup
+ * form (one version, one Save); Reminders was the drawer; Onboarding answers
+ * was its own page. Every section saves exactly what it saved before:
+ * basics and subscription as new versions (Z8-3), payment records for the
+ * trainer's own tracking only (Z8-4), coaching setup versions, reminder rules.
+ * An ended client sees every section read-only.
  */
 export function ClientSettingsPage() {
-  const { workspace, relationshipId, online, ended, openWorkspaceModal, reloadWorkspace } =
-    useOutletContext<WorkspaceOutletContext>();
+  const {
+    workspace,
+    relationshipId,
+    online,
+    ended,
+    openWorkspaceModal,
+    reloadWorkspace,
+    refreshEpoch,
+  } = useOutletContext<WorkspaceOutletContext>();
   const location = useLocation();
+  const navigate = useNavigate();
   const { me } = useAuth();
   const [settings, setSettings] = useState<ClientSettingsResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -91,9 +142,14 @@ export function ClientSettingsPage() {
   const [subscriptionSaved, setSubscriptionSaved] = useState(false);
   const [paymentEditor, setPaymentEditor] = useState<PaymentEditor | null>(null);
   const [paymentSaved, setPaymentSaved] = useState<"added" | "updated" | null>(null);
-  const [active, setActive] = useState<SectionId>(() => sectionFromHash(location.hash));
+  const [active, setActive] = useState<SettingsSectionId>(() =>
+    sectionFromHash(location.hash),
+  );
+  const [toast, setToast] = useState<string | null>(null);
+  const [endedElsewhere, setEndedElsewhere] = useState(false);
   const editButtonRef = useRef<HTMLButtonElement>(null);
   const subscriptionButtonRef = useRef<HTMLButtonElement>(null);
+  const panel = panelForSection(active);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -101,9 +157,7 @@ export function ClientSettingsPage() {
     try {
       setSettings(await apiClient.getClientSettings(relationshipId));
     } catch (err) {
-      setLoadError(
-        userFacingMessage(err, { fallback: "Couldn't load client settings." }),
-      );
+      setLoadError(userFacingMessage(err, { fallback: "Couldn't load client settings." }));
     } finally {
       setLoading(false);
     }
@@ -113,23 +167,58 @@ export function ClientSettingsPage() {
     void load();
   }, [load]);
 
-  // A link such as `/settings#subscription` lands on that section.
+  // A link such as `/settings#subscription` (or an old `/configure` URL,
+  // redirected with `#coaching`) lands on that section.
   useEffect(() => {
-    if (!settings || !location.hash) return;
-    const id = sectionFromHash(location.hash);
-    setActive(id);
-    document.getElementById(`cs-${id}`)?.scrollIntoView?.({ block: "start" });
-  }, [settings, location.hash]);
+    if (!location.hash) return;
+    setActive(sectionFromHash(location.hash));
+  }, [location.hash]);
+
+  // Sections below the first one of a panel are scrolled to; the first one
+  // keeps the client header in view.
+  // Coaching setup and Check-ins render after their own data loads, so the
+  // target is looked for over a few frames.
+  const panelReady = panel !== "details" || settings !== null;
+  useEffect(() => {
+    if (!panelReady || isFirstSectionOfPanel(active)) return;
+    let frame = 0;
+    let tries = 0;
+    const seek = () => {
+      const target = document.getElementById(sectionElementId(active));
+      if (target) {
+        target.scrollIntoView?.({ block: "start" });
+        return;
+      }
+      tries += 1;
+      if (tries < 120) frame = window.requestAnimationFrame(seek);
+    };
+    seek();
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, panelReady]);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const header = workspace?.header ?? null;
   const profileName = settings?.basics.displayName ?? header?.traineeDisplayName ?? "";
   const shownName = settings?.basics.clientDisplayName ?? profileName;
   const firstName = shownName.split(/\s+/)[0] || shownName;
-  const readOnly = ended || settings?.readOnly === true;
+  const gender = header?.traineeProfile.gender?.trim() || null;
+  const pronoun = possessivePronoun(gender);
+  const readOnly = ended || endedElsewhere || settings?.readOnly === true;
 
-  function goTo(id: SectionId) {
+  function goTo(id: SettingsSectionId) {
+    if (id === active && !isFirstSectionOfPanel(id)) {
+      // Same section again: the effect does not rerun, so scroll here.
+      document
+        .getElementById(sectionElementId(id))
+        ?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
     setActive(id);
-    document.getElementById(`cs-${id}`)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    navigate({ hash: `#${id}` }, { replace: true });
   }
 
   function closeDrawer() {
@@ -158,88 +247,113 @@ export function ClientSettingsPage() {
     }, 0);
   }
 
+  const mainSections = SETTINGS_SECTIONS.filter((s) => s.id !== "danger");
   const nav = (
-    <nav className="cs-nav" aria-label="Client settings sections">
-      <p className="cs-eyebrow">Client settings</p>
+    <nav className="cs-subnav" aria-label="Client settings sections" data-testid="cs-subnav">
       <ul>
-        {SECTIONS.map(({ id, label, icon: Icon }) => (
-          <li key={id}>
-            <a
-              href={`#${id}`}
-              className={`cs-nav-link${active === id ? " is-active" : ""}`}
-              aria-current={active === id ? "true" : undefined}
-              onClick={(e) => {
-                e.preventDefault();
-                goTo(id);
-              }}
-            >
-              <Icon size={16} strokeWidth={1.75} aria-hidden />
-              {label}
-            </a>
-          </li>
-        ))}
+        {mainSections.map(({ id, label }) => {
+          const Icon = SECTION_ICONS[id];
+          return (
+            <li key={id}>
+              <a
+                href={`#${id}`}
+                className={`cs-subnav-link${active === id ? " is-on" : ""}`}
+                aria-current={active === id ? "true" : undefined}
+                data-testid={`cs-nav-${id}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  goTo(id);
+                }}
+              >
+                <Icon className="ui-i" aria-hidden="true" />
+                {label}
+              </a>
+            </li>
+          );
+        })}
+      </ul>
+      <p className="cs-subnav-group">Danger zone</p>
+      <ul>
+        <li>
+          <a
+            href="#danger"
+            className={`cs-subnav-link${readOnly ? "" : " is-danger"}${active === "danger" ? " is-on" : ""}`}
+            aria-current={active === "danger" ? "true" : undefined}
+            data-testid="cs-nav-danger"
+            onClick={(e) => {
+              e.preventDefault();
+              goTo("danger");
+            }}
+          >
+            <UserX className="ui-i" aria-hidden="true" />
+            {readOnly ? "Coaching ended" : "End coaching"}
+          </a>
+        </li>
       </ul>
     </nav>
   );
 
-  const coachingNote = (
-    <p className="cs-coaching-note">
-      Goal, expectations, check-ins and reminders are coaching, so they live in{" "}
-      <Link to={`/clients/${relationshipId}/configure`}>Plan › Coaching setup</Link>.
-    </p>
-  );
+  let details: ReactNode = null;
+  if (panel === "details") {
+    if (loading && !settings) {
+      details = (
+        <p className="muted" aria-busy="true">
+          Loading client settings…
+        </p>
+      );
+    } else if (loadError && !settings) {
+      details = (
+        <div className="cs-card cs-card-pad" role="alert">
+          <p className="form-error">{loadError}</p>
+          <button type="button" className="ui-btn ui-btn-secondary" onClick={() => void load()}>
+            Try again
+          </button>
+        </div>
+      );
+    } else if (settings) {
+      details = renderDetails(settings);
+    }
+  }
 
-  let content: ReactNode;
-  if (loading && !settings) {
-    content = (
-      <p className="muted" aria-busy="true">
-        Loading client settings…
-      </p>
-    );
-  } else if (loadError && !settings) {
-    content = (
-      <div className="cs-card" role="alert">
-        <p className="form-error">{loadError}</p>
-        <button type="button" className="button-secondary" onClick={() => void load()}>
-          Try again
-        </button>
-      </div>
-    );
-  } else if (settings) {
-    const { basics, subscription, payments } = settings;
-    const phone = basics.contactPhoneE164 ?? basics.phoneE164;
+  function renderDetails(current: ClientSettingsResponse) {
+    const { basics, subscription, payments } = current;
+    const contactPhone = basics.contactPhoneE164;
+    const phone = contactPhone ?? basics.phoneE164;
     const today = civilDateOf(new Date().toISOString()) ?? "";
     const chip = subscription ? renewalChipLabel(subscription, today) : null;
-    const startedOn = civilDateOf(settings.startedAt);
-    const endedOn = settings.endedAt ? civilDateOf(settings.endedAt) : null;
-    const weeks = settings.endedAt ? null : weeksSince(settings.startedAt);
+    const startedOn = civilDateOf(current.startedAt);
+    const endedOn = current.endedAt ? civilDateOf(current.endedAt) : null;
+    const weeks = current.endedAt ? null : weeksSince(current.startedAt);
     const age = header?.traineeProfile.age ?? null;
-    const gender = header?.traineeProfile.gender?.trim() || null;
     const timeZone = header?.traineeTimezone?.trim() || null;
+    const ageSex = [age !== null ? String(age) : null, gender ? titleCase(gender) : null]
+      .filter(Boolean)
+      .join(" · ");
+    const paid = lastPaid(payments);
 
-    content = (
+    return (
       <>
         {readOnly ? (
           <p className="cs-readonly-banner" data-testid="cs-readonly-banner">
-            <Lock size={16} strokeWidth={1.75} aria-hidden />
+            <Lock className="ui-i" aria-hidden />
             {endedOn
               ? `Coaching with ${firstName} ended ${formatCivilDate(endedOn)}. Client settings are read-only.`
               : `Coaching with ${firstName} has ended. Client settings are read-only.`}
           </p>
         ) : null}
         <section
-          id="cs-basic"
+          id={sectionElementId("basic")}
           className="cs-card"
           aria-labelledby="cs-basic-title"
           data-testid="cs-section-basic"
         >
           <header className="cs-card-head">
-            <h3 id="cs-basic-title">Basic details</h3>
+            <h2 id="cs-basic-title">Basic details</h2>
             {readOnly ? null : (
               <button
                 ref={editButtonRef}
                 type="button"
-                className="cs-edit-button"
+                className="ui-btn ui-btn-secondary ui-btn-sm cs-edit-button"
                 onClick={() => {
                   setSavedNotice(false);
                   setEditing(true);
@@ -247,21 +361,27 @@ export function ClientSettingsPage() {
                 disabled={!online}
                 aria-label="Edit basic details"
               >
-                <Pencil size={16} strokeWidth={1.75} aria-hidden />
+                <Pencil className="ui-i" aria-hidden />
                 Edit
               </button>
             )}
           </header>
-          <dl className="cs-grid">
-            <Row label="Name" value={shownName} testId="cs-basic-name" />
-            <Row
+          <dl className="cs-rows">
+            <SettingRow label="Name" value={shownName} testId="cs-basic-name" />
+            <SettingRow
               label="Phone"
+              help={phone ? (contactPhone ? "WhatsApp" : "Sign-in phone") : undefined}
               value={phone ? formatPhone(phone) : "Not added"}
               testId="cs-basic-phone"
             />
-            {gender ? <Row label="Sex" value={titleCase(gender)} /> : null}
-            {age !== null ? <Row label="Age" value={String(age)} /> : null}
-            {timeZone ? <Row label="Time zone" value={formatTimeZone(timeZone)} /> : null}
+            {ageSex ? <SettingRow label="Age and sex" value={ageSex} /> : null}
+            {timeZone ? (
+              <SettingRow
+                label="Time zone"
+                help={`Reminders follow ${pronoun} time`}
+                value={formatTimeZone(timeZone)}
+              />
+            ) : null}
           </dl>
           {savedNotice ? (
             <p className="cs-saved" role="status">
@@ -271,28 +391,27 @@ export function ClientSettingsPage() {
         </section>
 
         <section
-          id="cs-subscription"
+          id={sectionElementId("subscription")}
           className="cs-card"
           aria-labelledby="cs-subscription-title"
           data-testid="cs-section-subscription"
         >
           <header className="cs-card-head">
-            <h3 id="cs-subscription-title">Subscription & package</h3>
+            <h2 id="cs-subscription-title">Package and payments</h2>
             {readOnly && subscription ? (
-              <span className="cs-ended-chip">Ended</span>
+              <span className="ui-pill ui-p-neutral">Ended</span>
             ) : subscription && chip ? (
               <StatusChip
                 kind="renewal"
                 value={subscription.renewalState}
                 label={chip}
-                className="status-chip-xs"
               />
             ) : null}
             {readOnly ? null : (
               <button
                 ref={subscriptionButtonRef}
                 type="button"
-                className="cs-edit-button"
+                className="ui-btn ui-btn-secondary ui-btn-sm cs-edit-button"
                 onClick={() => {
                   setSubscriptionSaved(false);
                   setEditingSubscription(true);
@@ -300,20 +419,39 @@ export function ClientSettingsPage() {
                 disabled={!online}
                 aria-label="Edit subscription"
               >
-                <Pencil size={16} strokeWidth={1.75} aria-hidden />
+                <Pencil className="ui-i" aria-hidden />
                 Edit
               </button>
             )}
           </header>
           {subscription ? (
-            <dl className="cs-grid">
-              <Row label="Plan" value={subscription.planName} />
-              <Row
-                label="Payment frequency"
-                value={labelFor("payment_frequency", subscription.paymentFrequency)}
+            <dl className="cs-rows">
+              <SettingRow label="Package" value={subscription.planName} />
+              <SettingRow
+                label={subscription.amountPaise !== null ? "Fee" : "Payment frequency"}
+                value={
+                  subscription.amountPaise !== null ? (
+                    <>
+                      <span className="cs-num">{formatRupees(subscription.amountPaise)}</span>
+                      {" · "}
+                      {labelFor("payment_frequency", subscription.paymentFrequency)}
+                    </>
+                  ) : (
+                    labelFor("payment_frequency", subscription.paymentFrequency)
+                  )
+                }
               />
-              <Row label="Started" value={formatCivilDate(subscription.startsOn)} />
-              <Row
+              {subscription.coachingMode ? (
+                <SettingRow
+                  label="Coaching mode"
+                  value={COACHING_MODE_LABELS[subscription.coachingMode]}
+                />
+              ) : null}
+              <SettingRow
+                label="Started"
+                value={formatCivilDate(subscription.startsOn)}
+              />
+              <SettingRow
                 label="Renews"
                 value={
                   readOnly && endedOn
@@ -321,35 +459,43 @@ export function ClientSettingsPage() {
                     : formatCivilDate(subscription.renewsOn)
                 }
               />
-              {subscription.amountPaise !== null ? (
-                <Row
-                  label="Amount"
-                  value={<span className="cs-num">{formatRupees(subscription.amountPaise)}</span>}
+              {paid ? (
+                <SettingRow
+                  label="Last payment"
+                  help="Recorded by you. FitBud does not take payments."
+                  value={[
+                    formatRupees(paid.amountPaise),
+                    paid.method ? PAYMENT_METHOD_LABELS[paid.method] : null,
+                    paid.paidOn ? formatCivilDate(paid.paidOn) : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  testId="cs-last-payment"
                 />
               ) : null}
             </dl>
           ) : (
-            <p className="cs-empty">No subscription saved yet.</p>
+            <p className="cs-empty cs-card-pad">No subscription saved yet.</p>
           )}
           {subscriptionSaved ? (
-            <p className="cs-saved" role="status">
+            <p className="cs-saved cs-card-pad" role="status">
               Saved as a new subscription version.
             </p>
           ) : null}
 
           <div className="cs-payments" data-testid="cs-payments">
             <div className="cs-payments-head">
-              <h4 id="cs-payments-title" className="cs-eyebrow" tabIndex={-1}>
+              <h3 id="cs-payments-title" className="cs-payments-title" tabIndex={-1}>
                 Payment records · tracking only
-              </h4>
+              </h3>
               {readOnly || !subscription ? null : (
                 <button
                   type="button"
-                  className="cs-link-button"
+                  className="ui-btn ui-btn-ghost ui-btn-sm"
                   onClick={(e) => openPaymentEditor(null, e.currentTarget)}
                   disabled={!online}
                 >
-                  <Plus size={16} strokeWidth={1.75} aria-hidden />
+                  <Plus className="ui-i" aria-hidden />
                   Add payment record
                 </button>
               )}
@@ -365,12 +511,14 @@ export function ClientSettingsPage() {
             ) : (
               <div className="cs-table-wrap">
                 <table className="cs-table">
-                  <caption className="sr-only">Payments you've recorded</caption>
+                  <caption className="sr-only">Payments you&apos;ve recorded</caption>
                   <thead>
                     <tr>
                       <th scope="col">Due</th>
                       <th scope="col">Note</th>
-                      <th scope="col">Amount</th>
+                      <th scope="col" className="is-r">
+                        Amount
+                      </th>
                       <th scope="col">Status</th>
                       <th scope="col">Method</th>
                       <th scope="col">Paid on</th>
@@ -388,9 +536,11 @@ export function ClientSettingsPage() {
                         <td className="cs-pay-note">
                           {payment.note ? payment.note : <span aria-label="No note">—</span>}
                         </td>
-                        <td className="cs-num cs-nowrap">{formatRupees(payment.amountPaise)}</td>
+                        <td className="cs-num cs-nowrap is-r">{formatRupees(payment.amountPaise)}</td>
                         <td>
-                          <span className={`cs-pay-chip is-${payment.status}`}>
+                          <span
+                            className={`ui-pill ${payment.status === "paid" ? "ui-p-done" : "ui-p-neutral"} cs-pay-chip is-${payment.status}`}
+                          >
                             {PAYMENT_STATUS_LABELS[payment.status]}
                           </span>
                         </td>
@@ -412,12 +562,12 @@ export function ClientSettingsPage() {
                           <td className="cs-pay-action">
                             <button
                               type="button"
-                              className="cs-row-button"
+                              className="ui-btn ui-btn-quiet ui-btn-sm"
                               onClick={(e) => openPaymentEditor(payment, e.currentTarget)}
                               disabled={!online}
                               aria-label={`Edit payment record due ${formatCivilDate(payment.dueOn)}, ${formatRupees(payment.amountPaise)}`}
                             >
-                              <Pencil size={16} strokeWidth={1.75} aria-hidden />
+                              <Pencil className="ui-i" aria-hidden />
                               Edit
                             </button>
                           </td>
@@ -437,45 +587,71 @@ export function ClientSettingsPage() {
         </section>
 
         <section
-          id="cs-relationship"
-          className="cs-card"
-          aria-labelledby="cs-relationship-title"
-          data-testid="cs-section-relationship"
+          id={sectionElementId("danger")}
+          className={`cs-card cs-danger${readOnly ? " is-ended" : ""}`}
+          aria-labelledby="cs-danger-title"
+          data-testid="cs-section-danger"
         >
-          <header className="cs-card-head">
-            <h3 id="cs-relationship-title">Coaching relationship</h3>
+          <div className="cs-danger-row">
+            <div className="cs-danger-copy">
+              <h2 id="cs-danger-title">{readOnly ? "Coaching ended" : "End coaching"}</h2>
+              <p data-testid="cs-coaching-dates">
+                {startedOn && endedOn
+                  ? `Coached ${formatCivilDate(startedOn)} — ${formatCivilDate(endedOn)}`
+                  : startedOn
+                    ? `Coaching since ${formatCivilDate(startedOn)}${weeks ? ` · ${weeks}` : ""}`
+                    : endedOn
+                      ? `Coaching ended ${formatCivilDate(endedOn)}`
+                      : null}
+              </p>
+              {readOnly ? null : (
+                <p>
+                  {firstName} keeps {pronoun} account and history. Plans and reminders stop
+                  today. You can reactivate later.
+                </p>
+              )}
+            </div>
             {readOnly ? null : (
               <button
                 type="button"
-                className="cs-end-button"
+                className="ui-btn ui-btn-danger-quiet cs-end-button"
                 onClick={() => openWorkspaceModal({ type: "end" })}
                 disabled={!online}
               >
                 End coaching…
               </button>
             )}
-          </header>
-          <dl className="cs-grid">
-            {startedOn && endedOn ? (
-              <Row
-                label="Coached"
-                value={`${formatCivilDate(startedOn)} — ${formatCivilDate(endedOn)}`}
-              />
-            ) : startedOn ? (
-              <Row
-                label="Coaching since"
-                value={`${formatCivilDate(startedOn)}${weeks ? ` · ${weeks}` : ""}`}
-              />
-            ) : endedOn ? (
-              <Row label="Coaching ended" value={formatCivilDate(endedOn)} />
-            ) : null}
-            {subscription?.coachingMode ? (
-              <Row label="Mode" value={COACHING_MODE_LABELS[subscription.coachingMode]} />
-            ) : null}
-          </dl>
+          </div>
         </section>
       </>
     );
+  }
+
+  let body: ReactNode;
+  if (panel === "details") {
+    body = details;
+  } else if (panel === "coaching") {
+    body = <ConfigureCoachingPage />;
+  } else if (panel === "reminders") {
+    body = (
+      <RemindersSection
+        relationshipId={relationshipId}
+        firstName={(header?.traineeDisplayName ?? shownName).trim().split(/\s+/)[0] ?? ""}
+        gender={gender}
+        clientWhatsappE164={header?.clientWhatsappE164 ?? null}
+        hasCustomMealTimes={header?.hasCustomMealTimes ?? false}
+        ended={readOnly}
+        online={online}
+        refreshEpoch={refreshEpoch}
+        onToast={setToast}
+        onEndedElsewhere={() => {
+          setEndedElsewhere(true);
+          reloadWorkspace?.();
+        }}
+      />
+    );
+  } else {
+    body = <OnboardingReviewPage />;
   }
 
   return (
@@ -483,29 +659,28 @@ export function ClientSettingsPage() {
       className="cs-page"
       aria-labelledby="client-settings-title"
       data-testid="client-settings-page"
+      data-section={active}
     >
-      <div className="cs-titlebar">
-        <Link className="cs-back" to={`/clients/${relationshipId}/overview`}>
-          <ChevronLeft size={18} strokeWidth={1.75} aria-hidden />
-          Overview
-        </Link>
-        <h2 id="client-settings-title">Client settings</h2>
-        {firstName ? (
-          <p className="cs-only-you">
-            Only you see these. They don't change {firstName}'s plan.
-          </p>
-        ) : null}
-      </div>
+      <h2 id="client-settings-title" className="sr-only">
+        Client settings
+      </h2>
       <div className="cs-layout">
-        <aside className="cs-side">
-          {nav}
-          <div className="cs-side-note">{coachingNote}</div>
-        </aside>
-        <div className="cs-main">
-          {content}
-          <div className="cs-bottom-note">{coachingNote}</div>
+        <aside className="cs-side">{nav}</aside>
+        <div className="cs-main" data-testid={`cs-panel-${panel}`}>
+          {endedElsewhere && !ended ? (
+            <p className="cs-readonly-banner" role="status">
+              <Lock className="ui-i" aria-hidden />
+              Coaching with {firstName} has ended. Client settings are read-only.
+            </p>
+          ) : null}
+          {body}
         </div>
       </div>
+      {toast ? (
+        <div className="home-toast" role="status">
+          {toast}
+        </div>
+      ) : null}
       {editing && settings ? (
         <EditBasicsDrawer
           relationshipId={relationshipId}

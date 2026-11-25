@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { WorkoutAssignment, WorkoutExecution } from "@fitbud/contracts";
 import { fireEvent, render, screen, waitFor } from "../test/render";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
-import type { RatingOutcome } from "./workout/rpeRating";
+import type { FeedbackChange, RatingOutcome } from "./workout/rpeRating";
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
@@ -161,42 +161,121 @@ describe("WorkoutSummaryScreen v3", () => {
     expect(screen.getByText("Saved on your phone")).toBeTruthy();
   });
 
-  it("asks how hard it was, optional, and sends each pick without guessing a version (W-17a2)", async () => {
-    const onSaveRpe = vi.fn(async () => ({ kind: "saved", rpe: 7 }) as const);
+  it("asks how hard it was and for a note; one Save and share sends both (W-17a2)", async () => {
+    const onSaveFeedback = vi.fn(
+      async () => ({ kind: "saved", rpe: 7, note: "Left knee felt tight." }) as const,
+    );
     render(
       <WorkoutSummaryScreen
         execution={execution}
         assignment={finishedAssignment}
         coachName="Rahul Verma"
-        onSaveRpe={onSaveRpe}
+        onSaveFeedback={onSaveFeedback}
         onDone={() => undefined}
       />,
     );
     expect(screen.getByText("HOW HARD WAS IT?")).toBeTruthy();
     expect(screen.getByText("Optional")).toBeTruthy();
     expect(screen.getByText("1 Very easy · 5 Hard · 10 Max effort")).toBeTruthy();
-    const save = screen.getByRole("button", { name: "Save and share with Rahul" });
-    expect((save as HTMLButtonElement).disabled).toBeFalsy();
+    expect(screen.getByText("Note for Rahul")).toBeTruthy();
+    expect(screen.getByPlaceholderText("Anything Rahul should know?")).toBeTruthy();
     fireEvent.click(screen.getByRole("radio", { name: "7 of 10" }));
-    expect(onSaveRpe).toHaveBeenLastCalledWith(7, expect.any(Function));
-    // Choosing it again clears it (optional).
-    await waitFor(() => expect(onSaveRpe).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("radio", { name: "7 of 10" }));
-    await waitFor(() => expect(onSaveRpe).toHaveBeenLastCalledWith(null, expect.any(Function)));
+    fireEvent.change(screen.getByTestId("workout-note-input"), {
+      target: { value: "Left knee felt tight." },
+    });
+    // Nothing is sent until Save and share.
+    expect(onSaveFeedback).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save and share with Rahul" }));
+    await waitFor(() => expect(screen.getByText("Shared with Rahul")).toBeTruthy());
+    expect(onSaveFeedback).toHaveBeenCalledTimes(1);
+    expect(onSaveFeedback).toHaveBeenCalledWith(
+      { rpe: 7, note: "Left knee felt tight." },
+      expect.any(Function),
+    );
+  });
+
+  it("sends nothing when neither the rating nor the note changed", () => {
+    const onSaveFeedback = vi.fn();
+    render(
+      <WorkoutSummaryScreen
+        execution={execution}
+        assignment={finishedAssignment}
+        coachName="Rahul Verma"
+        onSaveFeedback={onSaveFeedback}
+        onDone={() => undefined}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("workout-note-input"), { target: { value: "   " } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and share with Rahul" }));
+    expect(screen.getByText("Shared with Rahul")).toBeTruthy();
+    expect(onSaveFeedback).not.toHaveBeenCalled();
+  });
+
+  it("shows a counter only near the 500 character limit", () => {
+    render(
+      <WorkoutSummaryScreen
+        execution={execution}
+        assignment={finishedAssignment}
+        coachName="Rahul Verma"
+        onDone={() => undefined}
+      />,
+    );
+    expect(screen.queryByText(/ \/ 500/)).toBeNull();
+    fireEvent.change(screen.getByTestId("workout-note-input"), {
+      target: { value: "a".repeat(460) },
+    });
+    expect(screen.getByText("460 / 500")).toBeTruthy();
+  });
+
+  it("says a held rating and note wait for the workout to be sent, and keeps the note on refusal", async () => {
+    let finishLanded: (outcome: RatingOutcome) => void = () => undefined;
+    const onSaveFeedback = vi.fn((_c: unknown, progress: (s: "held") => void) => {
+      progress("held");
+      return new Promise<RatingOutcome>((resolve) => {
+        finishLanded = resolve;
+      });
+    });
+    render(
+      <WorkoutSummaryScreen
+        execution={execution}
+        assignment={finishedAssignment}
+        coachName="Rahul Verma"
+        onSaveFeedback={onSaveFeedback}
+        onDone={() => undefined}
+      />,
+    );
+    fireEvent.change(screen.getByTestId("workout-note-input"), { target: { value: "Felt strong." } });
+    fireEvent.click(screen.getByRole("button", { name: "Save and share with Rahul" }));
+    expect(
+      await screen.findByText("Your rating and note will be saved when this workout is sent."),
+    ).toBeTruthy();
+    // The server then refuses: back on the summary with the typed note intact.
+    finishLanded({
+      kind: "refused",
+      reason: "other",
+      message: "Couldn't save your rating and note. Try again.",
+    });
+    expect(await screen.findByText("Couldn't save your rating and note. Try again.")).toBeTruthy();
+    expect((screen.getByTestId("workout-note-input") as HTMLTextAreaElement).value).toBe("Felt strong.");
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
   });
 
   describe("rating verdicts (Z14-12 fix round 1)", () => {
-    function renderAfterFinish(onSaveRpe: (...args: never[]) => unknown) {
+    function renderAfterFinish(onSaveFeedback: (...args: never[]) => unknown) {
       render(
         <WorkoutSummaryScreen
           execution={{ ...execution, sessionRpe: 5 }}
           assignment={finishedAssignment}
           coachName="Rahul Verma"
-          onSaveRpe={onSaveRpe as never}
+          onSaveFeedback={onSaveFeedback as never}
           onDone={() => undefined}
         />,
       );
     }
+    const pickAndSave = (n: number) => {
+      fireEvent.click(screen.getByRole("radio", { name: `${n} of 10` }));
+      fireEvent.click(screen.getByRole("button", { name: "Save and share with Rahul" }));
+    };
     // The chosen chip is the one drawn in the on-brand (white) text colour.
     const selected = (n: number) =>
       String(
@@ -206,30 +285,32 @@ describe("WorkoutSummaryScreen v3", () => {
       );
 
     it("says a held rating is waiting for the workout to be sent", async () => {
-      let finishLanded: (outcome: { kind: "saved"; rpe: number }) => void = () => undefined;
-      renderAfterFinish((_rpe: number, progress: (s: "held") => void) => {
+      let finishLanded: (outcome: RatingOutcome) => void = () => undefined;
+      renderAfterFinish((_c: unknown, progress: (s: "held") => void) => {
         progress("held");
         return new Promise((resolve) => {
           finishLanded = resolve;
         });
       });
-      fireEvent.click(screen.getByRole("radio", { name: "8 of 10" }));
+      pickAndSave(8);
       expect(await screen.findByText("Your rating will be saved when this workout is sent.")).toBeTruthy();
-      finishLanded({ kind: "saved", rpe: 8 });
+      finishLanded({ kind: "saved", rpe: 8, note: null });
       await waitFor(() =>
         expect(screen.queryByText("Your rating will be saved when this workout is sent.")).toBeNull(),
       );
-      expect(selected(8)).toBe("true");
+      expect(screen.getByText("Shared with Rahul")).toBeTruthy();
     });
 
     it("puts the last confirmed rating back and says the window closed (422)", async () => {
       renderAfterFinish(async () => ({
         kind: "refused",
         reason: "window_closed",
-        message: "Ratings can be changed for 48 hours after a workout.",
+        message: "Ratings and notes can be changed for 48 hours after a workout.",
       }));
-      fireEvent.click(screen.getByRole("radio", { name: "8 of 10" }));
-      expect(await screen.findByText("Ratings can be changed for 48 hours after a workout.")).toBeTruthy();
+      pickAndSave(8);
+      expect(
+        await screen.findByText("Ratings and notes can be changed for 48 hours after a workout."),
+      ).toBeTruthy();
       // Read-only from here: 5, the last confirmed value, and no picker.
       expect(screen.queryByRole("radio")).toBeNull();
       expect(screen.getByText("5 of 10")).toBeTruthy();
@@ -243,7 +324,7 @@ describe("WorkoutSummaryScreen v3", () => {
         message: "Your rating was changed somewhere else. Pick again to replace it.",
         serverRpe: 3,
       }));
-      fireEvent.click(screen.getByRole("radio", { name: "8 of 10" }));
+      pickAndSave(8);
       expect(
         await screen.findByText("Your rating was changed somewhere else. Pick again to replace it."),
       ).toBeTruthy();
@@ -251,20 +332,19 @@ describe("WorkoutSummaryScreen v3", () => {
       expect(selected(8)).toBe("false");
     });
 
-    it("offers Try again after another refusal and sends the same pick again", async () => {
-      const onSaveRpe = vi
+    it("offers Try again after another refusal and sends the same change again", async () => {
+      const onSaveFeedback = vi
         .fn()
         .mockResolvedValueOnce({ kind: "refused", reason: "other", message: "Couldn't save your rating. Try again." })
-        .mockResolvedValueOnce({ kind: "saved", rpe: 8 });
-      renderAfterFinish(onSaveRpe);
-      fireEvent.click(screen.getByRole("radio", { name: "8 of 10" }));
+        .mockResolvedValueOnce({ kind: "saved", rpe: 8, note: null });
+      renderAfterFinish(onSaveFeedback);
+      pickAndSave(8);
       expect(await screen.findByText("Couldn't save your rating. Try again.")).toBeTruthy();
       expect(selected(5)).toBe("true");
       fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-      await waitFor(() => expect(onSaveRpe).toHaveBeenCalledTimes(2));
-      expect(onSaveRpe).toHaveBeenLastCalledWith(8, expect.any(Function));
-      await waitFor(() => expect(screen.queryByText("Couldn't save your rating. Try again.")).toBeNull());
-      expect(selected(8)).toBe("true");
+      await waitFor(() => expect(onSaveFeedback).toHaveBeenCalledTimes(2));
+      expect(onSaveFeedback).toHaveBeenLastCalledWith({ rpe: 8 }, expect.any(Function));
+      await waitFor(() => expect(screen.getByText("Shared with Rahul")).toBeTruthy());
     });
   });
 
@@ -291,7 +371,7 @@ describe("WorkoutSummaryScreen v3", () => {
         execution={{ ...execution, requireSessionRpe: true }}
         assignment={finishedAssignment}
         coachName="Rahul Verma"
-        onSaveRpe={vi.fn()}
+        onSaveFeedback={vi.fn()}
         onDone={() => undefined}
       />,
     );
@@ -316,7 +396,7 @@ describe("WorkoutSummaryScreen v3", () => {
     function renderView(
       over: Partial<WorkoutExecution> = {},
       now = during,
-      onSaveRpe: (rpe: number | null, progress: (state: "held") => void) => Promise<RatingOutcome> | void = vi.fn(async () => ({ kind: "saved", rpe: 9 }) as const),
+      onSaveFeedback: (change: FeedbackChange, progress: (state: "held") => void) => Promise<RatingOutcome> | void = vi.fn(async () => ({ kind: "saved", rpe: 9, note: null }) as const),
     ) {
       const onDone = vi.fn();
       render(
@@ -326,37 +406,38 @@ describe("WorkoutSummaryScreen v3", () => {
           assignment={finishedAssignment}
           coachName="Rahul Verma"
           now={now}
-          onSaveRpe={onSaveRpe}
+          onSaveFeedback={onSaveFeedback}
           onDone={onDone}
         />,
       );
-      return { onDone, onSaveRpe };
+      return { onDone, onSaveFeedback };
     }
 
     it("is read-only with one Done and never offers Save and share", () => {
       const { onDone } = renderView();
       expect(screen.queryByRole("button", { name: /Save and share/ })).toBeNull();
       expect(screen.queryByRole("radio")).toBeNull();
-      expect(screen.getByText("YOUR RATING")).toBeTruthy();
+      expect(screen.getByText("YOUR RATING AND NOTE")).toBeTruthy();
       expect(screen.getByText("7 of 10")).toBeTruthy();
       expect(screen.getByText("Sent to Rahul")).toBeTruthy();
       expect(screen.getByText("Shared Sat 14 Nov, 7:22 pm")).toBeTruthy();
-      expect(screen.queryByText(/note/i)).toBeNull();
+      // No note written: nothing for it.
+      expect(screen.queryByText("Note for Rahul")).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Done" }));
       expect(onDone).toHaveBeenCalledTimes(1);
     });
 
     it("lets the trainee change the rating inside the 48 h window and queues it (W-17c2)", () => {
-      const { onSaveRpe } = renderView();
+      const { onSaveFeedback } = renderView();
       expect(
         screen.getByText("You can change this until Mon 16 Nov, 7:22 pm."),
       ).toBeTruthy();
-      fireEvent.click(screen.getByRole("button", { name: "Change your rating" }));
-      expect(screen.getByText("Your rating")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating and note" }));
+      expect(screen.getByText("Your rating and note")).toBeTruthy();
       fireEvent.click(screen.getByRole("radio", { name: "9 of 10" }));
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(onSaveRpe).toHaveBeenCalledTimes(1);
-      expect(onSaveRpe).toHaveBeenCalledWith(9, expect.any(Function));
+      expect(onSaveFeedback).toHaveBeenCalledTimes(1);
+      expect(onSaveFeedback).toHaveBeenCalledWith({ rpe: 9 }, expect.any(Function));
       expect(screen.getByText("9 of 10")).toBeTruthy();
     });
 
@@ -369,43 +450,43 @@ describe("WorkoutSummaryScreen v3", () => {
             ({
               kind: "refused",
               reason: "window_closed",
-              message: "Ratings can be changed for 48 hours after a workout.",
+              message: "Ratings and notes can be changed for 48 hours after a workout.",
             }) as const,
         ),
       );
-      fireEvent.click(screen.getByRole("button", { name: "Change your rating" }));
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating and note" }));
       fireEvent.click(screen.getByRole("radio", { name: "9 of 10" }));
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
       await waitFor(() => expect(screen.getByText("7 of 10")).toBeTruthy());
       expect(screen.queryByText("9 of 10")).toBeNull();
       // The window is closed: Change is gone, the line says why.
-      expect(screen.queryByRole("button", { name: "Change your rating" })).toBeNull();
-      expect(screen.getAllByText("Ratings can be changed for 48 hours after a workout.").length).toBeGreaterThan(0);
+      expect(screen.queryByRole("button", { name: "Change your rating and note" })).toBeNull();
+      expect(screen.getAllByText("Ratings and notes can be changed for 48 hours after a workout.").length).toBeGreaterThan(0);
     });
 
     it("clears the rating when it is optional", () => {
-      const { onSaveRpe } = renderView();
-      fireEvent.click(screen.getByRole("button", { name: "Change your rating" }));
+      const { onSaveFeedback } = renderView();
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating and note" }));
       fireEvent.click(screen.getByRole("radio", { name: "7 of 10" }));
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
-      expect(onSaveRpe).toHaveBeenCalledWith(null, expect.any(Function));
+      expect(onSaveFeedback).toHaveBeenCalledWith({ rpe: null }, expect.any(Function));
       expect(screen.getByText("Not rated")).toBeTruthy();
     });
 
     it("cancel saves nothing", () => {
-      const { onSaveRpe } = renderView();
-      fireEvent.click(screen.getByRole("button", { name: "Change your rating" }));
+      const { onSaveFeedback } = renderView();
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating and note" }));
       fireEvent.click(screen.getByRole("radio", { name: "2 of 10" }));
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(onSaveRpe).not.toHaveBeenCalled();
+      expect(onSaveFeedback).not.toHaveBeenCalled();
       expect(screen.getByText("7 of 10")).toBeTruthy();
     });
 
     it("hides Change at and after the 48 h boundary (W-17c3)", () => {
       renderView({}, new Date("2026-11-16T13:52:00.000Z"));
-      expect(screen.queryByRole("button", { name: "Change your rating" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Change your rating and note" })).toBeNull();
       expect(
-        screen.getByText("Ratings can be changed for 48 hours after a workout."),
+        screen.getByText("Ratings and notes can be changed for 48 hours after a workout."),
       ).toBeTruthy();
       expect(screen.getByRole("button", { name: "Done" })).toBeTruthy();
     });
@@ -413,7 +494,38 @@ describe("WorkoutSummaryScreen v3", () => {
     it("shows Not rated and no Change when the API gives no window", () => {
       renderView({ sessionRpe: null, feedbackEditableUntil: null });
       expect(screen.getByText("Not rated")).toBeTruthy();
-      expect(screen.queryByRole("button", { name: "Change your rating" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Change your rating and note" })).toBeNull();
+    });
+    it("shows the note, and a note-only change from the sheet sends only the note", () => {
+      const { onSaveFeedback } = renderView({ sessionNote: "Left knee felt tight." });
+      expect(screen.getByText("Note for Rahul")).toBeTruthy();
+      expect(screen.getByText("Left knee felt tight.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating and note" }));
+      fireEvent.change(screen.getByTestId("workout-note-input"), {
+        target: { value: "Knee fine today." },
+      });
+      fireEvent.click(screen.getByTestId("workout-note-save"));
+      expect(onSaveFeedback).toHaveBeenCalledTimes(1);
+      expect(onSaveFeedback).toHaveBeenCalledWith({ note: "Knee fine today." }, expect.any(Function));
+      expect(screen.getByTestId("workout-note-text").textContent).toBe("Knee fine today.");
+    });
+
+    it("cancel discards a typed note", () => {
+      const { onSaveFeedback } = renderView({ sessionNote: "Original." });
+      fireEvent.click(screen.getByRole("button", { name: "Change your rating and note" }));
+      fireEvent.change(screen.getByTestId("workout-note-input"), { target: { value: "Edited." } });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(onSaveFeedback).not.toHaveBeenCalled();
+      expect(screen.getByText("Original.")).toBeTruthy();
+    });
+
+    it("keeps the note read-only after the window, with the 48 hour line", () => {
+      renderView({ sessionNote: "Original." }, new Date("2026-11-17T00:00:00.000Z"));
+      expect(screen.getByText("Original.")).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Change your rating and note" })).toBeNull();
+      expect(
+        screen.getByText("Ratings and notes can be changed for 48 hours after a workout."),
+      ).toBeTruthy();
     });
   });
 });

@@ -1,0 +1,422 @@
+/**
+ * W13-10: the v3 client header and tabs, and the client Settings tab
+ * (frames W-209 + iPad, W-IP07, W-181, W-146) on the demo seed.
+ */
+import { expect, test, type Page } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
+import path from "node:path";
+import { signIn } from "./support/session";
+
+const OUT = path.resolve("qa-captures/w13-10");
+const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
+const KAVYA = "b9f01670-8acc-45f6-adab-d7728bca88a6";
+
+async function windowLocked(page: Page) {
+  return page.evaluate(() => {
+    const main = document.querySelector("main.main");
+    const doc = document.documentElement;
+    const mainStyle = main ? getComputedStyle(main) : null;
+    return {
+      windowScrolls: doc.scrollHeight > doc.clientHeight + 1,
+      mainOverflow: mainStyle?.overflowY ?? "missing",
+    };
+  });
+}
+
+// Copied from e2e/w13-2-shell.spec.ts (D-W13-19): the check-web.mjs checks.
+async function textProblems(page: Page) {
+  return page.evaluate(() => {
+    const small: string[] = [];
+    const clip: string[] = [];
+    let broken = 0;
+    document.querySelectorAll("img").forEach((img) => {
+      if (!img.complete || img.naturalWidth === 0) broken += 1;
+    });
+    document.querySelectorAll("body *").forEach((el) => {
+      const text = [...el.childNodes]
+        .filter((node) => node.nodeType === 3 && node.textContent?.trim())
+        .map((node) => node.textContent?.trim() ?? "")
+        .join(" ");
+      if (!text) return;
+      const cs = getComputedStyle(el);
+      const box = el.getBoundingClientRect();
+      if (box.width === 0 || box.height === 0) return;
+      if (el.closest(".sr-only")) return;
+      const size = Number.parseFloat(cs.fontSize);
+      if (size < 12 && !el.closest(".shell-kbd, .ui-kbd, kbd")) {
+        small.push(`${size}:${text.slice(0, 24)}`);
+      }
+      if (el.matches("main.main, .shell-bell-popover, .shell-palette-results")) return;
+      if (
+        el.scrollWidth > el.clientWidth + 2 &&
+        cs.overflow !== "visible" &&
+        cs.overflowX !== "visible"
+      ) {
+        clip.push(text.slice(0, 40));
+      }
+    });
+    return { small, clip, broken };
+  });
+}
+
+async function shot(page: Page, name: string) {
+  await mkdir(OUT, { recursive: true });
+  await page.screenshot({ path: path.join(OUT, name), fullPage: false });
+  const locked = await windowLocked(page);
+  expect.soft(locked.windowScrolls, name).toBe(false);
+  expect.soft(locked.mainOverflow, name).toBe("auto");
+  const problems = await textProblems(page);
+  expect.soft(problems.broken, name).toBe(0);
+  expect.soft(problems.small, name).toEqual([]);
+  expect.soft(problems.clip, name).toEqual([]);
+}
+
+/** Header meta line: normal text lines, no separator dot visible at the start of a wrapped line. */
+async function metaLineProblems(page: Page) {
+  return page.evaluate(() => {
+    // The meta line's visible clip box (its clip-path inset, resolved to px).
+    const clipBox = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      const px = (getComputedStyle(el).clipPath.match(/-?[\d.]+px/g) ?? []).map(Number.parseFloat);
+      if (px.length !== 4) return null;
+      const [top, right, bottom, left] = px as [number, number, number, number];
+      return { top: box.top + top, right: box.right - right, bottom: box.bottom - bottom, left: box.left + left };
+    };
+    const meta = document.querySelector(".wsh-v3 .wsh-meta");
+    const items = Array.from(document.querySelectorAll(".wsh-v3 .wsh-meta .wsh-meta-item"));
+    const bad: string[] = [];
+    const clip = meta ? clipBox(meta) : null;
+    if (meta && !clip) bad.push("meta line has no inset clip-path");
+    let lineTop: number | null = null;
+    items.forEach((item, index) => {
+      const box = item.getBoundingClientRect();
+      if (box.height === 0) return;
+      if (box.height > 30) bad.push(`item ${index} is ${Math.round(box.height)} px tall`);
+      if (lineTop !== null && box.top > lineTop + 4) {
+        // A wrapped line's first item: its dot hangs left of the clip edge, out of sight.
+        const dot = getComputedStyle(item, "::before");
+        if (dot.content !== "none") {
+          if (dot.position !== "absolute") {
+            bad.push(`item ${index} starts a new line with an in-flow separator`);
+          } else if (clip) {
+            const dotRight = box.left + Number.parseFloat(dot.left) + Number.parseFloat(dot.width);
+            if (dotRight > clip.left) bad.push(`item ${index} shows its separator at a line start`);
+          }
+        }
+        lineTop = box.top;
+      }
+      if (lineTop === null) lineTop = box.top;
+    });
+    return bad;
+  });
+}
+
+/**
+ * iPad widths: the plan link takes taps over its whole 44 px band (centre and
+ * centre ±21 px, by hit-testing), and its keyboard focus ring is not clipped.
+ */
+async function planLinkProblems(page: Page) {
+  const link = page.locator(".wsh-v3 .wsh-meta .workspace-plan-link");
+  await expect(link).toBeVisible();
+  // Keyboard focus, so :focus-visible applies.
+  await link.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  const result = await page.evaluate(() => {
+    // The meta line's visible clip box (its clip-path inset, resolved to px).
+    const clipBox = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      const px = (getComputedStyle(el).clipPath.match(/-?[\d.]+px/g) ?? []).map(Number.parseFloat);
+      if (px.length !== 4) return null;
+      const [top, right, bottom, left] = px as [number, number, number, number];
+      return { top: box.top + top, right: box.right - right, bottom: box.bottom - bottom, left: box.left + left };
+    };
+    const el = document.querySelector(".wsh-v3 .wsh-meta .workspace-plan-link");
+    const meta = document.querySelector(".wsh-v3 .wsh-meta");
+    const bad: string[] = [];
+    if (!el || !meta) return { bad: ["no plan link"], wrapped: false };
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    for (const dy of [-21, 0, 21]) {
+      const hit = document.elementFromPoint(x, y + dy);
+      if (!hit || !(hit === el || el.contains(hit))) {
+        const name = hit ? `${hit.tagName.toLowerCase()}.${[...hit.classList].join(".")}` : "nothing";
+        bad.push(`tap at centre ${dy >= 0 ? "+" : ""}${dy} px lands on ${name}`);
+      }
+    }
+    // Its own box is 44 px (tw-g-ipad measures getBoundingClientRect, not hit areas).
+    if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
+      bad.push(`plan link box is ${Math.round(rect.width)}x${Math.round(rect.height)}`);
+    }
+    if (!el.matches(":focus-visible")) {
+      bad.push("plan link is not keyboard-focused");
+    } else {
+      // The ring is the link's outline, or an ::after outline that hugs the text.
+      const own = getComputedStyle(el);
+      const after = getComputedStyle(el, "::after");
+      const onAfter = own.outlineStyle === "none" && after.outlineStyle !== "none";
+      const cs = onAfter ? after : own;
+      const ring = Number.parseFloat(cs.outlineWidth) + Number.parseFloat(cs.outlineOffset);
+      const inset = (value: string) => (onAfter ? Number.parseFloat(value) || 0 : 0);
+      const box = {
+        top: rect.top + inset(after.top) - ring,
+        right: rect.right - inset(after.right) + ring,
+        bottom: rect.bottom - inset(after.bottom) + ring,
+        left: rect.left + inset(after.left) - ring,
+      };
+      const clip = clipBox(meta);
+      if (cs.outlineStyle === "none" || !(ring > 0)) bad.push("plan link has no focus ring");
+      if (!clip) bad.push("meta line has no inset clip-path");
+      else if (
+        box.left < clip.left - 0.5 ||
+        box.right > clip.right + 0.5 ||
+        box.top < clip.top - 0.5 ||
+        box.bottom > clip.bottom + 0.5
+      ) {
+        bad.push("plan link focus ring is clipped");
+      }
+    }
+    const tops = new Set(
+      Array.from(meta.querySelectorAll(".wsh-meta-item"))
+        .map((item) => item.getBoundingClientRect())
+        .filter((box) => box.height > 0)
+        .map((box) => Math.round(box.top)),
+    );
+    return { bad, wrapped: tops.size > 1 };
+  });
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  return result;
+}
+
+/** iPad widths: every control is at least 44×44 (labels count for their inputs). */
+async function undersizedTargets(page: Page) {
+  return page.locator("main.main").evaluate((node) => {
+    const selectors = [
+      "button",
+      "a[href]",
+      "[role='button']",
+      "[role='switch']",
+      "input[type='checkbox']",
+      "input[type='radio']",
+      "input[type='text']",
+      ".overflow-menu-trigger",
+      ".wsh-tab",
+    ].join(",");
+    const bad: string[] = [];
+    for (const el of Array.from(node.querySelectorAll(selectors))) {
+      const target = el.matches("input[type='checkbox'], input[type='radio']")
+        ? (el.closest("label") ?? el)
+        : el;
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const rect = target.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+      if (el.closest(".sr-only")) continue;
+      if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
+        bad.push(`${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 30)}" ${Math.round(rect.width)}x${Math.round(rect.height)}`);
+      }
+    }
+    return bad;
+  });
+}
+
+async function openSection(page: Page, client: string, hash: string, testId: string) {
+  await page.goto(`/clients/${client}/settings#${hash}`);
+  await expect(page.getByTestId("client-settings-page")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId(testId).first()).toBeVisible({ timeout: 30_000 });
+}
+
+test.describe("W13-10 client header, tabs and Settings tab", () => {
+  test.beforeEach(async ({ page }) => {
+    await signIn(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+  });
+
+  test("header: seven tabs ending in Settings, Remind and Note, ⋯ keeps End coaching only", async ({
+    page,
+  }) => {
+    await page.goto(`/clients/${ROHAN}/overview`);
+    const header = page.getByTestId("screen-TW-09a");
+    await expect(header).toBeVisible({ timeout: 30_000 });
+    const tabs = header.getByRole("navigation", { name: "Client sections" }).getByRole("link");
+    await expect(tabs).toHaveText([
+      "Overview",
+      "Plan",
+      "Activity",
+      "Progress",
+      /^Check-ins/,
+      "History",
+      "Settings",
+    ]);
+    await expect(header.getByRole("link", { name: "Message on WhatsApp" })).toBeVisible();
+    await expect(header.getByTestId("wsh-remind")).toHaveText("Remind");
+    await expect(header.getByTestId("wsh-note")).toBeVisible();
+    await expect(header).not.toContainText(/nudg/i);
+    await header.getByRole("button", { name: /More actions|Open menu/i }).click();
+    await expect(page.getByRole("menuitem")).toHaveText([/End coaching/]);
+    await page.keyboard.press("Escape");
+
+    await header.getByRole("link", { name: "Settings" }).click();
+    await expect(page).toHaveURL(new RegExp(`/clients/${ROHAN}/settings`));
+    await expect(page.getByTestId("cs-section-basic")).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("each Settings section loads from the sub-nav and by hash", async ({ page }) => {
+    await openSection(page, ROHAN, "basic", "cs-section-basic");
+    const nav = page.getByTestId("cs-subnav");
+    const sections: Array<[string, string]> = [
+      ["subscription", "cs-section-subscription"],
+      ["coaching", "cs-section-coaching"],
+      ["checkins", "cs-section-checkins"],
+      ["reminders", "cs-section-reminders"],
+      ["onboarding", "screen-TW-10"],
+      ["danger", "cs-section-danger"],
+      ["basic", "cs-section-basic"],
+    ];
+    for (const [hash, testId] of sections) {
+      await nav.getByTestId(`cs-nav-${hash}`).click();
+      await expect(page).toHaveURL(new RegExp(`#${hash}$`));
+      await expect(page.getByTestId(testId).first()).toBeVisible({ timeout: 30_000 });
+    }
+    // The old id of the Coaching relationship section lands on the Danger zone.
+    await openSection(page, ROHAN, "relationship", "cs-section-danger");
+    await expect(page.getByTestId("cs-nav-danger")).toHaveAttribute("aria-current", "true");
+  });
+
+  test("old /configure and /onboarding URLs land on their sections", async ({ page }) => {
+    await page.goto(`/clients/${ROHAN}/configure`);
+    await expect(page).toHaveURL(new RegExp(`/clients/${ROHAN}/settings#coaching$`));
+    await expect(page.getByTestId("cs-section-coaching")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("configure-footer")).toBeVisible();
+
+    await page.goto(`/clients/${ROHAN}/onboarding`);
+    await expect(page).toHaveURL(new RegExp(`/clients/${ROHAN}/settings#onboarding$`));
+    await expect(page.getByTestId("screen-TW-10")).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("Plan keeps a Coaching setup link into Settings", async ({ page }) => {
+    await page.goto(`/clients/${ROHAN}/plan`);
+    const link = page.getByRole("navigation", { name: "Plan sections" }).getByRole("link", {
+      name: "Coaching setup",
+    });
+    await expect(link).toBeVisible({ timeout: 30_000 });
+    await link.click();
+    await expect(page).toHaveURL(new RegExp(`/settings#coaching$`));
+    await expect(page.getByTestId("cs-section-coaching")).toBeVisible({ timeout: 30_000 });
+  });
+
+  test("editing client details saves", async ({ page }) => {
+    await openSection(page, ROHAN, "basic", "cs-section-basic");
+    const basic = page.getByTestId("cs-section-basic");
+    const before = (await basic.getByTestId("cs-basic-name").locator("dd").textContent())?.trim() ?? "";
+    await basic.getByRole("button", { name: "Edit basic details" }).click();
+    const dialog = page.getByRole("dialog", { name: "Edit basic details" });
+    await dialog.getByLabel("Name").fill(`${before} (Tue)`);
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(basic.getByTestId("cs-basic-name")).toContainText(`${before} (Tue)`);
+    // Put the seed back.
+    await basic.getByRole("button", { name: "Edit basic details" }).click();
+    await dialog.getByLabel("Name").fill(before);
+    await dialog.getByRole("button", { name: "Save changes" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(basic.getByTestId("cs-basic-name")).toContainText(before);
+  });
+
+  test("Reminders still opens from the Overview as a drawer", async ({ page }) => {
+    await page.goto(`/clients/${ROHAN}/overview`);
+    await expect(page.getByTestId("screen-TW-09a")).toBeVisible({ timeout: 30_000 });
+    await page
+      .locator("section", { has: page.getByRole("heading", { name: "Reminders", exact: true }) })
+      .getByRole("button", { name: "Details", exact: true })
+      .click();
+    const drawer = page.getByTestId("screen-TW-31");
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText(/Switch categories on or off in Settings › Reminders/);
+    await expect(drawer).toContainText("Opened from Overview › Reminders › Details");
+  });
+
+  test("an ended client's sections are read-only", async ({ page }) => {
+    await openSection(page, KAVYA, "basic", "cs-section-basic");
+    await expect(page.getByTestId("cs-readonly-banner")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Edit basic details" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "End coaching…" })).toHaveCount(0);
+    await page.getByTestId("cs-nav-coaching").click();
+    await expect(page.getByTestId("configure-readonly")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("configure-footer")).toHaveCount(0);
+    await page.getByTestId("cs-nav-reminders").click();
+    await expect(page.getByTestId("cs-section-reminders")).toContainText(
+      "Reminders are off while coaching is ended.",
+    );
+    await expect(page.getByRole("switch")).toHaveCount(0);
+  });
+
+  test("iPad widths: header, tabs, sub-nav and section controls are at least 44 px", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    for (const [width, height] of [
+      [1180, 820],
+      [1024, 1366],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      for (const [hash, testId] of [
+        ["basic", "cs-section-basic"],
+        ["coaching", "cs-section-coaching"],
+        ["reminders", "cs-reminders-summary"],
+        ["onboarding", "screen-TW-10"],
+      ] as const) {
+        await openSection(page, ROHAN, hash, testId);
+        await page.waitForTimeout(500);
+        expect(await undersizedTargets(page), `${hash} at ${width}`).toEqual([]);
+        expect(await metaLineProblems(page), `meta line, ${hash} at ${width}`).toEqual([]);
+        const plan = await planLinkProblems(page);
+        expect(plan.bad, `plan link, ${hash} at ${width}`).toEqual([]);
+        // Rohan's subtitle fits one line at 1180 and wraps at 1024: both cases are hit-tested.
+        expect(plan.wrapped, `meta line wraps, ${hash} at ${width}`).toBe(width === 1024);
+      }
+    }
+  });
+
+  test("captures the Settings frames at 1440, 1180 and 1024", async ({ page }) => {
+    test.setTimeout(300_000);
+    const sizes: Array<[number, number]> = [
+      [1440, 900],
+      [1180, 820],
+      [1024, 1366],
+    ];
+    const frames: Array<[string, string, string]> = [
+      ["W-209", "basic", "cs-section-basic"],
+      ["W-IP07", "coaching", "cs-section-coaching"],
+      ["W-181", "reminders", "cs-reminders-summary"],
+      ["W-146", "onboarding", "screen-TW-10"],
+    ];
+    for (const [id, hash, testId] of frames) {
+      for (const [width, height] of sizes) {
+        await page.setViewportSize({ width, height });
+        await openSection(page, ROHAN, hash, testId);
+        await page.waitForTimeout(800);
+        await page.evaluate(() => document.querySelector("main.main")?.scrollTo(0, 0));
+        const name =
+          id === "W-209" && width === 1024 ? "W-209-ipad" : id;
+        await shot(page, `${name}-${width}x${height}.png`);
+      }
+    }
+    // No frame of their own (spec): the same row system, captured for review.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const extras: Array<[string, string, string, string]> = [
+      ["nf-package-payments", ROHAN, "subscription", "cs-section-subscription"],
+      ["nf-checkins", ROHAN, "checkins", "cs-section-checkins"],
+      ["nf-danger-zone", ROHAN, "danger", "cs-section-danger"],
+      ["nf-ended-danger-zone", KAVYA, "danger", "cs-section-danger"],
+      ["nf-ended-coaching-setup", KAVYA, "coaching", "configure-readonly"],
+    ];
+    for (const [name, client, hash, testId] of extras) {
+      await openSection(page, client, hash, testId);
+      await page.waitForTimeout(800);
+      await shot(page, `${name}-1440x900.png`);
+    }
+  });
+});

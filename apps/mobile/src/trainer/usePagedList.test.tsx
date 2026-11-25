@@ -47,6 +47,20 @@ describe("usePagedList", () => {
     expect(new Set(result.current.items.map(getKey)).size).toBe(75);
   });
 
+  it("a row at the end of one page and the start of the next is shown once, in order (Z14-33)", async () => {
+    const fetchPage = vi
+      .fn<(cursor: string | null) => Promise<PagedResult<Row>>>()
+      .mockResolvedValueOnce({ items: rows(0, 30), nextCursor: "29" })
+      .mockResolvedValueOnce({ items: rows(29, 45), nextCursor: null });
+    const { result } = renderHook(() =>
+      usePagedList<Row>({ queryKey: "all", fetchPage, getKey }),
+    );
+    await waitFor(() => expect(result.current.items).toHaveLength(30));
+    act(() => result.current.loadMore());
+    await waitFor(() => expect(result.current.items).toHaveLength(45));
+    expect(result.current.items.map(getKey)).toEqual(rows(0, 45).map(getKey));
+  });
+
   it("never asks twice for the same cursor", async () => {
     const first = deferred<PagedResult<Row>>();
     const fetchPage = vi

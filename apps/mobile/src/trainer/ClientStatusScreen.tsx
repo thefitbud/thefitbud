@@ -387,22 +387,11 @@ export function ClientStatusScreen({
       : [header ? header.goalShort : kept?.goalShort, weekLabel]
           .filter(Boolean)
           .join(" · ") || (pending ? "" : "No plan assigned yet");
-  const gender = header?.traineeProfile?.gender?.toLowerCase() ?? "";
-  const possessive =
-    gender === "female" || gender === "f" || gender === "she/her"
-      ? ("her" as const)
-      : gender === "male" || gender === "m" || gender === "he/him"
-        ? ("his" as const)
-        : ("their" as const);
-  const subject =
-    possessive === "her" ? ("She" as const) : possessive === "his" ? ("He" as const) : ("They" as const);
   const waiting = onboardingIncomplete
     ? onboardingWaitingCopy({
         firstName: first,
         status: header?.onboardingStatus ?? "onboarding_pending",
         startedAt,
-        possessive,
-        subject,
       })
     : null;
   const steps = onboardingIncomplete
