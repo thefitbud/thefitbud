@@ -8,7 +8,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { signIn } from "./support/session";
 
-const OUT = path.resolve("qa-captures/w13-8");
+const OUT = path.resolve("qa-captures/w13-14");
 const ROHAN = "c422296e-ed7b-4196-a2b4-647096af3002";
 
 async function windowLocked(page: Page) {
@@ -127,6 +127,45 @@ test.describe("W13-8 Activity and History", () => {
 
     await page.getByTestId("activity-row").first().getByRole("button", { name: "View" }).click();
     await expect(page.getByTestId("activity-drawer")).toBeVisible();
+  });
+
+  test("Activity (W13-14): no future day cards and no Remind on a day after today", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openActivity(page);
+    const todayIso = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+    const todayLabel = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    })
+      .format(new Date())
+      .replace(",", "");
+    const heads = await page.locator(".activity-day-header").allInnerTexts();
+    const dayRe = /^(?:Today · )?(\w{3}) (\d{1,2}) (\w{3})$/;
+    const toNum = (text: string) => {
+      const m = dayRe.exec(text);
+      return m ? new Date(`${m[2]} ${m[3]} 2026 12:00 UTC`).getTime() : null;
+    };
+    const todayNum = new Date(`${todayIso}T12:00:00Z`).getTime();
+    for (const head of heads) {
+      const n = toNum(head);
+      if (n !== null) expect(n, head).toBeLessThanOrEqual(todayNum);
+    }
+    for (const head of heads) {
+      if (head.startsWith("Today")) expect(head).toBe(`Today · ${todayLabel}`);
+    }
+    for (const group of await page.getByTestId("activity-day-group").all()) {
+      const head = (await group.locator(".activity-day-header").innerText()).trim();
+      const n = toNum(head);
+      if (n !== null && n > todayNum) {
+        await expect(group.getByRole("button", { name: "Remind" })).toHaveCount(0);
+      }
+    }
+    // Planned rows (window not started) never carry Remind.
+    for (const row of await page.getByTestId("activity-row").filter({ has: page.locator(".activity-status", { hasText: /^Planned$/ }) }).all()) {
+      await expect(row.getByRole("button", { name: "Remind" })).toHaveCount(0);
+    }
   });
 
   test("History: grouped by day with sentence titles", async ({ page }) => {
