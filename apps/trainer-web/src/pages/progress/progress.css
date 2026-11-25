@@ -559,8 +559,17 @@
   .pg-custom-btn,
   .pg-rail-tab,
   .pg-rail-link-row,
-  .pg-rail-foot a {
+  .pg-rail-foot a,
+  .pg-range .ui-seg button,
+  .pg-compare-btn,
+  .pg-text-btn,
+  .pg-outline-btn,
+  .pg-apply {
     min-height: 44px;
+  }
+
+  .pg-range .ui-seg button {
+    min-width: 44px;
   }
 
   .pg-rail-tab {

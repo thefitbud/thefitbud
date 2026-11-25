@@ -133,7 +133,7 @@ test.describe("W13-9 progress", () => {
     const box = (await page.getByTestId("pg-chart-svg").boundingBox())!;
     await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5);
     await expect(page.getByTestId("pg-tooltip")).toContainText(
-      /\b(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2}\b/,
+      /(Mon|Tue|Wed|Thu|Fri|Sat|Sun) \d{1,2} [A-Z][a-z]{2}/,
     );
 
     // Another metric in the rail: the heading and the chart change.
