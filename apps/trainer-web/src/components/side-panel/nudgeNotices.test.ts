@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   clientTimeLabel,
+  nudgeHintTone,
   nudgeLimitNotice,
+  remindHelper,
   quietHoursNotice,
   resolveLockHelper,
   waitLabel,
@@ -94,5 +96,35 @@ describe("resolveLockHelper", () => {
         otherOpen: 1,
       }),
     ).toBe("Resolving closes this item. Rohan's other item stays open.");
+  });
+});
+
+describe("remindHelper (W13-11, FLOW 6.3)", () => {
+  it("promises a push only when push is on", () => {
+    expect(remindHelper({ firstName: "Rohan", label: "logs_on_own" })).toBe(
+      "Sends Rohan a push notification",
+    );
+    expect(remindHelper({ firstName: null, label: null })).toBe(
+      "Sends your client a push notification",
+    );
+  });
+
+  it("says the reminder goes to the inbox when push is off or reminders are paused", () => {
+    expect(remindHelper({ firstName: "Ishita", label: "notifications_off" })).toBe(
+      "Push is off for Ishita. A reminder goes to their FitBud inbox.",
+    );
+    expect(remindHelper({ firstName: "Farhan", label: "reminders_paused" })).toBe(
+      "Reminders are paused for Farhan. A reminder goes to their FitBud inbox.",
+    );
+  });
+});
+
+describe("nudgeHintTone", () => {
+  it("maps the fixed notice copy to a tone", () => {
+    expect(nudgeHintTone("Reminder sent")).toBe("done");
+    expect(nudgeHintTone("Reminder sent. It arrives after 7:00 am (client's time, IST).")).toBe("done");
+    expect(nudgeHintTone("Reminder sent to their inbox. Push is off.")).toBe("info");
+    expect(nudgeHintTone("Already reminded about this today.")).toBe("neutral");
+    expect(nudgeHintTone("Could not send the reminder")).toBe("warn");
   });
 });

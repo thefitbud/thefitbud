@@ -14,6 +14,7 @@ import type {
 import { formatClockTime, formatHhMmTime, labelFor } from "@fitbud/core";
 import { ActivityDayGroup } from "../components/activity/ActivityDayGroup";
 import { ActivityDrawer } from "../components/activity/ActivityDrawer";
+import { ChipMenu } from "../components/activity/ChipMenu";
 import {
   ActivityRemovedRow,
   type NudgeUiState,
@@ -28,10 +29,12 @@ import {
   mealDayHeaderSummary,
   parseItemParam,
   plannedDailyKcalMeta,
+  rangeLabel,
   resolveDateRange,
   todayInTimezone,
 } from "../components/activity/activityUtils";
-import { Button } from "../components/Button";
+import { ClipboardCheck, Dumbbell, UtensilsCrossed, CalendarDays } from "lucide-react";
+import { Button } from "../components/ui";
 import { EmptyState, ErrorState, LoadingBlock } from "../components/StatePanels";
 import { apiClient } from "../lib/api";
 import { stage1Api } from "../lib/stage1-api";
@@ -50,6 +53,12 @@ type FeedEvent = {
   mealDate?: string | null;
   previousKcal?: number | null;
 };
+
+const RANGE_OPTIONS: Array<{ value: string; label: string; chipLabel: string }> = [
+  { value: "this_week", label: "This week", chipLabel: "This week" },
+  { value: "last_week", label: "Last week", chipLabel: "Last week" },
+  { value: "custom", label: "Custom range", chipLabel: "Custom" },
+];
 
 const MEAL_PILLS: Array<{ value: MealStateFilter; label: string }> = [
   { value: "", label: "All" },
@@ -456,145 +465,95 @@ export function ClientActivityPage() {
     [unreadEdits],
   );
   const cardTitle = feedCardTitle(activityType, rangeMode);
+  // One "Status Any" menu replaces the old row of state pills (W-158).
+  const statusOptions =
+    activityType === "meal"
+      ? MEAL_PILLS.map((pill) => ({ value: pill.value, label: pill.value ? pill.label : "Any" }))
+      : activityType === "workout"
+        ? WORKOUT_PILLS.map((pill) => ({ value: pill.value, label: pill.value ? pill.label : "Any" }))
+        : CHECKIN_PILLS.map((value) => ({
+            value,
+            label: value ? labelFor("checkin_status", value) : "Any",
+          }));
   const plannedMeta =
     activityType === "meal" ? plannedDailyKcalMeta(mealAssignments) : null;
 
   return (
     <div className="workspace-page activity-page" data-testid="screen-TW-17">
-      <header className="workspace-page-head">
-        <h1>Activity</h1>
-      </header>
+      <h1 className="sr-only">Activity</h1>
 
-      <div
-        className="segment activity-type-segment"
-        role="group"
-        aria-label="Activity type"
-      >
-        {(["workout", "meal", "checkin"] as const).map((type) => (
-          <button
-            key={type}
-            type="button"
-            className={
-              activityType === type ? "segment-btn is-on" : "segment-btn"
-            }
-            aria-pressed={activityType === type}
-            onClick={() =>
-              patchParams({ type, state: null, item: null })
-            }
-          >
-            {type === "workout"
-              ? "Workouts"
-              : type === "meal"
-                ? "Meals"
-                : "Check-ins"}
-          </button>
-        ))}
-      </div>
-
-      <div className="activity-filters">
-        <div className="activity-state-pills" role="group" aria-label="State">
-          {activityType === "meal"
-            ? MEAL_PILLS.map((pill) => (
-                <button
-                  key={pill.label}
-                  type="button"
-                  className={
-                    stateFilter === pill.value
-                      ? "filter-pill is-on"
-                      : "filter-pill"
-                  }
-                  aria-pressed={stateFilter === pill.value}
-                  onClick={() => patchParams({ state: pill.value || null })}
-                >
-                  {pill.label}
-                </button>
-              ))
-            : null}
-          {activityType === "workout"
-            ? WORKOUT_PILLS.map((pill) => (
-                <button
-                  key={pill.label}
-                  type="button"
-                  className={
-                    stateFilter === pill.value
-                      ? "filter-pill is-on"
-                      : "filter-pill"
-                  }
-                  aria-pressed={stateFilter === pill.value}
-                  onClick={() => patchParams({ state: pill.value || null })}
-                >
-                  {pill.label}
-                </button>
-              ))
-            : null}
-          {activityType === "checkin"
-            ? CHECKIN_PILLS.map((value) => (
-                <button
-                  key={value || "all"}
-                  type="button"
-                  className={
-                    stateFilter === value ? "filter-pill is-on" : "filter-pill"
-                  }
-                  aria-pressed={stateFilter === value}
-                  onClick={() => patchParams({ state: value || null })}
-                >
-                  {value
-                    ? labelFor("checkin_status", value)
-                    : "All"}
-                </button>
-              ))
-            : null}
-        </div>
-
+      <div className="activity-toolbar" role="group" aria-label="Activity filters">
         <div
-          className="segment activity-range-segment"
+          className="ui-seg activity-type-segment"
           role="group"
-          aria-label="Date range"
+          aria-label="Activity type"
         >
           {(
             [
-              ["this_week", "This week"],
-              ["last_week", "Last week"],
-              ["custom", "Custom"],
+              ["workout", "Workouts", Dumbbell],
+              ["meal", "Meals", UtensilsCrossed],
+              ["checkin", "Check-ins", ClipboardCheck],
             ] as const
-          ).map(([value, label]) => (
+          ).map(([type, label, TypeIcon]) => (
             <button
-              key={value}
+              key={type}
               type="button"
-              className={
-                rangeMode === value ? "segment-btn is-on" : "segment-btn"
-              }
-              aria-pressed={rangeMode === value}
-              onClick={() => patchParams({ range: value })}
+              className={activityType === type ? "is-on" : undefined}
+              aria-pressed={activityType === type}
+              onClick={() => patchParams({ type, state: null, item: null })}
             >
+              <TypeIcon className="ui-i" aria-hidden="true" />
               {label}
             </button>
           ))}
         </div>
-        {rangeMode === "custom" ? (
-          <div className="activity-custom-range">
-            <label className="field">
-              <span>From</span>
-              <input
-                type="date"
-                value={customFrom}
-                onChange={(event) =>
-                  patchParams({ from: event.target.value || null })
-                }
-              />
-            </label>
-            <label className="field">
-              <span>To</span>
-              <input
-                type="date"
-                value={customTo}
-                onChange={(event) =>
-                  patchParams({ to: event.target.value || null })
-                }
-              />
-            </label>
-          </div>
-        ) : null}
+
+        <div className="activity-toolbar-end">
+          <ChipMenu
+            label="Status"
+            aria-label="Status"
+            options={statusOptions}
+            value={stateFilter}
+            onChange={(value) => patchParams({ state: value || null })}
+            alignEnd
+          />
+          {rangeMode === "custom" ? (
+            <div className="activity-custom-range">
+              <label className="activity-date-field">
+                <span>From</span>
+                <input
+                  type="date"
+                  value={customFrom}
+                  onChange={(event) =>
+                    patchParams({ from: event.target.value || null })
+                  }
+                />
+              </label>
+              <label className="activity-date-field">
+                <span>To</span>
+                <input
+                  type="date"
+                  value={customTo}
+                  onChange={(event) =>
+                    patchParams({ to: event.target.value || null })
+                  }
+                />
+              </label>
+            </div>
+          ) : null}
+          <ChipMenu
+            icon={<CalendarDays className="ui-i" aria-hidden="true" />}
+            aria-label="Date range"
+            options={RANGE_OPTIONS}
+            value={rangeMode}
+            valueLabel={`${
+              RANGE_OPTIONS.find((option) => option.value === rangeMode)?.chipLabel ??
+              "This week"
+            } · ${rangeLabel(range.from, range.to)}`}
+            onChange={(value) => patchParams({ range: value })}
+            alignEnd
+          />
+        </div>
       </div>
 
       {error ? (
@@ -622,20 +581,19 @@ export function ClientActivityPage() {
       ) : null}
 
       {!loading && !emptyCopy && (groups.length > 0 || removals.length > 0) ? (
-        <section className="activity-feed-card" aria-labelledby="activity-feed-title">
-          <div className="activity-feed-card-head">
-            <h2 id="activity-feed-title" className="activity-feed-card-title">
-              {cardTitle}
-            </h2>
-            {plannedMeta ? (
-              <p className="activity-feed-card-meta">{plannedMeta}</p>
-            ) : null}
-          </div>
+        <section className="activity-feed" aria-labelledby="activity-feed-title">
+          <h2 id="activity-feed-title" className="sr-only">
+            {cardTitle}
+          </h2>
+          {plannedMeta ? (
+            <p className="activity-feed-card-meta">{plannedMeta}</p>
+          ) : null}
           <UnreadLogEditsContext.Provider value={unreadEntryIds}>
           {groups.map((group) => (
             <ActivityDayGroup
               key={group.date}
               date={group.date}
+              today={today}
               headerSuffix={
                 activityType === "meal"
                   ? mealDayHeaderSummary(group.items)
@@ -656,7 +614,9 @@ export function ClientActivityPage() {
           </UnreadLogEditsContext.Provider>
           {removals.length > 0 ? (
             <section className="activity-day-group" data-testid="activity-removals">
-              <h2 className="activity-day-header">Removed logs</h2>
+              <header className="activity-day-head">
+                <h2 className="activity-day-header">Removed logs</h2>
+              </header>
               <ul className="activity-feed-list">
                 {removals.map((event) => (
                   <ActivityRemovedRow
@@ -680,6 +640,7 @@ export function ClientActivityPage() {
         <Button
           type="button"
           variant="secondary"
+          className="activity-load-more"
           disabled={loadingMore}
           onClick={() => void load(nextCursor)}
         >

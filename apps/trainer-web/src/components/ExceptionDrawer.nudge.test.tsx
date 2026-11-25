@@ -126,6 +126,39 @@ describe("ExceptionDrawer nudge (Z12-50)", () => {
     const button = await renderDrawer();
     fireEvent.click(button);
     await screen.findByText("Reminder sent");
-    expect(screen.queryByText(/inbox/)).toBeNull();
+    expect(screen.getByTestId("panel-nudge-result").textContent).not.toMatch(/inbox/);
+  });
+
+  it("hides Remind for a meal that was logged later (FLOW 6.2)", async () => {
+    api.getException.mockResolvedValue({
+      ...detail,
+      type: "meal_logged_later",
+      status: "active",
+      acknowledgedAt: null,
+      sourceEntityType: "meal_assignment",
+    });
+    render(
+      <MemoryRouter>
+        <ExceptionDrawer exceptionId={EXC_ID} onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+    await screen.findByRole("button", { name: /resolve/i });
+    expect(screen.queryByRole("button", { name: "Remind" })).toBeNull();
+    expect(screen.queryByText(/push notification/)).toBeNull();
+  });
+
+  it("the helper under Remind follows the client's push state (FLOW 6.3)", async () => {
+    api.getResponsiveness.mockResolvedValue({
+      label: "notifications_off",
+      counts: { sent: 0, opened: 0, loggedAfter: 0, loggedBefore: 0 },
+      pushEnabled: false,
+    });
+    await renderDrawer();
+    expect(
+      await screen.findByText(
+        "Push is off for Rohan. A reminder goes to their FitBud inbox.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Sends Rohan a push/)).toBeNull();
   });
 });
