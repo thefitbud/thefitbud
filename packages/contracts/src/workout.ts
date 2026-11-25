@@ -96,6 +96,13 @@ export const workoutExecutionSchema = z.object({
   pausedAt: isoDateTimeSchema.nullable(),
   completedAt: isoDateTimeSchema.nullable(),
   sessionRpe: z.number().min(1).max(10).nullable(),
+  /**
+   * Z14-31 (D-W14-34): the trainee's note on the finished workout (null when
+   * none), set with the rating and editable for 48 h. The API always sends it
+   * (REST reads, trainer reads and sync pull payloads); optional so older
+   * fixtures parse.
+   */
+  sessionNote: z.string().nullable().optional(),
   requireSessionRpe: z.boolean(),
   /**
    * Who logged the entry (Z6-19, R1): `coach` entries are read-only to the
@@ -200,20 +207,38 @@ export type CompleteSetRequest = z.infer<typeof completeSetRequestSchema>;
 export const completeWorkoutRequestSchema = z.object({
   sessionRpe: z.number().min(1).max(10).nullable().optional(),
 });
+/** Z14-31 (D-W14-34): longest workout note, counted after trimming. */
+export const WORKOUT_SESSION_NOTE_MAX_LENGTH = 500;
+
+/**
+ * A workout note as sent: trimmed, at most 500 characters (longer is refused,
+ * never cut). An empty or whitespace-only note parses to `null` (clear it).
+ */
+export const workoutSessionNoteInputSchema = z
+  .string()
+  .transform((value) => value.trim())
+  .pipe(z.string().max(WORKOUT_SESSION_NOTE_MAX_LENGTH))
+  .transform((value) => (value === "" ? null : value));
+
 /**
  * `PATCH /workouts/executions/:id/feedback` (trainee, Idempotency-Key): sets or
- * clears the session RPE of the trainee's own finished workout for 48 h after
- * it finished (Z14-11, D-W14-20). `recordVersion` is the version edited.
- * The note is not here: `workout_executions` has no note column and D-W14-18
- * allows no other migration (see the Z14-11 report).
+ * clears the session RPE and the note of the trainee's own finished workout for
+ * 48 h after it finished (Z14-11, D-W14-20, Z14-31 / D-W14-34). `recordVersion`
+ * is the version edited. An omitted `rpe` or `note` means "unchanged"; `null`
+ * clears it (for the note, `""` and whitespace-only clear it too). At least one
+ * of the two must be sent. The old `{ rpe, recordVersion }` body still works.
  */
 export const traineeWorkoutFeedbackRequestSchema = z
   .object({
-    rpe: z.number().int().min(1).max(10).nullable(),
+    rpe: z.number().int().min(1).max(10).nullable().optional(),
+    note: workoutSessionNoteInputSchema.nullable().optional(),
     recordVersion: z.number().int().nonnegative(),
   })
-  // Strict: a `note` (or any other key) is refused, never silently dropped.
-  .strict();
+  // Strict: any other key is refused, never silently dropped.
+  .strict()
+  .refine((body) => body.rpe !== undefined || body.note !== undefined, {
+    message: "Send a rating or a note.",
+  });
 export type TraineeWorkoutFeedbackRequest = z.infer<
   typeof traineeWorkoutFeedbackRequestSchema
 >;

@@ -342,6 +342,12 @@ export type WorkoutLogSnapshot = {
   status: string;
   performedAt: string | null;
   sessionRpe: number | null;
+  /**
+   * Z14-31 (D-W14-34): the trainee's note. Kept in the stored snapshot only;
+   * change lines and feed text never carry it. Absent on rows written before
+   * the note existed (read as null).
+   */
+  sessionNote?: string | null;
   sets: Array<{
     id: string;
     exercise: string;
@@ -354,7 +360,12 @@ export type WorkoutLogSnapshot = {
 
 export function workoutLogSnapshot(input: {
   assignment: { localDate: string; workoutDayName: string };
-  execution: { status: string; completedAt: string | null; sessionRpe: number | null };
+  execution: {
+    status: string;
+    completedAt: string | null;
+    sessionRpe: number | null;
+    sessionNote?: string | null;
+  };
   exercises: Array<{ id: string; name: string; order: number }>;
   sets: Array<{
     id: string;
@@ -372,6 +383,7 @@ export function workoutLogSnapshot(input: {
     status: input.execution.status,
     performedAt: input.execution.completedAt,
     sessionRpe: input.execution.sessionRpe,
+    sessionNote: input.execution.sessionNote ?? null,
     sets: exercises.flatMap((exercise) =>
       input.sets
         .filter((set) => set.exerciseExecutionId === exercise.id)
@@ -411,8 +423,24 @@ export function workoutChangeLines(
   if (before.sessionRpe !== after.sessionRpe) {
     lines.push(`Session RPE: ${before.sessionRpe ?? "none"} → ${after.sessionRpe ?? "none"}`);
   }
+  const noteLine = sessionNoteChangeLine(before.sessionNote ?? null, after.sessionNote ?? null);
+  if (noteLine) lines.push(noteLine);
   if (before.performedAt !== after.performedAt) lines.push("Time changed");
   return lines;
+}
+
+/**
+ * Z14-31: how the workout note changed, without its text ("Note: added",
+ * "Note: changed", "Note: removed"); null when it did not change.
+ */
+export function sessionNoteChangeLine(
+  before: string | null,
+  after: string | null,
+): string | null {
+  if (before === after) return null;
+  if (before === null) return "Note: added";
+  if (after === null) return "Note: removed";
+  return "Note: changed";
 }
 
 function isWorkoutSnapshot(value: unknown): value is WorkoutLogSnapshot {
