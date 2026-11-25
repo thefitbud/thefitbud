@@ -282,9 +282,39 @@ a.checkin-review-step:focus-visible {
   align-items: center;
   gap: var(--s2);
   margin-top: var(--s2);
-  min-height: 44px;
   font: var(--t-body);
   color: var(--ink);
+}
+
+/* The whole label row is the target: box stays 18 px, row is 44 px at every width. */
+.checkin-review-visible .ui-cbx {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  text-align: left;
+  font: var(--t-body);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.checkin-review-visible .ui-cbx i {
+  flex: none;
+}
+
+.checkin-open-list .workspace-row-copy {
+  align-items: flex-start;
+}
+
+.checkin-open-list .checkin-open-review {
+  box-sizing: border-box;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  text-decoration: none;
 }
 
 .checkin-review-more {
@@ -466,6 +496,17 @@ a.checkin-review-step:focus-visible {
     padding-left: var(--s5);
     padding-right: var(--s5);
   }
+}
+
+/* Outcome segment: equal columns that wrap instead of touching the border. */
+.checkin-review-card .ui-seg button {
+  white-space: normal;
+  text-align: center;
+  line-height: 16px;
+  padding: 4px 8px;
+  height: auto;
+  min-height: 36px;
+  font-size: 13px;
 }
 
 /* Touch targets on iPad widths. */
