@@ -117,6 +117,25 @@ async function stepToItem(page: Page, text: RegExp) {
   }
 }
 
+/**
+ * W13-13: the review panel shows Remind only on items with something left to
+ * remind about, so step to the first such item (or stay put when none has it).
+ */
+async function stepToRemindable(page: Page) {
+  const panel = page.getByTestId("screen-TW-05");
+  await panelLoaded(page);
+  const remind = panel.getByRole("button", { name: /^remind/i });
+  for (let k = 0; k < 10; k += 1) {
+    if (await remind.count()) return remind;
+    const next = panel.getByRole("button", { name: "Next item" });
+    if (!(await next.count()) || !(await next.isEnabled())) break;
+    await next.click();
+    await expect(panel.locator(".sp-title")).toBeVisible({ timeout: 15_000 });
+    await page.waitForTimeout(300);
+  }
+  return (await remind.count()) ? remind : null;
+}
+
 test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
   test.beforeEach(async ({ page }) => {
     await signIn(page);
@@ -192,12 +211,12 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       console.log("STEP W-02b remind states");
       await openClient(page, pass.nudge);
       if (pass.nudge === "Rohan") await stepToItem(page, /Missed workout/i);
-      const remind = panel.getByRole("button", { name: /^remind/i });
-      if (await remind.isEnabled()) {
+      const remind = await stepToRemindable(page);
+      if (remind && (await remind.isEnabled())) {
         await remind.click();
         await page.waitForTimeout(1200);
         await shot(page, "W-02b-panel-nudge-states", size);
-        if (await remind.isEnabled()) {
+        if ((await remind.count()) && (await remind.isEnabled())) {
           await remind.click();
           await page.waitForTimeout(1200);
         }

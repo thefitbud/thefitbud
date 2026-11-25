@@ -2147,4 +2147,46 @@ describe("Review pager order and all-done summary (W13-13)", () => {
       ]);
     });
   });
+
+  it("Resolve several… fills every seeded row, not just the open item; a failed lookup leaves only that row short", async () => {
+    // Seeded items: details null, meal_assignment source. The open item's
+    // source is loaded for its own card first; every other row must still
+    // be read from its assignment (W13-13 fix round 1).
+    const ids = [1, 2, 3, 4].map((n) => `bbbbbbb${n}-0000-4000-8000-000000000000`);
+    const meals = ids.map((id, i) =>
+      openItem(i + 1, {
+        type: "overdue_meal",
+        summary: "Required meal still unlogged",
+        sourceEntityType: "meal_assignment",
+        sourceEntityId: id,
+        details: null,
+      }),
+    );
+    const byAssignment: Record<string, { mealName: string; localDate: string }> = {
+      [ids[0]!]: { mealName: "Dinner", localDate: "2026-11-24" },
+      [ids[1]!]: { mealName: "Snack", localDate: "2026-11-24" },
+      [ids[2]!]: { mealName: "Lunch", localDate: "2026-11-24" },
+    };
+    api.getMealAssignment.mockImplementation(async (id: string) => {
+      const meal = byAssignment[id];
+      if (!meal) throw new Error("gone");
+      return { ...meal, windowEndsAt: null };
+    });
+    renderPanel(meals);
+    fireEvent.click(await screen.findByRole("button", { name: "Resolve several…" }));
+    const list = await screen.findByTestId("bulk-select-list");
+    await waitFor(() => {
+      const titles = Array.from(list.querySelectorAll(".sp-bulk-title")).map(
+        (el) => el.textContent,
+      );
+      expect(titles).toEqual([
+        "Required meal still unlogged · Dinner · Tue 24 Nov",
+        "Required meal still unlogged · Snack · Tue 24 Nov",
+        "Required meal still unlogged · Lunch · Tue 24 Nov",
+        "Required meal still unlogged",
+      ]);
+    });
+    const asked = api.getMealAssignment.mock.calls.map((call) => call[0]);
+    for (const id of ids) expect(asked).toContain(id);
+  });
 });

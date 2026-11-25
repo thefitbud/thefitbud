@@ -140,7 +140,10 @@ export function headerMeta(
   return parts.join(" · ");
 }
 
-/** "Open 5 d · not reviewed yet" / "Open 5 d · noted" (frame 02, RP-02). */
+/**
+ * "Open 5 d" / "Open 5 d · noted" (frame 02, RP-02). An item not yet noted
+ * shows its age only: "reviewed" is retired wording (W14 words, D-W13-5).
+ */
 export function itemAgeLine(
   item: Pick<Exception, "detectedAt" | "status">,
   now: number = Date.now(),
@@ -150,10 +153,7 @@ export function itemAgeLine(
     ? 0
     : Math.max(0, Math.floor((now - detected) / DAY_MS));
   const age = days === 0 ? "Open today" : `Open ${days} d`;
-  // W14 words (D-W13-5): a noted item reads "noted", not "reviewed".
-  const review =
-    item.status === "acknowledged" ? "noted" : "not reviewed yet";
-  return `${age} · ${review}`;
+  return item.status === "acknowledged" ? `${age} · noted` : age;
 }
 
 /** Source card heading (frame 02): where the expectation came from. */

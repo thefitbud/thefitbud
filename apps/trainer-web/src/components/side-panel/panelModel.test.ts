@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   allDoneSummary,
   buildPanelList,
+  itemAgeLine,
   itemTitle,
   moreOpenText,
 } from "./panelModel";
@@ -63,5 +64,22 @@ describe("panel copy", () => {
     expect(allDoneSummary(2, 1)).toBe("2 resolved · 1 noted, still open");
     expect(allDoneSummary(3, 0)).toBe("3 resolved");
     expect(allDoneSummary(0, 2)).toBe("2 noted, still open");
+  });
+});
+
+describe("itemAgeLine (W13-13, W14 words)", () => {
+  const now = Date.parse("2026-11-25T10:00:00.000Z");
+  it("shows the age only while the item is open, never \"reviewed\"", () => {
+    const today = itemAgeLine({ detectedAt: "2026-11-25T06:00:00.000Z", status: "active" }, now);
+    const older = itemAgeLine({ detectedAt: "2026-11-20T09:00:00.000Z", status: "active" }, now);
+    expect(today).toBe("Open today");
+    expect(older).toBe("Open 5 d");
+    expect(`${today} ${older}`).not.toMatch(/review/i);
+  });
+
+  it("a noted item reads \"noted\"", () => {
+    expect(
+      itemAgeLine({ detectedAt: "2026-11-23T09:00:00.000Z", status: "acknowledged" }, now),
+    ).toBe("Open 2 d · noted");
   });
 });

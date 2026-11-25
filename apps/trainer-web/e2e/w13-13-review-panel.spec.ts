@@ -392,13 +392,24 @@ test.describe("W13-13 review panel (Z14-23 layout on web)", () => {
       panel = await openFromHome(page, "Farhan");
       await panel.getByRole("button", { name: /resolve several/i }).click();
       await expect(page.getByTestId("bulk-select-list")).toBeVisible();
-      await expect(page.locator(".sp-bulk-title").first()).toContainText(/ · .* · /, {
-        timeout: 15_000,
-      });
+      // Every row names its meal or workout and day, and no two rows read the
+      // same, before the capture (seeded items carry no details: the panel
+      // reads each source assignment).
+      await expect
+        .poll(
+          async () => {
+            const titles = await page.locator(".sp-bulk-title").allTextContents();
+            return {
+              count: titles.length > 1,
+              allNamed: titles.every((t) => / · .* · /.test(t)),
+              distinct: new Set(titles).size === titles.length,
+            };
+          },
+          { message: "resolve several rows are distinguishable", timeout: 20_000 },
+        )
+        .toEqual({ count: true, allNamed: true, distinct: true });
       await page.waitForTimeout(400);
       await shot(page, "W-02f-resolve-several", size);
-      const titles = await page.locator(".sp-bulk-title").allTextContents();
-      expect.soft(new Set(titles).size, "resolve several rows are distinguishable").toBe(titles.length);
 
       console.log("STEP W-02i ended client");
       await page.goto(`/?exception=${kavyaResolved}`);
