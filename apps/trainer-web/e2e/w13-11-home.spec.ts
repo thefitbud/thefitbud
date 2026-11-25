@@ -106,12 +106,12 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
 
   test("home row click opens list mode, noted, resolve and undo", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openClient(page, "Rohan");
+    await openClient(page, "Neha");
     const panel = page.getByTestId("screen-TW-05");
-    await expect(panel.getByText(/of 6/)).toBeVisible();
-    await expect(panel.getByRole("heading", { name: /also open for rohan/i })).toBeVisible();
+    await expect(panel.getByText(/^1 of 2$/)).toBeVisible();
+    await expect(panel.getByRole("heading", { name: /also open for neha/i })).toBeVisible();
     await panel.getByRole("button", { name: /^noted, keep open$/i }).click();
-    await expect(panel.getByTestId("sp-noted-state")).toBeVisible({ timeout: 15_000 });
+    await expect(panel.locator(".sp-noted-state")).toBeVisible({ timeout: 15_000 });
     await panel.getByRole("button", { name: /^resolve…?$/i }).click();
     await panel.getByRole("button", { name: /^resolve item$/i }).click();
     const banner = page.getByTestId("exception-resolve-banner");
@@ -124,7 +124,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/checkins");
     await expect(page.getByRole("tab", { name: /to review/i })).toBeVisible({ timeout: 30_000 });
-    for (const name of [/due/i, /overdue/i, /reviewed/i, /to review/i]) {
+    for (const name of [/^due/i, /^overdue/i, /^reviewed/i, /^to review/i]) {
       await page.getByRole("tab", { name }).click();
       await expect(page.getByRole("tab", { name })).toHaveAttribute("aria-selected", "true");
     }
@@ -137,7 +137,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
   });
 
   test("captures every frame at three widths", async ({ page }) => {
-    test.setTimeout(500_000);
+    test.setTimeout(200_000);
     const token = await apiToken();
     const h = { Authorization: `Bearer ${token}` };
     const clients = (
@@ -167,18 +167,18 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       const pass = passes[i]!;
       await page.setViewportSize({ width: size.w, height: size.h });
 
-      // W-02 list mode
+      console.log("STEP W-02 list mode");
       await openClient(page, "Rohan");
       const panel = page.getByTestId("screen-TW-05");
       await shot(page, "W-02-home-side-panel", size);
 
-      // W-02a more menu
+      console.log("STEP W-02a more menu");
       await panel.getByRole("button", { name: /more actions/i }).click();
       await expect(page.getByRole("menu")).toBeVisible();
       await shot(page, "W-02a-panel-more-menu", size);
       await page.keyboard.press("Escape");
 
-      // W-02b remind states
+      console.log("STEP W-02b remind states");
       await openClient(page, pass.nudge);
       if (pass.nudge === "Rohan") await stepToItem(page, /Missed workout/i);
       const remind = panel.getByRole("button", { name: /^remind$/i });
@@ -195,7 +195,7 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
         await shot(page, "W-02b-panel-nudge-states", size);
       }
 
-      // W-02c resolve form, W-02d resolved + undo
+      console.log("STEP W-02c resolve form, W-02d resolved + undo");
       await openClient(page, pass.resolve);
       await stepToItem(page, /Missed workout/i);
       await panel.getByRole("button", { name: /^resolve…?$/i }).click();
@@ -211,12 +211,12 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
         .click();
       await expect(page.getByTestId("exception-resolve-banner")).toBeHidden({ timeout: 15_000 });
 
-      // W-02e resolved read-only
+      console.log("STEP W-02e resolved read-only");
       await page.goto(`/?exception=${rohanResolved}`);
       await expect(page.getByTestId("panel-readonly-line")).toBeVisible({ timeout: 20_000 });
       await shot(page, "W-02e-panel-resolved-readonly", size);
 
-      // W-02f / g / h resolve several
+      console.log("STEP W-02f / g / h resolve several");
       await openClient(page, "Farhan");
       await page.getByTestId("screen-TW-05").getByRole("button", { name: /more actions/i }).click();
       await page.getByRole("menuitem", { name: /resolve several/i }).click();
@@ -235,12 +235,12 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       await page.getByTestId("bulk-undo-toast").getByRole("button", { name: /undo/i }).click();
       await page.waitForTimeout(1500);
 
-      // W-02i ended client
+      console.log("STEP W-02i ended client");
       await page.goto(`/?exception=${kavyaResolved}`);
       await expect(page.getByTestId("panel-readonly-foot")).toBeVisible({ timeout: 20_000 });
       await shot(page, "W-02i-panel-ended-readonly", size);
 
-      // W-166 inbox
+      console.log("STEP W-166 inbox");
       await page.goto("/checkins");
       await expect(page.getByRole("tab", { name: /to review/i })).toBeVisible({ timeout: 30_000 });
       await page.waitForTimeout(1500);

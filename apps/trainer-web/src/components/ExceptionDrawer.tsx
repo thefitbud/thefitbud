@@ -1777,7 +1777,7 @@ export function ExceptionDrawer({
                   >
                     Open client
                   </Link>
-                  <Button variant="primary" onClick={requestClose}>
+                  <Button variant="secondary" onClick={requestClose}>
                     Done
                   </Button>
                 </div>
