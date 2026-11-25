@@ -5,7 +5,7 @@ import {
   type Exception,
 } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
-import { itemShortLabel } from "./AlsoOpenList";
+import { itemShortLabel } from "./panelModel";
 
 /** D11: the confirm dialog opens only when more than this many are selected. */
 export const BULK_CONFIRM_ABOVE = 3;
@@ -45,11 +45,6 @@ export function individualOnlyHint(items: readonly Row[]): string | null {
     : `${label} · ${others.length} resolved on their own`;
 }
 
-function detailString(item: Row, key: string): string | null {
-  const value = item.details?.[key];
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
 function openDays(detectedAt: string, now: number): number {
   const detected = Date.parse(detectedAt);
   if (Number.isNaN(detected)) return 0;
@@ -57,18 +52,13 @@ function openDays(detectedAt: string, now: number): number {
 }
 
 /**
- * Second line of a bulk row (DS2): "Lower body A · open 7 d" when the item
- * names its workout or meal, otherwise "Open 2 d"; items that cannot join a
- * bulk action add "resolve on its own".
+ * Second line of a bulk row (DS2): "Open 7 d". The meal or workout and the
+ * day are in the row title (W13-13). Items that cannot join a bulk action add
+ * "resolve on its own".
  */
 export function bulkRowSubline(item: Row, now: number = Date.now()): string {
   const days = openDays(item.detectedAt, now);
-  const age = days === 0 ? "open today" : `open ${days} d`;
-  const name =
-    detailString(item, "workoutDayName") ?? detailString(item, "mealName");
-  const base = name
-    ? `${name} · ${age}`
-    : age.charAt(0).toUpperCase() + age.slice(1);
+  const base = days === 0 ? "Open today" : `Open ${days} d`;
   return isBulkCompatible(item) ? base : `${base} · resolve on its own`;
 }
 

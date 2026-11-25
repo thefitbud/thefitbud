@@ -260,68 +260,6 @@
   color: var(--ink3);
 }
 
-.sp-also {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid var(--line);
-  border-radius: var(--r-card);
-  overflow: hidden;
-}
-
-.sp-also li + li {
-  border-top: 1px solid var(--line);
-}
-
-.sp-also-row {
-  width: 100%;
-  min-height: 48px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 16px;
-  border: 0;
-  background: var(--card);
-  font: var(--t-body);
-  color: var(--ink);
-  text-align: left;
-  cursor: pointer;
-}
-
-.sp-also-row:hover {
-  background: var(--row-hover);
-}
-
-.sp-also-row:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
-}
-
-.sp-also-row > svg {
-  flex: none;
-  color: var(--ink3);
-}
-
-.sp-also-label {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sp-more {
-  margin: 0;
-  font: var(--t-meta);
-  color: var(--ink3);
-}
-
-.sp-more .link {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-}
-
 .sp-timeline li {
   position: relative;
   padding-left: 18px;
@@ -388,22 +326,8 @@
 
 .sp-actions .button-primary,
 .sp-actions .button-secondary,
-.sp-actions .button-tinted,
-.sp-actions .overflow-menu-trigger,
-.sp-foot-resolved .button-primary {
+.sp-actions .button-tinted {
   min-height: 44px;
-}
-
-.sp-actions .overflow-menu-trigger {
-  min-width: 44px;
-  border: 1px solid var(--line2);
-  border-radius: var(--r-ctl);
-  background: var(--card);
-}
-
-/* Frame 02: Noted, keep open · Nudge … spacer … ⋯ · Resolve… */
-.sp-actions > .overflow-menu {
-  margin-left: auto;
 }
 
 .sp-actions .sp-resolve {
@@ -422,14 +346,6 @@
   font: var(--t-meta);
   color: var(--ink3);
   font-variant-numeric: tabular-nums;
-}
-
-.drawer-foot .link.sp-open-client {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  font: 600 13px/18px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
-  align-self: flex-start;
 }
 
 /* Z7-6 resolve form (frame 02): outcome chips + private note in a card. */
@@ -509,27 +425,6 @@
 .sp-foot-form .button-secondary,
 .sp-foot-form .button-primary {
   min-height: 44px;
-}
-
-/* Frame 131 ⋯ menu: one line per action, 44 px rows, body-size text. */
-.sp-actions .overflow-menu-list {
-  min-width: 15rem;
-}
-
-.sp-actions .overflow-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 44px;
-  font-size: 14px;
-  white-space: nowrap;
-}
-
-.sp-actions .overflow-menu-divider {
-  height: 1px;
-  margin: 4px 8px;
-  background: var(--line2);
-  list-style: none;
 }
 
 /* Frames 131 / 199: nudge limit and client quiet hours, inline notices. */
@@ -678,12 +573,6 @@
   font-size: 13px;
   line-height: 1.45;
   color: var(--ink-500, #5b616b);
-}
-
-.sp-foot-readonly .link.sp-open-client {
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 8px;
 }
 
 /* Z7-8 bulk side panel (DS2 frames): selection, confirm over 3, result, Undo. */
@@ -1179,4 +1068,239 @@ label.sp-bulk-row-inner:hover {
     max-height: 100vh;
     border-radius: 0;
   }
+}
+
+/* W13-13 (D-W13-21, RP-01…RP-05): the app review layout on web. */
+
+/* The avatar and name open the client page. */
+.sp-who-link {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: var(--r-ctl);
+  color: inherit;
+  text-decoration: none;
+}
+
+.sp-who-link:hover .sp-name {
+  text-decoration: underline;
+}
+
+.sp-who-link:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.sp-who-link .sp-meta {
+  display: block;
+}
+
+.sp-name-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.sp-name-row .sp-name {
+  min-width: 0;
+}
+
+.sp-name-chev {
+  flex: none;
+  color: var(--ink3);
+}
+
+@media (max-width: 599px) {
+  .sp-who-link {
+    flex-basis: calc(100% - 60px);
+  }
+}
+
+/* RP-04: the item is handled and more are open, so › is the next step. */
+.sp-icon-btn.is-suggested:not(:disabled) {
+  border-color: var(--brand-tint);
+  background: var(--brand-tint);
+  color: var(--brand);
+}
+
+/* Footer: Remind {first} · Noted, keep open · Resolve… (primary). */
+.drawer-foot.sp-foot {
+  gap: 10px;
+}
+
+.sp-actions .sp-resolve {
+  margin-left: auto;
+}
+
+.sp-actions .sp-remind {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* RP-02 state line with Undo. */
+.sp-state-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 4px 0 12px;
+  border-radius: var(--r-ctl);
+  background: var(--fill);
+  font: var(--t-body);
+  color: var(--ink2);
+}
+
+.sp-state-line > svg {
+  flex: none;
+  color: var(--ink3);
+}
+
+.sp-state-line > span {
+  flex: 1;
+  min-width: 0;
+}
+
+.sp-state-undo {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  font: 600 14px/20px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.sp-state-undo:hover:not(:disabled) {
+  background: var(--row-hover);
+}
+
+.sp-state-undo:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.sp-state-undo:disabled {
+  color: var(--ink4);
+  cursor: default;
+}
+
+/* Add note · WhatsApp · Resolve several… as small text actions. */
+.sp-text-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 16px;
+}
+
+.sp-text-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  font: 600 13px/18px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.sp-text-action:hover {
+  background: var(--row-hover);
+}
+
+.sp-text-action:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.sp-text-action > svg {
+  flex: none;
+  color: var(--ink3);
+}
+
+.sp-foot .sp-foot-summary {
+  text-align: center;
+}
+
+/* RP-03 lock line under the outcome. */
+.sp-lock-line {
+  background: var(--fill);
+  color: var(--ink2);
+}
+
+.sp-lock-line svg {
+  color: var(--ink3);
+}
+
+/* Add note in place of the item body. */
+.sp-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sp-note-head .sp-section-title:focus {
+  outline: none;
+}
+
+/* RP-05 all-done summary. */
+.drawer-body.sp-summary {
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  padding-top: 56px;
+}
+
+.sp-summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: var(--r-card);
+  background: var(--brand-tint);
+  color: var(--deep-navy, #1a1248);
+}
+
+.sp-summary-title {
+  margin: 8px 0 0;
+  font: var(--t-h3);
+  color: var(--ink);
+}
+
+.sp-summary-title:focus {
+  outline: none;
+}
+
+.sp-summary-text {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--ink3);
+}
+
+.sp-actions.sp-actions-stack {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.sp-actions-stack .button-primary,
+.sp-actions-stack .button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
 }
