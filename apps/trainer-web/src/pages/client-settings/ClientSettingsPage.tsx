@@ -277,7 +277,7 @@ export function ClientSettingsPage() {
         <li>
           <a
             href="#danger"
-            className={`cs-subnav-link is-danger${active === "danger" ? " is-on" : ""}`}
+            className={`cs-subnav-link${readOnly ? "" : " is-danger"}${active === "danger" ? " is-on" : ""}`}
             aria-current={active === "danger" ? "true" : undefined}
             data-testid="cs-nav-danger"
             onClick={(e) => {

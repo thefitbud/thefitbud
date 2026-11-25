@@ -281,5 +281,19 @@ test.describe("W13-10 client header, tabs and Settings tab", () => {
         await shot(page, `${name}-${width}x${height}.png`);
       }
     }
+    // No frame of their own (spec): the same row system, captured for review.
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const extras: Array<[string, string, string, string]> = [
+      ["nf-package-payments", ROHAN, "subscription", "cs-section-subscription"],
+      ["nf-checkins", ROHAN, "checkins", "cs-section-checkins"],
+      ["nf-danger-zone", ROHAN, "danger", "cs-section-danger"],
+      ["nf-ended-danger-zone", KAVYA, "danger", "cs-section-danger"],
+      ["nf-ended-coaching-setup", KAVYA, "coaching", "configure-readonly"],
+    ];
+    for (const [name, client, hash, testId] of extras) {
+      await openSection(page, client, hash, testId);
+      await page.waitForTimeout(800);
+      await shot(page, `${name}-1440x900.png`);
+    }
   });
 });

@@ -14,7 +14,7 @@
   gap: var(--s4);
 }
 
-.wsh-v3 .wsh-avatar {
+.wsh-v3 .workspace-avatar.wsh-avatar {
   width: 56px;
   height: 56px;
   flex: 0 0 56px;
