@@ -73,7 +73,7 @@ describe("NoteComposer wording (D-W14-37)", () => {
     render(<NoteComposer relationshipId={REL_ID} traineeName="Rohan Mehta" traineeGender={gender} />);
     fireEvent.click(await screen.findByRole("radio", { name: "Rohan too" }));
     expect(screen.getByText("Rohan sees it on Today and gets one notification.")).toBeTruthy();
-    expect(screen.getByText("Rohan will see this on Today.")).toBeTruthy();
+    expect(screen.getByText("Rohan will see this on their Today screen.")).toBeTruthy();
     expect(document.body.textContent ?? "").not.toMatch(/\b(he|she|his|her|hers|him)\b/i);
   });
 });

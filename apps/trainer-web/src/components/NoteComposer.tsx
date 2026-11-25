@@ -364,8 +364,8 @@ export function NoteComposer({
           <div className="note-visible-preview">
             <p className="muted">
               {activeNote && activeNote.visibility === "client"
-                ? `${firstName} can see this on Today.`
-                : `${firstName} will see this on Today.`}
+                ? `${firstName} can see this on their Today screen.`
+                : `${firstName} will see this on their Today screen.`}
             </p>
             <span className="note-preview-chip" aria-hidden="true">
               From {trainerFirstName} · just now
