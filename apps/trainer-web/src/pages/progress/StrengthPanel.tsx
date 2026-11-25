@@ -6,6 +6,7 @@ import type {
   StrengthWeekCount,
 } from "@fitbud/contracts";
 import { formatCivilDate } from "@fitbud/core";
+import { Seg } from "../../components/ui";
 import { MetricLineChart, useWidth, type ChartPoint } from "./MetricLineChart";
 import { formatPointDate, styleAt } from "./metricKeys";
 import type { MetricRange } from "./useProgressMetrics";
@@ -272,24 +273,18 @@ export function StrengthPanel({ model, range, today, exerciseId, onExercise }: P
                 ))}
               </select>
             </label>
-            <div className="pg-segment" role="group" aria-label="Chart value">
-              <button
-                type="button"
-                className={mode === "top" ? "pg-segment-btn is-on" : "pg-segment-btn"}
-                aria-pressed={mode === "top"}
-                onClick={() => setMode("top")}
-              >
-                Top set
-              </button>
-              <button
-                type="button"
-                className={mode === "total" ? "pg-segment-btn is-on" : "pg-segment-btn"}
-                aria-pressed={mode === "total"}
-                onClick={() => setMode("total")}
-              >
-                {exercise.chartBy === "reps" ? "Total reps" : "Total reps × kg"}
-              </button>
-            </div>
+            <Seg<Mode>
+              aria-label="Chart value"
+              options={[
+                { value: "top", label: "Top set" },
+                {
+                  value: "total",
+                  label: exercise.chartBy === "reps" ? "Total reps" : "Total reps × kg",
+                },
+              ]}
+              value={mode}
+              onChange={setMode}
+            />
           </div>
         ) : null}
       </div>

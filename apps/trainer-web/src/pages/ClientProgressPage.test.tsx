@@ -713,13 +713,21 @@ describe("ClientProgressPage workouts from logs (frame 160e, D-W8-7)", () => {
     let chart = within(panel).getByRole("img", { name: /Back squat, top set in kg/ });
     expect(chart.querySelectorAll("circle")).toHaveLength(3);
 
-    fireEvent.click(within(panel).getByRole("button", { name: "Total reps × kg" }));
+    const group = within(panel).getByRole("radiogroup", { name: "Chart value" });
+    expect(within(group).getByRole("radio", { name: "Top set" }).getAttribute("aria-checked")).toBe("true");
+    expect(within(group).getByRole("radio", { name: "Top set" }).className).toBe("is-on");
+    expect(within(group).getByRole("radio", { name: "Total reps × kg" }).getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(within(panel).getByRole("radio", { name: "Total reps × kg" }));
+    expect(within(group).getByRole("radio", { name: "Total reps × kg" }).getAttribute("aria-checked")).toBe("true");
+    expect(within(group).getByRole("radio", { name: "Total reps × kg" }).className).toBe("is-on");
+    expect(within(group).getByRole("radio", { name: "Top set" }).getAttribute("aria-checked")).toBe("false");
+    expect(within(group).getByRole("radio", { name: "Top set" }).className).toBe("");
     chart = within(panel).getByRole("img", { name: /Back squat, total in kg/ });
     expect(chart.querySelector("circle title")?.textContent).toContain("1,440 kg");
 
     // Pull-ups carry no kg: charted by reps (D-W8-7).
     fireEvent.change(exercise, { target: { value: "ex-pull" } });
-    fireEvent.click(within(panel).getByRole("button", { name: "Top set" }));
+    fireEvent.click(within(panel).getByRole("radio", { name: "Top set" }));
     expect(panel.textContent).toContain(
       "Most reps in one set per session · bodyweight lift, charted by reps",
     );
@@ -736,7 +744,7 @@ describe("ClientProgressPage workouts from logs (frame 160e, D-W8-7)", () => {
       (node) => node.textContent ?? "",
     );
     expect(ticks.some((tick) => tick.endsWith(" reps"))).toBe(true);
-    expect(within(panel).getByRole("button", { name: "Total reps" })).toBeTruthy();
+    expect(within(panel).getByRole("radio", { name: "Total reps" })).toBeTruthy();
 
     // Uncharted sets: count, the frame's copy, and the list on demand.
     expect(panel.textContent).toContain(

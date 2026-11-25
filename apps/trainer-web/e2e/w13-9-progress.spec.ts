@@ -168,6 +168,55 @@ test.describe("W13-9 progress", () => {
     }
   });
 
+  test("Strength view: the Chart value toggle is styled, selectable and 44 px at iPad widths", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    const sizes: Array<[number, number]> = [
+      [1440, 900],
+      [1180, 820],
+      [1024, 1366],
+    ];
+    for (const [w, h] of sizes) {
+      await page.setViewportSize({ width: w, height: h });
+      await openProgress(page);
+      const rail = page.getByRole("complementary", { name: "Metrics" });
+      for (const [tab, file] of [
+        ["Workouts done", "workouts"],
+        ["Exercise progress", "exercise"],
+      ] as const) {
+        await rail.getByRole("tab", { name: new RegExp(tab) }).click();
+        await expect(page.getByRole("heading", { name: "Exercise progress", level: 2 })).toBeVisible({
+          timeout: 30_000,
+        });
+        await expect(page.locator(".pg-skel")).toHaveCount(0, { timeout: 30_000 });
+        const group = page.getByRole("radiogroup", { name: "Chart value" });
+        await expect(group).toBeVisible({ timeout: 30_000 });
+        await expect(page.getByTestId("pg-chart-svg").first()).toBeVisible();
+        const top = group.getByRole("radio", { name: "Top set" });
+        const total = group.getByRole("radio", { name: /^Total reps/ });
+        // The chosen value carries over between the two Strength views; start from Top set.
+        await top.click();
+        await expect(top).toHaveAttribute("aria-checked", "true");
+        await expect(top).toHaveClass(/is-on/);
+        const bg = await top.evaluate((el) => getComputedStyle(el).backgroundColor);
+        expect(bg).not.toBe("rgba(0, 0, 0, 0)");
+        if (w < 1440) {
+          for (const radio of [top, total]) {
+            const box = (await radio.boundingBox())!;
+            expect(box.height + 0.5, `${w}x${h} ${tab}`).toBeGreaterThanOrEqual(44);
+            expect(box.width + 0.5, `${w}x${h} ${tab}`).toBeGreaterThanOrEqual(44);
+          }
+          expect(await undersizedTargets(page), `${w}x${h} ${tab}`).toEqual([]);
+        }
+        await shot(page, `W-160-strength-${file}-${w}x${h}.png`);
+        await total.click();
+        await expect(total).toHaveAttribute("aria-checked", "true");
+        await expect(top).toHaveAttribute("aria-checked", "false");
+      }
+    }
+  });
+
   test("captures W-160 at the three sizes", async ({ page }) => {
     test.setTimeout(180_000);
     const sizes: Array<[number, number]> = [

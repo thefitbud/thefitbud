@@ -561,6 +561,7 @@
   .pg-rail-link-row,
   .pg-rail-foot a,
   .pg-range .ui-seg button,
+  .pg-head-controls .ui-seg button,
   .pg-compare-btn,
   .pg-text-btn,
   .pg-outline-btn,
@@ -568,7 +569,8 @@
     min-height: 44px;
   }
 
-  .pg-range .ui-seg button {
+  .pg-range .ui-seg button,
+  .pg-head-controls .ui-seg button {
     min-width: 44px;
   }
 
