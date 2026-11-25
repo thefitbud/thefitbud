@@ -1227,7 +1227,7 @@ export function ConfigureCoachingPage() {
         >
           <div className="cs-fields">
             <label className="cs-field">
-              <span className="cs-field-label">Goal</span>
+              <span className="cs-field-label sr-only" data-testid="configure-goal-label">Goal</span>
               <input
                 type="text"
                 name="goalShort"

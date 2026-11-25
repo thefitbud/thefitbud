@@ -41,9 +41,27 @@
 
 .wsh-v3 .wsh-meta {
   margin-top: var(--s1);
-  gap: var(--s1) var(--s2);
+  gap: var(--s1) var(--s3);
   font: var(--t-body);
   color: var(--ink3);
+}
+
+/* Separator dots hang in the gap before an item, so one that lands at the start
+   of a wrapped line sits in the clipped left padding and is never seen. */
+.wsh-v3 .wsh-meta {
+  margin-inline-start: calc(-1 * var(--s3));
+  padding-inline-start: var(--s3);
+  clip-path: inset(-8px 0 -8px var(--s3));
+}
+
+.wsh-v3 .wsh-meta-item {
+  position: relative;
+}
+
+.wsh-v3 .wsh-meta-item + .wsh-meta-item::before {
+  position: absolute;
+  left: calc(-0.5 * var(--s3) - 1.5px);
+  margin-right: 0;
 }
 
 .wsh-v3 .wsh-meta a {
@@ -156,13 +174,32 @@
     display: none;
   }
 
-  /* 44 px hit areas at iPad landscape too (tap-targets.css starts at 1024). */
-  .wsh-v3 .wsh-crumb a,
-  .wsh-v3 .wsh-meta .workspace-plan-link {
+  /* 44 px hit areas at iPad landscape too (tap-targets.css starts at 1024).
+     The crumb keeps a real 44 px box; the plan link stays an inline text
+     line and gets its tap height from a pseudo-element hit area, so the
+     meta line keeps normal text lines and no separator starts a line. */
+  .wsh-v3 .wsh-crumb a {
     display: inline-flex;
     align-items: center;
     min-height: 44px;
     padding-inline: 0;
+  }
+
+  .wsh-v3 .wsh-meta .workspace-plan-link {
+    position: relative;
+    display: inline;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 0;
+  }
+
+  .wsh-v3 .wsh-meta .workspace-plan-link::after {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    height: 44px;
+    transform: translateY(-50%);
   }
 
   .wsh-v3 .wsh-crumb {

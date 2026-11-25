@@ -218,6 +218,12 @@ describe("OnboardingReviewPage footer (CE2)", () => {
     },
   );
 
+  it("active client: Marked ready carries the weekday, like Mon 6 Jul", async () => {
+    renderPage("active");
+    const mark = await screen.findByText(/^Marked ready/);
+    expect(mark.textContent).toMatch(/^Marked ready Mon 6 Jul( \d{4})?$/);
+  });
+
   it("active client: WhatsApp still opens the intake draft", async () => {
     renderPage("active", "+919876543210");
     const link = await screen.findByRole("link", { name: /Message on WhatsApp/i });

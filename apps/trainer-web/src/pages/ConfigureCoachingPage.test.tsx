@@ -1228,6 +1228,25 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     expect(text).not.toMatch(/\d\s?%/);
   });
 
+  it("Goal row: the label shows once (row title); the field keeps a screen-reader-only label", async () => {
+    const { container } = renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    const goalRow = container.querySelector("#configure-goal") ?? container;
+    const visibleGoalLabels = Array.from(
+      container.querySelectorAll("#cs-coaching .cs-field-label"),
+    ).filter(
+      (el) => el.textContent === "Goal" && !el.classList.contains("sr-only"),
+    );
+    expect(visibleGoalLabels).toHaveLength(0);
+    const input = container.querySelector<HTMLInputElement>('[name="goalShort"]');
+    expect(input).not.toBeNull();
+    const label = input!.closest("label")?.querySelector(".cs-field-label");
+    expect(label?.textContent).toBe("Goal");
+    expect(label?.classList.contains("sr-only")).toBe(true);
+    expect(input!.labels?.[0]?.textContent).toContain("Goal");
+    expect(goalRow).toBeTruthy();
+  });
+
   it("badges: Done for saved sections, Editing once a target changes, To do before anything is saved", async () => {
     const { container, unmount } = renderPage("active", "draft");
     await screen.findByRole("heading", { name: "Coaching setup" });

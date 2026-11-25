@@ -71,6 +71,29 @@ async function shot(page: Page, name: string) {
   expect.soft(problems.clip, name).toEqual([]);
 }
 
+/** Header meta line: normal text lines, no separator dot starting a wrapped line. */
+async function metaLineProblems(page: Page) {
+  return page.evaluate(() => {
+    const items = Array.from(document.querySelectorAll(".wsh-v3 .wsh-meta .wsh-meta-item"));
+    const bad: string[] = [];
+    let lineTop: number | null = null;
+    items.forEach((item, index) => {
+      const box = item.getBoundingClientRect();
+      if (box.height === 0) return;
+      if (box.height > 30) bad.push(`item ${index} is ${Math.round(box.height)} px tall`);
+      if (lineTop !== null && box.top > lineTop + 4) {
+        // A wrapped line's first item: its dot must hang in the clipped gap, not in flow.
+        const dot = getComputedStyle(item, "::before");
+        if (dot.content !== "none" && dot.position !== "absolute") {
+          bad.push(`item ${index} starts a new line with an in-flow separator`);
+        }
+      }
+      if (lineTop === null) lineTop = box.top;
+    });
+    return bad;
+  });
+}
+
 /** iPad widths: every control is at least 44×44 (labels count for their inputs). */
 async function undersizedTargets(page: Page) {
   return page.locator("main.main").evaluate((node) => {
@@ -96,6 +119,11 @@ async function undersizedTargets(page: Page) {
       if (rect.width === 0 || rect.height === 0) continue;
       if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
       if (el.closest(".sr-only")) continue;
+      // The plan link is an inline text link; its 44 px hit area is an ::after box.
+      if (el.matches(".workspace-plan-link")) {
+        const hit = window.getComputedStyle(el, "::after");
+        if (Number.parseFloat(hit.height) >= 44 && hit.position === "absolute") continue;
+      }
       if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
         bad.push(`${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 30)}" ${Math.round(rect.width)}x${Math.round(rect.height)}`);
       }
@@ -253,6 +281,7 @@ test.describe("W13-10 client header, tabs and Settings tab", () => {
         await openSection(page, ROHAN, hash, testId);
         await page.waitForTimeout(500);
         expect(await undersizedTargets(page), `${hash} at ${width}`).toEqual([]);
+        expect(await metaLineProblems(page), `meta line, ${hash} at ${width}`).toEqual([]);
       }
     }
   });

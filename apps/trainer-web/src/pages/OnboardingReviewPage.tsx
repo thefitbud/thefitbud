@@ -413,7 +413,7 @@ export function OnboardingReviewPage() {
           <p className="intake-ready-mark" role="status">
             Marked ready
             {readyCivil
-              ? ` ${formatCivilDate(readyCivil, { includeWeekday: false })}`
+              ? ` ${formatCivilDate(readyCivil)}`
               : ""}
           </p>
         ) : null}
