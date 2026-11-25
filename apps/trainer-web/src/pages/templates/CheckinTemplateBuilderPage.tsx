@@ -43,6 +43,7 @@ import {
   setStandardGroupKeys,
   standardKeyCopy,
   STANDARD_CHECKIN_GROUPS,
+  STANDARD_KEY_PICKER_COPY,
   typeForFamily,
   updateStandardGroup,
   type CheckinAnswerFamily,
@@ -84,7 +85,9 @@ function standardSubtitle(
   const required = requiredText(drafts.some((draft) => draft.required));
   if (group.keys.length > 1) {
     const picked = drafts
-      .map((draft) => (standardKeyCopy(draft.key!).label).toLowerCase())
+      .map((draft) =>
+        (STANDARD_KEY_PICKER_COPY[draft.key!]?.label ?? draft.label).toLowerCase(),
+      )
       .join(", ");
     return group.id === "body"
       ? `${picked} · cm · ${required}`
@@ -741,7 +744,7 @@ export function CheckinTemplateBuilderPage() {
               : "Your question"}
         </span>
         {!readOnly ? (
-          <Button variant="danger-quiet" size="sm" onClick={removeActive}>
+          <Button variant="quiet" size="sm" onClick={removeActive}>
             <Trash2 className="ui-i" strokeWidth={1.75} aria-hidden />
             {active.kind === "standard" ? "Remove" : "Delete"}
           </Button>
@@ -882,7 +885,11 @@ export function CheckinTemplateBuilderPage() {
         smallScreen={smallScreen}
       />
       <SidePanel open={previewOpen && mode === "narrow"} onClose={() => setPreviewOpen(false)} title="Preview">
-        {previewPane}
+        <FormPhonePreview
+          fields={previewFields}
+          title={detail.name}
+          activeIds={active ? rowDraftIds(active) : undefined}
+        />
       </SidePanel>
       {picker?.mode === "add" ? (
         <CheckinMeasurePicker

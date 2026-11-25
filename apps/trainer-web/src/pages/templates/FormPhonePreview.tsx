@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { OnboardingFieldDefinition } from "@fitbud/contracts";
 import { checkinFieldTypeLabel } from "./checkinBuilder";
 import "./FormPhonePreview.css";
@@ -48,13 +48,26 @@ export function FormPhonePreview({
 }) {
   const preview = asPreviewFields(fields);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const screenRef = useRef<HTMLDivElement>(null);
+  const activeKey = activeIds?.join("|") ?? "";
+  useEffect(() => {
+    // Keep the question being edited in view inside the phone, without
+    // scrolling any pane around it.
+    const screen = screenRef.current;
+    const target = screen?.querySelector<HTMLElement>(".phone-q.is-active");
+    if (!screen || !target) return;
+    const box = screen.getBoundingClientRect();
+    const at = target.getBoundingClientRect();
+    if (at.top < box.top) screen.scrollTop += at.top - box.top - 12;
+    else if (at.bottom > box.bottom) screen.scrollTop += at.bottom - box.bottom + 12;
+  }, [activeKey]);
   const qClass = (field: PreviewField) =>
     `field phone-field phone-q${activeIds?.includes(field.id) ? " is-active" : ""}`;
 
   return (
     <aside className="form-phone-preview" aria-label="Trainee phone preview">
       <div className="phone-frame form-preview-phone">
-        <div className="phone-screen" tabIndex={0}>
+        <div className="phone-screen" tabIndex={0} ref={screenRef}>
           <p className="phone-title">{title}</p>
           {preview.length === 0 ? (
             <p className="muted">Add a question to preview it here.</p>

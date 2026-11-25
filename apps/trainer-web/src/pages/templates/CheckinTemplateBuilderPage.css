@@ -186,6 +186,7 @@ div.ck-row-btn {
 
 .ck-card-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--s3);
   margin-bottom: var(--s5);
@@ -195,8 +196,14 @@ div.ck-row-btn {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
+  white-space: nowrap;
   font: var(--t-h2);
   color: var(--ink);
+}
+
+.checkin-builder-page [data-builder-mode="narrow"] .ck-card-kind {
+  order: 3;
+  flex: 1 0 100%;
 }
 
 .ck-card-kind {
@@ -364,6 +371,11 @@ div.ck-row-btn {
   color: var(--brand);
 }
 
+/* The switch itself is 20 px tall; give it a 44 px target. */
+.ck-toggle-row .ui-tgl {
+  min-height: 44px;
+}
+
 /* ---------- preview pane ---------- */
 
 .ck-preview {
@@ -463,10 +475,6 @@ div.ck-row-btn {
   background: var(--row-hover);
 }
 
-.ck-picker-row.is-on {
-  background: var(--row-sel);
-}
-
 .ck-picker-row.is-locked {
   cursor: default;
 }
@@ -534,6 +542,12 @@ div.ck-row-btn {
 .ck-check:disabled:checked {
   border-color: var(--ink3);
   background: var(--ink3);
+}
+
+/* The whole 56 px row is the target; keep the box at the drawn size on iPad widths. */
+.ck-picker-row .ck-check {
+  min-width: 18px;
+  min-height: 18px;
 }
 
 .ck-check:focus-visible {
