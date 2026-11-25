@@ -16,7 +16,7 @@ const profilePage = readFileSync(
 );
 
 function ipadBlock(source: string): string {
-  const start = source.indexOf("@media (max-width: 1024px), (pointer: coarse)");
+  const start = source.indexOf("@media (max-width: 1280px), (pointer: coarse)");
   expect(start).toBeGreaterThanOrEqual(0);
   return source.slice(start);
 }
