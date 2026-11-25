@@ -68,6 +68,39 @@ describe("ResolveSheet (TM-04d)", () => {
   });
 });
 
+describe("ResolveSheet outcome radio rows (RP-03)", () => {
+  it("lists one radio per outcome in a radiogroup, none checked, each at least 44 pt tall", () => {
+    mount();
+    expect(screen.getByRole("radiogroup")).toBeTruthy();
+    const radios = screen.getAllByRole("radio");
+    expect(radios.map((r) => r.getAttribute("data-testid"))).toEqual([
+      "resolve-outcome-talked",
+      "resolve-outcome-plan_adjusted",
+      "resolve-outcome-no_action",
+    ]);
+    for (const radio of radios) {
+      expect(radio.getAttribute("aria-checked")).toBe("false");
+      expect(Number.parseFloat(getComputedStyle(radio).minHeight)).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  it("moves the selection between rows, one at a time", () => {
+    mount();
+    fireEvent.click(screen.getByTestId("resolve-outcome-talked"));
+    expect(screen.getByTestId("resolve-outcome-talked").getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByTestId("resolve-outcome-no_action"));
+    expect(screen.getByTestId("resolve-outcome-talked").getAttribute("aria-checked")).toBe("false");
+    expect(screen.getByTestId("resolve-outcome-no_action").getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("keeps the Resolve button's id and confirms with the chosen row", () => {
+    const onConfirm = mount();
+    fireEvent.click(screen.getByTestId("resolve-outcome-plan_adjusted"));
+    fireEvent.click(screen.getByTestId("resolve-confirm"));
+    expect(onConfirm).toHaveBeenCalledWith({ outcome: "plan_adjusted", note: null });
+  });
+});
+
 describe("exception sheet copy", () => {
   it("builds the workout subtitle: item, date, first name", () => {
     const workout = {
