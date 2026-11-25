@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { OnboardingFieldDefinition } from "@fitbud/contracts";
 import { checkinFieldTypeLabel } from "./checkinBuilder";
+import "./FormPhonePreview.css";
 
 type PreviewField = {
   id: string;
@@ -38,17 +39,35 @@ function asPreviewFields(
 export function FormPhonePreview({
   fields,
   title = "Your form",
+  activeIds,
 }: {
   fields: OnboardingFieldDefinition[] | PreviewField[];
   title?: string;
+  /** Question ids to mark as the one being edited (check-in builder). */
+  activeIds?: string[];
 }) {
   const preview = asPreviewFields(fields);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const screenRef = useRef<HTMLDivElement>(null);
+  const activeKey = activeIds?.join("|") ?? "";
+  useEffect(() => {
+    // Keep the question being edited in view inside the phone, without
+    // scrolling any pane around it.
+    const screen = screenRef.current;
+    const target = screen?.querySelector<HTMLElement>(".phone-q.is-active");
+    if (!screen || !target) return;
+    const box = screen.getBoundingClientRect();
+    const at = target.getBoundingClientRect();
+    if (at.top < box.top) screen.scrollTop += at.top - box.top - 12;
+    else if (at.bottom > box.bottom) screen.scrollTop += at.bottom - box.bottom + 12;
+  }, [activeKey]);
+  const qClass = (field: PreviewField) =>
+    `field phone-field phone-q${activeIds?.includes(field.id) ? " is-active" : ""}`;
 
   return (
     <aside className="form-phone-preview" aria-label="Trainee phone preview">
       <div className="phone-frame form-preview-phone">
-        <div className="phone-screen" tabIndex={0}>
+        <div className="phone-screen" tabIndex={0} ref={screenRef}>
           <p className="phone-title">{title}</p>
           {preview.length === 0 ? (
             <p className="muted">Add a question to preview it here.</p>
@@ -61,7 +80,7 @@ export function FormPhonePreview({
                 field.type === "select"
               ) {
                 return (
-                  <label key={field.id} className="field phone-field">
+                  <label key={field.id} className={qClass(field)}>
                     <span>{label}</span>
                     <select
                       value={answers[field.id] ?? ""}
@@ -87,7 +106,7 @@ export function FormPhonePreview({
               }
               if (field.type === "yes_no") {
                 return (
-                  <fieldset key={field.id} className="phone-field">
+                  <fieldset key={field.id} className={qClass(field)}>
                     <legend>{label}</legend>
                     <label>
                       <input type="radio" name={field.id} value="yes" /> Yes
@@ -100,19 +119,19 @@ export function FormPhonePreview({
               }
               if (field.type === "scale_1_5") {
                 return (
-                  <fieldset key={field.id} className="phone-field">
+                  <fieldset key={field.id} className={qClass(field)}>
                     <legend>{label}</legend>
                     <div className="scale-row">
                       {[1, 2, 3, 4, 5].map((n) => (
-                        <label key={n}>
+                        <label key={n} className="scale-chip">
                           <input type="radio" name={field.id} value={n} />
-                          {n}
+                          <span>{n}</span>
                         </label>
                       ))}
                     </div>
-                    <p className="muted">
-                      1 · {field.lowLabel ?? "Very low"} … 5 ·{" "}
-                      {field.highLabel ?? "Very high"}
+                    <p className="phone-scale-ends">
+                      <span>{field.lowLabel ?? "Very low"}</span>
+                      <span>{field.highLabel ?? "Very high"}</span>
                     </p>
                   </fieldset>
                 );
@@ -122,7 +141,7 @@ export function FormPhonePreview({
                 field.type === "textarea"
               ) {
                 return (
-                  <label key={field.id} className="field phone-field">
+                  <label key={field.id} className={qClass(field)}>
                     <span>{label}</span>
                     <textarea rows={3} readOnly placeholder="Your answer" />
                     {field.helpText ? (
@@ -133,7 +152,7 @@ export function FormPhonePreview({
               }
               if (field.type === "photo_intent") {
                 return (
-                  <div key={field.id} className="phone-field">
+                  <div key={field.id} className={qClass(field)}>
                     <p>{label}</p>
                     <p className="muted">
                       Photo slot · {checkinFieldTypeLabel("photo_intent")}
@@ -143,7 +162,7 @@ export function FormPhonePreview({
               }
               if (field.type === "measurement") {
                 return (
-                  <label key={field.id} className="field phone-field">
+                  <label key={field.id} className={qClass(field)}>
                     <span>
                       {label}
                       {field.unit ? ` (${field.unit})` : ""}
@@ -153,7 +172,7 @@ export function FormPhonePreview({
                 );
               }
               return (
-                <label key={field.id} className="field phone-field">
+                <label key={field.id} className={qClass(field)}>
                   <span>
                     {label}
                     {field.unit ? ` (${field.unit})` : ""}

@@ -9,6 +9,9 @@ import {
   GLOBAL_CHECKIN_FORM_V2_FIELDS,
 } from "@fitbud/core";
 import {
+  addedStandardKeys,
+  addStandardKeys,
+  answerFamilyOf,
   blankCheckinField,
   buildCheckinFields,
   checkinDraftSections,
@@ -21,6 +24,8 @@ import {
   normalizeCheckinDraftOrder,
   ownQuestionFeedsChart,
   setStandardGroupKeys,
+  standardKeyCopy,
+  typeForFamily,
   updateStandardGroup,
 } from "./checkinBuilder";
 
@@ -341,5 +346,43 @@ describe("measurement picker (frame 171b)", () => {
       "notes",
     ]);
     expect(sections.custom.map((draft) => draft.id)).toEqual(["went-well", "hurting"]);
+  });
+
+  it("addStandardKeys adds keys across groups and keeps what is already asked", () => {
+    const drafts = draftsFromCheckinFields(
+      keyedV2Fork().filter(
+        (field) => !["hunger", "thigh", "photo_back", "stress"].includes(field.key ?? ""),
+      ),
+    );
+    expect(addedStandardKeys(drafts)).not.toContain("hunger");
+    const next = addStandardKeys(drafts, ["hunger", "thigh", "photo_back"]);
+    const keys = addedStandardKeys(next);
+    expect(keys).toContain("hunger");
+    expect(keys).toContain("thigh");
+    expect(keys).toContain("photo_back");
+    expect(keys).not.toContain("stress");
+    expect(next.filter((draft) => draft.key === "waist")).toHaveLength(1);
+    expect(next.at(-1)?.key ?? null).toBeNull();
+    expect(findCheckinFormKeyProblem(buildCheckinFields(next).ok ? (buildCheckinFields(next) as { fields: CheckinFieldDefinition[] }).fields : [])).toBeNull();
+  });
+
+  it("names every standard key for the measure picker", () => {
+    for (const key of CHECKIN_STANDARD_KEYS) {
+      const copy = standardKeyCopy(key);
+      expect(copy.label.length).toBeGreaterThan(0);
+      expect(copy.hint.length).toBeGreaterThan(0);
+    }
+    expect(standardKeyCopy("photo_front").label).toBe("Front photo");
+    expect(standardKeyCopy("waist")).toEqual({ label: "Waist", hint: "At the navel" });
+  });
+
+  it("answer families map the four seg options to question types", () => {
+    expect(answerFamilyOf("long_text")).toBe("text");
+    expect(answerFamilyOf("measurement")).toBe("number");
+    expect(answerFamilyOf("yes_no")).toBeNull();
+    expect(typeForFamily("long_text", "text")).toBe("long_text");
+    expect(typeForFamily("long_text", "number")).toBe("number");
+    expect(typeForFamily("yes_no", "scale")).toBe("scale_1_5");
+    expect(typeForFamily("short_text", "photos")).toBe("photo_intent");
   });
 });

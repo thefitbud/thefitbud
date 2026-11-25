@@ -80,24 +80,27 @@ function savedFields(): CheckinFieldDefinition[] {
 }
 
 describe("CheckinTemplateBuilderPage", () => {
-  it("shows standard questions as charted and own questions as not charted", async () => {
+  it("lists standard questions under the charted heading and own questions apart", async () => {
     renderPage();
     const standard = await screen.findByRole("list", { name: "Standard questions" });
-    expect(within(standard).getAllByText("Charted")).toHaveLength(7);
+    expect(screen.getByText("Standard · charted in Progress")).toBeTruthy();
+    expect(within(standard).getAllByRole("listitem")).toHaveLength(8);
     expect(within(standard).getByText("Body measurements")).toBeTruthy();
     expect(within(standard).getByText("waist, hip, chest, arm, thigh · cm · optional")).toBeTruthy();
     const own = screen.getByRole("list", { name: "Your own questions" });
     expect(within(own).getByText("What went well this week?")).toBeTruthy();
-    expect(within(own).getByText("Not charted")).toBeTruthy();
+    expect(screen.getByText("Shown in check-in review. Not charted.")).toBeTruthy();
   });
 
-  it("locks standard wording", async () => {
+  it("selecting a row shows its question in the properties card", async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole("button", { name: /Body weight/ }));
-    const question = screen.getByLabelText("Question") as HTMLInputElement;
-    expect(question.value).toBe("Body weight");
-    expect(question.disabled).toBe(true);
-    expect(screen.getByText("Wording is fixed for standard questions.")).toBeTruthy();
+    const own = await screen.findByRole("list", { name: "Your own questions" });
+    fireEvent.click(within(own).getByRole("button", { name: /What went well/ }));
+    const total = screen.getAllByRole("listitem").length;
+    expect(screen.getByText(`Question ${total} of ${total}`)).toBeTruthy();
+    expect((screen.getByRole("textbox", { name: "Question" }) as HTMLInputElement).value).toBe(
+      "What went well this week?",
+    );
   });
 
   it("saves an unedited keyed v2 form with all 14 standard keys", async () => {
@@ -120,10 +123,10 @@ describe("CheckinTemplateBuilderPage", () => {
     fireEvent.change(screen.getByLabelText("Tip for the client"), {
       target: { value: "Think about the last 7 nights" },
     });
-    fireEvent.click(screen.getByLabelText("Required"));
+    fireEvent.click(screen.getByRole("switch", { name: "Required" }));
 
     fireEvent.click(screen.getByRole("button", { name: /Add your own question/ }));
-    fireEvent.change(screen.getByLabelText(/^Label/), {
+    fireEvent.change(screen.getByRole("textbox", { name: "Question" }), {
       target: { value: "Anything hurting?" },
     });
 
@@ -146,16 +149,14 @@ describe("CheckinTemplateBuilderPage", () => {
   it("measurement picker removes a key and saving drops only that key", async () => {
     renderPage();
     fireEvent.click(await screen.findByRole("button", { name: /Body measurements/ }));
-    const trigger = screen.getByRole("button", { name: "Measurements to collect" });
-    expect(trigger.getAttribute("aria-expanded")).toBe("false");
-    fireEvent.click(trigger);
-    const panel = screen.getByRole("group", { name: "Measurements to collect" });
-    expect(within(panel).getByText("At the navel")).toBeTruthy();
-    expect(within(panel).getByText("5 picked · all in cm")).toBeTruthy();
-    fireEvent.click(within(panel).getByRole("checkbox", { name: /Thigh/ }));
-    expect(within(panel).getByText("4 picked · all in cm")).toBeTruthy();
-    fireEvent.click(within(panel).getByRole("button", { name: "Done" }));
-    expect(screen.queryByRole("group", { name: "Measurements to collect" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Measurements to collect" }));
+    const dialog = screen.getByRole("dialog", { name: "Measurements to collect" });
+    expect(within(dialog).getByText("At the navel")).toBeTruthy();
+    expect(within(dialog).getByText("5 selected")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Thigh/ }));
+    expect(within(dialog).getByText("4 selected")).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText("waist, hip, chest, arm · cm · optional")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: "Save version" }));
@@ -164,13 +165,38 @@ describe("CheckinTemplateBuilderPage", () => {
     expect(keys).toEqual(CHECKIN_STANDARD_KEYS.filter((key) => key !== "thigh"));
   });
 
-  it("offers missing standard questions and adds them with their key", async () => {
+  it("Cancel in the measure picker leaves the form as it was", async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole("button", { name: /Body measurements/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Measurements to collect" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Thigh/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("waist, hip, chest, arm, thigh · cm · optional")).toBeTruthy();
+  });
+
+  it("Add standard measure lists the rest, searches, locks added rows and adds with the key", async () => {
     api.getCheckinFormTemplate.mockResolvedValue(
-      detail(forkFields().filter((field) => field.key !== "hunger")),
+      detail(
+        forkFields().filter((field) => field.key !== "hunger" && field.key !== "stress"),
+      ),
     );
     renderPage();
-    const add = (await screen.findByLabelText("Add a standard question")) as HTMLSelectElement;
-    fireEvent.change(add, { target: { value: "hunger" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Add standard measure" }));
+    const dialog = screen.getByRole("dialog", { name: "Add a standard measure" });
+    expect(within(dialog).getByText("0 selected")).toBeTruthy();
+    expect(
+      (within(dialog).getByRole("button", { name: "Add 0 measures" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
+    const added = within(dialog).getByRole("checkbox", { name: /Body weight/ }) as HTMLInputElement;
+    expect(added.checked).toBe(true);
+    expect(added.disabled).toBe(true);
+    fireEvent.change(within(dialog).getByRole("searchbox", { name: "Search measures" }), {
+      target: { value: "hung" },
+    });
+    expect(within(dialog).queryByRole("checkbox", { name: /Body weight/ })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Hunger/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add 1 measure" }));
     fireEvent.click(screen.getByRole("button", { name: "Save version" }));
     await waitFor(() => expect(api.createCheckinFormTemplateVersion).toHaveBeenCalled());
     const fields = savedFields();
@@ -179,7 +205,31 @@ describe("CheckinTemplateBuilderPage", () => {
       label: "Hunger",
       type: "scale_1_5",
     });
+    expect(fields.some((field) => field.key === "stress")).toBe(false);
     expect(fields.at(-1)?.id).toBe("went-well");
+  });
+
+  it("answer type control has four options and switches the type", async () => {
+    renderPage();
+    const own = await screen.findByRole("list", { name: "Your own questions" });
+    fireEvent.click(within(own).getByRole("button", { name: /What went well/ }));
+    const seg = screen.getByRole("radiogroup", { name: "Answer type" });
+    const options = within(seg).getAllByRole("radio");
+    expect(options.map((option) => option.textContent)).toEqual([
+      "Number",
+      "Scale 1–5",
+      "Text",
+      "Photos",
+    ]);
+    // Long text is in the Text family, so it stays selected and keeps its type.
+    expect(within(seg).getByRole("radio", { name: "Text" }).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(within(seg).getByRole("radio", { name: "Scale 1–5" }));
+    expect(screen.getByLabelText("Label for 1")).toBeTruthy();
+    expect((screen.getByLabelText("Type") as HTMLSelectElement).value).toBe("scale_1_5");
+    fireEvent.click(within(seg).getByRole("radio", { name: "Photos" }));
+    expect((screen.getByLabelText("Type") as HTMLSelectElement).value).toBe("photo_intent");
+    fireEvent.click(within(seg).getByRole("radio", { name: "Text" }));
+    expect((screen.getByLabelText("Type") as HTMLSelectElement).value).toBe("short_text");
   });
 
   it("v1 fork: own charted measurement is not marked Not charted, and adding the standard one converts it", async () => {
@@ -193,13 +243,13 @@ describe("CheckinTemplateBuilderPage", () => {
     const own = await screen.findByRole("list", { name: "Your own questions" });
     const waistRow = within(own).getByText("Waist").closest("li")!;
     expect(within(waistRow).getByText("Charted")).toBeTruthy();
-    expect(within(waistRow).queryByText("Not charted")).toBeNull();
     const wellbeingRow = within(own).getByText("Wellbeing").closest("li")!;
-    expect(within(wellbeingRow).getByText("Not charted")).toBeTruthy();
+    expect(within(wellbeingRow).queryByText("Charted")).toBeNull();
 
-    fireEvent.change(screen.getByLabelText("Add a standard question"), {
-      target: { value: "body" },
-    });
+    fireEvent.click(screen.getByRole("button", { name: "Add standard measure" }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: /Waist/ }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add 1 measure" }));
     expect(screen.queryByText("Another question uses this label.")).toBeNull();
     expect(within(screen.getByRole("list", { name: "Your own questions" })).queryByText("Waist")).toBeNull();
 
@@ -225,7 +275,7 @@ describe("CheckinTemplateBuilderPage", () => {
     renderPage();
     expect(await screen.findByRole("button", { name: "Fork to edit" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Save version" })).toBeNull();
-    expect(screen.queryByLabelText("Add a standard question")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add standard measure" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Add your own question/ })).toBeNull();
   });
 });
