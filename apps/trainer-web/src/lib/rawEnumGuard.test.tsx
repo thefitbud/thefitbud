@@ -52,6 +52,7 @@ const api = vi.hoisted(() => ({
   getPlanConsistency: vi.fn(),
   getClientSteps: vi.fn(),
   getException: vi.fn(),
+  listExceptions: vi.fn(async () => ({ items: [] })),
   getWorkoutAssignment: vi.fn(),
   getClientWorkspace: vi.fn(),
   getCoachingConfiguration: vi.fn(),

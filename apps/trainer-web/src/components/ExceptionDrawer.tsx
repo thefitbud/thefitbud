@@ -314,6 +314,7 @@ export function ExceptionDrawer({
   exceptionId,
   relationshipId,
   openSeq,
+  variant = "drawer",
   onClose,
   onChanged,
 }: {
@@ -326,6 +327,11 @@ export function ExceptionDrawer({
    * item before the previous close has committed (DR1 QA F2).
    */
   openSeq?: number;
+  /**
+   * "drawer" (default): docked right panel, as on Home. "modal" (W13-6): the
+   * same content in a centred 720 px dialog; only the container differs.
+   */
+  variant?: "drawer" | "modal";
   onClose: () => void;
   onChanged?: () => void;
 }) {
@@ -1389,13 +1395,13 @@ export function ExceptionDrawer({
     <>
     <div
       ref={backdropRef}
-      className="drawer-backdrop sp-backdrop"
+      className={`drawer-backdrop sp-backdrop${variant === "modal" ? " sp-backdrop-modal" : ""}`}
       role="presentation"
       onClick={requestClose}
     >
       <div
         ref={panelRef}
-        className="drawer-panel sp-panel"
+        className={`drawer-panel sp-panel${variant === "modal" ? " sp-panel-modal" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-label="Needs attention detail"

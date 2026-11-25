@@ -1,220 +1,195 @@
-import type { MeasurementType } from "@fitbud/contracts";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { ChevronRight, TrendingDown, TrendingUp } from "lucide-react";
 import {
   addDaysToLocalDate,
   formatCivilDate,
-  formatInstant,
   formatLocalDate,
-  formatWeight,
-  labelFor,
+  formatNumber,
 } from "@fitbud/core";
-
-export const MEASUREMENT_SERIES: readonly MeasurementType[] = [
-  "body_weight_kg",
-  "waist_cm",
-  "hip_cm",
-  "chest_cm",
-];
 
 export type TrendPoint = {
   id: string;
   value: number;
   unit: string;
   observedAt: string;
-  source?: string;
-  checkinId?: string | null;
   localDate?: string;
 };
 
-export type TrendRange = "4w" | "12w" | "all";
+type Range = "6w" | "3m";
 
-export function measurementTypeLabel(type: string): string {
-  return labelFor("measurement_type", type);
-}
+const RANGE_DAYS: Record<Range, number> = { "6w": 42, "3m": 90 };
+const RANGE_LABEL: Record<Range, string> = { "6w": "6 wk", "3m": "3 mo" };
+const PLOT_W = 300;
+const PLOT_H = 120;
 
-export function formatObservedAt(
-  value: string,
-  timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-): string {
-  return formatInstant(value, timeZone);
+function civil(point: TrendPoint): string {
+  return point.localDate ?? formatLocalDate(new Date(point.observedAt), "UTC");
 }
 
 function byTime(points: TrendPoint[]): TrendPoint[] {
-  return [...points].sort((left, right) =>
-    left.observedAt.localeCompare(right.observedAt),
-  );
+  return [...points].sort((a, b) => a.observedAt.localeCompare(b.observedAt));
 }
 
-function filterRange(
-  points: TrendPoint[],
-  range: TrendRange,
-  today: string,
-): TrendPoint[] {
-  if (range === "all") return points;
-  const days = range === "4w" ? 28 : 84;
-  const from = addDaysToLocalDate(today, -days);
-  return points.filter((point) => {
-    const civil =
-      point.localDate ?? formatLocalDate(new Date(point.observedAt), "UTC");
-    return civil >= from;
-  });
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
-function changeSummary(
-  points: TrendPoint[],
-  label: string,
-): string | null {
-  if (points.length < 2) return null;
-  const first = points[0]!;
-  const last = points[points.length - 1]!;
-  const delta = last.value - first.value;
-  const unit = last.unit || first.unit;
-  const magnitude =
-    label.toLowerCase().includes("weight")
-      ? formatWeight(Math.abs(delta), unit === "lb" ? "lb" : "kg")
-      : `${Math.abs(delta).toFixed(1)} ${unit}`;
-  const sign = delta < 0 ? "−" : delta > 0 ? "+" : "";
-  const deltaText = `${sign}${magnitude}`;
-  const since = formatCivilDate(
-    first.localDate ??
-      formatLocalDate(new Date(first.observedAt), "UTC"),
-  );
-  return `${deltaText} since ${since}`;
+/** Whole-kilogram value axis with four labels so the scale reads cleanly. */
+function axis(values: number[]): { min: number; max: number; ticks: number[] } {
+  const lo = Math.floor(Math.min(...values));
+  const hi = Math.ceil(Math.max(...values));
+  const step = Math.max(1, Math.ceil((hi - lo) / 3));
+  const ticks: number[] = [];
+  for (let i = 0; i <= 3; i += 1) ticks.push(lo + step * i);
+  return { min: lo, max: lo + step * 3, ticks };
 }
 
-/** TrendChart — line with gap breaks, neutral change copy (TW-18). */
-export function TrendChart({
-  label,
+/**
+ * Weight card on the client Overview (frame W-03): latest value, the change
+ * over the shown range, a line chart with value and date labels, and the date
+ * of the last weigh-in. Change copy is neutral (no good or bad colouring). A
+ * plan carries no numeric goal weight, so no goal line is drawn.
+ */
+export function WeightCard({
   points,
-  range,
-  today,
-  timeZone,
+  progressHref,
 }: {
-  label: string;
   points: TrendPoint[];
-  range: TrendRange;
-  today: string;
-  timeZone: string;
+  progressHref: string;
 }) {
-  const sorted = byTime(filterRange(points, range, today));
-  const first = sorted[0];
-  if (!first) {
-    return null;
-  }
-  if (sorted.length === 1) {
-    return (
-      <p className="trend-single" data-testid="trend-single">
-        <strong>
-          {first.value} {first.unit}
-        </strong>
-        <span className="muted">Add more weigh-ins to see a trend</span>
-      </p>
-    );
-  }
-
-  const width = 480;
-  const height = 140;
-  const padX = 16;
-  const padY = 16;
-  const values = sorted.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const last = sorted[sorted.length - 1] ?? first;
-
-  const coords = sorted.map((point, index) => {
-    const x =
-      padX + (index / (sorted.length - 1)) * (width - padX * 2);
-    const y = padY + (1 - (point.value - min) / span) * (height - padY * 2);
-    return { x, y, point, index };
-  });
-
-  const segments: string[] = [];
-  let current: string[] = [];
-  for (let i = 0; i < coords.length; i++) {
-    const coord = coords[i]!;
-    const prev = coords[i - 1];
-    if (
-      prev &&
-      coord.point.localDate &&
-      prev.point.localDate &&
-      daysBetween(prev.point.localDate, coord.point.localDate) > 10
-    ) {
-      if (current.length > 0) {
-        segments.push(current.join(" "));
-        current = [];
-      }
-    }
-    current.push(
-      `${current.length === 0 ? "M" : "L"}${coord.x.toFixed(1)} ${coord.y.toFixed(1)}`,
-    );
-  }
-  if (current.length > 0) segments.push(current.join(" "));
-
-  const summary = changeSummary(sorted, label);
+  const [range, setRange] = useState<Range>("6w");
+  const all = byTime(points);
+  const last = all[all.length - 1];
+  const from = last ? addDaysToLocalDate(civil(last), -RANGE_DAYS[range]) : "";
+  const shown = all.filter((p) => civil(p) >= from);
+  const first = shown[0];
 
   return (
-    <figure className="trend-chart" data-testid="trend-chart">
-      <div className="trend-range-caption">
-        <span>
-          Start {first.value} {first.unit}
-        </span>
-        <span>
-          Latest {last.value} {last.unit}
-        </span>
-        {summary ? <span>{summary}</span> : null}
+    <section className="ov-card ov-weight" data-testid="ov-weight">
+      <div className="ov-weight-h">
+        <h3>Weight</h3>
+        {last ? (
+          <div className="ov-range" role="group" aria-label="Range">
+            {(Object.keys(RANGE_LABEL) as Range[]).map((key) => (
+              <button
+                key={key}
+                type="button"
+                className="ov-range-btn"
+                aria-pressed={range === key}
+                onClick={() => setRange(key)}
+              >
+                {RANGE_LABEL[key]}
+              </button>
+            ))}
+          </div>
+        ) : null}
       </div>
-      <div className="trend-plot">
+      {!last ? (
+        <p className="muted ov-pad">No weigh-ins yet</p>
+      ) : (
+        <>
+          <div className="ov-weight-v">
+            <b>{formatNumber(round1(last.value))}</b>
+            <span>kg</span>
+            {first && shown.length >= 2 ? (
+              <DeltaLine first={first} last={last} />
+            ) : null}
+          </div>
+          {shown.length >= 2 ? (
+            <Chart points={shown} />
+          ) : (
+            <p className="muted ov-pad" data-testid="trend-single">
+              Add more weigh-ins to see a trend
+            </p>
+          )}
+          <div className="ov-weight-f">
+            <span>Last weigh-in {formatCivilDate(civil(last))}</span>
+            <Link className="text-link" to={progressHref}>
+              Progress
+              <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
+            </Link>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function DeltaLine({ first, last }: { first: TrendPoint; last: TrendPoint }) {
+  const delta = round1(last.value - first.value);
+  const sign = delta < 0 ? "−" : delta > 0 ? "+" : "";
+  const Icon = delta > 0 ? TrendingUp : TrendingDown;
+  return (
+    <span className="ov-weight-d">
+      {delta !== 0 ? <Icon size={16} strokeWidth={1.75} aria-hidden /> : null}
+      <b>
+        {sign}
+        {formatNumber(Math.abs(delta))} kg
+      </b>{" "}
+      since {formatCivilDate(civil(first))}
+    </span>
+  );
+}
+
+function Chart({ points }: { points: TrendPoint[] }) {
+  const { min, max, ticks } = axis(points.map((p) => p.value));
+  const span = max - min || 1;
+  const t0 = Date.parse(`${civil(points[0]!)}T00:00:00Z`);
+  const t1 = Date.parse(`${civil(points[points.length - 1]!)}T00:00:00Z`);
+  const tSpan = t1 - t0 || 1;
+  const coords = points.map((p) => ({
+    x: ((Date.parse(`${civil(p)}T00:00:00Z`) - t0) / tSpan) * PLOT_W,
+    y: (1 - (p.value - min) / span) * PLOT_H,
+  }));
+  const line = coords
+    .map((c, i) => `${i === 0 ? "M" : "L"}${c.x.toFixed(1)} ${c.y.toFixed(1)}`)
+    .join(" ");
+  const area = `${line} L${PLOT_W} ${PLOT_H} L0 ${PLOT_H} Z`;
+  const end = coords[coords.length - 1]!;
+  const midDate = formatCivilDate(
+    formatLocalDate(new Date((t0 + t1) / 2), "UTC"),
+  );
+  return (
+    <figure className="ov-chart" data-testid="trend-chart">
+      <div className="ov-chart-y" aria-hidden="true">
+        {[...ticks].reverse().map((v) => (
+          <span key={v}>{v}</span>
+        ))}
+      </div>
+      <div className="ov-chart-plot">
         <svg
-          viewBox={`0 0 ${width} ${height}`}
+          viewBox={`0 0 ${PLOT_W} ${PLOT_H}`}
+          preserveAspectRatio="none"
           role="img"
-          aria-label={`${label} trend`}
+          aria-label="Weight trend"
         >
-          {segments.map((path, index) => (
-            <path
-              key={index}
-              d={path}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
+          {ticks.map((v) => (
+            <line
+              key={v}
+              className="ov-chart-grid"
+              x1="0"
+              x2={PLOT_W}
+              y1={(1 - (v - min) / span) * PLOT_H}
+              y2={(1 - (v - min) / span) * PLOT_H}
             />
           ))}
-          {coords.map((coord) => (
-            <circle key={coord.point.id} cx={coord.x} cy={coord.y} r="4" />
-          ))}
+          <path className="ov-chart-area" d={area} />
+          <path className="ov-chart-line" d={line} />
         </svg>
+        <i
+          className="ov-chart-dot"
+          style={{
+            left: `${(end.x / PLOT_W) * 100}%`,
+            top: `${(end.y / PLOT_H) * 100}%`,
+          }}
+        />
       </div>
-      <figcaption className="trend-caption">
-        <time dateTime={last.observedAt}>
-          {formatObservedAt(last.observedAt, timeZone)}
-        </time>
+      <figcaption className="ov-chart-x">
+        <span>{formatCivilDate(civil(points[0]!))}</span>
+        <span>{midDate}</span>
+        <span>{formatCivilDate(civil(points[points.length - 1]!))}</span>
       </figcaption>
     </figure>
-  );
-}
-
-function daysBetween(left: string, right: string): number {
-  const start = Date.parse(`${left}T00:00:00Z`);
-  const end = Date.parse(`${right}T00:00:00Z`);
-  return Math.round((end - start) / 86_400_000);
-}
-
-/** @deprecated use TrendChart — kept for overview compact sparkline */
-export function MeasurementTrend({
-  label,
-  points,
-}: {
-  label: string;
-  points: TrendPoint[];
-  compact?: boolean;
-}) {
-  const today = formatLocalDate(new Date(), "UTC");
-  return (
-    <TrendChart
-      label={label}
-      points={points}
-      range="all"
-      today={today}
-      timeZone="UTC"
-    />
   );
 }

@@ -411,7 +411,12 @@ function SearchProbe() {
 
 function renderPanel(
   items: ExceptionDetail[],
-  opts: { exceptionId?: string; onClose?: () => void; onChanged?: () => void } = {},
+  opts: {
+    exceptionId?: string;
+    onClose?: () => void;
+    onChanged?: () => void;
+    variant?: "drawer" | "modal";
+  } = {},
 ) {
   api.listExceptions.mockResolvedValue({ items, nextCursor: null });
   const byId = new Map(items.map((item) => [item.id, item]));
@@ -433,6 +438,7 @@ function renderPanel(
               <SearchProbe />
               <ExceptionDrawer
                 exceptionId={opts.exceptionId ?? null}
+                variant={opts.variant}
                 onClose={opts.onClose ?? (() => undefined)}
                 onChanged={opts.onChanged}
               />
@@ -447,6 +453,34 @@ function renderPanel(
 async function findTitle(text: RegExp) {
   return screen.findByRole("heading", { level: 3, name: text });
 }
+
+describe("Modal variant (W13-6)", () => {
+  beforeEach(() => {
+    stubWorkspaceApis();
+  });
+  afterEach(() => {
+    cleanup();
+    vi.clearAllMocks();
+  });
+
+  it("renders the same list-mode review in the modal container with the W14 words", async () => {
+    renderPanel([openItem(1), openItem(2)], { variant: "modal" });
+    await screen.findByRole("button", { name: "Noted, keep open" });
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.className).toContain("sp-panel-modal");
+    expect(dialog.parentElement?.className).toContain("sp-backdrop-modal");
+    expect(screen.getByText(/^1 of 2$/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Noted, keep open" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Remind" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Resolve…?$/ })).toBeTruthy();
+  });
+
+  it("the default container stays the docked drawer", async () => {
+    renderPanel([openItem(1)]);
+    await screen.findByRole("button", { name: "Noted, keep open" });
+    expect(screen.getByRole("dialog").className).not.toContain("sp-panel-modal");
+  });
+});
 
 describe("Side panel v3 list (Z7-5)", () => {
   beforeEach(() => {

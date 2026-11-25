@@ -163,10 +163,6 @@
   cursor: not-allowed;
 }
 
-.ov-nut {
-  flex-wrap: wrap;
-}
-
 @media (max-width: 1100px) {
   .ov-wnav-btn,
   .ov-dnav-btn,
@@ -174,4 +170,338 @@
     width: auto;
     min-width: 2.75rem;
   }
+}
+
+/* W13-6 (frame W-03): Needs attention list, Today's food card, Weight card. */
+.overview-grid .ov-attention .ov-att + .ov-att {
+  border-top: 1px solid var(--line);
+}
+
+.overview-grid .ov-ml,
+.overview-grid .note-vis-badge {
+  font-size: 0.75rem;
+}
+
+.ov-food-nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+}
+
+.ov-food-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  min-height: var(--h-md);
+}
+
+.ov-food-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+  padding: 0 var(--s5) var(--s5);
+}
+
+.ov-food-kcal {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+}
+
+.ov-food-kcal b {
+  font: var(--t-kpi);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-food-kcal span {
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ov-bar {
+  height: 8px;
+  border-radius: var(--r-full);
+  background: var(--fill);
+  overflow: hidden;
+}
+
+.ov-bar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-full);
+  background: var(--brand);
+}
+
+.ov-bar i.is-protein {
+  background: var(--ink);
+}
+
+.ov-bar i.is-carbs {
+  background: var(--brand-indigo);
+}
+
+.ov-bar i.is-fat {
+  background: var(--info);
+}
+
+.ov-macros {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s5);
+}
+
+.ov-macro {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
+}
+
+.ov-macro-h {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s2);
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ov-macro-h b {
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Weight card */
+.ov-weight-h {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5) var(--s2);
+}
+
+.overview-side .ov-weight-h h3 {
+  margin: 0;
+  font: var(--t-h2);
+  color: var(--ink);
+  letter-spacing: 0;
+}
+
+.ov-range {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: var(--r-ctl);
+  background: var(--fill);
+}
+
+.ov-range-btn {
+  min-height: var(--h-md);
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  font: var(--t-meta);
+  font-weight: 600;
+  color: var(--ink3);
+  cursor: pointer;
+}
+
+.ov-range-btn[aria-pressed="true"] {
+  background: var(--white);
+  color: var(--ink);
+  box-shadow: var(--e1);
+}
+
+.ov-weight-v {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s1) var(--s2);
+  padding: 0 var(--s5);
+}
+
+.ov-weight-v b {
+  font: var(--t-kpi);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-weight-v > span:not(.ov-weight-d) {
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ov-weight-d {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  margin-left: var(--s2);
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ov-weight-d b {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ov-chart {
+  margin: 0;
+  padding: var(--s4) var(--s5) var(--s3);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--s2);
+}
+
+.ov-chart-y {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  font: var(--t-cap);
+  color: var(--ink3);
+  font-variant-numeric: tabular-nums;
+}
+
+.ov-chart-plot {
+  position: relative;
+  height: 120px;
+}
+
+.ov-chart-plot svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.ov-chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.ov-chart-area {
+  fill: var(--fill);
+  opacity: 0.7;
+}
+
+.ov-chart-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.ov-chart-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: var(--r-full);
+  background: var(--white);
+  border: 2px solid var(--ink);
+}
+
+.ov-chart-x {
+  grid-column: 2;
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--s2);
+  font: var(--t-cap);
+  color: var(--ink3);
+}
+
+.ov-weight-f {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s5);
+  border-top: 1px solid var(--line);
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ov-weight-f .text-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  min-height: var(--h-md);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+@media (max-width: 1100px) {
+  .ov-macros {
+    gap: var(--s3);
+  }
+}
+
+/* iPad widths: the range toggle's own boxes reach 44 px (W13-6). */
+@media (max-width: 1280px), (pointer: coarse) {
+  .ov-range-btn {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  .ov-food-link,
+  .ov-weight-f .text-link {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
+/* iPad widths (frame W-03-ipad): main column full width, the rail drops below the
+   food card in two columns (Weight left; Next check-in, Plan, Notes... right). */
+@media (max-width: 1280px) {
+  .ov-att button {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  div.overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-grid:not(.overview-ended) .overview-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.25rem;
+    row-gap: 0;
+    align-items: start;
+    margin-bottom: -1.25rem;
+  }
+
+  .overview-grid:not(.overview-ended) .overview-side > * {
+    grid-column: 2;
+    margin-bottom: 1.25rem;
+    min-width: 0;
+  }
+
+  .overview-grid:not(.overview-ended) .overview-side > :first-child {
+    grid-column: 1;
+    grid-row: 1 / span 12;
+  }
+}
+
+/* The seven days always fit the card: columns may shrink (no clipped Sunday at iPad widths). */
+.overview-grid .ov-week {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--s1);
+  padding-inline: var(--s3);
+}
+
+.overview-grid .ov-day {
+  padding-inline: 0;
+  min-width: 0;
+}
+
+/* Workout labels wrap to two lines instead of truncating. */
+.overview-grid .ov-wl {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
 }

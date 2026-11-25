@@ -1125,3 +1125,58 @@ label.sp-bulk-row-inner:hover {
     height: var(--h-lg);
   }
 }
+
+/*
+ * Modal variant (W13-6, frames W-03x…xd): the same review in a centred 720 px
+ * dialog over a scrim. Only the container changes; the content rules above
+ * apply as they do in the docked panel.
+ */
+.drawer-backdrop.sp-backdrop.sp-backdrop-modal {
+  top: 0;
+  left: 0;
+  z-index: 60;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(26 18 72 / 40%);
+}
+
+.drawer-panel.sp-panel.sp-panel-modal {
+  width: min(720px, 100%);
+  height: auto;
+  max-height: calc(100vh - 48px);
+  border: 0;
+  border-radius: var(--r-modal);
+  box-shadow: 0 24px 64px rgb(26 18 72 / 24%);
+  overflow: hidden;
+  animation: sp-modal-in 160ms ease-out;
+}
+
+@keyframes sp-modal-in {
+  from {
+    transform: translateY(8px);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-panel.sp-panel.sp-panel-modal {
+    animation: none;
+  }
+}
+
+@media (max-width: 599px) {
+  .drawer-backdrop.sp-backdrop.sp-backdrop-modal {
+    padding: 0;
+  }
+
+  .drawer-panel.sp-panel.sp-panel-modal {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+}
