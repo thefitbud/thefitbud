@@ -55,29 +55,26 @@ async function ownTemplate(type: "workout" | "nutrition", prefer: string): Promi
   return api<Template>("GET", `/templates/${pick!.id}`);
 }
 
-/** Copy of a template cut down to a short plan (2 exercises or 1 meal). */
+/** New trainer-owned template cut down to a short plan (2 exercises or 1 meal). */
 async function shortCopy(source: Template, type: "workout" | "nutrition"): Promise<string> {
-  const copy = await api<Template>("POST", `/templates/${source.id}/fork`, {
-    title: `${source.title} (short)`,
-  });
   const content =
     type === "workout"
       ? {
           workoutDays: [
             {
-              ...copy.content.workoutDays[0]!,
-              exercises: copy.content.workoutDays[0]!.exercises.slice(0, 2),
+              ...source.content.workoutDays[0]!,
+              exercises: source.content.workoutDays[0]!.exercises.slice(0, 2),
             },
           ],
           mealPrescriptions: [],
         }
-      : { workoutDays: [], mealPrescriptions: copy.content.mealPrescriptions.slice(0, 1) };
-  await api("PUT", `/templates/${copy.id}`, {
-    expectedRecordVersion: copy.recordVersion,
-    title: copy.title,
+      : { workoutDays: [], mealPrescriptions: source.content.mealPrescriptions.slice(0, 1) };
+  const created = await api<Template>("POST", "/templates", {
+    title: `${source.title} (short)`,
+    templateType: type,
     content,
   });
-  return copy.id;
+  return created.id;
 }
 
 async function windowLocked(page: Page) {
@@ -220,10 +217,10 @@ test.describe("W13-3 builder workspace", () => {
         if (wide) {
           await libraryLoaded(page);
           await expect(page.getByTestId("library-drawer")).toBeVisible();
-          await expect(page.getByRole("button", { name: "Library" })).toHaveCount(0);
+          await expect(page.getByRole("button", { name: "Library", exact: true })).toHaveCount(0);
         } else {
           await expect(page.getByTestId("builder-pane-library")).toHaveCount(0);
-          await expect(page.getByRole("button", { name: "Library" })).toBeVisible();
+          await expect(page.getByRole("button", { name: "Library", exact: true })).toBeVisible();
         }
         const label = `${frame}-${width}x${height}`;
         await expectWorkspace(page, label, wide ? 3 : 2);
@@ -273,7 +270,7 @@ test.describe("W13-3 builder workspace", () => {
     await openTemplate(page, "workouts", copyId);
     await expect(page.getByTestId("library-drawer")).toHaveCount(0);
 
-    const library = page.getByRole("button", { name: "Library" });
+    const library = page.getByRole("button", { name: "Library", exact: true });
     const box = await library.boundingBox();
     expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     await library.click();

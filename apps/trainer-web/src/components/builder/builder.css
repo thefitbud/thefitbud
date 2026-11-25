@@ -50,6 +50,12 @@
   min-height: 44px;
 }
 
+/* The stepper's 1 px border sits inside its height: add it back so the
+   buttons themselves are 44 px tall. */
+.builder[data-builder-mode="narrow"] .ui-stepper {
+  height: calc(var(--h-md) + 2px);
+}
+
 .builder[data-builder-mode="narrow"] .ui-stepper button {
   width: 44px;
 }
