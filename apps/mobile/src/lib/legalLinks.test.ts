@@ -20,6 +20,7 @@ vi.mock("react", async (importOriginal) => ({
   useState: (initial: unknown) => [initial, () => undefined],
   useEffect: () => undefined,
   useCallback: (fn: unknown) => fn,
+  useRef: (v: unknown) => ({ current: v }),
 }));
 
 vi.mock("react-native", () => ({

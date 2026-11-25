@@ -361,9 +361,23 @@ describe("CheckinReviewPage layout (W13-7)", () => {
       Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent),
     );
     expect(rows).toEqual([
-      ["Body weight", "64.9 kg", "64.2 kg", "−0.7"],
+      ["Body weight", "64.9 kg", "64.2 kg", "−0.7 kg"],
       ["Waist", "—", "77.2 cm", "—"],
     ]);
+  });
+
+  it("writes the submitted line with the weekday and the note label with the first name", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    expect(screen.getByText(/Submitted Tue 27 Oct/)).toBeTruthy();
+    expect(screen.getByText("Rohan can see this note")).toBeTruthy();
+    expect(screen.getByText("Private unless you mark it visible to Rohan.")).toBeTruthy();
+    expect(screen.queryByText(/Visible to client/)).toBeNull();
+    const box = screen.getByRole("checkbox", { name: "Rohan can see this note" });
+    expect(box.getAttribute("aria-checked")).toBe("false");
+    fireEvent.click(box);
+    expect(box.getAttribute("aria-checked")).toBe("true");
   });
 
   it("shows no This week table without stored measurements", async () => {
