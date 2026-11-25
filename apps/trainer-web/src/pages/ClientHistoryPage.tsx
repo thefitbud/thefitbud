@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useOutletContext, useParams, useSearchParams } from "react-router-dom";
-import { CalendarDays } from "lucide-react";
+import { CalendarDays, Search } from "lucide-react";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import type { HistoryItem, HistoryItemKind } from "@fitbud/contracts";
 import {
@@ -11,7 +11,17 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
 import { civilDateEnd, civilDateStart } from "../lib/dateFilters";
-import { humanizeHistoryText } from "../lib/history-ui";
+import {
+  civilDaysAgo,
+  firstName,
+  groupHistoryByDay,
+  historyKindIcon,
+  historyKindTone,
+  historyLine,
+  type HistoryActor,
+} from "../lib/history-ui";
+import { ChipMenu } from "../components/activity/ChipMenu";
+import { rangeLabel } from "../components/activity/activityUtils";
 import {
   ErrorState,
   LoadingBlock,
@@ -64,6 +74,14 @@ const HISTORY_KIND_GROUPS = [
 ] as const;
 
 type HistoryKindGroupId = (typeof HISTORY_KIND_GROUPS)[number]["id"];
+
+const RANGE_OPTIONS = [
+  { value: "", label: "All time" },
+  { value: "7", label: "Last 7 days" },
+  { value: "30", label: "Last 30 days" },
+  { value: "90", label: "Last 90 days" },
+  { value: "custom", label: "Custom range" },
+];
 
 function parseKindGroup(value: string | null): HistoryKindGroupId | undefined {
   return HISTORY_KIND_GROUPS.find((group) => group.id === value)?.id;
@@ -138,8 +156,10 @@ export function ClientHistoryPage() {
     "UTC";
   const { relationshipId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { refreshEpoch = 0, online = true } =
+  const { refreshEpoch = 0, online = true, workspace = null } =
     useOutletContext<WorkspaceOutletContext>();
+  const clientFirst = firstName(workspace?.header.traineeDisplayName);
+  const trainerName = me?.trainerProfile?.displayName?.trim() || "You";
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -150,14 +170,26 @@ export function ClientHistoryPage() {
     requestId?: string | null;
   } | null>(null);
   const requestId = useRef(0);
-  const kindSelectId = useId();
+  const searchId = useId();
   const fromId = useId();
   const toId = useId();
 
   const kindGroup = parseKindGroup(searchParams.get("kind"));
   const selectedGroup = HISTORY_KIND_GROUPS.find((group) => group.id === kindGroup);
-  const occurredFrom = searchParams.get("occurredFrom") ?? "";
-  const occurredTo = searchParams.get("occurredTo") ?? "";
+  // Range menu: a preset ("7", "30", "90") counts back from today in the
+  // trainer’s timezone; "custom" uses the From and To dates in the URL.
+  const rangeParam = searchParams.get("range") ?? "";
+  const customFrom = searchParams.get("occurredFrom") ?? "";
+  const customTo = searchParams.get("occurredTo") ?? "";
+  const presetDays = ["7", "30", "90"].includes(rangeParam)
+    ? Number(rangeParam)
+    : 0;
+  const rangeMode =
+    presetDays > 0 ? rangeParam : rangeParam === "custom" || customFrom || customTo ? "custom" : "";
+  const occurredFrom = presetDays > 0 ? civilDaysAgo(presetDays, timeZone) : rangeMode === "custom" ? customFrom : "";
+  const occurredTo = presetDays > 0 ? "" : rangeMode === "custom" ? customTo : "";
+  const [query, setQuery] = useState("");
+  const [who, setWho] = useState<"" | HistoryActor>("");
   const filterKey = `${relationshipId}|${kindGroup ?? ""}|${occurredFrom}|${occurredTo}`;
   const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const listReady = loadedKey === filterKey && !loading;
@@ -256,6 +288,7 @@ export function ClientHistoryPage() {
 
   function updateFilters(next: {
     kind?: HistoryKindGroupId | null;
+    range?: string;
     occurredFrom?: string;
     occurredTo?: string;
   }) {
@@ -266,13 +299,24 @@ export function ClientHistoryPage() {
           if (next.kind) params.set("kind", next.kind);
           else params.delete("kind");
         }
+        if (next.range !== undefined) {
+          if (next.range) params.set("range", next.range);
+          else params.delete("range");
+          // A preset (or "All time") replaces any custom dates.
+          if (next.range !== "custom") {
+            params.delete("occurredFrom");
+            params.delete("occurredTo");
+          }
+        }
         if (next.occurredFrom !== undefined) {
           if (next.occurredFrom) params.set("occurredFrom", next.occurredFrom);
           else params.delete("occurredFrom");
+          params.set("range", "custom");
         }
         if (next.occurredTo !== undefined) {
           if (next.occurredTo) params.set("occurredTo", next.occurredTo);
           else params.delete("occurredTo");
+          params.set("range", "custom");
         }
         return params;
       },
@@ -280,9 +324,39 @@ export function ClientHistoryPage() {
     );
   }
 
-  const empty = listReady && items.length === 0 && !error;
-  const filtersActive = Boolean(kindGroup || occurredFrom || occurredTo);
   const now = new Date();
+  const names = useMemo(
+    () => ({ client: clientFirst, trainer: trainerName }),
+    [clientFirst, trainerName],
+  );
+  // Search and "Who" narrow the loaded rows; type and dates go to the API.
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return items.filter((item) => {
+      const line = historyLine(item, names);
+      if (who && line.actor !== who) return false;
+      if (!needle) return true;
+      const text = `${line.lead}${line.bold}${line.tail} ${line.meta}`.toLowerCase();
+      return text.includes(needle);
+    });
+  }, [items, names, query, who]);
+  const groups = useMemo(
+    () => groupHistoryByDay(visible, timeZone, new Date()),
+    [visible, timeZone],
+  );
+
+  const empty = listReady && items.length === 0 && !error;
+  const noMatches = listReady && items.length > 0 && visible.length === 0;
+  const filtersActive = Boolean(
+    kindGroup || rangeMode || who || query.trim(),
+  );
+  const rangeChip = `${
+    RANGE_OPTIONS.find((option) => option.value === rangeMode)?.label ?? "All time"
+  }${
+    rangeMode === "custom" && (occurredFrom || occurredTo)
+      ? ` · ${rangeLabel(occurredFrom || occurredTo, occurredTo || occurredFrom)}`
+      : ""
+  }`;
 
   return (
     <div className="workspace-page history-page" data-testid="screen-TW-21">
@@ -292,151 +366,191 @@ export function ClientHistoryPage() {
         </p>
       ) : null}
 
-      <section
-        className="workspace-card history-card"
-        aria-labelledby="history-heading"
-      >
-        <header className="history-card-head">
-          <h1 id="history-heading" className="workspace-page-title">
-            History
-          </h1>
-          <label className="sr-only" htmlFor={kindSelectId}>
-            Event kind
-          </label>
-          <select
-            id={kindSelectId}
-            className="history-kind-select"
-            value={kindGroup ?? ""}
-            aria-label="All events"
-            onChange={(event) => {
-              const value = event.target.value;
-              updateFilters({
-                kind: value
-                  ? (value as HistoryKindGroupId)
-                  : null,
-              });
-            }}
-          >
-            <option value="">All events</option>
-            {HISTORY_KIND_GROUPS.map((group) => (
-              <option key={group.id} value={group.id}>
-                {group.label}
-              </option>
-            ))}
-          </select>
-        </header>
+      <h1 id="history-heading" className="sr-only">
+        History
+      </h1>
 
-        <form
-          className="history-date-filters"
-          aria-label="Date range"
-          onSubmit={(event) => event.preventDefault()}
-        >
-          <CivilDateFilter
-            id={fromId}
-            label="From"
-            value={occurredFrom}
-            onChange={(value) => updateFilters({ occurredFrom: value })}
+      <div className="history-toolbar" role="group" aria-label="History filters">
+        <label className="history-search" htmlFor={searchId}>
+          <Search className="ui-i" aria-hidden="true" />
+          <input
+            id={searchId}
+            type="search"
+            value={query}
+            placeholder="Search history"
+            aria-label="Search history"
+            onChange={(event) => setQuery(event.target.value)}
           />
-          <CivilDateFilter
-            id={toId}
-            label="To"
-            value={occurredTo}
-            onChange={(value) => updateFilters({ occurredTo: value })}
+        </label>
+        <ChipMenu
+          label="Type"
+          aria-label="Type"
+          options={[
+            { value: "", label: "All" },
+            ...HISTORY_KIND_GROUPS.map((group) => ({
+              value: group.id,
+              label: group.label,
+            })),
+          ]}
+          value={kindGroup ?? ""}
+          onChange={(value) =>
+            updateFilters({ kind: value ? (value as HistoryKindGroupId) : null })
+          }
+        />
+        <ChipMenu
+          label="Who"
+          aria-label="Who"
+          options={[
+            { value: "", label: "Anyone" },
+            { value: "client", label: clientFirst },
+            { value: "trainer", label: "You" },
+          ]}
+          value={who}
+          onChange={(value) => setWho(value as "" | HistoryActor)}
+        />
+        <div className="history-toolbar-end">
+          {rangeMode === "custom" ? (
+            <form
+              className="history-date-filters"
+              aria-label="Date range"
+              onSubmit={(event) => event.preventDefault()}
+            >
+              <CivilDateFilter
+                id={fromId}
+                label="From"
+                value={occurredFrom}
+                onChange={(value) => updateFilters({ occurredFrom: value })}
+              />
+              <CivilDateFilter
+                id={toId}
+                label="To"
+                value={occurredTo}
+                onChange={(value) => updateFilters({ occurredTo: value })}
+              />
+            </form>
+          ) : null}
+          <ChipMenu
+            icon={<CalendarDays className="ui-i" aria-hidden="true" />}
+            aria-label="Date range"
+            options={RANGE_OPTIONS}
+            value={rangeMode}
+            valueLabel={rangeChip}
+            onChange={(value) => updateFilters({ range: value })}
+            alignEnd
           />
           {filtersActive ? (
             <button
               type="button"
-              className="button-ghost history-clear-filters"
-              onClick={() =>
-                updateFilters({
-                  kind: null,
-                  occurredFrom: "",
-                  occurredTo: "",
-                })
-              }
+              className="ui-btn ui-btn-ghost ui-btn-sm history-clear-filters"
+              onClick={() => {
+                setQuery("");
+                setWho("");
+                updateFilters({ kind: null, range: "" });
+              }}
             >
               Clear filters
             </button>
           ) : null}
-        </form>
+        </div>
+      </div>
 
-        {error && !listReady ? (
-          <ErrorState
-            message={userFacingMessage(error)}
-            kind={error.kind}
-            requestId={error.requestId}
-            screenId="TW-21"
-            onRetry={() => void load()}
-          />
-        ) : null}
+      {error && !listReady ? (
+        <ErrorState
+          message={userFacingMessage(error)}
+          kind={error.kind}
+          requestId={error.requestId}
+          screenId="TW-21"
+          onRetry={() => void load()}
+        />
+      ) : null}
 
-        {!listReady && !error ? <LoadingBlock label="Loading history…" /> : null}
+      {!listReady && !error ? <LoadingBlock label="Loading history…" /> : null}
 
-        {listReady && error ? (
-          <ErrorState
-            message={userFacingMessage(error)}
-            kind={error.kind}
-            requestId={error.requestId}
-            screenId="TW-21"
-            onRetry={() => void load()}
-          />
-        ) : null}
+      {listReady && error ? (
+        <ErrorState
+          message={userFacingMessage(error)}
+          kind={error.kind}
+          requestId={error.requestId}
+          screenId="TW-21"
+          onRetry={() => void load()}
+        />
+      ) : null}
 
-        {empty ? (
-          <p className="workspace-empty" role="status">
-            Nothing recorded yet.
-          </p>
-        ) : null}
+      {empty ? (
+        <p className="workspace-empty" role="status">
+          Nothing recorded yet.
+        </p>
+      ) : null}
 
-        {listReady && items.length > 0 ? (
-          <ol className="history-timeline">
-            {items.map((item, index) => {
-              const sentence = humanizeHistoryText(item.title);
-              const when = formatHistoryWhen(item.occurredAt, timeZone, now);
-              return (
-                <li
-                  key={`${item.kind}:${item.id}`}
-                  className="history-timeline-item"
-                >
-                  <span
-                    className={
-                      index === 0
-                        ? "history-timeline-dot is-accent"
-                        : "history-timeline-dot"
-                    }
-                    aria-hidden="true"
-                  />
-                  <div className="history-timeline-body">
-                    <span className="history-timeline-title">{sentence}</span>
-                    <span className="history-timeline-sep" aria-hidden="true">
-                      ·
-                    </span>
-                    <time
-                      className="history-timeline-when"
-                      dateTime={item.occurredAt}
+      {noMatches ? (
+        <p className="workspace-empty" role="status">
+          Nothing matches those filters.
+        </p>
+      ) : null}
+
+      {listReady && groups.length > 0 ? (
+        <div className="history-card" data-testid="history-days">
+          {groups.map((group) => (
+            <section
+              key={group.date}
+              className="history-day"
+              data-testid="history-day"
+              aria-label={group.sub ? `${group.heading}, ${group.sub}` : group.heading}
+            >
+              <header className="history-day-head">
+                <h2>{group.heading}</h2>
+                {group.sub ? <p>{group.sub}</p> : null}
+              </header>
+              <ol className="history-rows">
+                {group.items.map((item) => {
+                  const line = historyLine(item, names);
+                  const Icon = historyKindIcon(item.kind);
+                  const tone = historyKindTone(item);
+                  return (
+                    <li
+                      key={`${item.kind}:${item.id}`}
+                      className="history-row"
+                      data-testid="history-row"
                     >
-                      {when}
-                    </time>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        ) : null}
+                      <span className={`history-tile is-${tone}`} aria-hidden="true">
+                        <Icon size={18} strokeWidth={1.75} />
+                      </span>
+                      <div className="history-row-main">
+                        <p className="history-row-title">
+                          {line.lead}
+                          {line.bold ? <strong>{line.bold}</strong> : null}
+                          {line.tail}
+                        </p>
+                        <p className="history-row-meta">{line.meta}</p>
+                      </div>
+                      <time
+                        className="history-row-time"
+                        dateTime={item.occurredAt}
+                        title={formatHistoryWhen(item.occurredAt, timeZone, now)}
+                      >
+                        {formatClockTime(item.occurredAt, timeZone)}
+                      </time>
+                    </li>
+                  );
+                })}
+              </ol>
+            </section>
+          ))}
+        </div>
+      ) : null}
 
-        {listReady && nextCursor ? (
-          <button
-            type="button"
-            className="button-secondary history-load-more"
-            disabled={loadingMore || !online}
-            onClick={() => {
-              void load(nextCursor);
-            }}
-          >
-            {loadingMore ? "Loading…" : "Load more"}
-          </button>
-        ) : null}
-      </section>
+      {listReady && nextCursor ? (
+        <button
+          type="button"
+          className="ui-btn ui-btn-secondary history-load-more"
+          disabled={loadingMore || !online}
+          onClick={() => {
+            void load(nextCursor);
+          }}
+        >
+          {loadingMore ? "Loading…" : "Load more"}
+        </button>
+      ) : null}
     </div>
   );
 }
