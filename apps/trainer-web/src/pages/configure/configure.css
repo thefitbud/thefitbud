@@ -10,66 +10,6 @@
   gap: 1rem;
 }
 
-.cs-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
-}
-
-.cs-toolbar-note {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--ink-500);
-  font-variant-numeric: tabular-nums;
-}
-
-.cs-moved-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.875rem 1rem;
-  border-radius: 12px;
-  background: var(--semantic-info-fill);
-  border: 1px solid #bfdbfe;
-  color: var(--semantic-info-text);
-  font-size: 0.875rem;
-  line-height: 1.45;
-}
-
-.cs-moved-banner p {
-  flex: 1 1 20rem;
-  margin: 0;
-}
-
-.cs-moved-banner-icon {
-  flex: none;
-}
-
-.cs-moved-banner-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  min-height: 44px;
-  margin: -0.5rem 0;
-  color: var(--semantic-info-text);
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.cs-moved-banner-link:hover {
-  text-decoration: underline;
-}
-
-.cs-moved-banner-link:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
 /* One card, sections separated by rules (not a stack of cards). */
 .configure-v3 .configure-accordion-list {
   gap: 0;
