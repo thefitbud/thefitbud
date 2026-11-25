@@ -162,6 +162,44 @@ async function expectWorkspace(page: Page, label: string, wantPanes: number) {
   return panes;
 }
 
+/**
+ * Every weekday tab is on screen in full: inside the canvas pane, never cut
+ * by a scroll strip, and the selected tab is visible.
+ */
+async function expectDayTabsFit(page: Page, label: string) {
+  const result = await page.evaluate(() => {
+    const strip = document.querySelector<HTMLElement>(".builder-day-tabs[aria-label='Training days']");
+    const pane = document.querySelector<HTMLElement>("[data-testid='builder-pane-canvas']");
+    if (!strip || !pane) return null;
+    const paneBox = pane.getBoundingClientRect();
+    const tabs = [...strip.querySelectorAll<HTMLElement>("[role='tab']")];
+    return {
+      count: tabs.length,
+      stripScrolls: strip.scrollWidth > strip.clientWidth + 1,
+      cut: tabs
+        .filter((tab) => {
+          const box = tab.getBoundingClientRect();
+          return (
+            box.left < paneBox.left - 1 ||
+            box.right > paneBox.right + 1 ||
+            tab.scrollWidth > tab.clientWidth + 1
+          );
+        })
+        .map((tab) => tab.textContent ?? ""),
+      selectedVisible: tabs.some((tab) => {
+        if (tab.getAttribute("aria-selected") !== "true") return false;
+        const box = tab.getBoundingClientRect();
+        return box.left >= paneBox.left - 1 && box.right <= paneBox.right + 1;
+      }),
+    };
+  });
+  expect(result, `${label} day tabs`).not.toBeNull();
+  expect(result!.count, `${label} every weekday`).toBeGreaterThanOrEqual(7);
+  expect(result!.stripScrolls, `${label} strip scrolls`).toBe(false);
+  expect(result!.cut, `${label} cut tabs`).toEqual([]);
+  expect(result!.selectedVisible, `${label} selected tab`).toBe(true);
+}
+
 async function shot(page: Page, name: string) {
   await mkdir(OUT, { recursive: true });
   await page.screenshot({ path: path.join(OUT, name), fullPage: false });
@@ -243,6 +281,18 @@ test.describe("W13-3 builder workspace", () => {
         }
         const label = `${frame}-${width}x${height}`;
         await expectWorkspace(page, label, wide ? 3 : 2);
+        // An own template is editable: "Draft" pill, no version number.
+        await expect(page.getByTestId("builder-version-pill").first()).toHaveText("Draft");
+        if (hub === "workouts") {
+          await expectDayTabsFit(page, label);
+          await expect(page.getByRole("button", { name: "Duplicate day" })).toBeVisible();
+          await expect(page.locator(".ui-stepper[aria-label='Reps']")).toBeVisible();
+          if (wide) {
+            await expect(page.getByRole("group", { name: "Muscle group" })).toBeVisible();
+          }
+        } else {
+          await expect(page.getByTestId("meal-day-tabs")).toBeVisible();
+        }
         if (wide) {
           const widths = await page.evaluate(() =>
             [...document.querySelectorAll<HTMLElement>(".builder-pane")].map((pane) =>
@@ -300,6 +350,9 @@ test.describe("W13-3 builder workspace", () => {
         "Library is available when you can edit.",
       );
       await expectWorkspace(page, "read-only template", 3);
+      await expect(page.getByTestId("builder-version-pill")).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Duplicate day" })).toHaveCount(0);
+      await expectDayTabsFit(page, "read-only template");
       await shot(page, "W-152-read-only-1440x900.png");
     }
   });
@@ -321,13 +374,26 @@ test.describe("W13-3 builder workspace", () => {
     await expect(page.getByRole("searchbox", { name: "Search exercises" })).toBeFocused();
     await libraryLoaded(page);
     await expectWorkspace(page, "drawer open", 2);
+    // Muscle chips filter the drawer's list through the API.
+    const chips = drawer.getByRole("group", { name: "Muscle group" });
+    await expect(chips.getByRole("button", { name: "All" })).toHaveAttribute("aria-pressed", "true");
+    const filtered = page.waitForResponse(
+      (res) => res.url().includes("/libraries/exercises") && res.url().includes("muscleGroup=quads"),
+    );
+    await chips.getByRole("button", { name: "Quads" }).click();
+    await filtered;
+    await expect(chips.getByRole("button", { name: "Quads" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await libraryLoaded(page);
     await shot(page, "W-152-library-drawer-1180x820.png");
 
     // Targets in the header row and the cards are at least 44 px at iPad widths.
     const small = await page.evaluate(() =>
       [
         ...document.querySelectorAll<HTMLElement>(
-          ".builder-topbar button, .builder-topbar a, .exercise-card, .overflow-menu-trigger, .builder-day-tab, .ui-stepper button",
+          ".builder-topbar button, .builder-topbar a, .exercise-card, .overflow-menu-trigger, .builder-day-tab, .ui-stepper button, .builder-library-chips button, .session-board-duplicate, .builder-reps-clear",
         ),
       ]
         .filter((el) => el.getBoundingClientRect().height > 0)
@@ -372,11 +438,16 @@ test.describe("W13-3 builder workspace", () => {
     await expect(page.getByTestId("screen-TW-13")).toBeVisible({ timeout: 30_000 });
     await libraryLoaded(page);
     await expectWorkspace(page, "client workout", 3);
+    await expect(page.getByTestId("builder-version-pill").first()).toHaveText(/^Draft · v\d+$/);
+    await expectDayTabsFit(page, "client workout");
     await shot(page, "client-plan-workout-1440x900.png");
 
     await page.getByRole("tab", { name: "Nutrition" }).click();
     await expect(page.getByTestId("screen-TW-14")).toBeVisible();
     await expect(page.getByTestId("day-total-bar")).toBeVisible();
+    // Rohan's plan has training and rest days: the diet day row offers both.
+    const dayRow = page.getByTestId("meal-day-tabs");
+    await expect(dayRow.getByRole("tab")).toHaveText(["Every day", "Training days", "Rest days"]);
     await libraryLoaded(page);
     await expectWorkspace(page, "client nutrition", 3);
     await shot(page, "client-plan-nutrition-1440x900.png");

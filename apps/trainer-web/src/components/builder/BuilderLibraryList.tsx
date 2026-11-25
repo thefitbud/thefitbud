@@ -48,7 +48,6 @@ export const LIBRARY_MUSCLE_CHIPS = [
   "upper_back",
   "shoulders",
   "quads",
-  "glutes",
   "abs",
 ] as const;
 
