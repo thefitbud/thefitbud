@@ -274,7 +274,7 @@ function insertPaymentFixtures(sqlite: SqliteLike): void {
 }
 
 describe("migration chain and seeds", () => {
-  it("places 0030 to 0042 in order after 0029, with 0042 last", async () => {
+  it("places 0030 to 0043 in order after 0029, with 0043 last", async () => {
     const journal = JSON.parse(
       readFileSync(join(drizzleDir, "meta/_journal.json"), "utf8"),
     ) as JournalEntry[];
@@ -294,7 +294,8 @@ describe("migration chain and seeds", () => {
     expect(tags[previous + 11]).toBe("0040_client_basics");
     expect(tags[previous + 12]).toBe("0041_checkin_form_v2");
     expect(tags[previous + 13]).toBe("0042_index_hygiene");
-    expect(tags.at(-1)).toBe("0042_index_hygiene");
+    expect(tags[previous + 14]).toBe("0043_workout_session_note");
+    expect(tags.at(-1)).toBe("0043_workout_session_note");
     expect(journal[previous + 1]?.idx).toBe(journal[previous]!.idx + 1);
     expect(journal[previous + 1]?.idx).toBe(30);
     expect(journal[previous + 2]?.idx).toBe(31);
@@ -309,6 +310,7 @@ describe("migration chain and seeds", () => {
     expect(journal[previous + 11]?.idx).toBe(40);
     expect(journal[previous + 12]?.idx).toBe(41);
     expect(journal[previous + 13]?.idx).toBe(42);
+    expect(journal[previous + 14]?.idx).toBe(43);
 
     const files = migrationSqlFiles();
     const previousFile = files.indexOf("0029_checkin_form_global_fields.sql");
@@ -325,7 +327,8 @@ describe("migration chain and seeds", () => {
     expect(files[previousFile + 11]).toBe("0040_client_basics.sql");
     expect(files[previousFile + 12]).toBe("0041_checkin_form_v2.sql");
     expect(files[previousFile + 13]).toBe("0042_index_hygiene.sql");
-    expect(files.at(-1)).toBe("0042_index_hygiene.sql");
+    expect(files[previousFile + 14]).toBe("0043_workout_session_note.sql");
+    expect(files.at(-1)).toBe("0043_workout_session_note.sql");
     expect(readFileSync(join(drizzleDir, "0030_perf_indexes.sql"), "utf8")).toBe(
       PERF_INDEXES_SQL,
     );
@@ -1374,7 +1377,8 @@ describe("migration chain and seeds", () => {
         ).toEqual(byName(fromSchema(table)));
       }
       for (const table of ["workout_executions", "meal_compliance", "measurements"]) {
-        const columns = tableColumns(handle.sqlite, table);
+        // 0043 (Z14-31) appends workout_executions.session_note after these.
+        const columns = tableColumns(handle.sqlite, table).filter((name) => name !== "session_note");
         expect(columns.slice(-LOG_AUTHORSHIP_COLUMNS.length), table).toEqual(
           LOG_AUTHORSHIP_COLUMNS,
         );
@@ -2245,6 +2249,57 @@ describe("migration chain and seeds", () => {
     },
     120_000,
   );
+  describe("0043 workout session note (Z14-31, D-W14-34)", () => {
+    it("is one additive statement: a nullable text column, no default, index or backfill", () => {
+      const statements = readFileSync(join(drizzleDir, "0043_workout_session_note.sql"), "utf8")
+        .split("--> statement-breakpoint")
+        .map((part) => part.replace(/^--.*$/gm, "").trim())
+        .filter(Boolean);
+      expect(statements).toEqual(["ALTER TABLE `workout_executions` ADD `session_note` text;"]);
+    });
+
+    it("adds session_note as nullable text matching schema.ts, and keeps every row and value", async () => {
+      const handle = await createMemoryDb({
+        foreignKeys: true,
+        librarySeed: true,
+        through: "0042_index_hygiene.sql",
+      });
+      try {
+        await yieldToEventLoop();
+        const passwordHash = await hashPassword("FitBud-demo-2026");
+        const demoSql = buildDemoSeedSql({
+          referenceInstant: "2026-11-24T06:00:00.000Z",
+          passwordHash,
+          libraryIndex: loadDemoLibraryIndex(handle.sqlite),
+        });
+        handle.sqlite.exec(withoutDeletesFromMissingTables(handle.sqlite, demoSql));
+        await yieldToEventLoop();
+        const snapshot = () =>
+          handle.sqlite.exec("SELECT id, status, record_version, session_rpe, completed_at FROM workout_executions ORDER BY id")[0]
+            ?.values ?? [];
+        const before = snapshot();
+        expect(before.length).toBeGreaterThan(0);
+        handle.applyMigrationsFrom("0043_workout_session_note.sql");
+        expect(snapshot()).toEqual(before);
+        const column = (
+          handle.sqlite.exec(
+            "SELECT type, \"notnull\", dflt_value FROM pragma_table_info('workout_executions') WHERE name = 'session_note'",
+          )[0]?.values ?? []
+        )[0];
+        expect(column).toEqual(["TEXT", 0, null]);
+        const notes = handle.sqlite.exec("SELECT count(*) FROM workout_executions WHERE session_note IS NOT NULL")[0]!.values[0]![0];
+        expect(notes).toBe(0);
+        expect(getTableConfig(workoutExecutions).columns.find((c) => c.name === "session_note")).toMatchObject({
+          notNull: false,
+          hasDefault: false,
+        });
+        assertNoForeignKeyViolations(handle.sqlite);
+      } finally {
+        handle.close();
+      }
+    }, 120_000);
+  });
+
   describe("0042 index hygiene (Z14-4)", () => {
     type IndexShape = { table: string; columns: string[]; unique: boolean; partial: boolean };
 

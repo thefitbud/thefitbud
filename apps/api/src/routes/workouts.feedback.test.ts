@@ -231,6 +231,7 @@ type ExecutionBody = {
   status: string;
   recordVersion: number;
   sessionRpe: number | null;
+  sessionNote?: string | null;
   alreadyCompleted?: boolean;
   exercises: Array<{ sets: SetBody[] }>;
 };
@@ -544,11 +545,11 @@ describe("the trainee rates a finished workout for 48 hours (Z14-11)", () => {
     }
   });
 
-  it("refuses a note (or any unknown key) instead of silently dropping it, over REST and sync", async () => {
+  it("refuses an unknown key instead of silently dropping it, over REST and sync", async () => {
     const { trainee, execution } = await finished("fb8");
     const rest = await patchFeedback(trainee, execution.id, {
       rpe: 6,
-      note: "Felt heavy",
+      mood: "tired",
       recordVersion: execution.recordVersion,
     });
     expect(rest.status).toBe(400);
@@ -562,7 +563,7 @@ describe("the trainee rates a finished workout for 48 hours (Z14-11)", () => {
             81,
             "workout.feedback",
             execution.id,
-            { executionId: execution.id, body: { rpe: 6, note: "Felt heavy", recordVersion: execution.recordVersion } },
+            { executionId: execution.id, body: { rpe: 6, mood: "tired", recordVersion: execution.recordVersion } },
             new Date().toISOString(),
           ),
         ],
@@ -573,6 +574,318 @@ describe("the trainee rates a finished workout for 48 hours (Z14-11)", () => {
     expect(["rejected", "http-400"]).toContain(status);
     const [row] = await db.select().from(schema.workoutExecutions).where(eq(schema.workoutExecutions.id, execution.id));
     expect(row!.sessionRpe).toBeNull();
+    expect(row!.sessionNote).toBeNull();
+  });
+
+  // -------------------------------------------------------------------------
+  // Z14-31 (D-W14-34): the workout note, stored with the rating
+  // -------------------------------------------------------------------------
+
+  const storedRow = async (executionId: string) =>
+    (await db.select().from(schema.workoutExecutions).where(eq(schema.workoutExecutions.id, executionId)))[0]!;
+
+  type FeedEvent = { type: string; subtype: string; summary: string; relationshipId: string };
+  async function ratingFeed(trainer: Record<string, string>): Promise<FeedEvent[]> {
+    const feed = await request("/activity/feed", { headers: trainer });
+    expect(feed.status).toBe(200);
+    return ((await feed.json()) as { data: { events: FeedEvent[] } }).data.events.filter(
+      (event) => event.type === "client_edited" && event.subtype === "Rating",
+    );
+  }
+
+  it("note only: stored, trimmed, version bumped, audited as 'Note: added' and shown as 'Added a note' without its text", async () => {
+    const { trainee, trainer, execution } = await finished("note1");
+    const noteText = "Left knee felt tight on the last set";
+    const notifyBefore = (await db.select().from(schema.notifications)).length;
+
+    const saved = await patchFeedback(trainee, execution.id, {
+      note: `  ${noteText}  `,
+      recordVersion: execution.recordVersion,
+    });
+    expect(saved.status).toBe(200);
+    expect(saved.data).toMatchObject({
+      sessionNote: noteText,
+      sessionRpe: null,
+      recordVersion: execution.recordVersion + 1,
+      lastEditedByRole: "trainee",
+    });
+    expect((await storedRow(execution.id)).sessionNote).toBe(noteText);
+
+    const [audit] = await auditOf(execution.id);
+    expect(JSON.parse(audit!.beforeJson!).sessionNote).toBeNull();
+    expect(JSON.parse(audit!.afterJson).sessionNote).toBe(noteText);
+
+    const events = await ratingFeed(trainer);
+    expect(events.map((event) => event.summary)).toEqual(["Added a note on Lower body B"]);
+    expect(JSON.stringify(events)).not.toContain("knee");
+
+    // No push and no inbox row for a note (D-W14-34 c).
+    expect((await db.select().from(schema.notifications)).length).toBe(notifyBefore);
+
+    // Changed, then removed (blank clears): the feed words follow, never the text.
+    const changed = await patchFeedback(trainee, execution.id, {
+      note: "Knee fine after warm-up",
+      recordVersion: execution.recordVersion + 1,
+    });
+    expect(changed.data!.sessionNote).toBe("Knee fine after warm-up");
+    const removed = await patchFeedback(trainee, execution.id, {
+      note: "   ",
+      recordVersion: execution.recordVersion + 2,
+    });
+    expect(removed.status).toBe(200);
+    expect(removed.data!.sessionNote).toBeNull();
+    const summaries = (await ratingFeed(trainer)).map((event) => event.summary).sort();
+    expect(summaries).toEqual([
+      "Added a note on Lower body B",
+      "Changed the note on Lower body B",
+      "Removed the note on Lower body B",
+    ]);
+    expect(summaries.join(" ")).not.toMatch(/knee/i);
+  });
+
+  it("a note-only change never clears or trips the stored rating, even when the plan requires one", async () => {
+    const { trainee, execution } = await finished("note2");
+    await db
+      .update(schema.workoutExecutions)
+      .set({ requireSessionRpe: true, sessionRpe: 7 })
+      .where(eq(schema.workoutExecutions.id, execution.id));
+
+    const noteOnly = await patchFeedback(trainee, execution.id, {
+      note: "Grip gave out",
+      recordVersion: execution.recordVersion,
+    });
+    expect(noteOnly.status).toBe(200);
+    expect(noteOnly.data).toMatchObject({ sessionRpe: 7, sessionNote: "Grip gave out" });
+    expect((await storedRow(execution.id)).sessionRpe).toBe(7);
+
+    // Clearing the note also leaves the rating alone.
+    const cleared = await patchFeedback(trainee, execution.id, {
+      note: null,
+      recordVersion: execution.recordVersion + 1,
+    });
+    expect(cleared.status).toBe(200);
+    expect(cleared.data).toMatchObject({ sessionRpe: 7, sessionNote: null });
+
+    // Only an explicit rpe: null is refused on a required-rating plan.
+    const explicitClear = await patchFeedback(trainee, execution.id, {
+      rpe: null,
+      note: "Trying to clear",
+      recordVersion: execution.recordVersion + 2,
+    });
+    expect(explicitClear.status).toBe(422);
+    expect(explicitClear.error?.code).toBe("SESSION_RPE_REQUIRED");
+    const row = await storedRow(execution.id);
+    expect(row.sessionRpe).toBe(7);
+    expect(row.sessionNote).toBeNull();
+  });
+
+  it("rating and note together: one atomic write, both in the audit, 'Rated …: RPE n · left a note'", async () => {
+    const { trainee, trainer, execution } = await finished("note3");
+    const counter = installRoundTripCounter(handle);
+    counter.reset();
+    const both = await patchFeedback(trainee, execution.id, {
+      rpe: 8,
+      note: "Last set was a grind",
+      recordVersion: execution.recordVersion,
+    });
+    expect(both.status).toBe(200);
+    expect(both.data).toMatchObject({ sessionRpe: 8, sessionNote: "Last set was a grind", recordVersion: execution.recordVersion + 1 });
+    const writes = counter.trips.filter((trip) => trip.sql.some((statement) => /^update "workout_executions"/i.test(statement)));
+    expect(writes, describeTrips(counter.trips)).toHaveLength(1);
+    expect(writes[0]!.kind).toBe("batch");
+    expect(writes[0]!.sql.some((statement) => statement.includes("log_edit_events"))).toBe(true);
+
+    const audits = await auditOf(execution.id);
+    expect(audits).toHaveLength(1);
+    expect(JSON.parse(audits[0]!.afterJson)).toMatchObject({ sessionRpe: 8, sessionNote: "Last set was a grind" });
+    expect((await ratingFeed(trainer)).map((event) => event.summary)).toEqual([
+      "Rated Lower body B: RPE 8 · left a note",
+    ]);
+
+    // A rating-only change after that keeps the old wording.
+    await patchFeedback(trainee, execution.id, { rpe: 6, recordVersion: execution.recordVersion + 1 });
+    expect((await ratingFeed(trainer)).map((event) => event.summary).sort()).toEqual([
+      "Rated Lower body B: RPE 6",
+      "Rated Lower body B: RPE 8 · left a note",
+    ]);
+    expect((await storedRow(execution.id)).sessionNote).toBe("Last set was a grind");
+  });
+
+  it("a coach's later edit keeps the trainee's note and its feed line does not mention one", async () => {
+    const { trainee, trainer, execution } = await finished("note9");
+    await patchFeedback(trainee, execution.id, { note: "Felt heavy", recordVersion: execution.recordVersion });
+    const edit = await request(`/workouts/executions/${execution.id}`, {
+      method: "PATCH",
+      headers: { ...trainer, "Idempotency-Key": "coach-edit-note9" },
+      body: { recordVersion: execution.recordVersion + 1, sessionRpe: 6 },
+    });
+    expect(edit.status).toBe(200);
+    const row = await storedRow(execution.id);
+    expect(row).toMatchObject({ sessionRpe: 6, sessionNote: "Felt heavy" });
+    const audits = await auditOf(execution.id);
+    const coachRow = audits.find((audit) => audit.actorRole !== "trainee")!;
+    expect(JSON.parse(coachRow.afterJson).sessionNote).toBe("Felt heavy");
+    const feed = await request("/activity/feed", { headers: trainer });
+    const summaries = ((await feed.json()) as { data: { events: Array<{ type: string; summary: string }> } }).data.events
+      .filter((event) => event.type === "coach_edited")
+      .map((event) => event.summary);
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatch(/Session RPE: none → 6$/);
+  });
+
+  it("equal values change nothing: no version bump, no audit row, no activity item", async () => {
+    const { trainee, trainer, execution } = await finished("note4");
+    const first = await patchFeedback(trainee, execution.id, {
+      rpe: 5,
+      note: "Easy day",
+      recordVersion: execution.recordVersion,
+    });
+    expect(first.status).toBe(200);
+    const v = execution.recordVersion + 1;
+    for (const body of [
+      { rpe: 5, note: "Easy day", recordVersion: v },
+      { note: "  Easy day ", recordVersion: v },
+      { rpe: 5, recordVersion: v },
+    ]) {
+      const same = await patchFeedback(trainee, execution.id, body);
+      expect(same.status).toBe(200);
+      expect(same.data).toMatchObject({ recordVersion: v, sessionRpe: 5, sessionNote: "Easy day" });
+    }
+    expect(await auditOf(execution.id)).toHaveLength(1);
+    expect(await ratingFeed(trainer)).toHaveLength(1);
+  });
+
+  it("the note follows the same refusals: 48 h window, stale version, too long, nothing sent, another trainee, a coach caller", async () => {
+    const { trainee, trainer, execution, completedAt } = await finished("note5");
+    const tooLong = await patchFeedback(trainee, execution.id, {
+      note: "x".repeat(501),
+      recordVersion: execution.recordVersion,
+    });
+    expect(tooLong.status).toBe(400);
+    expect(tooLong.error).toMatchObject({
+      code: "INVALID_REQUEST",
+      message: "Notes can be up to 500 characters. Shorten it and try again.",
+    });
+    const nothing = await patchFeedback(trainee, execution.id, { recordVersion: execution.recordVersion });
+    expect(nothing.status).toBe(400);
+    expect(nothing.error?.message).toBe("Choose a rating or write a note, then save.");
+    const exactly500 = await patchFeedback(trainee, execution.id, {
+      note: "y".repeat(500),
+      recordVersion: execution.recordVersion,
+    });
+    expect(exactly500.status).toBe(200);
+
+    const stale = await patchFeedback(trainee, execution.id, { note: "Again", recordVersion: execution.recordVersion });
+    expect(stale.status).toBe(409);
+    expect(stale.error?.code).toBe("VERSION_CONFLICT");
+
+    const asCoach = await patchFeedback(trainer, execution.id, { note: "Coach note", recordVersion: execution.recordVersion + 1 });
+    expect(asCoach.status).toBe(403);
+
+    const other = await reachWorkoutToday("note5-other");
+    const notMine = await patchFeedback(other.trainee, execution.id, { note: "Mine", recordVersion: execution.recordVersion + 1 });
+    expect(notMine.status).toBe(404);
+
+    vi.setSystemTime(Date.parse(completedAt) + 48 * HOUR + 60_000);
+    const late = await patchFeedback(trainee, execution.id, { note: "Too late", recordVersion: execution.recordVersion + 1 });
+    expect(late.status).toBe(422);
+    expect(late.error?.code).toBe("FEEDBACK_EDIT_WINDOW_CLOSED");
+    expect((await storedRow(execution.id)).sessionNote).toBe("y".repeat(500));
+  });
+
+  it("a coach-logged workout and an ended client are read-only for the note", async () => {
+    const coached = await finished("note6");
+    const { trainee, trainer, execution, relationshipId } = coached;
+    const ended = await request(`/relationships/${relationshipId}/end`, {
+      method: "POST",
+      headers: trainer,
+      body: {},
+    });
+    expect(ended.status).toBe(200);
+    const afterEnd = await patchFeedback(trainee, execution.id, { note: "After end", recordVersion: execution.recordVersion });
+    expect(afterEnd.status).toBe(409);
+    expect(afterEnd.error?.code).toBe("RELATIONSHIP_ENDED");
+
+    const second = await finished("note6b");
+    await db
+      .update(schema.workoutExecutions)
+      .set({ loggedByRole: "coach" })
+      .where(eq(schema.workoutExecutions.id, second.execution.id));
+    const coachLogged = await patchFeedback(second.trainee, second.execution.id, {
+      note: "Mine",
+      recordVersion: second.execution.recordVersion,
+    });
+    expect(coachLogged.status).toBe(409);
+    expect(coachLogged.error?.code).toBe("COACH_LOGGED_READ_ONLY");
+    expect((await storedRow(second.execution.id)).sessionNote).toBeNull();
+  });
+
+  it("the trainee's read, the trainer's read and the sync pull carry sessionNote", async () => {
+    const { trainee, trainer, execution } = await finished("note7");
+    // Before any note: always sent, as null.
+    const blank = await request(`/workouts/executions/${execution.id}`, { headers: trainee });
+    expect(((await blank.json()) as { data: { sessionNote: unknown } }).data.sessionNote).toBeNull();
+
+    await patchFeedback(trainee, execution.id, { note: "Felt strong", recordVersion: execution.recordVersion });
+    for (const headers of [trainee, trainer]) {
+      const read = await request(`/workouts/executions/${execution.id}`, { headers });
+      expect(read.status).toBe(200);
+      expect(((await read.json()) as { data: { sessionNote: string | null } }).data.sessionNote).toBe("Felt strong");
+    }
+
+    type Change = { entityType: string; recordId: string; payload: Record<string, unknown> | null };
+    const changes: Change[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 20; page += 1) {
+      const pull = await request(
+        cursor ? `/sync/pull?limit=100&cursor=${encodeURIComponent(cursor)}` : "/sync/pull?limit=100",
+        { headers: trainee },
+      );
+      expect(pull.status).toBe(200);
+      const body = (await pull.json()) as { data: { changes: Change[]; nextCursor: string | null; hasMore: boolean } };
+      changes.push(...body.data.changes);
+      if (!body.data.hasMore) break;
+      cursor = body.data.nextCursor;
+    }
+    const pulled = changes.filter((change) => change.entityType === "workout_execution" && change.recordId === execution.id);
+    expect(pulled.length).toBeGreaterThan(0);
+    expect(pulled.at(-1)!.payload).toMatchObject({ sessionNote: "Felt strong" });
+  });
+
+  it("sync: a note mutation applies, replays idempotently, and an offline one inside the window is accepted within 72 h", async () => {
+    const { trainee, trainer, execution, completedAt } = await finished("note8");
+    const madeAt = new Date(Date.parse(completedAt) + 10 * HOUR).toISOString();
+    vi.setSystemTime(Date.parse(completedAt) + 48 * HOUR + 70 * HOUR);
+    const send = (n: number, body: Record<string, unknown>) =>
+      push(trainee, [mutationAt(n, "workout.feedback", execution.id, { executionId: execution.id, body }, madeAt)]);
+    const [applied] = await send(101, { note: "Written on the train", recordVersion: execution.recordVersion });
+    expect(applied).toMatchObject({ status: "applied", serverVersion: execution.recordVersion + 1 });
+    const [again] = await send(101, { note: "Written on the train", recordVersion: execution.recordVersion });
+    expect(again!.status).toBe("already_applied");
+    expect(await auditOf(execution.id)).toHaveLength(1);
+    expect((await storedRow(execution.id)).sessionNote).toBe("Written on the train");
+    expect((await ratingFeed(trainer)).map((event) => event.summary)).toEqual(["Added a note on Lower body B"]);
+
+    // Past the 72 h grace the same offline change is refused with the window reason.
+    vi.setSystemTime(Date.parse(completedAt) + 48 * HOUR + 73 * HOUR);
+    const [late] = await send(102, { note: "Too late", recordVersion: execution.recordVersion + 1 });
+    expect(late).toMatchObject({ status: "rejected", error: { code: "FEEDBACK_EDIT_WINDOW_CLOSED" } });
+    expect((late as { error?: { message?: string } }).error?.message).toBe(
+      "Ratings can be changed for 48 hours after a workout.",
+    );
+    // A too-long note through sync is refused with friendly copy, nothing stored.
+    vi.setSystemTime(Date.parse(completedAt) + HOUR);
+    const [long] = await push(trainee, [
+      mutationAt(
+        103,
+        "workout.feedback",
+        execution.id,
+        { executionId: execution.id, body: { note: "z".repeat(501), recordVersion: execution.recordVersion + 1 } },
+        new Date().toISOString(),
+      ),
+    ]);
+    expect(long!.status).toBe("rejected");
+    expect((await storedRow(execution.id)).sessionNote).toBe("Written on the train");
   });
 
   it("commits in one batch of at most 4 statements", async () => {

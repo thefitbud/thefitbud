@@ -2669,6 +2669,8 @@ workoutRoutes.patch(
             status: nextStatus,
             completedAt: nextCompletedAt,
             sessionRpe: nextSessionRpe,
+            // A coach edit never changes the trainee's note (Z14-31).
+            sessionNote: bundle.execution.sessionNote,
           },
           exercises: bundle.exercises,
           sets: afterSets,
@@ -2701,20 +2703,38 @@ workoutRoutes.patch(
 
 const FEEDBACK_OPERATION = "workout.execution.feedback";
 
+/**
+ * Z14-31: static, friendly copy for a refused feedback body (never echoes the
+ * request). The issues stay in `details` for logs.
+ */
+function feedbackInvalidMessage(issues: readonly { path: PropertyKey[]; code: string }[]): string {
+  if (issues.some((issue) => issue.path[0] === "note" && issue.code === "too_big")) {
+    return "Notes can be up to 500 characters. Shorten it and try again.";
+  }
+  if (issues.some((issue) => issue.path[0] === "rpe")) {
+    return "Choose a rating from 1 to 10.";
+  }
+  if (issues.some((issue) => issue.code === "custom" && issue.path.length === 0)) {
+    return "Choose a rating or write a note, then save.";
+  }
+  return "That rating or note couldn't be saved. Try again.";
+}
+
 workoutRoutes.patch(
   "/executions/:executionId/feedback",
   operation({
     tag: "Workouts",
-    summary: "Trainee sets or clears the session RPE of a finished workout",
+    summary: "Trainee sets or clears the session RPE and note of a finished workout",
     description:
-      "Sets (1 to 10) or clears the session RPE of the trainee's own finished workout. Allowed until 48 hours after completedAt (422 FEEDBACK_EDIT_WINDOW_CLOSED); recordVersion must match (409 VERSION_CONFLICT). Writes the change log (before and after), an activity item for the coach and a realtime hint. The execution read returns feedbackEditableUntil. Through sync, a change made offline inside the window is accepted if it arrives within 72 hours of the window closing. A note is not stored: workout_executions has no note column (see the Z14-11 report).",
+      "Sets (1 to 10) or clears the session RPE, and sets or clears the note (trimmed, at most 500 characters), of the trainee's own finished workout. An omitted rpe or note is left unchanged; null clears it (an empty or blank note clears it too); at least one must be sent. The rating and note are stored in one write. Allowed until 48 hours after completedAt (422 FEEDBACK_EDIT_WINDOW_CLOSED); recordVersion must match (409 VERSION_CONFLICT). Values equal to the stored ones change nothing (no new version, no change-log row, no activity item). Otherwise writes the change log (before and after; the description never carries the note text), an activity item for the coach without the note text, and a realtime hint; no push or inbox notification. The execution read returns sessionNote and feedbackEditableUntil. Through sync (workout.feedback), a change made offline inside the window is accepted if it arrives within 72 hours of the window closing.",
     roles: ["trainee"],
     idempotency: true,
     body: traineeWorkoutFeedbackRequestSchema,
     response: workoutExecutionSchema,
     errors: [
       { status: 409, description: "VERSION_CONFLICT, or the workout is not finished." },
-      { status: 422, description: "FEEDBACK_EDIT_WINDOW_CLOSED, or SESSION_RPE_REQUIRED when the plan requires a rating." },
+      { status: 422, description: "FEEDBACK_EDIT_WINDOW_CLOSED, or SESSION_RPE_REQUIRED when rpe: null is sent and the plan requires a rating." },
+      { status: 400, description: "INVALID_REQUEST: no rating or note, a rating outside 1 to 10, a note over 500 characters, or an unknown field." },
     ],
   }),
   optionalAuthMiddleware,
@@ -2738,7 +2758,7 @@ workoutRoutes.patch(
       await c.req.json().catch(() => null),
     );
     if (!parsed.success) {
-      return fail(c, 400, "INVALID_REQUEST", "Invalid rating.", {
+      return fail(c, 400, "INVALID_REQUEST", feedbackInvalidMessage(parsed.error.issues), {
         issues: parsed.error.issues,
       });
     }
@@ -2793,6 +2813,8 @@ workoutRoutes.patch(
         "This workout changed since it was opened. Reload and try again.",
       );
     }
+    // Only an explicit `rpe: null` clears the rating; an omitted rpe (a
+    // note-only change) keeps it, so it can never trip the required rule.
     if (body.rpe === null && execution.requireSessionRpe) {
       return fail(
         c,
@@ -2816,8 +2838,10 @@ workoutRoutes.patch(
       return responseBody;
     };
 
-    if (body.rpe === execution.sessionRpe) {
-      // Nothing changed: no new version, no activity item.
+    const nextRpe = body.rpe === undefined ? execution.sessionRpe : body.rpe;
+    const nextNote = body.note === undefined ? execution.sessionNote : body.note;
+    if (nextRpe === execution.sessionRpe && nextNote === execution.sessionNote) {
+      // Nothing changed: no new version, no change-log row, no activity item.
       return c.json(
         await respond(workoutExecutionSchema.parse(mapExecution(bundle))),
         200,
@@ -2833,10 +2857,15 @@ workoutRoutes.patch(
       return fail(c, 404, "EXECUTION_NOT_FOUND", "Execution not found.");
     }
     const serverVersion = execution.recordVersion + 1;
-    const snapshotOf = (sessionRpe: number | null) =>
+    const snapshotOf = (sessionRpe: number | null, sessionNote: string | null) =>
       workoutLogSnapshot({
         assignment,
-        execution: { status: execution.status, completedAt: execution.completedAt, sessionRpe },
+        execution: {
+          status: execution.status,
+          completedAt: execution.completedAt,
+          sessionRpe,
+          sessionNote,
+        },
         exercises: bundle.exercises.map((exercise) => ({
           id: exercise.id,
           name: exercise.name,
@@ -2856,14 +2885,15 @@ workoutRoutes.patch(
         },
         kind: "edit",
         actorUserId: actor.userId,
-        before: snapshotOf(execution.sessionRpe),
-        after: snapshotOf(body.rpe),
+        before: snapshotOf(execution.sessionRpe, execution.sessionNote),
+        after: snapshotOf(nextRpe, nextNote),
         now,
         claim: () =>
           db
             .update(workoutExecutions)
             .set({
-              sessionRpe: body.rpe,
+              sessionRpe: nextRpe,
+              sessionNote: nextNote,
               recordVersion: serverVersion,
               lastEditedByRole: "trainee",
               lastEditedByUserId: actor.userId,

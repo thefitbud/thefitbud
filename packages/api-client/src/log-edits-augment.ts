@@ -19,9 +19,11 @@ import type { FitBudApiClient } from "./index.js";
 declare module "./index.js" {
   interface FitBudApiClient {
     /**
-     * Trainee sets or clears the session RPE of a finished workout, for 48 h
-     * after it finished (Z14-11, D-W14-20). Send the `recordVersion` read and
-     * reuse the same `idempotencyKey` when retrying one logical change.
+     * Trainee sets or clears the session RPE and/or the note of a finished
+     * workout, for 48 h after it finished (Z14-11, D-W14-20, Z14-31 /
+     * D-W14-34). Omit `rpe` or `note` to leave it unchanged; `null` clears it.
+     * Send the `recordVersion` read and reuse the same `idempotencyKey` when
+     * retrying one logical change.
      */
     setWorkoutFeedback(
       executionId: string,
