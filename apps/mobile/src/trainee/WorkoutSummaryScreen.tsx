@@ -5,6 +5,7 @@ import { Text } from "../components/Text";
 import type { WorkoutAssignment, WorkoutExecution } from "@fitbud/contracts";
 import { formatClockTime, formatInstant, formatNumber } from "@fitbud/core";
 import { Button } from "../components/Button";
+import { Field } from "../components/Field";
 import { BottomSheet } from "../components/BottomSheet";
 import { OfflineBanner } from "../components/OfflineBanner";
 import { Screen } from "../components/Screen";
@@ -20,10 +21,15 @@ import {
 } from "./workoutHeroState";
 import { sessionSetCounts, sessionVolumeKg } from "./workoutSession";
 import { RpePicker } from "./workout/rpePicker";
+import { WORKOUT_SESSION_NOTE_MAX_LENGTH } from "@fitbud/contracts";
 import {
   RATING_HELD_MESSAGE,
+  RATING_NOTE_HELD_MESSAGE,
+  RATING_NOTE_QUEUED_MESSAGE,
+  RATING_NOTE_WINDOW_CLOSED_MESSAGE,
   RATING_QUEUED_MESSAGE,
-  RATING_WINDOW_CLOSED_MESSAGE,
+  normalizeNote,
+  type FeedbackChange,
   type RatingOutcome,
 } from "./workout/rpeRating";
 
@@ -39,15 +45,16 @@ import {
  * opens: the finish sent it (or queued it, offline). "Save and share" moves
  * to the confirmation; it sends nothing new.
  *
- * Z14-12 (D-W14-10, D-W14-20): after a finish the summary asks how hard it
- * was (W-17a2, optional unless the plan requires it, W-17a3) and queues the
- * rating through `onSaveRpe` (the `workout.feedback` outbox mutation).
- * `mode="view"` is the read-only summary of a finished workout (W-17c) with
- * one Done; while the API's `feedbackEditableUntil` is in the future one
- * "Change" opens the rating sheet (W-17c2), afterwards the group is plain
- * text (W-17c3). The note is not built: `workout_executions` has no note
- * column and no new migration is allowed (D-W14-18), so nothing here asks for
- * or implies a saved note. Records are not computed either.
+ * Z14-12 (D-W14-10, D-W14-20) and Z14-32 (D-W14-34): after a finish the
+ * summary asks how hard it was (W-17a2, optional unless the plan requires it,
+ * W-17a3) and offers a short note for the coach. "Save and share" sends the
+ * rating and the note together through `onSaveFeedback` (the
+ * `workout.feedback` outbox mutation) and only then moves on; nothing is sent
+ * on a pick. `mode="view"` is the read-only summary of a finished workout
+ * (W-17c, "Your rating and note"): while the API's `feedbackEditableUntil` is
+ * in the future one "Change" opens the sheet with the grid and the note
+ * (W-17c2), afterwards the group is plain text (W-17c3). Records are not
+ * computed.
  */
 export function WorkoutSummaryScreen({
   execution,
@@ -60,7 +67,7 @@ export function WorkoutSummaryScreen({
   timeZone = "Asia/Kolkata",
   offline = false,
   mode = "after_finish",
-  onSaveRpe,
+  onSaveFeedback,
   now,
 }: {
   execution: WorkoutExecution;
@@ -69,12 +76,12 @@ export function WorkoutSummaryScreen({
   /** `view`: the read-only summary of a finished workout (W-17c). */
   mode?: "after_finish" | "view";
   /**
-   * Sends one rating change and resolves with the server's verdict. The
+   * Sends one rating and/or note change and resolves with the server's verdict. The
    * caller owns the version (never guessed here); `progress("held")` says the
    * pick is waiting for the finish to be sent.
    */
-  onSaveRpe?: (
-    rpe: number | null,
+  onSaveFeedback?: (
+    change: FeedbackChange,
     progress: (state: "held") => void,
   ) => Promise<RatingOutcome> | void;
   /** The clock for the 48 h rule (tests). */
@@ -88,13 +95,19 @@ export function WorkoutSummaryScreen({
 }) {
   const [shared, setShared] = useState(false);
   const [rpe, setRpe] = useState<number | null>(execution.sessionRpe);
+  const [note, setNote] = useState<string>(execution.sessionNote ?? "");
   const [rating, setRating] = useState<RatingNotice>({ kind: "idle" });
   // Closed by the server: the group is plain text from then on (W-17c3).
   const [windowClosed, setWindowClosed] = useState(false);
-  // The last rating the server confirmed; a refusal puts the screen back to it.
-  const confirmedRef = useRef<number | null>(execution.sessionRpe);
+  // What the server last confirmed; a refusal puts the screen back to it.
+  const confirmedRef = useRef<{ rpe: number | null; note: string | null }>({
+    rpe: execution.sessionRpe,
+    note: normalizeNote(execution.sessionNote),
+  });
   const inflightRef = useRef(false);
-  const wantedRef = useRef<{ value: number | null } | null>(null);
+  const wantedRef = useRef<FeedbackChange | null>(null);
+  // After a finish, a good verdict moves on to the shared step.
+  const shareOnDoneRef = useRef(false);
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -104,39 +117,49 @@ export function WorkoutSummaryScreen({
   }, []);
 
   /**
-   * One pick at a time: a pick made while another is being sent replaces it
-   * (only the last one matters) and goes out when the first has its verdict.
+   * One send at a time: a change made while another is being sent is merged
+   * (the later value of a field wins) and goes out when the first has its
+   * verdict.
    */
-  async function sendRating(next: number | null) {
-    wantedRef.current = { value: next };
+  async function sendFeedback(change: FeedbackChange) {
+    wantedRef.current = { ...wantedRef.current, ...change };
     if (inflightRef.current) return;
     inflightRef.current = true;
     try {
       while (wantedRef.current) {
-        const { value } = wantedRef.current;
+        const sending = wantedRef.current;
         wantedRef.current = null;
-        if (mountedRef.current) setRating({ kind: "saving" });
-        const outcome = await onSaveRpe?.(value, (state) => {
+        if (mountedRef.current) setRating({ kind: "saving", withNote: sending.note !== undefined });
+        const outcome = await onSaveFeedback?.(sending, (state) => {
           if (state === "held" && mountedRef.current && !wantedRef.current) {
-            setRating({ kind: "held" });
+            setRating({ kind: "held", withNote: sending.note !== undefined });
+            if (shareOnDoneRef.current) setShared(true);
           }
         });
         if (wantedRef.current || !mountedRef.current) continue;
         if (!outcome) {
           setRating({ kind: "idle" });
         } else if (outcome.kind === "saved") {
-          confirmedRef.current = outcome.rpe;
+          confirmedRef.current = { rpe: outcome.rpe, note: outcome.note };
           setRating({ kind: "idle" });
+          if (shareOnDoneRef.current) setShared(true);
         } else if (outcome.kind === "queued") {
-          setRating({ kind: "queued" });
+          setRating({ kind: "queued", withNote: sending.note !== undefined });
+          if (shareOnDoneRef.current) setShared(true);
         } else {
-          if (outcome.serverRpe !== undefined) confirmedRef.current = outcome.serverRpe;
-          setRpe(confirmedRef.current);
+          if (outcome.serverRpe !== undefined) confirmedRef.current.rpe = outcome.serverRpe;
+          if (outcome.serverNote !== undefined) confirmedRef.current.note = outcome.serverNote;
+          setRpe(confirmedRef.current.rpe);
+          // After a finish the typed note stays on screen so it is not lost;
+          // the read-only view goes back to what the server holds.
+          if (mode === "view") setNote(confirmedRef.current.note ?? "");
           if (outcome.reason === "window_closed") setWindowClosed(true);
+          shareOnDoneRef.current = false;
+          setShared(false);
           setRating({
             kind: "refused",
             message: outcome.message,
-            retryValue: outcome.reason === "other" ? value : undefined,
+            retryChange: outcome.reason === "other" ? sending : undefined,
           });
         }
       }
@@ -144,9 +167,36 @@ export function WorkoutSummaryScreen({
       inflightRef.current = false;
     }
   }
-  function commitRpe(next: number | null) {
-    setRpe(next);
-    void sendRating(next);
+
+  /** Only what differs from what the server holds goes out. */
+  function changeSinceConfirmed(next: { rpe: number | null; note: string }): FeedbackChange {
+    const change: FeedbackChange = {};
+    if (next.rpe !== confirmedRef.current.rpe) change.rpe = next.rpe;
+    if (normalizeNote(next.note) !== confirmedRef.current.note) change.note = next.note;
+    return change;
+  }
+
+  /** "Save and share": rating and note together, then the shared step. */
+  function saveAndShare() {
+    const change = changeSinceConfirmed({ rpe, note });
+    if (Object.keys(change).length === 0) {
+      setShared(true);
+      return;
+    }
+    shareOnDoneRef.current = true;
+    void sendFeedback(change);
+  }
+  /** Try again after a refusal: the same change, nothing lost. */
+  function retry(change: FeedbackChange) {
+    if (mode !== "view") shareOnDoneRef.current = true;
+    void sendFeedback(change);
+  }
+  /** The Change sheet's Save: sends only what changed. */
+  function saveFromSheet(next: { rpe: number | null; note: string }) {
+    const change = changeSinceConfirmed(next);
+    setRpe(next.rpe);
+    setNote(next.note);
+    if (Object.keys(change).length > 0) void sendFeedback(change);
   }
   const trimmedCoach = coachName.trim() || "Your coach";
   const coachFirst =
@@ -155,6 +205,7 @@ export function WorkoutSummaryScreen({
       : trimmedCoach.split(/\s+/)[0]!;
 
   const rpeBlocked = execution.requireSessionRpe && rpe == null;
+  const saving = rating.kind === "saving";
   const footer =
     mode === "view" || shared ? (
       <SummaryFooter label="Done" onPress={onDone} />
@@ -162,9 +213,9 @@ export function WorkoutSummaryScreen({
       <SummaryFooter
         label={`Save and share with ${coachFirst}`}
         share
-        disabled={rpeBlocked}
+        disabled={rpeBlocked || saving}
         hint={rpeBlocked ? "Pick how hard it was to save." : undefined}
-        onPress={() => setShared(true)}
+        onPress={saveAndShare}
       />
     );
 
@@ -177,12 +228,13 @@ export function WorkoutSummaryScreen({
           coachFirst={coachFirst}
           timeZone={timeZone}
           rpe={rpe}
+          note={note}
           rating={rating}
           windowClosed={windowClosed}
           now={now}
           onBack={onDone}
-          onSaveRpe={commitRpe}
-          onRetry={commitRpe}
+          onSave={saveFromSheet}
+          onRetry={retry}
         />
       </Screen>
     );
@@ -198,6 +250,8 @@ export function WorkoutSummaryScreen({
     >
       {shared ? (
         <SharedBody
+          rating={rating}
+          onRetry={retry}
           execution={execution}
           assignment={assignment}
           coachFirst={coachFirst}
@@ -215,11 +269,13 @@ export function WorkoutSummaryScreen({
           timeZone={timeZone}
           offline={offline}
           rpe={rpe}
-          confirmedRpe={confirmedRef.current}
+          note={note}
+          confirmedRpe={confirmedRef.current.rpe}
           rating={rating}
           windowClosed={windowClosed}
-          onPickRpe={commitRpe}
-          onRetry={commitRpe}
+          onPickRpe={setRpe}
+          onChangeNote={setNote}
+          onRetry={retry}
         />
       )}
     </Screen>
@@ -228,10 +284,10 @@ export function WorkoutSummaryScreen({
 
 type RatingNotice =
   | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "held" }
-  | { kind: "queued" }
-  | { kind: "refused"; message: string; retryValue?: number | null };
+  | { kind: "saving"; withNote: boolean }
+  | { kind: "held"; withNote: boolean }
+  | { kind: "queued"; withNote: boolean }
+  | { kind: "refused"; message: string; retryChange?: FeedbackChange };
 
 /** What happened to the last rating pick, in plain words (no codes). */
 function RatingLine({
@@ -239,26 +295,30 @@ function RatingLine({
   onRetry,
 }: {
   rating: RatingNotice;
-  onRetry: (value: number | null) => void;
+  onRetry: (change: FeedbackChange) => void;
 }) {
   const styles = useStyles();
   if (rating.kind === "idle" || rating.kind === "saving") return null;
   const text =
     rating.kind === "held"
-      ? RATING_HELD_MESSAGE
+      ? rating.withNote
+        ? RATING_NOTE_HELD_MESSAGE
+        : RATING_HELD_MESSAGE
       : rating.kind === "queued"
-        ? RATING_QUEUED_MESSAGE
+        ? rating.withNote
+          ? RATING_NOTE_QUEUED_MESSAGE
+          : RATING_QUEUED_MESSAGE
         : rating.message;
   return (
     <View style={styles.ratingNotice} accessibilityLiveRegion="polite">
       <Text variant="subhead" tone={rating.kind === "refused" ? "crit" : "ink2"}>
         {text}
       </Text>
-      {rating.kind === "refused" && rating.retryValue !== undefined ? (
+      {rating.kind === "refused" && rating.retryChange !== undefined ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Try again"
-          onPress={() => onRetry(rating.retryValue ?? null)}
+          onPress={() => onRetry(rating.retryChange ?? {})}
           hitSlop={12}
           style={styles.changeHit}
         >
@@ -314,10 +374,12 @@ function SummaryBody({
   timeZone,
   offline,
   rpe,
+  note,
   confirmedRpe,
   rating,
   windowClosed,
   onPickRpe,
+  onChangeNote,
   onRetry,
 }: {
   execution: WorkoutExecution;
@@ -327,11 +389,13 @@ function SummaryBody({
   timeZone: string;
   offline: boolean;
   rpe: number | null;
+  note: string;
   confirmedRpe: number | null;
   rating: RatingNotice;
   windowClosed: boolean;
   onPickRpe: (next: number | null) => void;
-  onRetry: (value: number | null) => void;
+  onChangeNote: (next: string) => void;
+  onRetry: (change: FeedbackChange) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
@@ -443,8 +507,39 @@ function SummaryBody({
             coachFirst={coachFirst}
           />
         )}
+        {windowClosed ? null : (
+          <NoteField value={note} onChange={onChangeNote} coachFirst={coachFirst} />
+        )}
         <RatingLine rating={rating} onRetry={onRetry} />
       </View>
+    </View>
+  );
+}
+
+/** The note for the coach (W-17a2, W-17c2): multiline, counter near the limit. */
+function NoteField({
+  value,
+  onChange,
+  coachFirst,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  coachFirst: string;
+}) {
+  const styles = useStyles();
+  const nearLimit = value.length >= WORKOUT_SESSION_NOTE_MAX_LENGTH - 50;
+  return (
+    <View style={styles.noteWrap}>
+      <Field
+        label={`Note for ${coachFirst}`}
+        testID="workout-note-input"
+        multiline
+        value={value}
+        onChangeText={onChange}
+        maxLength={WORKOUT_SESSION_NOTE_MAX_LENGTH}
+        placeholder={`Anything ${coachFirst} should know?`}
+        hint={nearLimit ? `${value.length} / ${WORKOUT_SESSION_NOTE_MAX_LENGTH}` : undefined}
+      />
     </View>
   );
 }
@@ -488,11 +583,12 @@ function ViewBody({
   coachFirst,
   timeZone,
   rpe,
+  note,
   rating,
   windowClosed,
   now,
   onBack,
-  onSaveRpe,
+  onSave,
   onRetry,
 }: {
   execution: WorkoutExecution;
@@ -500,17 +596,20 @@ function ViewBody({
   coachFirst: string;
   timeZone: string;
   rpe: number | null;
+  note: string;
   rating: RatingNotice;
   windowClosed: boolean;
   now?: Date;
   onBack: () => void;
-  onSaveRpe: (next: number | null) => void;
-  onRetry: (value: number | null) => void;
+  onSave: (next: { rpe: number | null; note: string }) => void;
+  onRetry: (change: FeedbackChange) => void;
 }) {
   const theme = useTheme();
   const styles = useStyles();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<number | null>(rpe);
+  const [draftNote, setDraftNote] = useState(note);
+  const shownNote = normalizeNote(note);
   const counts = sessionSetCounts(execution);
   const volume = sessionVolumeKg(execution);
   const minutes = durationMinutesFromExecution(execution);
@@ -631,14 +730,15 @@ function ViewBody({
 
       <View style={styles.ratingHead}>
         <Text variant="label" tone="ink2">
-          YOUR RATING
+          YOUR RATING AND NOTE
         </Text>
         {editable ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Change your rating"
+            accessibilityLabel="Change your rating and note"
             onPress={() => {
               setDraft(rpe);
+              setDraftNote(note);
               setEditing(true);
             }}
             hitSlop={12}
@@ -648,31 +748,43 @@ function ViewBody({
           </Pressable>
         ) : null}
       </View>
-      <View style={[styles.card, styles.changeRow]}>
-        <View style={[styles.changeTile, styles.changeTileNeutral]}>
-          {rpe != null ? (
-            <Text variant="headline">{String(rpe)}</Text>
-          ) : (
-            <Minus size={18} color={theme.colors.ink2} strokeWidth={2} />
-          )}
+      <View style={styles.card}>
+        <View style={styles.changeRow}>
+          <View style={[styles.changeTile, styles.changeTileNeutral]}>
+            {rpe != null ? (
+              <Text variant="headline">{String(rpe)}</Text>
+            ) : (
+              <Minus size={18} color={theme.colors.ink2} strokeWidth={2} />
+            )}
+          </View>
+          <View style={styles.flex}>
+            <Text variant="subhead" tone="ink2">
+              How hard was it
+            </Text>
+            <Text variant="body">{rpe != null ? `${rpe} of 10` : "Not rated"}</Text>
+          </View>
         </View>
-        <View style={styles.flex}>
-          <Text variant="subhead" tone="ink2">
-            How hard was it
-          </Text>
-          <Text variant="body">{rpe != null ? `${rpe} of 10` : "Not rated"}</Text>
-        </View>
+        {shownNote != null ? (
+          <View style={[styles.noteRead, styles.changeBorder]}>
+            <Text variant="subhead" tone="ink2">
+              {`Note for ${coachFirst}`}
+            </Text>
+            <Text variant="body" selectable testID="workout-note-text">
+              {shownNote}
+            </Text>
+          </View>
+        ) : null}
       </View>
       <Text variant="subhead" tone="ink2" style={styles.viewHint}>
         {editable && until
           ? `You can change this until ${weekdayInstant(until, timeZone)}.`
-          : RATING_WINDOW_CLOSED_MESSAGE}
+          : RATING_NOTE_WINDOW_CLOSED_MESSAGE}
       </Text>
       <RatingLine rating={rating} onRetry={onRetry} />
 
       <BottomSheet
         visible={editing}
-        title="Your rating"
+        title="Your rating and note"
         subtitle={`${sessionTitle}${dateShort ? ` · ${dateShort}` : ""} · ${coachFirst === "your coach" ? "Your coach" : coachFirst} sees the change`}
         onDismiss={() => setEditing(false)}
       >
@@ -682,12 +794,14 @@ function ViewBody({
           required={execution.requireSessionRpe}
           coachFirst={coachFirst}
         />
+        <NoteField value={draftNote} onChange={setDraftNote} coachFirst={coachFirst} />
         <View style={styles.sheetActions}>
           <Button
             label="Save"
+            testID="workout-note-save"
             disabled={execution.requireSessionRpe && draft == null}
             onPress={() => {
-              if (draft !== rpe) onSaveRpe(draft);
+              onSave({ rpe: draft, note: draftNote });
               setEditing(false);
             }}
           />
@@ -699,6 +813,8 @@ function ViewBody({
 }
 
 function SharedBody({
+  rating,
+  onRetry,
   execution,
   assignment,
   coachFirst,
@@ -707,6 +823,8 @@ function SharedBody({
   timeZone,
   offline,
 }: {
+  rating: RatingNotice;
+  onRetry: (change: FeedbackChange) => void;
   execution: WorkoutExecution;
   assignment: WorkoutAssignment | null;
   coachFirst: string;
@@ -750,6 +868,7 @@ function SharedBody({
           ? `It goes to ${coachFirst} when you’re back online.`
           : `${savedAt ? `Saved at ${savedAt}. ` : ""}${coachLabel} will see your sets.`}
       </Text>
+      <RatingLine rating={rating} onRetry={onRetry} />
 
       {week.total > 0 ? (
         <View style={[styles.card, styles.weekCard]}>
@@ -898,6 +1017,15 @@ const useStyles = createThemedStyles((t) => ({
     justifyContent: "center",
     minHeight: 44,
     minWidth: 44,
+  },
+  noteWrap: {
+    marginTop: t.spacing.lg,
+  },
+  noteRead: {
+    gap: 2,
+    paddingBottom: t.spacing.md,
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.md,
   },
   ratingNotice: {
     gap: t.spacing.xs,

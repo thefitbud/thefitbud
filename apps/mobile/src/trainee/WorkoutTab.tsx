@@ -800,14 +800,14 @@ export function WorkoutTab({
         today={today}
         offline={offline}
         mode={summaryIsView ? "view" : "after_finish"}
-        // One rating change (Z14-12, D-W14-20). The version is read from the
+        // One rating and note change (Z14-12, Z14-32). The version is read from the
         // server after the finish landed, never guessed (fix round 1).
-        onSaveRpe={(rpe, progress) =>
+        onSaveFeedback={(change, progress) =>
           saveWorkoutRating({
             sync,
             api,
             executionId: summaryExecution.id,
-            rpe,
+            change,
             progress,
           })
         }
