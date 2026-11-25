@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Check,
+  ChevronDown,
+  ClipboardCheck,
   ClipboardList,
   Dumbbell,
   FilePlus2,
@@ -21,12 +23,15 @@ import {
 import type {
   CheckinFormTemplateSummary,
   OnboardingFormTemplateSummary,
+  PlanTemplateListItem,
   PlanTemplateSummary,
   PlanTemplateType,
+  TemplateUsedBy,
 } from "@fitbud/contracts";
 import { labelFor } from "@fitbud/core";
 import { blankContentForTemplateType } from "../components/plan-composition";
-import { Button } from "../components/Button";
+import { Button } from "../components/ui";
+import { useAuth } from "../auth/AuthProvider";
 import { OverflowMenu } from "../components/OverflowMenu";
 import {
   ErrorState,
@@ -48,6 +53,7 @@ import {
   emptyMineBody,
   emptyMineTitle,
   errorText,
+  formatEditedDate,
   hubRowSubtitle,
   matchesName,
   structureSummary,
@@ -57,13 +63,18 @@ import {
 import {
   filterByScope,
   readTemplateScope,
+  readTemplateSort,
   readTemplateStatus,
   TemplateScopeToolbar,
   typeFilterFromRoute,
   type TemplateTypeFilter,
 } from "./templates/TemplateScopeToolbar";
+import { UsedByCell } from "./templates/UsedByCell";
 import { useCursorPage, useDebounced } from "./templates/useCursorPage";
 import "./TemplatesHub.css";
+
+/** Rows shown before "Show all" (W-168 footer). */
+const PAGE_ROWS = 10;
 
 const LEGACY_FAMILY: Record<string, string> = {
   workout: "workouts",
@@ -80,6 +91,8 @@ type HubRow = {
   ownership: "global" | "trainer";
   subtitle: string;
   hubSlug: string;
+  updatedAt: string;
+  usedBy?: TemplateUsedBy;
   plan?: PlanTemplateSummary;
   onboarding?: OnboardingFormTemplateSummary;
   checkin?: CheckinFormTemplateSummary;
@@ -125,20 +138,9 @@ function TemplatesHubChrome() {
   if (resolvedType === "libraries") {
     return (
       <section
-        className="page templates-hub templates-hub-v3 templates-hub-libraries-chrome"
+        className="page templates-hub templates-hub-v3"
         data-testid="screen-TW-23-hub"
       >
-        <header className="templates-hub-header">
-          <div className="page-header">
-            <h1>Templates</h1>
-            <p className="lede">Plans and forms you can reuse for any client</p>
-          </div>
-        </header>
-        <nav className="templates-hub-toolbar" aria-label="Libraries navigation">
-          <Link className="templates-libraries-link" to="/templates">
-            ← Templates
-          </Link>
-        </nav>
         <LibrariesPanel />
       </section>
     );
@@ -154,6 +156,10 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
   const typeFilter = typeFilterFromRoute(routeType);
   const scope = readTemplateScope(params);
   const status = readTemplateStatus(params);
+  const sort = readTemplateSort(params);
+  const { me } = useAuth();
+  const timeZone = me?.timezone ?? "UTC";
+  const [showAll, setShowAll] = useState(false);
   const q = params.get("q") ?? "";
   const debouncedQ = useDebounced(q, 300);
 
@@ -250,7 +256,7 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
   const rows = useMemo(() => {
     const next: HubRow[] = [];
 
-    const pushPlan = (item: PlanTemplateSummary) => {
+    const pushPlan = (item: PlanTemplateListItem) => {
       const kind = item.templateType as HubKind;
       const hubSlug =
         kind === "nutrition"
@@ -268,6 +274,8 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
         ownership: item.ownership,
         subtitle: hubRowSubtitle(kind, detail, item.recordVersion || undefined),
         hubSlug,
+        updatedAt: item.updatedAt,
+        usedBy: item.usedBy,
         plan: item,
       });
     };
@@ -293,6 +301,7 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
           item.latestVersionNumber,
         ),
         hubSlug: "onboarding",
+        updatedAt: item.updatedAt,
         onboarding: item,
       });
     }
@@ -308,6 +317,7 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
           item.latestVersionNumber,
         ),
         hubSlug: "checkins",
+        updatedAt: item.updatedAt,
         checkin: item,
       });
     }
@@ -337,8 +347,24 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
     // API has no draft/archived template status (D-W12b-1 follow-up).
     // Every listed template is treated as published for filter/display.
     if (status === "draft" || status === "archived") list = [];
-    return list;
-  }, [typedRows, scope, q, status]);
+    return [...list].sort((a, b) =>
+      sort === "name"
+        ? a.title.localeCompare(b.title)
+        : b.updatedAt.localeCompare(a.updatedAt),
+    );
+  }, [typedRows, scope, q, status, sort]);
+
+  const counts = useMemo(
+    () => ({
+      all: rows.length,
+      workout: rows.filter((row) => row.kind === "workout").length,
+      nutrition: rows.filter((row) => row.kind === "nutrition").length,
+      checkin: rows.filter((row) => row.kind === "checkin").length,
+      onboarding: rows.filter((row) => row.kind === "onboarding").length,
+    }),
+    [rows],
+  );
+  const shownRows = showAll ? scoped : scoped.slice(0, PAGE_ROWS);
 
   useEffect(() => {
     let cancelled = false;
@@ -375,6 +401,11 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
       cancelled = true;
     };
   }, [scoped, planMeta]);
+
+  const rowsById = useMemo(
+    () => new Map(rows.map((row) => [row.id, row])),
+    [rows],
+  );
 
   const emptyMine =
     scope === "mine" &&
@@ -562,8 +593,11 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
             aria-haspopup={typeFilter === "all" ? "menu" : undefined}
             aria-expanded={typeFilter === "all" ? newOpen : undefined}
           >
-            <Plus size={16} strokeWidth={2} aria-hidden="true" />
+            <Plus className="ui-i" strokeWidth={2} aria-hidden="true" />
             New template
+            {typeFilter === "all" ? (
+              <ChevronDown className="ui-i" strokeWidth={2} aria-hidden="true" />
+            ) : null}
           </Button>
           {newOpen && typeFilter === "all" ? (
             <ul className="templates-hub-new-menu" role="menu">
@@ -617,7 +651,7 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
         />
       ) : null}
 
-      <TemplateScopeToolbar typeFilter={typeFilter} />
+      <TemplateScopeToolbar typeFilter={typeFilter} counts={counts} />
 
       {actionError ? (
         <p className="form-error" role="alert">
@@ -705,29 +739,54 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
 
         {scoped.length > 0 ? (
           <div className="templates-hub-table-wrap">
-            <table className="templates-hub-table">
+            <table className="ui-table templates-hub-table">
               <thead>
                 <tr>
                   <th scope="col">Template</th>
-                  <th scope="col">Owner</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Used by</th>
+                  <th scope="col" className="col-owner">
+                    Owner
+                  </th>
+                  <th scope="col" className="col-status">
+                    Status
+                  </th>
+                  <th scope="col" className="col-used">
+                    Used by
+                  </th>
+                  <th scope="col" className="col-edited">
+                    Edited
+                  </th>
                   <th scope="col" className="col-use">
-                    <span className="sr-only">Use</span>
+                    <span className="sr-only">Actions</span>
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {scoped.map((row) => (
+                {shownRows.map((row) => (
                   <HubTableRow
                     key={`${row.kind}-${row.id}`}
                     row={row}
+                    clients={clients}
+                    timeZone={timeZone}
                     onUse={() => onUse(row)}
                     onFork={() => onFork(row)}
                   />
                 ))}
               </tbody>
             </table>
+            <footer className="templates-hub-foot">
+              <span>
+                Showing {shownRows.length} of {scoped.length}
+              </span>
+              {scoped.length > PAGE_ROWS ? (
+                <button
+                  type="button"
+                  className="templates-hub-showall"
+                  onClick={() => setShowAll((current) => !current)}
+                >
+                  {showAll ? "Show fewer" : "Show all"}
+                </button>
+              ) : null}
+            </footer>
           </div>
         ) : null}
       </div>
@@ -736,6 +795,9 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
         <UseTemplateModal
           templateId={usePlan.id}
           templateTitle={usePlan.title}
+          templateMeta={
+            rowsById.get(usePlan.id)?.subtitle.replace(/ · v\d+$/, "")
+          }
           clients={clients}
           onClose={() => setUsePlan(null)}
         />
@@ -765,13 +827,18 @@ function TemplatesHubList({ routeType }: { routeType: string | undefined }) {
 
 function HubTableRow({
   row,
+  clients,
+  timeZone,
   onUse,
   onFork,
 }: {
   row: HubRow;
+  clients: ApplyClient[];
+  timeZone: string;
   onUse: () => void;
   onFork: () => void;
 }) {
+  const navigate = useNavigate();
   const isBase = row.ownership === "global";
   const editPath = `/templates/${row.hubSlug}/${row.id}`;
 
@@ -798,50 +865,60 @@ function HubTableRow({
           </div>
         </div>
       </td>
-      <td>
+      <td className="col-owner">
         <span
           className={
-            isBase ? "templates-hub-chip is-base" : "templates-hub-chip is-mine"
+            isBase
+              ? "ui-pill ui-p-neutral templates-owner"
+              : "ui-pill ui-p-coach templates-owner"
           }
         >
           {isBase ? (
-            <Check size={12} strokeWidth={2.5} aria-hidden="true" />
+            <Check className="ui-i" strokeWidth={2.5} aria-hidden="true" />
           ) : (
-            <User size={12} strokeWidth={2.5} aria-hidden="true" />
+            <User className="ui-i" strokeWidth={2.5} aria-hidden="true" />
           )}
-          {isBase ? "FitBud base" : "Mine"}
+          {isBase ? "FitBud base" : "You"}
         </span>
       </td>
-      <td>
-        <span className="templates-hub-chip is-published">
-          <Check size={12} strokeWidth={2.5} aria-hidden="true" />
+      <td className="col-status">
+        <span className="ui-pill ui-p-done">
+          <Check className="ui-i" strokeWidth={2.5} aria-hidden="true" />
           {labelFor("plan_version_status", "published")}
         </span>
       </td>
-      <td>
-        <span className="templates-hub-used-by">—</span>
+      <td className="col-used">
+        <UsedByCell usedBy={row.usedBy} clients={clients} />
+      </td>
+      <td className="col-edited">
+        <span className="templates-edited">
+          {formatEditedDate(row.updatedAt, timeZone)}
+        </span>
       </td>
       <td className="col-use">
         <div className="templates-hub-row-actions">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             className="templates-hub-use-btn"
             onClick={onUse}
           >
-            Use
-          </button>
-          {isBase ? (
-            <OverflowMenu
-              label={`More actions for ${row.title}`}
-              items={[
-                {
-                  id: "fork",
-                  label: "Make your own copy",
-                  onSelect: onFork,
-                },
-              ]}
-            />
-          ) : null}
+            Use for client
+          </Button>
+          <OverflowMenu
+            label={`More actions for ${row.title}`}
+            items={
+              isBase
+                ? [{ id: "fork", label: "Make a copy", onSelect: onFork }]
+                : [
+                    {
+                      id: "open",
+                      label: "Open in editor",
+                      onSelect: () => navigate(editPath),
+                    },
+                  ]
+            }
+          />
         </div>
       </td>
     </tr>
@@ -852,7 +929,10 @@ function TypeIcon({ kind }: { kind: HubKind }) {
   if (kind === "nutrition") {
     return <UtensilsCrossed size={16} strokeWidth={1.75} />;
   }
-  if (kind === "onboarding" || kind === "checkin") {
+  if (kind === "checkin") {
+    return <ClipboardCheck size={16} strokeWidth={1.75} />;
+  }
+  if (kind === "onboarding") {
     return <ClipboardList size={16} strokeWidth={1.75} />;
   }
   if (kind === "combined") {
