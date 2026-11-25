@@ -1,7 +1,7 @@
 appId: com.thefitbud.mobile.staging
 ---
 # Subflow of flows/v3/F20-triage-nudge.yaml (Z12-50). No tags: it is only ever called.
-# Input: CLIENT_SLUG (client-row-* testID slug). Opens the client and presses Nudge….
+# Input: CLIENT_SLUG (client-row-* testID slug). Opens the client and presses Remind… (id client-nudge).
 # v3 client detail has Needs attention + Review (not Mark reviewed/Resolve on this screen).
 - launchApp:
     stopApp: true
@@ -25,16 +25,11 @@ appId: com.thefitbud.mobile.staging
 - runFlow:
     when:
       visible:
-        id: "exception-more"
+        id: "exception-review"
     commands:
+      # The review panel (Z14-23 removed its more menu): its client link opens the client page.
       - tapOn:
-          id: "exception-more"
-      - extendedWaitUntil:
-          visible:
-            id: "more-profile"
-          timeout: 10000
-      - tapOn:
-          id: "more-profile"
+          id: "client-name-link"
 - extendedWaitUntil:
     visible:
       id: "client-nudge"
