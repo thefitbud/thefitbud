@@ -208,8 +208,9 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     fireEvent.keyDown(review, { key: "Enter" });
     expect(loc()).not.toContain("client=");
     fireEvent.click(review);
-    expect(loc()).toContain(`exception=${ROHAN_EXC}`);
-    expect(loc()).not.toContain("client=");
+    // W13-11 (FLOW 6.5): Review opens list mode, the same panel as the row.
+    expect(loc()).toContain(`client=${ROHAN}`);
+    expect(loc()).not.toContain("exception=");
     expect(screen.getByRole("dialog", { name: "Exception" })).toBeTruthy();
   });
 
@@ -228,9 +229,23 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     // A touch tap: pointerdown does not select, the click does (so it must bubble).
     fireEvent.pointerDown(review, { pointerType: "touch" });
     fireEvent.click(review, { detail: 1 });
-    expect(loc()).toContain("exception=4b0e7c2a");
+    expect(loc()).toContain(`client=${MEERA}`);
     expect(screen.getAllByRole("row")[1]!.className).toContain("is-focused");
     expect(screen.getAllByRole("row")[0]!.className).not.toContain("is-focused");
+  });
+
+  it("stacks the issue line under the client name in one column (W-02)", async () => {
+    await renderHome();
+    const grid = screen.getByRole("grid", { name: "Needs attention" });
+    const row = within(grid).getByRole("button", { name: "More actions for Rohan Mehta" }).closest("[role=row]")!;
+    const who = row.querySelector(".home-who")!;
+    const tx = who.querySelector(".home-who-tx")!;
+    expect(tx.children[0]!.tagName).toBe("B");
+    expect(tx.children[0]!.textContent).toBe("Rohan Mehta");
+    expect(tx.children[1]!.classList.contains("home-issue")).toBe(true);
+    expect(tx.children[1]!.querySelector(".home-issue-txt")).not.toBeNull();
+    // name+issue, chip, age, review, menu: five cells, the issue is not its own cell.
+    expect(row.children).toHaveLength(5);
   });
 
   it("clicking the open overflow menu's own padding does not open the client panel", async () => {

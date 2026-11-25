@@ -406,6 +406,8 @@ export function HomePage() {
 
   // D-W7-2: the panel lane reads ?client=. Row navigation closes a drawer.
   function openClientPanel(relationshipId: string) {
+    // DR1 QA F2: same fresh-open token as openException (Review lands here too).
+    setDrawerOpenSeq((n) => n + 1);
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("client", relationshipId);
@@ -1092,7 +1094,7 @@ export function HomePage() {
                   return (
                     <div
                       key={group.relationshipId}
-                      className={`home-row${focusIdx === idx ? " is-focused" : ""}`}
+                      className={`home-row${focusIdx === idx ? " is-focused" : ""}${clientPanelId === group.relationshipId ? " is-open" : ""}`}
                       role="row"
                       tabIndex={-1}
                       ref={(el) => {
@@ -1110,17 +1112,15 @@ export function HomePage() {
                         <span className={avatarClass(group.traineeDisplayName)}>
                           {initials(group.traineeDisplayName)}
                         </span>
-                        <b>{group.traineeDisplayName}</b>
-                      </div>
-                      <div
-                        className="home-issue"
-                        role="gridcell"
-                        title={issue.title}
-                      >
-                        <span className="home-issue-txt">{issue.text}</span>
-                        {issue.more > 0 ? (
-                          <span className="home-more">+{issue.more} more</span>
-                        ) : null}
+                        <div className="home-who-tx">
+                          <b>{group.traineeDisplayName}</b>
+                          <div className="home-issue" title={issue.title}>
+                            <span className="home-issue-txt">{issue.text}</span>
+                            {issue.more > 0 ? (
+                              <span className="home-more">+{issue.more} more</span>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
                       <div role="gridcell">
                         <StatusChip kind="severity" value={primary.severity} />
@@ -1132,7 +1132,7 @@ export function HomePage() {
                         <Button
                           variant="tinted"
                           className="button-sm"
-                          onClick={() => openException(primary.id)}
+                          onClick={() => openClientPanel(group.relationshipId)}
                           onKeyDown={stopRowControl}
                         >
                           Review
@@ -1237,7 +1237,7 @@ export function HomePage() {
                   return (
                     <div
                       key={ask.id}
-                      className="home-li is-target"
+                      className="home-li home-li-ask is-target"
                       onClick={(event) => {
                         if (event.button !== 0) return;
                         if (isRowControlTarget(event.target)) return;
