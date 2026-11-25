@@ -1277,8 +1277,12 @@ describe("ClientProgressPage rail and KPI agree (W13-18)", () => {
     let r = await railAndKpi();
     expect(r.railWorkouts).toBe("2 of 5");
     expect(r.kpiWorkouts).toBe(r.railWorkouts);
-    expect(r.railWeightChange).toContain("−2");
-    expect(r.kpiChange).toContain("−2");
+    // Exactly the 12-week change (88.4 to 86.4), not the all-time −2.7.
+    expect(r.railWeightChange).toBe("−2 kg");
+    expect(r.kpiChange?.replace(/\s/g, "")).toMatch(/−2kg$/);
+    expect(r.railWeightChange?.replace(/\s/g, "")).toBe(
+      r.kpiChange?.replace(/\s/g, "").replace(/^Since.*?(?=−)/, ""),
+    );
 
     fireEvent.click(screen.getByRole("radio", { name: "4 wk" }));
     await waitFor(async () =>
