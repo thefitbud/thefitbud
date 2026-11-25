@@ -505,3 +505,14 @@
   text-overflow: clip;
   overflow-wrap: anywhere;
 }
+
+/* W13-21: one-line title with an ellipsis; the pill and Review never move. */
+.overview-grid .ov-attention .ov-att-tx b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-grid .ov-attention .ov-att > :not(.ov-att-tx) {
+  flex: none;
+}

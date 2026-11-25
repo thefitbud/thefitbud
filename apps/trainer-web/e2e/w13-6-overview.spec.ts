@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { API, apiToken, signIn } from "./support/session";
 
-const OUT = path.resolve("qa-captures/w13-6");
+const OUT = path.resolve("qa-captures/w13-21");
 
 async function windowLocked(page: Page) {
   return page.evaluate(() => {
@@ -173,6 +173,19 @@ test.describe("W13-6 Client Overview and review modal", () => {
     await modalLoaded(page);
     await page.goBack();
     await expect(page.getByTestId("screen-TW-05")).toHaveCount(0);
+  });
+
+  test("the second card row opens the panel at 2 of n, with the row's title (W13-21)", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const { rid } = await clientWithOpen(2);
+    await page.goto(`/clients/${rid}`);
+    await overviewLoaded(page);
+    const rows = page.locator(".ov-att");
+    const total = await rows.count();
+    expect(total).toBeGreaterThanOrEqual(2);
+    await rows.nth(1).getByRole("button", { name: "Review" }).click();
+    const panel = await modalLoaded(page);
+    await expect(panel.getByText(new RegExp(`^2 of ${Math.min(total, 10)}$`))).toBeVisible();
   });
 
   test("captures every frame at three widths", async ({ page }) => {
