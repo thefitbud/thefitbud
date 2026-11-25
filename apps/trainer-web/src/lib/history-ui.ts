@@ -301,7 +301,8 @@ export function historyLine(item: HistoryItem, names: HistoryNames): HistoryLine
         actor: "system",
         lead: "",
         bold: type,
-        tail: detail ? `: ${detail}` : "",
+        // The API often repeats the type as the summary ("Overdue meal"): say it once.
+        tail: detail && detail.toLowerCase() !== type.toLowerCase() ? `: ${detail}` : "",
         meta: state ? `FitBud · ${lowerFirst(state)}` : "FitBud",
       };
     }

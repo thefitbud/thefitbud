@@ -25,38 +25,37 @@
 }
 
 .history-page .history-search {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: var(--s2);
   flex: 0 1 388px;
   min-width: 220px;
-  height: var(--h-md);
-  padding: 0 var(--s3);
-  border: 1px solid var(--line2);
-  border-radius: var(--r-ctl);
-  background: var(--card);
   color: var(--ink3);
 }
 
-.history-page .history-search:focus-within {
-  border-color: var(--brand);
-  box-shadow: var(--focus);
-}
-
 .history-page .history-search .ui-i {
+  position: absolute;
+  left: var(--s3);
   width: 16px;
   height: 16px;
+  pointer-events: none;
 }
 
 .history-page .history-search input {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  border: 0;
-  outline: none;
-  background: transparent;
+  width: 100%;
+  height: var(--h-md);
+  padding: 0 var(--s3) 0 36px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
   color: var(--ink);
   font: var(--t-body);
+}
+
+.history-page .history-search input:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: var(--focus);
 }
 
 .history-page .history-search input::placeholder {
@@ -267,7 +266,7 @@
 
 /* iPad widths: targets are at least 44 px; the day column stacks above its rows. */
 @media (max-width: 1180px), (pointer: coarse) {
-  .history-page .history-search,
+  .history-page .history-search input,
   .history-page .chip-menu-btn,
   .history-page .history-clear-filters,
   .history-page .history-load-more,

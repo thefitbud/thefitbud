@@ -111,6 +111,8 @@ describe("historyLine", () => {
       expect(text).not.toMatch(/[a-z]+_[a-z]+/);
     }
     expect(sentence(historyLine(rows[1]!, NAMES))).toBe("Missed workout: Missed Lower body A");
+    const repeated = item({ kind: "exception", title: "Exception · Overdue meal", summary: "Overdue meal (status: Open).", status: "active" });
+    expect(sentence(historyLine(repeated, NAMES))).toBe("Overdue meal");
   });
 });
 
