@@ -4,7 +4,7 @@ import type {
   PlanContent,
   PlanTemplateType,
 } from "@fitbud/contracts";
-import { formatInstant, labelFor } from "@fitbud/core";
+import { formatCivilDate, formatInstant, labelFor } from "@fitbud/core";
 
 export type ApplyClient = ClientDirectoryItem & { relationshipId: string };
 
@@ -223,4 +223,26 @@ export function clientStatusLabel(status: string): string {
   // Use-modal clients are already coaching-ready; frame 174 reads "Ready to coach".
   if (status === "active" || status === "coaching_ready") return "Ready to coach";
   return labelFor("onboarding_status", status);
+}
+
+/** Stable avatar tone 1..6 (the kit's `ui-av1`..`ui-av6`) from any string. */
+export function avatarTone(key: string): number {
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  }
+  return (hash % 6) + 1;
+}
+
+/** "Wed 21 Oct" in the trainer's timezone; the year only when not the current one. */
+export function formatEditedDate(iso: string, timeZone = "UTC"): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  const civil = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+  return formatCivilDate(civil);
 }

@@ -15,26 +15,23 @@ test.describe("TW-F templates, forms, libraries", () => {
   test("TW-23 hub: type filters and templates table loads", async ({ page }) => {
     await page.goto("/templates");
     await expect(page.getByRole("heading", { name: "Templates", level: 1 })).toBeVisible();
-    const types = page.getByRole("group", { name: "Template types" });
-    await expect(types.getByRole("link", { name: "All" })).toBeVisible();
-    await expect(types.getByRole("link", { name: "Workout" })).toBeVisible();
-    await expect(types.getByRole("link", { name: "Nutrition" })).toBeVisible();
-    await expect(types.getByRole("link", { name: "Intake form" })).toBeVisible();
-    await expect(types.getByRole("link", { name: "Check-in form" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Libraries" })).toBeVisible();
+    const types = page.getByRole("tablist", { name: "Template types" });
+    for (const label of ["All", "Workouts", "Nutrition", "Check-in forms", "Intake forms"]) {
+      await expect(types.getByRole("tab", { name: new RegExp(`^${label}`) })).toBeVisible();
+    }
     await expect(page.getByTestId("screen-TW-23")).toBeVisible();
     await expect(page.getByText("Could not load this list")).toHaveCount(0);
     await expect(page.getByRole("columnheader", { name: "Template" })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByText("FitBud base").first()).toBeVisible({ timeout: 20_000 });
-    await expect(page.getByRole("button", { name: /^Use$/ }).first()).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Used by" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Use for client" }).first()).toBeVisible();
   });
 
   test("TW-27 Use modal excludes ended clients", async ({ page }) => {
     await page.goto("/templates/workouts");
     await expect(page.getByTestId("screen-TW-23")).toBeVisible();
-    await page.getByRole("button", { name: /^Use$/ }).first().click();
+    await page.getByRole("button", { name: "Use for client" }).first().click();
     await expect(page.getByTestId("use-template-modal")).toBeVisible();
     await expect(page.getByText(/This opens a draft plan for/i)).toBeVisible();
     await expect(page.getByRole("button", { name: /Open draft/i })).toBeVisible();
@@ -42,14 +39,33 @@ test.describe("TW-F templates, forms, libraries", () => {
     await expect(page.getByText("Nikhil")).toHaveCount(0);
   });
 
+  test("W13-5 Use for client opens a draft for the chosen client", async ({ page }) => {
+    await page.goto("/templates/workouts");
+    await expect(page.getByTestId("screen-TW-23")).toBeVisible();
+    await page.getByRole("button", { name: "Use for client" }).first().click();
+    const modal = page.getByTestId("use-template-modal");
+    await expect(modal).toBeVisible();
+    await modal.getByRole("combobox", { name: "Client" }).click();
+    await page.getByPlaceholder("Search clients").fill("a");
+    await page.getByRole("option").first().click();
+    await page.getByRole("button", { name: /Open draft/i }).click();
+    await expect(page).toHaveURL(/\/clients\/[0-9a-f-]+\/plan\/[0-9a-f-]+\/versions\/[0-9a-f-]+\/edit/, {
+      timeout: 30_000,
+    });
+  });
+
   test("TW-27 Fork modal lands on Mine editor", async ({ page }) => {
     await page.goto("/templates/workouts");
     await expect(page.getByText("FitBud base").first()).toBeVisible({ timeout: 20_000 });
-    await page.getByRole("button", { name: /More actions for/i }).first().click();
-    await page.getByRole("menuitem", { name: /Make your own copy/i }).click();
+    await page
+      .locator("tr", { hasText: "FitBud base" })
+      .first()
+      .getByRole("button", { name: /More actions for/i })
+      .click();
+    await page.getByRole("menuitem", { name: /Make a copy/i }).click();
     await expect(page.getByTestId("fork-template-modal")).toBeVisible();
-    await expect(page.getByText(/Your copy starts as a draft/i)).toBeVisible();
-    await page.getByRole("button", { name: /^Make copy$/ }).click();
+    await expect(page.getByText(/The copy is yours to change/i)).toBeVisible();
+    await page.getByRole("button", { name: "Make a copy" }).click();
     await expect(page).toHaveURL(/\/templates\/workouts\/[0-9a-f-]+/, {
       timeout: 30_000,
     });
@@ -87,11 +103,11 @@ test.describe("TW-F templates, forms, libraries", () => {
     await expect(page.getByText("defaultReps")).toHaveCount(0);
     await expect(page.getByText("defaultLoadLabel")).toHaveCount(0);
     await expect(
-      page.getByRole("group", { name: "Library type" }).getByRole("link", {
+      page.getByRole("tablist", { name: "Library type" }).getByRole("tab", {
         name: "Exercises",
       }),
     ).toBeVisible();
-    await page.getByRole("link", { name: "Foods" }).click();
+    await page.getByRole("tab", { name: "Foods" }).click();
     await expect(page.getByRole("columnheader", { name: "Food" })).toBeVisible({
       timeout: 20_000,
     });
