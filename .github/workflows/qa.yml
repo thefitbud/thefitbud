@@ -256,7 +256,10 @@ jobs:
           package-manager-cache: false
 
       # Node 22 needs the quoted glob; a bare directory is rejected. No dependencies:
-      # summarize.mjs and its tests use Node built-ins only.
+      # summarize.mjs and its tests use Node built-ins only. So does the stale-id guard,
+      # scripts/qa/maestro-testids.test.mjs (Z14-42, D-W14-38): it reads the flows with its
+      # own small YAML reader and does not skip here, so a stale Maestro id fails this job.
+      # qa-scripts stays NOT a required check; the ci job still runs the same tests.
       - name: Report builder tests
         run: node --test "scripts/qa/**/*.test.mjs"
 

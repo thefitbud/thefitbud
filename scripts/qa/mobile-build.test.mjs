@@ -398,13 +398,8 @@ test("no flow dismisses the keyboard with hideKeyboard; the full-tag flows tap i
   }
   const src = (rel) => fs.readFileSync(path.join(repo, rel), "utf8");
   const cases = [
-    {
-      flow: "flows/trainer/notes-more.yaml",
-      after: '- inputText: "QA nightly note. Safe to delete."',
-      tap: "Coach notes",
-      screen: "apps/mobile/src/trainer/ClientStatusScreen.tsx",
-      text: /<Text style=\{styles\.section\}>Coach notes<\/Text>/,
-    },
+    // flows/trainer/notes-more.yaml (Z14-24) no longer dismisses the keyboard: the note
+    // sheet's Save is in its header, above the keyboard, so the flow taps note-save directly.
     {
       flow: "flows/trainee/checkin.yaml",
       after: '- inputText: "Solid week, one session missed."',
@@ -445,7 +440,8 @@ test("no flow dismisses the keyboard with hideKeyboard; the full-tag flows tap i
 // status screen, where the name is a plain Text header, it stays exact.
 test("the client-list steps match the client name inside the row's iOS label", () => {
   const tab = fs.readFileSync(path.join(repo, "apps/mobile/src/trainer/ClientsTab.tsx"), "utf8");
-  const row = tab.match(/<Pressable\s+key=\{row\.key\}[^>]*>/);
+  // Z14-3 and later: a CardRow wraps one Pressable whose testID is the row id.
+  const row = tab.match(/<Pressable\s+testID=\{rowId\}[^>]*>/);
   assert.ok(row, "ClientsTab renders each client row as a Pressable");
   assert.doesNotMatch(row[0], /accessibilityLabel/, "the row has no label of its own");
   assert.match(tab, /<Text style=\{styles\.name\}>\{formatPersonName\(row\.name\)\}<\/Text>/);

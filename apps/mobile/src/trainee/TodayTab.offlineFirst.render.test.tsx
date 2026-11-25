@@ -265,11 +265,15 @@ describe("one Today skeleton (TR-06f, #2)", () => {
     expect(anyBlockRendered()).toBe(false);
     expect(onFirstPaint).not.toHaveBeenCalled();
 
-    releaseWeek();
+    await act(async () => {
+      releaseWeek();
+    });
     await waitFor(() => expect(screen.queryByLabelText("Loading today")).toBeNull());
     expect(screen.getByLabelText("Open diet")).toBeTruthy();
     expect(screen.getByLabelText("View meal plan")).toBeTruthy();
-    expect(onFirstPaint).toHaveBeenCalledTimes(1);
+    // Flake trace (CI run 45480773153): onFirstPaint fires from an effect after
+    // the gate opens, so it can land a tick after the skeleton leaves. Wait for it.
+    await waitFor(() => expect(onFirstPaint).toHaveBeenCalledTimes(1));
   });
 
   it("a failed day load also opens the gate (the failure is shown, not a skeleton)", async () => {

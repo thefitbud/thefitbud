@@ -267,8 +267,19 @@ describe("ClientLogMealScreen", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Changed the portion" }));
     fireEvent.click(screen.getByRole("button", { name: "Save portion" }));
     await screen.findByText(/Something went wrong on our side/);
+    // Flake trace (CI run 45535882284): the retry press must land after the
+    // failed save has finished (the button leaves its busy state), or the
+    // press is dropped and onSaved never fires. Wait for that, then retry.
+    // Waits end as soon as the state is true; the bound only caps a real failure.
+    await waitFor(
+      () =>
+        expect(
+          screen.getByRole("button", { name: "Save portion" }).getAttribute("aria-busy"),
+        ).not.toBe("true"),
+      { timeout: 4000 },
+    );
     fireEvent.click(screen.getByRole("button", { name: "Save portion" }));
-    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledWith("Logged by you"), { timeout: 4000 });
     const keys = api.request.mock.calls.map((c) => c[3].idempotencyKey);
     expect(keys.length).toBeGreaterThanOrEqual(2);
     expect(new Set(keys).size).toBe(1);
