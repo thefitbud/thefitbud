@@ -16,6 +16,7 @@ const api = vi.hoisted(() => ({
   getWorkoutAdherence: vi.fn(),
   getMealCompliance: vi.fn(),
   listCheckins: vi.fn(),
+  listExceptions: vi.fn(),
 }));
 const stage1 = vi.hoisted(() => ({
   getWorkspaceWeek: vi.fn(),
@@ -26,7 +27,25 @@ const stage1 = vi.hoisted(() => ({
 vi.mock("../lib/api", () => ({ apiClient: api }));
 vi.mock("../lib/stage1-api", () => ({ stage1Api: stage1 }));
 vi.mock("../auth/AuthProvider", () => ({ useAuth: () => ({ me: null }) }));
-vi.mock("../components/ExceptionDrawer", () => ({ ExceptionDrawer: () => null }));
+vi.mock("../components/ExceptionDrawer", () => ({
+  ExceptionDrawer: (props: {
+    variant?: string;
+    relationshipId?: string | null;
+    exceptionId?: string | null;
+    onClose: () => void;
+  }) => (
+    <div
+      data-testid="drawer-stub"
+      data-variant={props.variant}
+      data-rid={props.relationshipId}
+      data-eid={props.exceptionId}
+    >
+      <button type="button" onClick={props.onClose}>
+        Close stub
+      </button>
+    </div>
+  ),
+}));
 
 import { ClientOverviewPage } from "./ClientOverviewPage";
 
@@ -123,6 +142,7 @@ beforeEach(() => {
   api.getWorkoutAdherence.mockResolvedValue({ items: [], totals: {} });
   api.getMealCompliance.mockResolvedValue({ items: [], totals: {} });
   api.listCheckins.mockResolvedValue({ items: [], nextCursor: null });
+  api.listExceptions.mockResolvedValue({ items: [], nextCursor: null });
   stage1.getWorkspaceWeek.mockRejectedValue(new Error("no week in unit test"));
   stage1.getResponsiveness.mockResolvedValue(RESPONDS);
 });
@@ -158,7 +178,7 @@ describe("ClientOverviewPage renewal link (CE3)", () => {
 
   it("active client, renewal current: no Renewal card", async () => {
     renderPage("active", "current");
-    expect(await screen.findByRole("heading", { name: "Progress" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Weight" })).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Renewal" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Open settings" })).toBeNull();
   });
@@ -344,7 +364,9 @@ describe("ClientOverviewPage week nav + activity (Z12-6)", () => {
     expect(next.hasAttribute("disabled")).toBe(true);
     expect(screen.queryByText(/620 kcal \/ 1,745 kcal/)).toBeNull();
     expect(screen.queryByText(/P 40\/101/)).toBeNull();
-    expect(screen.getByText(/Today · Tue 17 Nov/)).toBeTruthy();
+    const food = screen.getByTestId("ov-food");
+    expect(within(food).getByRole("heading", { name: "Today\u2019s food" })).toBeTruthy();
+    expect(within(food).getByText("Tue 17 Nov")).toBeTruthy();
   });
 
   it("previous week renames the card and shows the This week pill (03b)", async () => {
@@ -444,7 +466,7 @@ describe("ClientOverviewPage week nav + activity (Z12-6)", () => {
     );
     expect(await screen.findByText("Logged")).toBeTruthy();
     expect(screen.getByText("Changed")).toBeTruthy();
-    expect(screen.getByText("Tue 17 Nov")).toBeTruthy();
+    expect(screen.getAllByText("Tue 17 Nov").length).toBeGreaterThan(0);
     expect(screen.getByText("Mon 16 Nov")).toBeTruthy();
     expect(screen.queryByText(/ago/)).toBeNull();
     expect(screen.queryByText("Confirmed")).toBeNull();
@@ -792,5 +814,47 @@ describe("ClientOverviewPage ended client body (frame 179, Z8-20)", () => {
     expect(screen.queryByRole("heading", { name: "Your notes" })).toBeNull();
     expect(stage1.getWorkspaceWeek).toHaveBeenCalled();
     expect(api.getWorkoutAdherence).not.toHaveBeenCalled();
+  });
+});
+
+describe("ClientOverviewPage review modal (W13-6)", () => {
+  const item = (n: number, severity: "critical" | "attention", status = "active") => ({
+    id: `0000000${n}-0000-4000-8000-000000000000`,
+    type: "missed_workout",
+    severity,
+    status,
+    summary: `Item ${n} summary`,
+    detectedAt: `2026-10-0${n}T09:00:00.000Z`,
+  });
+
+  it("lists every open item, most severe first, and Review opens the modal in list mode", async () => {
+    api.listExceptions.mockResolvedValue({
+      items: [item(1, "attention"), item(2, "critical"), item(3, "attention", "resolved")],
+      nextCursor: null,
+    });
+    renderPage("active", "current");
+    const rows = await screen.findAllByRole("button", { name: "Review" });
+    expect(rows).toHaveLength(2);
+    const card = screen.getByTestId("ov-attention");
+    expect(within(card).getByText("2 open · most severe first")).toBeTruthy();
+    expect(within(card).queryByText("Item 3 summary")).toBeNull();
+    const titles = within(card).getAllByText(/Item \d summary/).map((n) => n.textContent);
+    expect(titles).toEqual(["Item 2 summary", "Item 1 summary"]);
+
+    fireEvent.click(rows[0]!);
+    const stub = await screen.findByTestId("drawer-stub");
+    expect(stub.getAttribute("data-variant")).toBe("modal");
+    expect(stub.getAttribute("data-rid")).toBe(REL_ID);
+    expect(stub.getAttribute("data-eid")).toBe(item(2, "critical").id);
+  });
+
+  it("closing the modal returns focus to the Review button that opened it", async () => {
+    api.listExceptions.mockResolvedValue({ items: [item(1, "critical")], nextCursor: null });
+    renderPage("active", "current");
+    const review = await screen.findByRole("button", { name: "Review" });
+    fireEvent.click(review);
+    fireEvent.click(await screen.findByRole("button", { name: "Close stub" }));
+    await waitFor(() => expect(screen.queryByTestId("drawer-stub")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(review));
   });
 });

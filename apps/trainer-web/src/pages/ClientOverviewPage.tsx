@@ -3,6 +3,7 @@ import { Link, useOutletContext, useParams, useSearchParams } from "react-router
 import type {
   Checkin,
   ClientWorkspace,
+  Exception as ClientException,
   ProgressMetricPoint,
   MealComplianceItem,
   TrainerNote,
@@ -42,7 +43,7 @@ import {
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
 import { ErrorState } from "../components/StatePanels";
-import { MeasurementTrend } from "../components/MeasurementTrend";
+import { WeightCard } from "../components/MeasurementTrend";
 import { StatusChip } from "../components/StatusChip";
 import {
   RemindersDrawer,
@@ -200,53 +201,20 @@ function mealCountLabel(day: WeekDayView, isToday: boolean): string | null {
   return `${logged} of ${assigned}${suffix}`;
 }
 
-function MiniRing({
+/** Thin progress bar; the figures are printed beside it, never colour alone. */
+function MacroBar({
   value,
   max,
-  color,
-  label,
-  unit,
+  tone,
 }: {
   value: number;
   max: number;
-  color: string;
-  label: string;
-  unit: string;
+  tone: "kcal" | "protein" | "carbs" | "fat";
 }) {
-  const r = 14;
-  const c = 2 * Math.PI * r;
-  const pct = max > 0 ? Math.min(value / max, 1) : 0;
-  const dash = pct * c;
+  const width = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
   return (
-    <div className="ov-mini">
-      <svg viewBox="0 0 36 36" aria-hidden="true">
-        <circle
-          cx="18"
-          cy="18"
-          r={r}
-          fill="none"
-          stroke="var(--ink-200, #E6E8EB)"
-          strokeWidth="5"
-        />
-        <circle
-          cx="18"
-          cy="18"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${c}`}
-          transform="rotate(-90 18 18)"
-        />
-      </svg>
-      <span>
-        <b>
-          {formatNumber(value)} / {formatNumber(max)}
-          {unit ? ` ${unit}` : ""}
-        </b>
-        {label}
-      </span>
+    <div className="ov-bar" aria-hidden="true">
+      <i className={`is-${tone}`} style={{ width: `${width}%` }} />
     </div>
   );
 }
@@ -255,8 +223,32 @@ export function ClientOverviewPage() {
   const { relationshipId = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const drawerId = params.get("exception");
+  const reviewBtnRef = useRef<HTMLButtonElement | null>(null);
+  /** Closing the review modal returns focus to the Review button (W13-6). */
+  const closeReview = useCallback(() => {
+    setParams({});
+    window.setTimeout(() => reviewBtnRef.current?.focus(), 0);
+  }, [setParams]);
   const { workspace, openWorkspaceModal, refreshEpoch, online = true } =
     useOutletContext<WorkspaceOutletContext>();
+  /** Every open item for this client (the review modal walks the same list). */
+  const [openItems, setOpenItems] = useState<ClientException[] | null>(null);
+  useEffect(() => {
+    if (!relationshipId) return;
+    let cancelled = false;
+    void apiClient
+      .listExceptions(relationshipId)
+      .then((res) => {
+        if (!cancelled) setOpenItems(res.items.filter((i) => i.status !== "resolved"));
+      })
+      .catch(() => {
+        // The card falls back to the most severe item from the workspace read model.
+        if (!cancelled) setOpenItems(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [relationshipId, refreshEpoch, drawerId]);
   const { me } = useAuth();
   const viewerTz = me?.timezone ?? "Asia/Kolkata";
   const thisWeekMonday = mondayOfWeek(todayCivilUtc());
@@ -447,6 +439,18 @@ export function ClientOverviewPage() {
   }
 
   const openEx = overview.openException;
+  const attentionRows: Array<
+    Pick<ClientException, "id" | "type" | "severity" | "status" | "summary" | "detectedAt">
+  > =
+    openItems && openItems.length > 0
+      ? [...openItems].sort(
+          (a, b) =>
+            (a.severity === b.severity ? 0 : a.severity === "critical" ? -1 : 1) ||
+            b.detectedAt.localeCompare(a.detectedAt),
+        )
+      : openEx
+        ? [openEx]
+        : [];
   const nutrition = week?.todayNutrition;
   const traineeTz = resolveTraineeTimezone(header).timezone;
   const todayDate =
@@ -472,17 +476,6 @@ export function ClientOverviewPage() {
   const selectedMealLabel = selectedDay
     ? mealCountLabel(selectedDay, selectedDate === todayDate)
     : null;
-  const nutritionTitle =
-    selectedDate === todayDate
-      ? `Today · ${formatCivilDate(selectedDate)}`
-      : formatCivilDate(selectedDate);
-  const nutritionSub =
-    selectedDate === todayDate
-      ? "Nutrition logged so far"
-      : selectedMealLabel
-        ? `Nutrition logged · ${selectedMealLabel} meals`
-        : "Nutrition logged";
-
   const goToWeek = (nextMonday: string, preferredDate?: string) => {
     const clamped =
       coachingStartMonday && nextMonday < coachingStartMonday
@@ -535,45 +528,48 @@ export function ClientOverviewPage() {
   return (
     <div className="overview-grid" data-testid="screen-TW-09">
       <div className="overview-main">
-        {openEx ? (
+        {attentionRows.length > 0 ? (
           <section className="ov-card ov-attention" data-testid="ov-attention">
             <div className="ov-card-h">
               <h2 className="t-h3">Needs attention</h2>
-              <span className="t-cap muted">Most severe open item</span>
-            </div>
-            <div className="ov-att">
-              <span
-                className={`ov-att-ico is-${openEx.severity}`}
-                aria-hidden="true"
-              >
-                {openEx.severity === "critical" ? (
-                  <AlertOctagon size={20} strokeWidth={1.75} />
-                ) : (
-                  <AlertTriangle size={20} strokeWidth={1.75} />
-                )}
+              <span className="t-cap muted">
+                {attentionRows.length} open · most severe first
               </span>
-              <div className="ov-att-tx">
-                <b>
-                  {openEx.summary?.trim() ||
-                    labelFor("exception_type", openEx.type)}
-                </b>
-                <span>
-                  Open {formatRelative(openEx.detectedAt)}
-                  {openEx.status === "acknowledged"
-                    ? ", reviewed"
-                    : ", not reviewed yet"}
-                  .
-                </span>
-              </div>
-              <StatusChip kind="severity" value={openEx.severity} />
-              <Button
-                variant="tinted"
-                disabled={!online}
-                onClick={() => setParams({ exception: openEx.id })}
-              >
-                Review
-              </Button>
             </div>
+            {attentionRows.map((row) => (
+              <div className="ov-att" key={row.id}>
+                <span
+                  className={`ov-att-ico is-${row.severity}`}
+                  aria-hidden="true"
+                >
+                  {row.severity === "critical" ? (
+                    <AlertOctagon size={20} strokeWidth={1.75} />
+                  ) : (
+                    <AlertTriangle size={20} strokeWidth={1.75} />
+                  )}
+                </span>
+                <div className="ov-att-tx">
+                  <b>
+                    {row.summary?.trim() || labelFor("exception_type", row.type)}
+                  </b>
+                  <span>
+                    Open {formatRelative(row.detectedAt)}
+                    {row.status === "acknowledged" ? " · Noted by you" : ""}
+                  </span>
+                </div>
+                <StatusChip kind="severity" value={row.severity} />
+                <Button
+                  variant="tinted"
+                  disabled={!online}
+                  onClick={(e) => {
+                    reviewBtnRef.current = e.currentTarget;
+                    setParams({ exception: row.id });
+                  }}
+                >
+                  Review
+                </Button>
+              </div>
+            ))}
           </section>
         ) : null}
 
@@ -733,83 +729,6 @@ export function ClientOverviewPage() {
                   </div>
                 </div>
               </div>
-              <div className="ov-nut">
-                <div className="ov-nut-lbl">
-                  {nutritionTitle}
-                  <span>{nutritionSub}</span>
-                </div>
-                {showNutritionRings && nutrition ? (
-                  <>
-                    <MiniRing
-                      value={nutrition.logged.kcal}
-                      max={
-                        (nutrition.assigned?.kcal ?? nutrition.logged.kcal) ||
-                        1
-                      }
-                      color="var(--brand)"
-                      label="kcal"
-                      unit=""
-                    />
-                    <MiniRing
-                      value={nutrition.logged.proteinG}
-                      max={
-                        (nutrition.assigned?.proteinG ??
-                          nutrition.logged.proteinG) || 1
-                      }
-                      color="var(--brand-deep-navy, #1A1248)"
-                      label="Protein"
-                      unit="g"
-                    />
-                    <MiniRing
-                      value={nutrition.logged.carbsG}
-                      max={
-                        (nutrition.assigned?.carbsG ??
-                          nutrition.logged.carbsG) || 1
-                      }
-                      color="#7C6CF0"
-                      label="Carbs"
-                      unit="g"
-                    />
-                    <MiniRing
-                      value={nutrition.logged.fatG}
-                      max={
-                        (nutrition.assigned?.fatG ?? nutrition.logged.fatG) ||
-                        1
-                      }
-                      color="#0E7490"
-                      label="Fat"
-                      unit="g"
-                    />
-                  </>
-                ) : null}
-                <div className="ov-dnav" aria-label="Day">
-                  <button
-                    type="button"
-                    className="ov-dnav-btn"
-                    aria-label={`Previous day, ${formatCivilDate(addCivilDays(selectedDate, -1))}`}
-                    disabled={
-                      coachingStartMonday != null &&
-                      addCivilDays(selectedDate, -1) < coachingStartMonday
-                    }
-                    onClick={() => stepDay(-1)}
-                  >
-                    <ChevronLeft size={14} strokeWidth={1.75} aria-hidden />
-                  </button>
-                  <button
-                    type="button"
-                    className="ov-dnav-btn"
-                    aria-label={
-                      selectedDate >= todayDate
-                        ? "Next day"
-                        : `Next day, ${formatCivilDate(addCivilDays(selectedDate, 1))}`
-                    }
-                    disabled={selectedDate >= todayDate}
-                    onClick={() => stepDay(1)}
-                  >
-                    <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
-                  </button>
-                </div>
-              </div>
             </>
           ) : weekError ? (
             <p className="form-error" role="alert">
@@ -826,6 +745,98 @@ export function ClientOverviewPage() {
             <p className="muted">Loading week…</p>
           )}
         </section>
+
+        {week ? (
+          <section className="ov-card ov-food" data-testid="ov-food">
+            <div className="ov-card-h">
+              <h2 className="t-h3">
+                {selectedDate === todayDate ? "Today\u2019s food" : "Food"}
+              </h2>
+              <div className="ov-food-nav">
+                <span className="t-cap muted">
+                  {formatCivilDate(selectedDate)}
+                </span>
+                <div className="ov-dnav" aria-label="Day">
+                  <button
+                    type="button"
+                    className="ov-dnav-btn"
+                    aria-label={`Previous day, ${formatCivilDate(addCivilDays(selectedDate, -1))}`}
+                    disabled={
+                      coachingStartMonday != null &&
+                      addCivilDays(selectedDate, -1) < coachingStartMonday
+                    }
+                    onClick={() => stepDay(-1)}
+                  >
+                    <ChevronLeft size={16} strokeWidth={1.75} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="ov-dnav-btn"
+                    aria-label={
+                      selectedDate >= todayDate
+                        ? "Next day"
+                        : `Next day, ${formatCivilDate(addCivilDays(selectedDate, 1))}`
+                    }
+                    disabled={selectedDate >= todayDate}
+                    onClick={() => stepDay(1)}
+                  >
+                    <ChevronRight size={16} strokeWidth={1.75} aria-hidden />
+                  </button>
+                </div>
+                <Link
+                  className="text-link ov-food-link"
+                  to={`/clients/${relationshipId}/activity?date=${selectedDate}`}
+                >
+                  Review day
+                  <ChevronRight size={14} strokeWidth={1.75} aria-hidden />
+                </Link>
+              </div>
+            </div>
+            {showNutritionRings && nutrition ? (
+              <div className="ov-food-body">
+                <div className="ov-food-kcal">
+                  <b>{formatNumber(nutrition.logged.kcal)}</b>
+                  <span>
+                    {nutrition.assigned?.kcal
+                      ? `of ${formatNumber(nutrition.assigned.kcal)} kcal planned`
+                      : "kcal logged"}
+                  </span>
+                </div>
+                <MacroBar
+                  value={nutrition.logged.kcal}
+                  max={nutrition.assigned?.kcal ?? 0}
+                  tone="kcal"
+                />
+                <div className="ov-macros">
+                  {(
+                    [
+                      ["Protein", nutrition.logged.proteinG, nutrition.assigned?.proteinG, "protein"],
+                      ["Carbs", nutrition.logged.carbsG, nutrition.assigned?.carbsG, "carbs"],
+                      ["Fat", nutrition.logged.fatG, nutrition.assigned?.fatG, "fat"],
+                    ] as const
+                  ).map(([label, logged, planned, tone]) => (
+                    <div className="ov-macro" key={label}>
+                      <div className="ov-macro-h">
+                        <span>{label}</span>
+                        <b>
+                          {formatNumber(logged)}
+                          {planned ? ` / ${formatNumber(planned)}` : ""} g
+                        </b>
+                      </div>
+                      <MacroBar value={logged} max={planned ?? 0} tone={tone} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="muted ov-pad">
+                {selectedMealLabel
+                  ? `Nutrition logged · ${selectedMealLabel} meals`
+                  : "Nutrition logged"}
+              </p>
+            )}
+          </section>
+        ) : null}
 
         <section className="ov-card">
           <div className="ov-card-h">
@@ -868,6 +879,18 @@ export function ClientOverviewPage() {
       </div>
 
       <aside className="overview-side">
+        <WeightCard
+          progressHref={`/clients/${relationshipId}/progress`}
+          points={overview.progress.measurements
+            .filter((m) => m.type === "body_weight_kg")
+            .map((m) => ({
+              id: m.id,
+              value: m.value,
+              unit: m.unit,
+              observedAt: m.observedAt,
+            }))}
+        />
+
         {overview.pendingReviewCheckin || overview.nextCheckin ? (
           <section className="ov-card ov-side">
             {(() => {
@@ -876,7 +899,7 @@ export function ClientOverviewPage() {
               return (
                 <>
                   <div className="ov-side-h">
-                    <h3>Check-in</h3>
+                    <h3>{overview.pendingReviewCheckin ? "Check-in" : "Next check-in"}</h3>
                     <Link
                       className="text-link"
                       to={`/clients/${relationshipId}/check-ins/${checkin.id}`}
@@ -977,36 +1000,6 @@ export function ClientOverviewPage() {
             traineeFirstName={firstName}
             clientWhatsappE164={header.clientWhatsappE164}
           />
-        </section>
-
-        <section className="ov-card ov-side">
-          <div className="ov-side-h">
-            <h3>Progress</h3>
-            <Link
-              className="text-link"
-              to={`/clients/${relationshipId}/progress`}
-            >
-              View
-            </Link>
-          </div>
-          {overview.progress.measurements.filter(
-            (m) => m.type === "body_weight_kg",
-          ).length >= 2 ? (
-            <MeasurementTrend
-              compact
-              label="Weight"
-              points={overview.progress.measurements
-                .filter((m) => m.type === "body_weight_kg")
-                .map((m) => ({
-                  id: m.id,
-                  value: m.value,
-                  unit: m.unit,
-                  observedAt: m.observedAt,
-                }))}
-            />
-          ) : (
-            <p className="muted">No weigh-ins yet</p>
-          )}
         </section>
 
         {header.renewalState && header.renewalState !== "current" ? (
@@ -1151,8 +1144,10 @@ export function ClientOverviewPage() {
 
       {drawerId ? (
         <ExceptionDrawer
+          variant="modal"
           exceptionId={drawerId}
-          onClose={() => setParams({})}
+          relationshipId={relationshipId}
+          onClose={closeReview}
         />
       ) : null}
     </div>
