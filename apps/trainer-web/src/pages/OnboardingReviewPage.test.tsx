@@ -26,12 +26,13 @@ function pageTree(
   onboardingStatus: Lifecycle,
   refreshEpoch = 0,
   clientWhatsappE164: string | null = null,
+  gender: string | null = "female",
 ) {
   const context = {
     workspace: {
       header: {
         traineeDisplayName: "Kavya Menon",
-        traineeProfile: { gender: "female" },
+        traineeProfile: { gender },
         onboardingStatus,
         clientWhatsappE164,
         traineeTimezone: "Asia/Kolkata",
@@ -67,8 +68,9 @@ function SettingsProbe() {
 function renderPage(
   onboardingStatus: Lifecycle,
   clientWhatsappE164: string | null = null,
+  gender: string | null = "female",
 ) {
-  return render(pageTree(onboardingStatus, 0, clientWhatsappE164));
+  return render(pageTree(onboardingStatus, 0, clientWhatsappE164, gender));
 }
 
 beforeEach(() => {
@@ -174,11 +176,12 @@ describe("OnboardingReviewPage not submitted (frame 147)", () => {
     });
     renderPage("onboarding_pending", "+919876543210");
     expect(
-      await screen.findByText(/Kavya hasn't submitted her intake yet/),
+      await screen.findByText(/Kavya hasn't submitted the intake yet/),
     ).toBeTruthy();
     expect(screen.getByText(/answered 1 of 2 sections/i)).toBeTruthy();
     const remind = screen.getByRole("link", { name: /Remind on WhatsApp/i });
     expect(remind.getAttribute("href") ?? "").toMatch(/^https:\/\/wa\.me\//);
+    expect(document.body.textContent).toContain("Kavya joined Sat 4 Jul and has answered");
     expect(screen.getByRole("heading", { name: "Next step" })).toBeTruthy();
     expect(screen.getByText(/Intake started/)).toBeTruthy();
   });
@@ -246,5 +249,27 @@ describe("OnboardingReviewPage refresh", () => {
     expect(screen.queryByText("Loading intake…")).toBeNull();
     await waitFor(() => expect(api.getOnboardingResponse).toHaveBeenCalledTimes(2));
     expect(screen.getByRole("button", { name: "Mark ready & configure" })).toBeTruthy();
+  });
+});
+
+describe("OnboardingReviewPage copy never guesses from gender (D-W14-37)", () => {
+  it("reads identically for female, male and unset", async () => {
+    const texts: string[] = [];
+    for (const gender of ["female", "male", null]) {
+      api.getOnboardingResponse.mockResolvedValue({
+        status: "draft",
+        submittedAt: null,
+        createdAt: "2026-07-04T05:00:00.000Z",
+        updatedAt: "2026-07-04T06:00:00.000Z",
+        answers: { goals: "Build strength" },
+      });
+      const view = renderPage("onboarding_pending", "+919876543210", gender);
+      await screen.findByText(/Kavya hasn't submitted the intake yet/);
+      texts.push(document.body.textContent ?? "");
+      view.unmount();
+    }
+    expect(texts[1]).toBe(texts[0]);
+    expect(texts[2]).toBe(texts[0]);
+    expect(texts[0]).not.toMatch(/\b(he|she|his|her|him|they|them|their)\b/i);
   });
 });
