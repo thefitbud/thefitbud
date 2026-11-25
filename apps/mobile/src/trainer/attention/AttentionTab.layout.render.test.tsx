@@ -124,7 +124,7 @@ function groups(): AttentionGroupsResponse {
   });
 }
 
-function mount(onOpenClient = vi.fn()) {
+function mount(onOpenClient = vi.fn(), onFullScreenChange?: (open: boolean) => void) {
   api.getAttentionGroups.mockResolvedValue(groups());
   api.listCoachAsks.mockResolvedValue({ items: [], nextCursor: null });
   api.listTrainerCheckinInbox.mockResolvedValue({ items: [], nextCursor: null });
@@ -135,6 +135,7 @@ function mount(onOpenClient = vi.fn()) {
       onOpenClient={onOpenClient}
       onReviewException={vi.fn()}
       onReviewCheckin={vi.fn()}
+      onFullScreenChange={onFullScreenChange}
     />,
   );
   return onOpenClient;
@@ -170,6 +171,16 @@ describe("Attention layout (Z14-22)", () => {
     fireEvent.click(within(pushed).getByRole("button", { name: "Back" }));
     expect(screen.queryByTestId("section-all-screen")).toBeNull();
     expect(screen.getByRole("button", { name: "See all 5 missed" })).toBeTruthy();
+  });
+
+  it("reports a full-screen child while See all is open and clears it on Back (Z14-36)", async () => {
+    const onFullScreenChange = vi.fn();
+    mount(vi.fn(), onFullScreenChange);
+    fireEvent.click(await screen.findByRole("button", { name: "See all 5 missed" }));
+    const pushed = await screen.findByTestId("section-all-screen");
+    expect(onFullScreenChange).toHaveBeenLastCalledWith(true);
+    fireEvent.click(within(pushed).getByRole("button", { name: "Back" }));
+    expect(onFullScreenChange).toHaveBeenLastCalledWith(false);
   });
 
   it("a tile tap scrolls to its section; a zero tile is muted and not pressable", async () => {
