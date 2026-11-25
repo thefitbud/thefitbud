@@ -26,7 +26,7 @@ export const MEAL_REMOVE_NOT_ALLOWED_MESSAGE =
   "This log can't be removed any more.";
 export const FEEDBACK_EDIT_WINDOW_CLOSED_CODE = "FEEDBACK_EDIT_WINDOW_CLOSED";
 export const FEEDBACK_EDIT_WINDOW_CLOSED_MESSAGE =
-  "Ratings can be changed for 48 hours after a workout.";
+  "Ratings and notes can be changed for 48 hours after a workout.";
 
 /**
  * Device time of a mutation that sync is applying, keyed by the exact Request

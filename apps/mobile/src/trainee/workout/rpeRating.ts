@@ -52,8 +52,6 @@ export type RatingOutcome =
       serverNote?: string | null;
     };
 
-export const RATING_WINDOW_CLOSED_MESSAGE =
-  "Ratings can be changed for 48 hours after a workout.";
 export const RATING_NOTE_WINDOW_CLOSED_MESSAGE =
   "Ratings and notes can be changed for 48 hours after a workout.";
 export const RATING_CONFLICT_MESSAGE =
@@ -123,7 +121,7 @@ function refusedFrom(
     return {
       kind: "refused",
       reason: "window_closed",
-      message: hasNote ? RATING_NOTE_WINDOW_CLOSED_MESSAGE : RATING_WINDOW_CLOSED_MESSAGE,
+      message: RATING_NOTE_WINDOW_CLOSED_MESSAGE,
     };
   }
   if (result.status === "conflicted" || code === "VERSION_CONFLICT") {
@@ -295,7 +293,7 @@ async function sendRating(
       return {
         kind: "refused",
         reason: "window_closed",
-        message: hasNote ? RATING_NOTE_WINDOW_CLOSED_MESSAGE : RATING_WINDOW_CLOSED_MESSAGE,
+        message: RATING_NOTE_WINDOW_CLOSED_MESSAGE,
       };
     }
     if (await finishQueued(sync, executionId)) {
@@ -352,7 +350,7 @@ async function sendRating(
       return {
         kind: "refused",
         reason: "window_closed",
-        message: hasNote ? RATING_NOTE_WINDOW_CLOSED_MESSAGE : RATING_WINDOW_CLOSED_MESSAGE,
+        message: RATING_NOTE_WINDOW_CLOSED_MESSAGE,
       };
     }
   }

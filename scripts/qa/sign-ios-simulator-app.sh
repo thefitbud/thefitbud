@@ -27,6 +27,9 @@
 SIGN_IOS_SIMULATOR_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Keys that macOS only accepts in a signature backed by a provisioning profile.
+# This list is about ad-hoc SIMULATOR signatures only. `aps-environment` is listed because a
+# simulator app cannot carry it; it says nothing about store builds: TestFlight `staging-store`
+# builds use the production APNs environment (APS_ENVIRONMENT in eas.json, D-W14-35).
 IOS_RESTRICTED_ENTITLEMENT_KEYS=(
   "<key>application-identifier</key>"
   "<key>keychain-access-groups</key>"
