@@ -1,0 +1,148 @@
+/*
+ * Form phone preview (W13-4, frame W-171). Phone frame in ink, a light
+ * screen, one white card per question. v3 tokens only. Shared with the intake
+ * form builder, which gets the same restyle with no behaviour change.
+ */
+
+.form-phone-preview {
+  position: static;
+  min-width: 0;
+}
+
+.form-phone-preview .form-preview-phone {
+  padding: var(--s2);
+  border-radius: 36px;
+  background: var(--brand);
+}
+
+.form-phone-preview .phone-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  min-height: 0;
+  max-height: min(640px, calc(100vh - 240px));
+  padding: var(--s4);
+  border-radius: 28px;
+  background: var(--bg);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.form-phone-preview .phone-title {
+  margin: 0;
+  font: var(--t-cap);
+  color: var(--ink2);
+}
+
+.form-phone-preview .phone-q {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  min-width: 0;
+  margin: 0;
+  padding: var(--s4);
+  border: 1px solid transparent;
+  border-radius: var(--r-card);
+  background: var(--card);
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+/* A legend sits on the fieldset border by default; make it an ordinary first line. */
+.form-phone-preview fieldset.phone-q > legend {
+  float: left;
+  width: 100%;
+}
+
+.form-phone-preview fieldset.phone-q > legend + * {
+  clear: both;
+}
+
+.form-phone-preview .phone-q.is-active {
+  border-color: var(--brand);
+  box-shadow: var(--e1);
+}
+
+.form-phone-preview .phone-q > span:first-child,
+.form-phone-preview .phone-q > legend,
+.form-phone-preview .phone-q > p:first-child {
+  margin: 0;
+  padding: 0;
+  font: var(--t-h2);
+  color: var(--ink);
+}
+
+.form-phone-preview .phone-q .muted {
+  margin: 0;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.form-phone-preview .phone-q input[type="text"],
+.form-phone-preview .phone-q input[type="number"],
+.form-phone-preview .phone-q select,
+.form-phone-preview .phone-q textarea {
+  width: 100%;
+  min-height: var(--h-md);
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+.form-phone-preview .phone-q textarea {
+  padding: var(--s2) 12px;
+}
+
+.form-phone-preview .scale-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--s2);
+}
+
+.form-phone-preview .scale-chip {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: block;
+}
+
+.form-phone-preview .scale-chip input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.form-phone-preview .scale-chip span {
+  display: grid;
+  place-items: center;
+  height: 44px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  font: var(--t-h3);
+  color: var(--ink);
+}
+
+.form-phone-preview .scale-chip input:checked + span {
+  border-color: var(--brand);
+  background: var(--brand);
+  color: #fff;
+}
+
+.form-phone-preview .scale-chip input:focus-visible + span {
+  box-shadow: var(--focus);
+}
+
+.form-phone-preview .phone-scale-ends {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s2);
+  margin: 0;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
