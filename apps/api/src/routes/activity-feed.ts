@@ -9,6 +9,7 @@ import {
   coachingRelationships,
   logEditEvents,
   mealCompliance,
+  notifications,
   trainerProfiles,
   traineeProfiles,
   workoutExecutions,
@@ -28,6 +29,7 @@ import type { Env, Variables } from "../types.js";
 type MealAuditSnapshot = {
   localDate?: string;
   mealName?: string;
+  deviationKind?: string | null;
   removed?: boolean;
   photoOnly?: boolean;
   macros?: { kcalScaled?: number | null };
@@ -90,6 +92,7 @@ function describeTraineeMealChange(row: {
   summary: string;
   mealDate: string | null;
   previousKcal: number | null;
+  previousAteOut: boolean;
 } | null {
   if (row.entityType !== "meal_compliance") return null;
   let after: MealAuditSnapshot;
@@ -106,6 +109,8 @@ function describeTraineeMealChange(row: {
     before?.macros?.kcalScaled == null
       ? null
       : Math.round(before.macros.kcalScaled / NUTRIENT_SCALE);
+  // Z14-33: the entry was an "ate out" meal before this change.
+  const previousAteOut = before?.deviationKind === "restaurant";
   const mealDate = typeof after.localDate === "string" ? after.localDate : null;
   return after.removed
     ? {
@@ -114,6 +119,7 @@ function describeTraineeMealChange(row: {
         summary: `Removed the ${meal} log`,
         mealDate,
         previousKcal,
+        previousAteOut,
       }
     : {
         type: "client_edited",
@@ -121,6 +127,7 @@ function describeTraineeMealChange(row: {
         summary: `Edited ${meal}`,
         mealDate,
         previousKcal,
+        previousAteOut,
       };
 }
 
@@ -160,7 +167,25 @@ activityFeedRoutes.get(
       .where(inArray(logEditEvents.coachingRelationshipId, relIdsQuery))
       .orderBy(desc(logEditEvents.createdAt))
       .limit(50);
-    const [rels, trainees, meals, workouts, checkinRows, asks, coachChanges, actorProfiles] =
+    // Z14-33: the trainer's own "client changed a meal log" inbox rows,
+    // one statement for the whole page (newest 100, read or not). The dedupe key carries the entry id.
+    const logEditInboxQuery = db
+      .select({
+        id: notifications.id,
+        dedupeKey: notifications.dedupeKey,
+        state: notifications.state,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.recipientUserId, actor.userId),
+          eq(notifications.notificationType, "trainer_client_log_edited"),
+          inArray(notifications.coachingRelationshipId, relIdsQuery),
+        ),
+      )
+      .orderBy(desc(notifications.createdAt))
+      .limit(100);
+    const [rels, trainees, meals, workouts, checkinRows, asks, coachChanges, actorProfiles, logEditInbox] =
       await db.batch([
         db.select().from(coachingRelationships).where(relScope),
         db
@@ -214,6 +239,7 @@ activityFeedRoutes.get(
                 .limit(50),
             ),
           ),
+        logEditInboxQuery,
       ]);
     if (rels.length === 0) {
       return ok(c, activityFeedResponseSchema.parse({ events: [], nextCursor: null }));
@@ -229,6 +255,15 @@ activityFeedRoutes.get(
         resolveClientDisplayName(r, profileNameByUser.get(r.traineeUserId)),
       ]),
     );
+    // Newest first: the latest inbox row per entry decides whether it is unread.
+    const unreadByEntry = new Map<string, string>();
+    const seenEntries = new Set<string>();
+    for (const row of logEditInbox) {
+      const entryId = row.dedupeKey.split(":")[1];
+      if (!entryId || seenEntries.has(entryId)) continue;
+      seenEntries.add(entryId);
+      if (row.state !== "read") unreadByEntry.set(entryId, row.id);
+    }
     const events: Array<{
       id: string;
       relationshipId: string;
@@ -243,6 +278,9 @@ activityFeedRoutes.get(
       entryId?: string | null;
       mealDate?: string | null;
       previousKcal?: number | null;
+      previousAteOut?: boolean;
+      unread?: boolean;
+      notificationId?: string;
     }> = [];
     for (const row of meals) {
       events.push({
@@ -337,6 +375,11 @@ activityFeedRoutes.get(
           entryId: row.entityId,
           mealDate: traineeEvent.mealDate,
           previousKcal: traineeEvent.previousKcal,
+          previousAteOut: traineeEvent.previousAteOut,
+          unread: unreadByEntry.has(row.entityId),
+          ...(unreadByEntry.has(row.entityId)
+            ? { notificationId: unreadByEntry.get(row.entityId)! }
+            : {}),
         });
         continue;
       }

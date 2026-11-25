@@ -4,6 +4,7 @@ import {
   earlyFinishBanner,
   finishedEarly,
   sessionMetrics,
+  sessionNoteText,
   sessionStatus,
   sessionStatusLabel,
 } from "./model";
@@ -81,5 +82,15 @@ describe("session detail model", () => {
     expect(earlyFinishBanner(execution(), "Rohan")).toMatch(
       /sets weren’t logged/,
     );
+  });
+
+  it("reads the trainee's note, trimmed, and nothing when it is empty", () => {
+    const base = execution();
+    expect(sessionNoteText({ ...base, sessionNote: "  Left knee felt tight.  " })).toBe(
+      "Left knee felt tight.",
+    );
+    expect(sessionNoteText({ ...base, sessionNote: "   " })).toBeNull();
+    expect(sessionNoteText({ ...base, sessionNote: null })).toBeNull();
+    expect(sessionNoteText(base)).toBeNull();
   });
 });

@@ -1,0 +1,68 @@
+appId: com.thefitbud.mobile.staging
+name: F32 A client's name opens their profile (Z14-33)
+tags:
+  - device
+  - trainer
+  - z14-33
+---
+# F32 (Z14-33, D-W14-36): in Activity and Check-ins rows the client's name opens
+# the profile (like the picture), and Back returns to the list.
+- launchApp:
+    clearState: true
+    clearKeychain: true
+    permissions:
+      all: allow
+- runFlow:
+    file: ../../common/sign-in-password.yaml
+    env:
+      SIGN_IN_EMAIL: ${QA_TRAINER_EMAIL}
+- runFlow: ../../common/wait-attention-loaded.yaml
+
+# Clients -> Activity -> name -> profile -> Back.
+- tapOn:
+    id: "tab-clients"
+- extendedWaitUntil:
+    visible: "Activity"
+    timeout: 30000
+- tapOn: "Activity"
+- extendedWaitUntil:
+    visible:
+      id: "client-name-link"
+    timeout: 60000
+- takeScreenshot: TM-09e
+- tapOn:
+    id: "client-name-link"
+- extendedWaitUntil:
+    visible:
+      id: "client-status"
+    timeout: 30000
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back|‹"
+- extendedWaitUntil:
+    visible:
+      id: "client-name-link"
+    timeout: 30000
+
+# Check-ins -> name -> profile -> Back.
+- tapOn:
+    id: "tab-checkins"
+- extendedWaitUntil:
+    visible:
+      id: "checkins-screen"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "client-name-link"
+    timeout: 60000
+- tapOn:
+    id: "client-name-link"
+- extendedWaitUntil:
+    visible:
+      id: "client-status"
+    timeout: 30000
+- runFlow: ../../common/assert-no-crash.yaml
+- tapOn: "Back|‹"
+- extendedWaitUntil:
+    visible:
+      id: "checkins-screen"
+    timeout: 30000

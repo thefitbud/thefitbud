@@ -4,6 +4,7 @@ import {
   formatLocalDate,
   formatRelative,
   mealEditedByLine,
+  mealRemovedActivityLine,
   mealWasLine,
 } from "@fitbud/core";
 
@@ -47,6 +48,10 @@ export type ActivityEventLike = {
   entryId?: string | null;
   mealDate?: string | null;
   previousKcal?: number | null;
+  /** Z14-33: the removed meal was an ate-out; unread dot; inbox row to mark read. */
+  previousAteOut?: boolean;
+  unread?: boolean;
+  notificationId?: string;
 };
 
 export const ACTIVITY_FILTERS: Array<{ id: ActivityFilter; label: string }> = [
@@ -260,4 +265,25 @@ export function clientEditMarker(
     }),
     was: compliance.previousValue ? mealWasLine(compliance.previousValue) : null,
   };
+}
+
+
+/**
+ * The row's sentence without the client's name (the name is its own link line,
+ * Z14-33). A removal reads as TM-09e: "removed their dinner log (Fri 13 Nov) ·
+ * was 1,120 kcal, ate out"; everything else is the feed summary and kcal.
+ */
+export function activitySentence(event: ActivityEventLike): string {
+  if (event.type === "client_removed" && event.entryId) {
+    const line = mealRemovedActivityLine({
+      clientName: "X",
+      summary: event.summary,
+      mealDate: event.mealDate ?? null,
+      previousKcal: event.previousKcal ?? null,
+      previousAteOut: event.previousAteOut ?? false,
+    });
+    return line.replace(/^X /, "");
+  }
+  const kcal = event.kcal != null ? ` · ${event.kcal.toLocaleString("en-IN")} kcal` : "";
+  return `${event.summary}${kcal}`;
 }
