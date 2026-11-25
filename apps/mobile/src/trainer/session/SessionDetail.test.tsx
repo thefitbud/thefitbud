@@ -123,4 +123,34 @@ describe("SessionDetailScreen TM-11", () => {
       screen.getByRole("button", { name: "Reply on WhatsApp" }),
     ).toBeTruthy();
   });
+
+  it("shows a Note from the first name card only when a note exists", async () => {
+    api.getWorkoutExecution.mockResolvedValue({
+      ...execution,
+      sessionNote: "Left knee felt tight on lunges.",
+    });
+    render(
+      <SessionDetailScreen
+        executionId={EXEC_ID}
+        displayName="Rohan Mehta"
+        onBack={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText("Note from Rohan")).toBeTruthy();
+    expect(screen.getByText("Left knee felt tight on lunges.")).toBeTruthy();
+  });
+
+  it("shows no note card for an empty note", async () => {
+    api.getWorkoutExecution.mockResolvedValue({ ...execution, sessionNote: "  " });
+    render(
+      <SessionDetailScreen
+        executionId={EXEC_ID}
+        displayName="Rohan Mehta"
+        onBack={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText("Finished early")).toBeTruthy();
+    expect(screen.queryByText(/Note from/)).toBeNull();
+    expect(screen.queryByTestId("session-trainee-note")).toBeNull();
+  });
 });

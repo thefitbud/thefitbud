@@ -327,3 +327,148 @@
   font-weight: 500;
   color: var(--ink-500, var(--ink3));
 }
+
+/*
+ * W13-10: Onboarding answers is a Settings tab section (frame W-146). Answers
+ * are grouped by form section in label-left cards (client-settings.css), the
+ * answers to keep in mind come first. Tokens and kit only.
+ */
+.intake-review-page.intake-embedded {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  min-width: 0;
+  padding: 0;
+}
+
+.intake-embed-head .intake-review-heading {
+  margin: 0;
+  font: var(--t-h2);
+  color: var(--ink);
+}
+
+.intake-embed-head .intake-review-submitted {
+  margin: 2px 0 0;
+  font: var(--t-meta);
+  color: var(--ink3);
+  text-transform: none;
+}
+
+.intake-keep {
+  padding: var(--s4) var(--s5);
+  background: var(--warn-tint);
+  border-color: var(--warn-tint);
+}
+
+.intake-keep-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin: 0 0 var(--s3);
+  font: var(--t-h2);
+  color: var(--ink);
+}
+
+.intake-keep-title .ui-i {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.intake-keep-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+.intake-keep-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+}
+
+.intake-keep-list .ui-pill {
+  flex: none;
+  background: var(--card);
+}
+
+.intake-embedded .intake-answer-list {
+  display: block;
+  margin: 0;
+}
+
+.intake-embedded .intake-answer-list > .cs-row {
+  display: grid;
+  gap: var(--s6);
+}
+
+.intake-embedded .intake-answer-list dd {
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+@media (max-width: 1279px) {
+  .intake-embedded .intake-answer-list > .cs-row {
+    gap: var(--s4);
+  }
+}
+
+.intake-embedded .intake-answer-list dt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s1);
+}
+
+.intake-embedded .intake-review-flag {
+  font: var(--t-cap);
+}
+
+.intake-embedded .intake-answer-text {
+  margin: 0;
+  font: var(--t-body);
+}
+
+.intake-embedded .intake-stepper {
+  margin: 0;
+}
+
+.intake-embedded .intake-empty-state {
+  padding: var(--s8) var(--s5);
+}
+
+.intake-next-body p {
+  margin: 0 0 var(--s3);
+  font: var(--t-body);
+  color: var(--ink2);
+}
+
+.intake-next-body .intake-side-actions {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+.intake-embedded .intake-next-body .intake-side-actions > * {
+  width: auto;
+}
+
+.intake-foot {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--s5);
+  align-items: start;
+}
+
+.intake-embedded .intake-timeline {
+  margin: 0;
+  list-style: none;
+  font: var(--t-meta);
+  color: var(--ink2);
+}

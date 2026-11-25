@@ -191,18 +191,17 @@ export function onboardingChipLabel(status: string): string {
   return "Onboarding";
 }
 
+/** D-W14-37: first name only; no pronoun is inferred from the gender field. */
 export function onboardingWaitingCopy(input: {
   firstName: string;
   status: string;
   startedAt: string | null | undefined;
-  possessive: "his" | "her" | "their";
-  subject: "He" | "She" | "They";
 }): { title: string; body: string } {
   const first = input.firstName;
   if (input.status === "onboarding_submitted") {
     return {
       title: `${first}'s intake is ready`,
-      body: `Review ${input.possessive} answers on FitBud web, then assign a plan.`,
+      body: `Review ${first}’s answers on FitBud web, then assign a plan.`,
     };
   }
   const days = input.startedAt
@@ -223,6 +222,6 @@ export function onboardingWaitingCopy(input: {
           : `${days} days ago`;
   return {
     title: `Waiting for ${first}’s intake`,
-    body: `${input.subject} accepted your invite ${when} but hasn’t sent the intake form, so you can’t plan yet.`,
+    body: `${first} accepted your invite ${when} but hasn’t sent the intake form, so you can’t plan yet.`,
   };
 }
