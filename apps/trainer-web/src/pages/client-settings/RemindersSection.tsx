@@ -5,7 +5,6 @@ import type {
   ResponsivenessCategoryCounts,
   ResponsivenessResponse,
 } from "@fitbud/contracts";
-import { possessivePronoun } from "@fitbud/core";
 import { Toggle } from "../../components/ui";
 import { WhatsAppGlyph } from "../../components/WhatsAppGlyph";
 import {
@@ -61,7 +60,6 @@ export function categoryCountsLine(row: ResponsivenessCategoryCounts): string {
 export function RemindersSection({
   relationshipId,
   firstName,
-  gender,
   clientWhatsappE164,
   hasCustomMealTimes,
   ended,
@@ -84,7 +82,6 @@ export function RemindersSection({
 }) {
   const { config } = useConfig();
   const waAutomationOn = isWhatsAppAutomationEnabled(config);
-  const pronoun = possessivePronoun(gender);
   const [data, setData] = useState<ResponsivenessResponse | null>(null);
   const [factsError, setFactsError] = useState<string | null>(null);
   const [rules, setRules] = useState<RuleState>(DEFAULT_RULES);
@@ -341,7 +338,7 @@ export function RemindersSection({
         <p className="cs-card-foot responsiveness-footer">
           {ended
             ? "Reminders are off while coaching is ended."
-            : `Reminders are timed by FitBud and respect ${firstName}'s settings and meal times. FitBud reminds only when something isn't logged, and never in ${pronoun} quiet hours. ${firstName} controls ${pronoun} own notification settings.`}
+            : `Reminders are timed by FitBud and respect ${firstName}'s settings and meal times. FitBud reminds only when something isn't logged, and never in ${firstName}'s quiet hours. ${firstName} controls the notification settings.`}
         </p>
       </section>
     </div>

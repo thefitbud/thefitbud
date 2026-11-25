@@ -42,6 +42,10 @@ import {
 } from "../components/activity/activityUtils";
 import { Button } from "../components/Button";
 import { ExceptionDrawer } from "../components/ExceptionDrawer";
+import {
+  compareReviewOrder,
+  itemTitle,
+} from "../components/side-panel/panelModel";
 import { ErrorState } from "../components/StatePanels";
 import { WeightCard } from "../components/MeasurementTrend";
 import { StatusChip } from "../components/StatusChip";
@@ -440,14 +444,14 @@ export function ClientOverviewPage() {
 
   const openEx = overview.openException;
   const attentionRows: Array<
-    Pick<ClientException, "id" | "type" | "severity" | "status" | "summary" | "detectedAt">
+    Pick<
+      ClientException,
+      "id" | "type" | "severity" | "status" | "summary" | "detectedAt"
+    > &
+      Partial<Pick<ClientException, "details">>
   > =
     openItems && openItems.length > 0
-      ? [...openItems].sort(
-          (a, b) =>
-            (a.severity === b.severity ? 0 : a.severity === "critical" ? -1 : 1) ||
-            b.detectedAt.localeCompare(a.detectedAt),
-        )
+      ? [...openItems].sort(compareReviewOrder)
       : openEx
         ? [openEx]
         : [];
@@ -549,8 +553,8 @@ export function ClientOverviewPage() {
                   )}
                 </span>
                 <div className="ov-att-tx">
-                  <b>
-                    {row.summary?.trim() || labelFor("exception_type", row.type)}
+                  <b title={itemTitle({ details: null, ...row })}>
+                    {itemTitle({ details: null, ...row })}
                   </b>
                   <span>
                     Open {formatRelative(row.detectedAt)}
