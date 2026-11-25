@@ -22,6 +22,7 @@ vi.mock("react", async (importOriginal) => ({
   },
   useEffect: () => undefined,
   useCallback: (fn: unknown) => fn,
+  useRef: (v: unknown) => ({ current: v }),
 }));
 
 vi.mock("react-native", () => ({
@@ -30,6 +31,12 @@ vi.mock("react-native", () => ({
   View: "View",
   Pressable: "Pressable",
   Modal: "Modal",
+}));
+const kept = vi.hoisted(() => ({ reload: undefined as undefined | (() => void) }));
+vi.mock("./keptTab", () => ({
+  useRefreshWhenActive: (_a: boolean, _r: unknown, reload: () => void) => {
+    kept.reload = reload;
+  },
 }));
 vi.mock("./HelpSheet", () => ({ HelpSheet: "HelpSheet", openSupportMailOrFallback: vi.fn() }));
 vi.mock("lucide-react-native", () => {
@@ -378,5 +385,30 @@ describe("trainer More heading alignment (CU7 / TM-07a)", () => {
     expect(headingInset - stackInset).toBe(moreHeadingNudge);
     expect(stackInset).toBe(16);
     expect(headingInset).toBe(20);
+  });
+});
+
+describe("trainer More keeps its count while reloading (Z14-39)", () => {
+  it("a failed network reload keeps the count and shows the offline notice", async () => {
+    hooks.states = [];
+    hooks.state = undefined;
+    TrainerMoreScreen({ onOpenNotifications: vi.fn(), onOpenProfile: vi.fn() });
+    // states: legal, helpOpen, confirmSignOut, activeCount, offline
+    hooks.states[3] = 7;
+    auth.api.listClients.mockRejectedValueOnce(new TypeError("Network request failed"));
+    kept.reload?.();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(hooks.states[3]).toBe(7);
+    expect(hooks.states[4]).toBe(true);
+  });
+
+  it("an in-flight reload leaves the count alone", () => {
+    hooks.states = [];
+    hooks.state = undefined;
+    TrainerMoreScreen({ onOpenNotifications: vi.fn(), onOpenProfile: vi.fn() });
+    hooks.states[3] = 7;
+    auth.api.listClients.mockReturnValueOnce(new Promise(() => undefined));
+    kept.reload?.();
+    expect(hooks.states[3]).toBe(7);
   });
 });
