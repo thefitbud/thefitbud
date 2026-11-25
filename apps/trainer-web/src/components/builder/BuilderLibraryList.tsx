@@ -7,7 +7,9 @@ import {
   type WorkoutDay,
 } from "@fitbud/contracts";
 import { calculateServingNutrients, formatNumber } from "@fitbud/core";
+import { GripVertical, Plus, Search } from "lucide-react";
 import { apiClient } from "../../lib/api";
+import { Button, LibraryThumb } from "../ui";
 import { PLAN_COMPOSITION_LIMITS } from "../plan-composition";
 import { useCursorPage, useDebounced } from "../../pages/templates/useCursorPage";
 import { exerciseMetaLine } from "./formatters";
@@ -63,7 +65,8 @@ export function BuilderExerciseLibrary({
 
   return (
     <div className="builder-library-pane" data-testid="builder-exercise-library">
-      <label className="builder-library-search">
+      <label className="builder-library-search ui-input">
+        <Search className="ui-i" strokeWidth={1.75} aria-hidden />
         <span className="sr-only">Search exercises</span>
         <input
           ref={searchRef}
@@ -118,14 +121,20 @@ export function BuilderExerciseLibrary({
                     meta ? `Add ${item.name}, ${meta}` : `Add ${item.name}`
                   }
                 >
-                  <span className="builder-library-handle" aria-hidden="true">
-                    ⋮⋮
-                  </span>
+                  <GripVertical
+                    className="builder-library-handle ui-i"
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
+                  <LibraryThumb name={item.name} kind="exercise" />
                   <span className="builder-library-copy">
                     <span className="builder-library-name">{item.name}</span>
                     {meta ? (
                       <span className="builder-library-meta">{meta}</span>
                     ) : null}
+                  </span>
+                  <span className="builder-library-add" aria-hidden="true">
+                    <Plus className="ui-i" strokeWidth={1.75} />
                   </span>
                 </button>
               </li>
@@ -134,14 +143,14 @@ export function BuilderExerciseLibrary({
         </ul>
       )}
       {page.nextCursor ? (
-        <button
-          type="button"
-          className="button-ghost"
+        <Button
+          variant="ghost"
+          className="builder-library-more"
           disabled={page.loadingMore}
           onClick={page.loadMore}
         >
           {page.loadingMore ? "Loading…" : "Load more exercises"}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -171,7 +180,8 @@ export function BuilderFoodLibrary({
 
   return (
     <div className="builder-library-pane" data-testid="builder-food-library">
-      <label className="builder-library-search">
+      <label className="builder-library-search ui-input">
+        <Search className="ui-i" strokeWidth={1.75} aria-hidden />
         <span className="sr-only">Search foods</span>
         <input
           ref={searchRef}
@@ -229,12 +239,18 @@ export function BuilderFoodLibrary({
                     meta ? `Add ${item.name}, ${meta}` : `Add ${item.name}`
                   }
                 >
-                  <span className="builder-library-handle" aria-hidden="true">
-                    ⋮⋮
-                  </span>
+                  <GripVertical
+                    className="builder-library-handle ui-i"
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
+                  <LibraryThumb name={item.name} kind="food" />
                   <span className="builder-library-copy">
                     <span className="builder-library-name">{item.name}</span>
                     <span className="builder-library-meta">{meta}</span>
+                  </span>
+                  <span className="builder-library-add" aria-hidden="true">
+                    <Plus className="ui-i" strokeWidth={1.75} />
                   </span>
                 </button>
               </li>
@@ -243,14 +259,14 @@ export function BuilderFoodLibrary({
         </ul>
       )}
       {page.nextCursor ? (
-        <button
-          type="button"
-          className="button-ghost"
+        <Button
+          variant="ghost"
+          className="builder-library-more"
           disabled={page.loadingMore}
           onClick={page.loadMore}
         >
           {page.loadingMore ? "Loading…" : "Load more foods"}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

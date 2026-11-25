@@ -1,7 +1,14 @@
 import { useEffect, useRef } from "react";
-import type { MealPrescription, PlanContent } from "@fitbud/contracts";
-import { formatHhMmTime, formatNumber } from "@fitbud/core";
+import {
+  NUTRIENT_SCALE,
+  type MealFoodItem,
+  type MealPrescription,
+  type PlanContent,
+} from "@fitbud/contracts";
+import { formatHhMmTime, formatNumber, formatScaledQuantity } from "@fitbud/core";
+import { Plus } from "lucide-react";
 import { OverflowMenu } from "../OverflowMenu";
+import { LibraryThumb } from "../ui";
 import {
   PLAN_COMPOSITION_LIMITS,
   addMeal,
@@ -18,6 +25,17 @@ import { WEEK_ORDER, WEEKDAY_INITIAL, weekdayShort } from "./weekdays";
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 export type MealDay = number | "all";
+
+function servingText(item: MealFoodItem): string {
+  return item.snapshotKind === "calculated"
+    ? `${formatScaledQuantity(item.quantityScaled)} ${item.serving.label}`
+    : item.serving.label;
+}
+
+function itemKcal(item: MealFoodItem): string {
+  const scaled = item.calculated?.energyKcalScaled;
+  return scaled == null ? "—" : formatNumber(Math.round(scaled / NUTRIENT_SCALE));
+}
 
 function appliesOn(meal: MealPrescription, day: MealDay): boolean {
   if (day === "all") return true;
@@ -234,7 +252,10 @@ export function MealsPane({
               const isSelected = meal.id === selectedMealId;
               const time = meal.localTime ? formatHhMmTime(meal.localTime) : "Set a time";
               return (
-                <li key={meal.id} className="meal-card-row">
+                <li
+                  key={meal.id}
+                  className={isSelected ? "meal-card-row is-selected" : "meal-card-row"}
+                >
                   <button
                     type="button"
                     className={isSelected ? "meal-summary-card is-selected" : "meal-summary-card"}
@@ -243,42 +264,76 @@ export function MealsPane({
                   >
                     <span className="meal-summary-top">
                       <span className="meal-summary-title">{meal.name}</span>
-                      <span className="meal-summary-kcal">
-                        {kcal != null ? `${formatNumber(kcal)} kcal` : "—"}
+                      <span className="meal-summary-time">
+                        {time}
+                        {" · "}
+                        <span className="meal-summary-kcal">
+                          {kcal != null ? `${formatNumber(kcal)} kcal` : "—"}
+                        </span>
                       </span>
                     </span>
-                    <span className="meal-summary-time">{time}</span>
-                    <span className="meal-summary-items">{mealItemsLine(items)}</span>
+                    {items.length === 0 ? (
+                      <span className="meal-summary-items">{mealItemsLine(items)}</span>
+                    ) : (
+                      <span className="meal-food-rows">
+                        {items.map((item, itemIndex) => (
+                          <span key={`${item.name}-${itemIndex}`} className="meal-food-row">
+                            <LibraryThumb name={item.name} kind="food" />
+                            <span className="meal-food-copy">
+                              <span className="meal-food-name">{item.name}</span>
+                              <span className="meal-food-serving">{servingText(item)}</span>
+                            </span>
+                            <span className="meal-food-kcal">{itemKcal(item)}</span>
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </button>
                   {readOnly ? null : (
-                    <OverflowMenu
-                      label={`Actions for ${meal.name}`}
-                      items={[
-                        {
-                          id: "up",
-                          label: "Move up",
-                          disabled: index === 0,
-                          onSelect: () => onChange((current) => moveMeal(current, meal.id, -1)),
-                        },
-                        {
-                          id: "down",
-                          label: "Move down",
-                          disabled: index === visible.length - 1,
-                          onSelect: () => onChange((current) => moveMeal(current, meal.id, 1)),
-                        },
-                        {
-                          id: "duplicate",
-                          label: "Duplicate",
-                          onSelect: () => onChange((current) => duplicateMeal(current, meal.id)),
-                        },
-                        {
-                          id: "delete",
-                          label: "Delete",
-                          destructive: true,
-                          onSelect: () => onChange((current) => removeMeal(current, meal.id)),
-                        },
-                      ]}
-                    />
+                    <span className="meal-card-menu">
+                      <OverflowMenu
+                        label={`Actions for ${meal.name}`}
+                        items={[
+                          {
+                            id: "up",
+                            label: "Move up",
+                            disabled: index === 0,
+                            onSelect: () => onChange((current) => moveMeal(current, meal.id, -1)),
+                          },
+                          {
+                            id: "down",
+                            label: "Move down",
+                            disabled: index === visible.length - 1,
+                            onSelect: () => onChange((current) => moveMeal(current, meal.id, 1)),
+                          },
+                          {
+                            id: "duplicate",
+                            label: "Duplicate",
+                            onSelect: () => onChange((current) => duplicateMeal(current, meal.id)),
+                          },
+                          {
+                            id: "delete",
+                            label: "Delete",
+                            destructive: true,
+                            onSelect: () => onChange((current) => removeMeal(current, meal.id)),
+                          },
+                        ]}
+                      />
+                    </span>
+                  )}
+                  {readOnly || !onOpenLibrary ? null : (
+                    <button
+                      type="button"
+                      className="meal-card-add"
+                      aria-label={`Add food to ${meal.name}`}
+                      onClick={() => {
+                        onSelectMeal(meal.id);
+                        onOpenLibrary();
+                      }}
+                    >
+                      <Plus className="ui-i" strokeWidth={1.75} aria-hidden />
+                      Add food
+                    </button>
                   )}
                 </li>
               );
@@ -288,11 +343,12 @@ export function MealsPane({
         {readOnly ? null : (
           <button
             type="button"
-            className="button-secondary meals-add"
+            className="meals-add"
             disabled={meals.length >= PLAN_COMPOSITION_LIMITS.meals}
             onClick={() => onChange((current) => addMeal(current))}
           >
-            + Add meal
+            <Plus className="ui-i" strokeWidth={1.75} aria-hidden />
+            Add meal
           </button>
         )}
         {showLibraryToggle && onOpenLibrary ? (

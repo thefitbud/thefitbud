@@ -8,6 +8,16 @@ import type {
 } from "@fitbud/contracts";
 import { formatClockTime, formatHhMmTime } from "@fitbud/core";
 import {
+  ArrowLeft,
+  Dumbbell,
+  Eye,
+  Library as LibraryIcon,
+  Pencil,
+  Undo2,
+  Utensils,
+} from "lucide-react";
+import { Button } from "../ui";
+import {
   addExerciseFromLibrary,
   addFoodItemFromLibrary,
   addSetTarget,
@@ -380,25 +390,30 @@ export function PlanBuilder({
   const topbar = (
     <>
       <div className="builder-topbar-main">
-        <Link className="builder-back" to={backTo} aria-label={backLabel}>
-          ←
+        <Link className="builder-back" to={backTo} aria-label={backLabel} title={backLabel}>
+          <ArrowLeft className="ui-i" strokeWidth={1.75} aria-hidden />
         </Link>
         <div className="builder-titleline">
           <h1 className="sr-only">
             {tab === "workout" ? "Workout builder" : "Nutrition builder"}
             {title.trim() ? ` · ${title.trim()}` : ""}
           </h1>
-          <label className="field builder-title-field">
-            <span className="sr-only">Plan title</span>
-            <input
-              value={title}
-              maxLength={160}
-              disabled={!editable}
-              onChange={(event) => setTitle(event.target.value)}
-            />
-          </label>
-          {clientName ? <span className="builder-title-client">· {clientName}</span> : null}
-          <span className="builder-draft-pill">Draft</span>
+          <div className="builder-title-row">
+            <label className="field builder-title-field">
+              <span className="sr-only">Plan title</span>
+              <input
+                value={title}
+                maxLength={160}
+                disabled={!editable}
+                onChange={(event) => setTitle(event.target.value)}
+              />
+            </label>
+            {clientName ? <span className="builder-title-client">· {clientName}</span> : null}
+            <span className="builder-draft-pill ui-pill ui-p-neutral">
+              <Pencil className="ui-i" strokeWidth={1.75} aria-hidden />
+              Draft
+            </span>
+          </div>
           <p
             className={`builder-status is-${saveState.kind}`}
             role="status"
@@ -418,16 +433,21 @@ export function PlanBuilder({
         </div>
       </div>
       {onTabChange && mode !== "small" ? (
-        <div className="builder-tabs" role="tablist" aria-label="Plan section">
+        <div className="builder-tabs ui-seg" role="tablist" aria-label="Plan section">
           {(["workout", "nutrition"] as const).map((value) => (
             <button
               key={value}
               type="button"
               role="tab"
               aria-selected={tab === value}
-              className={tab === value ? "builder-tab is-active" : "builder-tab"}
+              className={tab === value ? "builder-tab is-on is-active" : "builder-tab"}
               onClick={() => onTabChange(value)}
             >
+              {value === "workout" ? (
+                <Dumbbell className="ui-i" strokeWidth={1.75} aria-hidden />
+              ) : (
+                <Utensils className="ui-i" strokeWidth={1.75} aria-hidden />
+              )}
               {value === "workout" ? "Workout" : "Nutrition"}
             </button>
           ))}
@@ -435,44 +455,41 @@ export function PlanBuilder({
       ) : null}
       <div className="builder-topbar-actions">
         {narrow && editable ? (
-          <button
-            type="button"
-            className="button-secondary builder-library-toggle"
+          <Button
+            variant="secondary"
+            className="builder-library-toggle"
+            aria-expanded={libraryOpen}
             onClick={openLibrary}
-            aria-label="Library"
-            title="Library"
           >
-            <span className="builder-library-toggle-icon" aria-hidden="true">
-              ▤
-            </span>
-            <span className="sr-only">Library</span>
-          </button>
+            <LibraryIcon className="ui-i" strokeWidth={1.75} aria-hidden />
+            Library
+          </Button>
         ) : null}
         {mode === "small" ? null : (
-          <button
-            type="button"
-            className="button-ghost"
+          <Button
+            variant="ghost"
             disabled={!canUndo || !editable}
             onClick={undo}
             aria-label="Undo"
           >
+            <Undo2 className="ui-i" strokeWidth={1.75} aria-hidden />
             Undo
-          </button>
+          </Button>
         )}
         {mode === "small" ? null : (
-          <button type="button" className="button-secondary" onClick={() => void openPreview()}>
+          <Button variant="secondary" onClick={() => void openPreview()}>
+            <Eye className="ui-i" strokeWidth={1.75} aria-hidden />
             Preview
-          </button>
+          </Button>
         )}
         {onPublish ? (
-          <button
-            type="button"
-            className="button-primary"
+          <Button
+            variant="primary"
             disabled={!editable || !online || conflict}
             onClick={() => void publish()}
           >
             {publishLabel}
-          </button>
+          </Button>
         ) : null}
       </div>
     </>

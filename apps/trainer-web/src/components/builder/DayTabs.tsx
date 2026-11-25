@@ -38,7 +38,7 @@ export function DayTabs({
   const atLimit = days.length >= PLAN_COMPOSITION_LIMITS.workoutDays;
 
   return (
-    <div className="builder-day-tabs" role="tablist" aria-label="Training days">
+    <div className="builder-day-tabs ui-tabs" role="tablist" aria-label="Training days">
       {WEEK_ORDER.map((weekday) => {
         const day = byWeekday.get(weekday) ?? null;
         const selected = day != null && day.id === selectedId;
@@ -50,7 +50,7 @@ export function DayTabs({
             aria-selected={selected}
             className={
               selected
-                ? "builder-day-tab is-active"
+                ? "builder-day-tab is-on is-active"
                 : day
                   ? "builder-day-tab"
                   : "builder-day-tab is-rest"
@@ -84,7 +84,9 @@ export function DayTabs({
           type="button"
           role="tab"
           aria-selected={day.id === selectedId}
-          className={day.id === selectedId ? "builder-day-tab is-active" : "builder-day-tab"}
+          className={
+            day.id === selectedId ? "builder-day-tab is-on is-active" : "builder-day-tab"
+          }
           onClick={() => onSelect(day.id)}
         >
           {day.name}

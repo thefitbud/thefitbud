@@ -10,31 +10,44 @@ function unknownCount(
 
 export function MacroTiles({ items }: { items: readonly MealFoodItem[] }) {
   const totals = dayMacrosFromScaledItems(items.map((item) => item.calculated));
+  const atLeast = (key: Parameters<typeof unknownCount>[1]) =>
+    unknownCount(items, key) > 0 ? "≥ " : "";
   const tiles = [
     {
+      key: "kcal",
       label: "Calories",
-      value: `${unknownCount(items, "energyKcalScaled") > 0 ? "≥ " : ""}${formatNumber(totals.kcal)} kcal`,
+      value: `${atLeast("energyKcalScaled")}${formatNumber(totals.kcal)}`,
+      unit: "kcal",
     },
     {
+      key: "protein",
       label: "Protein",
-      value: `${unknownCount(items, "proteinScaled") > 0 ? "≥ " : ""}${formatNumber(totals.proteinG)} g`,
+      value: `${atLeast("proteinScaled")}${formatNumber(totals.proteinG)}`,
+      unit: "g",
     },
     {
+      key: "carbs",
       label: "Carbs",
-      value: `${unknownCount(items, "carbsScaled") > 0 ? "≥ " : ""}${formatNumber(totals.carbsG)} g`,
+      value: `${atLeast("carbsScaled")}${formatNumber(totals.carbsG)}`,
+      unit: "g",
     },
     {
+      key: "fat",
       label: "Fat",
-      value: `${unknownCount(items, "fatScaled") > 0 ? "≥ " : ""}${formatNumber(totals.fatG)} g`,
+      value: `${atLeast("fatScaled")}${formatNumber(totals.fatG)}`,
+      unit: "g",
     },
   ];
 
   return (
     <div className="builder-macro-tiles" data-testid="macro-tiles">
       {tiles.map((tile) => (
-        <div key={tile.label} className="builder-macro-tile">
+        <div key={tile.key} className={`builder-macro-tile is-${tile.key}`}>
           <span className="builder-macro-label">{tile.label}</span>
-          <span className="builder-macro-value">{tile.value}</span>
+          <span className="builder-macro-value">
+            {tile.value}
+            <span className="builder-macro-unit"> {tile.unit}</span>
+          </span>
         </div>
       ))}
     </div>
