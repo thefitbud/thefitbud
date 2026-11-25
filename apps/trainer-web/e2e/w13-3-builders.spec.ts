@@ -11,7 +11,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { API, apiToken, signIn } from "./support/session";
 
-const OUT = path.resolve("qa-captures/w13-3");
+const OUT = path.resolve("qa-captures/w13-20");
 
 type Template = {
   id: string;
@@ -415,6 +415,96 @@ test.describe("W13-3 builder workspace", () => {
     await page.getByRole("button", { name: /^Actions for / }).last().click();
     await page.getByRole("menuitem", { name: "Delete" }).click();
     await expect(page.locator(".exercise-card-row")).toHaveCount(2);
+  });
+
+  test("W13-20: Every day calories, tappable small controls, one food-row layout", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const workout = await ownTemplate("workout", "Demo strength block");
+    const diet = await ownTemplate("nutrition", "Demo Indian meals");
+    const everyDay = [0, 1, 2, 3, 4, 5, 6];
+    const meals = (diet.content.mealPrescriptions as Array<Record<string, unknown>>).slice(0, 2);
+    const mixed = await api<Template>("POST", "/templates", {
+      title: `${diet.title} (calories scope)`,
+      templateType: "nutrition",
+      content: {
+        workoutDays: [],
+        mealPrescriptions: [
+          { ...meals[0]!, applicableWeekdays: everyDay },
+          { ...meals[1]!, applicableWeekdays: [1, 2, 3, 4, 5] },
+        ],
+      },
+    });
+    const sizes: Array<[number, number]> = [
+      [1440, 900],
+      [1180, 820],
+      [1024, 1366],
+    ];
+    for (const [width, height] of sizes) {
+      await page.setViewportSize({ width, height });
+      const label = `${width}x${height}`;
+
+      // Diet: the weekday-only meal is listed but left out of the Every day tiles.
+      await openTemplate(page, "diets", mixed.id);
+      await expect(page.locator(".meal-card-row")).toHaveCount(2);
+      const note = page.getByTestId("tiles-every-day-note");
+      await expect(note).toHaveText("Counts the meals that apply every day.");
+      const everyDayTiles = await page.getByTestId("macro-tiles").innerText();
+      await page.locator(".meal-card-row .meal-summary-card").first().click();
+      const props = page.getByTestId("meal-properties");
+      await expect(props).toBeVisible();
+      // Every food row: serving select full width, quantity and Remove on the row beneath.
+      const rows = await props.locator(".builder-meal-item").evaluateAll((items) =>
+        items.map((item) => {
+          const controls = item.querySelector<HTMLElement>(".builder-meal-item-controls");
+          const select = item.querySelector<HTMLElement>(".builder-meal-item-serving");
+          const qty = item.querySelector<HTMLElement>(".builder-meal-item-qty");
+          const remove = item.querySelector<HTMLElement>(".builder-meal-item-remove");
+          const c = controls?.getBoundingClientRect();
+          const sel = select?.getBoundingClientRect();
+          const q = qty?.getBoundingClientRect();
+          const r = remove?.getBoundingClientRect();
+          return {
+            hasSelect: !!sel,
+            selectFull: sel && c ? Math.abs(sel.width - c.width) <= 1 : true,
+            sameRow: q && r ? Math.abs(q.top + q.height / 2 - (r.top + r.height / 2)) <= 4 : false,
+            below: sel && q ? q.top >= sel.bottom - 1 : true,
+            removeHeight: r?.height ?? 0,
+          };
+        }),
+      );
+      expect(rows.length, `${label} food rows`).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.selectFull, `${label} select full width`).toBe(true);
+        expect(row.sameRow, `${label} quantity and Remove share a row`).toBe(true);
+        expect(row.below, `${label} quantity sits under the select`).toBe(true);
+        if (width <= 1180) expect(row.removeHeight, `${label} Remove`).toBeGreaterThanOrEqual(44);
+      }
+      const library = page.locator(".meals-open-library");
+      if (width < 1280) {
+        const box = await library.boundingBox();
+        expect(box?.height ?? 0, `${label} Open food library`).toBeGreaterThanOrEqual(44);
+      }
+      await shot(page, `W-154-every-day-${label}.png`);
+
+      // Training days: the listed meals are counted, no note.
+      const training = page.getByTestId("meal-day-tabs").getByRole("tab", { name: "Training days" });
+      if (await training.count()) {
+        await training.click();
+        await expect(note).toHaveCount(0);
+        expect(await page.getByTestId("macro-tiles").innerText()).not.toBe(everyDayTiles);
+      }
+
+      // Workout: "Clear reps" reads as an action and is a 44 px target.
+      await openTemplate(page, "workouts", workout.id);
+      await page.locator(".exercise-card-row .exercise-card").first().click();
+      const clear = page.getByRole("button", { name: "Clear reps" });
+      await expect(clear).toHaveText("Clear reps");
+      const clearBox = await clear.boundingBox();
+      expect(clearBox?.height ?? 0, `${label} Clear reps`).toBeGreaterThanOrEqual(44);
+      await shot(page, `W-152-clear-reps-${label}.png`);
+    }
   });
 
   test("client plan builder: both tabs fill the workspace", async ({ page }) => {

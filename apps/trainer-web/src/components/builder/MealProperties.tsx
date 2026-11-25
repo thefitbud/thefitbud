@@ -96,6 +96,18 @@ function QuantityField({
     }
   }
 
+  const removeButton = (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="builder-meal-item-remove"
+      aria-label={`Remove ${item.name}`}
+      onClick={() => onChange((current) => removeFoodItem(current, mealId, index))}
+    >
+      Remove
+    </Button>
+  );
+
   return (
     <div className="builder-meal-item">
       <div className="builder-meal-item-main">
@@ -122,34 +134,24 @@ function QuantityField({
               </select>
             </label>
           ) : null}
-          <span className="builder-meal-item-qty ui-input">
-            <input
-              type="number"
-              min={0.5}
-              step={0.5}
-              aria-label={`Quantity of ${item.name}`}
-              value={quantity}
-              onChange={(event) => setQuantity(Number(event.target.value))}
-            />
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            aria-label={`Remove ${item.name}`}
-            onClick={() => onChange((current) => removeFoodItem(current, mealId, index))}
-          >
-            Remove
-          </Button>
+          <div className="builder-meal-item-qty-row">
+            <span className="builder-meal-item-qty ui-input">
+              <input
+                type="number"
+                min={0.5}
+                step={0.5}
+                aria-label={`Quantity of ${item.name}`}
+                value={quantity}
+                onChange={(event) => setQuantity(Number(event.target.value))}
+              />
+            </span>
+            {removeButton}
+          </div>
         </div>
       ) : readOnly ? null : (
-        <Button
-          variant="ghost"
-          size="sm"
-          aria-label={`Remove ${item.name}`}
-          onClick={() => onChange((current) => removeFoodItem(current, mealId, index))}
-        >
-          Remove
-        </Button>
+        <div className="builder-meal-item-controls">
+          <div className="builder-meal-item-qty-row">{removeButton}</div>
+        </div>
       )}
     </div>
   );
