@@ -312,6 +312,25 @@ export function dayHeaderLabel(date: string, suffix: string | null): string {
   return suffix ? `${base} · ${suffix}` : base;
 }
 
+/** "Today · Wed 18 Nov" for the client’s today, else "Tue 17 Nov". */
+export function dayHeading(date: string, today?: string): string {
+  const base = formatCivilDate(date);
+  return today && date === today ? `Today · ${base}` : base;
+}
+
+/** "16 – 22 Nov", "29 Nov – 5 Dec", or "18 Nov" for a single day. */
+export function rangeLabel(from: string, to: string): string {
+  const short = (value: string) => formatCivilDate(value, { includeWeekday: false });
+  if (!from || !to) return "";
+  if (from === to) return short(from);
+  const [fromDay, ...fromRest] = short(from).split(" ");
+  const toText = short(to);
+  const toRest = toText.split(" ").slice(1).join(" ");
+  return fromRest.join(" ") === toRest
+    ? `${fromDay} – ${toText}`
+    : `${short(from)} – ${toText}`;
+}
+
 export function parseItemParam(
   raw: string | null,
 ): { type: "meal" | "workout"; id: string } | null {

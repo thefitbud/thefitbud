@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { HistoryItem } from "@fitbud/contracts";
 import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
 import {
@@ -93,39 +93,50 @@ describe("ClientHistoryPage", () => {
     cleanup();
   });
 
-  it("shows All events select, civil date placeholders, and absolute times", async () => {
+  it("groups rows by day with sentence titles and an actor line, no raw ids", async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Check-in submitted")).toBeTruthy();
+      expect(screen.getAllByTestId("history-day").length).toBe(2);
     });
-
-    const kind = screen.getByLabelText("All events") as HTMLSelectElement;
-    expect(kind.value).toBe("");
-    expect(screen.getByRole("option", { name: "All events" })).toBeTruthy();
-    expect(screen.getByRole("option", { name: "Workouts" })).toBeTruthy();
-
-    const choose = screen.getAllByText("Choose a date");
-    expect(choose.length).toBeGreaterThanOrEqual(2);
-    expect(screen.queryByDisplayValue(/mm\/dd\/yyyy/i)).toBeNull();
-
-    const when = screen.getAllByText(/Oct,/);
-    expect(when.length).toBeGreaterThan(0);
-    expect(screen.queryByText(/min ago|h ago|yesterday|\d+ d ago/i)).toBeNull();
+    const days = screen.getAllByTestId("history-day");
+    expect(within(days[0]!).getByRole("heading", { name: "Fri 16 Oct" })).toBeTruthy();
+    expect(within(days[1]!).getByRole("heading", { name: "Thu 15 Oct" })).toBeTruthy();
+    const rows = screen.getAllByTestId("history-row");
+    expect(rows[0]!.textContent).toMatch(/sent a check-in/);
+    expect(rows[0]!.textContent).toMatch(/Submitted by/);
+    expect(screen.queryByText(/Check-in submitted|Meal Confirmed/)).toBeNull();
+    expect(document.body.textContent).not.toMatch(/\d{4}-\d{2}-\d{2}|[0-9a-f]{8}-[0-9a-f]{4}/);
   });
 
-  it("filters by kind through the compact All events control", async () => {
+  it("filters by type through the Type menu, and by who through the Who menu", async () => {
     renderPage();
     await waitFor(() => {
       expect(api.listHistory).toHaveBeenCalled();
     });
-    const kind = screen.getByLabelText("All events");
-    fireEvent.change(kind, { target: { value: "meals" } });
+    fireEvent.click(screen.getByRole("button", { name: /^Type/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Meals" }));
     await waitFor(() => {
-      const last = api.listHistory.mock.calls.at(-1)?.[1] as
-        | { kind?: string }
-        | undefined;
+      const last = api.listHistory.mock.calls.at(-1)?.[1] as { kind?: string } | undefined;
       expect(last?.kind).toBe("meal_compliance");
     });
+    fireEvent.click(screen.getByRole("button", { name: /^Who/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "You" }));
+    await waitFor(() => {
+      expect(screen.getByText("Nothing matches those filters.")).toBeTruthy();
+    });
+  });
+
+  it("searches the loaded rows and offers the date range menu", async () => {
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByTestId("history-row").length).toBe(2);
+    });
+    fireEvent.change(screen.getByLabelText("Search history"), { target: { value: "check-in" } });
+    expect(screen.getAllByTestId("history-row").length).toBe(1);
+    fireEvent.click(screen.getByRole("button", { name: /^Date range/ }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Custom range" }));
+    expect(screen.getAllByText("Choose a date").length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByDisplayValue(/mm\/dd\/yyyy/i)).toBeNull();
   });
 
   it("shows empty copy when nothing is recorded", async () => {

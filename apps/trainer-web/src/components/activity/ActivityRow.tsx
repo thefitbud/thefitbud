@@ -7,13 +7,16 @@ import {
   AlertTriangle,
   CheckCircle2,
   CircleDashed,
+  ClipboardCheck,
+  Dumbbell,
   Info,
   Pencil,
   Trash2,
+  UtensilsCrossed,
   type LucideIcon,
 } from "lucide-react";
 import { LinkedMedia } from "../LinkedMedia";
-import { Button } from "../Button";
+import { Button } from "../ui";
 import {
   activityChipTone,
   canNudgeItem,
@@ -86,14 +89,12 @@ function mealTitleLine(
   return item.title;
 }
 
-const UNREAD_DOT_STYLE = {
-  background: "currentColor",
-  borderRadius: "50%",
-  display: "inline-block",
-  height: 8,
-  marginLeft: 6,
-  width: 8,
-} as const;
+/** The row’s leading tile: the kind of entry, tinted by the status tone. */
+const TYPE_ICON: Record<WorkspaceActivityItem["type"], LucideIcon> = {
+  meal: UtensilsCrossed,
+  workout: Dumbbell,
+  checkin: ClipboardCheck,
+};
 
 /** TM-09e: a client removed a meal log. A quiet row with a neutral "Removed" tag. */
 export function ActivityRemovedRow({
@@ -119,15 +120,20 @@ export function ActivityRemovedRow({
       <time className="activity-feed-time" dateTime={occurredAt} title={time.title}>
         {time.label}
       </time>
+      <span className="activity-tile is-neutral" aria-hidden="true">
+        <Trash2 size={20} strokeWidth={1.75} />
+      </span>
       <div className="activity-feed-main">
         <p className="activity-feed-title">
           {mealRemovedActivityLine({ clientName, summary, mealDate, previousKcal })}
         </p>
       </div>
-      <span className="activity-status activity-status-neutral" data-testid="removed-tag">
-        <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
-        <span>Removed</span>
-      </span>
+      <div className="activity-feed-trail">
+        <span className="activity-status activity-status-neutral" data-testid="removed-tag">
+          <Trash2 size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span>Removed</span>
+        </span>
+      </div>
     </li>
   );
 }
@@ -164,6 +170,7 @@ export function ActivityRow({
         : labelFor("checkin_status", item.state));
   const tone = activityChipTone(item);
   const Icon = TONE_ICON[tone];
+  const TileIcon = TYPE_ICON[item.type];
 
   const rawDetail = item.type === "meal" ? mealDetailLine(mealAssignment) : "";
   // mealDetailLine falls back to the deviation kind with underscores swapped
@@ -197,6 +204,9 @@ export function ActivityRow({
       <time className="activity-feed-time" dateTime={item.occurredAt} title={time.title}>
         {time.label}
       </time>
+      <span className={`activity-tile is-${tone}`} aria-hidden="true">
+        <TileIcon size={20} strokeWidth={1.75} />
+      </span>
       <div className="activity-feed-main">
         <p className="activity-feed-title">{title}</p>
         {showDetail && detail ? (
@@ -208,32 +218,34 @@ export function ActivityRow({
           </div>
         ) : null}
       </div>
-      <span
-        className={`activity-status activity-status-${tone}`}
-        data-kind={item.type}
-        data-value={chipValueForActivity(item)}
-      >
-        <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
-        <span>{chipText}</span>
-      </span>
-      {clientEdited ? (
-        <span className="activity-status activity-status-neutral" data-testid="edited-tag">
-          <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
-          <span>Edited</span>
-          {editUnread ? (
-            <span
-              style={UNREAD_DOT_STYLE}
-              role="img"
-              aria-label="Unread"
-              data-testid="edited-unread-dot"
-            />
-          ) : null}
+      <div className="activity-feed-trail">
+        <span
+          className={`activity-status activity-status-${tone}`}
+          data-kind={item.type}
+          data-value={chipValueForActivity(item)}
+        >
+          <Icon size={14} strokeWidth={1.75} aria-hidden="true" />
+          <span>{chipText}</span>
         </span>
-      ) : null}
+        {clientEdited ? (
+          <span className="activity-status activity-status-neutral" data-testid="edited-tag">
+            <Pencil size={14} strokeWidth={1.75} aria-hidden="true" />
+            <span>Edited</span>
+            {editUnread ? (
+              <span
+                className="activity-unread-dot"
+                role="img"
+                aria-label="Unread"
+                data-testid="edited-unread-dot"
+              />
+            ) : null}
+          </span>
+        ) : null}
+      </div>
       <div className="activity-feed-actions">
         {showNudge ? (
           nudge?.kind === "sent" ? (
-            <Button type="button" variant="tinted" disabled>
+            <Button type="button" variant="quiet" size="sm" disabled>
               Sent {nudge.label}
             </Button>
           ) : nudge?.kind === "limited" ? (
@@ -241,7 +253,8 @@ export function ActivityRow({
           ) : (
             <Button
               type="button"
-              variant="tinted"
+              variant="quiet"
+              size="sm"
               disabled={!online || nudging}
               onClick={onNudge}
             >
@@ -249,7 +262,7 @@ export function ActivityRow({
             </Button>
           )
         ) : null}
-        <Button type="button" variant="secondary" onClick={onView}>
+        <Button type="button" variant="secondary" size="sm" onClick={onView}>
           View
         </Button>
       </div>
