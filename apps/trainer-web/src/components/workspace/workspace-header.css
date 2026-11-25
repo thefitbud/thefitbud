@@ -47,11 +47,16 @@
 }
 
 /* Separator dots hang in the gap before an item, so one that lands at the start
-   of a wrapped line sits in the clipped left padding and is never seen. */
+   of a wrapped line sits in the clipped left padding and is never seen. The
+   left clip edge sits 4 px left of the content edge: past the 3 px focus ring
+   of an item that starts a line, but right of its 3 px dot (6–9 px out). The
+   clip leaves 16 px above and below, so the plan link's 44 px box at iPad
+   widths (12 px past its 20 px line each way) and its focus ring are never
+   cut. */
 .wsh-v3 .wsh-meta {
   margin-inline-start: calc(-1 * var(--s3));
   padding-inline-start: var(--s3);
-  clip-path: inset(-8px 0 -8px var(--s3));
+  clip-path: inset(-16px -4px -16px calc(var(--s3) - 4px));
 }
 
 .wsh-v3 .wsh-meta-item {
@@ -73,6 +78,12 @@
 .wsh-v3 .wsh-meta a:focus-visible {
   color: var(--ink);
   text-decoration: underline;
+}
+
+.wsh-v3 .wsh-meta a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  border-radius: 2px;
 }
 
 .wsh-v3 .wsh-signals:empty {
@@ -175,9 +186,11 @@
   }
 
   /* 44 px hit areas at iPad landscape too (tap-targets.css starts at 1024).
-     The crumb keeps a real 44 px box; the plan link stays an inline text
-     line and gets its tap height from a pseudo-element hit area, so the
-     meta line keeps normal text lines and no separator starts a line. */
+     The crumb keeps a real 44 px box. The plan link (a flex item of its meta
+     item) gets a real 44 px box from 12 px block padding, cancelled by an
+     equal negative margin, so the meta line keeps its 20 px text lines and no
+     separator starts a line. Its item sits above the next wrapped line's
+     items, so the whole box takes taps; the focus ring hugs the text. */
   .wsh-v3 .wsh-crumb a {
     display: inline-flex;
     align-items: center;
@@ -185,21 +198,31 @@
     padding-inline: 0;
   }
 
-  .wsh-v3 .wsh-meta .workspace-plan-link {
-    position: relative;
-    display: inline;
-    height: auto !important;
-    min-height: 0 !important;
-    padding: 0;
+  .wsh-v3 .wsh-meta-item.is-plan {
+    z-index: 1;
   }
 
-  .wsh-v3 .wsh-meta .workspace-plan-link::after {
+  .wsh-v3 .wsh-meta .workspace-plan-link {
+    position: relative;
+    display: block;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 12px 0;
+    margin-block: -12px;
+  }
+
+  .wsh-v3 .wsh-meta .workspace-plan-link:focus-visible {
+    outline: none;
+  }
+
+  .wsh-v3 .wsh-meta .workspace-plan-link:focus-visible::after {
     content: "";
     position: absolute;
-    inset-inline: 0;
-    top: 50%;
-    height: 44px;
-    transform: translateY(-50%);
+    inset: 12px 0;
+    border-radius: 2px;
+    outline: 2px solid var(--brand);
+    outline-offset: 1px;
+    pointer-events: none;
   }
 
   .wsh-v3 .wsh-crumb {

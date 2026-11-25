@@ -71,27 +71,122 @@ async function shot(page: Page, name: string) {
   expect.soft(problems.clip, name).toEqual([]);
 }
 
-/** Header meta line: normal text lines, no separator dot starting a wrapped line. */
+/** Header meta line: normal text lines, no separator dot visible at the start of a wrapped line. */
 async function metaLineProblems(page: Page) {
   return page.evaluate(() => {
+    // The meta line's visible clip box (its clip-path inset, resolved to px).
+    const clipBox = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      const px = (getComputedStyle(el).clipPath.match(/-?[\d.]+px/g) ?? []).map(Number.parseFloat);
+      if (px.length !== 4) return null;
+      const [top, right, bottom, left] = px as [number, number, number, number];
+      return { top: box.top + top, right: box.right - right, bottom: box.bottom - bottom, left: box.left + left };
+    };
+    const meta = document.querySelector(".wsh-v3 .wsh-meta");
     const items = Array.from(document.querySelectorAll(".wsh-v3 .wsh-meta .wsh-meta-item"));
     const bad: string[] = [];
+    const clip = meta ? clipBox(meta) : null;
+    if (meta && !clip) bad.push("meta line has no inset clip-path");
     let lineTop: number | null = null;
     items.forEach((item, index) => {
       const box = item.getBoundingClientRect();
       if (box.height === 0) return;
       if (box.height > 30) bad.push(`item ${index} is ${Math.round(box.height)} px tall`);
       if (lineTop !== null && box.top > lineTop + 4) {
-        // A wrapped line's first item: its dot must hang in the clipped gap, not in flow.
+        // A wrapped line's first item: its dot hangs left of the clip edge, out of sight.
         const dot = getComputedStyle(item, "::before");
-        if (dot.content !== "none" && dot.position !== "absolute") {
-          bad.push(`item ${index} starts a new line with an in-flow separator`);
+        if (dot.content !== "none") {
+          if (dot.position !== "absolute") {
+            bad.push(`item ${index} starts a new line with an in-flow separator`);
+          } else if (clip) {
+            const dotRight = box.left + Number.parseFloat(dot.left) + Number.parseFloat(dot.width);
+            if (dotRight > clip.left) bad.push(`item ${index} shows its separator at a line start`);
+          }
         }
+        lineTop = box.top;
       }
       if (lineTop === null) lineTop = box.top;
     });
     return bad;
   });
+}
+
+/**
+ * iPad widths: the plan link takes taps over its whole 44 px band (centre and
+ * centre ±21 px, by hit-testing), and its keyboard focus ring is not clipped.
+ */
+async function planLinkProblems(page: Page) {
+  const link = page.locator(".wsh-v3 .wsh-meta .workspace-plan-link");
+  await expect(link).toBeVisible();
+  // Keyboard focus, so :focus-visible applies.
+  await link.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  const result = await page.evaluate(() => {
+    // The meta line's visible clip box (its clip-path inset, resolved to px).
+    const clipBox = (el: Element) => {
+      const box = el.getBoundingClientRect();
+      const px = (getComputedStyle(el).clipPath.match(/-?[\d.]+px/g) ?? []).map(Number.parseFloat);
+      if (px.length !== 4) return null;
+      const [top, right, bottom, left] = px as [number, number, number, number];
+      return { top: box.top + top, right: box.right - right, bottom: box.bottom - bottom, left: box.left + left };
+    };
+    const el = document.querySelector(".wsh-v3 .wsh-meta .workspace-plan-link");
+    const meta = document.querySelector(".wsh-v3 .wsh-meta");
+    const bad: string[] = [];
+    if (!el || !meta) return { bad: ["no plan link"], wrapped: false };
+    const rect = el.getBoundingClientRect();
+    const x = rect.left + rect.width / 2;
+    const y = rect.top + rect.height / 2;
+    for (const dy of [-21, 0, 21]) {
+      const hit = document.elementFromPoint(x, y + dy);
+      if (!hit || !(hit === el || el.contains(hit))) {
+        const name = hit ? `${hit.tagName.toLowerCase()}.${[...hit.classList].join(".")}` : "nothing";
+        bad.push(`tap at centre ${dy >= 0 ? "+" : ""}${dy} px lands on ${name}`);
+      }
+    }
+    // Its own box is 44 px (tw-g-ipad measures getBoundingClientRect, not hit areas).
+    if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
+      bad.push(`plan link box is ${Math.round(rect.width)}x${Math.round(rect.height)}`);
+    }
+    if (!el.matches(":focus-visible")) {
+      bad.push("plan link is not keyboard-focused");
+    } else {
+      // The ring is the link's outline, or an ::after outline that hugs the text.
+      const own = getComputedStyle(el);
+      const after = getComputedStyle(el, "::after");
+      const onAfter = own.outlineStyle === "none" && after.outlineStyle !== "none";
+      const cs = onAfter ? after : own;
+      const ring = Number.parseFloat(cs.outlineWidth) + Number.parseFloat(cs.outlineOffset);
+      const inset = (value: string) => (onAfter ? Number.parseFloat(value) || 0 : 0);
+      const box = {
+        top: rect.top + inset(after.top) - ring,
+        right: rect.right - inset(after.right) + ring,
+        bottom: rect.bottom - inset(after.bottom) + ring,
+        left: rect.left + inset(after.left) - ring,
+      };
+      const clip = clipBox(meta);
+      if (cs.outlineStyle === "none" || !(ring > 0)) bad.push("plan link has no focus ring");
+      if (!clip) bad.push("meta line has no inset clip-path");
+      else if (
+        box.left < clip.left - 0.5 ||
+        box.right > clip.right + 0.5 ||
+        box.top < clip.top - 0.5 ||
+        box.bottom > clip.bottom + 0.5
+      ) {
+        bad.push("plan link focus ring is clipped");
+      }
+    }
+    const tops = new Set(
+      Array.from(meta.querySelectorAll(".wsh-meta-item"))
+        .map((item) => item.getBoundingClientRect())
+        .filter((box) => box.height > 0)
+        .map((box) => Math.round(box.top)),
+    );
+    return { bad, wrapped: tops.size > 1 };
+  });
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  return result;
 }
 
 /** iPad widths: every control is at least 44×44 (labels count for their inputs). */
@@ -119,11 +214,6 @@ async function undersizedTargets(page: Page) {
       if (rect.width === 0 || rect.height === 0) continue;
       if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
       if (el.closest(".sr-only")) continue;
-      // The plan link is an inline text link; its 44 px hit area is an ::after box.
-      if (el.matches(".workspace-plan-link")) {
-        const hit = window.getComputedStyle(el, "::after");
-        if (Number.parseFloat(hit.height) >= 44 && hit.position === "absolute") continue;
-      }
       if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
         bad.push(`${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 30)}" ${Math.round(rect.width)}x${Math.round(rect.height)}`);
       }
@@ -282,6 +372,10 @@ test.describe("W13-10 client header, tabs and Settings tab", () => {
         await page.waitForTimeout(500);
         expect(await undersizedTargets(page), `${hash} at ${width}`).toEqual([]);
         expect(await metaLineProblems(page), `meta line, ${hash} at ${width}`).toEqual([]);
+        const plan = await planLinkProblems(page);
+        expect(plan.bad, `plan link, ${hash} at ${width}`).toEqual([]);
+        // Rohan's subtitle fits one line at 1180 and wraps at 1024: both cases are hit-tested.
+        expect(plan.wrapped, `meta line wraps, ${hash} at ${width}`).toBe(width === 1024);
       }
     }
   });
