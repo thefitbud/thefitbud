@@ -2,7 +2,7 @@ import type {
   ProgressMetricKey,
   ProgressMetricSeries,
 } from "@fitbud/contracts";
-import { MetricLineChart, type ChartSeries } from "./MetricLineChart";
+import { MetricLineChart, seriesColor, type ChartSeries } from "./MetricLineChart";
 import {
   RATING_KEYS,
   formatMetricDifference,
@@ -10,7 +10,6 @@ import {
   metricLabel,
   styleAt,
 } from "./metricKeys";
-import { ClipboardIcon } from "./WeightPanel";
 
 type Props = {
   /** Left axis: the metric selected in the rail. */
@@ -78,7 +77,6 @@ export function ComparePanel({ primary, secondary, series, onRemove }: Props) {
             {primaryName} compared with {secondaryName}
           </h2>
           <p className="pg-subtitle">
-            <ClipboardIcon />
             Two scales: {scaleWords(primary, left.unit)} on the left,{" "}
             {scaleWords(secondary, right.unit)} on the right. Shown side by side
             only; FitBud doesn't link cause and effect.
@@ -99,7 +97,7 @@ export function ComparePanel({ primary, secondary, series, onRemove }: Props) {
                 x2="17"
                 y1="3"
                 y2="3"
-                stroke={row.style.color}
+                style={{ stroke: seriesColor(row.style) }}
                 strokeWidth="3"
                 strokeDasharray={row.style.dash}
                 strokeLinecap="round"

@@ -30,7 +30,7 @@ test.describe("TW-E activity, progress, check-ins", () => {
     await expect(page.getByTestId("screen-TW-18")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Progress", level: 1 })).toBeVisible();
     await expect(page.getByRole("tab", { name: "Weight" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "12 w" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: "12 wk" })).toBeVisible();
   });
 
   test("TW-18 progress: empty weigh-ins copy", async ({ page }) => {
