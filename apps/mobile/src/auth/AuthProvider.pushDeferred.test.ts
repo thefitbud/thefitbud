@@ -7,7 +7,7 @@ import { createTestIdToken } from "../lib/testToken";
 import { routerView } from "../navigation/routerView";
 
 /**
- * Z14-3: push registration runs after the first screen renders. The real
+ * Z14-3 (and Z14-40, at the bottom): push registration runs after the first screen renders. The real
  * provider, with the push call held open by a deferred promise: the app must
  * reach its shell while registration is still pending, and a registration
  * that fails later is reported, never shown.
@@ -66,7 +66,8 @@ vi.mock("../navigation/useAppDeepLinks", () => ({ useAppDeepLinks: () => undefin
 import { flushPersistedSession } from "../lib/sessionStorage";
 import { setTrainerCacheOwner } from "../trainer/cache";
 import { AuthProvider, useAuth } from "./AuthProvider";
-import { flushMeSnapshot } from "./meSnapshot";
+import { flushMeSnapshot, saveMeSnapshot } from "./meSnapshot";
+import { ApiClientError } from "@fitbud/api-client";
 
 const AARAV = "5e2b7c9a-1d3f-4a6b-8c0e-2f4a6b8c0d1e";
 const RAHUL = "8a1c3e5b-7d9f-4b2a-9c4e-6f8a0b2c4d6e";
@@ -164,5 +165,134 @@ describe("cold start and push registration (Z14-3)", () => {
     await waitFor(() => expect(h.reportError).toHaveBeenCalledWith("auth-push-register", failure));
     expect(auth!.errorMessage).toBeNull();
     expect(routerView(auth!.route, auth!.errorMessage)).toMatchObject({ view: "route" });
+  });
+});
+
+type Page = { items: CoachingRelationship[]; nextCursor: null };
+
+function hold() {
+  let release!: (page: Page) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<Page>((res, rej) => {
+    release = res;
+    reject = rej;
+  });
+  return { promise, release, reject };
+}
+
+const view = () => routerView(auth!.route, auth!.errorMessage);
+
+describe("cold start paints from the stored snapshot (Z14-40)", () => {
+  beforeEach(() => {
+    registerDeviceTokenForPush.mockResolvedValue({ status: "permission_denied" });
+  });
+
+  async function storeSnapshot(relationships: CoachingRelationship[]) {
+    await saveMeSnapshot({ me, relationships });
+    await flushMeSnapshot();
+  }
+
+  it("opens the trainee shell before listRelationships answers, then takes the live list", async () => {
+    await storeSnapshot([coachingReady]);
+    const live = hold();
+    h.client.listRelationships = vi.fn(() => live.promise);
+
+    render(createElement(AuthProvider, null, createElement(Probe)));
+
+    await waitFor(() =>
+      expect(view()).toMatchObject({
+        view: "route",
+        route: { name: "trainee_shell", relationship: { id: RELATIONSHIP } },
+      }),
+    );
+    expect(h.client.listRelationships).toHaveBeenCalledTimes(1);
+    expect(auth!.offlineSnapshot).toBeNull();
+
+    // The live list says the coaching has ended: the route moves once.
+    const ended = { ...coachingReady, status: "ended", endedAt: "2026-11-20T04:30:00.000Z" };
+    live.release({ items: [ended as CoachingRelationship], nextCursor: null });
+    await waitFor(() => expect(auth!.relationships[0]?.status).toBe("ended"));
+    expect(auth!.errorMessage).toBeNull();
+  });
+
+  it("without a snapshot, the first screen still waits for the live call", async () => {
+    const live = hold();
+    h.client.listRelationships = vi.fn(() => live.promise);
+
+    render(createElement(AuthProvider, null, createElement(Probe)));
+
+    await waitFor(() => expect(h.client.listRelationships).toHaveBeenCalled());
+    expect(view()).toEqual({ view: "loading" });
+
+    live.release({ items: [coachingReady], nextCursor: null });
+    await waitFor(() =>
+      expect(view()).toMatchObject({ view: "route", route: { name: "trainee_shell" } }),
+    );
+  });
+
+  it("a refused session signs out and the snapshot is not shown", async () => {
+    await storeSnapshot([coachingReady]);
+    h.client.me = vi.fn(async () => {
+      throw new ApiClientError({ code: "UNAUTHENTICATED", message: "x", requestId: "r", status: 401 });
+    });
+
+    render(createElement(AuthProvider, null, createElement(Probe)));
+
+    await waitFor(() => expect(view().view).not.toBe("loading"));
+    expect(auth!.me).toBeNull();
+    expect(view()).not.toMatchObject({ view: "route", route: { name: "trainee_shell" } });
+  });
+
+  it("a 401 on the background relationships call signs the person out", async () => {
+    await storeSnapshot([coachingReady]);
+    const live = hold();
+    h.client.listRelationships = vi.fn(() => live.promise);
+
+    render(createElement(AuthProvider, null, createElement(Probe)));
+    await waitFor(() => expect(view()).toMatchObject({ route: { name: "trainee_shell" } }));
+
+    live.reject(
+      new ApiClientError({ code: "UNAUTHENTICATED", message: "x", requestId: "r", status: 401 }),
+    );
+    await waitFor(() => expect(auth!.me).toBeNull());
+  });
+
+  it("an empty stored trainee list is not trusted: the live call is awaited", async () => {
+    await storeSnapshot([]);
+    const live = hold();
+    h.client.listRelationships = vi.fn(() => live.promise);
+
+    render(createElement(AuthProvider, null, createElement(Probe)));
+    await waitFor(() => expect(h.client.listRelationships).toHaveBeenCalled());
+    expect(view()).toEqual({ view: "loading" });
+    live.release({ items: [coachingReady], nextCursor: null });
+    await waitFor(() => expect(view()).toMatchObject({ route: { name: "trainee_shell" } }));
+  });
+
+  it("opens the trainer shell from the snapshot before the live call answers", async () => {
+    const trainerMe = {
+      ...me,
+      userId: RAHUL,
+      permittedRoles: ["trainer"],
+      selectedRole: "trainer",
+      trainerProfileId: RAHUL,
+      traineeProfileId: null,
+    } as unknown as MeResponse;
+    h.secure.set(
+      "fitbud.session",
+      JSON.stringify({ v: 1, userId: RAHUL, tokenKind: "test_id_token", selectedRole: "trainer" }),
+    );
+    h.client.me = vi.fn(async () => trainerMe);
+    await saveMeSnapshot({ me: trainerMe, relationships: [] });
+    await flushMeSnapshot();
+    const live = hold();
+    h.client.listRelationships = vi.fn(() => live.promise);
+
+    render(createElement(AuthProvider, null, createElement(Probe)));
+
+    await waitFor(() => expect(view()).toMatchObject({ view: "route", route: { name: "trainer_shell" } }));
+    live.release({ items: [], nextCursor: null });
+    await Promise.resolve();
+    expect(view()).toMatchObject({ route: { name: "trainer_shell" } });
   });
 });
