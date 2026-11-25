@@ -259,3 +259,7 @@
     padding: 0.35rem 0;
   }
 }
+
+@media (max-width: 1279px) {
+  .libraries-more { height: 44px; }
+}

@@ -579,6 +579,7 @@ function ExerciseLibrary({
         {page.nextCursor ? (
           <Button
             variant="secondary"
+            className="libraries-more"
             disabled={page.loadingMore}
             onClick={page.loadMore}
           >
@@ -1153,6 +1154,7 @@ function FoodLibrary({
         {page.nextCursor ? (
           <Button
             variant="secondary"
+            className="libraries-more"
             disabled={page.loadingMore}
             onClick={page.loadMore}
           >
