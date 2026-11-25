@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { userFacingMessage } from "@fitbud/api-client";
 import type { ProgressEntry, ProgressMetricKey } from "@fitbud/contracts";
@@ -9,7 +16,7 @@ import {
   labelFor,
   possessivePronoun,
 } from "@fitbud/core";
-import { ErrorState } from "../components/StatePanels";
+import { EmptyState, ErrorState, OfflineBanner } from "../components/ui";
 import { isWorkspaceReadOnly } from "../hooks/useWorkspaceReadOnly";
 import { apiClient } from "../lib/api";
 import { resolveTraineeTimezone } from "../lib/trainee-timezone";
@@ -32,6 +39,7 @@ import { ComparePanel } from "./progress/ComparePanel";
 import { CompareControl } from "./progress/CompareControl";
 import { MultiSeriesPanel } from "./progress/MultiSeriesPanel";
 import { PhotosPanel, groupPhotoDates } from "./progress/PhotosPanel";
+import type { WorkoutsKpi } from "./progress/KpiRow";
 import { PanelSkeleton, ProgressSkeleton } from "./progress/ProgressSkeleton";
 import { RangeControl } from "./progress/RangeControl";
 import { StrengthPanel } from "./progress/StrengthPanel";
@@ -253,12 +261,21 @@ export function ClientProgressPage() {
     relationshipId,
     range,
     refreshEpoch,
-    enabled: workoutsRow !== null && !photosOpen && range.range !== "all",
+    enabled: !photosOpen && range.range !== "all",
   });
   const strength =
     range.range === "all" ? strengthAll.data : strengthRange.data;
   const strengthLoading =
     range.range === "all" ? strengthAll.loading : strengthRange.loading;
+
+  // Finished and planned workouts in the chosen range, for the KPI row ("17 of 24").
+  const workoutsInRange = useMemo((): WorkoutsKpi | null => {
+    if (!strength) return null;
+    return {
+      completed: strength.workoutsPerWeek.reduce((sum, w) => sum + w.count, 0),
+      planned: strength.workoutsPerWeek.reduce((sum, w) => sum + w.planned, 0),
+    };
+  }, [strength]);
 
   useEffect(() => {
     if (workoutsRow !== "completed") return;
@@ -338,47 +355,46 @@ export function ClientProgressPage() {
     );
 
   function emptyPanel() {
+    const message = ended
+      ? "No check-in answers, workouts or photos were logged while coaching ran."
+      : `Charts follow the standard questions in ${pronoun} check-in form: weight, the measurements you picked, ratings and photos.${
+          nextCheckin
+            ? ` ${Pronoun} ${firstCheckin ? "first" : "next"} ${cadenceWord}check-in opens ${formatCivilDate(
+                formatLocalDate(new Date(nextCheckin.windowStartsAt), clientTz),
+              )}.`
+            : ""
+        } Workout progress appears after ${subject} ${
+          subject === "they" ? "log" : "logs"
+        } ${pronoun} first workout.`;
     return (
       <div className="pg-empty-state">
-        <span className="pg-empty-icon" aria-hidden="true">
-          <ChartLine size={18} strokeWidth={1.6} />
-        </span>
-        <h2 id="pg-panel-title">No progress data yet</h2>
-        {ended ? (
-          <p>
-            No check-in answers, workouts or photos were logged while coaching
-            ran.
-          </p>
-        ) : (
-          <p>
-            Charts follow the standard questions in {pronoun} check-in form:
-            weight, the measurements you picked, ratings and photos.
-            {nextCheckin
-              ? ` ${Pronoun} ${firstCheckin ? "first" : "next"} ${cadenceWord}check-in opens ${formatCivilDate(
-                  formatLocalDate(new Date(nextCheckin.windowStartsAt), clientTz),
-                )}.`
-              : null}{" "}
-            Workout progress appears after {subject}{" "}
-            {subject === "they" ? "log" : "logs"} {pronoun} first workout.
-          </p>
-        )}
-        <div className="pg-empty-actions">
-          {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
-          <Link
-            className="pg-outline-btn"
-            to={`/clients/${relationshipId}/configure`}
-          >
-            {ended ? "View coaching setup" : "Open check-in settings"}
-          </Link>
-          {!ended && formMetrics.templateId ? (
-            <Link
-              className="pg-soft-btn"
-              to={`/templates/checkins/${formMetrics.templateId}`}
-            >
-              See {pronoun} check-in form
-            </Link>
-          ) : null}
-        </div>
+        <h2 id="pg-panel-title" className="sr-only">
+          No progress data yet
+        </h2>
+        <EmptyState
+          icon={<ChartLine size={20} strokeWidth={1.75} aria-hidden />}
+          title="No progress data yet"
+          meta={message}
+          action={
+            <div className="pg-empty-actions">
+              {/* Ended: Configure is read-only (CE1), so label as view-only (CE3). */}
+              <Link
+                className="pg-outline-btn"
+                to={`/clients/${relationshipId}/configure`}
+              >
+                {ended ? "View coaching setup" : "Open check-in settings"}
+              </Link>
+              {!ended && formMetrics.templateId ? (
+                <Link
+                  className="pg-soft-btn"
+                  to={`/templates/checkins/${formMetrics.templateId}`}
+                >
+                  See {pronoun} check-in form
+                </Link>
+              ) : null}
+            </div>
+          }
+        />
       </div>
     );
   }
@@ -397,42 +413,45 @@ export function ClientProgressPage() {
     return candidates.sort().at(-1)!;
   }, [railSeries.weight, today, nextCheckin]);
 
+  const card = (node: ReactNode) =>
+    node === null ? null : <div className="workspace-card pg-card">{node}</div>;
+
   function panelBody() {
     if (!anyData) return emptyPanel();
     if (photosOpen) {
-      return (
+      return card(
         <PhotosPanel
           dates={photoDates}
           weight={railSeries.weight}
           clientFirstName={clientFirstName}
-        />
+        />,
       );
     }
     if (workoutsRow !== null) {
       if (!strength) {
-        return strengthLoading ? <PanelSkeleton /> : null;
+        return strengthLoading ? card(<PanelSkeleton />) : null;
       }
-      return (
+      return card(
         <StrengthPanel
           model={strength}
           range={range}
           today={today}
           exerciseId={exerciseId}
           onExercise={setExerciseId}
-        />
+        />,
       );
     }
     if (range.range !== "all" && !chart.data && chart.loading) {
-      return <PanelSkeleton />;
+      return card(<PanelSkeleton />);
     }
     if (comparing && compareKey) {
-      return (
+      return card(
         <ComparePanel
           primary={activeView.focus}
           secondary={compareKey}
           series={chartSeries}
           onRemove={() => setCompareKey(null)}
-        />
+        />,
       );
     }
     if (activeView.group === "weight") {
@@ -441,6 +460,7 @@ export function ClientProgressPage() {
           series={chartSeries.weight}
           allTimeEntries={railSeries.weight?.points.length ?? 0}
           sparseAxisEnd={sparseAxisEnd}
+          workouts={workoutsInRange}
           ended={ended}
           coachedPeriod={
             startedOn && endedOn
@@ -462,13 +482,14 @@ export function ClientProgressPage() {
         />
       );
     }
-    return (
+    return card(
       <MultiSeriesPanel
         kind={activeView.group}
         keys={chartKeys}
         series={chartSeries}
         clientFirstName={clientFirstName}
-      />
+        workouts={workoutsInRange}
+      />,
     );
   }
 
@@ -481,7 +502,6 @@ export function ClientProgressPage() {
 
       {error ? (
         <ErrorState
-          message={error}
           onRetry={() => {
             rail.reload();
             chart.reload();
@@ -489,8 +509,9 @@ export function ClientProgressPage() {
             strengthRange.reload();
             void loadEntries();
           }}
-          screenId="TW-18"
-        />
+        >
+          {error}
+        </ErrorState>
       ) : null}
       {ended ? (
         <p className="pg-ended-banner" role="note">
@@ -541,7 +562,7 @@ export function ClientProgressPage() {
           <section
             id="pg-panel"
             role={anyData ? "tabpanel" : "region"}
-            className="pg-panel workspace-card"
+            className="pg-panel"
             aria-labelledby="pg-panel-title"
             aria-busy={
               photosOpen || !anyData
@@ -565,9 +586,7 @@ export function ClientProgressPage() {
       ) : null}
 
       {!online ? (
-        <p className="muted" role="status">
-          Offline — progress data may be stale.
-        </p>
+        <OfflineBanner>Offline — progress data may be stale.</OfflineBanner>
       ) : null}
     </div>
   );

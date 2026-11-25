@@ -2,7 +2,7 @@ import type {
   ProgressMetricKey,
   ProgressMetricSeries,
 } from "@fitbud/contracts";
-import { MetricLineChart, type ChartSeries } from "./MetricLineChart";
+import { MetricLineChart, seriesColor, type ChartSeries } from "./MetricLineChart";
 import {
   formatMetricDifference,
   formatMetricValue,
@@ -10,7 +10,7 @@ import {
   metricLabel,
   styleAt,
 } from "./metricKeys";
-import { ClipboardIcon } from "./WeightPanel";
+import { KpiRow, kpiDifference, kpiValue, workoutsKpi, type Kpi, type WorkoutsKpi } from "./KpiRow";
 
 type Props = {
   kind: "body" | "ratings";
@@ -18,6 +18,8 @@ type Props = {
   keys: ProgressMetricKey[];
   series: Partial<Record<ProgressMetricKey, ProgressMetricSeries>>;
   clientFirstName: string;
+  /** Finished and planned workouts in the range, from the logs; the KPI is left out when null. */
+  workouts?: WorkoutsKpi | null;
 };
 
 function entriesText(count: number): string {
@@ -35,7 +37,7 @@ function Legend({ rows }: { rows: ChartSeries[] }) {
               x2="17"
               y1="3"
               y2="3"
-              stroke={row.style.color}
+              style={{ stroke: seriesColor(row.style) }}
               strokeWidth="3"
               strokeDasharray={row.style.dash}
               strokeLinecap="round"
@@ -54,6 +56,7 @@ export function MultiSeriesPanel({
   keys,
   series,
   clientFirstName,
+  workouts = null,
 }: Props) {
   const rows: ChartSeries[] = keys.map((key, index) => ({
     key,
@@ -86,13 +89,34 @@ export function MultiSeriesPanel({
     .sort()
     .at(-1);
 
+  // KPIs follow the metric selected in the rail (the first row).
+  const focus = rows[0];
+  const focusFirst = focus?.points[0];
+  const focusLast = focus?.points.at(-1);
+  const kpis: Kpi[] = [];
+  if (focus && focusFirst && focusLast) {
+    kpis.push({
+      key: "latest",
+      label: `${focus.label} · ${formatPointDate(focusLast.localDate)}`,
+      ...kpiValue(focusLast.value, focus.unit),
+    });
+    if (focus.points.length > 1) {
+      kpis.push({
+        key: "change",
+        label: `Since ${formatPointDate(focusFirst.localDate)}`,
+        ...kpiDifference(focusLast.value - focusFirst.value, focus.unit),
+      });
+    }
+  }
+  const done = workoutsKpi(workouts, "Workouts done");
+  if (kpis.length && done) kpis.push(done);
+
   return (
     <>
       <div className="pg-panel-head">
         <div>
           <h2 id="pg-panel-title">{title}</h2>
           <p className="pg-subtitle">
-            <ClipboardIcon />
             {subtitle}
           </p>
         </div>
@@ -100,8 +124,10 @@ export function MultiSeriesPanel({
 
       {withData.length && first && last ? (
         <>
+          <KpiRow items={kpis} />
           <Legend rows={rows} />
           <MetricLineChart
+            area={withData.length === 1}
             label={`${title}: ${rows.map((row) => row.label).join(", ")}, from ${formatPointDate(first)} to ${formatPointDate(last)}`}
             series={withData}
             fixedDomain={kind === "ratings" ? [1, 5] : undefined}

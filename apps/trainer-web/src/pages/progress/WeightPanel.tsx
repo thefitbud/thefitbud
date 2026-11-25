@@ -6,6 +6,15 @@ import type {
 import { ChartLine } from "lucide-react";
 import { MetricLineChart } from "./MetricLineChart";
 import {
+  KpiRow,
+  kpiDifference,
+  kpiValue,
+  weeksBetween,
+  workoutsKpi,
+  type Kpi,
+  type WorkoutsKpi,
+} from "./KpiRow";
+import {
   formatMetricDifference,
   formatMetricValue,
   formatPointDate,
@@ -24,6 +33,8 @@ type Props = {
   coachedPeriod?: string | null;
   /** Sparse only: where the date axis runs to (range end or next check-in, frame 160g). */
   sparseAxisEnd?: string | null;
+  /** Finished and planned workouts in the range, from the logs; the KPI is left out when null. */
+  workouts?: WorkoutsKpi | null;
 };
 
 const LATEST_ROWS = 3;
@@ -34,47 +45,7 @@ function countLabel(count: number, one: string, many: string): string {
   return count === 1 ? `1 ${one}` : `${count} ${many}`;
 }
 
-export function ClipboardIcon() {
-  return (
-    <svg
-      className="pg-subtitle-icon"
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-      width="14"
-      height="14"
-    >
-      <rect
-        x="3"
-        y="2.5"
-        width="10"
-        height="12"
-        rx="2"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-      />
-      <rect
-        x="5.5"
-        y="1.5"
-        width="5"
-        height="2.5"
-        rx="1"
-        fill="#fff"
-        stroke="currentColor"
-        strokeWidth="1.3"
-      />
-      <path
-        d="M5.5 9l1.8 1.8L10.5 7.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.3"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-/** Frame 160: weight as a line, with start, latest, change and entries. */
+/** Frame W-160: weight as a line, with the KPI row, and the latest entries in their own card. */
 export function WeightPanel({
   series,
   renderSource,
@@ -82,26 +53,28 @@ export function WeightPanel({
   ended = false,
   coachedPeriod = null,
   sparseAxisEnd = null,
+  workouts = null,
 }: Props) {
   const [showTable, setShowTable] = useState(false);
   const points = series?.points ?? [];
   const unit = series?.unit ?? "kg";
   const first = points[0];
   const last = points.at(-1);
-  const rows = [...points].reverse();
+  const rows = [...points]
+    .map((point, index) => ({ point, previous: points[index - 1] }))
+    .reverse();
   const visibleRows = showTable ? rows : rows.slice(0, LATEST_ROWS);
   const entries = countLabel(points.length, "entry", "entries");
   const sparse = !ended && allTimeEntries > 0 && allTimeEntries < SPARSE_BELOW;
   const fromCheckins = points.filter((point) => point.checkinId).length;
   const entered = points.length - fromCheckins;
 
-  let subtitle = `Weight · standard question in check-ins · ${entries}`;
+  let subtitle = `Standard question in check-ins · ${entries}`;
   if (ended) {
     subtitle = coachedPeriod
       ? `Coached period ${coachedPeriod} · ${entries}`
       : `Coaching ended · ${entries}`;
-  }
-  else if (sparse && points.length) {
+  } else if (sparse && points.length) {
     subtitle = [
       fromCheckins ? countLabel(fromCheckins, "from a check-in", "from check-ins") : null,
       entered ? countLabel(entered, "measurement entry", "measurement entries") : null,
@@ -110,140 +83,141 @@ export function WeightPanel({
       .join(", ");
   }
 
+  const kpis: Kpi[] = [];
+  if (first && last) {
+    const span = points.length > 1 && !sparse;
+    if (ended || sparse) {
+      kpis.push({
+        key: "start",
+        label: ended ? "Start" : `Start · ${formatPointDate(first.localDate)}`,
+        ...kpiValue(first.value, unit),
+      });
+    }
+    kpis.push({
+      key: "latest",
+      label: `${ended ? "Last" : "Latest"} · ${formatPointDate(last.localDate)}`,
+      ...kpiValue(last.value, unit),
+    });
+    if (span) {
+      kpis.push({
+        key: "change",
+        label: ended ? "Change" : `Since ${formatPointDate(first.localDate)}`,
+        ...kpiDifference(last.value - first.value, unit),
+      });
+      const weeks = weeksBetween(first.localDate, last.localDate);
+      if (weeks && !ended) {
+        kpis.push({
+          key: "average",
+          label: "Average change",
+          ...kpiDifference((last.value - first.value) / weeks, unit, true),
+        });
+      }
+    }
+    const done = ended ? null : workoutsKpi(workouts, "Workouts done");
+    if (done) kpis.push(done);
+  }
+
   return (
     <>
-      <div className="pg-panel-head">
-        <div>
-          <h2 id="pg-panel-title">Weight</h2>
-          <p className="pg-subtitle">
-            <ClipboardIcon />
-            {subtitle}
-          </p>
+      <div className="workspace-card pg-card">
+        <div className="pg-panel-head">
+          <div>
+            <h2 id="pg-panel-title">Weight</h2>
+            <p className="pg-subtitle">{subtitle}</p>
+          </div>
         </div>
-        {points.length && !sparse && !ended ? (
-          <button
-            type="button"
-            className="pg-outline-btn"
-            aria-expanded={showTable}
-            aria-controls="pg-weight-table"
-            onClick={() => setShowTable((current) => !current)}
-          >
-            <span
-              aria-hidden="true"
-              className={showTable ? "pg-chevron is-up" : "pg-chevron"}
-            />
-            {showTable ? "Hide data table" : "Show data table"}
-          </button>
-        ) : null}
-      </div>
 
-      {first && last ? (
-        <>
-          <dl className="pg-stats">
-            <div>
-              <dt>
-                {ended ? "Start" : `Start · ${formatPointDate(first.localDate)}`}
-              </dt>
-              <dd className="pg-stat-num">
-                {formatMetricValue(first.value, unit)}
-              </dd>
-            </div>
-            <div>
-              <dt>
-                {ended ? "Last" : "Latest"} · {formatPointDate(last.localDate)}
-              </dt>
-              <dd className="pg-stat-num">
-                {formatMetricValue(last.value, unit)}
-              </dd>
-            </div>
-            {points.length > 1 && !sparse ? (
-              <div>
-                <dt>Change</dt>
-                <dd>
-                  <span className="pg-stat-num">
-                    {formatMetricDifference(last.value - first.value, unit)}
-                  </span>
-                  {ended ? null : (
-                    <>
-                      {" "}
-                      <span className="pg-stat-note">
-                        since {formatPointDate(first.localDate)}
-                      </span>
-                    </>
-                  )}
-                </dd>
+        {first && last ? (
+          <>
+            <KpiRow items={kpis} />
+
+            <MetricLineChart
+              label={`Weight, ${entries} from ${formatPointDate(first.localDate)} to ${formatPointDate(last.localDate)}`}
+              xEnd={sparse ? sparseAxisEnd : null}
+              area
+              series={[
+                {
+                  key: "weight",
+                  label: "Weight",
+                  unit,
+                  points,
+                  style: styleAt(0),
+                },
+              ]}
+            />
+
+            {sparse ? (
+              <div className="pg-banner pg-banner-row" role="note">
+                <ChartLine size={16} strokeWidth={1.6} aria-hidden />
+                <p>
+                  {allTimeEntries === 1 ? "One weigh-in" : "Two weigh-ins"} so
+                  far. The trend line gets useful after a few more check-ins.
+                </p>
               </div>
             ) : null}
-            {ended ? null : (
-              <div>
-                <dt>Entries</dt>
-                <dd className="pg-stat-num">{points.length}</dd>
-              </div>
-            )}
-          </dl>
+          </>
+        ) : (
+          <p className="pg-empty" role="status">
+            No weight entries in this range.
+          </p>
+        )}
+      </div>
 
-          <MetricLineChart
-            label={`Weight, ${entries} from ${formatPointDate(first.localDate)} to ${formatPointDate(last.localDate)}`}
-            xEnd={sparse ? sparseAxisEnd : null}
-            series={[
-              {
-                key: "weight",
-                label: "Weight",
-                unit,
-                points,
-                style: styleAt(0),
-              },
-            ]}
-          />
-
-          {sparse ? (
-            <div className="pg-banner pg-banner-row" role="note">
-              <ChartLine size={16} strokeWidth={1.6} aria-hidden />
-              <p>
-                {allTimeEntries === 1 ? "One weigh-in" : "Two weigh-ins"} so
-                far. The trend line gets useful after a few more check-ins.
-              </p>
-            </div>
-          ) : null}
-
-          {/* Sparse: both entries are in the stats. Ended: the chart is the record (frame 160h). */}
-          {sparse || ended ? null : (
-            <>
-              <p className="pg-table-heading" id="pg-weight-table-heading">
-                {showTable ? "All entries in this range" : "Latest entries"}
-              </p>
-              <table
-                className="pg-table"
-                id="pg-weight-table"
-                aria-labelledby="pg-weight-table-heading"
+      {/* Sparse: both entries are in the KPIs. Ended: the chart is the record (frame 160h). */}
+      {first && last && !sparse && !ended ? (
+        <div className="workspace-card pg-card">
+          <div className="pg-card-head">
+            <h3 id="pg-weight-table-heading">
+              {showTable ? "All entries in this range" : "Latest entries"}
+            </h3>
+            {points.length > LATEST_ROWS ? (
+              <button
+                type="button"
+                className="pg-text-btn"
+                aria-expanded={showTable}
+                aria-controls="pg-weight-table"
+                onClick={() => setShowTable((current) => !current)}
               >
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Weight</th>
-                    <th scope="col">Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((point) => (
-                    <tr key={point.localDate}>
-                      <td>{formatPointDate(point.localDate)}</td>
-                      <td className="pg-num">
-                        {formatMetricValue(point.value, unit)}
-                      </td>
-                      <td>{renderSource(point)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </>
-          )}
-        </>
-      ) : (
-        <p className="pg-empty" role="status">
-          No weight entries in this range.
-        </p>
-      )}
+                {showTable ? "Show latest only" : "View all"}
+              </button>
+            ) : null}
+          </div>
+          <table
+            className="pg-table"
+            id="pg-weight-table"
+            aria-labelledby="pg-weight-table-heading"
+          >
+            <thead>
+              <tr>
+                <th scope="col">Date</th>
+                <th scope="col" className="is-r">
+                  Weight
+                </th>
+                <th scope="col" className="is-r">
+                  Change
+                </th>
+                <th scope="col">Source</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map(({ point, previous }) => (
+                <tr key={point.localDate}>
+                  <td>{formatPointDate(point.localDate)}</td>
+                  <td className="pg-num is-r pg-strong">
+                    {formatMetricValue(point.value, unit)}
+                  </td>
+                  <td className="pg-num is-r">
+                    {previous
+                      ? formatMetricDifference(point.value - previous.value, unit)
+                      : "—"}
+                  </td>
+                  <td>{renderSource(point)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </>
   );
 }

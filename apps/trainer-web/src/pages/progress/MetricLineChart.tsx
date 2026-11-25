@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type MouseEvent } from "react";
 import {
   formatMetricValue,
   formatPointDate,
@@ -40,6 +40,8 @@ type Props = {
   gaps?: { label?: string };
   /** Accessible name for the whole chart. */
   label: string;
+  /** Fades the first series' line into an area under it (frame W-160). */
+  area?: boolean;
   height?: number;
   /**
    * Runs the date axis on to this local date when it is later than the last entry,
@@ -48,7 +50,22 @@ type Props = {
   xEnd?: string | null;
 };
 
-const PAD = { top: 12, right: 24, bottom: 34, left: 56 };
+const PAD = { top: 16, right: 24, bottom: 34, left: 56 };
+
+/** The first line is the brand ink (v3 charts); the others keep their own colour and dash. */
+export function seriesColor(style: SeriesStyle): string {
+  return style.name === "solid" ? "var(--brand)" : style.color;
+}
+
+type Hover = {
+  key: string;
+  label: string;
+  unit: string | null;
+  localDate: string;
+  value: number;
+  cx: number;
+  cy: number;
+};
 const PAD_RIGHT_AXIS = 60;
 
 function dayNumber(localDate: string): number {
@@ -185,10 +202,13 @@ export function MetricLineChart({
   rightAxis,
   gaps,
   label,
-  height = 300,
+  area = false,
+  height = 320,
   xEnd = null,
 }: Props) {
   const { ref, width } = useWidth(760);
+  const gradientId = `pg-area-${useId().replace(/:/g, "")}`;
+  const [hover, setHover] = useState<Hover | null>(null);
   const leftSeries = series.filter((row) => row.axis !== "right");
   const rightSeries = rightAxis
     ? series.filter((row) => row.axis === "right")
@@ -241,6 +261,37 @@ export function MetricLineChart({
   const threshold = gaps ? gapThreshold(dates) : Infinity;
   const namedGaps = gaps?.label ? gapsIn(dates, threshold) : [];
 
+  const baseline = PAD.top + innerH;
+  const showArea = area && leftSeries.length > 0;
+  const areaSeries = showArea ? series[0] : undefined;
+
+  /** The entry nearest the pointer, across every plotted series. */
+  function nearest(event: MouseEvent<SVGSVGElement>) {
+    const box = event.currentTarget.getBoundingClientRect();
+    const px = event.clientX - box.left;
+    let best: Hover | null = null;
+    let bestDistance = Infinity;
+    for (const row of series) {
+      const y = row.axis === "right" && right ? yRight : yLeft;
+      for (const point of row.points) {
+        const distance = Math.abs(x(point.localDate) - px);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = {
+            key: row.key,
+            label: row.label,
+            unit: row.unit,
+            localDate: point.localDate,
+            value: point.value,
+            cx: x(point.localDate),
+            cy: y(point.value),
+          };
+        }
+      }
+    }
+    setHover(best);
+  }
+
   return (
     <div className="pg-chart" ref={ref}>
       <svg
@@ -249,7 +300,18 @@ export function MetricLineChart({
         width={width}
         height={height}
         viewBox={`0 0 ${width} ${height}`}
+        onMouseMove={nearest}
+        onMouseLeave={() => setHover(null)}
+        data-testid="pg-chart-svg"
       >
+        {areaSeries ? (
+          <defs>
+            <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0" className="pg-area-top" />
+              <stop offset="1" className="pg-area-bottom" />
+            </linearGradient>
+          </defs>
+        ) : null}
         <g className="pg-chart-grid" aria-hidden="true">
           {left.ticks.map((tick) => (
             <g key={tick}>
@@ -309,8 +371,30 @@ export function MetricLineChart({
             </text>
           ))}
         </g>
+        {areaSeries && areaSeries.points.length > 1 ? (
+          <path
+            className="pg-chart-area"
+            fill={`url(#${gradientId})`}
+            d={`${areaSeries.points
+              .map(
+                (point, index) =>
+                  `${index === 0 ? "M" : "L"}${x(point.localDate)},${yLeft(point.value)}`,
+              )
+              .join(" ")} L${x(areaSeries.points.at(-1)!.localDate)},${baseline} L${x(areaSeries.points[0]!.localDate)},${baseline} Z`}
+          />
+        ) : null}
+        {hover ? (
+          <line
+            className="pg-chart-cursor"
+            x1={hover.cx}
+            x2={hover.cx}
+            y1={PAD.top}
+            y2={baseline}
+          />
+        ) : null}
         {series.map((row) => {
           const y = row.axis === "right" && right ? yRight : yLeft;
+          const color = seriesColor(row.style);
           const path = row.points
             .map((point, index) => {
               const previous = row.points[index - 1];
@@ -327,32 +411,52 @@ export function MetricLineChart({
                 <path
                   d={path}
                   fill="none"
-                  stroke={row.style.color}
+                  style={{ stroke: color }}
                   strokeWidth={2}
                   strokeDasharray={row.style.dash}
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
               ) : null}
-              {row.points.map((point) => (
-                <circle
-                  key={point.localDate}
-                  cx={x(point.localDate)}
-                  cy={y(point.value)}
-                  r={4}
-                  fill="#ffffff"
-                  stroke={row.style.color}
-                  strokeWidth={2}
-                >
-                  <title>
-                    {`${row.label} · ${formatPointDate(point.localDate)} · ${formatMetricValue(point.value, row.unit)}`}
-                  </title>
-                </circle>
-              ))}
+              {row.points.map((point, index) => {
+                const isLast = index === row.points.length - 1;
+                return (
+                  <circle
+                    key={point.localDate}
+                    cx={x(point.localDate)}
+                    cy={y(point.value)}
+                    r={isLast ? 4.5 : 3}
+                    className={isLast ? "pg-dot is-last" : "pg-dot"}
+                    style={{ stroke: color, fill: isLast ? undefined : color }}
+                    strokeWidth={2}
+                  >
+                    <title>
+                      {`${row.label} · ${formatPointDate(point.localDate)} · ${formatMetricValue(point.value, row.unit)}`}
+                    </title>
+                  </circle>
+                );
+              })}
             </g>
           );
         })}
       </svg>
+      {hover ? (
+        <div
+          className="pg-tooltip"
+          data-testid="pg-tooltip"
+          aria-hidden="true"
+          style={{
+            left: Math.min(Math.max(hover.cx, 70), width - 70),
+            top: hover.cy,
+          }}
+        >
+          <b>{formatMetricValue(hover.value, hover.unit)}</b>
+          <span>
+            {series.length > 1 ? `${hover.label} · ` : ""}
+            {formatPointDate(hover.localDate)}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }

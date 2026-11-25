@@ -307,6 +307,15 @@ describe("ClientProgressPage no-weigh-ins link (CE3)", () => {
   });
 });
 
+/** A rail row as its label and latest value, without the change line under it. */
+function railTexts(tabs: HTMLElement[]): string[] {
+  return tabs.map(
+    (tab) =>
+      (tab.querySelector(".pg-rail-label")?.textContent ?? "") +
+      (tab.querySelector(".pg-rail-value")?.textContent ?? ""),
+  );
+}
+
 describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
   it("asks the metrics API for every standard key, at most two per call", async () => {
     serveMetrics(ROHAN);
@@ -342,15 +351,11 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
       within(rail)
         .getAllByRole("tablist")
         .map((list) => list.getAttribute("aria-labelledby")),
-    ).toEqual([
-      "pg-rail-weight",
-      "pg-rail-body",
-      "pg-rail-ratings",
-      "pg-rail-photos",
-    ]);
-    const tabs = within(rail)
-      .getAllByRole("tab")
-      .map((tab) => tab.textContent);
+    ).toEqual(["pg-rail-body", "pg-rail-ratings", "pg-rail-photos"]);
+    // Groups read Body, Check-in answers and Photos; the one heading holds weight and measurements.
+    expect(within(rail).getByText("Body")).toBeTruthy();
+    expect(within(rail).getByText("Check-in answers")).toBeTruthy();
+    const tabs = railTexts(within(rail).getAllByRole("tab"));
     expect(tabs).toEqual([
       "Weight86.4 kg",
       "Waist94 cm",
@@ -371,14 +376,19 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
     const { container } = renderPage();
     const panel = await screen.findByRole("tabpanel");
     await within(panel).findByRole("heading", { name: "Weight" });
-    expect(within(panel).getByText("Start · Mon 24 Aug")).toBeTruthy();
+    // KPI row: latest, change over the range, average change per week. No percentages.
     expect(
-      within(panel).getByText("Start · Mon 24 Aug").nextElementSibling
+      within(panel).getByText("Latest · Fri 16 Oct").nextElementSibling
         ?.textContent,
-    ).toBe("89.1 kg");
-    expect(within(panel).getByText("Latest · Fri 16 Oct")).toBeTruthy();
-    expect(within(panel).getByText("−2.7 kg")).toBeTruthy();
-    expect(within(panel).getByText("since Mon 24 Aug")).toBeTruthy();
+    ).toBe("86.4kg");
+    expect(
+      within(panel).getByText("Since Mon 24 Aug").nextElementSibling
+        ?.textContent,
+    ).toBe("−2.7kg");
+    expect(
+      within(panel).getByText("Average change").nextElementSibling?.textContent,
+    ).toMatch(/^−[\d.]+kg \/ wk$/);
+    expect(panel.textContent).not.toContain("%");
     expect(
       within(panel).getByRole("img", { name: /Weight, 3 entries/ }),
     ).toBeTruthy();
@@ -452,28 +462,28 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
     });
     renderPage();
     const panel = await screen.findByRole("tabpanel");
-    await within(panel).findByText("Start · Fri 9 Oct");
+    await within(panel).findByText("Since Fri 9 Oct");
     expect(
       calls().some((q) => q.range === "12w" && q.keys.includes("weight")),
     ).toBe(true);
 
-    fireEvent.click(screen.getByRole("button", { name: "4 w" }));
+    fireEvent.click(screen.getByRole("radio", { name: "4 wk" }));
     await waitFor(() =>
       expect(calls().some((q) => q.range === "4w")).toBe(true),
     );
     expect(
-      screen.getByRole("button", { name: "4 w" }).getAttribute("aria-pressed"),
+      screen.getByRole("radio", { name: "4 wk" }).getAttribute("aria-checked"),
     ).toBe("true");
 
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
-    await within(panel).findByText("Start · Mon 24 Aug");
+    fireEvent.click(screen.getByRole("radio", { name: "All" }));
+    await within(panel).findByText("Since Mon 24 Aug");
   });
 
   it("custom range: from after to is refused before calling the API; a valid pair is sent", async () => {
     serveMetrics(ROHAN);
     renderPage();
     await screen.findByRole("tabpanel");
-    fireEvent.click(screen.getByRole("button", { name: "Custom…" }));
+    fireEvent.click(screen.getByRole("button", { name: "Custom range" }));
     const from = screen.getByLabelText("From");
     const to = screen.getByLabelText("To");
     fireEvent.change(from, { target: { value: "2026-10-10" } });
@@ -515,7 +525,7 @@ describe("ClientProgressPage metric picker (frames 160, 160b, 160c)", () => {
       }
     }
     const checks = screen.getByRole("group", {
-      name: "Ratings 1 to 5 · standard: lines on the chart",
+      name: "Check-in answers: lines on the chart",
     });
     expect(within(checks).getAllByRole("checkbox")).toHaveLength(3);
   });
@@ -671,8 +681,8 @@ describe("ClientProgressPage workouts from logs (frame 160e, D-W8-7)", () => {
     serveMetrics(ROHAN);
     serveStrength(ROHAN_STRENGTH);
     renderPage();
-    const completed = await screen.findByRole("tab", { name: /Workouts completed/ });
-    expect(completed.textContent).toBe("Workouts completed4 of 11");
+    const completed = await screen.findByRole("tab", { name: /Workouts done/ });
+    expect(completed.textContent).toBe("Workouts done4 of 11");
     expect(
       screen.getByRole("tab", { name: /Exercise progress/ }).textContent,
     ).toBe("Exercise progress2 lifts");
@@ -761,7 +771,7 @@ describe("ClientProgressPage workouts from logs (frame 160e, D-W8-7)", () => {
       screen.queryByRole("heading", { name: "No progress data yet" }),
     ).toBeNull();
     // Range All reuses the all-time model.
-    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    fireEvent.click(screen.getByRole("radio", { name: "All" }));
     await within(panel).findByText("First logged · Wed 2 Sep");
     expect(within(panel).getByText("4 of 11 since start · 1 of 3 this week")).toBeTruthy();
   });
@@ -854,13 +864,13 @@ describe("ClientProgressPage photos compare (frame 160f)", () => {
     expect(tab.textContent).toBe("Progress photos3 dates");
     expect(tab.getAttribute("aria-selected")).toBe("false");
     expect(
-      screen.getByRole("button", { name: "12 w" }).getAttribute("aria-pressed"),
+      screen.getByRole("radio", { name: "12 wk" }).getAttribute("aria-checked"),
     ).toBe("true");
     fireEvent.click(tab);
     expect(tab.getAttribute("aria-selected")).toBe("true");
     // Photos are not filtered by range: the toolbar says All (frame 160f).
     expect(
-      screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed"),
+      screen.getByRole("radio", { name: "All" }).getAttribute("aria-checked"),
     ).toBe("true");
     expect(
       screen.getByRole("tab", { name: /Weight/ }).getAttribute("aria-selected"),
@@ -946,7 +956,6 @@ describe("ClientProgressPage sparse data (frame 160g)", () => {
     expect(within(panel).getByText("Start · Mon 5 Oct")).toBeTruthy();
     expect(within(panel).getByText("Latest · Sun 18 Oct")).toBeTruthy();
     expect(within(panel).queryByText("Change")).toBeNull();
-    expect(within(panel).getByText("Entries")).toBeTruthy();
     expect(
       within(panel).getByText(
         "Two weigh-ins so far. The trend line gets useful after a few more check-ins.",
@@ -968,9 +977,7 @@ describe("ClientProgressPage sparse data (frame 160g)", () => {
       ),
     );
     expect(api.getCheckinForm).toHaveBeenCalledWith(NEXT_CHECKIN_ID);
-    const tabs = within(rail)
-      .getAllByRole("tab")
-      .map((tab) => tab.textContent);
+    const tabs = railTexts(within(rail).getAllByRole("tab"));
     expect(tabs).toEqual([
       "Weight71.8 kg",
       "Waist1 entry",
@@ -995,7 +1002,9 @@ describe("ClientProgressPage sparse data (frame 160g)", () => {
     const panel = await screen.findByRole("tabpanel");
     await within(panel).findByText("Change");
     expect(within(panel).queryByText(/so far/)).toBeNull();
-    expect(within(panel).getByRole("button", { name: "Show data table" })).toBeTruthy();
+    expect(within(panel).getByRole("table")).toBeTruthy();
+    expect(within(panel).getByText("Latest entries")).toBeTruthy();
+    expect(panel.textContent).not.toContain("%");
   });
 });
 
@@ -1037,9 +1046,9 @@ describe("ClientProgressPage empty (frame 161)", () => {
       tabs.slice(1).every((tab) => tab.textContent!.endsWith("No entries")),
     ).toBe(true);
     expect(
-      within(rail).getByRole("tab", { name: /Workouts completed/ }).textContent,
-    ).toBe("Workouts completedNo entries");
-    expect(screen.getByRole("button", { name: "12 w" })).toBeTruthy();
+      within(rail).getByRole("tab", { name: /Workouts done/ }).textContent,
+    ).toBe("Workouts doneNo entries");
+    expect(screen.getByRole("radio", { name: "12 wk" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: /Compare with/ }).hasAttribute("disabled"),
     ).toBe(true);
@@ -1076,10 +1085,12 @@ describe("ClientProgressPage ended (frame 160h)", () => {
     expect(within(panel).getByText("Start")).toBeTruthy();
     // The whole coached period: ended clients open on All.
     expect(
-      screen.getByRole("button", { name: "All" }).getAttribute("aria-pressed"),
+      screen.getByRole("radio", { name: "All" }).getAttribute("aria-checked"),
     ).toBe("true");
     expect(within(panel).getByText("Last · Fri 2 Oct")).toBeTruthy();
-    expect(within(panel).getByText("−3.1 kg")).toBeTruthy();
+    expect(
+      within(panel).getByText("Change").nextElementSibling?.textContent,
+    ).toBe("−3.1kg");
     expect(within(panel).queryByText(/since/)).toBeNull();
     expect(within(panel).queryByText("Entries")).toBeNull();
     expect(within(panel).queryByText("Latest entries")).toBeNull();
@@ -1107,11 +1118,106 @@ describe("ClientProgressPage loading (frame 160i)", () => {
     expect(await screen.findByTestId("progress-skeleton")).toBeTruthy();
     expect(screen.getByText("Loading progress…")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "12 w" }).getAttribute("aria-pressed"),
+      screen.getByRole("radio", { name: "12 wk" }).getAttribute("aria-checked"),
     ).toBe("true");
     expect(screen.queryByRole("complementary", { name: "Metrics" })).toBeNull();
     release();
     await screen.findByRole("complementary", { name: "Metrics" });
     expect(screen.queryByTestId("progress-skeleton")).toBeNull();
+  });
+});
+
+describe("ClientProgressPage v3 rail, KPI row and chart (W13-9, frame W-160)", () => {
+  it("groups the rail as Body, Training, Check-in answers and Photos, and marks the selected row", async () => {
+    serveMetrics(ROHAN);
+    serveStrength(ROHAN_STRENGTH);
+    renderPage();
+    await screen.findByRole("tab", { name: /Weight/ });
+    const rail = screen.getByRole("complementary", { name: "Metrics" });
+    const headings = [...rail.querySelectorAll(".pg-rail-heading")].map(
+      (node) => node.textContent,
+    );
+    expect(headings).toEqual(["Body", "Training", "Check-in answers", "Photos"]);
+    const body = within(rail).getAllByRole("tablist")[0]!;
+    expect(
+      within(body)
+        .getAllByRole("tab")
+        .map((tab) => tab.querySelector(".pg-rail-label")?.textContent),
+    ).toEqual(["Weight", "Waist", "Hip"]);
+    expect(
+      within(rail).getByRole("tab", { name: /Weight/ }).className,
+    ).toContain("is-selected");
+    fireEvent.click(within(rail).getByRole("tab", { name: /Waist/ }));
+    const waist = within(rail).getByRole("tab", { name: /Waist/ });
+    expect(waist.getAttribute("aria-selected")).toBe("true");
+    expect(waist.className).toContain("is-selected");
+    expect(
+      within(rail).getByRole("tab", { name: /Weight/ }).getAttribute("aria-selected"),
+    ).toBe("false");
+    // Under a row's value: the change since the first entry.
+    expect(waist.querySelector(".pg-rail-change")?.textContent).toContain("−4 cm");
+  });
+
+  it("KPI row: latest, change, average and workouts done as 'n of m', with no percent figure", async () => {
+    serveMetrics(ROHAN);
+    serveStrength(ROHAN_STRENGTH);
+    renderPage();
+    const kpis = await screen.findByTestId("pg-kpis");
+    await waitFor(() =>
+      expect(within(kpis).getByTestId("pg-kpi-workouts")).toBeTruthy(),
+    );
+    expect(within(kpis).getByTestId("pg-kpi-workouts").textContent).toBe(
+      "Workouts done4 of 11",
+    );
+    expect(within(kpis).getByTestId("pg-kpi-latest").textContent).toBe(
+      "Latest · Fri 16 Oct86.4kg",
+    );
+    expect(kpis.textContent).not.toMatch(/%|streak/i);
+    expect(screen.getByRole("tabpanel").textContent).not.toMatch(/%/);
+  });
+
+  it("tooltip shows the value and a civil date such as 'Fri 16 Oct'", async () => {
+    serveMetrics(ROHAN);
+    renderPage();
+    const chart = await screen.findByTestId("pg-chart-svg");
+    expect(screen.queryByTestId("pg-tooltip")).toBeNull();
+    // The last entry sits at the right end of the plot.
+    fireEvent.mouseMove(chart, { clientX: 735, clientY: 100 });
+    const tooltip = await screen.findByTestId("pg-tooltip");
+    expect(tooltip.textContent).toBe("86.4 kgFri 16 Oct");
+    fireEvent.mouseLeave(chart);
+    expect(screen.queryByTestId("pg-tooltip")).toBeNull();
+  });
+
+  it("6 mo asks for the six months up to today; the chart keeps working", async () => {
+    serveMetrics(ROHAN);
+    renderPage();
+    await screen.findByRole("tabpanel");
+    fireEvent.click(screen.getByRole("radio", { name: "6 mo" }));
+    await waitFor(() =>
+      expect(
+        calls().some(
+          (q) =>
+            q.range === "custom" &&
+            q.from === "2026-04-18" &&
+            q.to === "2026-10-18",
+        ),
+      ).toBe(true),
+    );
+    expect(
+      screen.getByRole("radio", { name: "6 mo" }).getAttribute("aria-checked"),
+    ).toBe("true");
+    expect(
+      screen.getByRole("radio", { name: "12 wk" }).getAttribute("aria-checked"),
+    ).toBe("false");
+  });
+});
+
+describe("sixMonthsBefore", () => {
+  it("keeps the day, and clamps to the end of a shorter month", async () => {
+    const { sixMonthsBefore } = await import("./progress/RangeControl");
+    expect(sixMonthsBefore("2026-10-18")).toBe("2026-04-18");
+    expect(sixMonthsBefore("2026-08-31")).toBe("2026-02-28");
+    expect(sixMonthsBefore("2026-03-15")).toBe("2025-09-15");
   });
 });
