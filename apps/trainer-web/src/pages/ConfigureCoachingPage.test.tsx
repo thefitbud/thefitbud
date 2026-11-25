@@ -1434,6 +1434,16 @@ describe("ConfigureCoachingPage steps target (Z8-5, D-W8-5)", () => {
 
   it("an active version: changing the target saves it at once, without a new version", async () => {
     api.putClientStepsTarget.mockResolvedValue({ relationshipId: REL_ID, target: 10000 });
+    // Flake trace (CI run 45534624211): the page reads the target again when the
+    // configuration arrives, and a late read of a fixed 8000 overwrote the saved
+    // 10000. Like the API, reads answer with the last saved target.
+    api.getClientSteps.mockImplementation(async () => ({
+      relationshipId: REL_ID,
+      target: api.putClientStepsTarget.mock.calls.length > 0 ? 10000 : 8000,
+      from: "2026-07-01",
+      to: "2026-07-07",
+      days: [],
+    }));
     const { container } = renderPage("active", "active");
     await stepsLoaded(container);
     chooseOption(selectNamed(container, "stepsTarget"), "10000");
@@ -1443,7 +1453,7 @@ describe("ConfigureCoachingPage steps target (Z8-5, D-W8-5)", () => {
     expect(await screen.findByText("Steps target set to 10,000 a day")).toBeTruthy();
     expect(api.createConfigurationVersion).not.toHaveBeenCalled();
     expect(api.saveConfigurationDraft).not.toHaveBeenCalled();
-    expect(selectNamed(container, "stepsTarget").value).toBe("10000");
+    await waitFor(() => expect(selectNamed(container, "stepsTarget").value).toBe("10000"));
   });
 
   it("keeps a stored value that is off the 1,000 grid selectable", async () => {
