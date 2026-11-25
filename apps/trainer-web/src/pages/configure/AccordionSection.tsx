@@ -19,7 +19,12 @@ export function SectionBadge({ status }: { status: SectionStatus }) {
   );
 }
 
-/** One row of the Coaching setup list (frames 148/149). */
+/**
+ * One row of the Coaching setup list (frames 148/149). `variant="row"` is the
+ * Settings tab layout (W13-10, frame W-IP07): a label-left row that is always
+ * open, title, summary and status badge on the left and the fields on the
+ * right (`wide` puts the fields under the label, for tables).
+ */
 export function AccordionSection({
   id,
   title,
@@ -29,6 +34,8 @@ export function AccordionSection({
   forceOpen = false,
   children,
   error,
+  variant = "accordion",
+  wide = false,
 }: {
   id: string;
   title: string;
@@ -38,12 +45,38 @@ export function AccordionSection({
   forceOpen?: boolean;
   children: ReactNode;
   error?: string | null;
+  variant?: "accordion" | "row";
+  wide?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
     if (forceOpen) setOpen(true);
   }, [forceOpen]);
+
+  if (variant === "row") {
+    return (
+      <div
+        className={`configure-accordion cfg-row${wide ? " is-wide" : ""}${error ? " has-error" : ""}`}
+        data-testid="configure-row"
+      >
+        <div className="cfg-row-label">
+          <span className="configure-accordion-title">{title}</span>
+          <span className="configure-accordion-summary">{summary}</span>
+          {status ? <SectionBadge status={status} /> : null}
+        </div>
+        <div className="configure-accordion-body cfg-row-body" id={id}>
+          {error ? (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          ) : null}
+          {children}
+        </div>
+      </div>
+    );
+  }
+
 
   return (
     <details

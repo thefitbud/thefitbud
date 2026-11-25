@@ -2,9 +2,10 @@
  * Client workspace tab strip (TW-09a).
  *
  * Every `/clients/:relationshipId/*` screen that uses WorkspaceHeader renders
- * this list, in this order. Sessions, Packages, and Configure are not tabs.
- * Configure coaching stays on the header overflow menu and on existing
- * in-page links.
+ * this list, in this order (W13-10, D-WEB-3): Overview, Plan, Activity,
+ * Progress, Check-ins, History, Settings. Sessions, Packages and Configure are
+ * not tabs; Coaching setup, Reminders and Onboarding answers are sections of
+ * the Settings tab.
  */
 export const CLIENT_WORKSPACE_TABS = [
   { id: "overview", label: "Overview", segment: "overview" },
@@ -18,6 +19,7 @@ export const CLIENT_WORKSPACE_TABS = [
     badge: "submitted-checkins",
   },
   { id: "history", label: "History", segment: "history" },
+  { id: "settings", label: "Settings", segment: "settings" },
 ] as const;
 
 export type ClientWorkspaceTab = (typeof CLIENT_WORKSPACE_TABS)[number];
@@ -38,8 +40,9 @@ export function clientWorkspaceTabHref(
 
 /**
  * Overview is also the workspace index (`/clients/:id` and `/overview`).
- * Nested routes such as check-in review stay on their parent tab.
- * Configure and onboarding match none of these tabs.
+ * Nested routes such as check-in review stay on their parent tab. The old
+ * `configure` and `onboarding` routes redirect into Settings (D-W13-15), so
+ * they select Settings while the redirect runs.
  */
 export function isClientWorkspaceTabActive(
   pathname: string,
@@ -50,6 +53,12 @@ export function isClientWorkspaceTabActive(
   const href = `${base}/${tab.segment}`;
   if (pathname === href || pathname.startsWith(`${href}/`)) return true;
   if (tab.id === "overview" && (pathname === base || pathname === `${base}/`)) {
+    return true;
+  }
+  if (
+    tab.id === "settings" &&
+    (pathname === `${base}/configure` || pathname === `${base}/onboarding`)
+  ) {
     return true;
   }
   return false;

@@ -1,0 +1,243 @@
+/*
+ * W13-10 v3 client header (every client frame: W-03, W-158, W-163, W-181,
+ * W-209 …). Scoped to `.wsh-v3` so it layers over the older `.wsh` rules in
+ * styles/workspace.css without editing that file. Tokens and kit only.
+ */
+
+/* With the shell's 16 px gap: 24 px from the tabs to the tab body. */
+.wsh.wsh-v3 {
+  margin-bottom: var(--s2);
+}
+
+.wsh-v3 .wsh-r1 {
+  align-items: center;
+  gap: var(--s4);
+}
+
+.wsh-v3 .workspace-avatar.wsh-avatar {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 56px;
+  border-radius: var(--r-full);
+  background: var(--av1-bg);
+  color: var(--av1-fg);
+  font: var(--t-modal);
+  letter-spacing: 0;
+}
+
+.wsh-v3 .wsh-name-row {
+  gap: var(--s2);
+}
+
+.wsh-v3 .wsh-name-row .workspace-title {
+  font: var(--t-title);
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.wsh-v3 .wsh-name-row .status-chip {
+  white-space: nowrap;
+}
+
+.wsh-v3 .wsh-meta {
+  margin-top: var(--s1);
+  gap: var(--s1) var(--s3);
+  font: var(--t-body);
+  color: var(--ink3);
+}
+
+/* Separator dots hang in the gap before an item, so one that lands at the start
+   of a wrapped line sits in the clipped left padding and is never seen. The
+   left clip edge sits 4 px left of the content edge: past the 3 px focus ring
+   of an item that starts a line, but right of its 3 px dot (6–9 px out). The
+   clip leaves 16 px above and below, so the plan link's 44 px box at iPad
+   widths (12 px past its 20 px line each way) and its focus ring are never
+   cut. */
+.wsh-v3 .wsh-meta {
+  margin-inline-start: calc(-1 * var(--s3));
+  padding-inline-start: var(--s3);
+  clip-path: inset(-16px -4px -16px calc(var(--s3) - 4px));
+}
+
+.wsh-v3 .wsh-meta-item {
+  position: relative;
+}
+
+.wsh-v3 .wsh-meta-item + .wsh-meta-item::before {
+  position: absolute;
+  left: calc(-0.5 * var(--s3) - 1.5px);
+  margin-right: 0;
+}
+
+.wsh-v3 .wsh-meta a {
+  color: inherit;
+  font-weight: 400;
+}
+
+.wsh-v3 .wsh-meta a:hover,
+.wsh-v3 .wsh-meta a:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
+}
+
+.wsh-v3 .wsh-meta a:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.wsh-v3 .wsh-signals:empty {
+  display: none;
+}
+
+.wsh-v3 .wsh-acts {
+  gap: var(--s2);
+  padding-top: 0;
+  align-self: center;
+}
+
+/* Secondary buttons (DS §5.1): 36 px on desktop, 44 px on iPad widths. */
+.wsh-v3 .wsh-act {
+  white-space: nowrap;
+}
+
+.wsh-v3 .wsh-act svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+/* The frames print "WhatsApp"; the accessible name stays "Message on WhatsApp". */
+.wsh-v3 .wsh-wa-long {
+  display: none;
+}
+
+.wsh-v3 .wsh-wa-short {
+  display: inline;
+}
+
+.wsh-v3 .wsh-acts .overflow-menu-trigger {
+  width: var(--h-md);
+  height: var(--h-md);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  box-shadow: var(--e1);
+  color: var(--ink);
+}
+
+.wsh-v3 .wsh-acts .overflow-menu-trigger[aria-expanded="true"] {
+  border-color: var(--line-strong);
+  background: var(--fill);
+}
+
+/* Tabs (DS §5.4): 44 px, ink underline, counts in a neutral pill. */
+.wsh-v3 .wsh-tabs {
+  gap: var(--s6);
+  margin-top: var(--s5);
+  border-bottom: 1px solid var(--line);
+}
+
+.wsh-v3 .wsh-tab {
+  height: 44px;
+  font: 500 14px/20px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  color: var(--ink3);
+}
+
+.wsh-v3 .wsh-tab:hover {
+  color: var(--ink);
+}
+
+.wsh-v3 .wsh-tab.is-active {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.wsh-v3 .wsh-tab .tab-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--r-full);
+  background: var(--fill2);
+  color: var(--ink);
+  font: var(--t-cap);
+}
+
+.wsh-v3 .wsh-tab.is-active .tab-badge {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+/* iPad widths (1024 portrait, 1180 landscape): every target is 44 px. */
+@media (max-width: 1194px) {
+  .wsh-v3 .wsh-act {
+    min-height: 44px;
+    height: 44px;
+  }
+
+  .wsh-v3 .wsh-acts .overflow-menu-trigger {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* The iPad frame (W-209 iPad) leaves age and sex to Client details. */
+  .wsh-v3 .wsh-meta-item.is-profile {
+    display: none;
+  }
+
+  /* 44 px hit areas at iPad landscape too (tap-targets.css starts at 1024).
+     The crumb keeps a real 44 px box. The plan link (a flex item of its meta
+     item) gets a real 44 px box from 12 px block padding, cancelled by an
+     equal negative margin, so the meta line keeps its 20 px text lines and no
+     separator starts a line. Its item sits above the next wrapped line's
+     items, so the whole box takes taps; the focus ring hugs the text. */
+  .wsh-v3 .wsh-crumb a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding-inline: 0;
+  }
+
+  .wsh-v3 .wsh-meta-item.is-plan {
+    z-index: 1;
+  }
+
+  .wsh-v3 .wsh-meta .workspace-plan-link {
+    position: relative;
+    display: block;
+    height: auto !important;
+    min-height: 0 !important;
+    padding: 12px 0;
+    margin-block: -12px;
+  }
+
+  .wsh-v3 .wsh-meta .workspace-plan-link:focus-visible {
+    outline: none;
+  }
+
+  .wsh-v3 .wsh-meta .workspace-plan-link:focus-visible::after {
+    content: "";
+    position: absolute;
+    inset: 12px 0;
+    border-radius: 2px;
+    outline: 2px solid var(--brand);
+    outline-offset: 1px;
+    pointer-events: none;
+  }
+
+  .wsh-v3 .wsh-crumb {
+    margin-bottom: var(--s1);
+  }
+
+  .wsh-v3 .wsh-tab {
+    min-width: 44px;
+    justify-content: center;
+  }
+}
+
+/* At 1024 tap-targets.css pads each tab to 44 px; the padding is the gap. */
+@media (max-width: 1024px) {
+  .wsh-v3 .wsh-tabs {
+    gap: 0;
+  }
+}

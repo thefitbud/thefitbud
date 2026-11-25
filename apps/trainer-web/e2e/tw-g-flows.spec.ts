@@ -110,6 +110,7 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await expect(page.getByRole("button", { name: /Schedule check-in/i })).toHaveCount(0);
 
     await page.goto(`/clients/${KAVYA}/configure`);
+    await expect(page.getByTestId("configure-readonly")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole("button", { name: /Create new version/i })).toHaveCount(0);
   });
 
@@ -153,7 +154,7 @@ test.describe("TW-G history, settings, ended, reminders", () => {
     await page.getByRole("button", { name: /^Details$/i }).click();
     await expect(page.getByTestId("screen-TW-31")).toBeVisible();
     await expect(page.getByText(/WhatsApp reminders · Coming soon/i)).toBeVisible();
-    await expect(page.getByText(/Switch categories on or off in Plan › Coaching setup/i)).toBeVisible();
+    await expect(page.getByText(/Switch categories on or off in Settings › Reminders/i)).toBeVisible();
   });
 
   test("TW-30 reactivate modal from settings ended list", async ({ page }) => {

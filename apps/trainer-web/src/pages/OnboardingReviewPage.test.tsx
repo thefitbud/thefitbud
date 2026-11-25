@@ -2,8 +2,8 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Outlet, Route, Routes } from "react-router-dom";
+import { cleanup, fireEvent, render, screen, within, waitFor } from "@testing-library/react";
+import { MemoryRouter, Outlet, Route, Routes, useLocation } from "react-router-dom";
 
 const REL_ID = "55555555-5555-4555-8555-555555555555";
 
@@ -51,11 +51,17 @@ function pageTree(
           element={<Outlet context={context} />}
         >
           <Route path="onboarding" element={<OnboardingReviewPage />} />
-          <Route path="configure" element={<p>configure route</p>} />
+          <Route path="settings" element={<SettingsProbe />} />
         </Route>
       </Routes>
     </MemoryRouter>
   );
+}
+
+/** Stands in for the Settings tab: shows which section the hash selects. */
+function SettingsProbe() {
+  const { hash } = useLocation();
+  return <p>{`settings route ${hash}`}</p>;
 }
 
 function renderPage(
@@ -120,6 +126,19 @@ afterEach(() => {
 });
 
 describe("OnboardingReviewPage submitted (frame 146)", () => {
+  it("W-146: answers grouped by form section, the flagged ones listed first to keep in mind", async () => {
+    renderPage("active");
+    const keep = await screen.findByTestId("intake-keep-in-mind");
+    expect(within(keep).getByText("1 answer to keep in mind")).toBeTruthy();
+    expect(within(keep).getByText("Health")).toBeTruthy();
+    expect(keep.textContent).toContain("Injuries: Left knee pain");
+    expect(screen.getByRole("heading", { name: "Goals" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Health" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "FitBud standard intake · v1" })).toBeTruthy();
+    // Coached already: no onboarding stepper.
+    expect(screen.queryByLabelText("Onboarding progress")).toBeNull();
+  });
+
   it("shows stepper, Review flag, Next step actions, and Timeline", async () => {
     renderPage("onboarding_submitted", "+919876543210");
     expect(
@@ -171,7 +190,8 @@ describe("OnboardingReviewPage footer (CE2)", () => {
     const button = await screen.findByRole("button", { name: "View coaching setup" });
     expect(screen.queryByRole("button", { name: /configure/i })).toBeNull();
     fireEvent.click(button);
-    expect(await screen.findByText("configure route")).toBeTruthy();
+    // W13-10: the CTA selects the Settings tab's Coaching setup section.
+    expect(await screen.findByText("settings route #coaching")).toBeTruthy();
     expect(api.reviewOnboarding).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: /WhatsApp/i })).toBeNull();
     expect(screen.queryByRole("link", { name: /WhatsApp/i })).toBeNull();
@@ -186,14 +206,23 @@ describe("OnboardingReviewPage footer (CE2)", () => {
   });
 
   it.each(["active", "coaching_ready"] as const)(
-    "%s client: the button still reads Open configure",
+    "%s client: the button reads Open coaching setup and selects that section",
     async (status) => {
       renderPage(status);
-      expect(await screen.findByRole("button", { name: "Open configure" })).toBeTruthy();
+      const open = await screen.findByRole("button", { name: "Open coaching setup" });
+      expect(screen.queryByRole("button", { name: /configure/i })).toBeNull();
       expect(screen.queryByRole("button", { name: "View coaching setup" })).toBeNull();
       expect(screen.getByRole("button", { name: /Message on WhatsApp/i })).toBeTruthy();
+      fireEvent.click(open);
+      expect(await screen.findByText("settings route #coaching")).toBeTruthy();
     },
   );
+
+  it("active client: Marked ready carries the weekday, like Mon 6 Jul", async () => {
+    renderPage("active");
+    const mark = await screen.findByText(/^Marked ready/);
+    expect(mark.textContent).toMatch(/^Marked ready Mon 6 Jul( \d{4})?$/);
+  });
 
   it("active client: WhatsApp still opens the intake draft", async () => {
     renderPage("active", "+919876543210");

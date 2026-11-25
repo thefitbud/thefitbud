@@ -37,14 +37,11 @@ import {
   ReadOnlyField,
   ReadOnlyFieldList,
 } from "../components/ReadOnlyField";
-import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { quietHoursText } from "../components/workspace/ResponsivenessPanel";
 import { apiClient } from "../lib/api";
-import { useConfig, isWhatsAppAutomationEnabled } from "../lib/config";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { coachingPrefillFromIntake } from "../lib/intakePrefill";
 import { stage1Api } from "../lib/stage1-api";
-import { whatsappHref } from "../lib/whatsapp";
 import type { WorkspaceOutletContext } from "./workspaceContext";
 import { AccordionSection } from "./configure/AccordionSection";
 import {
@@ -54,12 +51,7 @@ import {
 } from "./configure/CoachingModeSection";
 import { useCoachingMode } from "./configure/useCoachingMode";
 import { COACHING_MODE_LABELS } from "./client-settings/clientSettingsFormat";
-import {
-  ClientSettingsMovedBanner,
-  ConfigureToolbar,
-  civilDateIn,
-  configureStatusNote,
-} from "./configure/ConfigureToolbar";
+import { civilDateIn, configureStatusNote } from "./configure/ConfigureToolbar";
 import {
   ActivateDialog,
   SaveVersionDialog,
@@ -172,8 +164,6 @@ export function ConfigureCoachingPage() {
   const { relationshipId = "" } = useParams();
   const { workspace, reloadWorkspace, online = true } =
     useOutletContext<WorkspaceOutletContext>();
-  const { config } = useConfig();
-  const waAutomationOn = isWhatsAppAutomationEnabled(config);
 
   const header = workspace?.header ?? null;
   const displayName = header?.traineeDisplayName ?? "Client";
@@ -207,7 +197,6 @@ export function ConfigureCoachingPage() {
     meal_reminder: true,
     checkin_reminder: true,
   });
-  const [reminderSaving, setReminderSaving] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [notificationsOff, setNotificationsOff] = useState(false);
   const [quietHours, setQuietHours] = useState<string | null>(null);
@@ -886,50 +875,6 @@ export function ConfigureCoachingPage() {
     }
   }
 
-  async function toggleReminder(type: ReminderType, enabled: boolean) {
-    if (!relationshipId || mutationsBlocked) return;
-    const previous = reminders[type];
-    setReminders((current) => ({ ...current, [type]: enabled }));
-    setReminderSaving(type);
-    try {
-      const result = await apiClient.saveReminderRules(relationshipId, {
-        rules: [{ reminderType: type, enabled }],
-      });
-      const next: Record<string, boolean> = { ...reminders, [type]: enabled };
-      for (const item of result.items) {
-        if (
-          item.reminderType === "workout_reminder" ||
-          item.reminderType === "meal_reminder" ||
-          item.reminderType === "checkin_reminder"
-        ) {
-          next[item.reminderType] = item.enabled;
-        }
-      }
-      setReminders(next);
-      const label =
-        REMINDER_CATEGORIES.find((c) => c.type === type)?.label ?? "Reminder";
-      showToast(
-        enabled ? `${label} reminders on` : `${label} reminders off`,
-      );
-    } catch (err) {
-      setReminders((current) => ({ ...current, [type]: previous ?? true }));
-      if (noteEndedElsewhere(err)) return;
-      showToast(
-        userFacingMessage(err, { fallback: "Could not update reminder." }),
-      );
-    } finally {
-      setReminderSaving(null);
-    }
-  }
-
-  const clientWhatsapp = header?.clientWhatsappE164 ?? null;
-  const openWhatsappHref = clientWhatsapp
-    ? whatsappHref({
-        phoneE164: clientWhatsapp,
-        draftText: `Hi ${firstName}, checking in from FitBud about your coaching setup.`,
-      })
-    : null;
-
   const statusKey = status ?? "draft";
   const statusLabel = relationshipEnded
     ? "Ended"
@@ -1087,7 +1032,11 @@ export function ConfigureCoachingPage() {
     >
       {relationshipEnded ? (
         // Z7-13 (DS7): ended title, lede and status in one quiet banner.
-        <header className="configure-page-header readonly-banner">
+        <header
+          className="configure-page-header readonly-banner"
+          id="cs-coaching"
+          data-testid="cs-section-coaching"
+        >
           <svg
             className="readonly-banner-icon"
             viewBox="0 0 24 24"
@@ -1110,28 +1059,15 @@ export function ConfigureCoachingPage() {
             {statusLabel}
           </span>
         </header>
-      ) : (
-        <>
-          {/* Frames 148/149: no visible title; the Plans | Coaching setup switch names the page. */}
-          <h2 className="sr-only">{pageTitle}</h2>
-          <ConfigureToolbar
-            relationshipId={relationshipId}
-            note={configureStatusNote(configuration)}
-          />
-          <ClientSettingsMovedBanner
-            relationshipId={relationshipId}
-            firstName={firstName}
-          />
-        </>
-      )}
+      ) : null}
 
       {header?.onboardingStatus !== "coaching_ready" &&
       header?.onboardingStatus !== "active" &&
       header?.onboardingStatus !== "ended" ? (
         <p className="banner-info" role="status">
           Finish onboarding review before editing coaching expectations.{" "}
-          <Link to={`/clients/${relationshipId}/onboarding`}>
-            Open onboarding review
+          <Link to={`/clients/${relationshipId}/settings#onboarding`}>
+            Open onboarding answers
           </Link>
         </p>
       ) : null}
@@ -1249,7 +1185,7 @@ export function ConfigureCoachingPage() {
               acknowledgedFingerprint === consistencyFingerprintValue
             }
             planTo={`/clients/${relationshipId}/plan`}
-            configureTo={`/clients/${relationshipId}/configure`}
+            configureTo={`/clients/${relationshipId}/settings#coaching`}
             showPlanLink={false}
             showConfigureLink={false}
           />
@@ -1261,12 +1197,26 @@ export function ConfigureCoachingPage() {
         </>
       ) : (
       <form
-        className="configure-accordion-list"
+        className="configure-accordion-list cfg-form"
         onSubmit={(event) => {
           void saveDraft(event);
         }}
       >
+        {/* W13-10 (frame W-IP07): the Coaching setup card, label-left rows. */}
+        <section
+          className="cfg-card"
+          id="cs-coaching"
+          aria-labelledby="cfg-coaching-title"
+          data-testid="cs-section-coaching"
+        >
+          <header className="cfg-card-head">
+            <h2 id="cfg-coaching-title">{pageTitle}</h2>
+            <p className="cfg-card-aside" data-testid="configure-status-note">
+              {configureStatusNote(configuration) ?? "Goal, mode and what you agreed"}
+            </p>
+          </header>
         <AccordionSection
+          variant="row"
           id="configure-goal"
           title="Goal"
           summary={summaries.goal}
@@ -1277,7 +1227,7 @@ export function ConfigureCoachingPage() {
         >
           <div className="cs-fields">
             <label className="cs-field">
-              <span className="cs-field-label">Goal</span>
+              <span className="cs-field-label sr-only" data-testid="configure-goal-label">Goal</span>
               <input
                 type="text"
                 name="goalShort"
@@ -1321,6 +1271,7 @@ export function ConfigureCoachingPage() {
         </AccordionSection>
 
         <AccordionSection
+          variant="row"
           id="configure-coaching-mode"
           title="Coaching mode"
           summary={
@@ -1334,11 +1285,13 @@ export function ConfigureCoachingPage() {
             state={coachingMode}
             disabled={mutationsBlocked}
             firstName={firstName}
-            settingsTo={`/clients/${relationshipId}/settings`}
+            settingsTo={`/clients/${relationshipId}/settings#subscription`}
           />
         </AccordionSection>
 
         <AccordionSection
+          variant="row"
+          wide
           id="configure-expectations"
           title="Expectations"
           summary={
@@ -1362,67 +1315,7 @@ export function ConfigureCoachingPage() {
         </AccordionSection>
 
         <AccordionSection
-          id="configure-checkins"
-          title="Check-ins"
-          summary={summaries.checkins}
-          status={sectionStatus("checkins")}
-        >
-          <div className="cs-fields cs-fields-row">
-            <label className="cs-field">
-              <span className="cs-field-label">Due window (hours)</span>
-              <input
-                disabled={fieldsDisabled}
-                type="number"
-                name="dueWindowHours"
-                min={1}
-                max={168}
-                value={form.dueWindowHours}
-                onChange={(event) =>
-                  setForm((current) => ({
-                    ...current,
-                    dueWindowHours: Number(event.target.value),
-                  }))
-                }
-              />
-            </label>
-            {/* Not in a disabled fieldset: on an active version the form is
-                still assigned for the next check-in (D-W8-5). */}
-            <label className="cs-field">
-              <span className="cs-field-label">Check-in form</span>
-              <select
-                name="checkinForm"
-                aria-describedby="configure-checkin-form-help"
-                disabled={checkinFormDisabled}
-                value={form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID}
-                onChange={(event) => {
-                  void changeCheckinForm(event.target.value || null);
-                }}
-              >
-                {checkinForms.length === 0 ? (
-                  <option value={GLOBAL_CHECKIN_FORM_VERSION_ID}>
-                    FitBud weekly check-in
-                  </option>
-                ) : (
-                  checkinForms.map((item) => (
-                    <option key={item.id} value={checkinFormOptionValue(item)}>
-                      {item.ownership === "global"
-                        ? `${item.name} (FitBud base)`
-                        : `${item.name} (Mine)`}
-                    </option>
-                  ))
-                )}
-              </select>
-            </label>
-          </div>
-          <p className="cs-field-help" id="configure-checkin-form-help">
-            {status === "active"
-              ? `Changing the form applies from ${firstName}'s next check-in. The rest of this version stays as it is.`
-              : "The next scheduled check-in uses this form."}{" "}
-            Fork and edit forms under Templates · Check-ins.
-          </p>
-        </AccordionSection>
-
-        <AccordionSection
+          variant="row"
           id="configure-tracking"
           title="Tracking"
           summary={summaries.tracking}
@@ -1485,80 +1378,78 @@ export function ConfigureCoachingPage() {
             </label>
           </fieldset>
         </AccordionSection>
+        </section>
 
-        <AccordionSection
-          id="configure-reminders"
-          title="Automatic reminders"
-          summary={summaries.reminders}
-          // Rules save on change, but there is nothing to badge before the
-          // first configuration exists (Z8-5 review).
-          status={configuration ? "done" : undefined}
+        {/* W-IP07: Check-ins is its own card, saved with the same version. */}
+        <section
+          className="cfg-card cfg-card-checkins"
+          id="cs-checkins"
+          aria-label="Check-ins"
+          data-testid="cs-section-checkins"
         >
-          <fieldset
-            className="configure-switch-list"
-            disabled={mutationsBlocked}
-          >
-            {REMINDER_CATEGORIES.map((category) => (
-              <label key={category.type} className="configure-switch">
-                <span>{category.label}</span>
-                <input
-                  type="checkbox"
-                  role="switch"
-                  className="configure-switch-input"
-                  aria-checked={Boolean(reminders[category.type])}
-                  checked={Boolean(reminders[category.type])}
-                  disabled={
-                    mutationsBlocked || reminderSaving === category.type
-                  }
-                  onChange={(event) => {
-                    void toggleReminder(category.type, event.target.checked);
-                  }}
-                />
-              </label>
-            ))}
-          </fieldset>
-          <p className="configure-reminder-note">
-            FitBud times reminders around {firstName}&apos;s meal times and
-            workout time, only when something isn&apos;t logged, and never in{" "}
-            {pronoun} quiet hours{quietHours ? ` (${quietHours})` : ""}.{" "}
-            {firstName} controls{" "}
-            {pronoun} own notification settings and can adjust {pronoun} meal
-            times.
-            {header?.hasCustomMealTimes
-              ? ` ${firstName} has customized meal times in the app.`
-              : ""}
-          </p>
-          <div className="configure-wa-reminders">
-            {waAutomationOn ? (
-              <p className="muted">
-                WhatsApp reminders: used when app notifications don&apos;t reach{" "}
-                {firstName}. The trainer can&apos;t opt a client in.
-              </p>
-            ) : (
-              <p>
-                WhatsApp reminders ·{" "}
-                <span className="chip-coming">Coming soon</span>. FitBud reminds{" "}
-                {firstName} in the app for now.
-              </p>
-            )}
-            {relationshipEnded ? null : openWhatsappHref ? (
-              <a
-                className="button-secondary button-whatsapp"
-                href={openWhatsappHref}
-                target="_blank"
-                rel="noreferrer"
+        <AccordionSection
+          variant="row"
+          id="configure-checkins"
+          title="Check-ins"
+          summary={summaries.checkins}
+          status={sectionStatus("checkins")}
+          defaultOpen
+        >
+          <div className="cs-fields cs-fields-row">
+            <label className="cs-field">
+              <span className="cs-field-label">Due window (hours)</span>
+              <input
+                disabled={fieldsDisabled}
+                type="number"
+                name="dueWindowHours"
+                min={1}
+                max={168}
+                value={form.dueWindowHours}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    dueWindowHours: Number(event.target.value),
+                  }))
+                }
+              />
+            </label>
+            {/* Not in a disabled fieldset: on an active version the form is
+                still assigned for the next check-in (D-W8-5). */}
+            <label className="cs-field">
+              <span className="cs-field-label">Check-in form</span>
+              <select
+                name="checkinForm"
+                aria-describedby="configure-checkin-form-help"
+                disabled={checkinFormDisabled}
+                value={form.formVersionId ?? GLOBAL_CHECKIN_FORM_VERSION_ID}
+                onChange={(event) => {
+                  void changeCheckinForm(event.target.value || null);
+                }}
               >
-                <WhatsAppGlyph />
-                Open WhatsApp
-              </a>
-            ) : (
-              <Button variant="whatsapp" disabled>
-                <WhatsAppGlyph />
-                Open WhatsApp
-              </Button>
-            )}
+                {checkinForms.length === 0 ? (
+                  <option value={GLOBAL_CHECKIN_FORM_VERSION_ID}>
+                    FitBud weekly check-in
+                  </option>
+                ) : (
+                  checkinForms.map((item) => (
+                    <option key={item.id} value={checkinFormOptionValue(item)}>
+                      {item.ownership === "global"
+                        ? `${item.name} (FitBud base)`
+                        : `${item.name} (Mine)`}
+                    </option>
+                  ))
+                )}
+              </select>
+            </label>
           </div>
+          <p className="cs-field-help" id="configure-checkin-form-help">
+            {status === "active"
+              ? `Changing the form applies from ${firstName}'s next check-in. The rest of this version stays as it is.`
+              : "The next scheduled check-in uses this form."}{" "}
+            Fork and edit forms under Templates · Check-ins.
+          </p>
         </AccordionSection>
+        </section>
 
         <PlanConsistencyNotice
           warnings={consistencyWarnings}
@@ -1574,7 +1465,7 @@ export function ConfigureCoachingPage() {
               : undefined
           }
           planTo={`/clients/${relationshipId}/plan`}
-          configureTo={`/clients/${relationshipId}/configure`}
+          configureTo={`/clients/${relationshipId}/settings#coaching`}
           showPlanLink={!relationshipEnded}
           showConfigureLink={false}
         />
