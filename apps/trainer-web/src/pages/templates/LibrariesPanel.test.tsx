@@ -205,8 +205,21 @@ describe("LibrariesPanel", () => {
         name: "Logged by clients, not in library",
       }),
     ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Muscle/ })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Equipment/ })).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: "Primary muscles" })).toBeNull();
+  });
+
+  it("filters exercises by Muscle through the API", async () => {
+    renderLibraries("exercises");
+    await screen.findByText("Back squat");
+    fireEvent.click(screen.getByRole("button", { name: /Muscle/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Quads" }));
+    await waitFor(() =>
+      expect(api.listExerciseLibrary).toHaveBeenCalledWith(
+        expect.objectContaining({ muscleGroup: "quads" }),
+      ),
+    );
   });
 
   it("filters by Source: Mine", async () => {

@@ -330,13 +330,14 @@ describe("UsedByCell", () => {
   });
 
   it("caps the avatars at three for four or more clients", () => {
+    const fourIds = [...ids, "44444444-4444-4444-8444-444444444444"];
     render(
       <UsedByCell
-        usedBy={{ count: 8, clientIds: ids }}
+        usedBy={{ count: 4, clientIds: fourIds }}
         clients={clients}
       />,
     );
-    expect(screen.getByText("8 clients")).toBeTruthy();
+    expect(screen.getByText("4 clients")).toBeTruthy();
     expect(screen.getAllByTestId("used-by-avatar")).toHaveLength(3);
   });
 

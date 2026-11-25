@@ -314,10 +314,12 @@ function ExerciseLibrary({
   const [q, setQ] = useState("");
   const [source, setSource] = useState<SourceFilter>("all");
   const [equipment, setEquipment] = useState("");
+  const [muscle, setMuscle] = useState("");
   const nameQuery = useDebounced(q);
   const page = useCursorPage(
     JSON.stringify({
       q: nameQuery.trim(),
+      muscle,
       equipment,
     }),
     (cursor) =>
@@ -325,6 +327,7 @@ function ExerciseLibrary({
         cursor,
         limit: PAGE_SIZE,
         q: nameQuery.trim() || undefined,
+        muscleGroup: muscle || undefined,
         equipment: equipment || undefined,
       }),
   );
@@ -349,7 +352,7 @@ function ExerciseLibrary({
     [page.items, source],
   );
   const emptySearch =
-    Boolean(nameQuery.trim() || equipment || source !== "all") &&
+    Boolean(nameQuery.trim() || muscle || equipment || source !== "all") &&
     items.length === 0 &&
     !page.loading;
 
@@ -456,6 +459,19 @@ function ExerciseLibrary({
             onChange={setQ}
             label="Search exercises"
             placeholder="Search exercises"
+          />
+          <FilterChipSelect
+            label="Muscle"
+            value={muscle || "all"}
+            defaultValue="all"
+            options={[
+              { value: "all", label: "Any" },
+              ...MUSCLE_OPTIONS.map((value) => ({
+                value,
+                label: labelFor("body_part", value),
+              })),
+            ]}
+            onChange={(next) => setMuscle(next === "all" ? "" : next)}
           />
           <FilterChipSelect
             label="Equipment"
