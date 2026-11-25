@@ -288,6 +288,20 @@ test.describe("W13-3 builder workspace", () => {
     panes = await expectWorkspace(page, "short diet", 3);
     expect(panes.find((pane) => pane.id === "builder-pane-canvas")?.overflows).toBe(false);
     await shot(page, "W-154-short-plan-1440x900.png");
+
+    // A FitBud (global) template opens read-only in the same workspace, with "Make a copy".
+    const globals = await api<{ items: Template[] }>("GET", "/templates?limit=50&templateType=workout");
+    const global = globals.items.find((item) => item.ownership !== "trainer");
+    if (global) {
+      await page.goto(`/templates/workouts/${global.id}`);
+      await expect(page.getByTestId("builder-layout")).toBeVisible({ timeout: 30_000 });
+      await expect(page.getByRole("button", { name: "Make a copy" })).toBeVisible();
+      await expect(page.getByTestId("builder-pane-library")).toContainText(
+        "Library is available when you can edit.",
+      );
+      await expectWorkspace(page, "read-only template", 3);
+      await shot(page, "W-152-read-only-1440x900.png");
+    }
   });
 
   test("at 1180 the Library button opens the drawer and adds an exercise", async ({ page }) => {
