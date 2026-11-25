@@ -31,6 +31,7 @@ const api = vi.hoisted(() => ({
   acknowledgeException: vi.fn(),
   resolveException: vi.fn(),
   getException: vi.fn(),
+  listExceptions: vi.fn(),
   getWorkoutAssignment: vi.fn(),
   getClientWorkspace: vi.fn(),
   nudgeActivity: vi.fn(),
@@ -56,6 +57,7 @@ vi.mock("../lib/api", () => ({
     acknowledgeException: api.acknowledgeException,
     resolveException: api.resolveException,
     getException: api.getException,
+    listExceptions: api.listExceptions,
     getWorkoutAssignment: api.getWorkoutAssignment,
     getClientWorkspace: api.getClientWorkspace,
     nudgeActivity: api.nudgeActivity,
@@ -200,6 +202,7 @@ beforeEach(() => {
   api.getWorkspaceWeek.mockRejectedValue(new Error("not needed"));
   api.getResponsiveness.mockRejectedValue(new Error("not needed"));
   api.getException.mockResolvedValue(detail);
+  api.listExceptions.mockResolvedValue({ items: [detail], nextCursor: null });
   api.getWorkoutAssignment.mockResolvedValue({
     workoutDayName: "Upper body A",
     windowEndsAt: "2026-10-22T12:00:00.000Z",
@@ -219,6 +222,24 @@ afterEach(() => {
 
 describe("Esc then browser Back reopens a usable drawer (DR2 / DR1 QA F-C)", () => {
   it("Home: Esc, Back before the close commits: same drawer, 'n' nudges and Esc closes", async () => {
+    window.history.replaceState(null, "", `/?exception=${EXC}`);
+    render(
+      <BrowserRouter>
+        <HomePage />
+      </BrowserRouter>,
+    );
+    await screen.findByText("Rohan Mehta");
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByRole("button", { name: "Remind" });
+    await escThenBack();
+    await expectUsable(dialog);
+  });
+
+  // The Review button opens the client's list mode (`?client=`), not a deep
+  // link to one item. List mode closes by replacing its own history entry, so
+  // Esc clears `?client=` and Back leaves Home rather than reopening it; the
+  // drawer must still be usable on open and close cleanly.
+  it("Home: Review button opens list mode; 'n' nudges and Esc closes and clears ?client=", async () => {
     window.history.replaceState(null, "", "/");
     render(
       <BrowserRouter>
@@ -229,8 +250,17 @@ describe("Esc then browser Back reopens a usable drawer (DR2 / DR1 QA F-C)", () 
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByRole("button", { name: "Remind" });
-    await escThenBack();
-    await expectUsable(dialog);
+    expect(new URLSearchParams(window.location.search).get("client")).toBe(REL);
+    expect(new URLSearchParams(window.location.search).get("exception")).toBeNull();
+    await act(async () => {
+      press("n");
+    });
+    expect(api.nudgeActivity).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      press("Escape");
+    });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(new URLSearchParams(window.location.search).get("client")).toBeNull();
   });
 
   // The client page passes no open token at all, so before DR2 nothing
