@@ -307,7 +307,15 @@ test.describe("W13-13 review panel (Z14-23 layout on web)", () => {
     expect((await windowLocked(page)).windowScrolls).toBe(false);
     // The first card row is item 1 of n in the modal (one order everywhere).
     const firstRow = (await page.locator(".ov-att .ov-att-tx b").first().textContent())?.trim() ?? "";
-    await expect(panel.locator(".sp-title")).toContainText(firstRow);
+    // The card row is titled from the list payload ("Overdue meal · Tue 24 Nov");
+    // the panel resolves the meal name too ("Overdue meal · Dinner · Tue 24 Nov").
+    // Compare what both share: the type up front and the date at the end.
+    const [rowType, ...rowRest] = firstRow.split(" · ");
+    const rowDate = rowRest[rowRest.length - 1] ?? "";
+    const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    await expect(panel.locator(".sp-title")).toHaveText(
+      new RegExp(`^${escape(rowType)}.*${escape(rowDate)}$`),
+    );
     await page.keyboard.press("ArrowRight");
     await expect(panel.getByText(/^2 of \d+$/)).toBeVisible();
     expect((await windowLocked(page)).windowScrolls).toBe(false);
