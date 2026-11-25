@@ -28,8 +28,12 @@ import {
  * - Z14-37: with `hold`, the held change is also written to the device store
  *   (`pendingFeedbackStore`) the moment it is held, so a restart does not lose
  *   it (`resumeHeldWorkoutFeedback` sends it later), and removed once the send
- *   has a verdict. A hold older than 72 h is given up with the neutral
- *   closed-window message. A store failure never blocks the send.
+ *   is durably in the outbox (or has a verdict before that). The held
+ *   record's token is the send's mutation id and idempotency key, so a resumed
+ *   send reuses it and a crash after the outbox write never queues a second
+ *   row. A hold older than 72 h, or one past the server's 48 h edit window
+ *   (D-W14-20), is given up with the neutral closed-window message. A store
+ *   failure never blocks the send.
  */
 /** What to change: an omitted field is left as it is (D-W14-34). */
 export type FeedbackChange = { rpe?: number | null; note?: string | null };
@@ -150,8 +154,41 @@ async function dropRefusedRow(sync: SyncEngine, mutationId: string): Promise<voi
   }
 }
 
-/** Executions with a held send running in this process (resume skips them). */
-const activeHolds = new Set<string>();
+/**
+ * Executions with a held or resumed send running in this process, counted
+ * (two overlapping sends for one workout each hold their own count). Resume
+ * skips an execution that has any.
+ */
+const activeHolds = new Map<string, number>();
+
+function acquireHold(executionId: string): void {
+  activeHolds.set(executionId, (activeHolds.get(executionId) ?? 0) + 1);
+}
+
+function releaseHold(executionId: string): void {
+  const left = (activeHolds.get(executionId) ?? 0) - 1;
+  if (left > 0) activeHolds.set(executionId, left);
+  else activeHolds.delete(executionId);
+}
+
+/** The server's 48 h edit window from the finish (D-W14-20). */
+const FEEDBACK_EDIT_WINDOW_MS = 48 * 60 * 60 * 1000;
+
+/**
+ * When the trainee's edit window closes: the server's `feedbackEditableUntil`
+ * when the read carries it, else `completedAt` + 48 h; null when unknown.
+ */
+function editWindowClosesAt(execution: WorkoutExecution): number | null {
+  if (execution.feedbackEditableUntil) {
+    const until = Date.parse(execution.feedbackEditableUntil);
+    if (!Number.isNaN(until)) return until;
+  }
+  if (execution.completedAt) {
+    const done = Date.parse(execution.completedAt);
+    if (!Number.isNaN(done)) return done + FEEDBACK_EDIT_WINDOW_MS;
+  }
+  return null;
+}
 
 export type HoldOptions = {
   /** The signed-in user: the held value is stored under this owner only. */
@@ -159,6 +196,11 @@ export type HoldOptions = {
   store?: PendingFeedbackStore;
   /** When the hold began (a resumed hold keeps its first time). */
   heldAt?: number;
+  /**
+   * A resumed hold: the stored record's token. It is reused as the send's
+   * mutation id and idempotency key, and the record is already on the device.
+   */
+  resumeToken?: string;
   now?: () => number;
 };
 
@@ -179,34 +221,46 @@ export async function saveWorkoutRating(input: {
 
   const store = hold.store ?? pendingFeedbackStore;
   const now = hold.now ?? (() => Date.now());
-  const token = createIdempotencyKey();
+  const token = hold.resumeToken ?? createIdempotencyKey();
   const heldAt = hold.heldAt ?? now();
-  let stored = false;
+  // A resumed record is already stored (and the resume holds the count).
+  let stored = hold.resumeToken !== undefined;
+  let acquired = false;
+  const release = async () => {
+    if (!stored) return;
+    stored = false;
+    await store.release(hold.ownerId, executionId, token);
+  };
   const held: HeldState = {
     heldAt,
     now,
+    token,
     async begin() {
-      if (stored) return;
+      if (stored || acquired) return;
       stored = true;
-      activeHolds.add(executionId);
+      acquired = true;
+      acquireHold(executionId);
       await store.hold({ ownerId: hold.ownerId, executionId, change, heldAt, token });
     },
+    enqueued: release,
   };
   try {
     return await sendRating(input, change, held);
   } finally {
-    if (stored) {
-      activeHolds.delete(executionId);
-      await store.release(hold.ownerId, executionId, token);
-    }
+    if (acquired) releaseHold(executionId);
+    await release();
   }
 }
 
 type HeldState = {
   heldAt: number;
   now: () => number;
+  /** The held record's token: the first send's mutation id and key. */
+  token: string;
   /** Writes the held value to the device store (never throws). */
   begin: () => Promise<void>;
+  /** The send is durably in the outbox: the held record is no longer needed. */
+  enqueued: () => Promise<void>;
 };
 
 async function sendRating(
@@ -290,9 +344,23 @@ async function sendRating(
 
   if (matches(current)) return savedFrom(current);
 
+  // A held value past the server's 48 h edit window is not sent (the server
+  // would refuse it): given up with the neutral closed-window copy.
+  if (held) {
+    const closesAt = editWindowClosesAt(current);
+    if (closesAt != null && held.now() >= closesAt) {
+      return {
+        kind: "refused",
+        reason: "window_closed",
+        message: hasNote ? RATING_NOTE_WINDOW_CLOSED_MESSAGE : RATING_WINDOW_CLOSED_MESSAGE,
+      };
+    }
+  }
+
   // One mutation id and key for this action; a retry of the same payload
-  // (the push failing, the app returning) reuses them.
-  let mutationId = createIdempotencyKey();
+  // (the push failing, the app returning) reuses them. A held action uses
+  // its stored token, so a resumed send after a restart is the same action.
+  let mutationId = held?.token ?? createIdempotencyKey();
   let seen = current;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     let results: SyncMutationResult[];
@@ -304,9 +372,10 @@ async function sendRating(
         operation: "workout.feedback",
         expectedServerVersion: seen.recordVersion,
         payload: { executionId, body: bodyFor(seen) },
-        wait: true,
       });
-      results = queued.results;
+      // The row is on the phone now: the outbox carries it from here.
+      await held?.enqueued();
+      results = await queued.pushed;
     } catch (err: unknown) {
       reportError("workout.feedback", err);
       return {
@@ -358,9 +427,12 @@ async function sendRating(
 /**
  * After a restart (called when the Workout tab mounts): sends each rating and
  * note this user held before, once its finish has synced, through the same
- * path as a Save. Only this owner's records are read; one older than 72 h is
- * removed without a word (the server would refuse it as late). A hold
- * already running in this process is left to it. Never throws.
+ * path as a Save, reusing the record's token as the mutation id and key. Only
+ * this owner's records are read; one older than 72 h, or past the 48 h edit
+ * window, is removed without a word (the server would refuse it as late). A
+ * send already running in this process for the workout is left to it; a
+ * record whose send is already in the outbox (a crash right after the write)
+ * is removed without queueing another. Never throws.
  */
 export async function resumeHeldWorkoutFeedback(input: {
   ownerId: string;
@@ -375,18 +447,25 @@ export async function resumeHeldWorkoutFeedback(input: {
   await Promise.all(
     rows.map(async (row) => {
       if (row.ownerId !== input.ownerId) return;
+      // Check and register in one step (no await between): a second resume
+      // started meanwhile (the tab remounting) skips this workout.
       if (activeHolds.has(row.executionId)) return;
-      if (now() - row.heldAt > PENDING_FEEDBACK_MAX_AGE_MS) {
-        await store.release(input.ownerId, row.executionId, row.token);
-        return;
-      }
+      acquireHold(row.executionId);
       try {
+        if (now() - row.heldAt > PENDING_FEEDBACK_MAX_AGE_MS) return;
+        if (await alreadyQueued(input.sync, row.token)) return;
         const outcome = await saveWorkoutRating({
           sync: input.sync,
           api: input.api,
           executionId: row.executionId,
           change: row.change,
-          hold: { ownerId: input.ownerId, store, heldAt: row.heldAt, now },
+          hold: {
+            ownerId: input.ownerId,
+            store,
+            heldAt: row.heldAt,
+            resumeToken: row.token,
+            now,
+          },
         });
         // Nobody is looking at this workout: a refusal is logged, not shown.
         if (outcome.kind === "refused" && outcome.reason === "other") {
@@ -395,12 +474,28 @@ export async function resumeHeldWorkoutFeedback(input: {
       } catch (err: unknown) {
         reportError("workout.feedback.resume", err);
       } finally {
-        // A hold that began above re-wrote and released the record itself;
-        // this removes the original when the send went out at once.
+        releaseHold(row.executionId);
+        // Removed only if this record still carries the token (a newer Save
+        // held meanwhile keeps its own).
         await store.release(input.ownerId, row.executionId, row.token);
       }
     }),
   );
+}
+
+/** True when the send with this mutation id is already in the outbox. */
+async function alreadyQueued(sync: SyncEngine, mutationId: string): Promise<boolean> {
+  try {
+    const rows = await sync.store.listOutbox();
+    return rows.some(
+      (row) => row.operation === "workout.feedback" && row.mutationId === mutationId,
+    );
+  } catch (err: unknown) {
+    // Unknown: sending reuses the same mutation id and key, so the server
+    // treats a repeat as the same action.
+    reportError("workout.feedback.resume", err);
+    return false;
+  }
 }
 
 /** Tests only: forget holds running in this process (a fresh process). */

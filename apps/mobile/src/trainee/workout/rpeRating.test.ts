@@ -373,10 +373,9 @@ describe("held rating and note survive a restart (Z14-37)", () => {
       store,
       now: () => T0 + 60 * 60 * 1000,
     });
-    await vi.waitFor(async () => {
-      const [row] = await store.list(OWNER);
-      expect(row?.token).not.toBe("first-process");
-    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Still held (same record, same token) while the finish is queued.
+    expect(await store.list(OWNER)).toMatchObject([{ token: "first-process" }]);
     expect(server.state.feedbackVersions).toEqual([]);
 
     server.state.online = true;
@@ -391,6 +390,222 @@ describe("held rating and note survive a restart (Z14-37)", () => {
     // Resuming again sends nothing more.
     await resumeHeldWorkoutFeedback({ ownerId: OWNER, sync, api: server.api, store });
     expect(server.state.feedbackVersions).toEqual([4]);
+  });
+
+  it("two concurrent resumes send one feedback mutation, keyed by the held token", async () => {
+    const phone = device();
+    await phone.store().hold({
+      ownerId: OWNER,
+      executionId: EXECUTION,
+      change: { rpe: 6, note: "Felt strong" },
+      heldAt: T0,
+      token: "held-token",
+    });
+    // The finish already synced: the resume goes straight to the read.
+    const server = fakeServer({ recordVersion: 4, sessionRpe: null });
+    const pushed: SyncMutationRequest[] = [];
+    const push = server.syncApi.pushSync;
+    server.syncApi.pushSync = async (body) => {
+      pushed.push(...body.mutations);
+      return push(body);
+    };
+    const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
+    const store = phone.store();
+    const run = () =>
+      resumeHeldWorkoutFeedback({
+        ownerId: OWNER,
+        sync,
+        api: server.api,
+        store,
+        now: () => T0 + 60_000,
+      });
+
+    // The tab remounting while the first resume reads starts a second one.
+    let letReadGo: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      letReadGo = resolve;
+    });
+    const read = server.api.getWorkoutExecution;
+    server.api.getWorkoutExecution = vi.fn(async () => {
+      await gate;
+      return read();
+    });
+    const first = run();
+    await vi.waitFor(() => expect(server.api.getWorkoutExecution).toHaveBeenCalledTimes(1));
+    const second = run();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    letReadGo();
+    await Promise.all([first, second]);
+
+    const feedback = pushed.filter((m) => m.operation === "workout.feedback");
+    expect(feedback).toHaveLength(1);
+    expect(feedback[0]).toMatchObject({ mutationId: "held-token", idempotencyKey: "held-token" });
+    expect(server.state.feedbackVersions).toEqual([4]);
+    // The second resume skipped the workout: one read, one send.
+    expect(server.state.reads).toBe(1);
+    expect(await store.list(OWNER)).toEqual([]);
+  });
+
+  it("after a crash right after the outbox write, a restart queues nothing new", async () => {
+    const phone = device();
+    await phone.store().hold({
+      ownerId: OWNER,
+      executionId: EXECUTION,
+      change: { rpe: 6 },
+      heldAt: T0,
+      token: "held-token",
+    });
+    const server = fakeServer({ recordVersion: 4, sessionRpe: null });
+    server.state.online = false;
+    const outbox = createMemorySyncStore();
+    // What the process that died had written: the feedback row, keyed by
+    // the held token, before it could release the held record.
+    const before = createSyncEngine(outbox, server.syncApi);
+    await enqueueAndPush(before, {
+      mutationId: "held-token",
+      idempotencyKey: "held-token",
+      recordId: EXECUTION,
+      operation: "workout.feedback",
+      expectedServerVersion: 4,
+      payload: { executionId: EXECUTION, body: { rpe: 6, recordVersion: 4 } },
+    });
+
+    const sync = createSyncEngine(outbox, server.syncApi);
+    const store = phone.store();
+    await resumeHeldWorkoutFeedback({
+      ownerId: OWNER,
+      sync,
+      api: server.api,
+      store,
+      now: () => T0 + 60_000,
+    });
+
+    const rows = (await outbox.listOutbox()).filter((r) => r.operation === "workout.feedback");
+    expect(rows.map((r) => r.mutationId)).toEqual(["held-token"]);
+    expect(server.state.reads).toBe(0);
+    expect(await store.list(OWNER)).toEqual([]);
+
+    server.state.online = true;
+    await sync.pushPending();
+    expect(server.state.feedbackVersions).toEqual([4]);
+  });
+
+  it("releases the held record once the row is in the outbox, before the push answers", async () => {
+    const phone = device();
+    await phone.store().hold({
+      ownerId: OWNER,
+      executionId: EXECUTION,
+      change: { rpe: 6 },
+      heldAt: T0,
+      token: "held-token",
+    });
+    const server = fakeServer({ recordVersion: 4, sessionRpe: null });
+    let answer: () => void = () => undefined;
+    const push = server.syncApi.pushSync;
+    server.syncApi.pushSync = async (body) => {
+      await new Promise<void>((resolve) => {
+        answer = resolve;
+      });
+      return push(body);
+    };
+    const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
+    const store = phone.store();
+    const resumed = resumeHeldWorkoutFeedback({
+      ownerId: OWNER,
+      sync,
+      api: server.api,
+      store,
+      now: () => T0 + 60_000,
+    });
+    await vi.waitFor(async () => {
+      const rows = await sync.store.listOutbox();
+      expect(rows.some((r) => r.mutationId === "held-token")).toBe(true);
+    });
+    await vi.waitFor(async () => expect(await store.list(OWNER)).toEqual([]));
+    expect(server.state.feedbackVersions).toEqual([]);
+
+    answer();
+    await resumed;
+    expect(server.state.feedbackVersions).toEqual([4]);
+  });
+
+  it("drops a held value past the 48 h edit window from the finish without sending it", async () => {
+    const phone = device();
+    const completedAt = Date.parse("2026-11-20T08:00:00.000Z");
+    await phone.store().hold({
+      ownerId: OWNER,
+      executionId: EXECUTION,
+      change: { rpe: 6 },
+      heldAt: completedAt + 60_000,
+      token: "a",
+    });
+    const server = fakeServer({ recordVersion: 4, sessionRpe: null });
+    const read = server.api.getWorkoutExecution;
+    server.api.getWorkoutExecution = vi.fn(async () => ({
+      ...(await read()),
+      completedAt: new Date(completedAt).toISOString(),
+    }));
+    const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
+
+    // Within 72 h of the hold, but past 48 h from the finish.
+    await resumeHeldWorkoutFeedback({
+      ownerId: OWNER,
+      sync,
+      api: server.api,
+      store: phone.store(),
+      now: () => completedAt + 48 * 60 * 60 * 1000 + 1,
+    });
+
+    expect(server.state.feedbackVersions).toEqual([]);
+    expect(await phone.store().list(OWNER)).toEqual([]);
+  });
+
+  it("when one of two overlapping holds ends, the resume still leaves the other alone", async () => {
+    const phone = device();
+    const store = phone.store();
+    const { server, sync } = await offlineWithQueuedFinish();
+    let firstClock = T0;
+    const first = saveWorkoutRating({
+      sync,
+      api: server.api,
+      executionId: EXECUTION,
+      change: { rpe: 7 },
+      hold: { ownerId: OWNER, store, now: () => firstClock },
+    });
+    await vi.waitFor(async () => expect(await store.list(OWNER)).toHaveLength(1));
+    const second = saveWorkoutRating({
+      sync,
+      api: server.api,
+      executionId: EXECUTION,
+      change: { note: "Second" },
+      hold: { ownerId: OWNER, store, now: () => T0 },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // The first hold gives up (past 72 h on its clock); the second waits on.
+    firstClock = T0 + PENDING_FEEDBACK_MAX_AGE_MS + 1;
+    await enqueueAndPush(sync, {
+      recordId: "00000000-0000-4000-8000-000000000779",
+      operation: "workout.pause",
+      expectedServerVersion: 1,
+      payload: {},
+    });
+    expect((await first).kind).toBe("refused");
+
+    // A resume now skips the workout at once instead of starting a second send.
+    const outcome = await Promise.race([
+      resumeHeldWorkoutFeedback({ ownerId: OWNER, sync, api: server.api, store, now: () => T0 }).then(
+        () => "skipped",
+      ),
+      new Promise((resolve) => setTimeout(() => resolve("started a second send"), 200)),
+    ]);
+    expect(outcome).toBe("skipped");
+
+    server.state.online = true;
+    await sync.pushPending();
+    await second;
+    expect(server.state.sessionNote).toBe("Second");
+    expect(server.state.feedbackVersions).toHaveLength(1);
   });
 
   it("never reads or sends another owner's held value", async () => {

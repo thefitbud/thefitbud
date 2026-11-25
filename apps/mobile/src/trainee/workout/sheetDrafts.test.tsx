@@ -172,6 +172,22 @@ describe("useSheetDraft", () => {
     expect(drafts.saves).toEqual(["Half a note"]);
   });
 
+  it("a pending write never brings a draft back after sign-out discarded them", async () => {
+    vi.useFakeTimers();
+    const map = new Map<string, string>();
+    const storage = createMemoryKeyValue(map);
+    const drafts = createSheetDrafts({ storage: () => storage });
+    let handle!: SheetDraftHandle<string>;
+    const { unmount } = render(<Probe drafts={drafts} onHandle={(h) => { handle = h; }} />);
+    handle.schedule("Typed before sign-out");
+    await drafts.clearAll();
+    // The cover arriving (or the tab unmounting on sign-out) flushes.
+    unmount();
+    vi.useRealTimers();
+    expect(await drafts.read(OWNER, "workoutFeedback", EXECUTION)).toBeNull();
+    expect([...map.keys()]).toEqual([]);
+  });
+
   it("clear drops a pending write", () => {
     vi.useFakeTimers();
     const drafts = counting();

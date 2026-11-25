@@ -185,6 +185,11 @@ export type SheetDrafts = {
   read<T>(ownerId: string, sheet: DraftSheet, entityId: string): Promise<T | null>;
   clear(ownerId: string, sheet: DraftSheet, entityId: string): Promise<void>;
   clearAll(): Promise<void>;
+  /**
+   * Bumped by every `clearAll` (sign-out). A write scheduled before it is
+   * dropped instead of bringing a discarded draft back.
+   */
+  generation?(): number;
 };
 
 export function createSheetDrafts(options: {
@@ -201,6 +206,7 @@ export function createSheetDrafts(options: {
     now,
   });
   const idFor = (sheet: DraftSheet, entityId: string) => `${sheet}.${entityId}`;
+  let generation = 0;
   return {
     save(ownerId, sheet, entityId, value) {
       return records.put(ownerId, idFor(sheet, entityId), { sheet, entityId, value });
@@ -220,7 +226,11 @@ export function createSheetDrafts(options: {
       return records.remove(ownerId, idFor(sheet, entityId));
     },
     clearAll() {
+      generation += 1;
       return records.clearAll();
+    },
+    generation() {
+      return generation;
     },
   };
 }
@@ -232,8 +242,10 @@ export const sheetDrafts: SheetDrafts = createSheetDrafts();
  * One sheet's draft: `schedule` writes after `SHEET_DRAFT_DEBOUNCE_MS` of no
  * change (one write per pause, never per keystroke), a pending write is made
  * at once when the sheet unmounts (a cover arriving), `clear` drops both the
- * pending write and the stored draft. With no owner or entity it does
- * nothing. The returned functions are stable across renders.
+ * pending write and the stored draft. A pending write scheduled before the
+ * drafts were discarded (sign-out) is dropped, never written after it. With
+ * no owner or entity it does nothing. The returned functions are stable
+ * across renders.
  */
 export type SheetDraftHandle<T> = {
   read: () => Promise<T | null>;
@@ -250,11 +262,17 @@ export function useSheetDraft<T>(input: {
   const drafts = input.drafts ?? sheetDrafts;
   const target = useRef({ ownerId: input.ownerId, sheet: input.sheet, entityId: input.entityId, drafts });
   target.current = { ownerId: input.ownerId, sheet: input.sheet, entityId: input.entityId, drafts };
-  const pending = useRef<{ value: T; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const pending = useRef<{
+    value: T;
+    generation: number | undefined;
+    timer: ReturnType<typeof setTimeout>;
+  } | null>(null);
 
-  const write = useCallback((value: T) => {
+  const write = useCallback((value: T, generation: number | undefined) => {
     const { ownerId, sheet, entityId, drafts: store } = target.current;
     if (!ownerId || !entityId) return;
+    // Discarded since it was typed (sign-out): never write it back.
+    if (generation !== store.generation?.()) return;
     void store.save(ownerId, sheet, entityId, value);
   }, []);
 
@@ -263,19 +281,20 @@ export function useSheetDraft<T>(input: {
     if (!queued) return;
     clearTimeout(queued.timer);
     pending.current = null;
-    write(queued.value);
+    write(queued.value, queued.generation);
   }, [write]);
 
   const schedule = useCallback(
     (value: T) => {
-      const { ownerId, entityId } = target.current;
+      const { ownerId, entityId, drafts: store } = target.current;
       if (!ownerId || !entityId) return;
       if (pending.current) clearTimeout(pending.current.timer);
+      const generation = store.generation?.();
       const timer = setTimeout(() => {
         pending.current = null;
-        write(value);
+        write(value, generation);
       }, SHEET_DRAFT_DEBOUNCE_MS);
-      pending.current = { value, timer };
+      pending.current = { value, generation, timer };
     },
     [write],
   );
