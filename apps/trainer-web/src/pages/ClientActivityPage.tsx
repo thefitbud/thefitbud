@@ -435,8 +435,8 @@ export function ClientActivityPage() {
   }
 
   const groups = useMemo(
-    () => groupByDay(items, activityType),
-    [activityType, items],
+    () => groupByDay(items, activityType, today),
+    [activityType, items, today],
   );
 
   const overrideEvents =
@@ -444,14 +444,24 @@ export function ClientActivityPage() {
       ? mealOverrideLines(header.traineeDisplayName, header.mealTimeOverrides)
       : [];
 
+  const onlyFuture =
+    items.length > 0 && groups.length === 0 && removals.length === 0;
   const emptyCopy =
-    activityType === "meal"
-      ? items.length === 0 && !loading
-        ? "No meals in this range."
-        : null
-      : items.length === 0 && !loading
-        ? `No ${labelFor("workspace_activity_type", activityType).toLowerCase()} in this range.`
-        : null;
+    !loading && onlyFuture
+      ? `Nothing to show for ${
+          rangeMode === "this_week"
+            ? "this week"
+            : rangeMode === "last_week"
+              ? "last week"
+              : "this range"
+        } yet.`
+      : activityType === "meal"
+        ? items.length === 0 && !loading
+          ? "No meals in this range."
+          : null
+        : items.length === 0 && !loading
+          ? `No ${labelFor("workspace_activity_type", activityType).toLowerCase()} in this range.`
+          : null;
 
   const noSchedule =
     activityType !== "checkin" &&
