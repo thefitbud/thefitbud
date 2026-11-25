@@ -207,6 +207,18 @@
   white-space: nowrap;
 }
 
+.pg-rail-name {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pg-rail-scope {
+  font: var(--t-cap);
+  color: var(--ink3);
+  white-space: nowrap;
+}
+
 .pg-rail-check {
   width: 18px;
   height: 18px;

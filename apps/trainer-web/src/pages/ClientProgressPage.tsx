@@ -8,13 +8,16 @@ import {
 } from "react";
 import { Link, useOutletContext, useParams } from "react-router-dom";
 import { userFacingMessage } from "@fitbud/api-client";
-import type { ProgressEntry, ProgressMetricKey } from "@fitbud/contracts";
+import type {
+  ProgressEntry,
+  ProgressMetricKey,
+  StrengthReadModel,
+} from "@fitbud/contracts";
 import { ChartLine, Lock } from "lucide-react";
 import {
   formatCivilDate,
   formatLocalDate,
   labelFor,
-  possessivePronoun,
 } from "@fitbud/core";
 import { EmptyState, ErrorState, OfflineBanner } from "../components/ui";
 import { isWorkspaceReadOnly } from "../hooks/useWorkspaceReadOnly";
@@ -42,6 +45,7 @@ import { PhotosPanel, groupPhotoDates } from "./progress/PhotosPanel";
 import type { WorkoutsKpi } from "./progress/KpiRow";
 import { PanelSkeleton, ProgressSkeleton } from "./progress/ProgressSkeleton";
 import { RangeControl } from "./progress/RangeControl";
+import { rangeScopeLabel } from "./progress/rangeScope";
 import { StrengthPanel } from "./progress/StrengthPanel";
 import { WeightPanel } from "./progress/WeightPanel";
 import { ProgressPanel } from "../components/activity/ProgressPanel";
@@ -59,6 +63,16 @@ const DEFAULT_LINES = 3;
 
 type Checked = Record<"body" | "ratings", ProgressMetricKey[]>;
 
+function summariseWorkouts(
+  model: StrengthReadModel | null,
+): WorkoutsSummary | null {
+  if (!model) return null;
+  const completed = model.workoutsPerWeek.reduce((sum, w) => sum + w.count, 0);
+  const planned = model.workoutsPerWeek.reduce((sum, w) => sum + w.planned, 0);
+  const lifts = model.exercises.length;
+  return completed || planned || lifts ? { completed, planned, lifts } : null;
+}
+
 export function ClientProgressPage() {
   const { relationshipId = "" } = useParams();
   const {
@@ -74,10 +88,8 @@ export function ClientProgressPage() {
   const clientFirstName =
     (header?.traineeDisplayName ?? "Client").trim().split(/\s+/)[0] || "Client";
   const today = useMemo(() => todayInTimezone(clientTz), [clientTz]);
-  const pronoun = possessivePronoun(header?.traineeProfile?.gender);
-  const Pronoun = pronoun.charAt(0).toUpperCase() + pronoun.slice(1);
-  // Subject form of the same pronoun ("her" → "she"), for "after she logs".
-  const subject = pronoun === "her" ? "she" : pronoun === "his" ? "he" : "they";
+  // Copy names the client by first name; no pronoun is guessed (D-W14-37, D-W13-31).
+  const clientPossessive = `${clientFirstName}'s`;
   const cadence = workspace?.configuration?.configuration?.checkin.cadence ?? null;
   // "weekly" / "monthly" from the cadence label, as on the Check-ins page.
   const cadenceWord =
@@ -134,14 +146,10 @@ export function ClientProgressPage() {
     range: ALL_TIME,
     refreshEpoch,
   });
-  const workouts = useMemo((): WorkoutsSummary | null => {
-    const model = strengthAll.data;
-    if (!model) return null;
-    const completed = model.workoutsPerWeek.reduce((sum, w) => sum + w.count, 0);
-    const planned = model.workoutsPerWeek.reduce((sum, w) => sum + w.planned, 0);
-    const lifts = model.exercises.length;
-    return completed || planned || lifts ? { completed, planned, lifts } : null;
-  }, [strengthAll.data]);
+  const workouts = useMemo(
+    () => summariseWorkouts(strengthAll.data),
+    [strengthAll.data],
+  );
 
   // Photos come from the progress entries list (stored progress photos).
   const [entries, setEntries] = useState<ProgressEntry[]>([]);
@@ -265,6 +273,29 @@ export function ClientProgressPage() {
   });
   const strength =
     range.range === "all" ? strengthAll.data : strengthRange.data;
+
+  // The rail follows the selected range, exactly like the KPI row. While a range loads, the
+  // rail keeps the all-time numbers and its scope line says "all time".
+  const railRange = useProgressMetrics({
+    relationshipId,
+    keys: ALL_METRIC_KEYS,
+    range,
+    refreshEpoch,
+    enabled: range.range !== "all" && Boolean(rail.data),
+  });
+  const rangeReady =
+    range.range === "all" ||
+    Boolean(railRange.data && strengthRange.data);
+  const railValueSeries =
+    rangeReady && railRange.data ? railRange.data.series : railSeries;
+  const railWorkouts = useMemo(() => {
+    if (!rangeReady || range.range === "all") return workouts;
+    return (
+      summariseWorkouts(strengthRange.data) ??
+      (workouts ? { completed: 0, planned: 0, lifts: 0 } : null)
+    );
+  }, [rangeReady, range.range, strengthRange.data, workouts]);
+  const railScope = rangeScopeLabel(rangeReady ? range : ALL_TIME, today);
   const strengthLoading =
     range.range === "all" ? strengthAll.loading : strengthRange.loading;
 
@@ -357,15 +388,13 @@ export function ClientProgressPage() {
   function emptyPanel() {
     const message = ended
       ? "No check-in answers, workouts or photos were logged while coaching ran."
-      : `Charts follow the standard questions in ${pronoun} check-in form: weight, the measurements you picked, ratings and photos.${
+      : `Charts follow the standard questions in ${clientPossessive} check-in form: weight, the measurements you picked, ratings and photos.${
           nextCheckin
-            ? ` ${Pronoun} ${firstCheckin ? "first" : "next"} ${cadenceWord}check-in opens ${formatCivilDate(
+            ? ` ${clientPossessive} ${firstCheckin ? "first" : "next"} ${cadenceWord}check-in opens ${formatCivilDate(
                 formatLocalDate(new Date(nextCheckin.windowStartsAt), clientTz),
               )}.`
             : ""
-        } Workout progress appears after ${subject} ${
-          subject === "they" ? "log" : "logs"
-        } ${pronoun} first workout.`;
+        } Workout progress appears after ${clientFirstName} logs a first workout.`;
     return (
       <div className="pg-empty-state">
         <h2 id="pg-panel-title" className="sr-only">
@@ -389,7 +418,7 @@ export function ClientProgressPage() {
                   className="pg-soft-btn"
                   to={`/templates/checkins/${formMetrics.templateId}`}
                 >
-                  See {pronoun} check-in form
+                  See {clientPossessive} check-in form
                 </Link>
               ) : null}
             </div>
@@ -520,8 +549,8 @@ export function ClientProgressPage() {
             {endedOn
               ? `Coaching with ${clientFirstName} ended ${formatCivilDate(endedOn)}. `
               : `Coaching with ${clientFirstName} has ended. `}
-            {Pronoun} progress is read-only and stays here for {pronoun}{" "}
-            records.
+            {clientPossessive} progress is read-only and stays here for you to
+            look back on.
           </span>
         </p>
       ) : null}
@@ -544,10 +573,12 @@ export function ClientProgressPage() {
         <div className="pg-layout">
           <MetricRail
             series={railSeries}
+            valueSeries={railValueSeries}
+            scope={railScope}
             view={activeView}
             checked={checked}
             compare={comparing ? compareKey : null}
-            workouts={workouts}
+            workouts={railWorkouts}
             workoutsRow={photosOpen ? null : workoutsRow}
             showEmptyWorkouts={Boolean(header?.effectivePlan) || !anyData}
             formKeys={formMetrics.keys}

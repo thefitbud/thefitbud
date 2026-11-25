@@ -682,10 +682,13 @@ describe("ClientProgressPage workouts from logs (frame 160e, D-W8-7)", () => {
     serveStrength(ROHAN_STRENGTH);
     renderPage();
     const completed = await screen.findByRole("tab", { name: /Workouts done/ });
-    expect(completed.textContent).toBe("Workouts done4 of 11");
+    expect(completed.querySelector(".pg-rail-label")?.textContent).toBe(
+      "Workouts done",
+    );
+    expect(completed.querySelector(".pg-rail-value")?.textContent).toBe("4 of 11");
     expect(
       screen.getByRole("tab", { name: /Exercise progress/ }).textContent,
-    ).toBe("Exercise progress2 lifts");
+    ).toContain("2 lifts");
     expect(strengthCalls()).toContainEqual({ range: "all" });
   });
 
@@ -1030,7 +1033,7 @@ describe("ClientProgressPage empty (frame 161)", () => {
     const panel = heading.closest("section")!;
     expect(
       within(panel).getByText(
-        "Charts follow the standard questions in her check-in form: weight, the measurements you picked, ratings and photos. Her first weekly check-in opens Sun 25 Oct. Workout progress appears after she logs her first workout.",
+        "Charts follow the standard questions in Priya's check-in form: weight, the measurements you picked, ratings and photos. Priya's first weekly check-in opens Sun 25 Oct. Workout progress appears after Priya logs a first workout.",
       ),
     ).toBeTruthy();
     expect(
@@ -1040,7 +1043,7 @@ describe("ClientProgressPage empty (frame 161)", () => {
     ).toBe(`/clients/${REL_ID}/configure`);
     expect(
       (
-        await within(panel).findByRole("link", { name: "See her check-in form" })
+        await within(panel).findByRole("link", { name: "See Priya's check-in form" })
       ).getAttribute("href"),
     ).toBe(`/templates/checkins/${FORM_TEMPLATE_ID}`);
 
@@ -1083,7 +1086,7 @@ describe("ClientProgressPage ended (frame 160h)", () => {
     const { container } = renderPage("ended", { header: ENDED });
     const banner = await screen.findByRole("note");
     expect(banner.textContent).toBe(
-      "Coaching with Kavya ended Sat 3 Oct. Her progress is read-only and stays here for her records.",
+      "Coaching with Kavya ended Sat 3 Oct. Kavya's progress is read-only and stays here for you to look back on.",
     );
     const panel = await screen.findByRole("tabpanel");
     await within(panel).findByRole("heading", { name: "Weight" });
@@ -1227,5 +1230,110 @@ describe("sixMonthsBefore", () => {
     expect(sixMonthsBefore("2026-10-18")).toBe("2026-04-18");
     expect(sixMonthsBefore("2026-08-31")).toBe("2026-02-28");
     expect(sixMonthsBefore("2026-03-15")).toBe("2025-09-15");
+  });
+});
+
+describe("ClientProgressPage rail and KPI agree (W13-18)", () => {
+  // The window holds the last two weigh-ins and the last two weeks of workouts only.
+  const RECENT: Fixture = {
+    weight: [point("2026-09-04", 88.4, CHECKIN_2), point("2026-10-16", 86.4, CHECKIN_3)],
+  };
+  const RECENT_STRENGTH: StrengthReadModel = {
+    ...ROHAN_STRENGTH,
+    workoutsPerWeek: ROHAN_STRENGTH.workoutsPerWeek.slice(-2),
+  };
+
+  async function railAndKpi() {
+    const rail = screen.getByRole("complementary", { name: "Metrics" });
+    const kpis = await screen.findByTestId("pg-kpis");
+    await waitFor(() =>
+      expect(within(kpis).getByTestId("pg-kpi-workouts")).toBeTruthy(),
+    );
+    const done = within(rail).getByRole("tab", { name: /Workouts done/ });
+    const weight = within(rail).getByRole("tab", { name: /Weight/ });
+    return {
+      railWorkouts: done.querySelector(".pg-rail-value")?.textContent,
+      railScopeText: done.querySelector(".pg-rail-scope")?.textContent,
+      kpiWorkouts: within(kpis)
+        .getByTestId("pg-kpi-workouts")
+        .querySelector(".pg-kpi-v")?.textContent,
+      railWeightChange: weight
+        .querySelector(".pg-rail-change")
+        ?.textContent?.replace("Change ", ""),
+      kpiChange: within(kpis).queryByTestId("pg-kpi-change")?.textContent,
+    };
+  }
+
+  it("shows the same workouts and weight change in the rail and the KPI row at every range, with a scope line", async () => {
+    serveMetrics(ROHAN, RECENT);
+    serveStrength(ROHAN_STRENGTH, RECENT_STRENGTH);
+    renderPage();
+
+    // 12 wk (the opening range): the window's two weeks and two weigh-ins.
+    await waitFor(async () => {
+      const r = await railAndKpi();
+      expect(r.railScopeText).toBe("last 12 weeks");
+    });
+    let r = await railAndKpi();
+    expect(r.railWorkouts).toBe("2 of 5");
+    expect(r.kpiWorkouts).toBe(r.railWorkouts);
+    expect(r.railWeightChange).toContain("−2");
+    expect(r.kpiChange).toContain("−2");
+
+    fireEvent.click(screen.getByRole("radio", { name: "4 wk" }));
+    await waitFor(async () =>
+      expect((await railAndKpi()).railScopeText).toBe("last 4 weeks"),
+    );
+    r = await railAndKpi();
+    expect(r.kpiWorkouts).toBe(r.railWorkouts);
+
+    fireEvent.click(screen.getByRole("radio", { name: "6 mo" }));
+    await waitFor(async () =>
+      expect((await railAndKpi()).railScopeText).toBe("last 6 months"),
+    );
+    r = await railAndKpi();
+    expect(r.kpiWorkouts).toBe(r.railWorkouts);
+
+    fireEvent.click(screen.getByRole("radio", { name: "All" }));
+    await waitFor(async () =>
+      expect((await railAndKpi()).railScopeText).toBe("all time"),
+    );
+    r = await railAndKpi();
+    expect(r.railWorkouts).toBe("4 of 11");
+    expect(r.kpiWorkouts).toBe("4 of 11");
+    expect(r.railWeightChange).toContain("−2.7");
+    expect(r.kpiChange).toContain("−2.7");
+  });
+
+  it("reads the same for female, male and unset gender, by first name", async () => {
+    const texts: string[] = [];
+    for (const gender of ["female", "male", null]) {
+      serveMetrics(ROHAN);
+      serveStrength(ROHAN_STRENGTH);
+      const { container, unmount } = renderPage("ended", {
+        header: {
+          endedAt: "2026-10-03T10:00:00.000Z",
+          traineeProfile: { displayName: "Rohan Mehta", age: null, gender },
+        },
+      });
+      const banner = await screen.findByRole("note");
+      expect(banner.textContent).toContain(
+        "Rohan's progress is read-only and stays here for you to look back on.",
+      );
+      texts.push(banner.textContent ?? "");
+      expect(container.textContent).not.toMatch(/\b(her|his|she|he)\b/i);
+      unmount();
+    }
+    expect(new Set(texts).size).toBe(1);
+  });
+
+  it("weekly bars read 'Week of 31 Aug', never 'w/c'", async () => {
+    serveMetrics(ROHAN);
+    serveStrength(ROHAN_STRENGTH);
+    renderPage();
+    fireEvent.click(await screen.findByRole("tab", { name: /Workouts done/ }));
+    const panel = await screen.findByRole("tabpanel");
+    await waitFor(() => expect(panel.textContent).toContain("Week of 31 Aug"));
+    expect(panel.textContent).not.toMatch(/w\/c/);
   });
 });
