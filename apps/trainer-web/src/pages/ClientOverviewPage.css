@@ -440,10 +440,49 @@
 }
 
 /* iPad widths: the range toggle's own boxes reach 44 px (W13-6). */
-@media (max-width: 1024px), (pointer: coarse) {
+@media (max-width: 1280px), (pointer: coarse) {
   .ov-range-btn {
     min-height: 2.75rem;
     min-width: 2.75rem;
+  }
+
+  .ov-food-link,
+  .ov-weight-f .text-link {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
+
+/* iPad widths (frame W-03-ipad): main column full width, the rail drops below the
+   food card in two columns (Weight left; Next check-in, Plan, Notes... right). */
+@media (max-width: 1280px) {
+  .ov-att button {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+
+  div.overview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-grid:not(.overview-ended) .overview-side {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.25rem;
+    row-gap: 0;
+    align-items: start;
+    margin-bottom: -1.25rem;
+  }
+
+  .overview-grid:not(.overview-ended) .overview-side > * {
+    grid-column: 2;
+    margin-bottom: 1.25rem;
+    min-width: 0;
+  }
+
+  .overview-grid:not(.overview-ended) .overview-side > :first-child {
+    grid-column: 1;
+    grid-row: 1 / span 12;
   }
 }
 

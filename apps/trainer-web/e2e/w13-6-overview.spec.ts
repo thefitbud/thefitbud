@@ -88,6 +88,24 @@ async function ridOf(name: string) {
   return c!.relationshipId!;
 }
 
+/** A client that has at least `min` unresolved exceptions right now (other specs may have resolved the seeded ones). */
+async function clientWithOpen(min: number) {
+  const token = await apiToken();
+  for (const c of await clientsList()) {
+    if (!c.relationshipId || c.endedAt) continue;
+    const res = await fetch(`${API}/exceptions/relationships/${c.relationshipId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) continue;
+    const items = ((await res.json()) as { data: { items: Array<{ id: string; status: string }> } }).data.items;
+    const open = items.filter((i) => i.status !== "resolved");
+    if (open.length >= min) {
+      return { rid: c.relationshipId, first: c.traineeDisplayName.split(" ")[0]!, open };
+    }
+  }
+  throw new Error("no client with enough open exceptions");
+}
+
 /** Overview fully loaded: header name, week strip and weight card all settled. */
 async function overviewLoaded(page: Page) {
   await expect(page.locator(".ws-name, h1").first()).toBeVisible({ timeout: 30_000 });
@@ -114,7 +132,7 @@ test.describe("W13-6 Client Overview and review modal", () => {
 
   test("Review opens the list-mode modal; Esc closes and focus returns", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    const rid = await ridOf("Neha");
+    const { rid, first } = await clientWithOpen(2);
     await page.goto(`/clients/${rid}`);
     await overviewLoaded(page);
     const review = page.locator(".ov-att").getByRole("button", { name: "Review" }).first();
@@ -124,7 +142,7 @@ test.describe("W13-6 Client Overview and review modal", () => {
     const box = await panel.boundingBox();
     expect(Math.round(box!.width)).toBe(720);
     await expect(panel.getByText(/^1 of \d+$/)).toBeVisible();
-    await expect(panel.getByRole("heading", { name: /also open for neha/i })).toBeVisible();
+    await expect(panel.getByRole("heading", { name: new RegExp(`also open for ${first}`, "i") })).toBeVisible();
     await expect(panel.getByRole("button", { name: /^noted, keep open$/i })).toBeVisible();
     await expect(panel.getByRole("button", { name: /^remind$/i })).toBeVisible();
     await expect(panel.getByRole("button", { name: /^resolve…?$/i })).toBeVisible();
@@ -135,12 +153,8 @@ test.describe("W13-6 Client Overview and review modal", () => {
 
   test("?exception= opens the modal; scrim click and browser back close it", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    const rid = await ridOf("Neha");
-    const token = await apiToken();
-    const list = (await (
-      await fetch(`${API}/exceptions/relationships/${rid}`, { headers: { Authorization: `Bearer ${token}` } })
-    ).json()) as { data: { items: Array<{ id: string; status: string }> } };
-    const open = list.data.items.find((i) => i.status !== "resolved")!;
+    const { rid, open: openItems } = await clientWithOpen(2);
+    const open = openItems[0]!;
     await page.goto(`/clients/${rid}?exception=${open.id}`);
     const panel = await modalLoaded(page);
     await expect(panel).toHaveClass(/sp-panel-modal/);
@@ -169,7 +183,7 @@ test.describe("W13-6 Client Overview and review modal", () => {
       await page.goto(`/clients/${rohan}`);
       await overviewLoaded(page);
       await shot(page, "W-03-client-overview", size);
-      if (size.w <= 1024) {
+      if (size.w <= 1180) {
         // Targets are measured on the element's own box (iPad widths), not a pseudo-element.
         const small = await page.evaluate(() => {
           const out: string[] = [];
@@ -185,6 +199,21 @@ test.describe("W13-6 Client Overview and review modal", () => {
           return out;
         });
         expect.soft(small, `44 px targets at ${size.w}`).toEqual([]);
+      }
+
+      // Layout: the rail sits below the food card at iPad widths, beside the main column at 1440.
+      const geo = await page.evaluate(() => {
+        const main = document.querySelector(".overview-main")!.getBoundingClientRect();
+        const side = document.querySelector(".overview-side")!.getBoundingClientRect();
+        const kids = Array.from(document.querySelectorAll(".overview-side > *")).map((e) => e.getBoundingClientRect());
+        return { main: { l: main.left, r: main.right, b: main.bottom, w: main.width }, side: { l: side.left, t: side.top, w: side.width }, w0: kids[0], k1: kids[1] };
+      });
+      if (size.w <= 1180) {
+        expect(geo.side.t, `rail below main at ${size.w}`).toBeGreaterThanOrEqual(geo.main.b - 1);
+        expect(geo.main.w, `main full width at ${size.w}`).toBeGreaterThan(size.w * 0.85);
+        expect(geo.k1.left, `rail two columns at ${size.w}`).toBeGreaterThan(geo.w0.right - 1);
+      } else {
+        expect(geo.side.l, `rail beside main at ${size.w}`).toBeGreaterThanOrEqual(geo.main.r - 1);
       }
 
       console.log("STEP W-03x modal");
