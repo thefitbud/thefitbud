@@ -575,6 +575,8 @@ export function mapWorkoutExecutionSummary(
     pausedAt: row.pausedAt,
     completedAt: row.completedAt,
     sessionRpe: row.sessionRpe,
+    // Z14-31 (D-W14-34): REST reads, trainer reads and sync pull carry the note.
+    sessionNote: row.sessionNote ?? null,
     requireSessionRpe: row.requireSessionRpe,
     // Z6-19 (R1, D-W6-36): REST reads and sync pull payloads both carry authorship.
     loggedByRole: row.loggedByRole,
