@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -50,6 +51,7 @@ vi.mock("../hooks/useOnline", () => ({
 }));
 
 import { TemplatesHub } from "./TemplatesHub";
+import { UsedByCell } from "./templates/UsedByCell";
 
 const NOW = "2026-11-12T10:00:00.000Z";
 
@@ -177,13 +179,15 @@ describe("TemplatesHub Z12-13", () => {
     );
     expect(screen.getByText("Plans and forms you can reuse for any client")).toBeTruthy();
     expect(screen.getByRole("button", { name: /New template/i })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Workout" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Nutrition" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Intake form" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "Check-in form" })).toBeTruthy();
+    const tabs = within(screen.getByRole("tablist", { name: "Template types" }));
+    expect(tabs.getByRole("tab", { name: /^All/ })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: /^Workouts/ })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: /^Nutrition/ })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: /^Check-in forms/ })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: /^Intake forms/ })).toBeTruthy();
     expect(screen.getByText("Fat loss base · Rahul")).toBeTruthy();
     expect(screen.getByText("FitBud intake")).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: /^Use$/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Use for client" }).length).toBeGreaterThan(0);
   });
 
   it("shows Mine empty for nutrition with Show FitBud base", async () => {
@@ -234,14 +238,16 @@ describe("TemplatesHub Z12-13", () => {
     await waitFor(() =>
       expect(screen.getByText("Strength base")).toBeTruthy(),
     );
-    const useButtons = screen.getAllByRole("button", { name: /^Use$/ });
+    const useButtons = screen.getAllByRole("button", { name: "Use for client" });
     fireEvent.click(useButtons[0]!);
     await waitFor(() =>
       expect(screen.getByTestId("use-template-modal")).toBeTruthy(),
     );
     expect(screen.getByRole("button", { name: "Open draft" })).toBeTruthy();
+    const modal = screen.getByTestId("use-template-modal");
+    expect(modal.textContent).toMatch(/This opens a draft plan for Vikram/i);
     expect(
-      screen.getByText(/This opens a draft plan for/i),
+      within(modal).getByRole("combobox", { name: "Client" }),
     ).toBeTruthy();
     expect(screen.queryByText("Kavya")).toBeNull();
   });
@@ -255,14 +261,88 @@ describe("TemplatesHub Z12-13", () => {
       screen.getByRole("button", { name: /More actions for Strength base/i }),
     );
     fireEvent.click(
-      screen.getByRole("menuitem", { name: /Make your own copy/i }),
+      screen.getByRole("menuitem", { name: /Make a copy/i }),
     );
     await waitFor(() =>
       expect(screen.getByTestId("fork-template-modal")).toBeTruthy(),
     );
     expect(
-      screen.getByRole("heading", { name: "Make your own copy" }),
+      screen.getByRole("heading", { name: "Make a copy" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Make copy" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Make a copy" })).toBeTruthy();
+    expect(screen.getByText(/aren.t affected/)).toBeTruthy();
+  });
+
+  it("shows counts on the type tabs", async () => {
+    renderHub("/templates");
+    await waitFor(() => expect(screen.getByText("Strength base")).toBeTruthy());
+    const tabs = within(screen.getByRole("tablist", { name: "Template types" }));
+    // 2 workouts, 2 nutrition, 1 check-in form, 1 intake form: 6 in all.
+    expect(tabs.getByRole("tab", { name: "All 6" })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: "Workouts 2" })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: "Nutrition 2" })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: "Check-in forms 1" })).toBeTruthy();
+    expect(tabs.getByRole("tab", { name: "Intake forms 1" })).toBeTruthy();
+  });
+
+  it("marks the Edited column so iPad widths can hide it", async () => {
+    renderHub("/templates");
+    await waitFor(() => expect(screen.getByText("Strength base")).toBeTruthy());
+    const header = screen.getByRole("columnheader", { name: "Edited" });
+    expect(header.className).toContain("col-edited");
+  });
+});
+
+describe("UsedByCell", () => {
+  const ids = [
+    "11111111-1111-4111-8111-111111111111",
+    "22222222-2222-4222-8222-222222222222",
+    "33333333-3333-4333-8333-333333333333",
+  ];
+  const clients = ids.map((id, index) => ({
+    relationshipId: id,
+    traineeDisplayName: ["Ananya Bose", "Deepak Nair", "Priya Iyer"][index]!,
+    status: "coaching_ready",
+  })) as never;
+
+  afterEach(cleanup);
+
+  it("says Not used yet only when the count is 0", () => {
+    render(<UsedByCell usedBy={{ count: 0, clientIds: [] }} clients={clients} />);
+    expect(screen.getByText("Not used yet")).toBeTruthy();
+  });
+
+  it("shows one client with one avatar", () => {
+    render(<UsedByCell usedBy={{ count: 1, clientIds: [ids[0]!] }} clients={clients} />);
+    expect(screen.getByText("1 client")).toBeTruthy();
+    expect(screen.getAllByTestId("used-by-avatar")).toHaveLength(1);
+  });
+
+  it("shows two clients", () => {
+    render(
+      <UsedByCell
+        usedBy={{ count: 2, clientIds: [ids[0]!, ids[1]!] }}
+        clients={clients}
+      />,
+    );
+    expect(screen.getByText("2 clients")).toBeTruthy();
+    expect(screen.getAllByTestId("used-by-avatar")).toHaveLength(2);
+  });
+
+  it("caps the avatars at three for four or more clients", () => {
+    render(
+      <UsedByCell
+        usedBy={{ count: 8, clientIds: ids }}
+        clients={clients}
+      />,
+    );
+    expect(screen.getByText("8 clients")).toBeTruthy();
+    expect(screen.getAllByTestId("used-by-avatar")).toHaveLength(3);
+  });
+
+  it("renders a dash, not a crash, when the field is missing", () => {
+    render(<UsedByCell usedBy={undefined} clients={clients} />);
+    expect(screen.queryByText("Not used yet")).toBeNull();
+    expect(screen.getByTestId("used-by-unknown")).toBeTruthy();
   });
 });

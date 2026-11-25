@@ -230,7 +230,7 @@ describe("rawEnumGuard: web", () => {
         expect(view.container.textContent).toContain("Generic");
         expect(view.container.textContent).toContain("Prepared");
         // Basis labels live on the add/edit form.
-        fireEvent.click(screen.getByRole("button", { name: /Add food/i }));
+        fireEvent.click(screen.getByRole("button", { name: /New food/i }));
         await waitFor(() =>
           expect(view.container.textContent).toContain("Per 100 ml"),
         );

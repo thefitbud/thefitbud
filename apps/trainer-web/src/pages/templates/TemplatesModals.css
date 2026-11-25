@@ -1,0 +1,102 @@
+/* W13-5: Use for client and Make a copy dialogs (W-174, W-175). v3 tokens only. */
+.tpl-modal-body { display: flex; flex-direction: column; gap: var(--s5); }
+.tpl-modal-banner {
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: var(--r-ctl);
+  background: var(--fill);
+  color: var(--ink2);
+  font: var(--t-body);
+}
+.tpl-modal-banner svg { flex: none; margin-top: 2px; color: var(--ink3); }
+.tpl-modal-banner b { color: var(--ink); font-weight: 600; }
+.tpl-modal-error { color: var(--crit-ink); font: var(--t-body); }
+.tpl-modal-empty { color: var(--ink3); font: var(--t-body); }
+.tpl-modal-brand { display: inline-flex; align-items: center; gap: 6px; }
+
+.tpl-name-input {
+  width: 100%;
+  height: var(--h-md);
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  color: var(--ink);
+  font: var(--t-body);
+}
+.tpl-name-input:focus-visible { outline: none; box-shadow: var(--focus); border-color: var(--brand); }
+.tpl-modal-opts { display: flex; flex-direction: column; gap: var(--s3); }
+
+.tpl-combo { position: relative; }
+.tpl-combo-trigger {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  color: var(--ink);
+  font: var(--t-body);
+  text-align: left;
+  cursor: pointer;
+}
+.tpl-combo-trigger.is-open,
+.tpl-combo-trigger:focus-visible { outline: none; border-color: var(--brand); box-shadow: var(--focus); }
+.tpl-combo-name { font-weight: 500; color: var(--ink); }
+.tpl-combo-status { color: var(--ink3); font: var(--t-meta); }
+.tpl-combo-caret { margin-left: auto; color: var(--ink3); flex: none; }
+.tpl-combo-pop {
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--card);
+  box-shadow: var(--e2);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.tpl-combo-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: var(--r-ctl);
+  background: var(--fill);
+  color: var(--ink3);
+}
+.tpl-combo-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: var(--t-body);
+}
+.tpl-combo-search input:focus-visible { outline: none; }
+.tpl-combo-pop ul { list-style: none; margin: 6px 0 0; padding: 0; }
+.tpl-combo-pop li button {
+  width: 100%;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--ink);
+  font: var(--t-body);
+  text-align: left;
+  cursor: pointer;
+}
+.tpl-combo-pop li button:hover,
+.tpl-combo-pop li button:focus-visible { background: var(--row-hover); outline: none; }
+.tpl-combo-pop li button.is-on { background: var(--row-sel); }
+.tpl-combo-check { margin-left: auto; color: var(--ink); }
+.tpl-combo-none { padding: 12px; color: var(--ink3); font: var(--t-meta); }

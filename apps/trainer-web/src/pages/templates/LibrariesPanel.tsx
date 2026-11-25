@@ -5,7 +5,8 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
+import { ChevronRight, Plus } from "lucide-react";
 import type {
   ExerciseDifficulty,
   ExerciseLibraryItem,
@@ -16,6 +17,8 @@ import type {
 import { NUTRIENT_SCALE } from "@fitbud/contracts";
 import { calculateServingNutrients, formatNumber, labelFor } from "@fitbud/core";
 import { Button } from "../../components/Button";
+import { Button as UiButton, Tabs } from "../../components/ui";
+import { LibraryThumb } from "../../components/ui/LibraryThumb";
 import {
   EmptyState,
   ErrorState,
@@ -24,6 +27,7 @@ import {
 import { useOnline } from "../../hooks/useOnline";
 import { apiClient } from "../../lib/api";
 import { LibrarySearch } from "./LibrarySearch";
+import { FilterChipSelect } from "./TemplateScopeToolbar";
 import { errorText } from "./shared";
 import { useCursorPage, useDebounced } from "./useCursorPage";
 import "./LibrariesPanel.css";
@@ -78,9 +82,9 @@ const FOOD_CLASSIFICATIONS: FoodClassification[] = [
 ];
 
 const SOURCE_OPTIONS: Array<{ value: SourceFilter; label: string }> = [
-  { value: "all", label: "All sources" },
-  { value: "global", label: "FitBud base" },
-  { value: "mine", label: "Mine" },
+  { value: "all", label: "Any" },
+  { value: "global", label: "FitBud" },
+  { value: "mine", label: "You" },
 ];
 
 function scaledDisplay(value: number | null): string {
@@ -135,6 +139,16 @@ export function foodServingKcal(item: FoodLibraryItem): string {
   const kcal = scaledDisplay(nutrients.calculated.energyKcalScaled);
   if (kcal === "—") return `${servingLabel} · —`;
   return `${servingLabel} · ${kcal} kcal`;
+}
+
+/** "6 · 45 · 5" protein, carbs, fat per default serving; a dash when there is none. */
+function foodMacros(item: FoodLibraryItem): string {
+  const nutrients = foodServingNutrients(item);
+  if (!nutrients) return "—";
+  const { proteinScaled, carbsScaled, fatScaled } = nutrients.calculated;
+  return [proteinScaled, carbsScaled, fatScaled]
+    .map((value) => scaledDisplay(value))
+    .join(" · ");
 }
 
 function FoodDrawerMacroRows({ item }: { item: FoodLibraryItem }) {
@@ -201,56 +215,28 @@ function SourceFilterControl({
   value: SourceFilter;
   onChange: (value: SourceFilter) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const label =
-    SOURCE_OPTIONS.find((option) => option.value === value)?.label ?? "Source";
-
-  useEffect(() => {
-    if (!open) return;
-    function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open]);
-
   return (
-    <div className="libraries-source">
-      <button
-        type="button"
-        className={
-          value === "all"
-            ? "libraries-source-trigger"
-            : "libraries-source-trigger has-selection"
-        }
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        Source{value === "all" ? "" : `: ${label}`}
-        <span aria-hidden>▾</span>
-      </button>
-      {open ? (
-        <ul className="libraries-source-menu" role="listbox" aria-label="Source">
-          {SOURCE_OPTIONS.map((option) => (
-            <li key={option.value} role="presentation">
-              <button
-                type="button"
-                role="option"
-                aria-selected={value === option.value}
-                className={value === option.value ? "is-on" : undefined}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-              >
-                {option.label}
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
+    <FilterChipSelect
+      label="Source"
+      value={value}
+      defaultValue="all"
+      options={SOURCE_OPTIONS}
+      onChange={(next) => onChange(next as SourceFilter)}
+    />
+  );
+}
+
+function SourceChip({ ownership }: { ownership: "global" | "trainer" }) {
+  return (
+    <span
+      className={
+        ownership === "trainer"
+          ? "ui-pill ui-p-coach libraries-source-chip is-mine"
+          : "ui-pill ui-p-neutral libraries-source-chip"
+      }
+    >
+      {ownership === "trainer" ? "You" : "FitBud"}
+    </span>
   );
 }
 
@@ -288,38 +274,32 @@ function LibrariesChrome({
   onAdd: () => void;
   children: ReactNode;
 }) {
+  const navigate = useNavigate();
   return (
     <>
       <header className="libraries-header">
-        <div>
-          <h2>Libraries</h2>
-          <p className="lede">Foods and exercises you use in plans</p>
+        <div className="page-header">
+          <h1>Library</h1>
+          <p className="lede">Foods and exercises you can add to any plan</p>
         </div>
-        <Button variant="primary" onClick={onAdd}>
-          <span aria-hidden>+ </span>
+        <UiButton variant="primary" onClick={onAdd}>
+          <Plus className="ui-i" strokeWidth={2} aria-hidden="true" />
           {addLabel}
-        </Button>
+        </UiButton>
       </header>
-      <div
-        className="libraries-segment"
-        role="group"
+      <Tabs
         aria-label="Library type"
-      >
-        <Link
-          to="/templates/libraries/foods"
-          className={tab === "foods" ? "is-on" : undefined}
-          onClick={() => onTab("foods")}
-        >
-          Foods
-        </Link>
-        <Link
-          to="/templates/libraries/exercises"
-          className={tab === "exercises" ? "is-on" : undefined}
-          onClick={() => onTab("exercises")}
-        >
-          Exercises
-        </Link>
-      </div>
+        value={tab}
+        items={[
+          { id: "foods", label: "Foods" },
+          { id: "exercises", label: "Exercises" },
+        ]}
+        onChange={(id) => {
+          const next = id === "foods" ? "foods" : "exercises";
+          onTab(next);
+          navigate(`/templates/libraries/${next}`);
+        }}
+      />
       {children}
     </>
   );
@@ -459,7 +439,7 @@ function ExerciseLibrary({
       <LibrariesChrome
         tab="exercises"
         onTab={onTab}
-        addLabel="Add exercise"
+        addLabel="New exercise"
         onAdd={openNew}
       >
         {!online ? (
@@ -475,36 +455,22 @@ function ExerciseLibrary({
             value={q}
             onChange={setQ}
             label="Search exercises"
-            placeholder="Search"
+            placeholder="Search exercises"
+          />
+          <FilterChipSelect
+            label="Equipment"
+            value={equipment || "all"}
+            defaultValue="all"
+            options={[
+              { value: "all", label: "Any" },
+              ...EQUIPMENT_OPTIONS.map((value) => ({
+                value,
+                label: labelFor("equipment", value),
+              })),
+            ]}
+            onChange={(next) => setEquipment(next === "all" ? "" : next)}
           />
           <SourceFilterControl value={source} onChange={setSource} />
-        </div>
-        <div
-          className="libraries-pill-filters"
-          role="group"
-          aria-label="Equipment"
-        >
-          <button
-            type="button"
-            className={equipment === "" ? "libraries-pill is-on" : "libraries-pill"}
-            onClick={() => setEquipment("")}
-          >
-            All equipment
-          </button>
-          {EQUIPMENT_OPTIONS.slice(0, 6).map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={
-                equipment === value ? "libraries-pill is-on" : "libraries-pill"
-              }
-              onClick={() =>
-                setEquipment((current) => (current === value ? "" : value))
-              }
-            >
-              {labelFor("equipment", value)}
-            </button>
-          ))}
         </div>
 
         {error || page.error ? (
@@ -556,13 +522,14 @@ function ExerciseLibrary({
 
         {items.length > 0 ? (
           <div className="libraries-table-wrap" tabIndex={0}>
-            <table className="libraries-table">
+            <table className="ui-table libraries-table">
               <thead>
                 <tr>
                   <th scope="col">Exercise</th>
+                  <th scope="col">Muscle</th>
                   <th scope="col">Equipment</th>
                   <th scope="col">Source</th>
-                  <th scope="col">
+                  <th scope="col" className="libraries-col-go">
                     <span className="sr-only">Open</span>
                   </th>
                 </tr>
@@ -582,25 +549,25 @@ function ExerciseLibrary({
                     }}
                   >
                     <td data-label="Exercise">
-                      <span className="libraries-name">{item.name}</span>
-                      <span className="libraries-sub">
-                        {exerciseMuscle(item)}
-                      </span>
+                      <div className="ui-cell-main">
+                        <LibraryThumb name={item.name} kind="exercise" />
+                        <div className="ui-t">
+                          <b className="libraries-name">{item.name}</b>
+                          <span className="libraries-sub">
+                            {item.difficulty
+                              ? labelFor("exercise_difficulty", item.difficulty)
+                              : "Exercise"}
+                          </span>
+                        </div>
+                      </div>
                     </td>
+                    <td data-label="Muscle">{exerciseMuscle(item)}</td>
                     <td data-label="Equipment">{exerciseEquipment(item)}</td>
                     <td data-label="Source">
-                      <span
-                        className={
-                          item.ownership === "trainer"
-                            ? "libraries-source-chip is-mine"
-                            : "libraries-source-chip"
-                        }
-                      >
-                        {sourceLabel(item.ownership)}
-                      </span>
+                      <SourceChip ownership={item.ownership} />
                     </td>
-                    <td aria-hidden="true">
-                      <span className="libraries-row-chevron">›</span>
+                    <td aria-hidden="true" className="libraries-col-go">
+                      <ChevronRight size={18} strokeWidth={1.75} />
                     </td>
                   </tr>
                 ))}
@@ -1085,7 +1052,7 @@ function FoodLibrary({
       <LibrariesChrome
         tab="foods"
         onTab={onTab}
-        addLabel="Add food"
+        addLabel="New food"
         onAdd={openNew}
       >
         {!online ? (
@@ -1101,7 +1068,7 @@ function FoodLibrary({
             value={q}
             onChange={setQ}
             label="Search foods"
-            placeholder="Search"
+            placeholder="Search foods"
           />
           <SourceFilterControl value={source} onChange={setSource} />
         </div>
@@ -1129,11 +1096,16 @@ function FoodLibrary({
 
         {items.length > 0 ? (
           <div className="libraries-table-wrap" tabIndex={0}>
-            <table className="libraries-table">
+            <table className="ui-table libraries-table">
               <thead>
                 <tr>
                   <th scope="col">Food</th>
                   <th scope="col">Serving · kcal</th>
+                  <th scope="col">P · C · F (g)</th>
+                  <th scope="col">Source</th>
+                  <th scope="col" className="libraries-col-go">
+                    <span className="sr-only">Open</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -1151,13 +1123,25 @@ function FoodLibrary({
                     }}
                   >
                     <td data-label="Food">
-                      <span className="libraries-name">{item.name}</span>
-                      <span className="libraries-sub">{foodCategory(item)}</span>
+                      <div className="ui-cell-main">
+                        <LibraryThumb name={item.name} kind="food" />
+                        <div className="ui-t">
+                          <b className="libraries-name">{item.name}</b>
+                          <span className="libraries-sub">{foodCategory(item)}</span>
+                        </div>
+                      </div>
                     </td>
                     <td data-label="Serving · kcal">
                       <span className="libraries-serving">
                         {foodServingKcal(item)}
                       </span>
+                    </td>
+                    <td data-label="P · C · F (g)">{foodMacros(item)}</td>
+                    <td data-label="Source">
+                      <SourceChip ownership={item.ownership} />
+                    </td>
+                    <td aria-hidden="true" className="libraries-col-go">
+                      <ChevronRight size={18} strokeWidth={1.75} />
                     </td>
                   </tr>
                 ))}

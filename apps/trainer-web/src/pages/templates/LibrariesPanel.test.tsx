@@ -135,9 +135,9 @@ describe("LibrariesPanel", () => {
   it("shows foods as Food + Serving · kcal with Source filter", async () => {
     renderLibraries("foods");
     expect(await screen.findByTestId("screen-TW-26")).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Libraries" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Library" })).toBeTruthy();
     expect(
-      screen.getByText("Foods and exercises you use in plans"),
+      screen.getByText("Foods and exercises you can add to any plan"),
     ).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Food" })).toBeTruthy();
     expect(
@@ -205,7 +205,7 @@ describe("LibrariesPanel", () => {
         name: "Logged by clients, not in library",
       }),
     ).toBeTruthy();
-    expect(screen.getByRole("group", { name: "Equipment" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Equipment/ })).toBeTruthy();
     expect(screen.queryByRole("columnheader", { name: "Primary muscles" })).toBeNull();
   });
 
@@ -225,7 +225,7 @@ describe("LibrariesPanel", () => {
     renderLibraries("foods");
     await screen.findByText("Paneer bhurji");
     fireEvent.click(screen.getByRole("button", { name: /Source/ }));
-    fireEvent.click(screen.getByRole("option", { name: "Mine" }));
+    fireEvent.click(screen.getByRole("option", { name: "You" }));
     await waitFor(() => {
       expect(screen.getByText("Rahul's protein oats")).toBeTruthy();
       expect(screen.queryByText("Paneer bhurji")).toBeNull();

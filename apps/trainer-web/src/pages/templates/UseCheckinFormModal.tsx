@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
-import { Button } from "../../components/Button";
+import { Info } from "lucide-react";
+import { Button, Modal } from "../../components/ui";
+import { ClientCombobox } from "./ClientCombobox";
 import { apiClient } from "../../lib/api";
 import {
-  clientInitials,
-  clientStatusLabel,
   errorText,
   usableApplyClients,
   type ApplyClient,
@@ -62,68 +61,14 @@ export function UseCheckinFormModal({
   }
 
   return (
-    <div className="modal-scrim" role="presentation" onClick={onClose}>
-      <div
-        className="modal-card use-template-modal templates-modal-v3"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="use-checkin-form-title"
-        data-testid="use-checkin-form-modal"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="modal-header">
-          <h2 id="use-checkin-form-title">Use {formTitle} for…</h2>
-          <button
-            type="button"
-            className="templates-modal-close"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            <X size={18} strokeWidth={2} aria-hidden="true" />
-          </button>
-        </header>
-        <label className="field">
-          <span>Client</span>
-          {usable.length === 0 ? (
-            <p className="muted">No ready clients to use this with.</p>
-          ) : (
-            <div className="templates-client-select">
-              <span className="templates-client-avatar" aria-hidden="true">
-                {clientInitials(clientName)}
-              </span>
-              <select
-                aria-label="Client"
-                value={selected?.relationshipId ?? ""}
-                onChange={(event) => setSelectedId(event.target.value)}
-              >
-                {usable.map((client) => {
-                  const name = client.traineeDisplayName ?? "Client";
-                  const status = clientStatusLabel(client.status);
-                  return (
-                    <option
-                      key={client.relationshipId}
-                      value={client.relationshipId}
-                    >
-                      {name} · {status}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
-        </label>
-        {selected ? (
-          <p className="templates-modal-copy use-template-copy">
-            {firstName}&apos;s next scheduled check-in will use this form.
-            Already-opened check-ins keep their pinned form.
-          </p>
-        ) : null}
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <div className="button-row">
+    <Modal
+      open
+      onClose={onClose}
+      title="Use form for a client"
+      subtitle={formTitle}
+      footer={
+        <>
+          <span className="ui-sp" />
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -134,8 +79,37 @@ export function UseCheckinFormModal({
           >
             {acting ? "Assigning…" : "Assign form"}
           </Button>
+        </>
+      }
+    >
+      <div className="tpl-modal-body" data-testid="use-checkin-form-modal">
+        <div className="ui-field">
+          <span className="ui-lbl">Client</span>
+          {usable.length === 0 ? (
+            <p className="tpl-modal-empty">No ready clients to use this with.</p>
+          ) : (
+            <ClientCombobox
+              clients={usable}
+              value={selected?.relationshipId ?? ""}
+              onChange={setSelectedId}
+            />
+          )}
         </div>
+        {selected ? (
+          <p className="tpl-modal-banner">
+            <Info size={18} strokeWidth={1.75} aria-hidden="true" />
+            <span>
+              {firstName}&apos;s next scheduled check-in will use this form.
+              Already-opened check-ins keep their pinned form.
+            </span>
+          </p>
+        ) : null}
+        {error ? (
+          <p className="tpl-modal-error" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   );
 }
