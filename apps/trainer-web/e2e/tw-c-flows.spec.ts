@@ -70,7 +70,7 @@ test.describe("TW-C workspace", () => {
     await signIn(page);
   });
 
-  test("TW-09a header: chips, WhatsApp client number, one CTA, tabs", async ({
+  test("TW-09a header: chips, WhatsApp client number, Remind and Note, tabs", async ({
     page,
   }) => {
     await page.goto(`/clients/${ROHAN}/overview`);
@@ -81,7 +81,14 @@ test.describe("TW-C workspace", () => {
     await expect(wa).toBeVisible();
     const href = await wa.getAttribute("href");
     expect(href).toMatch(/^https:\/\/wa\.me\/919000000007/);
-    await expect(page.getByRole("button", { name: /Review issue/i })).toBeVisible();
+    // W13-10 (DS §6, frame W-03): the header has no primary button; Remind
+    // and Note sit beside WhatsApp, and the Overview's Needs attention card
+    // carries Review.
+    const header = page.getByTestId("screen-TW-09a");
+    await expect(header.getByRole("button", { name: /Review issue/i })).toHaveCount(0);
+    await expect(header.getByTestId("wsh-remind")).toBeVisible();
+    await expect(header.getByTestId("wsh-note")).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Review$/ }).first()).toBeVisible();
     const tabs = page.getByRole("navigation", { name: /Client sections/i });
     await expectClientWorkspaceTabStrip(tabs);
     // The demo seed reviews every Rohan check-in (so Today shows the coach
@@ -116,15 +123,11 @@ test.describe("TW-C workspace", () => {
     }
     await page.goto(`/clients/${ROHAN}/overview`);
     await page.getByRole("button", { name: /more actions/i }).click();
-    await expect(
-      page.getByRole("menuitem", { name: /Coaching setup/i }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("menuitem", { name: /Onboarding answers/i }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("menuitem", { name: /Reminder settings/i }),
-    ).toBeVisible();
+    // W13-10: Coaching setup, Onboarding answers and Reminders are Settings
+    // tab sections now; the ⋯ menu keeps End coaching only.
+    for (const moved of [/Client settings/i, /Coaching setup/i, /Onboarding answers/i, /Reminder settings/i]) {
+      await expect(page.getByRole("menuitem", { name: moved })).toHaveCount(0);
+    }
     // Z9-13: notes are added from the Overview "Coach notes" card, not this menu.
     await expect(page.getByRole("menuitem", { name: /Add note/i })).toHaveCount(0);
     await expect(page.getByRole("menuitem", { name: /End coaching/i })).toBeVisible();
@@ -173,6 +176,7 @@ test.describe("TW-C workspace", () => {
     page,
   }) => {
     await page.goto(`/clients/${SNEHA}/onboarding`);
+    await expect(page).toHaveURL(/\/settings#onboarding$/);
     await expect(page.getByTestId("screen-TW-10")).toBeVisible();
     await expect(page.getByText(/Intake/i).first()).toBeVisible();
     await expect(
@@ -187,17 +191,19 @@ test.describe("TW-C workspace", () => {
     ).toBeVisible();
   });
 
-  test("TW-11 configure: accordion + payment labels + Coming soon", async ({
+  test("TW-11 configure: section rows + payment labels; reminders + Coming soon in Settings › Reminders", async ({
     page,
   }) => {
     await page.goto(`/clients/${ROHAN}/configure`);
     await expect(page.getByTestId("screen-TW-11")).toBeVisible();
-    const reminders = page.locator("details").filter({
-      hasText: /Automatic reminders/i,
-    });
-    await expect(reminders).toBeVisible();
-    await reminders.locator("summary").click();
-    await expect(page.getByText(/Coming soon/i).first()).toBeVisible();
+    // W13-10: the automatic reminders moved to Settings › Reminders.
+    await expect(page.getByText(/Automatic reminders/i)).toHaveCount(0);
+    await page.getByTestId("cs-nav-reminders").click();
+    const reminders = page.getByTestId("cs-section-reminders");
+    await expect(reminders.getByText(/Automatic reminders/i)).toBeVisible();
+    await expect(reminders.getByText(/Coming soon/i).first()).toBeVisible();
+    await page.getByTestId("cs-nav-coaching").click();
+    await expect(page.getByTestId("screen-TW-11")).toBeVisible();
     const body = await page.locator("body").innerText();
     expect(body).not.toMatch(/\bper_100_g\b/);
     // Payment frequency select should show labeled options when opened

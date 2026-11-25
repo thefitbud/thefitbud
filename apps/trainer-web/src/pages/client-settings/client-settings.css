@@ -450,6 +450,13 @@
   .cs-page .ui-btn {
     min-height: 44px;
   }
+
+  /* The 36×20 toggle keeps its look; the hit area is 44 px. */
+  .cs-page .ui-tgl {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
 }
 
 /* Narrower than an iPad: the sub-nav becomes a wrapping row above the content. */

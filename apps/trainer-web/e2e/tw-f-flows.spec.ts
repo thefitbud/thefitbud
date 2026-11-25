@@ -111,11 +111,9 @@ test.describe("TW-F templates, forms, libraries", () => {
     await expect(page.getByTestId("screen-TW-11")).toBeVisible({
       timeout: 30_000,
     });
-    const checkins = page.locator("details").filter({
-      has: page.locator(".configure-accordion-title", { hasText: "Check-ins" }),
-    });
+    // W13-10: Settings › Check-ins is an always-open row in its own card.
+    const checkins = page.getByTestId("cs-section-checkins");
     await expect(checkins).toBeVisible();
-    await checkins.locator("summary").click();
     await expect(checkins.getByLabel("Check-in form")).toBeVisible();
   });
 });
