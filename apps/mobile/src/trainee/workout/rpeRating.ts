@@ -21,27 +21,45 @@ import type { SyncEngine } from "../../sync/engine";
  * - A refused row is removed from the outbox: the summary shows the verdict
  *   itself and the trainee decides what to do next.
  */
+/** What to change: an omitted field is left as it is (D-W14-34). */
+export type FeedbackChange = { rpe?: number | null; note?: string | null };
+
 export type RatingOutcome =
-  /** The server holds this rating. */
-  | { kind: "saved"; rpe: number | null }
+  /** The server holds this rating and note. */
+  | { kind: "saved"; rpe: number | null; note: string | null }
   /** Queued behind a failed or slow push; it sends when the phone is online. */
   | { kind: "queued" }
   | {
       kind: "refused";
       reason: "window_closed" | "conflict" | "other";
       message: string;
-      /** The server's rating, when the read gave one (conflict). */
+      /** The server's rating and note, when the read gave them (conflict). */
       serverRpe?: number | null;
+      serverNote?: string | null;
     };
 
 export const RATING_WINDOW_CLOSED_MESSAGE =
   "Ratings can be changed for 48 hours after a workout.";
+export const RATING_NOTE_WINDOW_CLOSED_MESSAGE =
+  "Ratings and notes can be changed for 48 hours after a workout.";
 export const RATING_CONFLICT_MESSAGE =
   "Your rating was changed somewhere else. Pick again to replace it.";
+export const RATING_NOTE_CONFLICT_MESSAGE =
+  "Your rating or note was changed somewhere else. Save again to replace it.";
 export const RATING_HELD_MESSAGE =
   "Your rating will be saved when this workout is sent.";
+export const RATING_NOTE_HELD_MESSAGE =
+  "Your rating and note will be saved when this workout is sent.";
 export const RATING_QUEUED_MESSAGE =
   "Your rating will be saved when you're back online.";
+export const RATING_NOTE_QUEUED_MESSAGE =
+  "Your rating and note will be saved when you're back online.";
+
+/** A note as the server stores it: trimmed, empty is none. */
+export function normalizeNote(note: string | null | undefined): string | null {
+  const trimmed = (note ?? "").trim();
+  return trimmed === "" ? null : trimmed;
+}
 
 const RECHECK_MS = 15_000;
 
@@ -81,19 +99,31 @@ function nextChange(sync: SyncEngine, ms: number): Promise<void> {
   });
 }
 
-function refusedFrom(result: SyncMutationResult): RatingOutcome & { kind: "refused" } {
+function refusedFrom(
+  result: SyncMutationResult,
+  hasNote: boolean,
+): RatingOutcome & { kind: "refused" } {
   const code = result.error?.code;
+  const what = hasNote ? "rating and note" : "rating";
   if (code === "FEEDBACK_EDIT_WINDOW_CLOSED") {
-    return { kind: "refused", reason: "window_closed", message: RATING_WINDOW_CLOSED_MESSAGE };
+    return {
+      kind: "refused",
+      reason: "window_closed",
+      message: hasNote ? RATING_NOTE_WINDOW_CLOSED_MESSAGE : RATING_WINDOW_CLOSED_MESSAGE,
+    };
   }
   if (result.status === "conflicted" || code === "VERSION_CONFLICT") {
-    return { kind: "refused", reason: "conflict", message: RATING_CONFLICT_MESSAGE };
+    return {
+      kind: "refused",
+      reason: "conflict",
+      message: hasNote ? RATING_NOTE_CONFLICT_MESSAGE : RATING_CONFLICT_MESSAGE,
+    };
   }
   return {
     kind: "refused",
     reason: "other",
     message: userFacingMessage(result.error?.message, {
-      fallback: "Couldn't save your rating. Try again.",
+      fallback: `Couldn't save your ${what}. Try again.`,
     }),
   };
 }
@@ -114,10 +144,15 @@ export async function saveWorkoutRating(input: {
   sync: SyncEngine;
   api: RatingApi;
   executionId: string;
-  rpe: number | null;
+  change: FeedbackChange;
   progress?: (state: "held") => void;
 }): Promise<RatingOutcome> {
-  const { sync, api, executionId, rpe } = input;
+  const { sync, api, executionId } = input;
+  const change: FeedbackChange = {};
+  if (input.change.rpe !== undefined) change.rpe = input.change.rpe;
+  if (input.change.note !== undefined) change.note = normalizeNote(input.change.note);
+  const hasNote = change.note !== undefined;
+  const what = hasNote ? "rating and note" : "rating";
 
   // 1. Wait for the finish to be accepted; show the pick as held meanwhile.
   // 2. Read the execution for the real version.
@@ -148,16 +183,36 @@ export async function saveWorkoutRating(input: {
         kind: "refused",
         reason: "other",
         message: userFacingMessage(err, {
-          fallback: "Couldn't save your rating. Try again.",
+          fallback: `Couldn't save your ${what}. Try again.`,
         }),
       };
     }
   }
 
-  if (current.sessionRpe === rpe) return { kind: "saved", rpe };
+  const serverNote = (e: WorkoutExecution) => normalizeNote(e.sessionNote);
+  /** True when the server already holds everything asked for. */
+  const matches = (e: WorkoutExecution) =>
+    (change.rpe === undefined || e.sessionRpe === change.rpe) &&
+    (change.note === undefined || serverNote(e) === change.note);
+  const savedFrom = (e: WorkoutExecution): RatingOutcome => ({
+    kind: "saved",
+    rpe: change.rpe !== undefined ? change.rpe : e.sessionRpe,
+    note: change.note !== undefined ? change.note : serverNote(e),
+  });
+  /** Only the fields that differ from the server go out. */
+  const bodyFor = (e: WorkoutExecution) => {
+    const body: { rpe?: number | null; note?: string | null; recordVersion: number } = {
+      recordVersion: e.recordVersion,
+    };
+    if (change.rpe !== undefined && change.rpe !== e.sessionRpe) body.rpe = change.rpe;
+    if (change.note !== undefined && change.note !== serverNote(e)) body.note = change.note;
+    return body;
+  };
 
-  // One mutation id and key for this rating action; a retry of the same
-  // payload (the push failing, the app returning) reuses them.
+  if (matches(current)) return savedFrom(current);
+
+  // One mutation id and key for this action; a retry of the same payload
+  // (the push failing, the app returning) reuses them.
   let mutationId = createIdempotencyKey();
   let seen = current;
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -169,7 +224,7 @@ export async function saveWorkoutRating(input: {
         recordId: executionId,
         operation: "workout.feedback",
         expectedServerVersion: seen.recordVersion,
-        payload: { executionId, body: { rpe, recordVersion: seen.recordVersion } },
+        payload: { executionId, body: bodyFor(seen) },
         wait: true,
       });
       results = queued.results;
@@ -178,32 +233,40 @@ export async function saveWorkoutRating(input: {
       return {
         kind: "refused",
         reason: "other",
-        message: "Couldn't save your rating on this phone. Try again.",
+        message: `Couldn't save your ${what} on this phone. Try again.`,
       };
     }
     const result = results.find((item) => item.mutationId === mutationId);
     if (!result) return { kind: "queued" };
     if (result.status === "applied" || result.status === "already_applied") {
-      return { kind: "saved", rpe };
+      return savedFrom(seen);
     }
     if (result.status === "rejected" && result.retryable === true) {
       return { kind: "queued" };
     }
     await dropRefusedRow(sync, mutationId);
-    if (!isConflict(result)) return refusedFrom(result);
+    if (!isConflict(result)) return refusedFrom(result, hasNote);
 
     // 409: the version moved. Read once; retry only when the server's rating
-    // is the one this phone last saw.
+    // and note are the ones this phone last saw.
     let fresh: WorkoutExecution;
     try {
       fresh = await api.getWorkoutExecution(executionId);
     } catch (err: unknown) {
       reportError("workout.feedback.reread", err);
-      return refusedFrom(result);
+      return refusedFrom(result, hasNote);
     }
-    if (fresh.sessionRpe === rpe) return { kind: "saved", rpe };
-    if (attempt === 1 || fresh.sessionRpe !== seen.sessionRpe) {
-      return { ...refusedFrom(result), serverRpe: fresh.sessionRpe };
+    if (matches(fresh)) return savedFrom(fresh);
+    if (
+      attempt === 1 ||
+      fresh.sessionRpe !== seen.sessionRpe ||
+      serverNote(fresh) !== serverNote(seen)
+    ) {
+      return {
+        ...refusedFrom(result, hasNote),
+        serverRpe: fresh.sessionRpe,
+        serverNote: serverNote(fresh),
+      };
     }
     seen = fresh;
     // A new payload (the fresh version) is a new send: new id, old refused

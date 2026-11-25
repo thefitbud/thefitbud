@@ -15,12 +15,15 @@ import {
   Check,
   ClipboardCheck,
   Eye,
+  Pencil,
   RefreshCw,
+  Trash2,
   Trophy,
   UtensilsCrossed,
 } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
+import { isEndedClient } from "./clients";
 import { deviceTimeZone, formatLocalDate, formatPersonName } from "@fitbud/core";
 import type { ColorTokens } from "@fitbud/tokens";
 import { fontFamilySemiBold } from "@fitbud/ui-mobile";
@@ -28,7 +31,7 @@ import { stage1Api } from "../lib/stage1Api";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { CardRow, ListScreen, PagedListFooter } from "../components/ListScreen";
-import { ClientAvatar } from "./ClientAvatar";
+import { ClientAvatar, ClientNameLink } from "./ClientAvatar";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
 import { readTrainerCache, trainerCacheEpoch, writeTrainerCache } from "./cache";
@@ -39,10 +42,12 @@ import { ActivityMealSheet } from "./activity/ActivityMealSheet";
 import {
   ClientPickerSheet,
   type ActivityClientOption,
+  type ClientSearchResult,
 } from "./activity/ClientPickerSheet";
 import {
   ACTIVITY_FILTERS,
   activityDayLabel,
+  activitySentence,
   activityTag,
   activityTimeLine,
   emptyFilterCopy,
@@ -57,7 +62,13 @@ import { createThemedStyles, useTheme } from "../providers/ThemeProvider";
 
 type ActivityFeedEvent = Awaited<
   ReturnType<ReturnType<typeof stage1Api>["getActivityFeed"]>
->["events"][number];
+>["events"][number] &
+  // The hand-written `stage1Api` type predates these (it is not this task's file);
+  // the contract carries them (Z14-11, Z14-33).
+  Pick<
+    ActivityEventLike,
+    "entryId" | "mealDate" | "previousKcal" | "previousAteOut" | "unread" | "notificationId"
+  >;
 
 function avatars(c: ColorTokens) {
   return [
@@ -151,6 +162,8 @@ export function ActivityFeedScreen({
     relationshipId: string;
     displayName: string;
   } | null>(null);
+  // Z14-33: entries whose dot the trainer has cleared by opening them.
+  const [seenEntries, setSeenEntries] = useState<ReadonlySet<string>>(new Set());
   const [noteActing, setNoteActing] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
 
@@ -265,9 +278,42 @@ export function ActivityFeedScreen({
     }
   }
 
+  // Z14-33: the picker searches every client on the server, first page only.
+  const searchClients = useCallback(
+    async (q: string): Promise<ClientSearchResult> => {
+      try {
+        const page = await api.listClients({ q, limit: 20 });
+        return {
+          kind: "ok",
+          clients: page.items
+            .filter((item) => item.relationshipId && !isEndedClient(item))
+            .map((item) => ({
+              relationshipId: item.relationshipId!,
+              displayName: item.traineeDisplayName ?? "Client",
+            })),
+        };
+      } catch (err) {
+        if (isOfflineError(err)) return { kind: "offline" };
+        reportError("activity.clientSearch", err);
+        return { kind: "error" };
+      }
+    },
+    [api],
+  );
+
   function openEvent(event: ActivityFeedEvent) {
     const type = event.type.toLowerCase();
     const name = event.traineeDisplayName ?? "Client";
+    if (event.unread && event.entryId) {
+      const entryId = event.entryId;
+      setSeenEntries((prev) => new Set(prev).add(entryId));
+      if (event.notificationId) {
+        // The dot is already cleared; a failure only leaves the inbox row unread.
+        void s1.markNotificationRead(event.notificationId).catch((err: unknown) => {
+          if (!isOfflineError(err)) reportError("activity.markRead", err);
+        });
+      }
+    }
     if (type.includes("meal")) {
       setMealEvent(event);
       return;
@@ -423,6 +469,10 @@ export function ActivityFeedScreen({
             {index > 0 ? <View style={styles.divider} /> : null}
             <EventRow
               event={event}
+              unread={
+                event.unread === true &&
+                !(event.entryId && seenEntries.has(event.entryId))
+              }
               onPress={() => openEvent(event)}
               onOpenProfile={
                 onOpenProfile
@@ -437,6 +487,7 @@ export function ActivityFeedScreen({
       <ClientPickerSheet
         visible={pickerOpen}
         clients={clients}
+        onSearch={lockedRid ? undefined : searchClients}
         selectedId={clientFilter?.relationshipId ?? null}
         onSelect={setClientFilter}
         onDismiss={() => setPickerOpen(false)}
@@ -482,10 +533,12 @@ export function ActivityFeedScreen({
 
 function EventRow({
   event,
+  unread,
   onPress,
   onOpenProfile,
 }: {
   event: ActivityFeedEvent;
+  unread: boolean;
   onPress: () => void;
   onOpenProfile?: (() => void) | undefined;
 }) {
@@ -504,21 +557,39 @@ function EventRow({
         tone={tone}
         onPress={onOpenProfile}
       />
-      <Pressable
-        accessibilityRole="button"
-        onPress={onPress}
-        style={styles.body}
-      >
-        <Text style={styles.summary}>
-          <Text style={styles.who}>{firstName(name)}</Text>
-          {` · ${event.summary}`}
-          {event.kcal != null ? ` · ${event.kcal.toLocaleString("en-IN")} kcal` : ""}
-        </Text>
-        <View style={styles.foot}>
-          <TagPill kind={tag.kind} label={tag.label} />
-          <Text style={styles.time}>{activityTimeLine(event)}</Text>
-        </View>
-      </Pressable>
+      <View style={styles.body}>
+        {onOpenProfile ? (
+          // Z14-33: the name is its own link above the sentence, a sibling of
+          // the event button (no button inside a button on web).
+          <ClientNameLink
+            name={name}
+            onPress={onOpenProfile}
+            style={styles.who}
+          >
+            {firstName(name)}
+          </ClientNameLink>
+        ) : null}
+        <Pressable
+          accessibilityRole="button"
+          onPress={onPress}
+        >
+          <Text style={styles.summary}>
+            {onOpenProfile ? null : <Text style={styles.who}>{`${firstName(name)} · `}</Text>}
+            {activitySentence(event)}
+          </Text>
+          <View style={styles.foot}>
+            <TagPill kind={tag.kind} label={tag.label} />
+            <Text style={styles.time}>{activityTimeLine(event)}</Text>
+          </View>
+        </Pressable>
+      </View>
+      {unread ? (
+        <View
+          testID="activity-unread-dot"
+          accessibilityLabel="Unread"
+          style={styles.unreadDot}
+        />
+      ) : null}
     </View>
   );
 }
@@ -556,6 +627,10 @@ function tagTone(
       return { bg: c.fill, fg: c.ink2, Icon: RefreshCw };
     case "checkin":
       return { bg: c.infoTint, fg: c.info, Icon: ClipboardCheck };
+    case "edited":
+      return { bg: c.fill, fg: c.ink2, Icon: Pencil };
+    case "removed":
+      return { bg: c.fill, fg: c.ink2, Icon: Trash2 };
     case "note_seen":
       return { bg: c.fill, fg: c.ink2, Icon: Eye };
     case "change":
@@ -642,7 +717,14 @@ const useStyles = createThemedStyles((t) => ({
   avatarText: { fontFamily: fontFamilySemiBold, fontSize: 13 },
   body: { flex: 1, minWidth: 0 },
   summary: { color: t.colors.ink, fontSize: 15, lineHeight: 21 },
-  who: { fontFamily: fontFamilySemiBold },
+  who: { color: t.colors.ink, fontFamily: fontFamilySemiBold, fontSize: 15, lineHeight: 21 },
+  unreadDot: {
+    backgroundColor: t.colors.ink,
+    borderRadius: 4,
+    height: 8,
+    marginTop: 8,
+    width: 8,
+  },
   foot: {
     alignItems: "center",
     flexDirection: "row",

@@ -149,8 +149,32 @@ describe("CheckinsList", () => {
   it("the avatar opens the client's profile and does not open the check-in", () => {
     const onOpenClient = vi.fn();
     const props = renderList({ onOpenClient });
-    fireEvent.click(screen.getByRole("button", { name: "Open Deepak Nair's profile" }));
+    const links = screen.getAllByRole("button", { name: "Open Deepak Nair's profile" });
+    fireEvent.click(links.find((el) => el.getAttribute("data-testid") === "client-avatar-link")!);
     expect(onOpenClient).toHaveBeenCalledWith(model.toReview[1]!.item.coachingRelationshipId);
+    expect(props.onReview).not.toHaveBeenCalled();
+  });
+
+  it("the name opens the client's profile and not the check-in (Z14-33)", () => {
+    const onOpenClient = vi.fn();
+    const props = renderList({ onOpenClient });
+    const links = screen.getAllByRole("button", { name: "Open Deepak Nair's profile" });
+    const nameLink = links.find((el) => el.getAttribute("data-testid") === "client-name-link")!;
+    fireEvent.click(nameLink);
+    expect(onOpenClient).toHaveBeenCalledWith(model.toReview[1]!.item.coachingRelationshipId);
+    expect(props.onReview).not.toHaveBeenCalled();
+    // The rest of the row still opens the review.
+    fireEvent.click(screen.getByRole("button", { name: "Review Deepak Nair's check-in" }));
+    expect(props.onReview).toHaveBeenCalledWith(model.toReview[1]);
+  });
+
+  it("an overdue row's name opens the profile; the row itself opens nothing (Z14-33)", () => {
+    const onOpenClient = vi.fn();
+    const props = renderList({ onOpenClient, segment: "overdue" });
+    expect(screen.queryByRole("button", { name: /^Review/ })).toBeNull();
+    const links = screen.getAllByRole("button", { name: "Open Arjun Kapoor's profile" });
+    fireEvent.click(links.find((el) => el.getAttribute("data-testid") === "client-name-link")!);
+    expect(onOpenClient).toHaveBeenCalledWith(model.overdue[0]!.item.coachingRelationshipId);
     expect(props.onReview).not.toHaveBeenCalled();
   });
 

@@ -91,6 +91,15 @@ export function sessionMetrics(execution: WorkoutExecution): SessionMetric[] {
   ];
 }
 
+/**
+ * The trainee's note on this workout, trimmed; null when there is none
+ * (nothing is shown for an empty note, Z14-32).
+ */
+export function sessionNoteText(execution: WorkoutExecution): string | null {
+  const text = (execution.sessionNote ?? "").trim();
+  return text === "" ? null : text;
+}
+
 /** "Lower body B · today 6:31–7:23 pm" / "Lower body A · Sat 7 Nov · 31 min". */
 export function sessionSubtitle(input: {
   dayName: string;
