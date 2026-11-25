@@ -252,6 +252,28 @@ describe("TemplatesHub Z12-13", () => {
     expect(screen.queryByText("Kavya")).toBeNull();
   });
 
+  it("Use for client is a Quiet button and the client rows share one separator", async () => {
+    renderHub("/templates/workouts");
+    await waitFor(() =>
+      expect(screen.getByText("Strength base")).toBeTruthy(),
+    );
+    const useButtons = screen.getAllByRole("button", { name: "Use for client" });
+    for (const button of useButtons) {
+      expect(button.className).toContain("ui-btn-quiet");
+      expect(button.className).not.toContain("ui-btn-secondary");
+    }
+    fireEvent.click(useButtons[0]!);
+    const modal = await screen.findByTestId("use-template-modal");
+    fireEvent.click(within(modal).getByRole("combobox", { name: "Client" }));
+    const options = within(modal).getAllByRole("option");
+    expect(options.length).toBeGreaterThan(0);
+    for (const option of options) {
+      const seps = option.querySelectorAll(".tpl-combo-sep");
+      expect(seps).toHaveLength(1);
+      expect(option.querySelector(".tpl-combo-status > .tpl-combo-sep")).toBeTruthy();
+    }
+  });
+
   it("opens Make your own copy from the base overflow", async () => {
     renderHub("/templates/workouts");
     await waitFor(() =>

@@ -10,7 +10,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { API, apiToken, signIn } from "./support/session";
 
-const OUT = path.resolve("qa-captures/w13-4");
+const OUT = path.resolve(`qa-captures/${process.env.W13_CAPTURE_DIR ?? "w13-4"}`);
 const GLOBAL_CHECKIN = "c1000001-0000-4000-8000-000000000001";
 
 type Field = { id: string; key?: string } & Record<string, unknown>;
@@ -207,7 +207,7 @@ test.describe("W13-4 check-in form builder", () => {
       await page.setViewportSize({ width, height });
       await openForm(page, id);
       await page.getByRole("button", { name: /How did training feel/ }).click();
-      await expect(page.getByRole("radiogroup", { name: "Answer type" })).toBeVisible();
+      await expect(page.getByLabel("Answer type")).toBeVisible();
       await expect(page.getByTestId("builder-pane-library")).toHaveCount(wide ? 1 : 0);
       await expectWorkspace(page, `W-171 ${label}`, wide ? 3 : 2);
       await expect(page.getByTestId("builder-version-pill")).toBeVisible();
@@ -259,9 +259,9 @@ test.describe("W13-4 check-in form builder", () => {
 
     await page.getByRole("button", { name: /Add your own question/ }).click();
     await page.getByRole("textbox", { name: "Question" }).fill("How was your mood?");
-    await page.getByRole("radio", { name: "Scale 1–5" }).click();
+    await expect(page.getByRole("radiogroup", { name: "Answer type" })).toHaveCount(0);
+    await page.getByRole("combobox", { name: "Answer type" }).selectOption("scale_1_5");
     await expect(page.getByLabel("Label for 1")).toBeVisible();
-    await expect(page.getByRole("combobox", { name: "Type" })).toHaveValue("scale_1_5");
     await expectWorkspace(page, "after edits", 3);
 
     await page.getByRole("button", { name: "Save version" }).click();
@@ -276,5 +276,15 @@ test.describe("W13-4 check-in form builder", () => {
     await expect(page.getByRole("button", { name: "Add standard measure" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Save version" })).toHaveCount(0);
     await expectWorkspace(page, "read-only", 3);
+  });
+
+  test("below 1024 the builder is read-only with no Save version", async ({ page }) => {
+    const id = await ownForm();
+    await page.setViewportSize({ width: 900, height: 1200 });
+    await page.goto(`/templates/checkins/${id}`);
+    await expect(page.getByTestId("builder-small-screen")).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText("Open on a larger screen to edit.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save version" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Fork to edit" })).toHaveCount(0);
   });
 });

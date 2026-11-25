@@ -898,7 +898,7 @@ function HubTableRow({
       <td className="col-use">
         <div className="templates-hub-row-actions">
           <Button
-            variant="secondary"
+            variant="quiet"
             size="sm"
             className="templates-hub-use-btn"
             onClick={onUse}
