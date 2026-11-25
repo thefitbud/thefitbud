@@ -169,6 +169,23 @@ test.describe("W13-6 Client Overview and review modal", () => {
       await page.goto(`/clients/${rohan}`);
       await overviewLoaded(page);
       await shot(page, "W-03-client-overview", size);
+      if (size.w <= 1024) {
+        // Targets are measured on the element's own box (iPad widths), not a pseudo-element.
+        const small = await page.evaluate(() => {
+          const out: string[] = [];
+          document
+            .querySelectorAll(".ov-range-btn, .ov-dnav-btn, .ov-food-link, .ov-weight-f a, .ov-weight-f button, .ov-att button")
+            .forEach((el) => {
+              const b = el.getBoundingClientRect();
+              if (b.width === 0 || b.height === 0) return;
+              if (b.height < 43.5 || b.width < 43.5) {
+                out.push(`${el.className}:${Math.round(b.width)}x${Math.round(b.height)}`);
+              }
+            });
+          return out;
+        });
+        expect.soft(small, `44 px targets at ${size.w}`).toEqual([]);
+      }
 
       console.log("STEP W-03x modal");
       await page.locator(".ov-att").getByRole("button", { name: "Review" }).first().click();

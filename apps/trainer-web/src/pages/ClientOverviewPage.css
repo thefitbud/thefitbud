@@ -438,3 +438,11 @@
     gap: var(--s3);
   }
 }
+
+/* iPad widths: the range toggle's own boxes reach 44 px (W13-6). */
+@media (max-width: 1024px), (pointer: coarse) {
+  .ov-range-btn {
+    min-height: 2.75rem;
+    min-width: 2.75rem;
+  }
+}
