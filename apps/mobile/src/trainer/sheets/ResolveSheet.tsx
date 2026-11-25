@@ -4,7 +4,6 @@ import { Lock, X } from "lucide-react-native";
 import type { ExceptionDetail, ResolveExceptionRequest } from "@fitbud/contracts";
 import { BottomSheet } from "../../components/BottomSheet";
 import { Button } from "../../components/Button";
-import { Chip } from "../../components/Chip";
 import { Text } from "../../components/Text";
 import {
   ThemeScope,
@@ -96,18 +95,32 @@ function ResolveSheetBody({
       <Text variant="label" style={styles.label}>
         Outcome
       </Text>
-      <View style={styles.chips} accessibilityRole="radiogroup">
-        {RESOLVE_OUTCOMES.map((option) => {
+      <View style={styles.rows} accessibilityRole="radiogroup">
+        {RESOLVE_OUTCOMES.map((option, index) => {
           const selected = outcome === option.value;
           const label = resolvedOutcomePhrase(option.value, first) ?? option.label;
           return (
-            <Chip
+            <Pressable
               key={option.value}
-              label={label}
-              selected={selected}
+              testID={`resolve-outcome-${option.value}`}
+              accessibilityRole="radio"
               accessibilityLabel={label}
+              accessibilityState={{ checked: selected }}
+              aria-checked={selected}
+              // A second press clears the choice: the outcome stays optional.
               onPress={() => setOutcome(selected ? null : option.value)}
-            />
+              style={[styles.row, index > 0 ? styles.rowDivider : null]}
+            >
+              <Text variant="body" style={styles.rowLabel}>
+                {label}
+              </Text>
+              <View
+                style={[styles.dot, selected ? styles.dotSelected : null]}
+                importantForAccessibility="no-hide-descendants"
+              >
+                {selected ? <View style={styles.dotCore} /> : null}
+              </View>
+            </Pressable>
           );
         })}
       </View>
@@ -162,7 +175,35 @@ const useStyles = createThemedStyles((t) => ({
     width: t.touchTarget,
   },
   label: { marginTop: t.spacing.xs },
-  chips: { flexDirection: "row", flexWrap: "wrap", gap: t.spacing.sm },
+  rows: {
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line2,
+    borderRadius: t.radii.card,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  row: {
+    alignItems: "center",
+    alignSelf: "stretch",
+    flexDirection: "row",
+    gap: t.spacing.md,
+    minHeight: t.touchTarget,
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.sm,
+  },
+  rowDivider: { borderTopColor: t.colors.line2, borderTopWidth: 1 },
+  rowLabel: { flex: 1 },
+  dot: {
+    alignItems: "center",
+    borderColor: t.colors.ink3,
+    borderRadius: 11,
+    borderWidth: 2,
+    height: 22,
+    justifyContent: "center",
+    width: 22,
+  },
+  dotSelected: { borderColor: t.colors.ink },
+  dotCore: { backgroundColor: t.colors.ink, borderRadius: 6, height: 12, width: 12 },
   input: {
     ...t.text.body.style,
     color: t.colors.ink,

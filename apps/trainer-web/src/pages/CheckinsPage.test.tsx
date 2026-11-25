@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 
 const ACTIVE = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
@@ -144,5 +144,50 @@ describe("CheckinsPage (Z7-3)", () => {
     renderAt("/checkins");
     expect(await screen.findByText("1 to review")).toBeTruthy();
     expect(screen.getAllByText("Wed 21 Oct, 10:00 am").length).toBeGreaterThan(0);
+  });
+
+  it("offers Remind on Due and Overdue rows, and a Review link on submitted rows (W-166)", async () => {
+    api.listTrainerCheckinInbox.mockResolvedValue({
+      items: [
+        item(ACTIVE, "Rohan Mehta", "c1", "due"),
+        item("cccccccc-cccc-4ccc-8ccc-cccccccccccc", "Arjun Kapoor", "c3", "overdue"),
+        item("dddddddd-dddd-4ddd-8ddd-dddddddddddd", "Neha Reddy", "c4", "submitted"),
+      ],
+    });
+    api.nudgeActivity.mockResolvedValue({ deduped: false, delivery: "push", inboxReason: null });
+    renderAt("/checkins?tab=due");
+    const table = await screen.findByRole("table", { name: "Check-ins inbox" });
+    fireEvent.click(await within(table).findByRole("button", { name: "Remind" }));
+    await waitFor(() => expect(api.nudgeActivity).toHaveBeenCalledTimes(1));
+    expect(api.nudgeActivity.mock.calls[0]![1]).toEqual({
+      activityType: "checkin",
+      activityId: "c1",
+    });
+    expect((await screen.findByTestId("inbox-remind-notice")).textContent).toBe(
+      "Reminder sent to Rohan.",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /Overdue/ }));
+    expect(
+      await within(await screen.findByRole("table", { name: "Check-ins inbox" })).findByRole(
+        "button",
+        { name: "Remind" },
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /To review/ }));
+    expect(
+      (await screen.findAllByRole("link", { name: "Review" }))[0]!.getAttribute("href"),
+    ).toContain("/check-ins/c4?from=inbox");
+  });
+
+  it("says so when Remind fails, in plain words", async () => {
+    api.listTrainerCheckinInbox.mockResolvedValue({
+      items: [item(ACTIVE, "Rohan Mehta", "c1", "overdue")],
+    });
+    api.nudgeActivity.mockRejectedValue(new Error("boom"));
+    renderAt("/checkins?tab=overdue");
+    fireEvent.click((await screen.findAllByRole("button", { name: "Remind" }))[0]!);
+    const notice = await screen.findByTestId("inbox-remind-notice");
+    expect(notice.textContent).not.toMatch(/boom/);
+    expect(notice.textContent).toBeTruthy();
   });
 });
