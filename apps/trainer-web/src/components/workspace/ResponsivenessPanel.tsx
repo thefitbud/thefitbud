@@ -19,13 +19,13 @@ import { LoadingBlock } from "../StatePanels";
 /** The API's responsiveness window, in days (`?days=` on the request). */
 export const RESPONSIVENESS_WINDOW_DAYS = 14;
 
-function labelTitle(
+export function labelTitle(
   label: ResponsivenessResponse["label"],
 ): string {
   return labelFor("responsiveness_label", label);
 }
 
-function summaryCounts(data: ResponsivenessResponse): string {
+export function summaryCounts(data: ResponsivenessResponse): string {
   const { sent, opened, loggedAfter, loggedBefore } = data.counts;
   switch (data.label) {
     case "logs_on_own":
@@ -73,7 +73,7 @@ function formatOpened(value: number | null | undefined): string {
 }
 
 /** "7:00 pm · set by Rohan" — the time and where it came from (frame 181). */
-function preferredWorkoutText(
+export function preferredWorkoutText(
   data: ResponsivenessResponse,
   firstName: string,
 ): string | null {
@@ -314,7 +314,7 @@ export function ResponsivenessPanel({
       <p className="responsiveness-footer muted" style={FOOTER_TEXT}>
         {ended
           ? "Reminders are off while coaching is ended."
-          : `Reminders are timed by FitBud and respect ${traineeFirstName}'s settings and meal times. Switch categories on or off in Plan › Coaching setup.`}
+          : `Reminders are timed by FitBud and respect ${traineeFirstName}'s settings and meal times. Switch categories on or off in Settings › Reminders.`}
       </p>
     </div>
   );
@@ -335,6 +335,7 @@ export function RemindersDrawer({
   timeZone,
   refreshEpoch = 0,
   ended = false,
+  openedFrom = null,
   onClose,
 }: {
   relationshipId: string;
@@ -345,6 +346,12 @@ export function RemindersDrawer({
   timeZone: string;
   refreshEpoch?: number;
   ended?: boolean;
+  /**
+   * Where the drawer was opened from, for the footer line (e.g. "Overview ›
+   * Reminders › Details"). Without it the line is left out, so the review
+   * panel's Signals › Details no longer reads as the Overview (FLOW §6.4).
+   */
+  openedFrom?: string | null;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement>(null);
@@ -447,8 +454,10 @@ export function RemindersDrawer({
           style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}
         >
           <p style={{ ...FOOTER_TEXT, flex: "1 1 160px" }}>
-            Opened from Overview › Reminders › Details
+            {openedFrom ? `Opened from ${openedFrom}` : null}
           </p>
+          {/* Kept as built (D-W13-13): the Overview test owns this link; the
+              old route redirects into Settings (D-W13-15). */}
           <Link
             className="button-secondary"
             to={`/clients/${relationshipId}/configure`}
