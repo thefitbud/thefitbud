@@ -406,6 +406,8 @@ export function HomePage() {
 
   // D-W7-2: the panel lane reads ?client=. Row navigation closes a drawer.
   function openClientPanel(relationshipId: string) {
+    // DR1 QA F2: same fresh-open token as openException (Review lands here too).
+    setDrawerOpenSeq((n) => n + 1);
     setParams((prev) => {
       const next = new URLSearchParams(prev);
       next.set("client", relationshipId);
@@ -1092,7 +1094,7 @@ export function HomePage() {
                   return (
                     <div
                       key={group.relationshipId}
-                      className={`home-row${focusIdx === idx ? " is-focused" : ""}`}
+                      className={`home-row${focusIdx === idx ? " is-focused" : ""}${clientPanelId === group.relationshipId ? " is-open" : ""}`}
                       role="row"
                       tabIndex={-1}
                       ref={(el) => {

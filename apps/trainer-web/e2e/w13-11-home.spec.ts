@@ -74,12 +74,6 @@ async function shot(page: Page, name: string, size: Size) {
   expect.soft(problems.clip, `${name} ${size.w}`).toEqual([]);
 }
 
-async function loadHome(page: Page) {
-  await page.goto("/");
-  await expect(page.getByTestId("screen-TW-04")).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByText("Loading your day…")).toHaveCount(0, { timeout: 20_000 });
-}
-
 async function openClient(page: Page, name: string) {
   await page.goto("/");
   await expect(page.getByTestId("screen-TW-04")).toBeVisible({ timeout: 30_000 });
@@ -133,6 +127,12 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
     for (const name of [/due/i, /overdue/i, /reviewed/i, /to review/i]) {
       await page.getByRole("tab", { name }).click();
       await expect(page.getByRole("tab", { name })).toHaveAttribute("aria-selected", "true");
+    }
+    await page.getByRole("tab", { name: /^due/i }).click();
+    const remind = page.getByRole("button", { name: "Remind" }).first();
+    if (await remind.isVisible().catch(() => false)) {
+      await remind.click();
+      await expect(page.getByTestId("inbox-remind-notice")).toBeVisible();
     }
   });
 
@@ -223,15 +223,13 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
       await expect(page.getByTestId("bulk-select-list")).toBeVisible();
       await shot(page, "W-02f-panel-resolve-several", size);
       const boxes = page.getByTestId("bulk-select-list").getByRole("checkbox");
-      for (let k = 0; k < 3; k += 1) await boxes.nth(k).check();
-      await page.getByRole("button", { name: /^resolve 3 items…$/i }).click();
-      await page.waitForTimeout(500);
+      for (let k = 0; k < 5; k += 1) await boxes.nth(k).check();
+      await page.getByRole("button", { name: /^resolve 5 items…$/i }).click();
+      const confirm = page.getByTestId("bulk-confirm");
+      await expect(confirm).toBeVisible();
       await shot(page, "W-02g-panel-resolve-several-confirm", size);
-      await page
-        .getByRole("dialog")
-        .getByRole("button", { name: /talked to client/i })
-        .click();
-      await page.getByRole("dialog").getByRole("button", { name: /^resolve 3 items$/i }).click();
+      await confirm.getByRole("button", { name: /talked to client/i }).click();
+      await confirm.getByRole("button", { name: /^resolve 5 items$/i }).click();
       await expect(page.getByTestId("bulk-undo-toast")).toBeVisible({ timeout: 15_000 });
       await shot(page, "W-02h-panel-resolve-several-undo", size);
       await page.getByTestId("bulk-undo-toast").getByRole("button", { name: /undo/i }).click();

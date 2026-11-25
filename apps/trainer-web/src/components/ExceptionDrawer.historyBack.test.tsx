@@ -219,14 +219,13 @@ afterEach(() => {
 
 describe("Esc then browser Back reopens a usable drawer (DR2 / DR1 QA F-C)", () => {
   it("Home: Esc, Back before the close commits: same drawer, 'n' nudges and Esc closes", async () => {
-    window.history.replaceState(null, "", "/");
+    window.history.replaceState(null, "", `/?exception=${EXC}`);
     render(
       <BrowserRouter>
         <HomePage />
       </BrowserRouter>,
     );
     await screen.findByText("Rohan Mehta");
-    fireEvent.click(screen.getByRole("button", { name: "Review" }));
     const dialog = await screen.findByRole("dialog");
     await within(dialog).findByRole("button", { name: "Remind" });
     await escThenBack();
