@@ -358,6 +358,24 @@ export function HomePage() {
       });
   }, [groups]);
 
+  // RP-05 (W13-13): the client after the open panel's client in the Needs
+  // attention order. Once that client leaves the list (all resolved), the
+  // first other client waiting is next.
+  const nextPanelClient = useMemo(() => {
+    if (!clientPanelId) return null;
+    const idx = openGroups.findIndex(
+      (row) => row.group.relationshipId === clientPanelId,
+    );
+    const rest =
+      idx >= 0
+        ? openGroups.slice(idx + 1)
+        : openGroups.filter((row) => row.group.relationshipId !== clientPanelId);
+    const next = rest[0]?.group;
+    return next
+      ? { id: next.relationshipId, name: next.traineeDisplayName }
+      : null;
+  }, [clientPanelId, openGroups]);
+
   const reviewedGroups = useMemo(
     () =>
       groups
@@ -1496,6 +1514,14 @@ export function HomePage() {
           openSeq={drawerOpenSeq}
           onClose={closeDrawerWithFocus}
           onChanged={() => void refreshSection("attention")}
+          nextClient={
+            nextPanelClient
+              ? {
+                  name: nextPanelClient.name,
+                  onOpen: () => openClientPanel(nextPanelClient.id),
+                }
+              : null
+          }
         />
       ) : null}
 

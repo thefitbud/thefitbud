@@ -1,4 +1,5 @@
-import type { Ref } from "react";
+import type { MouseEvent, Ref } from "react";
+import { Link } from "react-router-dom";
 import { Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import type { ExceptionSeverity } from "@fitbud/contracts";
 import { StatusChip } from "../StatusChip";
@@ -11,6 +12,8 @@ export type PanelNav = {
   /** Per-item state for the progress dashes, in list order. */
   resolved: readonly boolean[];
   resolvedCount: number;
+  /** Item on screen is handled and more are open: › is the next step (RP-04). */
+  nextSuggested?: boolean;
   onPrev: () => void;
   onNext: () => void;
 };
@@ -27,6 +30,8 @@ export function PanelHeader({
   currentResolved,
   closeRef,
   onClose,
+  clientHref,
+  onLeave,
 }: {
   clientName: string;
   meta: string;
@@ -35,6 +40,13 @@ export function PanelHeader({
   currentResolved: boolean;
   closeRef: Ref<HTMLButtonElement>;
   onClose: () => void;
+  /**
+   * The client page (D-W13-21): the avatar and name are a visible link, so
+   * Open client, Adjust plan and Client settings live there, not in the panel.
+   */
+  clientHref?: string | null;
+  /** A plain click on the name leaves the panel (DR1 closing flag). */
+  onLeave?: (ev: MouseEvent<HTMLAnchorElement>) => void;
 }) {
   const showResolvedChip = Boolean(nav && currentResolved);
   // One item: no pager and no dashes, there is nowhere to step to.
@@ -42,16 +54,46 @@ export function PanelHeader({
   return (
     <header className="sp-head">
       <div className="sp-head-row">
-        <span
-          className={`${avatarToneClass(clientName)} sp-avatar`}
-          aria-hidden="true"
-        >
-          {initials(clientName)}
-        </span>
-        <div className="sp-head-who">
-          <h2 className="sp-name">{clientName}</h2>
-          {meta ? <p className="sp-meta">{meta}</p> : null}
-        </div>
+        {clientHref ? (
+          <Link
+            className="sp-who-link"
+            to={clientHref}
+            onClick={onLeave}
+            data-testid="panel-client-link"
+          >
+            <span
+              className={`${avatarToneClass(clientName)} sp-avatar`}
+              aria-hidden="true"
+            >
+              {initials(clientName)}
+            </span>
+            <span className="sp-head-who">
+              <span className="sp-name-row">
+                <h2 className="sp-name">{clientName}</h2>
+                <ChevronRight
+                  className="sp-name-chev"
+                  size={16}
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </span>
+              {meta ? <span className="sp-meta">{meta}</span> : null}
+            </span>
+          </Link>
+        ) : (
+          <>
+            <span
+              className={`${avatarToneClass(clientName)} sp-avatar`}
+              aria-hidden="true"
+            >
+              {initials(clientName)}
+            </span>
+            <div className="sp-head-who">
+              <h2 className="sp-name">{clientName}</h2>
+              {meta ? <p className="sp-meta">{meta}</p> : null}
+            </div>
+          </>
+        )}
         {nav && stepper ? (
           <div className="sp-nav" role="group" aria-label="Items for this client">
             <button
@@ -68,7 +110,9 @@ export function PanelHeader({
             </span>
             <button
               type="button"
-              className="sp-icon-btn"
+              className={
+                nav.nextSuggested ? "sp-icon-btn is-suggested" : "sp-icon-btn"
+              }
               aria-label="Next item"
               disabled={nav.index >= nav.total - 1}
               onClick={nav.onNext}
