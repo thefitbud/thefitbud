@@ -81,14 +81,14 @@ function settings(overrides: Partial<ClientSettingsResponse> = {}): ClientSettin
 
 const openWorkspaceModal = vi.fn();
 
-function renderPage({ ended = false, online = true, hash = "" } = {}) {
+function renderPage({ ended = false, online = true, hash = "", gender = "male" as string | undefined } = {}) {
   const context = {
     workspace: {
       header: {
         relationshipId: REL_ID,
         traineeDisplayName: "Rohan Mehta",
         onboardingStatus: ended ? "ended" : "active",
-        traineeProfile: { displayName: "Rohan Mehta", age: 29, gender: "male" },
+        traineeProfile: { displayName: "Rohan Mehta", age: 29, gender },
         traineeTimezone: "Asia/Kolkata",
       },
     },
@@ -140,6 +140,17 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     );
   });
 
+  it.each(["female", "male", undefined])("Client details and End coaching use Rohan, never a pronoun, for gender %s (D-W14-37)", async (gender) => {
+    renderPage({ gender });
+    const basic = await screen.findByTestId("cs-section-basic");
+    expect(within(basic).getByText("Reminders follow Rohan's time")).toBeTruthy();
+    cleanup();
+    renderPage({ gender, hash: "#danger" });
+    const danger = await screen.findByTestId("cs-section-danger");
+    expect(danger.textContent).toContain("Rohan keeps the account and history.");
+    expect(danger.textContent).not.toMatch(/\b(he|she|his|her|hers|him)\b/i);
+  });
+
   it.each(["#danger", "#relationship"])("%s selects the Danger zone", async (hash) => {
     renderPage({ hash });
     await screen.findByTestId("cs-section-danger");
@@ -156,7 +167,7 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     expect(within(basic).getByText("+91 90000 00008")).toBeTruthy();
     expect(within(basic).getByText("29 · Male")).toBeTruthy();
     expect(within(basic).getByText("India Standard Time (IST)")).toBeTruthy();
-    expect(within(basic).getByText("Reminders follow his time")).toBeTruthy();
+    expect(within(basic).getByText("Reminders follow Rohan's time")).toBeTruthy();
 
     const sub = screen.getByTestId("cs-section-subscription");
     expect(within(sub).getByRole("heading", { name: "Package and payments" })).toBeTruthy();

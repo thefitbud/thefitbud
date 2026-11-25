@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { userFacingMessage } from "@fitbud/api-client";
 import type { ClientSettingsResponse, PaymentRecord } from "@fitbud/contracts";
-import { formatCivilDate, labelFor, possessivePronoun } from "@fitbud/core";
+import { formatCivilDate, labelFor } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
 import { StatusChip } from "../../components/StatusChip";
@@ -207,7 +207,6 @@ export function ClientSettingsPage() {
   const shownName = settings?.basics.clientDisplayName ?? profileName;
   const firstName = shownName.split(/\s+/)[0] || shownName;
   const gender = header?.traineeProfile.gender?.trim() || null;
-  const pronoun = possessivePronoun(gender);
   const readOnly = ended || endedElsewhere || settings?.readOnly === true;
 
   function goTo(id: SettingsSectionId) {
@@ -378,7 +377,7 @@ export function ClientSettingsPage() {
             {timeZone ? (
               <SettingRow
                 label="Time zone"
-                help={`Reminders follow ${pronoun} time`}
+                help={`Reminders follow ${firstName}'s time`}
                 value={formatTimeZone(timeZone)}
               />
             ) : null}
@@ -606,7 +605,7 @@ export function ClientSettingsPage() {
               </p>
               {readOnly ? null : (
                 <p>
-                  {firstName} keeps {pronoun} account and history. Plans and reminders stop
+                  {firstName} keeps the account and history. Plans and reminders stop
                   today. You can reactivate later.
                 </p>
               )}
