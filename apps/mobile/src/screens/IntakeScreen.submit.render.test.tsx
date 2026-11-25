@@ -134,31 +134,26 @@ async function onFirstStep() {
   await waitFor(() => expect(screen.getByText("What is your main goal?")).toBeTruthy());
 }
 
-function fillCurrent(value: string) {
-  const input = document.querySelector("textarea, input") as HTMLElement;
-  fireEvent.change(input, { target: { value } });
+/** Fill every text box on the current step, optionally leaving the first one empty. */
+function fillStep(value: string, skipFirst = false) {
+  const inputs = Array.from(document.querySelectorAll("textarea, input")) as HTMLElement[];
+  inputs.forEach((input, i) => {
+    if (skipFirst && i === 0) return;
+    fireEvent.change(input, { target: { value } });
+  });
 }
 
 function press(name: RegExp) {
   fireEvent.click(screen.getByRole("button", { name }));
 }
 
-const NEXT_STEPS = [
-  ["Next: Your routine", "Describe a usual day"],
-  ["Next: Food habits", "What do you usually eat?"],
-  ["Next: Health", "Anything about your health?"],
-  ["Next: Goals", "Anything else for your coach?"],
-] as const;
-
 /** Answer every question and stop on the last step with Submit intake showing. */
 async function reachLastStep() {
   await onFirstStep();
-  fillCurrent("Lose 5 kg before the wedding");
-  for (const [button, nextLabel] of NEXT_STEPS) {
-    press(new RegExp(button));
-    await waitFor(() => expect(screen.getByText(nextLabel)).toBeTruthy());
-    fillCurrent("Answered");
-  }
+  fillStep("Lose 5 kg before the wedding");
+  press(/Continue/);
+  await waitFor(() => expect(screen.getByText("Anything about your health?")).toBeTruthy());
+  fillStep("Answered");
   await waitFor(() => expect(screen.getByRole("button", { name: /Submit intake/ })).toBeTruthy());
 }
 
@@ -221,12 +216,11 @@ describe("Submit intake (Z14-45)", () => {
   it("an empty required question on an earlier step sends nothing and shows the line under it", async () => {
     startScreen();
     await onFirstStep();
-    // Walk forward leaving step 1's required question empty.
-    for (const [button, nextLabel] of NEXT_STEPS) {
-      press(new RegExp(button));
-      await waitFor(() => expect(screen.getByText(nextLabel)).toBeTruthy());
-      if (nextLabel !== "Anything about your health?") fillCurrent("Answered");
-    }
+    // Leave step 1's first required question empty, answer the rest.
+    fillStep("Answered", true);
+    press(/Continue/);
+    await waitFor(() => expect(screen.getByText("Anything about your health?")).toBeTruthy());
+    fillStep("Answered");
     await waitFor(() => expect(screen.getByRole("button", { name: /Submit intake/ })).toBeTruthy());
     const callsBefore = server.calls.length;
 
