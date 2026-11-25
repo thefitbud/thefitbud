@@ -193,7 +193,7 @@ export async function uploadAndAttachMealPhoto(
     /** Called once the file is up, before the attach: the job keeps the id. */
     onUploaded?: (mediaAssetId: string) => Promise<void> | void;
   },
-): Promise<{ mediaAssetId: string }> {
+): Promise<{ mediaAssetId: string; entry: MealCompliance }> {
   let mediaAssetId = input.mediaAssetId ?? null;
   if (!mediaAssetId) {
     try {
@@ -209,8 +209,9 @@ export async function uploadAndAttachMealPhoto(
     }
     await input.onUploaded?.(mediaAssetId);
   }
+  let entry: MealCompliance;
   try {
-    await api.attachMealPhoto(
+    entry = await api.attachMealPhoto(
       input.entryId,
       { mediaAssetId },
       input.attachKey,
@@ -220,7 +221,34 @@ export async function uploadAndAttachMealPhoto(
     wrapped.mediaAssetId = mediaAssetId;
     throw wrapped;
   }
-  return { mediaAssetId };
+  return { mediaAssetId, entry };
+}
+
+/**
+ * The attach moved the entry's `recordVersion` on. Keep the version it
+ * returned where `nextRecordVersion` looks (the synced `meal_compliance`
+ * record), so the next edit or removal carries it instead of the stale one
+ * the day's copy still shows (Z14-34). Never lowers a version already held.
+ * Writes nothing once `isDiscarded()` says the user signed out meanwhile.
+ */
+export async function recordAttachedMealVersion(
+  sync: SyncEngine,
+  entry: Pick<MealCompliance, "id" | "recordVersion">,
+  isDiscarded: () => boolean = () => false,
+): Promise<void> {
+  if (isDiscarded()) return;
+  const existing = await sync.store.getLocal("meal_compliance", entry.id);
+  if (isDiscarded()) return;
+  const held = existing && !existing.tombstone ? (existing.serverVersion ?? 0) : 0;
+  if (held >= entry.recordVersion) return;
+  await sync.store.upsertLocal({
+    entityType: "meal_compliance",
+    recordId: entry.id,
+    serverVersion: entry.recordVersion,
+    payloadJson: existing?.payloadJson ?? null,
+    tombstone: false,
+    updatedAt: new Date().toISOString(),
+  });
 }
 
 /**
