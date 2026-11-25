@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Linking,
   Modal,
@@ -33,6 +33,7 @@ import { useLegalDocument } from "../screens/LegalDocumentScreen";
 import { M2Card, M2Group, M2Row } from "../trainee/settings/m2";
 import { mobilePermittedRoles } from "../navigation/resolveRoute";
 import { countsFromFacets } from "./clientCounts";
+import { useRefreshWhenActive } from "./keptTab";
 import {
   ThemeScope,
   createThemedStyles,
@@ -49,6 +50,11 @@ export { DEFAULT_TRAINER_WEB_URL, trainerWebUrl };
 type Props = {
   onOpenNotifications: () => void;
   onOpenProfile: () => void;
+  /**
+   * Z14-39: the shell keeps More mounted once visited. `active` is false while
+   * it is hidden; on return after the stale window it refreshes quietly.
+   */
+  active?: boolean;
 };
 
 function initials(name: string): string {
@@ -90,6 +96,7 @@ function isNetworkFailure(err: unknown): boolean {
 export function TrainerMoreScreen({
   onOpenNotifications,
   onOpenProfile,
+  active = true,
 }: Props) {
 
   const theme = useTheme();
@@ -102,12 +109,14 @@ export function TrainerMoreScreen({
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   const [activeCount, setActiveCount] = useState<number | null>(null);
   const [offline, setOffline] = useState(false);
+  const lastLoadedAt = useRef(0);
 
   const load = useCallback(async () => {
     try {
       // One row is enough: the active count is in the list's facets (Z14-21).
       const page = await api.listClients({ limit: 1 });
       if (page.facets) setActiveCount(countsFromFacets(page.facets).all);
+      lastLoadedAt.current = Date.now();
       setOffline(false);
     } catch (err) {
       if (isNetworkFailure(err)) {
@@ -121,6 +130,8 @@ export function TrainerMoreScreen({
   useEffect(() => {
     void load();
   }, [load]);
+  // A failed reload never clears a count already shown (only sets `offline`).
+  useRefreshWhenActive(active, lastLoadedAt, () => void load());
 
   const email = me?.email ?? null;
   // Only an account with both mobile roles can switch (TM-07a / TM-08c).
