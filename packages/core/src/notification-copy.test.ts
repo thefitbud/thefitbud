@@ -162,6 +162,12 @@ describe("clientLogEditCopy (Z14-16)", () => {
       title: "Priya removed their dinner log",
       body: "Fri 13 Nov · was 1,120 kcal. It's back to not logged.",
     });
+    expect(
+      clientLogEditCopy({ ...removed, fromDeviationKind: "restaurant" }, "Priya Nair", today).body,
+    ).toBe("Fri 13 Nov · was 1,120 kcal, ate out. It's back to not logged.");
+    expect(
+      clientLogEditCopy({ ...removed, fromDeviationKind: "portion_adjustment" }, "Priya Nair", today).body,
+    ).toBe("Fri 13 Nov · was 1,120 kcal. It's back to not logged.");
     expect(clientLogEditCopy(base, null, today).title).toBe(
       "A client edited lunch",
     );
@@ -217,5 +223,14 @@ describe("meal change marker lines (Z14-16)", () => {
         previousKcal: null,
       }),
     ).toBe("A client removed their lunch log");
+    expect(
+      mealRemovedActivityLine({
+        clientName: "Priya Nair",
+        summary: "Removed the dinner log",
+        mealDate: "2026-11-13",
+        previousKcal: 1120,
+        previousAteOut: true,
+      }),
+    ).toBe("Priya removed their dinner log (Fri 13 Nov) · was 1,120 kcal, ate out");
   });
 });

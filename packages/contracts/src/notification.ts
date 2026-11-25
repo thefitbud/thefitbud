@@ -309,6 +309,11 @@ export const clientLogEditPayloadSchema = z.object({
   toKcal: z.number().int().nonnegative().nullable(),
   fromOutcome: z.string().min(1).max(32),
   toOutcome: z.string().min(1).max(32).nullable(),
+  /** The entry's deviation kind before the change (Z14-35); absent on older stored rows. */
+  fromDeviationKind: z
+    .enum(["portion_adjustment", "restaurant", "logged_foods"])
+    .nullable()
+    .optional(),
   fields: z.array(z.enum(["outcome", "portion", "foods", "kcal", "note"])).max(5),
 });
 export type ClientLogEditPayload = z.infer<typeof clientLogEditPayloadSchema>;

@@ -118,6 +118,10 @@ describe("notification categories and the meal buttons (Z12-47)", async () => {
       data: { mealAssignmentId: MEAL_ID },
     });
     expect(request.trigger.type).toBe("date");
+    // Android: the v2 meal channel, never the deleted legacy "meal" id (Z14-35).
+    const channelId = (request.trigger as unknown as { channelId: string }).channelId;
+    expect(channelId).toBe("meal_v2");
+    expect(channelId).not.toBe("meal");
     expect(isMealSnoozed(MEAL_ID)).toBe(true);
 
     // The reminder itself carries the Snooze button; a second press does not
