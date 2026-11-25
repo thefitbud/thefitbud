@@ -1,15 +1,7 @@
 import { userFacingMessage } from "@fitbud/api-client";
 import { useState, type ReactNode } from "react";
-import {
-  Ban,
-  Bell,
-  ChevronRight,
-  CircleOff,
-  ClipboardCheck,
-  File,
-  Settings,
-} from "lucide-react";
-import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Ban, Bell, ChevronRight, CircleOff, NotebookPen } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import type { Checkin, ClientWorkspace } from "@fitbud/contracts";
 import {
   deviceTimeZone,
@@ -21,6 +13,7 @@ import {
 } from "@fitbud/core";
 import { useAuth } from "../../auth/AuthProvider";
 import { Button } from "../Button";
+import { Button as UiButton } from "../ui";
 import { OverflowMenu, type OverflowMenuItem } from "../OverflowMenu";
 import { StatusChip } from "../StatusChip";
 import { WhatsAppGlyph } from "../WhatsAppGlyph";
@@ -36,6 +29,7 @@ import {
   clientWorkspaceTabHref,
   isClientWorkspaceTabActive,
 } from "./workspaceTabs";
+import "./workspace-header.css";
 
 const WEEK_MS = 7 * 86_400_000;
 
@@ -67,6 +61,11 @@ function titleCaseGender(value: string): string {
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1).toLowerCase();
 }
 
+/**
+ * The v3 client header (W13-10; frames W-03, W-209 and every client frame):
+ * breadcrumb, avatar, name with status pills, a one-line subtitle, the actions
+ * **WhatsApp · Remind · Note · ⋯**, and the seven tabs ending in Settings.
+ */
 export function WorkspaceHeader({
   workspace,
   relationshipId,
@@ -85,7 +84,6 @@ export function WorkspaceHeader({
   const { me } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [, setParams] = useSearchParams();
   const header = workspace.header;
   const ended = header.onboardingStatus === "ended";
   const pendingReactivation = header.pendingReactivation ?? null;
@@ -97,7 +95,7 @@ export function WorkspaceHeader({
   // promote due/overdue drafts (or pre-reactivation leftovers) to "Review".
   const reviewCheckin = workspace.overview.pendingReviewCheckin ?? null;
 
-  const primary = primaryActionFor({
+  const nextStep = primaryActionFor({
     relationshipId,
     onboardingStatus: header.onboardingStatus,
     configurationActive,
@@ -106,6 +104,18 @@ export function WorkspaceHeader({
     ended,
     reactivationPending: Boolean(pendingReactivation),
   });
+  // W13-10 (DS §6, frames W-03 / W-209): a coached client's header has no
+  // primary button; its actions are WhatsApp · Remind · Note · ⋯ and the
+  // Overview carries Review. A client who is not coached yet keeps the one
+  // lifecycle step (Review intake, Set up coaching); an ended client keeps
+  // Reactivate.
+  const primary =
+    nextStep &&
+    (nextStep.kind === "review_intake" ||
+      nextStep.kind === "configure" ||
+      nextStep.kind === "reactivate")
+      ? nextStep
+      : null;
 
   const remindHref = header.clientWhatsappE164
     ? whatsappHref({
@@ -215,23 +225,18 @@ export function WorkspaceHeader({
       node: <span>{profileParts.join(" · ")}</span>,
     });
   }
-  if (!ended && header.renewalState && header.renewalState !== "current") {
-    const renewsOn = header.renewsOn
-      ? formatCivilDate(header.renewsOn)
-      : null;
-    const stateLabel = labelFor("renewal_state", header.renewalState);
-    metaNodes.push({
-      key: "renewal",
-      node: (
-        <StatusChip
-          kind="renewal"
-          value={header.renewalState}
-          label={`Renewal ${stateLabel.toLowerCase()}${renewsOn ? ` · ${renewsOn}` : ""}`}
-          className="status-chip-xs"
-        />
-      ),
-    });
-  }
+  // DS §6: a renewal that needs attention is a header pill beside the status
+  // pills, not part of the subtitle.
+  const renewalPill =
+    !ended && header.renewalState && header.renewalState !== "current" ? (
+      <StatusChip
+        kind="renewal"
+        value={header.renewalState}
+        label={`Renewal ${labelFor("renewal_state", header.renewalState).toLowerCase()}${
+          header.renewsOn ? ` · ${formatCivilDate(header.renewsOn)}` : ""
+        }`}
+      />
+    ) : null;
 
   function runPrimary() {
     if (!primary) return;
@@ -239,65 +244,28 @@ export function WorkspaceHeader({
       onOpenModal({ type: "reactivate" });
       return;
     }
-    if (primary.kind === "review_exception" && primary.exceptionId) {
-      setParams({ exception: primary.exceptionId });
-      navigate(`/clients/${relationshipId}/overview?exception=${primary.exceptionId}`);
-      return;
-    }
     navigate(primary.to);
   }
 
-  // Ended relationships: Configure is read-only (CE1) and the reminders
-  // drawer only reports history (D-W7-7). Order, icons, descriptions and the
-  // divider follow frames 208 and 208b; notes are added from the Overview
-  // "Coach notes" card (Z9-13).
-  const menuIcon = (Icon: typeof Settings) => (
-    <Icon size={16} strokeWidth={1.75} />
-  );
-  const overflowItems: OverflowMenuItem[] = [
-    {
-      id: "client-settings",
-      label: "Client settings",
-      description: "Basic details, subscription & package",
-      icon: menuIcon(Settings),
-      onSelect: () => navigate(`/clients/${relationshipId}/settings`),
-    },
-    {
-      id: "configure",
-      label: ended ? "View coaching setup" : "Coaching setup",
-      description: "Goal, expectations, check-ins, reminders",
-      icon: menuIcon(ClipboardCheck),
-      onSelect: () => navigate(`/clients/${relationshipId}/configure`),
-    },
-    {
-      id: "onboarding",
-      label: "Onboarding answers",
-      icon: menuIcon(File),
-      onSelect: () => navigate(`/clients/${relationshipId}/onboarding`),
-    },
-    {
-      id: "reminders",
-      label: ended ? "View reminder history" : "Reminder settings",
-      icon: menuIcon(Bell),
-      onSelect: () => onOpenModal({ type: "responsiveness" }),
-    },
-    ...(!ended
-      ? [
-          {
-            id: "end",
-            label: "End coaching…",
-            icon: menuIcon(Ban),
-            onSelect: () => onOpenModal({ type: "end" }),
-            destructive: true,
-            dividerBefore: true,
-            disabled: !online,
-          },
-        ]
-      : []),
-  ];
+  // W13-10: Client settings, Coaching setup, Onboarding answers and Reminder
+  // settings became the Settings tab and its sections, so the ⋯ menu keeps
+  // only the action that is not a place: End coaching… (frame 208 icon). An
+  // ended client has nothing left in it, so the ⋯ is not drawn.
+  const overflowItems: OverflowMenuItem[] = ended
+    ? []
+    : [
+        {
+          id: "end",
+          label: "End coaching…",
+          icon: <Ban size={16} strokeWidth={1.75} />,
+          onSelect: () => onOpenModal({ type: "end" }),
+          destructive: true,
+          disabled: !online,
+        },
+      ];
 
   return (
-    <header className="wsh" data-testid="screen-TW-09a">
+    <header className="wsh wsh-v3" data-testid="screen-TW-09a">
       {ended && pendingReactivation ? (
         <div className="wsh-pending">
           <p className="banner-neutral" role="status">
@@ -348,7 +316,7 @@ export function WorkspaceHeader({
           <span aria-current="page">{header.traineeDisplayName}</span>
         </nav>
         <div className="wsh-r1">
-          <span className="avatar workspace-avatar lg" aria-hidden="true">
+          <span className="avatar workspace-avatar lg wsh-avatar" aria-hidden="true">
             {initials}
           </span>
           <div className="wsh-id">
@@ -370,13 +338,14 @@ export function WorkspaceHeader({
                 <>
                   <StatusChip kind="lifecycle" value={header.onboardingStatus} />
                   <StatusChip kind="adherence" value={header.adherenceState} />
+                  {renewalPill}
                 </>
               )}
             </div>
             {metaNodes.length > 0 ? (
               <div className="wsh-meta">
                 {metaNodes.map((item) => (
-                  <span key={item.key} className="wsh-meta-item">
+                  <span key={item.key} className={`wsh-meta-item is-${item.key}`}>
                     {item.node}
                   </span>
                 ))}
@@ -403,35 +372,56 @@ export function WorkspaceHeader({
           <div className="wsh-acts">
             {!ended ? (
               <>
-              {whatsappHrefValue ? (
-                <a
-                  className="button-secondary button-whatsapp"
-                  href={whatsappHrefValue}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label="Message on WhatsApp"
+                {whatsappHrefValue ? (
+                  <a
+                    className="ui-btn ui-btn-secondary wsh-act wsh-wa"
+                    href={whatsappHrefValue}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Message on WhatsApp"
+                  >
+                    <WhatsAppGlyph />
+                    <span className="wsh-wa-long">Message on WhatsApp</span>
+                    <span className="wsh-wa-short" aria-hidden="true">
+                      WhatsApp
+                    </span>
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    className="ui-btn ui-btn-secondary wsh-act wsh-wa"
+                    disabled
+                    title="No WhatsApp number on file for this client"
+                    aria-label="Message on WhatsApp"
+                  >
+                    <WhatsAppGlyph />
+                    <span className="wsh-wa-long">Message on WhatsApp</span>
+                    <span className="wsh-wa-short" aria-hidden="true">
+                      WhatsApp
+                    </span>
+                  </button>
+                )}
+                {/* Remind sends a reminder about one planned item; the items
+                    and their Remind actions live in Activity (W14 flow). */}
+                <Link
+                  className="ui-btn ui-btn-secondary wsh-act"
+                  to={`/clients/${relationshipId}/activity`}
+                  title="Pick what to remind about in Activity"
+                  data-testid="wsh-remind"
                 >
-                  <WhatsAppGlyph />
-                  <span className="wsh-wa-long">Message on WhatsApp</span>
-                  <span className="wsh-wa-short" aria-hidden="true">
-                    WhatsApp
-                  </span>
-                </a>
-              ) : (
-                <button
-                  type="button"
-                  className="button-secondary button-whatsapp"
-                  disabled
-                  title="No WhatsApp number on file for this client"
-                  aria-label="Message on WhatsApp"
+                  <Bell size={16} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Remind</span>
+                </Link>
+                <UiButton
+                  variant="secondary"
+                  className="wsh-act"
+                  disabled={!online}
+                  onClick={() => onOpenModal({ type: "note" })}
+                  data-testid="wsh-note"
                 >
-                  <WhatsAppGlyph />
-                  <span className="wsh-wa-long">Message on WhatsApp</span>
-                  <span className="wsh-wa-short" aria-hidden="true">
-                    WhatsApp
-                  </span>
-                </button>
-              )}
+                  <NotebookPen size={16} strokeWidth={1.75} aria-hidden="true" />
+                  <span>Note</span>
+                </UiButton>
               </>
             ) : null}
             {ended && !pendingReactivation ? (
@@ -448,7 +438,9 @@ export function WorkspaceHeader({
                 {primary.label}
               </Button>
             ) : null}
-            <OverflowMenu items={overflowItems} variant="wide" />
+            {overflowItems.length > 0 ? (
+              <OverflowMenu items={overflowItems} variant="wide" />
+            ) : null}
           </div>
         </div>
         <nav className="wsh-tabs" aria-label="Client sections">

@@ -267,7 +267,7 @@ describe("ClientPlanPage current program card (frame 150)", () => {
     const nav = screen.getByRole("navigation", { name: "Plan sections" });
     expect(within(nav).getByRole("link", { name: "Plans" }).getAttribute("aria-current")).toBe("page");
     expect(within(nav).getByRole("link", { name: "Coaching setup" }).getAttribute("href")).toBe(
-      `/clients/${REL}/configure`,
+      `/clients/${REL}/settings#coaching`,
     );
     expect(screen.getByRole("button", { name: "Adjust plan" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Replace from template" })).toBeTruthy();

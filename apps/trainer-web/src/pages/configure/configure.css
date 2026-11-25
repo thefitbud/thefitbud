@@ -10,66 +10,6 @@
   gap: 1rem;
 }
 
-.cs-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem 1rem;
-}
-
-.cs-toolbar-note {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--ink-500);
-  font-variant-numeric: tabular-nums;
-}
-
-.cs-moved-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.625rem 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.875rem 1rem;
-  border-radius: 12px;
-  background: var(--semantic-info-fill);
-  border: 1px solid #bfdbfe;
-  color: var(--semantic-info-text);
-  font-size: 0.875rem;
-  line-height: 1.45;
-}
-
-.cs-moved-banner p {
-  flex: 1 1 20rem;
-  margin: 0;
-}
-
-.cs-moved-banner-icon {
-  flex: none;
-}
-
-.cs-moved-banner-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  min-height: 44px;
-  margin: -0.5rem 0;
-  color: var(--semantic-info-text);
-  font-weight: 500;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.cs-moved-banner-link:hover {
-  text-decoration: underline;
-}
-
-.cs-moved-banner-link:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-  border-radius: 4px;
-}
-
 /* One card, sections separated by rules (not a stack of cards). */
 .configure-v3 .configure-accordion-list {
   gap: 0;
@@ -728,5 +668,220 @@
 @media (max-width: 639px) {
   .configure-mode-options {
     grid-template-columns: 1fr;
+  }
+}
+
+/*
+ * W13-10: Coaching setup is a Settings tab section (frame W-IP07). The form
+ * holds two cards, Coaching setup and Check-ins; each section is a label-left
+ * row (AccordionSection variant="row"). Tokens and kit only.
+ */
+.configure-v3 .configure-accordion-list.cfg-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.cfg-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--e1);
+  scroll-margin-top: var(--s4);
+  min-width: 0;
+}
+
+.cfg-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  padding: var(--s4) var(--s5) var(--s2);
+}
+
+.cfg-card-head h2 {
+  flex: 1;
+  margin: 0;
+  font: var(--t-h2);
+  letter-spacing: -0.005em;
+  color: var(--ink);
+}
+
+.cfg-card-aside {
+  margin: 0;
+  font: var(--t-meta);
+  color: var(--ink3);
+  text-align: right;
+}
+
+.configure-v3 .cfg-card > .configure-accordion.cfg-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 280px) minmax(0, 1fr);
+  gap: var(--s6);
+  align-items: start;
+  padding: var(--s4) var(--s5);
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.configure-v3 .cfg-card-head + .configure-accordion.cfg-row,
+.configure-v3 .cfg-card > .configure-accordion.cfg-row:first-child {
+  border-top: 0;
+}
+
+.configure-v3 .cfg-card > .configure-accordion.cfg-row.is-wide {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--s3);
+}
+
+.configure-v3 .cfg-row .cs-expectations {
+  font: var(--t-body);
+}
+
+.configure-v3 .cfg-row .cs-expectations thead th {
+  font: var(--t-cap);
+  color: var(--ink3);
+}
+
+.configure-v3 .cfg-row .cs-expectations tbody th {
+  font: var(--t-h3);
+}
+
+.configure-v3 .cfg-row .cs-target,
+.configure-v3 .cfg-row .cs-inline-select,
+.configure-v3 .cfg-row .cs-inline-number {
+  font: var(--t-body);
+  border-color: var(--line2);
+  border-radius: var(--r-ctl);
+}
+
+.configure-v3 .configure-accordion.cfg-row.has-error {
+  box-shadow: inset 3px 0 0 var(--crit);
+}
+
+.cfg-row-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.configure-v3 .cfg-row .configure-accordion-title {
+  font: var(--t-h3);
+  color: var(--ink);
+}
+
+.configure-v3 .cfg-row .configure-accordion-summary {
+  font: var(--t-meta);
+  color: var(--ink3);
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.configure-v3 .cfg-row .cs-section-badge {
+  margin-top: var(--s1);
+  height: 24px;
+  font: var(--t-cap);
+}
+
+.configure-v3 .cfg-row .configure-accordion-body.cfg-row-body {
+  min-width: 0;
+  padding: 0;
+  border-top: 0;
+}
+
+.configure-v3 .cfg-row .cs-field-label {
+  font: var(--t-h3);
+  color: var(--ink);
+}
+
+.configure-v3 .cfg-row .cs-field input,
+.configure-v3 .cfg-row .cs-field select,
+.configure-v3 .cfg-row .cs-field textarea {
+  max-width: 560px;
+  min-height: 36px;
+  padding: 7px 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+.configure-v3 .cfg-row .cs-field textarea {
+  resize: none;
+}
+
+.configure-v3 .cfg-row .cs-field-help {
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.configure-v3 .cfg-row .configure-switch-list {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+/* The footer sits under the cards, pinned to the bottom of the scroller. */
+.configure-v3 .configure-sticky-footer {
+  border-color: var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--e2);
+}
+
+.configure-v3 .cs-footer-pill,
+.configure-v3 .cs-footer-hint {
+  font: var(--t-meta);
+}
+
+.configure-v3 .cs-footer-pill {
+  font-weight: 600;
+}
+
+.configure-v3 .configure-sticky-footer button {
+  min-height: var(--h-md);
+}
+
+@media (max-width: 1279px) {
+  .configure-v3 .cfg-card > .configure-accordion.cfg-row {
+    grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+    gap: var(--s4);
+    padding: var(--s4);
+  }
+
+  .cfg-card-head {
+    padding-left: var(--s4);
+    padding-right: var(--s4);
+  }
+}
+
+@media (max-width: 1194px) {
+  /* Inline links keep the line; padding gives a 44 px hit area. */
+  .configure-v3 .cfg-row p a {
+    display: inline-block;
+    padding: 14px 0;
+    margin: -14px 0;
+  }
+
+  .configure-v3 .configure-sticky-footer button,
+  .configure-v3 .cfg-row .cs-field input,
+  .configure-v3 .cfg-row .cs-field select {
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 900px) {
+  .configure-v3 .cfg-card > .configure-accordion.cfg-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s2);
   }
 }
