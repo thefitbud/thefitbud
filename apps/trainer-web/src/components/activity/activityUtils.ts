@@ -109,6 +109,21 @@ export function workoutChipLabel(state: string): string | undefined {
   return undefined;
 }
 
+/**
+ * W13-14: a meal or workout still waiting for its window to start. An item's
+ * `occurredAt` is its window start, so "not yet due" means that moment has not
+ * arrived. Such an item reads Planned and is never nudged.
+ */
+export function isNotYetDue(
+  item: Pick<WorkspaceActivityItem, "type" | "state" | "occurredAt">,
+  now: Date,
+): boolean {
+  const waiting =
+    (item.type === "meal" && item.state === "pending") ||
+    (item.type === "workout" && item.state === "assigned");
+  return waiting && Date.parse(item.occurredAt) > now.getTime();
+}
+
 export type ActivityChipTone =
   | "positive"
   | "info"
@@ -118,7 +133,9 @@ export type ActivityChipTone =
 
 export function activityChipTone(
   item: WorkspaceActivityItem,
+  now: Date = new Date(),
 ): ActivityChipTone {
+  if (isNotYetDue(item, now)) return "neutral";
   if (item.type === "meal") {
     if (item.state === "confirmed" || item.state === "logged_later") {
       return "positive";
@@ -178,7 +195,11 @@ export function plannedDailyKcalMeta(
   return `Planned ${avg.toLocaleString("en-IN")} kcal a day`;
 }
 
-export function canNudgeItem(item: WorkspaceActivityItem): boolean {
+export function canNudgeItem(
+  item: WorkspaceActivityItem,
+  now: Date = new Date(),
+): boolean {
+  if (isNotYetDue(item, now)) return false;
   if (item.type === "meal") {
     return item.state === "pending" || item.state === "overdue";
   }
@@ -205,8 +226,12 @@ export function sortActivityItems(
 export function groupByDay(
   items: WorkspaceActivityItem[],
   type: ActivityTypeFilter,
+  today?: string,
 ): Array<{ date: string; items: WorkspaceActivityItem[] }> {
-  const sorted = sortActivityItems(items);
+  // W13-14: days that have not come are not day cards.
+  const sorted = sortActivityItems(
+    today ? items.filter((item) => item.localDate <= today) : items,
+  );
   const groups: Array<{ date: string; items: WorkspaceActivityItem[] }> = [];
   for (const item of sorted) {
     const last = groups[groups.length - 1];

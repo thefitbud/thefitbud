@@ -63,8 +63,12 @@ export function ClientCombobox({
         </span>
         <span className="tpl-combo-name">{name}</span>
         <span className="tpl-combo-status">
-          {inTrigger ? "" : "· "}
-          {clientStatusLabel(client.status)}
+          {inTrigger ? null : (
+            <span className="tpl-combo-sep" aria-hidden="true">
+              ·
+            </span>
+          )}
+          <span>{clientStatusLabel(client.status)}</span>
         </span>
       </>
     );

@@ -152,13 +152,13 @@ export function ExerciseProperties({
                 onChange={(next) => patch({ reps: next })}
               />
               <Button
-                variant="ghost"
+                variant="quiet"
                 size="sm"
                 className="builder-reps-clear"
                 aria-label="Clear reps"
                 onClick={() => patch({ reps: null })}
               >
-                Clear
+                Clear reps
               </Button>
             </div>
           )}

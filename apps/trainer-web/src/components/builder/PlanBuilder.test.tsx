@@ -326,4 +326,55 @@ describe("PlanBuilder W13-3 fix round", () => {
       within(screen.getByTestId("meal-day-tabs")).getAllByRole("tab").map((tab) => tab.textContent),
     ).toEqual(["Every day"]);
   });
+
+  it("Every day tiles count only the meals that apply every day, with a quiet note", () => {
+    const withKcal = (meal: (typeof workoutContent.mealPrescriptions)[number]) => ({
+      ...meal,
+      items: (meal.items ?? []).map((item) => ({
+        ...item,
+        calculated: { ...item.calculated, energyKcalScaled: 220_000_000 },
+      })),
+    });
+    const lunch = withKcal(workoutContent.mealPrescriptions[0]!);
+    const banana = {
+      ...lunch,
+      id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      name: "Pre-workout banana",
+      localTime: "07:00",
+      applicableWeekdays: [2],
+    };
+    const content: PlanContent = { ...workoutContent, mealPrescriptions: [lunch, banana] };
+    renderBuilder({ initialContent: content }, "nutrition");
+    const tiles = () => screen.getByTestId("macro-tiles").textContent ?? "";
+    const row = screen.getByTestId("meal-day-tabs");
+
+    // Both meals are listed, only Lunch (220 kcal) is counted.
+    expect(screen.getByTestId("meals-board").textContent).toMatch(/Pre-workout banana/);
+    expect(tiles()).toMatch(/220\s*kcal/);
+    expect(screen.getByTestId("tiles-every-day-note").textContent).toBe(
+      "Counts the meals that apply every day.",
+    );
+
+    // Training days count what is scoped there (Lunch + banana), with no note.
+    fireEvent.click(within(row).getByRole("tab", { name: "Training days" }));
+    expect(tiles()).toMatch(/440\s*kcal/);
+    expect(screen.queryByTestId("tiles-every-day-note")).toBeNull();
+    cleanup();
+
+    // Nothing excluded: no note.
+    renderBuilder({ initialContent: workoutContent }, "nutrition");
+    expect(screen.queryByTestId("tiles-every-day-note")).toBeNull();
+  });
+
+  it("every food row lays out the same: quantity and Remove together in one row", () => {
+    renderBuilder({ initialContent: workoutContent }, "nutrition");
+    fireEvent.click(screen.getAllByRole("button", { name: /Lunch/ })[0]!);
+    const props = screen.getByTestId("meal-properties");
+    const row = props.querySelector(".builder-meal-item-controls .builder-meal-item-qty-row");
+    expect(row).not.toBeNull();
+    expect(
+      within(row as HTMLElement).getByRole("button", { name: "Remove Jowar roti" }),
+    ).toBeTruthy();
+    expect(row!.querySelector(".builder-meal-item-serving")).toBeNull();
+  });
 });

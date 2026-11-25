@@ -88,7 +88,11 @@ test("the real repository fingerprints, with the build scripts as inputs and no 
     assert.ok(files.includes(f), f);
   }
   assert.ok(!files.some((f) => /^apps\/mobile\/src\/.*\.tsx?$/.test(f)), "no app source is an input");
-  assert.ok(manifest.packages.some((p) => p.startsWith("react-native@")), "react-native's version (so its Hermes) is an input");
+  // The package list comes from node_modules. The qa-scripts job installs nothing (Z14-42),
+  // so there is no react-native to read there; the ci job runs this after pnpm install.
+  if (fs.existsSync(path.join(repoRoot, "apps/mobile/node_modules/react-native/package.json"))) {
+    assert.ok(manifest.packages.some((p) => p.startsWith("react-native@")), "react-native's version (so its Hermes) is an input");
+  }
 });
 
 test("swap-bundle guards the Hermes bytecode version and re-signs what it changed", () => {
