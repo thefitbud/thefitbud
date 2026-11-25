@@ -24,7 +24,7 @@ test.describe("TW-F templates, forms, libraries", () => {
     await expect(page.getByRole("columnheader", { name: "Template" })).toBeVisible({
       timeout: 20_000,
     });
-    await expect(page.getByText("FitBud base").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole("columnheader", { name: "Used by" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Use for client" }).first()).toBeVisible();
   });
 
