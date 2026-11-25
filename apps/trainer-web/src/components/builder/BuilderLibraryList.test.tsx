@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { createRef } from "react";
 import type { ExerciseLibraryItem, FoodLibraryItem, WorkoutDay } from "@fitbud/contracts";
+import { apiClient } from "../../lib/api";
 import { BuilderExerciseLibrary, BuilderFoodLibrary } from "./BuilderLibraryList";
 
 const exercise: ExerciseLibraryItem = {
@@ -84,6 +85,37 @@ describe("BuilderExerciseLibrary", () => {
     expect(screen.queryByText(/Beginner/i)).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /Add Goblet squat/i }));
     expect(onAdd).toHaveBeenCalledWith(exercise);
+  });
+});
+
+describe("BuilderExerciseLibrary muscle chips", () => {
+  it("filters the library by muscle group through the API and back to All", async () => {
+    const list = vi.mocked(apiClient.listExerciseLibrary);
+    list.mockClear();
+    render(<BuilderExerciseLibrary day={day} onAdd={vi.fn()} searchRef={createRef()} />);
+    await waitFor(() => expect(screen.getByText("Goblet squat")).toBeTruthy());
+    const group = screen.getByRole("group", { name: "Muscle group" });
+    const all = screen.getByRole("button", { name: "All" });
+    expect(all.getAttribute("aria-pressed")).toBe("true");
+    expect(group.textContent).toMatch(/Chest/);
+    expect(group.textContent).toMatch(/Upper back/);
+    expect(list).toHaveBeenLastCalledWith(
+      expect.objectContaining({ muscleGroup: undefined }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Quads" }));
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ muscleGroup: "quads" })),
+    );
+    expect(screen.getByRole("button", { name: "Quads" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    expect(all.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(all);
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ muscleGroup: undefined })),
+    );
   });
 });
 

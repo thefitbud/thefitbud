@@ -15,6 +15,7 @@ import {
 } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { removeFoodItem, updateFoodItem, updateMeal } from "../plan-composition";
+import { Button, Field, LibraryThumb } from "../ui";
 
 const libraryCache = new Map<string, Promise<FoodLibraryItem | null>>();
 
@@ -66,7 +67,7 @@ function QuantityField({
     item.snapshotKind === "calculated" ? item.quantityScaled / NUTRIENT_SCALE : 1;
   const display =
     item.snapshotKind === "calculated"
-      ? `${formatScaledQuantity(item.quantityScaled)} ${item.serving.label} · ${itemKcal(item)}`
+      ? `${formatScaledQuantity(item.quantityScaled)} × ${item.serving.label} · ${itemKcal(item)}`
       : `${item.serving.label} · ${itemKcal(item)}`;
 
   function setQuantity(next: number) {
@@ -98,13 +99,16 @@ function QuantityField({
   return (
     <div className="builder-meal-item">
       <div className="builder-meal-item-main">
-        <p className="builder-meal-item-name">{item.name}</p>
-        <p className="builder-meal-item-meta">{display}</p>
+        <LibraryThumb name={item.name} kind="food" />
+        <div className="builder-meal-item-copy">
+          <p className="builder-meal-item-name">{item.name}</p>
+          <p className="builder-meal-item-meta">{display}</p>
+        </div>
       </div>
       {item.snapshotKind === "calculated" && !readOnly ? (
         <div className="builder-meal-item-controls">
           {servings.length > 0 ? (
-            <label className="field">
+            <label className="builder-meal-item-serving ui-input">
               <span className="sr-only">Serving for {item.name}</span>
               <select
                 value={item.sourceServingId ?? servings[0]?.id ?? ""}
@@ -118,32 +122,34 @@ function QuantityField({
               </select>
             </label>
           ) : null}
-          <input
-            type="number"
-            min={0.5}
-            step={0.5}
-            aria-label={`Quantity of ${item.name}`}
-            value={quantity}
-            onChange={(event) => setQuantity(Number(event.target.value))}
-          />
-          <button
-            type="button"
-            className="button-ghost button-sm"
+          <span className="builder-meal-item-qty ui-input">
+            <input
+              type="number"
+              min={0.5}
+              step={0.5}
+              aria-label={`Quantity of ${item.name}`}
+              value={quantity}
+              onChange={(event) => setQuantity(Number(event.target.value))}
+            />
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
             aria-label={`Remove ${item.name}`}
             onClick={() => onChange((current) => removeFoodItem(current, mealId, index))}
           >
             Remove
-          </button>
+          </Button>
         </div>
       ) : readOnly ? null : (
-        <button
-          type="button"
-          className="button-ghost button-sm"
+        <Button
+          variant="ghost"
+          size="sm"
           aria-label={`Remove ${item.name}`}
           onClick={() => onChange((current) => removeFoodItem(current, mealId, index))}
         >
           Remove
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -181,27 +187,30 @@ export function MealProperties({
   return (
     <aside className="builder-props" aria-label="Meal properties" data-testid="meal-properties">
       <header className="builder-props-head">
-        <div>
+        <div className="builder-props-title">
           <h2 className="builder-pane-title">{meal.name}</h2>
           {summary ? <p className="builder-props-meta">{summary}</p> : null}
         </div>
       </header>
 
-      <label className="field">
-        <span>Time</span>
-        <input
-          type="time"
-          value={meal.localTime ?? ""}
-          disabled={readOnly}
-          onChange={(event) =>
-            onChange((current) =>
-              updateMeal(current, meal.id, { localTime: event.target.value || null }),
-            )
-          }
-        />
-      </label>
+      <Field label="Time">
+        <span className="ui-input">
+          <input
+            type="time"
+            aria-label="Time"
+            value={meal.localTime ?? ""}
+            disabled={readOnly}
+            onChange={(event) =>
+              onChange((current) =>
+                updateMeal(current, meal.id, { localTime: event.target.value || null }),
+              )
+            }
+          />
+        </span>
+      </Field>
 
-      <div className="builder-meal-items">
+      <section className="builder-meal-items" aria-label={`Foods in ${meal.name}`}>
+        <h3 className="builder-props-subtitle">Foods</h3>
         {items.length === 0 ? (
           <p className="muted">Add foods from the library.</p>
         ) : (
@@ -216,13 +225,17 @@ export function MealProperties({
             />
           ))
         )}
-      </div>
+      </section>
 
-      <label className="field">
-        <span>Swaps allowed</span>
+      <Field
+        label="Swaps allowed"
+        help="Clients can pick these instead without it counting as a change."
+      >
         <textarea
+          className="ui-textarea"
           rows={3}
           maxLength={2000}
+          aria-label="Swaps allowed"
           placeholder="Bajra roti, Moong dal"
           value={meal.instructions ?? ""}
           disabled={readOnly}
@@ -232,10 +245,7 @@ export function MealProperties({
             )
           }
         />
-      </label>
-      <p className="builder-props-note">
-        Clients can pick these instead without it counting as a change.
-      </p>
+      </Field>
     </aside>
   );
 }

@@ -1,4 +1,6 @@
+import { CloudOff } from "lucide-react";
 import { formatClockTime } from "@fitbud/core";
+import { Button } from "../ui";
 
 export function ConflictBanner({
   at,
@@ -17,31 +19,19 @@ export function ConflictBanner({
   return (
     <div className="builder-conflict" role="alert" data-testid="builder-conflict">
       <div className="builder-conflict-copy">
-        <span className="builder-conflict-icon" aria-hidden="true">
-          ☁
-        </span>
+        <CloudOff className="builder-conflict-icon ui-i" strokeWidth={1.75} aria-hidden />
         <p>
           Couldn&apos;t save. This plan was changed on another device
           {when ? ` at ${when}` : ""}. Your edits are kept here.
         </p>
       </div>
       <div className="builder-conflict-actions">
-        <button
-          type="button"
-          className="button-secondary"
-          aria-pressed={comparing}
-          onClick={onCompare}
-        >
+        <Button variant="secondary" aria-pressed={comparing} onClick={onCompare}>
           Compare versions
-        </button>
-        <button
-          type="button"
-          className="button-primary"
-          disabled={keepMineBusy}
-          onClick={onKeepMine}
-        >
+        </Button>
+        <Button variant="primary" disabled={keepMineBusy} onClick={onKeepMine}>
           {keepMineBusy ? "Saving…" : "Keep mine"}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -71,9 +61,9 @@ export function CompareVersionsModal({
       >
         <header className="builder-compare-head">
           <h2 id="builder-compare-title">Compare versions</h2>
-          <button type="button" className="button-ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </header>
         <div className="builder-compare-grid">
           <section>
@@ -94,12 +84,12 @@ export function CompareVersionsModal({
           </section>
         </div>
         <footer className="builder-compare-foot">
-          <button type="button" className="button-secondary" onClick={onTakeTheirs}>
+          <Button variant="secondary" onClick={onTakeTheirs}>
             Take theirs
-          </button>
-          <button type="button" className="button-primary" onClick={onKeepMine}>
+          </Button>
+          <Button variant="primary" onClick={onKeepMine}>
             Keep mine
-          </button>
+          </Button>
         </footer>
       </div>
     </div>

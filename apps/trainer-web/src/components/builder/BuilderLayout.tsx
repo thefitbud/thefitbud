@@ -11,6 +11,14 @@ export function useBuilderMode(): BuilderMode {
   return narrow ? "narrow" : "wide";
 }
 
+/**
+ * Full-height builder workspace (DS §4 "Editors"): header row, optional
+ * banners, then the pane grid. In wide and narrow modes the workspace fills
+ * the shell's `.main` and each pane scrolls on its own; the window and `.main`
+ * never scroll. Small mode (<1024) stays a read-only document page.
+ *
+ * Props are additive-only: W13-4 (check-in form builder) reuses this layout.
+ */
 export function BuilderLayout({
   mode,
   topbar,
@@ -33,10 +41,15 @@ export function BuilderLayout({
   smallScreen: ReactNode;
   footer?: ReactNode;
 }) {
+  const workspace = mode !== "small";
   return (
-    <div className="builder" data-builder-mode={mode}>
+    <div
+      className={workspace ? "builder is-workspace" : "builder"}
+      data-builder-mode={mode}
+      data-testid="builder-layout"
+    >
       <header className="builder-topbar">{topbar}</header>
-      {banner}
+      {banner ? <div className="builder-banners">{banner}</div> : null}
       {mode === "small" ? (
         <div className="builder-small" data-testid="builder-small-screen">
           <div className="builder-small-note" role="status">
@@ -50,12 +63,18 @@ export function BuilderLayout({
       ) : (
         <>
           <div className="builder-panes">
-            {mode === "wide" ? <div className="builder-pane builder-left">{left}</div> : null}
-            <div className="builder-pane builder-center">
+            {mode === "wide" ? (
+              <div className="builder-pane builder-left" data-testid="builder-pane-library">
+                {left}
+              </div>
+            ) : null}
+            <div className="builder-pane builder-center" data-testid="builder-pane-canvas">
               {center}
               {footer}
             </div>
-            <div className="builder-pane builder-right">{right}</div>
+            <div className="builder-pane builder-right" data-testid="builder-pane-properties">
+              {right}
+            </div>
           </div>
           {overlay}
         </>
