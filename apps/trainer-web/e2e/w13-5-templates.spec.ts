@@ -3,7 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { signIn } from "./support/session";
 
-const OUT = path.resolve("qa-captures/w13-5");
+const OUT = path.resolve(`qa-captures/${process.env.W13_CAPTURE_DIR ?? "w13-5"}`);
 
 async function windowLocked(page: Page) {
   return page.evaluate(() => {
@@ -132,6 +132,7 @@ test.describe("W13-5 templates and library", () => {
       } else {
         await expect(page.getByRole("columnheader", { name: "Edited" })).toBeVisible();
       }
+      await expect(page.getByRole("button", { name: "Use for client" }).first()).toHaveClass(/ui-btn-quiet/);
       await shot(page, `W-168-templates-${width}x${height}.png`, ipad);
 
       // W-174 Use template for a client, client list open.
