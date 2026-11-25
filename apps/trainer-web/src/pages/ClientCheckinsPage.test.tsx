@@ -129,6 +129,7 @@ function renderPage(
     phone?: string | null;
     endedAt?: string;
     configStatus?: "active" | "draft" | null;
+    gender?: "male" | "female";
   },
 ) {
   const configStatus = opts?.configStatus === undefined ? "active" : opts.configStatus;
@@ -142,7 +143,7 @@ function renderPage(
         traineeProfile: {
           displayName: "x",
           age: null,
-          gender: status === "ended" ? "female" : "male",
+          gender: opts?.gender ?? (status === "ended" ? "female" : "male"),
         },
         traineeTimezone: "Asia/Kolkata",
         hasCustomMealTimes: false,
@@ -338,11 +339,20 @@ describe("ClientCheckinsPage overdue WhatsApp draft", () => {
 });
 
 describe("ClientCheckinsPage ended (162c)", () => {
+  it("read-only copy is the same whatever the stored gender", async () => {
+    const copy = "Coaching with Kavya ended Sat 3 Oct. Kavya's check-ins are read-only.";
+    renderPage("ended", { endedAt: "2026-10-03T10:00:00.000Z" });
+    expect(await screen.findByText(copy)).toBeTruthy();
+    cleanup();
+    renderPage("ended", { endedAt: "2026-10-03T10:00:00.000Z", gender: "male" });
+    expect(await screen.findByText(copy)).toBeTruthy();
+  });
+
   it("is read-only: notice, no Overdue chip, no upcoming or overdue rows, no actions", async () => {
     renderPage("ended", { endedAt: "2026-10-03T10:00:00.000Z" });
     expect(
       await screen.findByText(
-        "Coaching with Kavya ended Sat 3 Oct. Her check-ins are read-only.",
+        "Coaching with Kavya ended Sat 3 Oct. Kavya's check-ins are read-only.",
       ),
     ).toBeTruthy();
     expect(await screen.findByRole("button", { name: /^All 6$/ })).toBeTruthy();
@@ -389,7 +399,7 @@ describe("ClientCheckinsPage empty (162b)", () => {
     expect(screen.queryByText("Cadence")).toBeNull();
     expect(
       screen.getByText(
-        "Check-ins start once his coaching setup is active. Submitted check-ins show up here, newest first.",
+        "Check-ins start once coaching setup is active. Submitted check-ins show up here, newest first.",
       ),
     ).toBeTruthy();
   });
