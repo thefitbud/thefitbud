@@ -27,6 +27,7 @@ let failDraft = false;
 let version = 0;
 let answers: Record<string, unknown> = {};
 let formLoadFails = false;
+let submitCalls = 0;
 
 const signOut = vi.fn();
 const auth: Record<string, unknown> = {};
@@ -76,6 +77,7 @@ const fakeFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   if (method === "GET" && path === `/onboarding/relationships/${RELATIONSHIP_ID}`) {
     return json(200, response());
   }
+  if (method === "POST" || (method === "PUT" && !path.endsWith("/draft"))) submitCalls += 1;
   if (method === "PUT" && path.endsWith("/draft")) {
     if (failDraft) throw new TypeError("Network request failed");
     answers = body.answers;
@@ -101,6 +103,7 @@ beforeEach(() => {
   fields = DEFAULT_FIELDS;
   failDraft = false;
   formLoadFails = false;
+  submitCalls = 0;
   version = 0;
   answers = {};
   signOut.mockClear();
@@ -147,14 +150,30 @@ describe("Intake layout (Z14-46)", () => {
     await waitFor(() => expect(screen.getByText("Step 1 of 5")).toBeTruthy());
   });
 
-  it("a required sleep question shows its stepper value and stores it", async () => {
+  it("an untouched required sleep stepper is unanswered: Submit sends nothing and shows the required line", async () => {
     fields = [
       { id: "sleep", type: "number", label: "Hours of sleep on a usual night", required: true },
     ];
     start();
     await waitFor(() => expect(screen.getByText("Hours of sleep on a usual night")).toBeTruthy());
+    expect(screen.getByText("—")).toBeTruthy();
     press(/^Submit intake$/);
-    await waitFor(() => expect(answers.sleep).toBe(6.5));
+    await waitFor(() => expect(screen.getByText("Answer this question to continue.")).toBeTruthy());
+    expect(answers.sleep).toBeUndefined();
+    expect(version).toBe(0);
+    expect(submitCalls).toBe(0);
+  });
+
+  it("tapping the sleep stepper stores a value starting from 6.5", async () => {
+    fields = [
+      { id: "sleep", type: "number", label: "Hours of sleep on a usual night", required: true },
+    ];
+    start();
+    await waitFor(() => expect(screen.getByText("—")).toBeTruthy());
+    press(/^Increase$/);
+    await waitFor(() => expect(screen.queryByText("—")).toBeNull());
+    press(/^Submit intake$/);
+    await waitFor(() => expect(answers.sleep).toBe(7));
   });
 
   it("the close button opens Finish later?, saves first, and Keep going closes it", async () => {
@@ -192,6 +211,19 @@ describe("Intake layout (Z14-46)", () => {
     await waitFor(() =>
       expect(screen.getByText("We couldn't save your last answers. Sign out anyway?")).toBeTruthy(),
     );
+    expect(screen.getByRole("button", { name: "Keep going" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  });
+
+  it("closing while the form is still loading does not claim answers are saved", async () => {
+    formLoadFails = true;
+    start();
+    press(/^Close$/);
+    await waitFor(() => expect(screen.getByText("Finish later?")).toBeTruthy());
+    expect(
+      screen.getByText("Sign out for now? You can sign in again any time to carry on."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Your answers are saved/)).toBeNull();
     expect(screen.getByRole("button", { name: "Keep going" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
   });

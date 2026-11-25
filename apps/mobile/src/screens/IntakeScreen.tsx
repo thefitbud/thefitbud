@@ -1,7 +1,7 @@
 import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, BackHandler, Platform, Pressable, SafeAreaView, ScrollView, View } from "react-native";
-import { X } from "lucide-react-native";
+import { Minus, Plus, X } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { onboardingAnswerErrors } from "@fitbud/core";
@@ -40,9 +40,11 @@ import {
 
 /** Sheet copy for the TR-03 close button (D-W14-46). */
 const FINISH_LATER_BODY = "Your answers are saved. Sign in again any time to carry on.";
+const FINISH_LATER_NOTHING_SAVED_BODY = "Sign out for now? You can sign in again any time to carry on.";
 const FINISH_LATER_UNSAVED_BODY = "We couldn't save your last answers. Sign out anyway?";
 const NO_QUESTIONS_COPY = "Your coach hasn't added any questions yet.";
-const SLEEP_DEFAULT_HOURS = 6.5;
+/** Where the first tap on an unanswered sleep stepper starts from; nothing is stored until a tap. */
+const SLEEP_START_HOURS = 6.5;
 
 /** Line under a question the trainee still has to answer (Z14-45). */
 const REQUIRED_ANSWER_COPY = "Answer this question to continue.";
@@ -156,6 +158,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
   const [savedFlash, setSavedFlash] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
   const [closeSaveFailed, setCloseSaveFailed] = useState(false);
+  const [closeNothingToSave, setCloseNothingToSave] = useState(false);
   const [useCaptureRoutine, setUseCaptureRoutine] = useState(false);
   const submitIdempotencyKey = useRef(createIdempotencyKey());
   const captureStepApplied = useRef(false);
@@ -252,30 +255,6 @@ function IntakeScreenBody({ relationshipId }: Props) {
   }, [definition?.fields, useCaptureRoutine]);
   const totalSteps = fieldGroups.length;
   const readOnly = status === "submitted";
-
-  /**
-   * A required sleep question is answered by the stepper's shown value
-   * (Z14-45 review follow-up): when its step is on screen and nothing is
-   * stored, store the 6.5 it shows, so what looks answered is what is saved.
-   */
-  useEffect(() => {
-    if (loading || readOnly || !definition) return;
-    const onScreen = fieldGroups[stepIndex] ?? [];
-    const missing = onScreen.filter(
-      (f) =>
-        intakeControlForField(f).kind === "number" &&
-        isSleepField(f) &&
-        typeof answers[f.id] !== "number",
-    );
-    if (missing.length === 0) return;
-    setAnswers((current) => {
-      const next = { ...current };
-      for (const f of missing) {
-        if (typeof next[f.id] !== "number") next[f.id] = SLEEP_DEFAULT_HOURS;
-      }
-      return next;
-    });
-  }, [loading, readOnly, definition, fieldGroups, stepIndex, answers]);
 
   function updateAnswer(fieldId: string, value: OnboardingAnswers[string] | undefined) {
     setFieldErrors((current) => {
@@ -421,22 +400,45 @@ function IntakeScreenBody({ relationshipId }: Props) {
 
     if (control.kind === "number") {
       if (isSleepField(field)) {
-        const num =
-          typeof stored === "number"
-            ? stored
-            : SLEEP_DEFAULT_HOURS;
+        const onChange = (next: number) => updateAnswer(field.id, next);
         return (
           <View key={field.id}>
             <QuestionHeading>{field.label}</QuestionHeading>
-            <NumberStepper
-              value={num}
-              unit="hours"
-              min={4}
-              max={12}
-              step={0.5}
-              disabled={readOnly}
-              onChange={(next) => updateAnswer(field.id, next)}
-            />
+            {typeof stored === "number" ? (
+              <NumberStepper
+                value={stored}
+                unit="hours"
+                min={4}
+                max={12}
+                step={0.5}
+                disabled={readOnly}
+                onChange={onChange}
+              />
+            ) : (
+              <View style={styles.sleepEmptyCard}>
+                <Text style={styles.sleepEmptyValue}>—</Text>
+                <View style={styles.sleepEmptyStepper}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Decrease"
+                    disabled={readOnly}
+                    onPress={() => onChange(SLEEP_START_HOURS - 0.5)}
+                    style={styles.sleepEmptyBtn}
+                  >
+                    <Minus size={18} color={theme.colors.ink} strokeWidth={2.2} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Increase"
+                    disabled={readOnly}
+                    onPress={() => onChange(SLEEP_START_HOURS + 0.5)}
+                    style={styles.sleepEmptyBtn}
+                  >
+                    <Plus size={18} color={theme.colors.ink} strokeWidth={2.2} />
+                  </Pressable>
+                </View>
+              </View>
+            )}
           </View>
         );
       }
@@ -554,6 +556,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
   /** Save the current answers before the "Finish later?" sheet opens (D-W14-46). */
   async function openCloseSheet() {
     setCloseSaveFailed(false);
+    setCloseNothingToSave(!definition || loading);
     if (definition && !readOnly && !loading) {
       setSaving(true);
       try {
@@ -594,7 +597,13 @@ function IntakeScreenBody({ relationshipId }: Props) {
     <BottomSheet
       visible={closeOpen}
       title="Finish later?"
-      subtitle={closeSaveFailed ? FINISH_LATER_UNSAVED_BODY : FINISH_LATER_BODY}
+      subtitle={
+        closeSaveFailed
+          ? FINISH_LATER_UNSAVED_BODY
+          : closeNothingToSave
+            ? FINISH_LATER_NOTHING_SAVED_BODY
+            : FINISH_LATER_BODY
+      }
       onDismiss={() => setCloseOpen(false)}
     >
       <Button label="Keep going" onPress={() => setCloseOpen(false)} />
@@ -747,6 +756,27 @@ const useStyles = createThemedStyles((t) => ({
     lineHeight: 18,
     marginTop: spacing.xs,
   },
+  sleepEmptyCard: {
+    alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+  },
+  sleepEmptyValue: { color: t.colors.ink3, fontSize: 22, fontWeight: "700" },
+  sleepEmptyStepper: {
+    borderColor: t.colors.line,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    overflow: "hidden",
+  },
+  sleepEmptyBtn: { alignItems: "center", height: 44, justifyContent: "center", width: 44 },
   hint: {
     color: t.colors.ink3,
     fontSize: 13,
