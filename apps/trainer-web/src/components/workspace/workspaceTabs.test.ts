@@ -10,7 +10,7 @@ import {
 const RID = "c422296e-ed7b-4196-a2b4-647096af3002";
 
 describe("client workspace tabs", () => {
-  it("is Overview, Plan, Activity, Progress, Check-ins, History in that order", () => {
+  it("is Overview, Plan, Activity, Progress, Check-ins, History, Settings in that order (W13-10)", () => {
     expect(CLIENT_WORKSPACE_TABS.map((tab) => tab.label)).toEqual([
       "Overview",
       "Plan",
@@ -18,6 +18,7 @@ describe("client workspace tabs", () => {
       "Progress",
       "Check-ins",
       "History",
+      "Settings",
     ]);
     expect(CLIENT_WORKSPACE_TABS.map((tab) => tab.segment)).toEqual([
       "overview",
@@ -26,15 +27,25 @@ describe("client workspace tabs", () => {
       "progress",
       "check-ins",
       "history",
+      "settings",
     ]);
   });
 
-  it("does not include Sessions, Packages, or Configure", () => {
+  it("does not include Sessions, Packages, or Configure; Settings is allowed and last", () => {
     const labels = CLIENT_WORKSPACE_TABS.map((tab) => tab.label);
     for (const forbidden of FORBIDDEN_CLIENT_WORKSPACE_TAB_LABELS) {
       expect(labels).not.toContain(forbidden);
     }
-    expect(CLIENT_WORKSPACE_TABS).toHaveLength(6);
+    expect(FORBIDDEN_CLIENT_WORKSPACE_TAB_LABELS).toContain("Configure");
+    expect(FORBIDDEN_CLIENT_WORKSPACE_TAB_LABELS).not.toContain("Settings");
+    expect(CLIENT_WORKSPACE_TABS).toHaveLength(7);
+    expect(labels.at(-1)).toBe("Settings");
+  });
+
+  it("only the Check-ins tab carries a badge", () => {
+    expect(
+      CLIENT_WORKSPACE_TABS.filter((tab) => "badge" in tab).map((tab) => tab.id),
+    ).toEqual(["check-ins"]);
   });
 
   it("builds hrefs under the client workspace", () => {
@@ -47,10 +58,16 @@ describe("client workspace tabs", () => {
       `/clients/${RID}/progress`,
       `/clients/${RID}/check-ins`,
       `/clients/${RID}/history`,
+      `/clients/${RID}/settings`,
     ]);
   });
 
   it("selects Overview on the index and overview routes, and never on Configure", () => {
+    const settings = CLIENT_WORKSPACE_TABS[6];
+    expect(isClientWorkspaceTabActive(`/clients/${RID}/settings`, RID, settings)).toBe(true);
+    // The old routes redirect into Settings sections (D-W13-15).
+    expect(isClientWorkspaceTabActive(`/clients/${RID}/configure`, RID, settings)).toBe(true);
+    expect(isClientWorkspaceTabActive(`/clients/${RID}/onboarding`, RID, settings)).toBe(true);
     const overview = CLIENT_WORKSPACE_TABS[0];
     expect(isClientWorkspaceTabActive(`/clients/${RID}`, RID, overview)).toBe(
       true,
@@ -74,10 +91,10 @@ describe("client workspace tabs", () => {
       ),
     ).toBe(true);
     expect(
-      CLIENT_WORKSPACE_TABS.some((tab) =>
+      CLIENT_WORKSPACE_TABS.filter((tab) =>
         isClientWorkspaceTabActive(`/clients/${RID}/configure`, RID, tab),
-      ),
-    ).toBe(false);
+      ).map((tab) => tab.id),
+    ).toEqual(["settings"]);
   });
 
   it("is the only tab strip WorkspaceHeader renders", () => {
@@ -89,6 +106,8 @@ describe("client workspace tabs", () => {
     expect(source).not.toMatch(/>\s*Sessions\s*</);
     expect(source).not.toMatch(/>\s*Packages\s*</);
     expect(source).not.toMatch(/>\s*Configure\s*</);
-    expect(source).toContain("Coaching setup");
+    // No "Nudge" anywhere in the header (D-W13-5): the button is Remind.
+    expect(source).not.toMatch(/nudg/i);
+    expect(source).toContain(">Remind<");
   });
 });

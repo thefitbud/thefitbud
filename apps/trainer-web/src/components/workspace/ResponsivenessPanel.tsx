@@ -1,6 +1,6 @@
 import { userFacingMessage } from "@fitbud/api-client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import type {
   ResponsivenessCategoryCounts,
   ResponsivenessResponse,
@@ -19,13 +19,13 @@ import { LoadingBlock } from "../StatePanels";
 /** The API's responsiveness window, in days (`?days=` on the request). */
 export const RESPONSIVENESS_WINDOW_DAYS = 14;
 
-function labelTitle(
+export function labelTitle(
   label: ResponsivenessResponse["label"],
 ): string {
   return labelFor("responsiveness_label", label);
 }
 
-function summaryCounts(data: ResponsivenessResponse): string {
+export function summaryCounts(data: ResponsivenessResponse): string {
   const { sent, opened, loggedAfter, loggedBefore } = data.counts;
   switch (data.label) {
     case "logs_on_own":
@@ -73,7 +73,7 @@ function formatOpened(value: number | null | undefined): string {
 }
 
 /** "7:00 pm · set by Rohan" — the time and where it came from (frame 181). */
-function preferredWorkoutText(
+export function preferredWorkoutText(
   data: ResponsivenessResponse,
   firstName: string,
 ): string | null {
@@ -96,7 +96,7 @@ const SUMMARY_BOX: CSSProperties = {
 };
 const CAPTION: CSSProperties = {
   margin: 0,
-  fontSize: "0.6875rem",
+  fontSize: "0.75rem",
   lineHeight: "1rem",
   fontWeight: 600,
   letterSpacing: "0.04em",
@@ -314,7 +314,7 @@ export function ResponsivenessPanel({
       <p className="responsiveness-footer muted" style={FOOTER_TEXT}>
         {ended
           ? "Reminders are off while coaching is ended."
-          : `Reminders are timed by FitBud and respect ${traineeFirstName}'s settings and meal times. Switch categories on or off in Plan › Coaching setup.`}
+          : `Reminders are timed by FitBud and respect ${traineeFirstName}'s settings and meal times. Switch categories on or off in Settings › Reminders.`}
       </p>
     </div>
   );
@@ -335,6 +335,7 @@ export function RemindersDrawer({
   timeZone,
   refreshEpoch = 0,
   ended = false,
+  openedFrom,
   onClose,
 }: {
   relationshipId: string;
@@ -345,10 +346,28 @@ export function RemindersDrawer({
   timeZone: string;
   refreshEpoch?: number;
   ended?: boolean;
+  /**
+   * Where the drawer was opened from, for the footer line. Left out, the line
+   * reads "Overview › Reminders › Details" only when the drawer really is the
+   * Overview's (the client Overview with no review open); from the review
+   * panel's Signals › Details it is left out (FLOW §6 item 4). `null` hides it.
+   */
+  openedFrom?: string | null;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+  const onOverview =
+    !searchParams.has("exception") &&
+    new RegExp(`^/clients/${relationshipId}(/overview)?/?$`).test(pathname);
+  const openedFromLine =
+    openedFrom !== undefined
+      ? openedFrom
+      : onOverview
+        ? "Overview › Reminders › Details"
+        : null;
   const firstName = traineeName.trim().split(/\s+/)[0] ?? traineeName;
   const initials = traineeName
     .trim()
@@ -447,8 +466,10 @@ export function RemindersDrawer({
           style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}
         >
           <p style={{ ...FOOTER_TEXT, flex: "1 1 160px" }}>
-            Opened from Overview › Reminders › Details
+            {openedFromLine ? `Opened from ${openedFromLine}` : null}
           </p>
+          {/* Kept as built (D-W13-13): the Overview test owns this link; the
+              old route redirects into Settings (D-W13-15). */}
           <Link
             className="button-secondary"
             to={`/clients/${relationshipId}/configure`}

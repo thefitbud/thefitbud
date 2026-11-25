@@ -112,90 +112,91 @@ afterEach(() => {
   auth.me = null;
 });
 
-describe("WorkspaceHeader ⋯ menu (CE2)", () => {
-  it("ended client: configure and reminder entries are labelled view-only", () => {
-    const { onOpenModal } = renderHeader(workspace("ended"));
-    expect(openMenu()).toEqual([
-      "Client settings",
-      "View coaching setup",
-      "Onboarding answers",
-      "View reminder history",
-    ]);
-    expect(screen.queryByRole("menuitem", { name: /configure/i })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "View reminder settings" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("menuitem", { name: "View reminder history" }));
-    expect(onOpenModal).toHaveBeenCalledWith({ type: "responsiveness" });
-
-    openMenu();
-    fireEvent.click(screen.getByRole("menuitem", { name: "View coaching setup" }));
-    expect(screen.getByText("configure route")).toBeTruthy();
-  });
-
-  it("ended client with a pending reactivation is labelled the same way", () => {
-    renderHeader(workspace("ended", { sentAt: "2026-10-20T04:00:00.000Z" }));
-    expect(openMenu()).toEqual([
-      "Client settings",
-      "View coaching setup",
-      "Onboarding answers",
-      "View reminder history",
-    ]);
-  });
-
+describe("WorkspaceHeader ⋯ menu (W13-10: places became the Settings tab)", () => {
   it.each(["active", "coaching_ready", "onboarding_submitted"] as const)(
-    "%s client: Client settings first, then the actions in frame 208 order",
+    "%s client: the ⋯ menu keeps only End coaching…",
     (status) => {
-      renderHeader(workspace(status));
-      expect(openMenu()).toEqual([
+      const { onOpenModal } = renderHeader(workspace(status));
+      expect(openMenu()).toEqual(["End coaching…"]);
+      for (const moved of [
         "Client settings",
         "Coaching setup",
         "Onboarding answers",
         "Reminder settings",
-        "End coaching…",
-      ]);
-      expect(screen.queryByRole("menuitem", { name: /Add note/i })).toBeNull();
+      ]) {
+        expect(screen.queryByRole("menuitem", { name: moved })).toBeNull();
+      }
+      const end = screen.getByRole("menuitem", { name: "End coaching…" });
+      expect(end.querySelector(".overflow-menu-item-icon svg")).not.toBeNull();
+      expect(screen.queryAllByRole("separator")).toHaveLength(0);
+      fireEvent.click(end);
+      expect(onOpenModal).toHaveBeenCalledWith({ type: "end" });
     },
   );
 
-  it("active client: frame 208 icons, descriptions and a divider before End coaching", () => {
-    renderHeader(workspace("active"));
-    openMenu();
-    const menu = screen.getByRole("menu");
-    expect(menu.classList.contains("overflow-menu-list-wide")).toBe(true);
-    const settings = screen.getByRole("menuitem", { name: "Client settings" });
-    const settingsDesc = document.getElementById(
-      settings.getAttribute("aria-describedby") ?? "",
-    );
-    expect(settingsDesc?.textContent).toBe("Basic details, subscription & package");
-    const setup = screen.getByRole("menuitem", { name: "Coaching setup" });
-    expect(
-      document.getElementById(setup.getAttribute("aria-describedby") ?? "")
-        ?.textContent,
-    ).toBe("Goal, expectations, check-ins, reminders");
-    for (const item of screen.getAllByRole("menuitem")) {
-      expect(item.querySelector(".overflow-menu-item-icon svg")).not.toBeNull();
-    }
-    const separators = screen.getAllByRole("separator");
-    expect(separators).toHaveLength(1);
-    expect(separators[0]?.nextElementSibling?.textContent).toBe("End coaching…");
-  });
-
-  it("ended client: no divider and no End coaching", () => {
-    renderHeader(workspace("ended"));
-    openMenu();
-    expect(screen.queryAllByRole("separator")).toHaveLength(0);
+  it.each([
+    ["ended", null],
+    ["ended with a pending reactivation", { sentAt: "2026-10-20T04:00:00.000Z" }],
+  ] as const)("%s client: no ⋯ menu (nothing left in it)", (_label, pending) => {
+    renderHeader(workspace("ended", pending));
+    expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: /End coaching/i })).toBeNull();
   });
 
-  it.each(["active", "ended"] as const)(
-    "%s client: Client settings opens the settings route",
-    (status) => {
-      renderHeader(workspace(status));
-      openMenu();
-      fireEvent.click(screen.getByRole("menuitem", { name: "Client settings" }));
-      expect(screen.getByText("settings route")).toBeTruthy();
-    },
-  );
+  it("the Settings tab is last and opens the settings route", () => {
+    renderHeader(workspace("active"));
+    const tabs = screen
+      .getByRole("navigation", { name: "Client sections" })
+      .querySelectorAll("a");
+    expect([...tabs].map((tab) => tab.textContent)).toEqual([
+      "Overview",
+      "Plan",
+      "Activity",
+      "Progress",
+      "Check-ins",
+      "History",
+      "Settings",
+    ]);
+    fireEvent.click(screen.getByRole("link", { name: "Settings" }));
+    expect(screen.getByText("settings route")).toBeTruthy();
+  });
+});
+
+describe("WorkspaceHeader actions (W13-10: WhatsApp · Remind · Note · ⋯)", () => {
+  it("active client: Remind (never Nudge) and Note; Note opens the composer", () => {
+    const { onOpenModal } = renderHeader(workspace("active"));
+    expect(screen.getByTestId("wsh-remind").textContent).toBe("Remind");
+    expect(screen.getByTestId("wsh-remind").getAttribute("href")).toBe(
+      `/clients/${REL_ID}/activity`,
+    );
+    expect(document.body.textContent ?? "").not.toMatch(/nudg/i);
+    fireEvent.click(screen.getByTestId("wsh-note"));
+    expect(onOpenModal).toHaveBeenCalledWith({ type: "note" });
+  });
+
+  it("a coached client's header has no primary Review button", () => {
+    const ws = workspace("active");
+    (ws.overview as unknown as { openException: { id: string } }).openException = {
+      id: "66666666-6666-4666-8666-666666666666",
+    };
+    renderHeader(ws);
+    expect(screen.queryByRole("button", { name: /^Review/ })).toBeNull();
+  });
+
+  it("ended client: no Remind or Note", () => {
+    renderHeader(workspace("ended"));
+    expect(screen.queryByTestId("wsh-remind")).toBeNull();
+    expect(screen.queryByTestId("wsh-note")).toBeNull();
+  });
+
+  it("a renewal that needs attention is a header pill beside the status pills", () => {
+    renderHeader(
+      workspace("active", null, { renewalState: "expired", renewsOn: "2026-11-22" }),
+    );
+    const pill = document.querySelector('.wsh-name-row .status-chip[data-kind="renewal"]');
+    expect(pill?.textContent).toMatch(/^Renewal expired · Sun 22 Nov/);
+    expect(document.querySelector('.wsh-meta .status-chip[data-kind="renewal"]')).toBeNull();
+  });
 });
 
 describe("WorkspaceHeader Message on WhatsApp (D-W7-7, read-only when ended)", () => {

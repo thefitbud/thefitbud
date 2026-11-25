@@ -1,5 +1,3 @@
-import { Link } from "react-router-dom";
-import { ChevronRight, ClipboardList, Target, UserRound } from "lucide-react";
 import type { CoachingConfiguration } from "@fitbud/contracts";
 import { formatCivilDate, formatClockTime } from "@fitbud/core";
 
@@ -63,68 +61,4 @@ export function configureStatusNote(
     return day ? `Draft saved ${day}` : "Draft saved";
   }
   return null;
-}
-
-/** Plans | Coaching setup switch (same control as the Plan tab, Z8-8) and the status note. */
-export function ConfigureToolbar({
-  relationshipId,
-  note,
-}: {
-  relationshipId: string;
-  note: string | null;
-}) {
-  return (
-    <div className="cs-toolbar">
-      <nav className="pp-segment" aria-label="Plan sections">
-        <Link className="pp-segment-item" to={`/clients/${relationshipId}/plan`}>
-          <ClipboardList size={16} strokeWidth={2} aria-hidden="true" />
-          Plans
-        </Link>
-        <Link
-          className="pp-segment-item is-on"
-          to={`/clients/${relationshipId}/configure`}
-          aria-current="page"
-        >
-          <Target size={16} strokeWidth={2} aria-hidden="true" />
-          Coaching setup
-        </Link>
-      </nav>
-      {note ? (
-        <p className="cs-toolbar-note" data-testid="configure-status-note">
-          {note}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-/** Frames 148/149: basics and subscription now live in Client settings. */
-export function ClientSettingsMovedBanner({
-  relationshipId,
-  firstName,
-}: {
-  relationshipId: string;
-  firstName: string;
-}) {
-  return (
-    <div className="cs-moved-banner" data-testid="configure-moved-banner">
-      <UserRound
-        className="cs-moved-banner-icon"
-        size={16}
-        strokeWidth={2}
-        aria-hidden="true"
-      />
-      <p>
-        Name, phone, age and subscription moved to Client settings. Coaching
-        setup is only about how you coach {firstName}.
-      </p>
-      <Link
-        className="cs-moved-banner-link"
-        to={`/clients/${relationshipId}/settings`}
-      >
-        Open client settings
-        <ChevronRight size={14} strokeWidth={2} aria-hidden="true" />
-      </Link>
-    </div>
-  );
 }

@@ -58,7 +58,7 @@ export function CoachingModeSection({
     return (
       <p className="muted" data-testid="coaching-mode-no-subscription">
         {firstName} has no subscription yet. Add one in{" "}
-        <Link to={settingsTo}>Client settings</Link>, then set the coaching
+        <Link to={settingsTo}>Package and payments</Link>, then set the coaching
         mode here.
       </p>
     );
@@ -98,7 +98,7 @@ export function CoachingModeSection({
       </div>
       <p className="cs-field-help">
         A note on {firstName}&apos;s subscription, also shown in{" "}
-        <Link to={settingsTo}>Client settings</Link>. It changes no plan,
+        <Link to={settingsTo}>Package and payments</Link>. It changes no plan,
         reminder or check-in.
       </p>
       {state.error ? (

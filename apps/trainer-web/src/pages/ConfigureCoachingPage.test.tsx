@@ -387,9 +387,9 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
     const switches = Array.from(
       container.querySelectorAll<HTMLInputElement>('input[role="switch"]'),
     );
+    // W13-10: the automatic reminder switches moved to Settings › Reminders.
     expect(switches.map((s) => s.disabled)).toEqual([
       false, false, false, // tracking (saved as v2)
-      false, false, false, // automatic reminders
     ]);
     // Frame 149 footer: Active · v1, Discard and Save as v2 wait for an edit.
     expect(screen.getByTestId("configure-status-pill").textContent).toBe("Active · v1");
@@ -415,8 +415,8 @@ describe("ConfigureCoachingPage on current clients (unchanged by CE1)", () => {
     const disabledButtons = controls(container)
       .filter((el) => el.tagName === "BUTTON" && el.disabled)
       .map((el) => el.textContent);
-    // Only the WhatsApp shortcut (no number in this fixture) is disabled.
-    expect(disabledButtons).toEqual(["Open WhatsApp"]);
+    // W13-10: the WhatsApp shortcut moved to Settings › Reminders.
+    expect(disabledButtons).toEqual([]);
     expect(container.textContent).not.toContain("is active.");
     expect(container.textContent).not.toContain("has ended");
     expect(screen.getByRole("button", { name: "Save draft" })).toBeTruthy();
@@ -848,7 +848,7 @@ describe("ConfigureCoachingPage ended copy (Z7-11, D-W7-6)", () => {
     liveWording(container.textContent ?? "");
   });
 
-  it("Rohan (active): v3 header, Client settings banner, WhatsApp and reminder wording stay", async () => {
+  it("Rohan (active): the Settings section header; the moved banner and toolbar are gone (W13-10)", async () => {
     const { container } = renderPage("active", "active", configuration("active"), {
       displayName: "Rohan Mehta",
       gender: "male",
@@ -856,15 +856,11 @@ describe("ConfigureCoachingPage ended copy (Z7-11, D-W7-6)", () => {
     expect(
       await screen.findByRole("heading", { name: "Coaching setup" }),
     ).toBeTruthy();
-    expect(screen.getByTestId("configure-moved-banner").textContent).toContain(
-      "Name, phone, age and subscription moved to Client settings. Coaching setup is only about how you coach Rohan.",
-    );
-    expect(
-      screen.getByRole("link", { name: "Open client settings" }).getAttribute("href"),
-    ).toBe(`/clients/${REL_ID}/settings`);
-    expect(screen.getByRole("link", { name: "Plans" }).getAttribute("href")).toBe(
-      `/clients/${REL_ID}/plan`,
-    );
+    // Client details is a sub-nav item beside this section now.
+    expect(screen.queryByTestId("configure-moved-banner")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Open client settings" })).toBeNull();
+    expect(screen.getByTestId("cs-section-coaching")).toBeTruthy();
+    expect(screen.getByTestId("cs-section-checkins")).toBeTruthy();
     expect(screen.getByTestId("configure-status-note").textContent).toBe(
       `Active since ${formatCivilDate("2026-07-06")} · v1`,
     );
@@ -877,8 +873,7 @@ describe("ConfigureCoachingPage ended copy (Z7-11, D-W7-6)", () => {
     expect(text).not.toContain("renews");
     expect(text).not.toContain("Renews on");
     expect(text).not.toContain("Due on");
-    expect(text).toContain("Open WhatsApp");
-    expect(text).toContain("On for");
+    expect(text).not.toContain("Open WhatsApp");
     expect(text).not.toContain("Coaching setup (ended)");
     expect(text).not.toContain("Waiting for");
     expect(screen.queryByTestId("configure-pending-reactivation")).toBeNull();
@@ -1156,24 +1151,12 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
     expect(reload).not.toHaveBeenCalled();
   });
 
-  it("a reminder toggle refused with 409 RELATIONSHIP_ENDED reverts and shows the message", async () => {
+  it("has no reminder switches: they moved to Settings › Reminders (W13-10)", async () => {
     mount(() => {});
     await screen.findByRole("heading", { name: "Coaching setup" });
-    api.saveReminderRules.mockRejectedValue(
-      new ApiClientError({
-        code: "RELATIONSHIP_ENDED",
-        message: "Coaching relationship has ended.",
-        requestId: "req-2",
-        status: 409,
-      }),
-    );
-    const box = (screen.getByText("Workout", { selector: "span" })
-      .closest("label")!
-      .querySelector("input") as HTMLInputElement);
-    const before = box.checked;
-    fireEvent.click(box);
-    await screen.findByText(MESSAGE);
-    await waitFor(() => expect(box.checked).toBe(before));
+    expect(screen.queryByText("Automatic reminders")).toBeNull();
+    expect(screen.queryByText("Workout", { selector: "span" })).toBeNull();
+    expect(api.saveReminderRules).not.toHaveBeenCalled();
   });
 
   it("a save refused with 409 RELATIONSHIP_ENDED shows the same message and refetches", async () => {
@@ -1205,11 +1188,14 @@ describe("ConfigureCoachingPage when coaching ends while open (Z7-12)", () => {
 });
 
 describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
+  // W13-10 (frame W-IP07): label-left rows, Coaching setup card then Check-ins card.
   const sectionRows = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll("details > summary")).map((summary) => ({
-      title: summary.querySelector(".configure-accordion-title")?.textContent,
-      badge: summary.querySelector("[data-testid=configure-section-badge]")?.textContent,
-    }));
+    Array.from(container.querySelectorAll("[data-testid=configure-row] > .cfg-row-label")).map(
+      (label) => ({
+        title: label.querySelector(".configure-accordion-title")?.textContent,
+        badge: label.querySelector("[data-testid=configure-section-badge]")?.textContent,
+      }),
+    );
 
   it("holds coaching targets only: no basics or subscription, no flag-rules column", async () => {
     const { container } = renderPage("active", "draft");
@@ -1218,10 +1204,10 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
       "Goal",
       "Coaching mode",
       "Expectations",
-      "Check-ins",
       "Tracking",
-      "Automatic reminders",
+      "Check-ins",
     ]);
+    expect(container.textContent).not.toContain("Automatic reminders");
     const text = container.textContent ?? "";
     expect(text).not.toContain("Payment frequency");
     expect(text).not.toContain("Plan name");
@@ -1242,11 +1228,30 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     expect(text).not.toMatch(/\d\s?%/);
   });
 
+  it("Goal row: the label shows once (row title); the field keeps a screen-reader-only label", async () => {
+    const { container } = renderPage("active", "draft");
+    await screen.findByRole("heading", { name: "Coaching setup" });
+    const goalRow = container.querySelector("#configure-goal") ?? container;
+    const visibleGoalLabels = Array.from(
+      container.querySelectorAll("#cs-coaching .cs-field-label"),
+    ).filter(
+      (el) => el.textContent === "Goal" && !el.classList.contains("sr-only"),
+    );
+    expect(visibleGoalLabels).toHaveLength(0);
+    const input = container.querySelector<HTMLInputElement>('[name="goalShort"]');
+    expect(input).not.toBeNull();
+    const label = input!.closest("label")?.querySelector(".cs-field-label");
+    expect(label?.textContent).toBe("Goal");
+    expect(label?.classList.contains("sr-only")).toBe(true);
+    expect(input!.labels?.[0]?.textContent).toContain("Goal");
+    expect(goalRow).toBeTruthy();
+  });
+
   it("badges: Done for saved sections, Editing once a target changes, To do before anything is saved", async () => {
     const { container, unmount } = renderPage("active", "draft");
     await screen.findByRole("heading", { name: "Coaching setup" });
     expect(sectionRows(container).map((row) => row.badge)).toEqual([
-      "Done", "Done", "Done", "Done", "Done", "Done",
+      "Done", "Done", "Done", "Done", "Done",
     ]);
     chooseOption(selectNamed(container, "sessionsPerWeek"), "5");
     expect(sectionRows(container)[2]!.badge).toBe("Editing");
@@ -1257,9 +1262,8 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
 
     const view = renderPage("coaching_ready", "draft", null as never);
     await screen.findByRole("heading", { name: "Coaching setup" });
-    // Reminders: no badge until a configuration exists (Z8-5 review).
     expect(sectionRows(view.container).map((row) => row.badge)).toEqual([
-      "To do", "Done", "To do", "To do", "To do", undefined,
+      "To do", "Done", "To do", "To do", "To do",
     ]);
     expect(screen.getByTestId("configure-status-note").textContent).toBe(
       "Not saved yet",
@@ -1272,14 +1276,14 @@ describe("ConfigureCoachingPage v3 sections (Z8-5, frames 148/149)", () => {
     chooseOption(selectNamed(container, "cadence"), "biweekly");
     const badges = sectionRows(container).map((row) => row.badge);
     expect(badges[2]).toBe("Editing");
-    expect(badges[3]).toBe("Done");
+    expect(badges[4]).toBe("Done");
     chooseOption(selectNamed(container, "cadence"), "weekly");
     fireEvent.change(container.querySelector('[name="dueWindowHours"]')!, {
       target: { value: "24" },
     });
     const after = sectionRows(container).map((row) => row.badge);
     expect(after[2]).toBe("Done");
-    expect(after[3]).toBe("Editing");
+    expect(after[4]).toBe("Editing");
   });
 
   it("Save draft never writes the subscription, so amount, type and mode can't be dropped (D-W8-5)", async () => {
@@ -1322,7 +1326,7 @@ describe("ConfigureCoachingPage coaching mode (Z8-7, frame IP-07)", () => {
     fireEvent.click(modeRadio(container, "in_person"));
     const badge = container
       .querySelector("#configure-coaching-mode")!
-      .closest("details")!
+      .closest("[data-testid=configure-row]")!
       .querySelector("[data-testid=configure-section-badge]");
     expect(badge?.textContent).toBe("Editing");
     fireEvent.click(screen.getByRole("button", { name: "Save coaching mode" }));
@@ -1382,10 +1386,13 @@ describe("ConfigureCoachingPage coaching mode (Z8-7, frame IP-07)", () => {
     expect(api.saveClientSubscription).toHaveBeenCalledTimes(1);
   });
 
-  it("without a subscription it points to Client settings and offers no radios", async () => {
+  it("without a subscription it points to Settings › Package and payments and offers no radios", async () => {
     api.getClientSettings.mockResolvedValue(clientSettings(null, false));
     const { container } = renderPage("active", "active");
     await screen.findByTestId("coaching-mode-no-subscription");
+    expect(
+      screen.getByRole("link", { name: "Package and payments" }).getAttribute("href"),
+    ).toBe(`/clients/${REL_ID}/settings#subscription`);
     expect(container.querySelector('input[name="coachingMode"]')).toBeNull();
   });
 
