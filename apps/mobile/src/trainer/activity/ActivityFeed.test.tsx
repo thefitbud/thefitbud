@@ -142,14 +142,113 @@ describe("ActivityFeedScreen", () => {
     render(
       <ActivityFeedScreen onOpenProfile={onOpenProfile} onOpenClient={onOpenClient} />,
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Open Deepak Nair's profile" }));
+    const links = await screen.findAllByRole("button", { name: "Open Deepak Nair's profile" });
+    fireEvent.click(links.find((el) => el.getAttribute("data-testid") === "client-avatar-link")!);
     expect(onOpenProfile).toHaveBeenCalledWith("2b65e3ad-84cf-4fe1-a546-0d62656c2c79");
     expect(onOpenClient).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByText(/Deepak/));
+    fireEvent.click(screen.getByText(/Check-in Fri 13 Nov/));
     expect(onOpenClient).toHaveBeenCalledWith(
       "2b65e3ad-84cf-4fe1-a546-0d62656c2c79",
       "Deepak Nair",
     );
+  });
+
+  it("the name opens the profile and not the event (Z14-33)", async () => {
+    api.getActivityFeed.mockResolvedValue({ events: [events[2]!], nextCursor: null });
+    const onOpenProfile = vi.fn();
+    const onOpenClient = vi.fn();
+    render(<ActivityFeedScreen onOpenProfile={onOpenProfile} onOpenClient={onOpenClient} />);
+    fireEvent.click(await screen.findByTestId("client-name-link"));
+    expect(onOpenProfile).toHaveBeenCalledWith("2b65e3ad-84cf-4fe1-a546-0d62656c2c79");
+    expect(onOpenClient).not.toHaveBeenCalled();
+  });
+
+  it("an unread removal shows a bin tag, the dot and ate out; opening it marks the inbox row read (Z14-33)", async () => {
+    const removed = {
+      id: "log_edit:dddddddd-0000-4000-8000-000000000004",
+      relationshipId: REL,
+      traineeDisplayName: "Priya Nair",
+      type: "client_removed",
+      subtype: "Removed",
+      occurredAt: "2026-11-14T10:00:00.000Z",
+      traineeLocalTime: null,
+      summary: "Removed the dinner log",
+      entryId: "eeeeeeee-0000-4000-8000-000000000005",
+      mealDate: "2026-11-13",
+      previousKcal: 1120,
+      previousAteOut: true,
+      unread: true,
+      notificationId: "ffffffff-0000-4000-8000-000000000006",
+    };
+    const edited = {
+      ...removed,
+      id: "log_edit:dddddddd-0000-4000-8000-000000000007",
+      type: "client_edited",
+      subtype: "Edited",
+      summary: "Edited lunch",
+      entryId: "eeeeeeee-0000-4000-8000-000000000008",
+      unread: false,
+      notificationId: undefined,
+      previousAteOut: false,
+    };
+    api.getActivityFeed.mockResolvedValue({ events: [removed, edited], nextCursor: null });
+    const markRead = vi.fn(async () => ({}));
+    Object.assign(api, { markNotificationRead: markRead });
+    render(<ActivityFeedScreen onOpenClient={vi.fn()} />);
+    await screen.findByText(/removed their dinner log \(Fri 13 Nov\) · was 1,120 kcal, ate out/);
+    expect(screen.getAllByTestId("activity-unread-dot")).toHaveLength(1);
+    expect(screen.getByText("Removed")).toBeTruthy();
+    expect(screen.getByText("Edited")).toBeTruthy();
+    fireEvent.click(screen.getByText(/removed their dinner log/));
+    expect(markRead).toHaveBeenCalledWith(removed.notificationId);
+    await waitFor(() => expect(screen.queryByTestId("activity-unread-dot")).toBeNull());
+  });
+
+  describe("client picker search (Z14-33)", () => {
+    const LOADED = [{ relationshipId: REL, displayName: "Priya Nair" }];
+    const FAR = {
+      relationshipId: "9b65e3ad-84cf-4fe1-a546-0d62656c2c79",
+      displayName: "Zoya Far",
+      onboardingStatus: "coaching_ready",
+    };
+    async function openPicker() {
+      api.getActivityFeed.mockResolvedValue({ events, nextCursor: null });
+      render(<ActivityFeedScreen clients={LOADED} />);
+      fireEvent.click(await screen.findByRole("button", { name: "Filter by client" }));
+      return screen.findByLabelText("Search clients");
+    }
+
+    it("finds a client who is not in the loaded list, through the server", async () => {
+      api.listClients.mockReset();
+      api.listClients.mockResolvedValue({
+        items: [{ relationshipId: FAR.relationshipId, traineeDisplayName: "Zoya Far" }],
+        nextCursor: null,
+      } as never);
+      const input = await openPicker();
+      expect(screen.getByText("Priya Nair")).toBeTruthy();
+      fireEvent.change(input, { target: { value: "zoya" } });
+      await screen.findByText("Zoya Far");
+      expect(api.listClients).toHaveBeenCalledTimes(1);
+      expect(api.listClients).toHaveBeenCalledWith({ q: "zoya", limit: 20 });
+    });
+
+    it("a failed search says so and keeps the loaded clients usable", async () => {
+      api.listClients.mockReset();
+      api.listClients.mockRejectedValue(new Error("boom"));
+      const input = await openPicker();
+      fireEvent.change(input, { target: { value: "priya" } });
+      await screen.findByText("Couldn't search just now. Try again.");
+      expect(screen.getByText("Priya Nair")).toBeTruthy();
+    });
+
+    it("offline, it searches only the loaded clients and says so", async () => {
+      api.listClients.mockReset();
+      api.listClients.mockRejectedValue(new TypeError("Network request failed"));
+      const input = await openPicker();
+      fireEvent.change(input, { target: { value: "priya" } });
+      await screen.findByText("You're offline. Showing the clients already loaded.");
+      expect(screen.getByText("Priya Nair")).toBeTruthy();
+    });
   });
 
   it("avatars are plain without a profile handler (client's own activity)", async () => {
