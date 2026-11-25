@@ -183,6 +183,17 @@ test.describe("W13-6 Client Overview and review modal", () => {
       await page.goto(`/clients/${rohan}`);
       await overviewLoaded(page);
       await shot(page, "W-03-client-overview", size);
+      // Same page scrolled inside .main so the rail is in view (the window itself never scrolls).
+      await page.evaluate(() => {
+        const side = document.querySelector(".overview-side");
+        const main = document.querySelector("main.main");
+        if (!side || !main) return;
+        const delta = side.getBoundingClientRect().bottom - main.getBoundingClientRect().bottom;
+        main.scrollTop += delta + 16;
+      });
+      await page.waitForTimeout(300);
+      await shot(page, "W-03-client-overview-rail", size);
+      await page.evaluate(() => document.querySelector("main.main")?.scrollTo(0, 0));
       if (size.w <= 1180) {
         // Targets are measured on the element's own box (iPad widths), not a pseudo-element.
         const small = await page.evaluate(() => {
