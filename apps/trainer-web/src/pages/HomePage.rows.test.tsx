@@ -54,7 +54,13 @@ vi.mock("../realtime/useRealtimeHints", () => ({
   useRealtimeHints: () => undefined,
 }));
 vi.mock("../components/ExceptionDrawer", () => ({
-  ExceptionDrawer: () => <div role="dialog" aria-label="Exception" />,
+  ExceptionDrawer: (props: { nextClient?: { name: string } | null }) => (
+    <div
+      role="dialog"
+      aria-label="Exception"
+      data-next-client={props.nextClient?.name ?? ""}
+    />
+  ),
 }));
 vi.mock("../components/CoachAskDrawer", () => ({
   CoachAskDrawer: () => <div role="dialog" aria-label="Ask" />,
@@ -212,6 +218,27 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     expect(loc()).toContain(`client=${ROHAN}`);
     expect(loc()).not.toContain("exception=");
     expect(screen.getByRole("dialog", { name: "Exception" })).toBeTruthy();
+  });
+
+  it("passes the next waiting client to the panel for its all-done summary (W13-13)", async () => {
+    const meera = {
+      ...attentionGroup(),
+      relationshipId: MEERA,
+      traineeDisplayName: "Meera Iyer",
+      items: [{ ...attentionGroup().items[0]!, id: "4b0e7c2a-3f1d-4a55-9c1e-2d6f8a9b1c30", ageMinutes: 60 }],
+    };
+    api.getAttentionGroups.mockResolvedValue({ groups: [attentionGroup(), meera] });
+    await renderHome(`/?client=${ROHAN}`);
+    const panel = await screen.findByRole("dialog", { name: "Exception" });
+    expect(panel.getAttribute("data-next-client")).toBe("Meera Iyer");
+    cleanup();
+    // The last client in the list has no next client.
+    await renderHome(`/?client=${MEERA}`);
+    expect(
+      (await screen.findByRole("dialog", { name: "Exception" })).getAttribute(
+        "data-next-client",
+      ),
+    ).toBe("");
   });
 
   it("selects the row on a touch tap of Review, and the click still reaches the Review handler (HM5)", async () => {

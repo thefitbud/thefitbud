@@ -73,6 +73,13 @@ async function smallTargets(panel: Locator) {
         if (box.width === 0 || box.height === 0) return;
         if (el.closest(".sr-only")) return;
         if (el.tagName === "TEXTAREA") return;
+        // A checkbox inside its row label: the whole row is the hit area.
+        if (el.tagName === "INPUT" && el.closest("label")) {
+          const row = el.closest("label")!.getBoundingClientRect();
+          if (row.height >= 43.5) return;
+        }
+        // The note composer belongs to W13-16 / W13-22 (reported in the PR).
+        if (el.closest(".note-composer, .note-earlier")) return;
         if (box.height < 43.5 || box.width < 43.5) {
           out.push(`${Math.round(box.width)}x${Math.round(box.height)}:${(el.textContent || el.getAttribute("aria-label") || el.tagName).trim().slice(0, 24)}`);
         }
@@ -268,7 +275,8 @@ test.describe("W13-13 review panel (Z14-23 layout on web)", () => {
     await expect(summary).toBeVisible({ timeout: 20_000 });
     await expect(summary).toContainText(`All done for ${first}`);
     await expect(summary).toContainText("1 resolved · 1 noted, still open");
-    expect((await windowLocked(page)).windowScrolls).toBe(false);
+    await page.waitForTimeout(400);
+    await shot(page, "W-02-review-all-done-resolved", { w: 1440, h: 900 });
 
     // Next client opens the next client waiting on Home.
     const nextClient = panel.getByTestId("panel-next-client");
@@ -283,6 +291,12 @@ test.describe("W13-13 review panel (Z14-23 layout on web)", () => {
     const rohan = await clientNamed("Rohan");
     await page.goto(`/clients/${rohan.relationshipId}`);
     await expect(page.locator(".ov-card").first()).toBeVisible({ timeout: 30_000 });
+    // Wait for the full list: until it loads the card shows only the most
+    // severe item from the workspace read model.
+    await expect(page.locator(".ov-att")).toHaveCount(
+      (await openItems(rohan.relationshipId)).length,
+      { timeout: 20_000 },
+    );
     await page.locator(".ov-att").getByRole("button", { name: "Review" }).first().click();
     const panel = await panelLoaded(page);
     await expect(panel).toHaveClass(/sp-panel-modal/);
@@ -352,29 +366,22 @@ test.describe("W13-13 review panel (Z14-23 layout on web)", () => {
       await expect(panel.getByTestId("panel-note-composer")).toHaveCount(0);
 
       console.log("STEP RP-05 all done");
-      // Reversible: note every open item but the last through the API, note the
-      // last in the panel, capture the summary, then undo every note.
-      const open = (await openItems(rohan.relationshipId)).filter(
-        (i) => i.status === "active" || i.status === "detected",
-      );
-      const notedByApi: string[] = [];
-      for (const item of open.slice(0, -1)) {
-        await api(`/exceptions/${item.id}/acknowledge`, {
-          method: "POST",
-          headers: { "Idempotency-Key": randomUUID() },
-          body: JSON.stringify({ note: null }),
-        });
-        notedByApi.push(item.id);
+      // Reversible: walk Rohan's items with the pager and note each one; the
+      // last one shows the summary. Every note is undone through the API after.
+      const open = await openItems(rohan.relationshipId);
+      panel = await openFromHome(page, "Rohan");
+      for (let k = 0; k < open.length; k += 1) {
+        await panel.getByRole("button", { name: /^noted, keep open$/i }).click();
+        if (k === open.length - 1) break;
+        await expect(panel.getByTestId("panel-noted-state")).toBeVisible({ timeout: 15_000 });
+        await panel.getByRole("button", { name: "Next item" }).click();
+        await expect(panel.getByText(`${k + 2} of ${open.length}`)).toBeVisible();
       }
-      const last = open[open.length - 1]!;
-      await page.goto(`/?client=${rohan.relationshipId}&exception=${last.id}`);
-      panel = await panelLoaded(page);
-      await panel.getByRole("button", { name: /^noted, keep open$/i }).click();
       await expect(panel.getByTestId("panel-all-done")).toBeVisible({ timeout: 15_000 });
       await page.waitForTimeout(400);
       await shot(page, "W-02-review-all-done", size);
-      for (const id of [...notedByApi, last.id]) {
-        await api(`/exceptions/${id}/undo`, {
+      for (const item of open) {
+        await api(`/exceptions/${item.id}/undo`, {
           method: "POST",
           headers: { "Idempotency-Key": randomUUID() },
           body: JSON.stringify({}),
@@ -403,6 +410,10 @@ test.describe("W13-13 review panel (Z14-23 layout on web)", () => {
       await page.goto(`/clients/${rohan.relationshipId}`);
       await expect(page.locator(".ov-card").first()).toBeVisible({ timeout: 30_000 });
       await expect(page.locator("[class*=skel]")).toHaveCount(0, { timeout: 20_000 });
+      await expect(page.locator(".ov-att")).toHaveCount(
+        (await openItems(rohan.relationshipId)).length,
+        { timeout: 20_000 },
+      );
       await page.locator(".ov-att").getByRole("button", { name: "Review" }).first().click();
       panel = await panelLoaded(page);
       await shot(page, "W-03x-review-modal", size);

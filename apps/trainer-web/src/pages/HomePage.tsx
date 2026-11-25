@@ -360,17 +360,31 @@ export function HomePage() {
 
   // RP-05 (W13-13): the client after the open panel's client in the Needs
   // attention order. Once that client leaves the list (all resolved), the
-  // first other client waiting is next.
+  // client that followed it stays next while it still waits; otherwise the
+  // first other client waiting.
+  const panelNextRef = useRef<{ from: string; id: string } | null>(null);
   const nextPanelClient = useMemo(() => {
     if (!clientPanelId) return null;
     const idx = openGroups.findIndex(
       (row) => row.group.relationshipId === clientPanelId,
     );
-    const rest =
-      idx >= 0
-        ? openGroups.slice(idx + 1)
-        : openGroups.filter((row) => row.group.relationshipId !== clientPanelId);
-    const next = rest[0]?.group;
+    let next: AttentionGroup | undefined;
+    if (idx >= 0) {
+      next = openGroups[idx + 1]?.group;
+      panelNextRef.current = next
+        ? { from: clientPanelId, id: next.relationshipId }
+        : null;
+    } else {
+      const remembered =
+        panelNextRef.current?.from === clientPanelId
+          ? panelNextRef.current.id
+          : null;
+      next =
+        openGroups.find((row) => row.group.relationshipId === remembered)
+          ?.group ??
+        openGroups.find((row) => row.group.relationshipId !== clientPanelId)
+          ?.group;
+    }
     return next
       ? { id: next.relationshipId, name: next.traineeDisplayName }
       : null;
