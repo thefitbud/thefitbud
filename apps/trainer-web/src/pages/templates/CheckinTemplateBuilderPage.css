@@ -1,0 +1,542 @@
+/*
+ * Check-in form builder (W13-4, frames W-171 and W-171b). Reuses the W13-3
+ * builder workspace (BuilderLayout + builder.css); this file only sets the
+ * pane widths for this screen and styles its own content. v3 tokens only.
+ *
+ * Wide (>=1280): questions | properties card | preview.
+ * Narrow (1024-1279): questions | properties; preview opens in a side panel.
+ */
+
+/* ---------- panes ---------- */
+
+.checkin-builder-page .builder.is-workspace[data-builder-mode="wide"] > .builder-panes {
+  grid-template-columns: 340px minmax(0, 1fr) 360px;
+}
+
+.checkin-builder-page .builder.is-workspace[data-builder-mode="narrow"] > .builder-panes {
+  grid-template-columns: minmax(0, 1fr) 360px;
+}
+
+.checkin-builder-page .builder.is-workspace .builder-center {
+  padding: var(--s6);
+}
+
+.checkin-builder-page .builder.is-workspace[data-builder-mode="narrow"] .builder-center {
+  padding: var(--s4);
+  background: var(--card);
+}
+
+.checkin-builder-page .builder.is-workspace[data-builder-mode="wide"] .builder-right {
+  background: var(--bg);
+}
+
+.checkin-builder-page .ck-title {
+  margin: 0;
+  font: var(--t-h2);
+  color: var(--ink);
+}
+
+.checkin-builder-page .builder-title-row {
+  flex-wrap: nowrap;
+}
+
+/* ---------- question list ---------- */
+
+.ck-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.ck-list-head {
+  margin: var(--s2) var(--s2) 0;
+  font: var(--t-cap);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.ck-list-head-own {
+  margin-top: var(--s4);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.ck-list-note {
+  margin: 0 var(--s2);
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ck-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.ck-row-btn {
+  width: 100%;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border: 1px solid transparent;
+  border-radius: var(--r-ctl);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ck-row-btn:hover {
+  background: var(--row-hover);
+}
+
+div.ck-row-btn {
+  cursor: default;
+}
+
+.ck-row.is-selected .ck-row-btn {
+  border-color: var(--brand);
+  background: var(--row-sel);
+}
+
+.ck-row-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.ck-tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--r-ctl);
+  background: var(--fill);
+  color: var(--ink2);
+}
+
+.ck-tile .ui-i {
+  width: 18px;
+  height: 18px;
+}
+
+.ck-row-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ck-row-title {
+  font: var(--t-h3);
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ck-row-sub {
+  font: var(--t-meta);
+  color: var(--ink3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ck-add {
+  align-self: flex-start;
+  margin-top: var(--s1);
+}
+
+.ck-empty {
+  margin: 0 var(--s2);
+  font: var(--t-body);
+  color: var(--ink3);
+}
+
+.ck-readonly {
+  padding: var(--s4) 0;
+}
+
+/* ---------- properties card ---------- */
+
+.ck-card {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--s6);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  background: var(--card);
+  box-shadow: var(--e1);
+}
+
+.checkin-builder-page [data-builder-mode="narrow"] .ck-card {
+  max-width: none;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+}
+
+.ck-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+}
+
+.ck-card-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  font: var(--t-h2);
+  color: var(--ink);
+}
+
+.ck-card-kind {
+  flex: none;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ck-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.ck-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.ck-lbl {
+  font: var(--t-h3);
+  color: var(--ink);
+}
+
+.ck-opt {
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ck-help {
+  margin: 0;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ck-error {
+  font: var(--t-meta);
+  color: var(--crit-ink);
+}
+
+.ck-input {
+  width: 100%;
+  height: var(--h-md);
+  min-height: var(--h-md);
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+.ck-input::placeholder {
+  color: var(--ink4);
+}
+
+.ck-input:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: var(--focus);
+}
+
+.ck-input:disabled {
+  background: var(--bg);
+  color: var(--ink2);
+}
+
+.ck-input[aria-invalid="true"] {
+  border-color: var(--crit-ink);
+}
+
+.ck-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s3);
+}
+
+.ck-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.ck-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s3);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.ck-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 44px;
+}
+
+.ck-toggle-label {
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+.ck-moves {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+
+.checkin-builder-page [data-builder-mode="narrow"] .ck-moves .ui-btn-sm {
+  height: var(--h-md);
+}
+
+.ck-picker-trigger {
+  width: 100%;
+  min-height: var(--h-lg);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ck-picker-trigger:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: var(--focus);
+}
+
+.ck-picker-trigger:disabled {
+  background: var(--bg);
+  cursor: default;
+}
+
+.ck-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+  min-width: 0;
+}
+
+.ck-chip {
+  padding: 2px var(--s2);
+  border-radius: var(--r-full);
+  background: var(--brand-tint);
+  font: var(--t-cap);
+  color: var(--ink);
+}
+
+.ck-picker-change {
+  flex: none;
+  font: var(--t-h3);
+  color: var(--brand);
+}
+
+/* ---------- preview pane ---------- */
+
+.ck-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.ck-preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s3);
+}
+
+.ck-preview-note {
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+/* ---------- measure picker modal (W-171b) ---------- */
+
+.ck-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s4);
+}
+
+.ck-search {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  height: var(--h-lg);
+  padding: 0 12px;
+  border: 1px solid var(--line2);
+  border-radius: var(--r-ctl);
+  background: var(--card);
+  color: var(--ink3);
+}
+
+.ck-search:focus-within {
+  border-color: var(--brand);
+  box-shadow: var(--focus);
+}
+
+.ck-search .ui-i {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.ck-search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+.ck-picker-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+}
+
+.ck-picker-head {
+  margin: 0;
+  font: var(--t-cap);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink3);
+}
+
+.ck-picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+
+.ck-picker-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: 56px;
+  padding: var(--s1) var(--s2);
+  border-radius: var(--r-ctl);
+  cursor: pointer;
+}
+
+.ck-picker-row:hover {
+  background: var(--row-hover);
+}
+
+.ck-picker-row.is-on {
+  background: var(--row-sel);
+}
+
+.ck-picker-row.is-locked {
+  cursor: default;
+}
+
+.ck-picker-row.is-locked .ck-picker-name,
+.ck-picker-row.is-locked .ck-tile {
+  opacity: 0.7;
+}
+
+.ck-picker-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ck-picker-name {
+  font: var(--t-h3);
+  color: var(--ink);
+}
+
+.ck-picker-hint {
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.ck-picker-count {
+  font: var(--t-body);
+  color: var(--ink2);
+}
+
+.ck-picker-empty {
+  margin: 0;
+  font: var(--t-body);
+  color: var(--ink3);
+}
+
+.ck-check {
+  appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 5px;
+  background: var(--card);
+  display: grid;
+  place-items: center;
+  cursor: inherit;
+}
+
+.ck-check:checked {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
+.ck-check:checked::after {
+  content: "";
+  width: 9px;
+  height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: translateY(-1px) rotate(-45deg);
+}
+
+.ck-check:disabled:checked {
+  border-color: var(--ink3);
+  background: var(--ink3);
+}
+
+.ck-check:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}

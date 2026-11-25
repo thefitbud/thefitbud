@@ -1,18 +1,20 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import type {
-  CheckinFormTemplateDetail,
-  CheckinStandardKey,
-} from "@fitbud/contracts";
-import { Button } from "../../components/Button";
+import type { CheckinFormTemplateDetail } from "@fitbud/contracts";
+import {
+  ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Copy,
+  Eye,
+  Pencil,
+  Plus,
+  Trash2,
+} from "lucide-react";
+import { Button, Pill, Seg, SidePanel, Toggle } from "../../components/ui";
+import { BuilderLayout, useBuilderMode } from "../../components/builder/BuilderLayout";
+import "../../components/builder/builder.css";
 import {
   EmptyState,
   ErrorState,
@@ -22,29 +24,38 @@ import { useOnline } from "../../hooks/useOnline";
 import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import {
+  addedStandardKeys,
+  addStandardKeys,
+  answerFamilyOf,
   blankCheckinField,
   buildCheckinFields,
+  CHECKIN_ANSWER_FAMILIES,
   CHECKIN_FIELD_TYPES,
   checkinDraftSections,
   checkinFieldTypeLabel,
   draftsFromCheckinFields,
   duplicateCheckinFieldDraft,
   measurementTypeOptions,
-  missingStandardGroups,
   moveCustomDraft,
   moveStandardGroup,
   normalizeCheckinDraftOrder,
   ownQuestionFeedsChart,
   setStandardGroupKeys,
-  STANDARD_KEY_PICKER_COPY,
+  standardKeyCopy,
+  STANDARD_CHECKIN_GROUPS,
+  typeForFamily,
   updateStandardGroup,
+  type CheckinAnswerFamily,
   type CheckinFieldDraft,
   type StandardCheckinGroup,
   type StandardCheckinGroupId,
 } from "./checkinBuilder";
+import { CheckinMeasurePicker } from "./CheckinMeasurePicker";
+import { standardRowIcon, typeRowIcon } from "./checkinIcons";
 import { FormPhonePreview } from "./FormPhonePreview";
 import { ForkTemplateModal } from "./ForkTemplateModal";
 import { errorText } from "./shared";
+import "./CheckinTemplateBuilderPage.css";
 
 function sortedVersions(detail: CheckinFormTemplateDetail) {
   return [...detail.versions].sort((a, b) => a.version - b.version);
@@ -62,73 +73,6 @@ function duplicateCheckinLabels(drafts: CheckinFieldDraft[]): string[] {
     .map(([label]) => label);
 }
 
-const sectionHeadStyle: CSSProperties = {
-  display: "flex",
-  flexWrap: "wrap",
-  alignItems: "baseline",
-  gap: "0.75rem",
-  margin: "0.25rem 0 0.5rem",
-};
-const sectionTitleStyle: CSSProperties = {
-  margin: 0,
-  fontSize: "0.75rem",
-  fontWeight: 600,
-  letterSpacing: "0.04em",
-  textTransform: "uppercase",
-  color: "var(--mid-grey)",
-};
-const rowHeadStyle: CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: "0.75rem",
-  minHeight: 44,
-};
-const rowToggleStyle: CSSProperties = {
-  flex: 1,
-  minWidth: 0,
-  minHeight: 44,
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "flex-start",
-  justifyContent: "center",
-  padding: 0,
-  border: 0,
-  background: "transparent",
-  textAlign: "left",
-  cursor: "pointer",
-  color: "inherit",
-};
-const rowSubStyle: CSSProperties = {
-  fontSize: "0.8rem",
-  color: "var(--mid-grey)",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-  maxWidth: "100%",
-};
-const badgeStyle: CSSProperties = {
-  display: "inline-flex",
-  alignItems: "center",
-  borderRadius: 999,
-  padding: "0.2rem 0.6rem",
-  fontSize: "0.75rem",
-  fontWeight: 600,
-  whiteSpace: "nowrap",
-  background: "var(--pale-lavender)",
-  color: "var(--brand)",
-};
-const mutedBadgeStyle: CSSProperties = {
-  ...badgeStyle,
-  background: "transparent",
-  border: "1px solid #e7e9f2",
-  color: "var(--mid-grey)",
-};
-const hintStyle: CSSProperties = {
-  fontSize: "0.8rem",
-  color: "var(--mid-grey)",
-  margin: "0.25rem 0 0.75rem",
-};
-
 function requiredText(required: boolean): string {
   return required ? "required" : "optional";
 }
@@ -140,9 +84,7 @@ function standardSubtitle(
   const required = requiredText(drafts.some((draft) => draft.required));
   if (group.keys.length > 1) {
     const picked = drafts
-      .map((draft) =>
-        (STANDARD_KEY_PICKER_COPY[draft.key!]?.label ?? draft.label).toLowerCase(),
-      )
+      .map((draft) => (standardKeyCopy(draft.key!).label).toLowerCase())
       .join(", ");
     return group.id === "body"
       ? `${picked} · cm · ${required}`
@@ -155,192 +97,62 @@ function ownSubtitle(draft: CheckinFieldDraft): string {
   return `${checkinFieldTypeLabel(draft.type).toLowerCase()} · ${requiredText(draft.required)}`;
 }
 
-/** Multi-select for the keys of a standard group (frame 171b). */
-function StandardKeyPicker({
-  group,
-  selected,
-  disabled,
-  onChange,
-}: {
-  group: StandardCheckinGroup;
-  selected: CheckinStandardKey[];
-  disabled: boolean;
-  onChange: (keys: CheckinStandardKey[]) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const listId = useId();
-  const labelId = useId();
-  const isBody = group.id === "body";
-  const title = isBody ? "Measurements to collect" : "Photos to collect";
-
-  function close() {
-    setOpen(false);
-    triggerRef.current?.focus();
-  }
-
-  useEffect(() => {
-    if (!open) return;
-    panelRef.current?.querySelector<HTMLInputElement>("input")?.focus();
-    function onDown(event: MouseEvent) {
-      const target = event.target as Node;
-      if (
-        panelRef.current?.contains(target) ||
-        triggerRef.current?.contains(target)
-      ) {
-        return;
-      }
-      setOpen(false);
+type Row =
+  | {
+      kind: "standard";
+      id: string;
+      group: StandardCheckinGroup;
+      drafts: CheckinFieldDraft[];
     }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+  | { kind: "own"; id: string; draft: CheckinFieldDraft };
 
+function rowTitle(row: Row): string {
+  return row.kind === "standard" ? row.group.title : row.draft.label.trim() || "Untitled question";
+}
+
+function rowSubtitle(row: Row): string {
+  return row.kind === "standard"
+    ? standardSubtitle(row.group, row.drafts)
+    : ownSubtitle(row.draft);
+}
+
+function rowDraftIds(row: Row): string[] {
+  return row.kind === "standard" ? row.drafts.map((draft) => draft.id) : [row.draft.id];
+}
+
+function RowIcon({ row }: { row: Row }) {
+  const Icon =
+    row.kind === "standard"
+      ? standardRowIcon(row.group.keys[0]!)
+      : typeRowIcon(row.draft.type);
   return (
-    <div className="field" style={{ position: "relative" }}>
-      <span id={labelId}>{title}</span>
-      <button
-        ref={triggerRef}
-        type="button"
-        disabled={disabled}
-        aria-labelledby={labelId}
-        aria-expanded={open}
-        aria-controls={listId}
-        onClick={() => setOpen((value) => !value)}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.4rem",
-          flexWrap: "wrap",
-          minHeight: 44,
-          width: "100%",
-          padding: "0.35rem 2rem 0.35rem 0.5rem",
-          border: `1px solid ${open ? "var(--brand)" : "#e7e9f2"}`,
-          borderRadius: 12,
-          background: "#fff",
-          textAlign: "left",
-          cursor: disabled ? "default" : "pointer",
-          position: "relative",
-          font: "inherit",
-        }}
-      >
-        {selected.map((key) => (
-          <span key={key} style={badgeStyle}>
-            {STANDARD_KEY_PICKER_COPY[key]?.label ?? key}
-          </span>
-        ))}
-        <span
-          aria-hidden
-          style={{ position: "absolute", right: "0.75rem", top: "50%", transform: "translateY(-50%)" }}
-        >
-          ▾
-        </span>
-      </button>
-      <span style={hintStyle}>Clients see only the ones you pick.</span>
-      {open ? (
-        <div
-          ref={panelRef}
-          id={listId}
-          role="group"
-          aria-label={title}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.stopPropagation();
-              close();
-            }
-          }}
-          style={{
-            position: "absolute",
-            zIndex: 5,
-            left: 0,
-            right: 0,
-            top: "4.75rem",
-            background: "#fff",
-            border: "1px solid #e7e9f2",
-            borderRadius: 14,
-            boxShadow: "var(--shadow)",
-            padding: "0.4rem",
-          }}
-        >
-          {group.keys.map((key) => {
-            const checked = selected.includes(key);
-            const copy = STANDARD_KEY_PICKER_COPY[key];
-            const lastOne = checked && selected.length === 1;
-            return (
-              <label
-                key={key}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.75rem",
-                  minHeight: 48,
-                  padding: "0.35rem 0.6rem",
-                  borderRadius: 10,
-                  background: checked ? "var(--pale-lavender)" : "transparent",
-                  cursor: lastOne ? "default" : "pointer",
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={lastOne}
-                  onChange={(event) =>
-                    onChange(
-                      event.target.checked
-                        ? [...selected, key]
-                        : selected.filter((value) => value !== key),
-                    )
-                  }
-                  style={{ width: 20, height: 20 }}
-                />
-                <span style={{ display: "flex", flexDirection: "column" }}>
-                  <span style={{ fontWeight: 600 }}>{copy?.label ?? key}</span>
-                  {copy?.hint ? (
-                    <span style={{ fontSize: "0.8rem", color: "var(--mid-grey)" }}>
-                      {copy.hint}
-                    </span>
-                  ) : null}
-                </span>
-              </label>
-            );
-          })}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: "0.75rem",
-              borderTop: "1px solid #e7e9f2",
-              marginTop: "0.4rem",
-              padding: "0.5rem 0.4rem 0.1rem 0.6rem",
-            }}
-          >
-            <span style={{ fontSize: "0.85rem", color: "var(--mid-grey)" }}>
-              {selected.length} picked{isBody ? " · all in cm" : ""}
-            </span>
-            <Button variant="primary" onClick={close}>
-              Done
-            </Button>
-          </div>
-        </div>
-      ) : null}
-    </div>
+    <span className="ck-tile" aria-hidden>
+      <Icon className="ui-i" strokeWidth={1.75} />
+    </span>
   );
 }
+
+type PickerState =
+  | null
+  | { mode: "add" }
+  | { mode: "edit"; groupId: StandardCheckinGroupId };
 
 export function CheckinTemplateBuilderPage() {
   const { templateId = "" } = useParams();
   const navigate = useNavigate();
   const online = useOnline();
+  const mode = useBuilderMode();
+  const idBase = useId();
   const [detail, setDetail] = useState<CheckinFormTemplateDetail | null>(null);
   const [drafts, setDrafts] = useState<CheckinFieldDraft[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [showFork, setShowFork] = useState(false);
+  const [picker, setPicker] = useState<PickerState>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const load = useCallback(() => {
     if (!templateId) return;
@@ -367,7 +179,26 @@ export function CheckinTemplateBuilderPage() {
   const nextVersion = (detail?.latestVersionNumber ?? 0) + 1;
   const readOnly = detail?.ownership === "global";
   const sections = useMemo(() => checkinDraftSections(drafts), [drafts]);
-  const missing = useMemo(() => missingStandardGroups(drafts), [drafts]);
+  const rows = useMemo<Row[]>(
+    () => [
+      ...sections.standard.map(
+        (entry): Row => ({
+          kind: "standard",
+          id: `std:${entry.group.id}`,
+          group: entry.group,
+          drafts: entry.drafts,
+        }),
+      ),
+      ...sections.custom.map((draft): Row => ({ kind: "own", id: `own:${draft.id}`, draft })),
+    ],
+    [sections],
+  );
+  const activeIndex = Math.max(
+    0,
+    rows.findIndex((row) => row.id === selectedId),
+  );
+  const active = rows[activeIndex] ?? null;
+  const allAdded = addedStandardKeys(drafts).length >= STANDARD_CHECKIN_GROUPS.flatMap((g) => g.keys).length;
   const dupLabels = useMemo(() => duplicateCheckinLabels(drafts), [drafts]);
   const previewFields = useMemo(() => {
     const built = buildCheckinFields(
@@ -387,7 +218,7 @@ export function CheckinTemplateBuilderPage() {
   function addOwnQuestion() {
     const draft = blankCheckinField();
     setDrafts((current) => normalizeCheckinDraftOrder([...current, draft]));
-    setExpanded(draft.id);
+    setSelectedId(`own:${draft.id}`);
   }
 
   async function saveVersion() {
@@ -453,473 +284,641 @@ export function CheckinTemplateBuilderPage() {
     );
   }
 
-  function renderStandardRow(
-    group: StandardCheckinGroup,
-    groupDrafts: CheckinFieldDraft[],
-    index: number,
-  ) {
-    const first = groupDrafts[0]!;
-    const isOpen = expanded === group.id;
-    const panelId = `checkin-std-${group.id}`;
-    const groupId: StandardCheckinGroupId = group.id;
+  const total = rows.length;
+  const standardRows = rows.filter((row) => row.kind === "standard");
+  const ownRows = rows.filter((row) => row.kind === "own");
+
+  function renderRow(row: Row) {
+    const isActive = active?.id === row.id;
+    const charted =
+      row.kind === "own"
+        ? ownQuestionFeedsChart(row.draft)
+        : false;
     return (
       <li
-        key={group.id}
-        className="form-question-card"
-        data-testid={`standard-question-${group.id}`}
-        style={isOpen ? { borderColor: "var(--brand)" } : undefined}
+        key={row.id}
+        className={isActive ? "ck-row is-selected" : "ck-row"}
+        data-testid={row.kind === "standard" ? `standard-question-${row.group.id}` : `own-question-${row.draft.id}`}
       >
-        <div style={rowHeadStyle}>
-          <span className="drag-handle" aria-hidden>
-            ⋮⋮
+        <button
+          type="button"
+          className="ck-row-btn"
+          aria-current={isActive ? "true" : undefined}
+          onClick={() => setSelectedId(row.id)}
+        >
+          <RowIcon row={row} />
+          <span className="ck-row-copy">
+            <span className="ck-row-title">{rowTitle(row)}</span>
+            <span className="ck-row-sub">{rowSubtitle(row)}</span>
           </span>
-          <button
-            type="button"
-            style={rowToggleStyle}
-            aria-expanded={isOpen}
-            aria-controls={panelId}
-            onClick={() => setExpanded(isOpen ? null : group.id)}
-          >
-            <strong>{group.title}</strong>
-            <span style={rowSubStyle}>{standardSubtitle(group, groupDrafts)}</span>
-          </button>
-          <span style={badgeStyle}>{group.charted ? "Charted" : "Standard"}</span>
-        </div>
-        {isOpen ? (
-          <div id={panelId} style={{ marginTop: "0.75rem" }}>
-            <div className="field">
-              <label htmlFor={`${panelId}-question`}>Question</label>
-              <input
-                id={`${panelId}-question`}
-                value={group.title}
-                readOnly
-                disabled
-                aria-describedby={`${panelId}-fixed`}
-              />
-              <span id={`${panelId}-fixed`} style={hintStyle}>
-                Wording is fixed for standard questions.
-              </span>
-            </div>
-            {group.keys.length > 1 ? (
-              <StandardKeyPicker
-                group={group}
-                selected={groupDrafts.map((draft) => draft.key!)}
-                disabled={readOnly}
-                onChange={(keys) =>
-                  setDrafts((current) => setStandardGroupKeys(current, groupId, keys))
-                }
-              />
-            ) : null}
-            {group.id === "body" ? (
-              <p style={hintStyle}>Saved and charted in cm.</p>
-            ) : null}
-            <label className="field">
-              <span>Tip for the client</span>
-              <input
-                value={first.helpText}
-                disabled={readOnly}
-                onChange={(event) =>
-                  setDrafts((current) =>
-                    updateStandardGroup(current, groupId, {
-                      helpText: event.target.value,
-                    }),
-                  )
-                }
-              />
-            </label>
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={first.required}
-                disabled={readOnly}
-                onChange={(event) =>
-                  setDrafts((current) =>
-                    updateStandardGroup(current, groupId, {
-                      required: event.target.checked,
-                    }),
-                  )
-                }
-              />
-              <span>Required</span>
-            </label>
-            {group.id === "body" ? (
-              <p style={hintStyle}>
-                Each value saves as a measurement and charts in Progress › Body.
-                Need something we don't list? Add it as your own question; it
-                shows in review but isn't charted.
-              </p>
-            ) : null}
-            {!readOnly ? (
-              <div className="form-question-toolbar" style={{ marginTop: "0.75rem" }}>
-                <Button
-                  variant="tertiary"
-                  disabled={index === 0}
-                  onClick={() => setDrafts((current) => moveStandardGroup(current, groupId, -1))}
-                >
-                  Up
-                </Button>
-                <Button
-                  variant="tertiary"
-                  disabled={index === sections.standard.length - 1}
-                  onClick={() => setDrafts((current) => moveStandardGroup(current, groupId, 1))}
-                >
-                  Down
-                </Button>
-                <Button
-                  variant="tertiary"
-                  onClick={() => {
-                    setDrafts((current) => setStandardGroupKeys(current, groupId, []));
-                    setExpanded(null);
-                  }}
-                >
-                  Remove
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+          {charted ? <Pill tone="done">Charted</Pill> : null}
+        </button>
       </li>
     );
   }
 
-  function renderOwnRow(draft: CheckinFieldDraft, index: number) {
-    const isOpen = expanded === draft.id;
-    const panelId = `checkin-own-${draft.id}`;
+  const questionList = (
+    <div className="ck-list">
+      {drafts.length === 0 && readOnly ? (
+        <EmptyState title="No questions yet." />
+      ) : (
+        <>
+          <h2 className="ck-list-head">Standard · charted in Progress</h2>
+          {standardRows.length > 0 ? (
+            <ul className="ck-rows" aria-label="Standard questions">
+              {standardRows.map(renderRow)}
+            </ul>
+          ) : (
+            <p className="ck-empty">No standard questions on this form.</p>
+          )}
+          {!readOnly && !allAdded ? (
+            <Button
+              variant="quiet"
+              className="ck-add"
+              onClick={() => setPicker({ mode: "add" })}
+            >
+              <Plus className="ui-i" strokeWidth={1.75} aria-hidden />
+              Add standard measure
+            </Button>
+          ) : null}
+          <h2 className="ck-list-head ck-list-head-own">Your questions</h2>
+          <p className="ck-list-note">Shown in check-in review. Not charted.</p>
+          {ownRows.length > 0 ? (
+            <ul className="ck-rows" aria-label="Your own questions">
+              {ownRows.map(renderRow)}
+            </ul>
+          ) : (
+            <p className="ck-empty">No questions of your own yet.</p>
+          )}
+          {!readOnly ? (
+            <Button variant="quiet" className="ck-add" onClick={addOwnQuestion}>
+              <Plus className="ui-i" strokeWidth={1.75} aria-hidden />
+              Add your own question
+            </Button>
+          ) : null}
+        </>
+      )}
+    </div>
+  );
+
+  function renderStandardCard(row: Extract<Row, { kind: "standard" }>) {
+    const { group, drafts: groupDrafts } = row;
+    const first = groupDrafts[0]!;
+    const groupId: StandardCheckinGroupId = group.id;
+    const panelId = `${idBase}-std-${group.id}`;
+    const pickerTitle = group.id === "photos" ? "Photos to collect" : "Measurements to collect";
+    const standardIndex = sections.standard.findIndex((entry) => entry.group.id === group.id);
+    return (
+      <>
+        <div className="ck-field">
+          <label className="ck-lbl" htmlFor={`${panelId}-question`}>
+            Question
+          </label>
+          <input
+            id={`${panelId}-question`}
+            className="ck-input"
+            value={group.title}
+            readOnly
+            disabled
+            aria-describedby={`${panelId}-fixed`}
+          />
+          <span id={`${panelId}-fixed`} className="ck-help">
+            Wording is fixed for standard questions.
+          </span>
+        </div>
+        {group.keys.length > 1 ? (
+          <div className="ck-field">
+            <span className="ck-lbl" id={`${panelId}-pick`}>
+              {pickerTitle}
+            </span>
+            <button
+              type="button"
+              className="ck-picker-trigger"
+              disabled={readOnly}
+              aria-labelledby={`${panelId}-pick`}
+              aria-haspopup="dialog"
+              onClick={() => setPicker({ mode: "edit", groupId })}
+            >
+              <span className="ck-chips">
+                {groupDrafts.map((draft) => (
+                  <span key={draft.id} className="ck-chip">
+                    {standardKeyCopy(draft.key!).label}
+                  </span>
+                ))}
+              </span>
+              <span className="ck-picker-change">Change</span>
+            </button>
+            <span className="ck-help">
+              Clients see only the ones you pick.
+              {group.id === "body" ? " Saved and charted in cm." : ""}
+            </span>
+          </div>
+        ) : null}
+        <div className="ck-field">
+          <label className="ck-lbl" htmlFor={`${panelId}-tip`}>
+            Tip for the client
+          </label>
+          <input
+            id={`${panelId}-tip`}
+            className="ck-input"
+            value={first.helpText}
+            disabled={readOnly}
+            onChange={(event) =>
+              setDrafts((current) =>
+                updateStandardGroup(current, groupId, { helpText: event.target.value }),
+              )
+            }
+          />
+        </div>
+        <div className="ck-toggles">
+          <RequiredToggle
+            checked={first.required}
+            disabled={readOnly}
+            onChange={(required) =>
+              setDrafts((current) => updateStandardGroup(current, groupId, { required }))
+            }
+          />
+        </div>
+        {group.id === "body" ? (
+          <p className="ck-help">
+            Each value saves as a measurement and charts in Progress › Body. Need something we
+            don&apos;t list? Add it as your own question; it shows in review but isn&apos;t
+            charted.
+          </p>
+        ) : null}
+        {!readOnly ? (
+          <div className="ck-moves">
+            <Button
+              variant="quiet"
+              size="sm"
+              disabled={standardIndex === 0}
+              onClick={() => setDrafts((current) => moveStandardGroup(current, groupId, -1))}
+            >
+              <ArrowUp className="ui-i" strokeWidth={1.75} aria-hidden />
+              Up
+            </Button>
+            <Button
+              variant="quiet"
+              size="sm"
+              disabled={standardIndex === sections.standard.length - 1}
+              onClick={() => setDrafts((current) => moveStandardGroup(current, groupId, 1))}
+            >
+              <ArrowDown className="ui-i" strokeWidth={1.75} aria-hidden />
+              Down
+            </Button>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
+  function renderOwnCard(row: Extract<Row, { kind: "own" }>) {
+    const draft = row.draft;
+    const panelId = `${idBase}-own-${draft.id}`;
+    const ownIndex = sections.custom.findIndex((entry) => entry.id === draft.id);
     const invalidLabel =
       !draft.label.trim() || dupLabels.includes(draft.label.trim().toLowerCase());
+    const family = answerFamilyOf(draft.type);
     return (
-      <li
-        key={draft.id}
-        className="form-question-card"
-        style={isOpen ? { borderColor: "var(--brand)" } : undefined}
-      >
-        <div style={rowHeadStyle}>
-          <span className="drag-handle" aria-hidden>
-            ⋮⋮
-          </span>
-          <button
-            type="button"
-            style={rowToggleStyle}
-            aria-expanded={isOpen}
-            aria-controls={panelId}
-            onClick={() => setExpanded(isOpen ? null : draft.id)}
-          >
-            <strong>{draft.label.trim() || "Untitled question"}</strong>
-            <span style={rowSubStyle}>{ownSubtitle(draft)}</span>
-          </button>
-          {ownQuestionFeedsChart(draft) ? (
-            <span style={badgeStyle}>Charted</span>
-          ) : (
-            <span style={mutedBadgeStyle}>Not charted</span>
-          )}
+      <>
+        <div className="ck-field">
+          <label className="ck-lbl" htmlFor={`${panelId}-label`}>
+            Question
+          </label>
+          <input
+            id={`${panelId}-label`}
+            className="ck-input"
+            value={draft.label}
+            disabled={readOnly}
+            aria-invalid={invalidLabel}
+            onChange={(event) => updateDraft(draft.id, { label: event.target.value })}
+          />
+          {!draft.label.trim() ? <span className="ck-error">Enter a label.</span> : null}
+          {draft.label.trim() && dupLabels.includes(draft.label.trim().toLowerCase()) ? (
+            <span className="ck-error">Another question uses this label.</span>
+          ) : null}
         </div>
-        {isOpen ? (
-          <div id={panelId} style={{ marginTop: "0.75rem" }}>
-            <label className="field">
-              <span>Label</span>
+        <div className="ck-field">
+          <span className="ck-lbl">Answer type</span>
+          <Seg<CheckinAnswerFamily | "">
+            full
+            aria-label="Answer type"
+            options={CHECKIN_ANSWER_FAMILIES.map((entry) => ({
+              value: entry.value,
+              label: entry.label,
+            }))}
+            value={family ?? ""}
+            onChange={(next) => {
+              if (readOnly || !next) return;
+              updateDraft(draft.id, { type: typeForFamily(draft.type, next) });
+            }}
+          />
+        </div>
+        <div className="ck-field">
+          <label className="ck-lbl" htmlFor={`${panelId}-type`}>
+            Type
+          </label>
+          <select
+            id={`${panelId}-type`}
+            className="ck-input"
+            value={draft.type}
+            disabled={readOnly}
+            onChange={(event) =>
+              updateDraft(draft.id, {
+                type: event.target.value as CheckinFieldDraft["type"],
+              })
+            }
+          >
+            {CHECKIN_FIELD_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {checkinFieldTypeLabel(type)}
+              </option>
+            ))}
+          </select>
+          <span className="ck-help">Yes / no and choices are only in this list.</span>
+        </div>
+        {draft.type === "scale_1_5" ? (
+          <div className="ck-pair">
+            <div className="ck-field">
+              <label className="ck-lbl" htmlFor={`${panelId}-low`}>
+                Label for 1
+              </label>
               <input
-                value={draft.label}
+                id={`${panelId}-low`}
+                className="ck-input"
+                value={draft.lowLabel}
                 disabled={readOnly}
-                aria-invalid={invalidLabel}
-                onChange={(event) => updateDraft(draft.id, { label: event.target.value })}
+                onChange={(event) => updateDraft(draft.id, { lowLabel: event.target.value })}
               />
-              {!draft.label.trim() ? (
-                <span className="field-error">Enter a label.</span>
-              ) : null}
-              {draft.label.trim() &&
-              dupLabels.includes(draft.label.trim().toLowerCase()) ? (
-                <span className="field-error">Another question uses this label.</span>
-              ) : null}
-            </label>
-            <label className="field">
-              <span>Help text</span>
+            </div>
+            <div className="ck-field">
+              <label className="ck-lbl" htmlFor={`${panelId}-high`}>
+                Label for 5
+              </label>
               <input
-                value={draft.helpText}
+                id={`${panelId}-high`}
+                className="ck-input"
+                value={draft.highLabel}
                 disabled={readOnly}
-                onChange={(event) => updateDraft(draft.id, { helpText: event.target.value })}
+                onChange={(event) => updateDraft(draft.id, { highLabel: event.target.value })}
               />
-            </label>
-            <label className="field">
-              <span>Type</span>
+            </div>
+          </div>
+        ) : null}
+        {draft.type === "measurement" ? (
+          <>
+            <div className="ck-field">
+              <label className="ck-lbl" htmlFor={`${panelId}-metric`}>
+                Metric
+              </label>
               <select
-                value={draft.type}
+                id={`${panelId}-metric`}
+                className="ck-input"
+                value={draft.measurementType}
                 disabled={readOnly}
                 onChange={(event) =>
                   updateDraft(draft.id, {
-                    type: event.target.value as CheckinFieldDraft["type"],
+                    measurementType: event.target.value as CheckinFieldDraft["measurementType"],
                   })
                 }
               >
-                {CHECKIN_FIELD_TYPES.map((type) => (
-                  <option key={type} value={type}>
-                    {checkinFieldTypeLabel(type)}
+                {measurementTypeOptions(draft.measurementType).map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
                   </option>
                 ))}
               </select>
-            </label>
-            <label className="checkbox-row">
-              <input
-                type="checkbox"
-                checked={draft.required}
-                disabled={readOnly}
-                onChange={(event) => updateDraft(draft.id, { required: event.target.checked })}
-              />
-              <span>Required</span>
-            </label>
-            {draft.type === "measurement" ? (
-              <>
-                <label className="field">
-                  <span>Metric</span>
-                  <select
-                    value={draft.measurementType}
-                    disabled={readOnly}
-                    onChange={(event) =>
-                      updateDraft(draft.id, {
-                        measurementType: event.target
-                          .value as CheckinFieldDraft["measurementType"],
-                      })
-                    }
-                  >
-                    {measurementTypeOptions(draft.measurementType).map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
+            </div>
+            {draft.measurementType === "other" ? (
+              <div className="ck-field">
+                <label className="ck-lbl" htmlFor={`${panelId}-unit`}>
+                  Unit
                 </label>
-                {draft.measurementType === "other" ? (
-                  <label className="field">
-                    <span>Unit</span>
-                    <input
-                      value={draft.unit}
-                      disabled={readOnly}
-                      onChange={(event) => updateDraft(draft.id, { unit: event.target.value })}
-                    />
-                  </label>
-                ) : null}
-              </>
-            ) : null}
-            {draft.type === "photo_intent" ? (
-              <label className="field">
-                <span>Photo slot</span>
-                <select
-                  value={draft.photoSlot}
+                <input
+                  id={`${panelId}-unit`}
+                  className="ck-input"
+                  value={draft.unit}
                   disabled={readOnly}
-                  onChange={(event) =>
-                    updateDraft(draft.id, {
-                      photoSlot: event.target.value as CheckinFieldDraft["photoSlot"],
-                    })
-                  }
-                >
-                  <option value="front">Front</option>
-                  <option value="side">Side</option>
-                  <option value="back">Back</option>
-                  <option value="any">Any</option>
-                </select>
-              </label>
-            ) : null}
-            {draft.type === "scale_1_5" ? (
-              <>
-                <label className="field">
-                  <span>1 · low label</span>
-                  <input
-                    value={draft.lowLabel}
-                    disabled={readOnly}
-                    onChange={(event) => updateDraft(draft.id, { lowLabel: event.target.value })}
-                  />
-                </label>
-                <label className="field">
-                  <span>5 · high label</span>
-                  <input
-                    value={draft.highLabel}
-                    disabled={readOnly}
-                    onChange={(event) => updateDraft(draft.id, { highLabel: event.target.value })}
-                  />
-                </label>
-              </>
-            ) : null}
-            {draft.type === "single_choice" || draft.type === "multiple_choice" ? (
-              <fieldset className="templates-options">
-                <legend>Choices</legend>
-                {draft.options.map((option, optionIndex) => (
-                  <div key={option.id} className="templates-option-row">
-                    <input
-                      value={option.label}
-                      disabled={readOnly}
-                      placeholder={`Option ${optionIndex + 1}`}
-                      onChange={(event) =>
-                        updateDraft(draft.id, {
-                          options: draft.options.map((opt) =>
-                            opt.id === option.id
-                              ? { ...opt, label: event.target.value }
-                              : opt,
-                          ),
-                        })
-                      }
-                    />
-                  </div>
-                ))}
-              </fieldset>
-            ) : null}
-            {!readOnly ? (
-              <div className="form-question-toolbar" style={{ marginTop: "0.75rem" }}>
-                <Button
-                  variant="tertiary"
-                  disabled={index === 0}
-                  onClick={() => setDrafts((current) => moveCustomDraft(current, draft.id, -1))}
-                >
-                  Up
-                </Button>
-                <Button
-                  variant="tertiary"
-                  disabled={index === sections.custom.length - 1}
-                  onClick={() => setDrafts((current) => moveCustomDraft(current, draft.id, 1))}
-                >
-                  Down
-                </Button>
-                <Button
-                  variant="tertiary"
-                  onClick={() =>
-                    setDrafts((current) => {
-                      const at = current.findIndex((row) => row.id === draft.id);
-                      const next = [...current];
-                      next.splice(at + 1, 0, duplicateCheckinFieldDraft(draft));
-                      return next;
-                    })
-                  }
-                >
-                  Duplicate
-                </Button>
-                <Button
-                  variant="tertiary"
-                  onClick={() =>
-                    setDrafts((current) => current.filter((row) => row.id !== draft.id))
-                  }
-                >
-                  Delete
-                </Button>
+                  onChange={(event) => updateDraft(draft.id, { unit: event.target.value })}
+                />
               </div>
             ) : null}
+          </>
+        ) : null}
+        {draft.type === "photo_intent" ? (
+          <div className="ck-field">
+            <label className="ck-lbl" htmlFor={`${panelId}-slot`}>
+              Photo slot
+            </label>
+            <select
+              id={`${panelId}-slot`}
+              className="ck-input"
+              value={draft.photoSlot}
+              disabled={readOnly}
+              onChange={(event) =>
+                updateDraft(draft.id, {
+                  photoSlot: event.target.value as CheckinFieldDraft["photoSlot"],
+                })
+              }
+            >
+              <option value="front">Front</option>
+              <option value="side">Side</option>
+              <option value="back">Back</option>
+              <option value="any">Any</option>
+            </select>
           </div>
         ) : null}
-      </li>
+        {draft.type === "single_choice" || draft.type === "multiple_choice" ? (
+          <fieldset className="ck-choices">
+            <legend className="ck-lbl">Choices</legend>
+            {draft.options.map((option, optionIndex) => (
+              <input
+                key={option.id}
+                className="ck-input"
+                value={option.label}
+                disabled={readOnly}
+                aria-label={`Choice ${optionIndex + 1}`}
+                placeholder={`Option ${optionIndex + 1}`}
+                onChange={(event) =>
+                  updateDraft(draft.id, {
+                    options: draft.options.map((opt) =>
+                      opt.id === option.id ? { ...opt, label: event.target.value } : opt,
+                    ),
+                  })
+                }
+              />
+            ))}
+          </fieldset>
+        ) : null}
+        <div className="ck-field">
+          <label className="ck-lbl" htmlFor={`${panelId}-help`}>
+            Help text <span className="ck-opt">(optional)</span>
+          </label>
+          <input
+            id={`${panelId}-help`}
+            className="ck-input"
+            value={draft.helpText}
+            placeholder="Shown under the question"
+            disabled={readOnly}
+            onChange={(event) => updateDraft(draft.id, { helpText: event.target.value })}
+          />
+        </div>
+        <div className="ck-toggles">
+          <RequiredToggle
+            checked={draft.required}
+            disabled={readOnly}
+            onChange={(required) => updateDraft(draft.id, { required })}
+          />
+        </div>
+        {!readOnly ? (
+          <div className="ck-moves">
+            <Button
+              variant="quiet"
+              size="sm"
+              disabled={ownIndex === 0}
+              onClick={() => setDrafts((current) => moveCustomDraft(current, draft.id, -1))}
+            >
+              <ArrowUp className="ui-i" strokeWidth={1.75} aria-hidden />
+              Up
+            </Button>
+            <Button
+              variant="quiet"
+              size="sm"
+              disabled={ownIndex === sections.custom.length - 1}
+              onClick={() => setDrafts((current) => moveCustomDraft(current, draft.id, 1))}
+            >
+              <ArrowDown className="ui-i" strokeWidth={1.75} aria-hidden />
+              Down
+            </Button>
+            <Button
+              variant="quiet"
+              size="sm"
+              onClick={() => {
+                const copy = duplicateCheckinFieldDraft(draft);
+                setDrafts((current) => {
+                  const at = current.findIndex((entry) => entry.id === draft.id);
+                  const next = [...current];
+                  next.splice(at + 1, 0, copy);
+                  return next;
+                });
+                setSelectedId(`own:${copy.id}`);
+              }}
+            >
+              <Copy className="ui-i" strokeWidth={1.75} aria-hidden />
+              Duplicate
+            </Button>
+          </div>
+        ) : null}
+      </>
     );
   }
 
-  return (
-    <section className="page form-builder-page" data-testid="screen-TW-25">
-      <header className="form-builder-header">
-        <div>
-          <Link to="/templates/checkins">← Check-in forms</Link>
-          <h1>{detail.name}</h1>
-          <p className="muted">
-            {readOnly ? "FitBud base · read-only" : "Mine"} ·{" "}
-            {readOnly
-              ? `v${detail.latestVersionNumber}`
-              : `Draft · will save as v${nextVersion}`}
-          </p>
-        </div>
-        <div className="button-row">
-          {readOnly ? (
-            <Button variant="primary" onClick={() => setShowFork(true)}>
-              Fork to edit
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              disabled={acting}
-              onClick={() => void saveVersion()}
-            >
-              {acting ? "Saving…" : "Save version"}
-            </Button>
-          )}
-        </div>
+  function removeActive() {
+    if (!active || readOnly) return;
+    if (active.kind === "standard") {
+      const groupId = active.group.id;
+      setDrafts((current) => setStandardGroupKeys(current, groupId, []));
+    } else {
+      const id = active.draft.id;
+      setDrafts((current) => current.filter((row) => row.id !== id));
+    }
+    setSelectedId(null);
+  }
+
+  const propertiesCard = active ? (
+    <section className="ck-card" aria-label="Question details" data-testid="checkin-question-card">
+      <header className="ck-card-head">
+        <h2 className="ck-card-title">
+          Question {activeIndex + 1} of {total}
+        </h2>
+        <span className="ck-card-kind">
+          {active.kind === "standard"
+            ? active.group.charted
+              ? "Standard · charted"
+              : "Standard"
+            : ownQuestionFeedsChart(active.draft)
+              ? "Your question · charted"
+              : "Your question"}
+        </span>
+        {!readOnly ? (
+          <Button variant="danger-quiet" size="sm" onClick={removeActive}>
+            <Trash2 className="ui-i" strokeWidth={1.75} aria-hidden />
+            {active.kind === "standard" ? "Remove" : "Delete"}
+          </Button>
+        ) : null}
       </header>
-
-      {message ? (
-        <p className="form-success" role="status">
-          {message}
-        </p>
-      ) : null}
-      {saveError ? (
-        <p className="form-error" role="alert">
-          {saveError}
-        </p>
-      ) : null}
-
-      <div className="form-builder-panes">
-        <div className="form-builder-editor" tabIndex={0}>
-          {drafts.length === 0 && readOnly ? (
-            <EmptyState title="No questions yet." />
-          ) : (
-            <>
-              <div style={sectionHeadStyle}>
-                <h2 style={sectionTitleStyle}>Standard questions</h2>
-                <span style={{ fontSize: "0.8rem", color: "var(--mid-grey)" }}>
-                  Charted in Progress, same wording for every client
-                </span>
-              </div>
-              {sections.standard.length > 0 ? (
-                <ul className="form-question-list" aria-label="Standard questions">
-                  {sections.standard.map((entry, index) =>
-                    renderStandardRow(entry.group, entry.drafts, index),
-                  )}
-                </ul>
-              ) : (
-                <p className="muted">No standard questions on this form.</p>
-              )}
-              {!readOnly && missing.length > 0 ? (
-                <label className="field" style={{ maxWidth: 320, marginBottom: "1rem" }}>
-                  <span>Add a standard question</span>
-                  <select
-                    value=""
-                    onChange={(event) => {
-                      const id = event.target.value as StandardCheckinGroupId;
-                      if (!id) return;
-                      const group = missing.find((row) => row.id === id);
-                      if (!group) return;
-                      setDrafts((current) =>
-                        setStandardGroupKeys(current, id, group.keys),
-                      );
-                      setExpanded(id);
-                    }}
-                  >
-                    <option value="">Choose…</option>
-                    {missing.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.title}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              ) : null}
-
-              <div style={sectionHeadStyle}>
-                <h2 style={sectionTitleStyle}>Your own questions</h2>
-                <span style={{ fontSize: "0.8rem", color: "var(--mid-grey)" }}>
-                  Shown in check-in review. Not charted.
-                </span>
-              </div>
-              {sections.custom.length > 0 ? (
-                <ul className="form-question-list" aria-label="Your own questions">
-                  {sections.custom.map((draft, index) => renderOwnRow(draft, index))}
-                </ul>
-              ) : (
-                <p className="muted">No questions of your own yet.</p>
-              )}
-              {!readOnly ? (
-                <div className="button-row">
-                  <Button variant="secondary" onClick={addOwnQuestion}>
-                    <span aria-hidden>+ </span>Add your own question
-                  </Button>
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
-        <FormPhonePreview fields={previewFields} title={detail.name} />
+      <div className="ck-card-body" key={active.id}>
+        {active.kind === "standard" ? renderStandardCard(active) : renderOwnCard(active)}
       </div>
+    </section>
+  ) : (
+    <section className="ck-card" aria-label="Question details">
+      <p className="ck-empty">
+        {readOnly ? "No questions on this form." : "Add a question to start."}
+      </p>
+    </section>
+  );
 
+  const previewPane = (
+    <div className="ck-preview">
+      <header className="ck-preview-head">
+        <h2 className="builder-pane-title">Preview</h2>
+        <span className="ck-preview-note">As a client sees it</span>
+      </header>
+      <FormPhonePreview
+        fields={previewFields}
+        title={detail.name}
+        activeIds={active ? rowDraftIds(active) : undefined}
+      />
+    </div>
+  );
+
+  const countText = `${total} ${total === 1 ? "question" : "questions"}`;
+  const topbar = (
+    <>
+      <div className="builder-topbar-main">
+        <Link
+          className="builder-back"
+          to="/templates/checkins"
+          aria-label="Back to check-in forms"
+          title="Back to check-in forms"
+        >
+          <ArrowLeft className="ui-i" strokeWidth={1.75} aria-hidden />
+        </Link>
+        <div className="builder-titleline">
+          <div className="builder-title-row">
+            <h1 className="ck-title">{detail.name}</h1>
+            <span className="builder-draft-pill" data-testid="builder-version-pill">
+              <Pill
+                tone={readOnly ? "info" : "neutral"}
+                icon={
+                  readOnly ? (
+                    <Check className="ui-i" strokeWidth={2} aria-hidden />
+                  ) : (
+                    <Pencil className="ui-i" strokeWidth={1.75} aria-hidden />
+                  )
+                }
+              >
+                {readOnly
+                  ? `FitBud base · v${detail.latestVersionNumber}`
+                  : `Draft · v${nextVersion}`}
+              </Pill>
+            </span>
+            <p className="builder-status">
+              {readOnly ? "Read-only · " : ""}
+              {countText}
+            </p>
+          </div>
+        </div>
+      </div>
+      <div className="builder-topbar-actions">
+        {mode === "narrow" ? (
+          <Button
+            variant="secondary"
+            aria-expanded={previewOpen}
+            onClick={() => setPreviewOpen(true)}
+          >
+            <Eye className="ui-i" strokeWidth={1.75} aria-hidden />
+            Preview
+          </Button>
+        ) : null}
+        {readOnly ? (
+          <Button variant="primary" onClick={() => setShowFork(true)}>
+            Fork to edit
+          </Button>
+        ) : (
+          <Button variant="primary" disabled={acting} onClick={() => void saveVersion()}>
+            {acting ? "Saving…" : "Save version"}
+          </Button>
+        )}
+      </div>
+    </>
+  );
+
+  const banner =
+    message || saveError ? (
+      <>
+        {message ? (
+          <p className="builder-banner is-info" role="status">
+            {message}
+          </p>
+        ) : null}
+        {saveError ? (
+          <p className="builder-banner is-attention" role="alert">
+            {saveError}
+          </p>
+        ) : null}
+      </>
+    ) : null;
+
+  const smallScreen = (
+    <article className="ck-readonly" data-testid="checkin-readonly-summary">
+      <ul className="ck-rows" aria-label="Questions">
+        {rows.map((row) => (
+          <li key={row.id} className="ck-row">
+            <div className="ck-row-btn">
+              <RowIcon row={row} />
+              <span className="ck-row-copy">
+                <span className="ck-row-title">{rowTitle(row)}</span>
+                <span className="ck-row-sub">{rowSubtitle(row)}</span>
+              </span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </article>
+  );
+
+  const wide = mode === "wide";
+  return (
+    <section className="page builder-v3 checkin-builder-page" data-testid="screen-TW-25">
+      <BuilderLayout
+        mode={mode}
+        topbar={topbar}
+        banner={banner}
+        left={questionList}
+        center={wide ? propertiesCard : questionList}
+        right={wide ? previewPane : propertiesCard}
+        smallScreen={smallScreen}
+      />
+      <SidePanel open={previewOpen && mode === "narrow"} onClose={() => setPreviewOpen(false)} title="Preview">
+        {previewPane}
+      </SidePanel>
+      {picker?.mode === "add" ? (
+        <CheckinMeasurePicker
+          mode="add"
+          added={addedStandardKeys(drafts)}
+          onCancel={() => setPicker(null)}
+          onConfirm={(keys) => {
+            setDrafts((current) => addStandardKeys(current, keys));
+            const first = STANDARD_CHECKIN_GROUPS.find((group) =>
+              group.keys.some((key) => keys.includes(key)),
+            );
+            if (first) setSelectedId(`std:${first.id}`);
+            setPicker(null);
+          }}
+        />
+      ) : null}
+      {picker?.mode === "edit" ? (
+        <CheckinMeasurePicker
+          mode="edit"
+          groupId={picker.groupId}
+          selected={drafts.flatMap((draft) =>
+            draft.key &&
+            STANDARD_CHECKIN_GROUPS.find((group) => group.id === picker.groupId)!.keys.includes(
+              draft.key,
+            )
+              ? [draft.key]
+              : [],
+          )}
+          onCancel={() => setPicker(null)}
+          onConfirm={(keys) => {
+            const groupId = picker.groupId;
+            setDrafts((current) => setStandardGroupKeys(current, groupId, keys));
+            setPicker(null);
+          }}
+        />
+      ) : null}
       {showFork ? (
         <ForkTemplateModal
           templateId={detail.id}
@@ -931,5 +930,25 @@ export function CheckinTemplateBuilderPage() {
         />
       ) : null}
     </section>
+  );
+}
+
+function RequiredToggle({
+  checked,
+  disabled,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const id = useId();
+  return (
+    <div className="ck-toggle-row">
+      <Toggle checked={checked} disabled={disabled} labelledBy={id} onChange={onChange} />
+      <span id={id} className="ck-toggle-label">
+        Required
+      </span>
+    </div>
   );
 }
