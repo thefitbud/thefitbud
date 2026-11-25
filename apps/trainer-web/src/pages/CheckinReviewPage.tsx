@@ -38,7 +38,6 @@ import { Button } from "../components/Button";
 import { OverflowMenu } from "../components/OverflowMenu";
 import { StatusChip } from "../components/StatusChip";
 import { Pill } from "../components/ui/Pill";
-import { Seg } from "../components/ui/Seg";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import {
   EmptyState,
@@ -509,6 +508,7 @@ export function CheckinReviewPage() {
         </Link>
         <div className="checkin-review-title">
           <h1>
+            <span className="sr-only">Check-in review: </span>
             {context
               ? `Weekly check-in · ${checkinDateLabel}`
               : "Weekly check-in"}
@@ -793,13 +793,23 @@ export function CheckinReviewPage() {
                     <p className="checkin-field-label" id="outcome-l">
                       Outcome
                     </p>
-                    <Seg
-                      full
+                    <div
+                      className="ui-seg is-full"
+                      role="group"
                       aria-label="Outcome"
-                      options={OUTCOMES}
-                      value={outcome}
-                      onChange={setOutcome}
-                    />
+                    >
+                      {OUTCOMES.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          className={outcome === opt.value ? "is-on" : undefined}
+                          aria-pressed={outcome === opt.value}
+                          onClick={() => setOutcome(opt.value)}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="checkin-review-note field">
                       <label>
                         <span>Note to {firstName}</span>

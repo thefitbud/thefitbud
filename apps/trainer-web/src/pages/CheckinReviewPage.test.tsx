@@ -398,3 +398,15 @@ describe("CheckinReviewPage layout (W13-7)", () => {
     expect(screen.queryByText(/to review$/)).toBeNull();
   });
 });
+
+describe("CheckinReviewPage structure other suites rely on (W13-7)", () => {
+  it("keeps the Check-in review heading name and the Outcome button group", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    render(pageTree(0));
+    expect(await screen.findByRole("heading", { level: 1, name: /Check-in review/ })).toBeTruthy();
+    const group = screen.getByRole("group", { name: "Outcome" });
+    const labels = Array.from(group.querySelectorAll("button")).map((b) => b.textContent);
+    expect(labels).toEqual(["Acknowledged", "Needs follow-up", "Adjust coaching"]);
+    expect(group.querySelector("button[aria-pressed='true']")?.textContent).toBe("Acknowledged");
+  });
+});
