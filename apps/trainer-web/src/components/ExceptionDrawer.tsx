@@ -17,6 +17,7 @@ import {
   ClipboardCheck,
   Clock,
   Dumbbell,
+  Inbox,
   Info,
   Moon,
   Utensils,
@@ -55,8 +56,10 @@ import { PanelHeader, type PanelNav } from "./side-panel/PanelHeader";
 import { ResolveForm } from "./side-panel/ResolveForm";
 import {
   clientTimeLabel,
+  nudgeHintTone,
   nudgeLimitNotice,
   quietHoursNotice,
+  remindHelper,
   resolveLockHelper,
 } from "./side-panel/nudgeNotices";
 import {
@@ -378,6 +381,7 @@ export function ExceptionDrawer({
   /** True while Resolve is optimistic and Undo can cancel before POST. */
   const [resolveUndoPending, setResolveUndoPending] = useState(false);
   const [reminderLine, setReminderLine] = useState<string | null>(null);
+  const [reminderLabel, setReminderLabel] = useState<string | null>(null);
   const [nudgeHint, setNudgeHint] = useState<string | null>(null);
   /** Reminders drawer opened from the Signals line (frame 181). */
   const [remindersOpen, setRemindersOpen] = useState(false);
@@ -616,6 +620,7 @@ export function ExceptionDrawer({
         const resp = await stage1Api.getResponsiveness(workspaceRid, 14);
         if (cancelled) return;
         setReminderLine(compactHeadline(resp, "their"));
+        setReminderLabel(resp.label);
         setQuietWindow({
           start: resp.quietHoursStart ?? null,
           end: resp.quietHoursEnd ?? null,
@@ -623,6 +628,7 @@ export function ExceptionDrawer({
       } catch {
         if (!cancelled) {
           setReminderLine(null);
+          setReminderLabel(null);
           setQuietWindow(null);
         }
       }
@@ -1186,7 +1192,13 @@ export function ExceptionDrawer({
     nudgeBlockedUntil != null && nudgeNow < nudgeBlockedUntil;
   const isSkipped =
     detail?.type === "skipped_meal" || detail?.type === "skipped_workout";
-  const showNudge = Boolean(detail && !readOnly && !isSkipped);
+  // A meal logged later is already done: there is nothing to remind about.
+  const isLoggedLater =
+    detail?.type === "meal_logged_later" ||
+    detail?.details?.loggedLater === true;
+  const showNudge = Boolean(
+    detail && !readOnly && !isSkipped && !isLoggedLater,
+  );
   const whatsappHref = clientWhatsappHref({
     phoneE164: clientWhatsappE164,
     name: clientName,
@@ -1230,9 +1242,10 @@ export function ExceptionDrawer({
     : null;
   const meta = headerMeta(clientHeader, openCount);
   const firstName = clientName.split(" ")[0] ?? clientName;
-  const nudgeHelperText = clientHeader
-    ? `Sends ${firstName} a push notification`
-    : "Sends your client a push notification";
+  const nudgeHelperText = remindHelper({
+    firstName: clientHeader ? firstName : null,
+    label: reminderLabel,
+  });
   // Derived every render so it cannot stay true if the drawer unmounts
   // another way (the panel's key handler reads it).
   remindersOpenRef.current = Boolean(remindersOpen && workspaceRid);
@@ -1604,8 +1617,21 @@ export function ExceptionDrawer({
                     </p>
                   ) : null}
                   {nudgeHint ? (
-                    <p className="sp-signal" role="status">
-                      {nudgeHint}
+                    <p
+                      className={`sp-notice sp-notice-${nudgeHintTone(nudgeHint)}`}
+                      role="status"
+                      data-testid="panel-nudge-result"
+                    >
+                      {nudgeHintTone(nudgeHint) === "info" ? (
+                        <Inbox size={16} strokeWidth={1.75} aria-hidden />
+                      ) : nudgeHintTone(nudgeHint) === "done" ? (
+                        <CheckCircle2 size={16} strokeWidth={1.75} aria-hidden />
+                      ) : nudgeHintTone(nudgeHint) === "warn" ? (
+                        <AlertCircle size={16} strokeWidth={1.75} aria-hidden />
+                      ) : (
+                        <Info size={16} strokeWidth={1.75} aria-hidden />
+                      )}
+                      <span>{nudgeHint}</span>
                     </p>
                   ) : null}
                 </section>

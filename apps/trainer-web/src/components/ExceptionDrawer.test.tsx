@@ -1377,7 +1377,8 @@ describe("Side panel bulk select, confirm, partial and Undo (Z7-8)", () => {
     )!;
     expect(mealChange.querySelector("input")).toBeNull();
     expect(mealChange.textContent).toMatch(/resolve on its own/);
-    expect(screen.getByText("Meal change · resolved on its own")).toBeTruthy();
+    // The row says it; the header no longer repeats it (FLOW 6.8).
+    expect(screen.queryByText("Meal change · resolved on its own")).toBeNull();
     // DS2: compatible rows first, the individual-only row last.
     const rowsText = Array.from(list.querySelectorAll("li")).map((li) => li.textContent ?? "");
     expect(rowsText.at(-1)).toMatch(/Meal change/);

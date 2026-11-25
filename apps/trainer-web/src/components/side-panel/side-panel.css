@@ -695,10 +695,6 @@
   cursor: pointer;
 }
 
-.sp-bulk-hint {
-  font-size: 12px;
-  color: var(--ink-500, #5b616b);
-}
 
 .sp-bulk-check {
   flex: none;

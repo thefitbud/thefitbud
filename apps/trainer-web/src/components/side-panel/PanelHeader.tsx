@@ -37,6 +37,8 @@ export function PanelHeader({
   onClose: () => void;
 }) {
   const showResolvedChip = Boolean(nav && currentResolved);
+  // One item: no pager and no dashes, there is nowhere to step to.
+  const stepper = Boolean(nav && nav.total > 1);
   return (
     <header className="sp-head">
       <div className="sp-head-row">
@@ -50,7 +52,7 @@ export function PanelHeader({
           <h2 className="sp-name">{clientName}</h2>
           {meta ? <p className="sp-meta">{meta}</p> : null}
         </div>
-        {nav ? (
+        {nav && stepper ? (
           <div className="sp-nav" role="group" aria-label="Items for this client">
             <button
               type="button"
@@ -85,9 +87,9 @@ export function PanelHeader({
           <X size={18} strokeWidth={1.75} aria-hidden />
         </button>
       </div>
-      {nav || severity || showResolvedChip ? (
+      {stepper || severity || showResolvedChip ? (
         <div className="sp-head-progress">
-          {nav ? (
+          {nav && stepper ? (
             <ol className="sp-dashes" aria-hidden="true">
               {nav.resolved.map((done, i) => (
                 <li

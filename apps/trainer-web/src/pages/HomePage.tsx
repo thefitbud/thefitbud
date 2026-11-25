@@ -1132,7 +1132,7 @@ export function HomePage() {
                         <Button
                           variant="tinted"
                           className="button-sm"
-                          onClick={() => openException(primary.id)}
+                          onClick={() => openClientPanel(group.relationshipId)}
                           onKeyDown={stopRowControl}
                         >
                           Review

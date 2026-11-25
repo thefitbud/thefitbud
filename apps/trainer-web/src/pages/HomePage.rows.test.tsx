@@ -208,8 +208,9 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     fireEvent.keyDown(review, { key: "Enter" });
     expect(loc()).not.toContain("client=");
     fireEvent.click(review);
-    expect(loc()).toContain(`exception=${ROHAN_EXC}`);
-    expect(loc()).not.toContain("client=");
+    // W13-11 (FLOW 6.5): Review opens list mode, the same panel as the row.
+    expect(loc()).toContain(`client=${ROHAN}`);
+    expect(loc()).not.toContain("exception=");
     expect(screen.getByRole("dialog", { name: "Exception" })).toBeTruthy();
   });
 
@@ -228,7 +229,7 @@ describe("HomePage rows and count cards (Z7-2)", () => {
     // A touch tap: pointerdown does not select, the click does (so it must bubble).
     fireEvent.pointerDown(review, { pointerType: "touch" });
     fireEvent.click(review, { detail: 1 });
-    expect(loc()).toContain("exception=4b0e7c2a");
+    expect(loc()).toContain(`client=${MEERA}`);
     expect(screen.getAllByRole("row")[1]!.className).toContain("is-focused");
     expect(screen.getAllByRole("row")[0]!.className).not.toContain("is-focused");
   });
