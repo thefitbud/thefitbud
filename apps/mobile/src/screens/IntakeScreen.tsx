@@ -1,6 +1,7 @@
-import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
+import { ThemeScope, createThemedStyles, useTheme } from "../providers/ThemeProvider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { ActivityIndicator, BackHandler, Platform, Pressable, SafeAreaView, ScrollView, View } from "react-native";
+import { Minus, Plus, X } from "lucide-react-native";
 import { Text } from "../components/Text";
 import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
 import { onboardingAnswerErrors } from "@fitbud/core";
@@ -14,18 +15,13 @@ import { spacing } from "@fitbud/ui-mobile";
 import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Button } from "../components/Button";
+import { BottomSheet } from "../components/BottomSheet";
 import { Field } from "../components/Field";
 import {
-  Card2,
   DayPills,
-  M2Field,
   M2InputRow,
-  M2Screen,
-  M2TopNav,
-  Progress5,
   QuestionHeading,
   RadioCard,
-  SavedBadge,
   YesNoToggle,
   NumberStepper,
 } from "../components/m2";
@@ -35,21 +31,20 @@ import {
 } from "../dev/captureBridge";
 import { createIdempotencyKey } from "../lib/idempotency";
 import { reportError } from "../lib/reportError";
+import { groupIntakeSteps } from "./intakeSteps";
 import {
   intakeControlForField,
   parseNumberAnswer,
   toggleSelectedOption,
 } from "./intakeFields";
 
-const STEP_TITLES = [
-  "About you",
-  "Your routine",
-  "Food habits",
-  "Health",
-  "Goals",
-] as const;
-
-const TOTAL_STEPS = STEP_TITLES.length;
+/** Sheet copy for the TR-03 close button (D-W14-46). */
+const FINISH_LATER_BODY = "Your answers are saved. Sign in again any time to carry on.";
+const FINISH_LATER_NOTHING_SAVED_BODY = "Sign out for now? You can sign in again any time to carry on.";
+const FINISH_LATER_UNSAVED_BODY = "We couldn't save your last answers. Sign out anyway?";
+const NO_QUESTIONS_COPY = "Your coach hasn't added any questions yet.";
+/** Where the first tap on an unanswered sleep stepper starts from; nothing is stored until a tap. */
+const SLEEP_START_HOURS = 6.5;
 
 /** Line under a question the trainee still has to answer (Z14-45). */
 const REQUIRED_ANSWER_COPY = "Answer this question to continue.";
@@ -123,16 +118,6 @@ function stringList(value: unknown): string[] {
     : [];
 }
 
-function chunkFields(fields: OnboardingFieldDefinition[], steps: number) {
-  if (fields.length === 0) return Array.from({ length: steps }, () => []);
-  const size = Math.max(1, Math.ceil(fields.length / steps));
-  const groups: OnboardingFieldDefinition[][] = [];
-  for (let i = 0; i < steps; i++) {
-    groups.push(fields.slice(i * size, (i + 1) * size));
-  }
-  return groups;
-}
-
 function isDayField(field: OnboardingFieldDefinition): boolean {
   const label = field.label.toLowerCase();
   return label.includes("day") && label.includes("train");
@@ -156,7 +141,8 @@ function hasRoutineTypedFields(fields: OnboardingFieldDefinition[]): boolean {
 
 function IntakeScreenBody({ relationshipId }: Props) {
   const styles = useStyles();
-  const { api, refreshSession } = useAuth();
+  const theme = useTheme();
+  const { api, refreshSession, signOut } = useAuth();
   const [definition, setDefinition] = useState<OnboardingFormVersion | null>(null);
   const [answers, setAnswers] = useState<OnboardingAnswers>({});
   const [numberDrafts, setNumberDrafts] = useState<Record<string, string>>({});
@@ -170,6 +156,9 @@ function IntakeScreenBody({ relationshipId }: Props) {
   const captureMode = isCaptureModeEnabled();
   const [stepIndex, setStepIndex] = useState(0);
   const [savedFlash, setSavedFlash] = useState(false);
+  const [closeOpen, setCloseOpen] = useState(false);
+  const [closeSaveFailed, setCloseSaveFailed] = useState(false);
+  const [closeNothingToSave, setCloseNothingToSave] = useState(false);
   const [useCaptureRoutine, setUseCaptureRoutine] = useState(false);
   const submitIdempotencyKey = useRef(createIdempotencyKey());
   const captureStepApplied = useRef(false);
@@ -177,6 +166,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     setErrorMessage(null);
+    setNumberDrafts({});
     try {
       const currentDefinition = await api.getCurrentOnboardingForm(relationshipId);
       setDefinition(currentDefinition);
@@ -213,6 +203,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
     try {
       const existing = await api.getOnboardingResponse(relationshipId);
       setAnswers(existing.answers);
+      setNumberDrafts({});
       setVersion(existing.version);
       setStatus(existing.status);
     } catch (error) {
@@ -249,20 +240,21 @@ function IntakeScreenBody({ relationshipId }: Props) {
       setUseCaptureRoutine(true);
       setAnswers((current) => ({ ...CAPTURE_ROUTINE_ANSWERS, ...current }));
     }
-    setStepIndex(Math.min(TOTAL_STEPS - 1, Math.max(0, target)));
-    setSavedFlash(true);
+    const last = groupIntakeSteps(definition.fields).length - 1;
+    setStepIndex(Math.min(last, Math.max(0, target)));
     captureStepApplied.current = true;
   }, [captureMode, definition, loading]);
 
   const fieldGroups = useMemo(() => {
-    const base = definition?.fields ?? [];
+    const groups = groupIntakeSteps(definition?.fields ?? []);
     if (useCaptureRoutine) {
-      const groups = chunkFields(base, TOTAL_STEPS);
-      groups[1] = CAPTURE_ROUTINE_FIELDS;
-      return groups;
+      if (groups.length > 1) groups[1] = CAPTURE_ROUTINE_FIELDS;
+      else groups.push(CAPTURE_ROUTINE_FIELDS);
     }
-    return chunkFields(base, TOTAL_STEPS);
+    return groups;
   }, [definition?.fields, useCaptureRoutine]);
+  const totalSteps = fieldGroups.length;
+  const readOnly = status === "submitted";
 
   function updateAnswer(fieldId: string, value: OnboardingAnswers[string] | undefined) {
     setFieldErrors((current) => {
@@ -359,12 +351,12 @@ function IntakeScreenBody({ relationshipId }: Props) {
   }
 
   async function goNext() {
-    if (stepIndex >= TOTAL_STEPS - 1) {
+    if (stepIndex >= totalSteps - 1) {
       await submit();
       return;
     }
     await saveDraft();
-    setStepIndex((s) => Math.min(TOTAL_STEPS - 1, s + 1));
+    setStepIndex((s) => Math.min(totalSteps - 1, s + 1));
   }
 
   function renderField(field: OnboardingFieldDefinition, readOnly: boolean) {
@@ -374,50 +366,79 @@ function IntakeScreenBody({ relationshipId }: Props) {
     if (control.kind === "short_text" || control.kind === "long_text") {
       if (control.kind === "long_text") {
         return (
-          <Field
-            key={field.id}
-            label={field.label}
+          <View key={field.id}>
+            <QuestionHeading>{field.label}</QuestionHeading>
+            <Field
+            label=""
+            accessibilityLabel={field.label}
             hint={field.helpText}
             value={typeof stored === "string" ? stored : ""}
             onChangeText={(value) => updateAnswer(field.id, value)}
             multiline
             editable={!readOnly}
             maxLength={control.maxLength}
-          />
+            />
+          </View>
         );
       }
       return (
-        <M2Field key={field.id} label={field.label} help={field.helpText}>
+        <View key={field.id}>
+          <QuestionHeading>{field.label}</QuestionHeading>
           <M2InputRow
             value={typeof stored === "string" ? stored : ""}
             onChangeText={(value) => updateAnswer(field.id, value)}
             inputProps={{
               editable: !readOnly,
               maxLength: control.maxLength,
+              accessibilityLabel: field.label,
             }}
           />
-        </M2Field>
+          {field.helpText ? <Text style={styles.hint}>{field.helpText}</Text> : null}
+        </View>
       );
     }
 
     if (control.kind === "number") {
       if (isSleepField(field)) {
-        const num =
-          typeof stored === "number"
-            ? stored
-            : parseNumberAnswer(numberDrafts[field.id] ?? "") ?? 6.5;
+        const onChange = (next: number) => updateAnswer(field.id, next);
         return (
           <View key={field.id}>
             <QuestionHeading>{field.label}</QuestionHeading>
-            <NumberStepper
-              value={num}
-              unit="hours"
-              min={4}
-              max={12}
-              step={0.5}
-              disabled={readOnly}
-              onChange={(next) => updateAnswer(field.id, next)}
-            />
+            {typeof stored === "number" ? (
+              <NumberStepper
+                value={stored}
+                unit="hours"
+                min={4}
+                max={12}
+                step={0.5}
+                disabled={readOnly}
+                onChange={onChange}
+              />
+            ) : (
+              <View style={styles.sleepEmptyCard}>
+                <Text style={styles.sleepEmptyValue}>—</Text>
+                <View style={styles.sleepEmptyStepper}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Decrease"
+                    disabled={readOnly}
+                    onPress={() => onChange(SLEEP_START_HOURS - 0.5)}
+                    style={styles.sleepEmptyBtn}
+                  >
+                    <Minus size={18} color={theme.colors.ink} strokeWidth={2.2} />
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Increase"
+                    disabled={readOnly}
+                    onPress={() => onChange(SLEEP_START_HOURS + 0.5)}
+                    style={styles.sleepEmptyBtn}
+                  >
+                    <Plus size={18} color={theme.colors.ink} strokeWidth={2.2} />
+                  </Pressable>
+                </View>
+              </View>
+            )}
           </View>
         );
       }
@@ -425,16 +446,22 @@ function IntakeScreenBody({ relationshipId }: Props) {
         numberDrafts[field.id] ??
         (typeof stored === "number" ? String(stored) : "");
       return (
-        <M2Field key={field.id} label={field.label} help={field.helpText}>
+        <View key={field.id}>
+          <QuestionHeading>{field.label}</QuestionHeading>
           <M2InputRow
             value={draft}
             onChangeText={(value) => {
               setNumberDrafts((current) => ({ ...current, [field.id]: value }));
               updateAnswer(field.id, parseNumberAnswer(value));
             }}
-            inputProps={{ keyboardType: "decimal-pad", editable: !readOnly }}
+            inputProps={{
+              keyboardType: "decimal-pad",
+              editable: !readOnly,
+              accessibilityLabel: field.label,
+            }}
           />
-        </M2Field>
+          {field.helpText ? <Text style={styles.hint}>{field.helpText}</Text> : null}
+        </View>
       );
     }
 
@@ -526,67 +553,116 @@ function IntakeScreenBody({ relationshipId }: Props) {
     );
   }
 
+  /** Save the current answers before the "Finish later?" sheet opens (D-W14-46). */
+  async function openCloseSheet() {
+    setCloseSaveFailed(false);
+    setCloseNothingToSave(!definition || loading);
+    if (definition && !readOnly && !loading) {
+      setSaving(true);
+      try {
+        const saved = await api.saveOnboardingDraft(relationshipId, {
+          answers,
+          expectedVersion: version,
+        });
+        setAnswers(saved.answers);
+        setVersion(saved.version);
+        setStatus(saved.status);
+        setSavedFlash(true);
+      } catch (error) {
+        reportError("IntakeScreen.saveForClose", error);
+        setCloseSaveFailed(true);
+      } finally {
+        setSaving(false);
+      }
+    }
+    setCloseOpen(true);
+  }
+
+  // Android hardware back (D-W14-24): the sheet on step 1, else the step before.
+  const backState = useRef({ stepIndex, closeOpen, openCloseSheet });
+  backState.current = { stepIndex, closeOpen, openCloseSheet };
+  useEffect(() => {
+    if (Platform.OS !== "android") return undefined;
+    const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      const state = backState.current;
+      if (state.closeOpen) setCloseOpen(false);
+      else if (state.stepIndex > 0) setStepIndex((s) => Math.max(0, s - 1));
+      else void state.openCloseSheet();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
+
+  const closeSheet = (
+    <BottomSheet
+      visible={closeOpen}
+      title="Finish later?"
+      subtitle={
+        closeSaveFailed
+          ? FINISH_LATER_UNSAVED_BODY
+          : closeNothingToSave
+            ? FINISH_LATER_NOTHING_SAVED_BODY
+            : FINISH_LATER_BODY
+      }
+      onDismiss={() => setCloseOpen(false)}
+    >
+      <Button label="Keep going" onPress={() => setCloseOpen(false)} />
+      <Button
+        label="Sign out"
+        variant="outline"
+        onPress={() => {
+          setCloseOpen(false);
+          signOut();
+        }}
+      />
+    </BottomSheet>
+  );
+
   if (loading) {
     return (
-      <M2Screen>
-        <Text style={styles.muted}>Loading…</Text>
-      </M2Screen>
+      <SafeAreaView style={styles.safe}>
+        <IntakeHeader onClose={() => void openCloseSheet()} />
+        <View style={styles.loading} accessibilityLabel="Loading">
+          <ActivityIndicator size="large" color={theme.colors.brand} />
+        </View>
+        {closeSheet}
+      </SafeAreaView>
     );
   }
 
   if (!definition) {
     return (
-      <M2Screen>
-        {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
-        <Button label="Retry" onPress={() => void load()} />
-</M2Screen>
+      <SafeAreaView style={styles.safe}>
+        <IntakeHeader onClose={() => void openCloseSheet()} />
+        <View style={styles.body}>
+          {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
+          <Button label="Try again" onPress={() => void load()} />
+        </View>
+        {closeSheet}
+      </SafeAreaView>
     );
   }
 
-  const readOnly = status === "submitted";
   const stepNumber = stepIndex + 1;
-  const stepTitle = STEP_TITLES[stepIndex] ?? "Getting started";
-  const nextTitle = STEP_TITLES[stepIndex + 1];
-  const footerLabel =
-    stepIndex >= TOTAL_STEPS - 1
-      ? "Submit intake"
-      : nextTitle
-        ? `Next: ${nextTitle}`
-        : "Continue";
-
-  const footer = !readOnly ? (
-    <Button
-      label={footerLabel}
-      loading={saving || submitting}
-      onPress={() => {
-        void goNext();
-      }}
-    />
-  ) : null;
+  const isLast = stepIndex >= totalSteps - 1;
+  const stepFields = fieldGroups[stepIndex] ?? [];
 
   return (
-    <M2Screen footer={footer}>
-      <M2TopNav
-        title="Getting to know you"
-        onBack={
-          stepIndex > 0
-            ? () => setStepIndex((s) => Math.max(0, s - 1))
-            : undefined
-        }
-        right={savedFlash ? <SavedBadge /> : null}
+    <SafeAreaView style={styles.safe}>
+      <IntakeHeader
+        onClose={() => void openCloseSheet()}
+        step={stepNumber}
+        total={totalSteps}
       />
-      <Progress5 step={stepNumber} />
-      <View style={styles.stepLabelRow}>
-        <Text style={styles.stepTitle}>
-          <Text style={styles.stepTitleBold}>{stepTitle}</Text>
-        </Text>
-        <Text style={styles.stepCount}>{stepNumber} of {TOTAL_STEPS}</Text>
-      </View>
+      <ScrollView
+        style={styles.flex}
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
 
-      {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
-
-      {fieldGroups[stepIndex]?.length
-        ? fieldGroups[stepIndex]!.map((field) => (
+        {stepFields.length > 0 ? (
+          stepFields.map((field) => (
             <View key={field.id}>
               {renderField(field, readOnly)}
               {fieldErrors[field.id] ? (
@@ -594,15 +670,78 @@ function IntakeScreenBody({ relationshipId }: Props) {
               ) : null}
             </View>
           ))
-        : (
-          <Card2>
-            <Text style={styles.muted}>
-              No questions on this step. Tap continue.
-            </Text>
-          </Card2>
+        ) : (
+          <Text style={styles.muted}>{NO_QUESTIONS_COPY}</Text>
         )}
+      </ScrollView>
+      {!readOnly ? (
+        <View style={styles.footer}>
+          <View style={styles.footerRow}>
+            {stepIndex > 0 ? (
+              <View style={styles.footerBack}>
+                <Button
+                  label="Back"
+                  variant="secondary"
+                  disabled={saving || submitting}
+                  onPress={() => setStepIndex((s) => Math.max(0, s - 1))}
+                />
+              </View>
+            ) : null}
+            <View style={styles.footerMain}>
+              <Button
+                label={isLast ? "Submit intake" : "Continue"}
+                loading={saving || submitting}
+                onPress={() => {
+                  void goNext();
+                }}
+              />
+            </View>
+          </View>
+          {savedFlash ? <Text style={styles.savedLine}>Answers saved</Text> : null}
+        </View>
+      ) : null}
+      {closeSheet}
+    </SafeAreaView>
+  );
+}
 
-</M2Screen>
+/** TR-03 header: ✕ at the left, title and "Step n of N" centred, one progress bar. */
+function IntakeHeader({
+  onClose,
+  step,
+  total,
+}: {
+  onClose: () => void;
+  step?: number;
+  total?: number;
+}) {
+  const theme = useTheme();
+  const styles = useStyles();
+  const showStep = step !== undefined && total !== undefined;
+  return (
+    <View style={styles.header}>
+      <View style={styles.headerRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+          onPress={onClose}
+          hitSlop={4}
+          style={styles.closeBtn}
+        >
+          <X size={20} color={theme.colors.ink2} strokeWidth={2.4} />
+        </Pressable>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Getting to know you</Text>
+          {showStep ? (
+            <Text style={styles.headerSub}>{`Step ${step} of ${total}`}</Text>
+          ) : null}
+        </View>
+        <View style={styles.closeSpacer} />
+      </View>
+      <View style={styles.track} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <View style={[styles.fill, { width: showStep ? `${(step / total) * 100}%` : "0%" }]} />
+      </View>
+    </View>
   );
 }
 
@@ -617,42 +756,81 @@ const useStyles = createThemedStyles((t) => ({
     lineHeight: 18,
     marginTop: spacing.xs,
   },
+  sleepEmptyCard: {
+    alignItems: "center",
+    backgroundColor: t.colors.card,
+    borderColor: t.colors.line,
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 10,
+  },
+  sleepEmptyValue: { color: t.colors.ink3, fontSize: 22, fontWeight: "700" },
+  sleepEmptyStepper: {
+    borderColor: t.colors.line,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    overflow: "hidden",
+  },
+  sleepEmptyBtn: { alignItems: "center", height: 44, justifyContent: "center", width: 44 },
   hint: {
     color: t.colors.ink3,
     fontSize: 13,
     lineHeight: 18,
     marginBottom: spacing.sm,
   },
-  stepLabelRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: spacing.sm,
-    paddingHorizontal: 4,
-  },
-  stepTitle: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  stepTitleBold: {
-    color: t.colors.brand,
-    fontWeight: "700",
-  },
-  stepCount: {
-    color: t.colors.ink3,
-    fontSize: 13,
-    fontWeight: "600",
-  },
-  saveDraft: {
+  flex: { flex: 1 },
+  safe: { flex: 1, backgroundColor: t.colors.bgPlain },
+  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  loading: { alignItems: "center", flex: 1, justifyContent: "center" },
+  scrollContent: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },
+  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  headerRow: { alignItems: "center", flexDirection: "row", minHeight: 48 },
+  closeBtn: {
     alignItems: "center",
-    marginTop: spacing.lg,
-    minHeight: 44,
+    backgroundColor: t.colors.fill,
+    borderRadius: 22,
+    height: 44,
     justifyContent: "center",
+    width: 44,
   },
-  saveDraftText: {
-    color: t.colors.brand,
-    fontSize: 15,
-    fontWeight: "600",
+  closeSpacer: { height: 44, width: 44 },
+  headerCenter: { alignItems: "center", flex: 1, paddingHorizontal: spacing.sm },
+  headerTitle: {
+    color: t.colors.ink,
+    fontSize: 17,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  headerSub: { color: t.colors.ink3, fontSize: 13, marginTop: 2 },
+  track: {
+    backgroundColor: t.colors.fill2,
+    borderRadius: 2,
+    height: 4,
+    marginTop: spacing.sm,
+    overflow: "hidden",
+  },
+  fill: { backgroundColor: t.colors.brand, borderRadius: 2, height: 4 },
+  footer: {
+    backgroundColor: t.colors.glass,
+    borderTopColor: t.colors.line,
+    borderTopWidth: 1,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+  },
+  footerRow: { flexDirection: "row", gap: spacing.md },
+  footerBack: { flex: 1 },
+  footerMain: { flex: 2 },
+  savedLine: {
+    color: t.colors.ink3,
+    fontSize: 13,
+    marginTop: spacing.sm,
+    textAlign: "center",
   },
 }));
 
