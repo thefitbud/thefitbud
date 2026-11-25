@@ -42,6 +42,7 @@ import { changeChipLabel,
   earlyFinishBanner,
   sessionExerciseCards,
   sessionMetrics,
+  sessionNoteText,
   sessionStatus,
   sessionStatusLabel,
   sessionSubtitle,
@@ -228,6 +229,7 @@ export function SessionDetailScreen({
   const openProfile =
     onOpenClient && profileId ? () => onOpenClient(profileId) : undefined;
   const status = execution ? sessionStatus(execution) : "finished";
+  const noteText = execution ? sessionNoteText(execution) : null;
   const metrics = useMemo(
     () => (execution ? sessionMetrics(execution) : []),
     [execution],
@@ -410,6 +412,15 @@ export function SessionDetailScreen({
               </View>
             ))}
           </View>
+
+          {noteText ? (
+            <View style={styles.card} testID="session-trainee-note">
+              <Text style={styles.cardTitle}>{`Note from ${first}`}</Text>
+              <Text selectable style={styles.noteBody}>
+                {noteText}
+              </Text>
+            </View>
+          ) : null}
 
           {earlyBanner ? (
             <View style={styles.warnBanner} accessibilityRole="summary">
@@ -684,6 +695,12 @@ const useStyles = createThemedStyles((t) => ({
     fontFamily: fontFamilySemiBold,
     fontSize: 16,
     fontWeight: "700",
+  },
+  noteBody: {
+    color: t.colors.ink,
+    fontSize: 15,
+    lineHeight: 21,
+    marginTop: 6,
   },
   cardPlan: {
     color: t.colors.ink3,

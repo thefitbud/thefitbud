@@ -16,10 +16,13 @@ import { saveWorkoutRating } from "./rpeRating";
 
 const EXECUTION = "00000000-0000-4000-8000-000000000900";
 
-function fakeServer(initial: { recordVersion: number; sessionRpe: number | null }) {
+function fakeServer(initial: { recordVersion: number; sessionRpe: number | null; sessionNote?: string | null }) {
   const state = {
     recordVersion: initial.recordVersion,
     sessionRpe: initial.sessionRpe,
+    sessionNote: (initial.sessionNote ?? null) as string | null,
+    sessionNoteOnBump: undefined as string | null | undefined,
+    sentBodies: [] as object[],
     finished: false,
     windowOpen: true,
     online: true,
@@ -52,13 +55,15 @@ function fakeServer(initial: { recordVersion: number; sessionRpe: number | null 
             return result(mutation, {});
           }
           if (mutation.operation === "workout.feedback") {
-            const sent = (mutation.payload as { body: { rpe: number | null; recordVersion: number } })
+            const sent = (mutation.payload as { body: { rpe?: number | null; note?: string | null; recordVersion: number } })
               .body;
             state.feedbackVersions.push(sent.recordVersion);
+            state.sentBodies.push(sent);
             if (state.bumpBeforeFeedback > 0) {
               state.recordVersion += state.bumpBeforeFeedback;
               state.bumpBeforeFeedback = 0;
               if (state.sessionRpeOnBump !== undefined) state.sessionRpe = state.sessionRpeOnBump;
+              if (state.sessionNoteOnBump !== undefined) state.sessionNote = state.sessionNoteOnBump;
             }
             if (!state.windowOpen) {
               return result(mutation, {
@@ -76,7 +81,8 @@ function fakeServer(initial: { recordVersion: number; sessionRpe: number | null 
               });
             }
             state.recordVersion += 1;
-            state.sessionRpe = sent.rpe;
+            if (sent.rpe !== undefined) state.sessionRpe = sent.rpe;
+            if (sent.note !== undefined) state.sessionNote = sent.note;
             return result(mutation, {});
           }
           return result(mutation, {});
@@ -93,6 +99,7 @@ function fakeServer(initial: { recordVersion: number; sessionRpe: number | null 
         id: EXECUTION,
         recordVersion: state.recordVersion,
         sessionRpe: state.sessionRpe,
+        sessionNote: state.sessionNote,
       } as WorkoutExecution;
     }),
   };
@@ -117,9 +124,9 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
     await finish(sync);
     expect(server.state.recordVersion).toBe(4);
 
-    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, rpe: 7 });
+    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, change: { rpe: 7 } });
 
-    expect(outcome).toEqual({ kind: "saved", rpe: 7 });
+    expect(outcome).toEqual({ kind: "saved", rpe: 7, note: null });
     // The old code sent phone version 1 + 1 = 2 here and got a 409.
     expect(server.state.feedbackVersions).toEqual([4]);
     expect(server.state.sessionRpe).toBe(7);
@@ -138,7 +145,7 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
       sync,
       api: server.api,
       executionId: EXECUTION,
-      rpe: 8,
+      change: { rpe: 8 },
       progress,
     });
     await vi.waitFor(() => expect(progress).toHaveBeenCalledWith("held"));
@@ -149,7 +156,7 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
     await sync.pushPending();
     const outcome = await pending;
 
-    expect(outcome).toEqual({ kind: "saved", rpe: 8 });
+    expect(outcome).toEqual({ kind: "saved", rpe: 8, note: null });
     expect(server.state.feedbackVersions).toEqual([4]);
     expect(server.state.sessionRpe).toBe(8);
   });
@@ -160,9 +167,9 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
     server.state.bumpBeforeFeedback = 2;
     const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
 
-    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, rpe: 9 });
+    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, change: { rpe: 9 } });
 
-    expect(outcome).toEqual({ kind: "saved", rpe: 9 });
+    expect(outcome).toEqual({ kind: "saved", rpe: 9, note: null });
     expect(server.state.feedbackVersions).toEqual([4, 6]);
     expect(server.state.reads).toBe(2);
     expect(await sync.store.listOutbox()).toEqual([]);
@@ -174,7 +181,7 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
     server.state.sessionRpeOnBump = 3;
     const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
 
-    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, rpe: 9 });
+    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, change: { rpe: 9 } });
 
     expect(outcome).toMatchObject({ kind: "refused", reason: "conflict", serverRpe: 3 });
     expect(server.state.feedbackVersions).toEqual([4]);
@@ -187,7 +194,7 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
     server.state.windowOpen = false;
     const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
 
-    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, rpe: 9 });
+    const outcome = await saveWorkoutRating({ sync, api: server.api, executionId: EXECUTION, change: { rpe: 9 } });
 
     expect(outcome).toEqual({
       kind: "refused",
@@ -195,5 +202,75 @@ describe("saveWorkoutRating (Z14-12 fix round 1)", () => {
       message: "Ratings can be changed for 48 hours after a workout.",
     });
     expect(await sync.store.listOutbox()).toEqual([]);
+  });
+
+  it("carries the note with the rating in one send", async () => {
+    const server = fakeServer({ recordVersion: 4, sessionRpe: null });
+    const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
+
+    const outcome = await saveWorkoutRating({
+      sync,
+      api: server.api,
+      executionId: EXECUTION,
+      change: { rpe: 7, note: "  Left knee felt tight.  " },
+    });
+
+    expect(outcome).toEqual({ kind: "saved", rpe: 7, note: "Left knee felt tight." });
+    expect(server.state.sentBodies).toEqual([
+      { rpe: 7, note: "Left knee felt tight.", recordVersion: 4 },
+    ]);
+  });
+
+  it("sends only the note when only the note changed, and clears with whitespace", async () => {
+    const server = fakeServer({ recordVersion: 4, sessionRpe: 7, sessionNote: "Old note" });
+    const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
+
+    await saveWorkoutRating({
+      sync,
+      api: server.api,
+      executionId: EXECUTION,
+      change: { rpe: 7, note: "   " },
+    });
+
+    expect(server.state.sentBodies).toEqual([{ note: null, recordVersion: 4 }]);
+    expect(server.state.sessionNote).toBeNull();
+  });
+
+  it("treats equal values as already saved and sends nothing", async () => {
+    const server = fakeServer({ recordVersion: 4, sessionRpe: 7, sessionNote: "Same" });
+    const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
+
+    const outcome = await saveWorkoutRating({
+      sync,
+      api: server.api,
+      executionId: EXECUTION,
+      change: { rpe: 7, note: " Same " },
+    });
+
+    expect(outcome).toEqual({ kind: "saved", rpe: 7, note: "Same" });
+    expect(server.state.sentBodies).toEqual([]);
+  });
+
+  it("on a 409 where the server's note changed, surfaces the conflict with the server's note", async () => {
+    const server = fakeServer({ recordVersion: 4, sessionRpe: 5, sessionNote: "A" });
+    server.state.bumpBeforeFeedback = 1;
+    server.state.sessionNoteOnBump = "B";
+    const sync = createSyncEngine(createMemorySyncStore(), server.syncApi);
+
+    const outcome = await saveWorkoutRating({
+      sync,
+      api: server.api,
+      executionId: EXECUTION,
+      change: { note: "C" },
+    });
+
+    expect(outcome).toMatchObject({
+      kind: "refused",
+      reason: "conflict",
+      serverNote: "B",
+      message: "Your rating or note was changed somewhere else. Save again to replace it.",
+    });
+    expect(server.state.feedbackVersions).toEqual([4]);
+    expect(server.state.sessionNote).toBe("B");
   });
 });
