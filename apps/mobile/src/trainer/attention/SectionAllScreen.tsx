@@ -45,14 +45,6 @@ const EMPTY_COPY: Record<NeedsYouSectionId, { title: string; body: string }> = {
   },
 };
 
-const FOOTER_NOUN: Record<NeedsYouSectionId, string> = {
-  missed: "Missed",
-  asked: "Questions",
-  checkins: "Check-ins",
-  off: "Off plan",
-  reviewed: "Noted, still open",
-};
-
 const SHORT_TITLE: Record<NeedsYouSectionId, string> = {
   missed: "Missed",
   asked: "Asked you",
@@ -141,7 +133,7 @@ function Body({
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
           ListFooterComponent={
-            <Text style={styles.end}>That’s everything in {FOOTER_NOUN[sectionId]}</Text>
+            <Text style={styles.end}>That’s everything in {SHORT_TITLE[sectionId]}</Text>
           }
           renderItem={({ item }) => (
             <NeedsYouRowShell

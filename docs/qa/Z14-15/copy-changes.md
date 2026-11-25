@@ -8,7 +8,7 @@ D-W14-3 (no codes on screen, say what went wrong), D-W14-15 (Nudge becomes Remin
 |---|---|---|
 | "{Coach} nudged you" (push and inbox title) | "{Coach} sent you a reminder" | apps/api/src/domain/reminders.ts |
 | "Your coach nudged you" (fallback) | "Your coach sent you a reminder" | apps/api/src/domain/reminders.ts, apps/mobile/src/notifications/copy.ts, apps/mobile/src/trainer/sheets/NudgeSheet.tsx |
-| "{Coach} nudged you" (older row without a title) | "{Coach} sent you a reminder" | apps/mobile/src/notifications/copy.ts |
+| "{Coach} nudged you" (inbox row title, stored or built) | "Reminder from {Coach first name}" (fallback "Reminder from your coach"; D-W14-15; the push title stays "{Coach} sent you a reminder") | apps/mobile/src/notifications/copy.ts, apps/mobile/src/trainee/NotificationsScreen.tsx |
 | "Nudges can't include links." | "Reminders can't include links." | apps/api/src/routes/notifications.ts, NudgeSheet.tsx |
 | "Invalid nudge request." | "Invalid reminder request." | apps/api/src/routes/notifications.ts |
 | "Ended relationships do not send nudges." | "Ended relationships do not send reminders." | apps/api/src/routes/notifications.ts |
@@ -45,7 +45,6 @@ D-W14-3 (no codes on screen, say what went wrong), D-W14-15 (Nudge becomes Remin
 | Swipe action "Mark reviewed" | "Noted, keep open" | apps/mobile/src/components/SwipeActionRow.tsx |
 | "{first} noted, still open · N still need you" | "{first} · Noted · still open · N still need you" (state line wording of the review frames) | AttentionTab.tsx |
 | Chip label "Reviewed, still open" | "Noted, still open" | packages/core/src/labels.ts |
-| Footer "That’s everything in Asked you" | "That’s everything in Questions" (plain section noun, as in frame TM-01a6) | attention/SectionAllScreen.tsx |
 | Specimen row "Mark reviewed" | "Noted, keep open" | dev/SpecimensScreen.tsx |
 
 Kept: the check-in review button "Mark reviewed" and "Also mark reviewed" (a different action: it marks a submitted check-in as reviewed).
