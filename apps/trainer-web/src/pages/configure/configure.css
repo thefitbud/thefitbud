@@ -796,9 +796,30 @@
   border-top: 0;
 }
 
-.configure-v3 .configure-accordion.cfg-row.is-wide {
+.configure-v3 .cfg-card > .configure-accordion.cfg-row.is-wide {
   grid-template-columns: minmax(0, 1fr);
   gap: var(--s3);
+}
+
+.configure-v3 .cfg-row .cs-expectations {
+  font: var(--t-body);
+}
+
+.configure-v3 .cfg-row .cs-expectations thead th {
+  font: var(--t-cap);
+  color: var(--ink3);
+}
+
+.configure-v3 .cfg-row .cs-expectations tbody th {
+  font: var(--t-h3);
+}
+
+.configure-v3 .cfg-row .cs-target,
+.configure-v3 .cfg-row .cs-inline-select,
+.configure-v3 .cfg-row .cs-inline-number {
+  font: var(--t-body);
+  border-color: var(--line2);
+  border-radius: var(--r-ctl);
 }
 
 .configure-v3 .configure-accordion.cfg-row.has-error {

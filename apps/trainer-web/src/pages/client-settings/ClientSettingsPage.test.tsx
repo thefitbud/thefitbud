@@ -81,7 +81,7 @@ function settings(overrides: Partial<ClientSettingsResponse> = {}): ClientSettin
 
 const openWorkspaceModal = vi.fn();
 
-function renderPage({ ended = false, online = true } = {}) {
+function renderPage({ ended = false, online = true, hash = "" } = {}) {
   const context = {
     workspace: {
       header: {
@@ -99,7 +99,7 @@ function renderPage({ ended = false, online = true } = {}) {
     refreshEpoch: 0,
   };
   return render(
-    <MemoryRouter initialEntries={[`/clients/${REL_ID}/settings`]}>
+    <MemoryRouter initialEntries={[`/clients/${REL_ID}/settings${hash}`]}>
       <Routes>
         <Route path="/clients/:relationshipId" element={<Outlet context={context} />}>
           <Route path="settings" element={<ClientSettingsPage />} />
@@ -121,21 +121,56 @@ afterEach(() => {
 });
 
 describe("ClientSettingsPage overview (frame 209)", () => {
-  it("shows the four sections with formatted dates, amounts and labels", async () => {
+  it("has the seven-section sub-nav; Client details is selected by default", async () => {
+    renderPage();
+    await screen.findByTestId("cs-section-basic");
+    const nav = screen.getByRole("navigation", { name: "Client settings sections" });
+    expect(within(nav).getAllByRole("link").map((a) => a.textContent)).toEqual([
+      "Client details",
+      "Package and payments",
+      "Coaching setup",
+      "Check-ins",
+      "Reminders",
+      "Onboarding answers",
+      "End coaching",
+    ]);
+    expect(within(nav).getByText("Danger zone")).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Client details" }).getAttribute("aria-current")).toBe(
+      "true",
+    );
+  });
+
+  it.each(["#danger", "#relationship"])("%s selects the Danger zone", async (hash) => {
+    renderPage({ hash });
+    await screen.findByTestId("cs-section-danger");
+    expect(screen.getByTestId("cs-nav-danger").getAttribute("aria-current")).toBe("true");
+    expect(screen.getByTestId("client-settings-page").getAttribute("data-section")).toBe("danger");
+  });
+
+  it("shows Client details, Package and payments and the Danger zone with formatted dates, amounts and labels", async () => {
     renderPage();
     const basic = await screen.findByTestId("cs-section-basic");
     expect(api.getClientSettings).toHaveBeenCalledWith(REL_ID);
+    // W-209: label-left rows.
     expect(within(basic).getByText("Rohan Mehta")).toBeTruthy();
     expect(within(basic).getByText("+91 90000 00008")).toBeTruthy();
-    expect(within(basic).getByText("Male")).toBeTruthy();
-    expect(within(basic).getByText("29")).toBeTruthy();
+    expect(within(basic).getByText("29 · Male")).toBeTruthy();
+    expect(within(basic).getByText("India Standard Time (IST)")).toBeTruthy();
+    expect(within(basic).getByText("Reminders follow his time")).toBeTruthy();
 
     const sub = screen.getByTestId("cs-section-subscription");
+    expect(within(sub).getByRole("heading", { name: "Package and payments" })).toBeTruthy();
     expect(within(sub).getByText("Fat Loss 12-week")).toBeTruthy();
-    expect(within(sub).getByText("Monthly")).toBeTruthy();
+    expect(within(sub).getByText("₹4,000")).toBeTruthy();
+    expect(within(sub).getByText("₹4,000").closest("dd")?.textContent).toBe("₹4,000 · Monthly");
+    expect(within(sub).getByText("In person")).toBeTruthy();
     expect(within(sub).getByText("Mon 24 Aug")).toBeTruthy();
     expect(within(sub).getAllByText("Sat 24 Oct").length).toBeGreaterThanOrEqual(1);
-    expect(within(sub).getByText("₹4,000")).toBeTruthy();
+    // The newest paid record, recorded by the trainer (tracking only).
+    expect(screen.getByTestId("cs-last-payment").textContent).toContain("₹6,000 · UPI · Thu 24 Sep");
+    expect(screen.getByTestId("cs-last-payment").textContent).toContain(
+      "FitBud does not take payments",
+    );
 
     const payments = screen.getByTestId("cs-payments");
     expect(within(payments).getAllByText("₹6,000")).toHaveLength(2);
@@ -145,9 +180,12 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     expect(within(payments).getByText("Unpaid")).toBeTruthy();
     expect(within(payments).getByText("UPI")).toBeTruthy();
 
-    const rel = screen.getByTestId("cs-section-relationship");
-    expect(within(rel).getByText(/^Mon 24 Aug/)).toBeTruthy();
-    expect(within(rel).getByText("In person")).toBeTruthy();
+    // Danger zone: the coaching dates and End coaching (was Coaching relationship).
+    const danger = screen.getByTestId("cs-section-danger");
+    expect(within(danger).getByTestId("cs-coaching-dates").textContent).toMatch(
+      /^Coaching since Mon 24 Aug/,
+    );
+    expect(danger.textContent).toContain("Plans and reminders stop today.");
 
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\d{4}-\d{2}-\d{2}/);
@@ -186,13 +224,12 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     expect(screen.getByText("No payment records yet.")).toBeTruthy();
   });
 
-  it("links the coaching note to Plan › Coaching setup and opens End coaching", async () => {
+  it("the Danger zone opens End coaching; the old coaching note is gone", async () => {
     renderPage();
     await screen.findByTestId("cs-section-basic");
     fireEvent.click(screen.getByRole("button", { name: "End coaching…" }));
     expect(openWorkspaceModal).toHaveBeenCalledWith({ type: "end" });
-    fireEvent.click(screen.getAllByRole("link", { name: "Plan › Coaching setup" })[0]!);
-    expect(await screen.findByText("coaching setup route")).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Plan › Coaching setup" })).toBeNull();
   });
 
   it("is read-only for an ended client", async () => {
@@ -212,8 +249,9 @@ describe("ClientSettingsPage overview (frame 209)", () => {
     expect(within(sub).getByText("Ended")).toBeTruthy();
     expect(within(sub).getByText("Ended Fri 30 Oct")).toBeTruthy();
     expect(within(sub).queryByText(/Renews in|Renews today|Renewal expired/)).toBeNull();
-    const rel = screen.getByTestId("cs-section-relationship");
-    expect(within(rel).getByText("Mon 24 Aug — Fri 30 Oct")).toBeTruthy();
+    const danger = screen.getByTestId("cs-section-danger");
+    expect(within(danger).getByText("Coached Mon 24 Aug — Fri 30 Oct")).toBeTruthy();
+    expect(within(danger).getByRole("heading", { name: "Coaching ended" })).toBeTruthy();
     // No write controls anywhere on the page.
     expect(screen.queryAllByRole("button").map((b) => b.textContent)).toEqual([]);
     expect(document.querySelectorAll("input, select, textarea")).toHaveLength(0);

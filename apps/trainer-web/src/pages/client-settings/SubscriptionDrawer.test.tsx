@@ -172,9 +172,9 @@ describe("SubscriptionDrawer (frames 211 / 211b)", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const sub = screen.getByTestId("cs-section-subscription");
     expect(within(sub).getByText("Hybrid coaching")).toBeTruthy();
-    expect(within(sub).getByText("Quarterly")).toBeTruthy();
     expect(within(sub).getByText("Tue 24 Nov")).toBeTruthy();
-    expect(within(sub).getByText("₹18,000")).toBeTruthy();
+    // W13-10: amount and frequency share the Fee row.
+    expect(within(sub).getByText("₹18,000").closest("dd")?.textContent).toBe("₹18,000 · Quarterly");
     expect(within(sub).getByRole("status").textContent).toBe("Saved as a new subscription version.");
     expect(reloadWorkspace).toHaveBeenCalled();
   });
