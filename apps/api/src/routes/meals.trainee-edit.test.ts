@@ -776,6 +776,7 @@ describe("trainee edits, removes and adds a photo to a logged meal (Z14-11)", ()
         toKcal: 900,
         fromOutcome: "confirmed",
         toOutcome: "modified",
+        fromDeviationKind: null,
         fields: ["outcome", "kcal"],
       });
       const sent = await deliveries(rows[0]!.id);

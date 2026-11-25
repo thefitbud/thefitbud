@@ -71,7 +71,9 @@ export function clientLogEditCopy(
     const was =
       payload.fromKcal == null
         ? ""
-        : ` · was ${formatNumber(payload.fromKcal)} kcal`;
+        : ` · was ${formatNumber(payload.fromKcal)} kcal${
+            payload.fromDeviationKind === "restaurant" ? ", ate out" : ""
+          }`;
     const dayLabel = today && payload.mealDate === today ? "Today" : day;
     return {
       title: `${first} removed their ${meal} log`,
@@ -200,11 +202,15 @@ export function mealRemovedActivityLine(input: {
   summary: string;
   mealDate: string | null;
   previousKcal: number | null;
+  /** The removed entry was an "ate out" meal (Z14-35). */
+  previousAteOut?: boolean;
 }): string {
   const first = firstNameOf(clientDisplayLabel(input.clientName)) ?? "A client";
   const meal = /^Removed the (.+) log$/i.exec(input.summary)?.[1] ?? "meal";
   const day = input.mealDate ? ` (${formatCivilDate(input.mealDate)})` : "";
   const was =
-    input.previousKcal == null ? "" : ` · was ${formatNumber(input.previousKcal)} kcal`;
+    input.previousKcal == null
+      ? ""
+      : ` · was ${formatNumber(input.previousKcal)} kcal${input.previousAteOut ? ", ate out" : ""}`;
   return `${first} removed their ${meal.toLowerCase()} log${day}${was}`;
 }
