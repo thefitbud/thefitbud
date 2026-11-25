@@ -272,11 +272,19 @@ describe("AttentionTab review sheet (Z12-51)", () => {
     await screen.findByText("An unexpected server error occurred.");
     expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
     expect(api.resolveException).toHaveBeenCalledTimes(1);
+    // Flake trace (CI run 45536057845): the retry press must land after the
+    // failed resolve has finished (Resolve leaves its busy state), or the
+    // press is dropped and the second resolve call is never made.
+    await waitFor(
+      () =>
+        expect(screen.getByTestId("resolve-confirm").getAttribute("aria-busy")).not.toBe("true"),
+      { timeout: 4000 },
+    );
     fireEvent.click(screen.getByTestId("resolve-confirm"));
-    await screen.findByText("All done for Rohan");
+    await screen.findByText("All done for Rohan", {}, { timeout: 4000 });
     // Noted already succeeded: not sent again. Resolve retries on its key.
+    await waitFor(() => expect(api.resolveException).toHaveBeenCalledTimes(2));
     expect(api.acknowledgeException).toHaveBeenCalledTimes(1);
-    expect(api.resolveException).toHaveBeenCalledTimes(2);
     const resolveKeys = api.resolveException.mock.calls.map((call) => call[2]);
     expect(resolveKeys[0]).toEqual(expect.any(String));
     expect(resolveKeys[1]).toBe(resolveKeys[0]);
