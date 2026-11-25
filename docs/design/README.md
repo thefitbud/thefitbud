@@ -9,6 +9,7 @@ Everything design lives here. **One file per screen state; if it is not in `mock
 1. **v3 frames** (`*-v3-*`, locked 21 Oct 2026 by Firoz): [DECISIONS-21OCT.md](DECISIONS-21OCT.md).
 2. **Original frames** (approved 18–21 Oct): [DESIGN-NOTES.md](DESIGN-NOTES.md). Where an original frame shows something a v3 decision changed (old Today ring card, old trainer tab bar "Attention · Clients · Check-ins · More", the exception drawer), follow the v3 decision; the Status column flags these.
 3. Content rules always apply: [../spec/01-product-rules.md](../spec/01-product-rules.md), [../spec/banned-strings.json](../spec/banned-strings.json).
+4. **Trainer web v3 redesign (W13, 25 Nov 2026):** the frames, design-system doc and live-resolver record in [`v3-web/`](v3-web/README.md) are the target for the trainer web screens in W13-3…W13-11 ([`../specs/batches/W13.md`](../specs/batches/W13.md)). Where a v3-web frame's words differ from the W14 words, the W14 words win (D-W13-5).
 
 **Locked without a frame (31 Oct 2026, owner):** the trainer-web note-saved confirmation (TW-34; the old web toast frame 134 was removed on 22 Oct).
 - Saving a note closes the drawer and shows "Saved privately" or "Shared with <first name>" in the deep-navy bottom pill (`.home-toast`, the same pattern as the Home toast and mobile frame 05) for 4 s.
