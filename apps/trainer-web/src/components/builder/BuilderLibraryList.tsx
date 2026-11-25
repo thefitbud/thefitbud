@@ -6,8 +6,10 @@ import {
   type MealPrescription,
   type WorkoutDay,
 } from "@fitbud/contracts";
-import { calculateServingNutrients, formatNumber } from "@fitbud/core";
+import { calculateServingNutrients, formatNumber, labelFor } from "@fitbud/core";
+import { GripVertical, Plus, Search } from "lucide-react";
 import { apiClient } from "../../lib/api";
+import { Button, Chip, LibraryThumb } from "../ui";
 import { PLAN_COMPOSITION_LIMITS } from "../plan-composition";
 import { useCursorPage, useDebounced } from "../../pages/templates/useCursorPage";
 import { exerciseMetaLine } from "./formatters";
@@ -35,6 +37,20 @@ export function foodLibraryMetaLine(item: FoodLibraryItem): string {
   return [serving.label, kcal].filter(Boolean).join(" · ");
 }
 
+/**
+ * Muscle filter chips (W-152's chip row). Values are the stored muscle keys
+ * the library API matches on (primary or secondary); the set is the most
+ * common primary muscles in the exercise library, kept short so the row fits
+ * the 300 px pane in two lines.
+ */
+export const LIBRARY_MUSCLE_CHIPS = [
+  "chest",
+  "upper_back",
+  "shoulders",
+  "quads",
+  "abs",
+] as const;
+
 function defaultFoodServingId(item: FoodLibraryItem): string | null {
   return item.servings.find((serving) => serving.conversionScaled != null)?.id ?? null;
 }
@@ -49,12 +65,14 @@ export function BuilderExerciseLibrary({
   searchRef: RefObject<HTMLInputElement>;
 }) {
   const [q, setQ] = useState("");
+  const [muscle, setMuscle] = useState("");
   const nameQuery = useDebounced(q);
-  const page = useCursorPage(nameQuery.trim(), (cursor) =>
+  const page = useCursorPage(JSON.stringify({ q: nameQuery.trim(), muscle }), (cursor) =>
     apiClient.listExerciseLibrary({
       cursor,
       limit: 50,
       q: nameQuery.trim() || undefined,
+      muscleGroup: muscle || undefined,
     }),
   );
   const atLimit =
@@ -63,7 +81,8 @@ export function BuilderExerciseLibrary({
 
   return (
     <div className="builder-library-pane" data-testid="builder-exercise-library">
-      <label className="builder-library-search">
+      <label className="builder-library-search ui-input">
+        <Search className="ui-i" strokeWidth={1.75} aria-hidden />
         <span className="sr-only">Search exercises</span>
         <input
           ref={searchRef}
@@ -81,6 +100,21 @@ export function BuilderExerciseLibrary({
           autoComplete="off"
         />
       </label>
+      <div
+        className="builder-library-chips"
+        role="group"
+        aria-label="Muscle group"
+        data-testid="builder-library-chips"
+      >
+        <Chip selected={muscle === ""} onClick={() => setMuscle("")}>
+          All
+        </Chip>
+        {LIBRARY_MUSCLE_CHIPS.map((value) => (
+          <Chip key={value} selected={muscle === value} onClick={() => setMuscle(value)}>
+            {labelFor("body_part", value)}
+          </Chip>
+        ))}
+      </div>
       {!day ? (
         <p className="muted">Select a session before adding an exercise.</p>
       ) : null}
@@ -101,7 +135,7 @@ export function BuilderExerciseLibrary({
         </p>
       ) : page.items.length === 0 ? (
         <p className="muted" role="status">
-          No exercises match that search.
+          {muscle ? "No exercises match that search and muscle." : "No exercises match that search."}
         </p>
       ) : (
         <ul className="builder-library-list">
@@ -118,14 +152,20 @@ export function BuilderExerciseLibrary({
                     meta ? `Add ${item.name}, ${meta}` : `Add ${item.name}`
                   }
                 >
-                  <span className="builder-library-handle" aria-hidden="true">
-                    ⋮⋮
-                  </span>
+                  <GripVertical
+                    className="builder-library-handle ui-i"
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
+                  <LibraryThumb name={item.name} kind="exercise" />
                   <span className="builder-library-copy">
                     <span className="builder-library-name">{item.name}</span>
                     {meta ? (
                       <span className="builder-library-meta">{meta}</span>
                     ) : null}
+                  </span>
+                  <span className="builder-library-add" aria-hidden="true">
+                    <Plus className="ui-i" strokeWidth={1.75} />
                   </span>
                 </button>
               </li>
@@ -134,14 +174,14 @@ export function BuilderExerciseLibrary({
         </ul>
       )}
       {page.nextCursor ? (
-        <button
-          type="button"
-          className="button-ghost"
+        <Button
+          variant="ghost"
+          className="builder-library-more"
           disabled={page.loadingMore}
           onClick={page.loadMore}
         >
           {page.loadingMore ? "Loading…" : "Load more exercises"}
-        </button>
+        </Button>
       ) : null}
     </div>
   );
@@ -171,7 +211,8 @@ export function BuilderFoodLibrary({
 
   return (
     <div className="builder-library-pane" data-testid="builder-food-library">
-      <label className="builder-library-search">
+      <label className="builder-library-search ui-input">
+        <Search className="ui-i" strokeWidth={1.75} aria-hidden />
         <span className="sr-only">Search foods</span>
         <input
           ref={searchRef}
@@ -229,12 +270,18 @@ export function BuilderFoodLibrary({
                     meta ? `Add ${item.name}, ${meta}` : `Add ${item.name}`
                   }
                 >
-                  <span className="builder-library-handle" aria-hidden="true">
-                    ⋮⋮
-                  </span>
+                  <GripVertical
+                    className="builder-library-handle ui-i"
+                    strokeWidth={1.75}
+                    aria-hidden
+                  />
+                  <LibraryThumb name={item.name} kind="food" />
                   <span className="builder-library-copy">
                     <span className="builder-library-name">{item.name}</span>
                     <span className="builder-library-meta">{meta}</span>
+                  </span>
+                  <span className="builder-library-add" aria-hidden="true">
+                    <Plus className="ui-i" strokeWidth={1.75} />
                   </span>
                 </button>
               </li>
@@ -243,14 +290,14 @@ export function BuilderFoodLibrary({
         </ul>
       )}
       {page.nextCursor ? (
-        <button
-          type="button"
-          className="button-ghost"
+        <Button
+          variant="ghost"
+          className="builder-library-more"
           disabled={page.loadingMore}
           onClick={page.loadMore}
         >
           {page.loadingMore ? "Loading…" : "Load more foods"}
-        </button>
+        </Button>
       ) : null}
     </div>
   );

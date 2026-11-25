@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { PlanContent } from "@fitbud/contracts";
 import { formatHhMmTime } from "@fitbud/core";
+import { X } from "lucide-react";
 import { sortedByOrder, sortedMealsByTime } from "../plan-composition";
+import { Button, Chip } from "../ui";
 import { WEEK_ORDER, weekdayShort } from "./weekdays";
 
 function setSummary(reps: number | null, load: string | null): string {
@@ -36,28 +38,23 @@ export function PhonePreview({
       >
         <header className="phone-preview-head">
           <h2>Preview as {clientName ?? "client"}</h2>
-          <button type="button" className="button-ghost button-sm" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
+            <X className="ui-i" strokeWidth={1.75} aria-hidden />
             Close
-          </button>
+          </Button>
         </header>
-        <div className="weekday-chips" role="group" aria-label="Preview day">
+        <div className="phone-preview-days" role="group" aria-label="Preview day">
           {WEEK_ORDER.map((value) => (
-            <button
-              key={value}
-              type="button"
-              className={value === weekday ? "weekday-chip is-on wide" : "weekday-chip wide"}
-              aria-pressed={value === weekday}
-              onClick={() => setWeekday(value)}
-            >
+            <Chip key={value} selected={value === weekday} onClick={() => setWeekday(value)}>
               {weekdayShort(value)}
-            </button>
+            </Chip>
           ))}
         </div>
         <div className="phone-frame">
           <div className="phone-screen">
             <p className="phone-title">{weekdayShort(weekday)}</p>
             <section>
-              <h3>Workout</h3>
+              <h3 className="phone-section-title">Workout</h3>
               {sessions.length === 0 ? (
                 <p className="muted">Rest day</p>
               ) : (
@@ -84,7 +81,7 @@ export function PhonePreview({
               )}
             </section>
             <section>
-              <h3>Meals</h3>
+              <h3 className="phone-section-title">Meals</h3>
               {meals.length === 0 ? (
                 <p className="muted">No meals planned</p>
               ) : (

@@ -65,8 +65,8 @@ env:
     id: "exception-whatsapp"
 - assertVisible:
     id: "exception-add-note"
-- assertNotVisible:
-    id: "exception-more"
+- assertVisible:
+    id: "exception-remind"
 - takeScreenshot: TM-04j
 - tapOn:
     id: "exception-add-note"
