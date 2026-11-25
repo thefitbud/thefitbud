@@ -77,6 +77,26 @@ describe("Settings › Reminders (W13-10, frame W-181; was the Reminders drawer)
     expect(document.body.textContent ?? "").not.toMatch(/nudg|%/i);
   });
 
+  it.each(["female", "male", null])("footnote names Rohan and no pronoun for gender %s (D-W14-37)", async (gender) => {
+    stage1.getResponsiveness.mockResolvedValue(DATA);
+    api.getReminderRules.mockResolvedValue({ items: [] });
+    render(
+      <RemindersSection
+        relationshipId={REL_ID}
+        firstName="Rohan"
+        gender={gender}
+        ended={false}
+        online
+        refreshEpoch={0}
+        onToast={vi.fn()}
+        onEndedElsewhere={vi.fn()}
+      />,
+    );
+    const note = await screen.findByText(/Reminders are timed by FitBud/);
+    expect(note.textContent).toContain("never in Rohan's quiet hours. Rohan controls the notification settings.");
+    expect(note.textContent).not.toMatch(/\b(he|she|his|her|hers|him)\b/i);
+  });
+
   it("each switch saves its one rule, as Coaching setup did", async () => {
     const { onToast } = renderSection();
     await waitFor(() => expect(api.getReminderRules).toHaveBeenCalled());

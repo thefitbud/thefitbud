@@ -262,8 +262,8 @@ describe("CoachAskDrawer (Z12-16)", () => {
     expect(screen.getByRole("heading", { name: "Ishita Banerjee" })).toBeTruthy();
     expect(screen.getByText("Asked coach")).toBeTruthy();
     expect(screen.getByRole("heading", { name: /Asked about Lunch/ })).toBeTruthy();
-    expect(screen.getByText(/Opened WhatsApp from her log/)).toBeTruthy();
-    expect(screen.getByText(/From her meal log/)).toBeTruthy();
+    expect(screen.getByText(/Opened WhatsApp from Ishita's log/)).toBeTruthy();
+    expect(screen.getByText(/From Ishita's meal log/)).toBeTruthy();
     expect(screen.getByText("Meal", { selector: "dt" })).toBeTruthy();
     expect(screen.getByText(/Lunch · Thu 22 Oct/)).toBeTruthy();
     expect(screen.getByText("Planned", { selector: "dt" })).toBeTruthy();
@@ -294,9 +294,9 @@ describe("CoachAskDrawer (Z12-16)", () => {
     await screen.findByRole("button", { name: "Mark done" });
     expect(document.querySelector(".cad-chip-pain")?.textContent).toMatch(/Pain/);
     expect(
-      screen.getByText(/Pain topic. Reply today. If it sounds serious, ask her to pause/),
+      screen.getByText(/Pain topic. Reply today. If it sounds serious, ask Ishita to pause/),
     ).toBeTruthy();
-    expect(screen.getByText(/From her workout log/)).toBeTruthy();
+    expect(screen.getByText(/From Ishita's workout log/)).toBeTruthy();
     expect(screen.getByText("Workout", { selector: "dt" })).toBeTruthy();
     expect(screen.getByText(/Walking lunge · 3 x 10/)).toBeTruthy();
     expect(screen.getByText("Pain", { selector: "dd" })).toBeTruthy();

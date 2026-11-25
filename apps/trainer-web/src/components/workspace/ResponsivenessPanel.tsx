@@ -62,7 +62,7 @@ export function compactHeadline(
   data: ResponsivenessResponse,
   // Kept so callers (ExceptionDrawer, out of scope for H2) still compile; drop it with that file.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  pronoun: string,
+  _pronoun?: string,
 ): string {
   return `${labelTitle(data.label)} · ${summaryCounts(data)}`;
 }
