@@ -66,7 +66,7 @@ import {
   type EffectivePlanState,
 } from "./TodayTab";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
-import { saveWorkoutRating } from "./workout/rpeRating";
+import { resumeHeldWorkoutFeedback, saveWorkoutRating } from "./workout/rpeRating";
 import {
   durationMinutesFromExecution,
   elapsedSeconds,
@@ -296,6 +296,18 @@ export function WorkoutTab({
   // day is the shell's `selectedDate`; the local pick is only for a tab
   // rendered on its own.
   const [pickedDate, setPickedDate] = useState<string | null>(null);
+  // Z14-37: a rating and note held before a restart (waiting for the finish
+  // to sync) are sent from here, for this user only.
+  const ownerId = me?.userId ?? null;
+  const resumeDeps = useRef({ sync, api });
+  resumeDeps.current = { sync, api };
+  useEffect(() => {
+    if (!ownerId) return;
+    const { sync: engine, api: client } = resumeDeps.current;
+    void resumeHeldWorkoutFeedback({ ownerId, sync: engine, api: client }).catch(
+      (err: unknown) => reportError("workout.feedback.resume", err),
+    );
+  }, [ownerId]);
   const pickDate = useCallback(
     (date: string) => {
       if (onSelectDate) onSelectDate(date);
@@ -800,6 +812,7 @@ export function WorkoutTab({
         today={today}
         offline={offline}
         mode={summaryIsView ? "view" : "after_finish"}
+        draftOwnerId={ownerId}
         // One rating and note change (Z14-12, Z14-32). The version is read from the
         // server after the finish landed, never guessed (fix round 1).
         onSaveFeedback={(change, progress) =>
@@ -809,6 +822,8 @@ export function WorkoutTab({
             executionId: summaryExecution.id,
             change,
             progress,
+            // Z14-37: the held value survives a restart, for this user only.
+            hold: ownerId ? { ownerId } : undefined,
           })
         }
         onDone={() => {
