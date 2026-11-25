@@ -205,7 +205,7 @@ describe("CheckinReviewPage answers (Z6-2c / Z12-8)", () => {
   }
 
   function answerList() {
-    const heading = screen.getByRole("heading", { name: /Check-in ·/ });
+    const heading = screen.getByRole("heading", { name: /Rohan wrote/ });
     const dl = heading.closest("section")!.querySelector("dl");
     return Array.from(dl?.querySelectorAll("div") ?? []).map((row) => [
       row.querySelector("dt")!.textContent,
@@ -227,7 +227,7 @@ describe("CheckinReviewPage answers (Z6-2c / Z12-8)", () => {
       }),
     );
     render(pageTree(0));
-    await screen.findByRole("heading", { name: /Check-in ·/ });
+    await screen.findByRole("heading", { name: /Rohan wrote/ });
     expect(answerList()).toEqual([
       ["Waist", "82 cm"],
       ["Arm", "31.5 cm"],
@@ -243,7 +243,7 @@ describe("CheckinReviewPage answers (Z6-2c / Z12-8)", () => {
       v2Context({ bodyWeightKg: 86.4, fieldAnswers: { "q-energy": 2 } }),
     );
     render(pageTree(0));
-    await screen.findByRole("heading", { name: /Check-in ·/ });
+    await screen.findByRole("heading", { name: /Rohan wrote/ });
     const rows = answerList();
     expect(rows).toEqual([
       ["Weight", "86.4 kg"],
@@ -264,7 +264,7 @@ describe("CheckinReviewPage answers (Z6-2c / Z12-8)", () => {
     context.checkin.answers = { wellbeing: "Slept badly", notes: null };
     api.getCheckinReviewContext.mockResolvedValue(context);
     render(pageTree(0));
-    await screen.findByRole("heading", { name: /Check-in ·/ });
+    await screen.findByRole("heading", { name: /Rohan wrote/ });
     expect(answerList()).toEqual([["Wellbeing", "Slept badly"]]);
   });
 
@@ -296,8 +296,105 @@ describe("CheckinReviewPage answers (Z6-2c / Z12-8)", () => {
   it("reviewed state shows a Reviewed pill on the right card", async () => {
     api.getCheckinReviewContext.mockResolvedValue(reviewContext(true));
     render(pageTree(0));
-    expect(await screen.findByText("Reviewed")).toBeTruthy();
+    expect((await screen.findAllByText("Reviewed")).length).toBeGreaterThan(0);
     expect(screen.getByRole("button", { name: "Edit review" })).toBeTruthy();
     expect(screen.getByTestId("review-action-bar").textContent).toMatch(/Reviewed by you/);
+  });
+});
+
+describe("CheckinReviewPage layout (W13-7)", () => {
+  const OTHER_REL = "aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa";
+  const OTHER_CHECKIN = "bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb";
+
+  it("renders the answers column and the review column side by side", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    const { container } = render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    const grid = container.querySelector(".checkin-review-grid")!;
+    expect(grid.children).toHaveLength(2);
+    const main = screen.getByTestId("checkin-answers-col");
+    expect(main.parentElement).toBe(grid);
+    expect(main.querySelector("#answers-h")).toBeTruthy();
+    expect(grid.querySelector("aside.checkin-review-side")).toBeTruthy();
+    expect(main.contains(screen.getByTestId("review-action-bar"))).toBe(false);
+  });
+
+  it("keeps Save review and WhatsApp in the actions bar", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    const bar = screen.getByTestId("checkin-review-bar");
+    expect(bar.textContent).toContain("Save review");
+    expect(bar.textContent).toContain("Message on WhatsApp");
+    expect(bar.textContent).toContain("Saving closes this check-in in Needs attention.");
+    expect(screen.getByTestId("review-action-bar").contains(bar)).toBe(true);
+  });
+
+  it("has no bar and no Save review once reviewed, and never says Mark reviewed", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(true));
+    const { container } = render(pageTree(0));
+    await screen.findByRole("button", { name: "Edit review" });
+    expect(screen.queryByTestId("checkin-review-bar")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save review" })).toBeNull();
+    expect(screen.getByText("Saved note")).toBeTruthy();
+    expect(container.textContent).not.toMatch(/mark(ed|ing)? reviewed/i);
+  });
+
+  it("does not use the old Mark reviewed wording while a review is open", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    const { container } = render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    expect(container.textContent).not.toMatch(/mark(ed|ing)? reviewed/i);
+  });
+
+  it("shows the stored measurements as a This week table with the change", async () => {
+    const context = reviewContext(false);
+    context.measurements = [
+      { type: "body_weight_kg", value: "64.2", unit: "kg", observedAt: "2026-10-26T05:00:00.000Z" },
+      { type: "body_weight_kg", value: "64.9", unit: "kg", observedAt: "2026-10-19T05:00:00.000Z" },
+      { type: "waist_cm", value: "77.2", unit: "cm", observedAt: "2026-10-26T05:00:00.000Z" },
+    ] as CheckinReviewContext["measurements"];
+    api.getCheckinReviewContext.mockResolvedValue(context);
+    render(pageTree(0));
+    const section = (await screen.findByTestId("checkin-this-week")) as HTMLElement;
+    const rows = Array.from(section.querySelectorAll("tbody tr")).map((row) =>
+      Array.from(row.querySelectorAll("td")).map((cell) => cell.textContent),
+    );
+    expect(rows).toEqual([
+      ["Body weight", "64.9 kg", "64.2 kg", "−0.7"],
+      ["Waist", "—", "77.2 cm", "—"],
+    ]);
+  });
+
+  it("shows no This week table without stored measurements", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    expect(screen.queryByTestId("checkin-this-week")).toBeNull();
+  });
+
+  it("shows where this check-in sits in the to-review queue, with both neighbours", async () => {
+    api.listTrainerCheckinInbox.mockResolvedValue({
+      items: [
+        { checkin: { id: OTHER_CHECKIN, status: "submitted" }, coachingRelationshipId: OTHER_REL },
+        { checkin: { id: CHECKIN_ID, status: "submitted" }, coachingRelationshipId: REL_ID },
+        { checkin: { id: "cccccccc-3333-4333-8333-cccccccccccc", status: "reviewed" }, coachingRelationshipId: REL_ID },
+        { checkin: { id: "dddddddd-4444-4444-8444-dddddddddddd", status: "submitted" }, coachingRelationshipId: OTHER_REL },
+      ],
+      nextCursor: null,
+    });
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    render(pageTree(0));
+    expect(await screen.findByText("2 of 3 to review")).toBeTruthy();
+    const prev = screen.getByRole("link", { name: "Previous check-in to review" });
+    expect(prev.getAttribute("href")).toBe(`/clients/${OTHER_REL}/check-ins/${OTHER_CHECKIN}`);
+    expect(screen.getByRole("link", { name: "Next check-in to review" })).toBeTruthy();
+  });
+
+  it("shows no pager when the check-in is not in the queue", async () => {
+    api.getCheckinReviewContext.mockResolvedValue(reviewContext(false));
+    render(pageTree(0));
+    await screen.findByRole("heading", { name: "Your review" });
+    expect(screen.queryByText(/to review$/)).toBeNull();
   });
 });
