@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Info } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "../../components/Button";
+import { Button, Modal } from "../../components/ui";
+import { ClientCombobox } from "./ClientCombobox";
 import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import {
-  clientInitials,
-  clientStatusLabel,
   errorText,
   usableApplyClients,
   type ApplyClient,
@@ -15,11 +14,13 @@ import {
 export function UseTemplateModal({
   templateId,
   templateTitle,
+  templateMeta,
   clients,
   onClose,
 }: {
   templateId: string;
   templateTitle: string;
+  templateMeta?: string;
   clients: ApplyClient[];
   onClose: () => void;
 }) {
@@ -64,71 +65,19 @@ export function UseTemplateModal({
     }
   }
 
+  const subtitle = templateMeta
+    ? `${templateTitle} · ${templateMeta}`
+    : templateTitle;
+
   return (
-    <div className="modal-scrim" role="presentation" onClick={onClose}>
-      <div
-        className="modal-card use-template-modal templates-modal-v3"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="use-template-title"
-        data-testid="use-template-modal"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="modal-header">
-          <h2 id="use-template-title">Use {templateTitle} for…</h2>
-          <button
-            type="button"
-            className="templates-modal-close"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            <X size={18} strokeWidth={2} aria-hidden="true" />
-          </button>
-        </header>
-
-        <label className="field">
-          <span>Client</span>
-          {usable.length === 0 ? (
-            <p className="muted">No ready clients to use this with.</p>
-          ) : (
-            <div className="templates-client-select">
-              <span className="templates-client-avatar" aria-hidden="true">
-                {clientInitials(clientName)}
-              </span>
-              <select
-                aria-label="Client"
-                value={selected?.relationshipId ?? ""}
-                onChange={(event) => setSelectedId(event.target.value)}
-              >
-                {usable.map((client) => {
-                  const name = client.traineeDisplayName ?? "Client";
-                  const status = clientStatusLabel(client.status);
-                  return (
-                    <option
-                      key={client.relationshipId}
-                      value={client.relationshipId}
-                    >
-                      {name} · {status}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
-        </label>
-
-        {selected ? (
-          <p className="templates-modal-copy use-template-copy">
-            This opens a draft plan for {firstName}. Nothing changes for{" "}
-            {firstName} until you publish. Your template stays as it is.
-          </p>
-        ) : null}
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
-        <div className="button-row">
+    <Modal
+      open
+      onClose={onClose}
+      title="Use template for a client"
+      subtitle={subtitle}
+      footer={
+        <>
+          <span className="ui-sp" />
           <Button variant="secondary" onClick={onClose}>
             Cancel
           </Button>
@@ -139,8 +88,38 @@ export function UseTemplateModal({
           >
             {acting ? "Opening draft…" : "Open draft"}
           </Button>
+        </>
+      }
+    >
+      <div className="tpl-modal-body" data-testid="use-template-modal">
+        <div className="ui-field">
+          <span className="ui-lbl">Client</span>
+          {usable.length === 0 ? (
+            <p className="tpl-modal-empty">No ready clients to use this with.</p>
+          ) : (
+            <ClientCombobox
+              clients={usable}
+              value={selected?.relationshipId ?? ""}
+              onChange={setSelectedId}
+            />
+          )}
         </div>
+        {selected ? (
+          <p className="tpl-modal-banner">
+            <Info size={18} strokeWidth={1.75} aria-hidden="true" />
+            <span>
+              This opens a <b>draft plan</b> for {firstName}. Nothing changes
+              for {firstName} until you publish, and your template stays as it
+              is.
+            </span>
+          </p>
+        ) : null}
+        {error ? (
+          <p className="tpl-modal-error" role="alert">
+            {error}
+          </p>
+        ) : null}
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { Check, ChevronDown, Search } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Tabs } from "../../components/ui";
 
-/** Type filter aligned to locked frames 168/169 (not the old six tabs). */
+/** Type tabs and filters aligned to W-168. */
 export type TemplateTypeFilter =
   | "all"
   | "workout"
@@ -15,60 +16,74 @@ export type TemplateScope = "all" | "bases" | "mine";
 
 export type TemplateStatusFilter = "all" | "published" | "draft" | "archived";
 
+export type TemplateSort = "edited" | "name";
+
 export const TYPE_FILTER_OPTIONS: {
   value: Exclude<TemplateTypeFilter, "combined">;
   label: string;
   path: string;
 }[] = [
   { value: "all", label: "All", path: "/templates" },
-  { value: "workout", label: "Workout", path: "/templates/workouts" },
+  { value: "workout", label: "Workouts", path: "/templates/workouts" },
   { value: "nutrition", label: "Nutrition", path: "/templates/diets" },
-  {
-    value: "onboarding",
-    label: "Intake form",
-    path: "/templates/onboarding",
-  },
-  { value: "checkin", label: "Check-in form", path: "/templates/checkins" },
+  { value: "checkin", label: "Check-in forms", path: "/templates/checkins" },
+  { value: "onboarding", label: "Intake forms", path: "/templates/onboarding" },
 ];
 
 const OWNER_OPTIONS: { value: TemplateScope; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "mine", label: "Mine" },
+  { value: "all", label: "Anyone" },
+  { value: "mine", label: "You" },
   { value: "bases", label: "FitBud base" },
 ];
 
 const STATUS_OPTIONS: { value: TemplateStatusFilter; label: string }[] = [
-  { value: "all", label: "All" },
+  { value: "all", label: "Any" },
   { value: "published", label: "Published" },
   { value: "draft", label: "Draft" },
   { value: "archived", label: "Archived" },
 ];
 
-function SingleSelectFilter({
+const SORT_OPTIONS: { value: TemplateSort; label: string }[] = [
+  { value: "edited", label: "Last edited" },
+  { value: "name", label: "Name" },
+];
+
+export function FilterChipSelect({
   label,
   value,
+  defaultValue,
   options,
   onChange,
+  align = "left",
+  hideLabel = false,
 }: {
   label: string;
   value: string;
+  defaultValue: string;
   options: { value: string; label: string }[];
   onChange: (value: string) => void;
+  align?: "left" | "right";
+  hideLabel?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const baseId = useId();
   const selected = options.find((option) => option.value === value);
-  const summary =
-    value === "all" || !selected ? label : `${label}: ${selected.label}`;
 
   useEffect(() => {
     if (!open) return;
     function onPointerDown(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
     }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
     document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   return (
@@ -76,22 +91,27 @@ function SingleSelectFilter({
       <button
         type="button"
         className={
-          value !== "all"
-            ? "templates-filter-trigger has-selection"
-            : "templates-filter-trigger"
+          value !== defaultValue
+            ? "ui-chip templates-filter-trigger is-active"
+            : "ui-chip templates-filter-trigger"
         }
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={`${baseId}-menu`}
         onClick={() => setOpen((current) => !current)}
       >
-        {summary}
+        {hideLabel ? null : `${label} `}
+        <b>{selected?.label}</b>
         <ChevronDown size={16} strokeWidth={1.75} aria-hidden="true" />
       </button>
       {open ? (
         <ul
           id={`${baseId}-menu`}
-          className="templates-filter-menu"
+          className={
+            align === "right"
+              ? "templates-filter-menu is-right"
+              : "templates-filter-menu"
+          }
           role="listbox"
           aria-label={label}
         >
@@ -122,14 +142,17 @@ function SingleSelectFilter({
 
 export function TemplateScopeToolbar({
   typeFilter,
-  showLibrariesLink = true,
+  counts,
 }: {
   typeFilter: TemplateTypeFilter;
-  showLibrariesLink?: boolean;
+  /** Rows per type tab; "all" is the total. Omitted counts render no badge. */
+  counts?: Partial<Record<Exclude<TemplateTypeFilter, "combined">, number>>;
 }) {
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const scope = readTemplateScope(params);
   const status = readTemplateStatus(params);
+  const sort = readTemplateSort(params);
   const q = params.get("q") ?? "";
   const showClear = scope !== "all" || status !== "all" || Boolean(q.trim());
 
@@ -144,6 +167,13 @@ export function TemplateScopeToolbar({
     const copy = new URLSearchParams(params);
     if (next === "all") copy.delete("status");
     else copy.set("status", next);
+    setParams(copy, { replace: true });
+  }
+
+  function setSort(next: TemplateSort) {
+    const copy = new URLSearchParams(params);
+    if (next === "edited") copy.delete("sort");
+    else copy.set("sort", next);
     setParams(copy, { replace: true });
   }
 
@@ -162,73 +192,79 @@ export function TemplateScopeToolbar({
     setParams(copy, { replace: true });
   }
 
+  const activeTab = typeFilter === "combined" ? "all" : typeFilter;
+  const search = params.toString();
+
   return (
-    <div className="templates-hub-toolbar" data-testid="templates-hub-toolbar">
-      <label className="templates-hub-search">
-        <Search size={16} strokeWidth={1.75} aria-hidden="true" />
-        <span className="sr-only">Search templates</span>
-        <input
-          type="search"
-          placeholder="Search templates"
-          value={q}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-      </label>
-
-      <div
-        className="templates-type-segment"
-        role="group"
+    <>
+      <Tabs
         aria-label="Template types"
+        value={activeTab}
+        items={TYPE_FILTER_OPTIONS.map((option) => ({
+          id: option.value,
+          label: option.label,
+          count: counts?.[option.value],
+        }))}
+        onChange={(id) => {
+          const option = TYPE_FILTER_OPTIONS.find((o) => o.value === id);
+          if (!option) return;
+          navigate(search ? `${option.path}?${search}` : option.path);
+        }}
+      />
+      <div
+        className="templates-hub-toolbar"
+        data-testid="templates-hub-toolbar"
       >
-        {TYPE_FILTER_OPTIONS.map((option) => {
-          const active =
-            typeFilter === option.value ||
-            (option.value === "all" && typeFilter === "combined");
-          const search = params.toString();
-          const to = search ? `${option.path}?${search}` : option.path;
-          return (
-            <Link
-              key={option.value}
-              to={to}
-              className={active ? "is-on" : undefined}
-              aria-current={active ? "page" : undefined}
-            >
-              {option.label}
-            </Link>
-          );
-        })}
+        <label className="templates-hub-search">
+          <Search size={16} strokeWidth={1.75} aria-hidden="true" />
+          <span className="sr-only">Search templates</span>
+          <input
+            type="search"
+            placeholder="Search templates"
+            value={q}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <FilterChipSelect
+          label="Owner"
+          value={scope}
+          defaultValue="all"
+          options={OWNER_OPTIONS}
+          onChange={(value) => setScope(value as TemplateScope)}
+        />
+        <FilterChipSelect
+          label="Status"
+          value={status}
+          defaultValue="all"
+          options={STATUS_OPTIONS}
+          onChange={(value) => setStatus(value as TemplateStatusFilter)}
+        />
+        {showClear ? (
+          <button
+            type="button"
+            className="templates-filter-clear"
+            onClick={clearFilters}
+          >
+            Clear filters
+          </button>
+        ) : null}
+        <span className="templates-sort-label">Sort</span>
+        <FilterChipSelect
+          label="Sort"
+          hideLabel
+          value={sort}
+          defaultValue="edited"
+          options={SORT_OPTIONS}
+          onChange={(value) => setSort(value as TemplateSort)}
+          align="right"
+        />
       </div>
-
-      <SingleSelectFilter
-        label="Owner"
-        value={scope}
-        options={OWNER_OPTIONS}
-        onChange={(value) => setScope(value as TemplateScope)}
-      />
-      <SingleSelectFilter
-        label="Status"
-        value={status}
-        options={STATUS_OPTIONS}
-        onChange={(value) => setStatus(value as TemplateStatusFilter)}
-      />
-
-      {showClear ? (
-        <button
-          type="button"
-          className="templates-filter-clear"
-          onClick={clearFilters}
-        >
-          Clear filters
-        </button>
-      ) : null}
-
-      {showLibrariesLink ? (
-        <Link className="templates-libraries-link" to="/templates/libraries/exercises">
-          Libraries
-        </Link>
-      ) : null}
-    </div>
+    </>
   );
+}
+
+export function readTemplateSort(params: URLSearchParams): TemplateSort {
+  return params.get("sort") === "name" ? "name" : "edited";
 }
 
 export function readTemplateScope(params: URLSearchParams): TemplateScope {
