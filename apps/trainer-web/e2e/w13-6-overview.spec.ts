@@ -142,10 +142,15 @@ test.describe("W13-6 Client Overview and review modal", () => {
     const box = await panel.boundingBox();
     expect(Math.round(box!.width)).toBe(720);
     await expect(panel.getByText(/^1 of \d+$/)).toBeVisible();
-    await expect(panel.getByRole("heading", { name: new RegExp(`also open for ${first}`, "i") })).toBeVisible();
-    await expect(panel.getByRole("button", { name: /^noted, keep open$/i })).toBeVisible();
-    await expect(panel.getByRole("button", { name: /^remind$/i })).toBeVisible();
+    // W13-13 (D-W13-21): the app layout; the name links to the client page.
+    await expect(panel.getByTestId("panel-client-link")).toContainText(first);
+    await expect(panel.getByRole("button", { name: /more actions/i })).toHaveCount(0);
     await expect(panel.getByRole("button", { name: /^resolve…?$/i })).toBeVisible();
+    // The first item may already be noted by another spec: Noted, keep open
+    // or the noted state line, never both.
+    const noted = panel.getByRole("button", { name: /^noted, keep open$/i });
+    const notedState = panel.getByTestId("panel-noted-state");
+    await expect(noted.or(notedState)).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.getByTestId("screen-TW-05")).toHaveCount(0);
     await expect(review).toBeFocused();
@@ -232,23 +237,22 @@ test.describe("W13-6 Client Overview and review modal", () => {
       const panel = await modalLoaded(page);
       await shot(page, "W-03x-exception-modal", size);
 
-      console.log("STEP W-03xb more menu");
-      await panel.getByRole("button", { name: /more actions/i }).click();
-      await expect(page.getByRole("menu")).toBeVisible();
-      await shot(page, "W-03xb-modal-more-menu", size);
-      await page.keyboard.press("Escape");
-
       console.log("STEP W-03xc resolve form");
-      const missed = panel.locator(".sp-also-row").filter({ hasText: /Missed workout/i }).first();
-      if (!(await panel.locator(".sp-title").filter({ hasText: /Missed workout/i }).count()) && (await missed.count())) {
-        await missed.click();
+      // The pager is the only item navigation (W13-13): step to a missed
+      // workout when the client has one.
+      for (let k = 0; k < 10; k += 1) {
+        if (await panel.locator(".sp-title").filter({ hasText: /Missed workout/i }).count()) break;
+        const next = panel.getByRole("button", { name: "Next item" });
+        if (!(await next.count()) || !(await next.isEnabled())) break;
+        await next.click();
+        await expect(panel.locator(".sp-title")).toBeVisible({ timeout: 15_000 });
       }
       await panel.getByRole("button", { name: /^resolve…?$/i }).click();
       await expect(panel.getByRole("button", { name: /^resolve item$/i })).toBeVisible();
       await shot(page, "W-03xc-modal-resolve-form", size);
 
       console.log("STEP W-03xd resolved, next item");
-      await panel.getByRole("button", { name: /talked to client/i }).click();
+      await panel.getByRole("button", { name: /^talked to /i }).click();
       await panel.getByRole("button", { name: /^resolve item$/i }).click();
       await expect(page.getByTestId("exception-resolve-banner")).toBeVisible();
       await shot(page, "W-03xd-modal-resolved-next", size);

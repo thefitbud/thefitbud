@@ -3,7 +3,6 @@ import {
   clientTimeLabel,
   nudgeHintTone,
   nudgeLimitNotice,
-  remindHelper,
   quietHoursNotice,
   resolveLockHelper,
   waitLabel,
@@ -96,26 +95,6 @@ describe("resolveLockHelper", () => {
         otherOpen: 1,
       }),
     ).toBe("Resolving closes this item. Rohan's other item stays open.");
-  });
-});
-
-describe("remindHelper (W13-11, FLOW 6.3)", () => {
-  it("promises a push only when push is on", () => {
-    expect(remindHelper({ firstName: "Rohan", label: "logs_on_own" })).toBe(
-      "Sends Rohan a push notification",
-    );
-    expect(remindHelper({ firstName: null, label: null })).toBe(
-      "Sends your client a push notification",
-    );
-  });
-
-  it("says the reminder goes to the inbox when push is off or reminders are paused", () => {
-    expect(remindHelper({ firstName: "Ishita", label: "notifications_off" })).toBe(
-      "Push is off for Ishita. A reminder goes to their FitBud inbox.",
-    );
-    expect(remindHelper({ firstName: "Farhan", label: "reminders_paused" })).toBe(
-      "Reminders are paused for Farhan. A reminder goes to their FitBud inbox.",
-    );
   });
 });
 
