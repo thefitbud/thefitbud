@@ -1,6 +1,6 @@
 appId: com.thefitbud.mobile.staging
 ---
-# Subflow of F20 (Z12-50). No tags. On a client's screen: wait for it to load, press Nudge….
+# Subflow of F20 (Z12-50). No tags. On a client's screen: wait for it to load, press Remind….
 - extendedWaitUntil:
     visible:
       id: "client-nudge"

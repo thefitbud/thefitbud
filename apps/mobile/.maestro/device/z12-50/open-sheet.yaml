@@ -1,10 +1,10 @@
 appId: com.thefitbud.mobile.staging
 ---
 # Subflow of F20 (Z12-50). No tags. After `nudge-client.yaml`: through the TM-03j picker if
-# it is up (a client with one open item goes straight to the sheet), to the nudge sheet.
+# it is up (a client with one open item goes straight to the sheet), to the reminder sheet.
 - runFlow:
     when:
-      visible: "Nudge .* about…"
+      visible: "Remind .* about…"
     commands:
       - takeScreenshot: TM-03j
       - tapOn: "Next"
