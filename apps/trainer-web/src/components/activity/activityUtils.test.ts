@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import { NUTRIENT_SCALE, type MealAssignment, type MealFoodItem } from "@fitbud/contracts";
 import {
   activityMealChipLabel,
+  dayHeading,
   feedCardTitle,
   mealDetailLine,
   planEnergyKcal,
+  rangeLabel,
 } from "./activityUtils";
 
 function scaledItem(kcal: number): MealFoodItem {
@@ -58,5 +60,18 @@ describe("activityMealChipLabel / feedCardTitle (Z12-8)", () => {
   it("titles the feed card by type and range", () => {
     expect(feedCardTitle("meal", "this_week")).toBe("Meals · this week");
     expect(feedCardTitle("workout", "last_week")).toBe("Workouts · last week");
+  });
+});
+
+describe("dayHeading / rangeLabel (W13-8)", () => {
+  it("reads Today with the date only for the client’s today", () => {
+    expect(dayHeading("2026-11-18", "2026-11-18")).toBe("Today · Wed 18 Nov");
+    expect(dayHeading("2026-11-17", "2026-11-18")).toBe("Tue 17 Nov");
+  });
+
+  it("writes a range as 16 – 22 Nov, across months, or one day", () => {
+    expect(rangeLabel("2026-11-16", "2026-11-22")).toBe("16 – 22 Nov");
+    expect(rangeLabel("2026-11-29", "2026-12-05")).toBe("29 Nov – 5 Dec");
+    expect(rangeLabel("2026-11-18", "2026-11-18")).toBe("18 Nov");
   });
 });
