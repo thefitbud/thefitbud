@@ -253,6 +253,15 @@ test.describe("W13-3 builder workspace", () => {
           expect(widths[2], `${label} properties`).toBe(340);
         }
         await shot(page, `${label}.png`);
+        if (width === 1440) {
+          // Phone preview (restyled with the Chip primitive): opens, renders, closes.
+          await page.getByRole("button", { name: "Preview", exact: true }).click();
+          const preview = page.getByRole("dialog", { name: /^Preview as / });
+          await expect(preview).toBeVisible({ timeout: 15_000 });
+          await shot(page, `${frame}-preview-${label.slice(frame.length + 1)}.png`);
+          await preview.getByRole("button", { name: "Close" }).click();
+          await expect(preview).toHaveCount(0);
+        }
       }
     }
   });

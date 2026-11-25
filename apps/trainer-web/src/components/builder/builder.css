@@ -863,7 +863,8 @@
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
   gap: var(--s4);
-  align-items: start;
+  /* Cards in a row share one height (W-154). */
+  align-items: stretch;
 }
 
 .builder .meal-card-row {
