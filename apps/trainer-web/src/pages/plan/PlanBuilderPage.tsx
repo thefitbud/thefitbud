@@ -123,7 +123,13 @@ export function PlanBuilderPage() {
         backLabel="Back to plan"
         initialTitle={planTitle}
         initialContent={version.content}
-        statusLabel={`Draft v${version.versionNumber}`}
+        statusLabel={
+          editable ? `Draft v${version.versionNumber}` : `Published v${version.versionNumber}`
+        }
+        versionPill={{
+          state: editable ? "draft" : "published",
+          versionNumber: version.versionNumber,
+        }}
         tab={tab}
         onTabChange={(next) => setParams({ tab: next }, { replace: true })}
         save={save}

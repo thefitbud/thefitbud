@@ -352,6 +352,80 @@ export function normalizeCheckinDraftOrder(
   return flattenSections(checkinDraftSections(drafts));
 }
 
+/** Picker sections for standard measures (W-171b): which groups sit under which heading. */
+export const STANDARD_PICKER_SECTIONS: ReadonlyArray<{
+  title: string;
+  groupIds: readonly StandardCheckinGroupId[];
+}> = [
+  { title: "Body", groupIds: ["weight", "body"] },
+  { title: "Photos", groupIds: ["photos"] },
+  { title: "How they feel", groupIds: ["energy", "sleep_quality", "stress", "hunger"] },
+  { title: "Notes", groupIds: ["notes"] },
+];
+
+/** Name and one-line hint for any standard key in the measure picker. */
+export function standardKeyCopy(key: CheckinStandardKey): { label: string; hint: string } {
+  const group = standardGroupFor(key);
+  const copy = STANDARD_KEY_PICKER_COPY[key];
+  if (group.keys.length === 1) return { label: group.title, hint: group.kind };
+  const label = group.id === "photos" ? `${copy?.label ?? key} photo` : (copy?.label ?? key);
+  return { label, hint: copy?.hint || group.kind };
+}
+
+/** Standard keys the form already asks. */
+export function addedStandardKeys(drafts: CheckinFieldDraft[]): CheckinStandardKey[] {
+  return drafts.flatMap((draft) => (draft.key ? [draft.key] : []));
+}
+
+/**
+ * Adds standard keys across groups (the "Add a standard measure" picker).
+ * Keys already asked stay as they are; each group goes through
+ * `setStandardGroupKeys`, so wording, ids and v1 conversions stay in one place.
+ */
+export function addStandardKeys(
+  drafts: CheckinFieldDraft[],
+  keys: readonly CheckinStandardKey[],
+): CheckinFieldDraft[] {
+  let next = drafts;
+  for (const group of STANDARD_CHECKIN_GROUPS) {
+    const wanted = group.keys.filter((key) => keys.includes(key));
+    if (wanted.length === 0) continue;
+    const have = next.flatMap((draft) =>
+      draft.key && group.keys.includes(draft.key) ? [draft.key] : [],
+    );
+    next = setStandardGroupKeys(next, group.id, [...have, ...wanted]);
+  }
+  return next;
+}
+
+/** The four answer kinds in the answer-type control (W-171). Other types stay in the Type list. */
+export type CheckinAnswerFamily = "number" | "scale" | "text" | "photos";
+
+export const CHECKIN_ANSWER_FAMILIES: ReadonlyArray<{
+  value: CheckinAnswerFamily;
+  label: string;
+  types: readonly CheckinBuilderFieldType[];
+}> = [
+  { value: "number", label: "Number", types: ["number", "measurement"] },
+  { value: "scale", label: "Scale 1–5", types: ["scale_1_5"] },
+  { value: "text", label: "Text", types: ["short_text", "long_text"] },
+  { value: "photos", label: "Photos", types: ["photo_intent"] },
+];
+
+/** The family a type belongs to; null for yes / no and the two choice types. */
+export function answerFamilyOf(type: CheckinBuilderFieldType): CheckinAnswerFamily | null {
+  return CHECKIN_ANSWER_FAMILIES.find((family) => family.types.includes(type))?.value ?? null;
+}
+
+/** Type to use when the trainer picks a family: keep the current one if it fits. */
+export function typeForFamily(
+  current: CheckinBuilderFieldType,
+  family: CheckinAnswerFamily,
+): CheckinBuilderFieldType {
+  const entry = CHECKIN_ANSWER_FAMILIES.find((row) => row.value === family)!;
+  return entry.types.includes(current) ? current : entry.types[0]!;
+}
+
 /** Standard groups the form does not ask yet. */
 export function missingStandardGroups(
   drafts: CheckinFieldDraft[],

@@ -5,6 +5,8 @@ import type {
   MealPrescription,
   WorkoutDay,
 } from "@fitbud/contracts";
+import { X } from "lucide-react";
+import { Button } from "../ui";
 import {
   BuilderExerciseLibrary,
   BuilderFoodLibrary,
@@ -46,9 +48,10 @@ export function LibraryDrawer({
       <header className="library-drawer-head">
         <h2 className="builder-pane-title">{heading}</h2>
         {overlay ? (
-          <button type="button" className="button-ghost button-sm" onClick={onClose}>
+          <Button variant="ghost" className="library-drawer-close" onClick={onClose}>
+            <X className="ui-i" strokeWidth={1.75} aria-hidden />
             Close
-          </button>
+          </Button>
         ) : null}
       </header>
       {kind === "workout" ? (
