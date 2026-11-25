@@ -83,23 +83,19 @@ env:
 - tapOn: "Review"
 - extendedWaitUntil:
     visible:
-      id: "exception-more"
+      id: "exception-resolve"
     timeout: 30000
 - takeScreenshot: trainer-exception__review
 - runFlow: ../../common/assert-no-crash.yaml
 
-# Mark reviewed first when it is still open; the API resolves a reviewed item only
-# (v3 exception review, Z12-51: TM-04a -> TM-04e -> TM-04d -> TM-04f).
+# Noted is optional: Resolve works on an open item (Z14-23). Resolve opens ResolveSheet.
 - runFlow:
     when:
       visible:
-        id: "exception-markReviewed"
+        id: "exception-noted"
     commands:
       - tapOn:
-          id: "exception-markReviewed"
-      - extendedWaitUntil:
-          visible: "Reviewed by you.*"
-          timeout: 20000
+          id: "exception-noted"
 - tapOn:
     id: "exception-resolve"
 - extendedWaitUntil:
