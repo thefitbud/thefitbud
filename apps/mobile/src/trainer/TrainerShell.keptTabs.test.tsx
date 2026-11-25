@@ -10,10 +10,10 @@ import { useRefreshWhenActive } from "./keptTab";
  * that opening a detail screen leaves the tabs mounted underneath.
  */
 const counts = vi.hoisted(() => ({
-  mount: { attention: 0, clients: 0, checkins: 0 },
-  unmount: { attention: 0, clients: 0, checkins: 0 },
-  active: { attention: true, clients: true, checkins: true },
-  reload: { attention: 0, clients: 0, checkins: 0 },
+  mount: { attention: 0, clients: 0, checkins: 0, more: 0 },
+  unmount: { attention: 0, clients: 0, checkins: 0, more: 0 },
+  active: { attention: true, clients: true, checkins: true, more: true },
+  reload: { attention: 0, clients: 0, checkins: 0, more: 0 },
 }));
 
 vi.mock("../auth/AuthProvider", () => ({
@@ -76,7 +76,18 @@ function stub(name: "attention" | "clients" | "checkins") {
 vi.mock("./AttentionTab", () => ({ AttentionTab: stub("attention") }));
 vi.mock("./ClientsTab", () => ({ ClientsTab: stub("clients") }));
 vi.mock("./CheckinsTab", () => ({ CheckinsTab: stub("checkins") }));
-vi.mock("./MoreScreen", () => ({ TrainerMoreScreen: () => <div data-testid="more-tab" /> }));
+vi.mock("./MoreScreen", () => ({
+  TrainerMoreScreen: (p: { active?: boolean }) => {
+    counts.active.more = p.active ?? true;
+    useEffect(() => {
+      counts.mount.more += 1;
+      return () => {
+        counts.unmount.more += 1;
+      };
+    }, []);
+    return <div data-testid="more-tab" />;
+  },
+}));
 vi.mock("./TrainerNotificationSettingsScreen", () => ({
   TrainerNotificationSettingsScreen: () => <div />,
 }));
@@ -98,29 +109,44 @@ import { TrainerShell } from "./TrainerShell";
 const tab = (label: string) => fireEvent.click(screen.getByLabelText(label));
 
 beforeEach(() => {
-  for (const key of ["attention", "clients", "checkins"] as const) {
+  for (const key of ["attention", "clients", "checkins", "more"] as const) {
     counts.mount[key] = 0;
     counts.unmount[key] = 0;
-    counts.reload[key] = 0;
+    if (key !== "more") counts.reload[key] = 0;
   }
 });
 
 describe("TrainerShell keeps visited tabs mounted", () => {
   it("switching away and back mounts nothing again", () => {
     render(<TrainerShell />);
-    expect(counts.mount).toEqual({ attention: 1, clients: 0, checkins: 0 });
+    expect(counts.mount).toEqual({ attention: 1, clients: 0, checkins: 0, more: 0 });
 
     tab("Clients");
-    expect(counts.mount).toEqual({ attention: 1, clients: 1, checkins: 0 });
+    expect(counts.mount).toEqual({ attention: 1, clients: 1, checkins: 0, more: 0 });
     expect(counts.active).toMatchObject({ attention: false, clients: true });
 
     tab("Attention");
     tab("Clients");
     tab("Check-ins");
     tab("Attention");
-    expect(counts.mount).toEqual({ attention: 1, clients: 1, checkins: 1 });
-    expect(counts.unmount).toEqual({ attention: 0, clients: 0, checkins: 0 });
+    expect(counts.mount).toEqual({ attention: 1, clients: 1, checkins: 1, more: 0 });
+    expect(counts.unmount).toEqual({ attention: 0, clients: 0, checkins: 0, more: 0 });
     expect(counts.active).toMatchObject({ attention: true, clients: false, checkins: false });
+  });
+
+  it("More joins the visited set: leaving and returning does not remount it", () => {
+    render(<TrainerShell />);
+    expect(screen.queryByTestId("more-tab")).toBeNull();
+    tab("More");
+    expect(counts.mount.more).toBe(1);
+    expect(counts.active.more).toBe(true);
+    tab("Clients");
+    expect(screen.getByTestId("more-tab")).toBeTruthy();
+    expect(counts.active.more).toBe(false);
+    tab("More");
+    expect(counts.mount.more).toBe(1);
+    expect(counts.unmount.more).toBe(0);
+    expect(counts.active.more).toBe(true);
   });
 
   it("a tab that was never opened is not mounted", () => {
@@ -136,11 +162,11 @@ describe("TrainerShell keeps visited tabs mounted", () => {
       within(screen.getByTestId("clients-tab")).getByText("open-client-row"),
     );
     expect(screen.getByTestId("client-screen")).toBeTruthy();
-    expect(counts.unmount).toEqual({ attention: 0, clients: 0, checkins: 0 });
+    expect(counts.unmount).toEqual({ attention: 0, clients: 0, checkins: 0, more: 0 });
     expect(counts.active).toMatchObject({ attention: false, clients: false });
 
     fireEvent.click(screen.getByText("back"));
-    expect(counts.mount).toEqual({ attention: 1, clients: 1, checkins: 0 });
+    expect(counts.mount).toEqual({ attention: 1, clients: 1, checkins: 0, more: 0 });
     expect(counts.active.clients).toBe(true);
   });
 

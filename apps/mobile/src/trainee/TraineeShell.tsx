@@ -57,6 +57,7 @@ import {
 } from "./TodayTab";
 import { WorkoutTab } from "./WorkoutTab";
 import { ActiveWorkoutScreen } from "./ActiveWorkoutScreen";
+import { resumeHeldWorkoutFeedback } from "./workout/rpeRating";
 import { WorkoutSummaryScreen } from "./WorkoutSummaryScreen";
 import { openActiveWorkout } from "./workoutSession";
 import {
@@ -404,6 +405,30 @@ export function TraineeShell({
   } = useAuth();
   const sync = useSyncEngine();
   const timeZone = me?.timezone ?? "UTC";
+  // Z14-41: a rating and note held before a force-quit are sent when the
+  // app opens and each time it returns to the foreground, not only when the
+  // Workout tab mounts. The 48 h window, owner check, token reuse and
+  // double-send guards live in `resumeHeldWorkoutFeedback`; a failure is
+  // logged and never blocks this screen.
+  const heldOwnerId = me?.userId ?? null;
+  const heldResumeDeps = useRef({ sync, api });
+  heldResumeDeps.current = { sync, api };
+  useEffect(() => {
+    if (!heldOwnerId) return;
+    const resume = () => {
+      const { sync: engine, api: client } = heldResumeDeps.current;
+      void resumeHeldWorkoutFeedback({
+        ownerId: heldOwnerId,
+        sync: engine,
+        api: client,
+      }).catch((err: unknown) => reportError("workout.feedback.resume", err));
+    };
+    resume();
+    const subscription = AppState.addEventListener?.("change", (next) => {
+      if (next === "active") resume();
+    });
+    return () => subscription?.remove();
+  }, [heldOwnerId]);
   const today = useMemo(() => localDateInTimezone(timeZone), [timeZone]);
 
   const [tab, setTab] = useState<TraineeTab>("today");

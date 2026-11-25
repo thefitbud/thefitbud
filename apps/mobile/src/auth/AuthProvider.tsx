@@ -374,6 +374,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       meResponse: MeResponse,
       preferredRole: Role | null,
       client: FitBudApiClient,
+      /**
+       * Z14-40: this user's stored relationships. When given, the first
+       * screen is chosen from them and the live call runs in the background.
+       */
+      paintFrom?: CoachingRelationship[] | null,
     ) => {
       const autoRole = selectInitialMobileRole(meResponse.permittedRoles);
       const role =
@@ -395,7 +400,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setNeedsAccountLink(false);
       setArchivedAccount(null);
 
-      if (role === "trainee" || role === "trainer") {
+      if ((role === "trainee" || role === "trainer") && paintFrom) {
+        setRelationships(paintFrom);
+        setRelationshipsLoaded(true);
+        // The live list replaces the stored one when it answers. A refused
+        // session still signs out; any other failure keeps what is shown.
+        void client
+          .listRelationships({ limit: 50 })
+          .then((page) => {
+            if (meRef.current?.userId !== meResponse.userId) return;
+            setRelationships(page.items);
+          })
+          .catch((error: unknown) => {
+            if (error instanceof ApiClientError && error.status === 401) {
+              dropRefusedSessionRef.current();
+            } else if (!isNetworkFailure(error)) {
+              reportError("auth-relationships-background", error);
+            }
+          });
+        void registerPushToken(client).catch((error: unknown) => {
+          reportError("auth-push-register", error);
+        });
+      } else if (role === "trainee" || role === "trainer") {
         await loadRelationships(client);
         // Both roles may register a device (D-B9); the route allows trainer
         // and trainee once a role is selected. Z14-3: not awaited, so the first
@@ -443,6 +469,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const restorePhaseRef = useRef(restorePhase);
   restorePhaseRef.current = restorePhase;
   const restoreStartedRef = useRef(false);
+  const dropRefusedSessionRef = useRef<() => void>(() => undefined);
 
   /**
    * Native startup restore and its Retry (AB3). Reads SecureStore, refreshes
@@ -523,7 +550,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (result.status === "signed_in") {
       try {
-        await applyMe(result.me, result.preferredRole, api);
+        // Z14-40: a stored snapshot for this user paints the first screen
+        // without waiting on `listRelationships`. A trainee's empty list is
+        // not trusted (the snapshot of a trainer-role session stores none).
+        const stored = await loadMeSnapshot(result.me.userId).catch(() => null);
+        const storedRole =
+          result.preferredRole && result.me.permittedRoles.includes(result.preferredRole)
+            ? result.preferredRole
+            : selectInitialMobileRole(result.me.permittedRoles);
+        const paintFrom =
+          stored &&
+          (storedRole === "trainer" ||
+            (storedRole === "trainee" && stored.relationships.length > 0))
+            ? stored.relationships
+            : null;
+        await applyMe(result.me, result.preferredRole, api, paintFrom);
         persistSession({
           accessToken: tokens.getAccessToken(),
           selectedRole: selectedRoleRef.current,
@@ -593,6 +634,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setNeedsAccountLink(true);
     setRoleSelectRequested(false);
   }, [leaveSnapshotMode, tokens]);
+
+  dropRefusedSessionRef.current = dropRefusedSession;
 
   /**
    * The app is open on the snapshot: ask the server again, quietly. On

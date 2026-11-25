@@ -7,7 +7,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { signIn } from "./support/session";
 
-const OUT = path.resolve("qa-captures/w13-7");
+const OUT = path.resolve("qa-captures/w13-15");
 const DEEPAK = "f2a64fdb-96ad-46f3-a95e-99151b4a25f1";
 const CHECKIN = "27c1bdac-36fc-46b0-b563-bc086f9ffa5f";
 
@@ -170,6 +170,32 @@ test.describe("W13-7 check-in review", () => {
       expect(last!.y + last!.height).toBeLessThanOrEqual(barBox.y + 1);
       await checks(page, `${w}`);
     }
+  });
+
+  test("the note-visibility checkbox is a 44 px row with a small box at every width", async ({
+    page,
+  }) => {
+    const boxes: number[] = [];
+    for (const [w, h] of [
+      [1440, 900],
+      [1180, 820],
+      [1024, 1366],
+    ] as const) {
+      await page.setViewportSize({ width: w, height: h });
+      await openReview(page);
+      const cbx = page.getByRole("checkbox", { name: /can see this note$/ });
+      if ((await cbx.count()) === 0) continue; // already reviewed: no note control
+      const row = (await cbx.boundingBox())!;
+      expect(row.height).toBeGreaterThanOrEqual(44);
+      const glyph = (await cbx.locator("i").boundingBox())!;
+      expect(glyph.width).toBeLessThanOrEqual(24);
+      expect(glyph.height).toBeLessThanOrEqual(24);
+      boxes.push(Math.round(glyph.width));
+      await cbx.focus();
+      await page.keyboard.press("Space");
+      await expect(cbx).toHaveAttribute("aria-checked", "true");
+    }
+    expect(new Set(boxes).size).toBeLessThanOrEqual(1);
   });
 
   test("save a review: window stays put and the reviewed card is visible", async ({
