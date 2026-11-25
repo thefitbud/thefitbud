@@ -870,6 +870,29 @@ describe("ClientOverviewPage review modal (W13-6)", () => {
     }
   });
 
+  it("two missed meals read as two distinguishable titles (W13-21)", async () => {
+    const meal = (n: number, mealName: string, localDate: string) => ({
+      ...item(n, "attention"),
+      type: "meal_overdue",
+      summary: "Overdue meal",
+      details: { mealName, localDate },
+    });
+    api.listExceptions.mockResolvedValue({
+      items: [meal(1, "Lunch", "2026-11-23"), meal(2, "Dinner", "2026-11-24")],
+      nextCursor: null,
+    });
+    renderPage("active", "current");
+    await screen.findAllByRole("button", { name: "Review" });
+    const card = screen.getByTestId("ov-attention");
+    const titles = within(card)
+      .getAllByText(/^Overdue meal/)
+      .map((n) => n.textContent);
+    expect(titles).toEqual([
+      "Overdue meal · Dinner · Tue 24 Nov",
+      "Overdue meal · Lunch · Mon 23 Nov",
+    ]);
+  });
+
   it("closing the modal returns focus to the Review button that opened it", async () => {
     api.listExceptions.mockResolvedValue({ items: [item(1, "critical")], nextCursor: null });
     renderPage("active", "current");
