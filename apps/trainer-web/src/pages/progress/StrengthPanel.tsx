@@ -144,7 +144,7 @@ export function WeeklyBars({
   const label = (week: StrengthWeekCount) =>
     week.weekStart === thisWeek
       ? "This week"
-      : `w/c ${formatCivilDate(week.weekStart, { includeWeekday: false })}`;
+      : `Week of ${formatCivilDate(week.weekStart, { includeWeekday: false })}`;
 
   // Week labels: the first, the last, and others no closer than about 150 px.
   const labelled = new Set<number>();

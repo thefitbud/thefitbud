@@ -2,7 +2,8 @@ import { ThemeScope, createThemedStyles } from "../providers/ThemeProvider";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { Text } from "../components/Text";
-import { ApiClientError } from "@fitbud/api-client";
+import { ApiClientError, userFacingMessage } from "@fitbud/api-client";
+import { onboardingAnswerErrors } from "@fitbud/core";
 import type {
   OnboardingAnswers,
   OnboardingFormResponse,
@@ -10,7 +11,7 @@ import type {
   OnboardingFieldDefinition,
 } from "@fitbud/contracts";
 import { spacing } from "@fitbud/ui-mobile";
-import { useAuth, messageFromError } from "../auth/AuthProvider";
+import { useAuth } from "../auth/AuthProvider";
 import { ErrorBanner } from "../components/ErrorBanner";
 import { Button } from "../components/Button";
 import { Field } from "../components/Field";
@@ -33,6 +34,7 @@ import {
   isCaptureModeEnabled,
 } from "../dev/captureBridge";
 import { createIdempotencyKey } from "../lib/idempotency";
+import { reportError } from "../lib/reportError";
 import {
   intakeControlForField,
   parseNumberAnswer,
@@ -48,6 +50,13 @@ const STEP_TITLES = [
 ] as const;
 
 const TOTAL_STEPS = STEP_TITLES.length;
+
+/** Line under a question the trainee still has to answer (Z14-45). */
+const REQUIRED_ANSWER_COPY = "Answer this question to continue.";
+
+/** Shown when another device or session changed the draft first (D-W14-44). */
+const VERSION_CONFLICT_COPY =
+  "Your answers were updated somewhere else. Check them and submit again.";
 
 /** Mockup 21 / TR-03 capture fields when the pinned form is still legacy textareas. */
 const CAPTURE_ROUTINE_FIELDS: OnboardingFieldDefinition[] = [
@@ -108,6 +117,12 @@ type Props = {
   relationshipId: string;
 };
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((v): v is string => typeof v === "string")
+    : [];
+}
+
 function chunkFields(fields: OnboardingFieldDefinition[], steps: number) {
   if (fields.length === 0) return Array.from({ length: steps }, () => []);
   const size = Math.max(1, Math.ceil(fields.length / steps));
@@ -151,6 +166,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const captureMode = isCaptureModeEnabled();
   const [stepIndex, setStepIndex] = useState(0);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -180,12 +196,45 @@ function IntakeScreenBody({ relationshipId }: Props) {
         }
       }
     } catch (error) {
-      setErrorMessage(messageFromError(error));
+      reportError("IntakeScreen.load", error);
+      setErrorMessage(userFacingMessage(error));
     } finally {
       setLoading(false);
     }
   }, [api, relationshipId]);
 
+  /**
+   * Background refetch after a version conflict (D-W14-44): refreshes answers,
+   * version and status without the full-screen loading state and without
+   * touching the error banner. A failed refetch is only reported; the banner
+   * already says what the trainee needs to know.
+   */
+  async function refetchResponse() {
+    try {
+      const existing = await api.getOnboardingResponse(relationshipId);
+      setAnswers(existing.answers);
+      setVersion(existing.version);
+      setStatus(existing.status);
+    } catch (error) {
+      reportError("IntakeScreen.refetchResponse", error);
+    }
+  }
+
+  function stepIndexOfField(fieldId: string): number {
+    return fieldGroups.findIndex((group) => group.some((f) => f.id === fieldId));
+  }
+
+  /** Mark the given questions and jump to the step holding the first one. */
+  function showFieldErrors(fieldIds: string[]) {
+    const known = fieldIds.filter((id) => stepIndexOfField(id) >= 0);
+    if (known.length === 0) return false;
+    const next: Record<string, string> = {};
+    for (const id of known) next[id] = REQUIRED_ANSWER_COPY;
+    setFieldErrors(next);
+    const firstStep = Math.min(...known.map(stepIndexOfField));
+    setStepIndex(firstStep);
+    return true;
+  }
   useEffect(() => {
     void load();
   }, [load]);
@@ -216,6 +265,12 @@ function IntakeScreenBody({ relationshipId }: Props) {
   }, [definition?.fields, useCaptureRoutine]);
 
   function updateAnswer(fieldId: string, value: OnboardingAnswers[string] | undefined) {
+    setFieldErrors((current) => {
+      if (!(fieldId in current)) return current;
+      const next = { ...current };
+      delete next[fieldId];
+      return next;
+    });
     setAnswers((current) => {
       const next = { ...current };
       if (value === undefined) delete next[fieldId];
@@ -238,18 +293,33 @@ function IntakeScreenBody({ relationshipId }: Props) {
       setStatus(saved.status);
       setSavedFlash(true);
     } catch (error) {
-      setErrorMessage(messageFromError(error));
+      reportError("IntakeScreen.saveDraft", error);
       if (error instanceof ApiClientError && error.code === "ONBOARDING_VERSION_CONFLICT") {
-        await load();
+        setErrorMessage(VERSION_CONFLICT_COPY);
+        await refetchResponse();
+      } else {
+        setErrorMessage(userFacingMessage(error));
       }
     } finally {
       setSaving(false);
     }
   }
 
+  /**
+   * One draft save, then one submit with the version that save returned
+   * (D-W14-44). The returned version is passed on directly: React state set
+   * in this handler is not visible to it until the next render.
+   */
   async function submit() {
+    const checked = onboardingAnswerErrors(definition?.fields ?? [], answers);
+    const blocked = [...checked.missingFieldIds, ...checked.invalidFieldIds];
+    if (blocked.length > 0 && showFieldErrors(blocked)) {
+      setErrorMessage(null);
+      return;
+    }
     setSubmitting(true);
     setErrorMessage(null);
+    setFieldErrors({});
     try {
       const saved = await api.saveOnboardingDraft(relationshipId, {
         answers,
@@ -268,14 +338,20 @@ function IntakeScreenBody({ relationshipId }: Props) {
       submitIdempotencyKey.current = createIdempotencyKey();
       await refreshSession();
     } catch (error) {
-      setErrorMessage(messageFromError(error));
-      if (
-        error instanceof ApiClientError &&
-        (error.code === "ONBOARDING_VERSION_CONFLICT" ||
-          error.code === "ONBOARDING_INCOMPLETE")
-      ) {
+      reportError("IntakeScreen.submit", error);
+      if (error instanceof ApiClientError && error.code === "ONBOARDING_VERSION_CONFLICT") {
         submitIdempotencyKey.current = createIdempotencyKey();
-        await load();
+        setErrorMessage(VERSION_CONFLICT_COPY);
+        await refetchResponse();
+      } else if (error instanceof ApiClientError && error.code === "ONBOARDING_INCOMPLETE") {
+        submitIdempotencyKey.current = createIdempotencyKey();
+        const ids = [
+          ...stringList(error.details?.missingFieldIds),
+          ...stringList(error.details?.invalidFieldIds),
+        ];
+        if (!showFieldErrors(ids)) setErrorMessage(userFacingMessage(error));
+      } else {
+        setErrorMessage(userFacingMessage(error));
       }
     } finally {
       setSubmitting(false);
@@ -283,11 +359,11 @@ function IntakeScreenBody({ relationshipId }: Props) {
   }
 
   async function goNext() {
-    await saveDraft();
     if (stepIndex >= TOTAL_STEPS - 1) {
       await submit();
       return;
     }
+    await saveDraft();
     setStepIndex((s) => Math.min(TOTAL_STEPS - 1, s + 1));
   }
 
@@ -510,7 +586,14 @@ function IntakeScreenBody({ relationshipId }: Props) {
       {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
 
       {fieldGroups[stepIndex]?.length
-        ? fieldGroups[stepIndex]!.map((field) => renderField(field, readOnly))
+        ? fieldGroups[stepIndex]!.map((field) => (
+            <View key={field.id}>
+              {renderField(field, readOnly)}
+              {fieldErrors[field.id] ? (
+                <Text style={styles.fieldError}>{fieldErrors[field.id]}</Text>
+              ) : null}
+            </View>
+          ))
         : (
           <Card2>
             <Text style={styles.muted}>
@@ -527,6 +610,12 @@ const useStyles = createThemedStyles((t) => ({
   muted: {
     color: t.colors.ink3,
     fontSize: 16,
+  },
+  fieldError: {
+    color: t.colors.critInk,
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: spacing.xs,
   },
   hint: {
     color: t.colors.ink3,
