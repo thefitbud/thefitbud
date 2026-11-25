@@ -16,6 +16,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
+        "APS_ENVIRONMENT": "development",
         "APP_VARIANT": "development",
         "EXPO_PUBLIC_API_BASE_URL": "https://api-staging.thefitbud.com",
         "EXPO_PUBLIC_TRAINER_WEB_URL": "https://app-staging.thefitbud.com"
@@ -25,6 +26,7 @@
       "extends": "base",
       "distribution": "internal",
       "env": {
+        "APS_ENVIRONMENT": "development",
         "APP_VARIANT": "staging",
         "EXPO_PUBLIC_API_BASE_URL": "https://api-staging.thefitbud.com",
         "EXPO_PUBLIC_TRAINER_WEB_URL": "https://app-staging.thefitbud.com"
@@ -36,6 +38,7 @@
       "autoIncrement": true,
       "environment": "preview",
       "env": {
+        "APS_ENVIRONMENT": "production",
         "APP_VARIANT": "staging",
         "EXPO_PUBLIC_API_BASE_URL": "https://api-staging.thefitbud.com",
         "EXPO_PUBLIC_TRAINER_WEB_URL": "https://app-staging.thefitbud.com"
@@ -46,6 +49,7 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
+        "APS_ENVIRONMENT": "production",
         "APP_VARIANT": "production",
         "EXPO_PUBLIC_API_BASE_URL": "https://api.thefitbud.com",
         "EXPO_PUBLIC_TRAINER_WEB_URL": "https://app.thefitbud.com"
