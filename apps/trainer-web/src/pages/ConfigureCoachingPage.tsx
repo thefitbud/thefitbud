@@ -1285,7 +1285,7 @@ export function ConfigureCoachingPage() {
             state={coachingMode}
             disabled={mutationsBlocked}
             firstName={firstName}
-            settingsTo={`/clients/${relationshipId}/settings`}
+            settingsTo={`/clients/${relationshipId}/settings#subscription`}
           />
         </AccordionSection>
 

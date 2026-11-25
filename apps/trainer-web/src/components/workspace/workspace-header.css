@@ -156,9 +156,22 @@
     display: none;
   }
 
-  /* tap-targets.css keeps the plan link 44 px tall; no extra side padding. */
+  /* 44 px hit areas at iPad landscape too (tap-targets.css starts at 1024). */
+  .wsh-v3 .wsh-crumb a,
   .wsh-v3 .wsh-meta .workspace-plan-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
     padding-inline: 0;
+  }
+
+  .wsh-v3 .wsh-crumb {
+    margin-bottom: var(--s1);
+  }
+
+  .wsh-v3 .wsh-tab {
+    min-width: 44px;
+    justify-content: center;
   }
 }
 

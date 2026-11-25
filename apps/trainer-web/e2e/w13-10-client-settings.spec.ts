@@ -71,6 +71,39 @@ async function shot(page: Page, name: string) {
   expect.soft(problems.clip, name).toEqual([]);
 }
 
+/** iPad widths: every control is at least 44×44 (labels count for their inputs). */
+async function undersizedTargets(page: Page) {
+  return page.locator("main.main").evaluate((node) => {
+    const selectors = [
+      "button",
+      "a[href]",
+      "[role='button']",
+      "[role='switch']",
+      "input[type='checkbox']",
+      "input[type='radio']",
+      "input[type='text']",
+      ".overflow-menu-trigger",
+      ".wsh-tab",
+    ].join(",");
+    const bad: string[] = [];
+    for (const el of Array.from(node.querySelectorAll(selectors))) {
+      const target = el.matches("input[type='checkbox'], input[type='radio']")
+        ? (el.closest("label") ?? el)
+        : el;
+      const style = window.getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      const rect = target.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0) continue;
+      if (rect.bottom < 0 || rect.top > window.innerHeight) continue;
+      if (el.closest(".sr-only")) continue;
+      if (rect.width + 0.5 < 44 || rect.height + 0.5 < 44) {
+        bad.push(`${el.tagName.toLowerCase()} "${(el.textContent ?? "").trim().slice(0, 30)}" ${Math.round(rect.width)}x${Math.round(rect.height)}`);
+      }
+    }
+    return bad;
+  });
+}
+
 async function openSection(page: Page, client: string, hash: string, testId: string) {
   await page.goto(`/clients/${client}/settings#${hash}`);
   await expect(page.getByTestId("client-settings-page")).toBeVisible({ timeout: 30_000 });
@@ -200,6 +233,28 @@ test.describe("W13-10 client header, tabs and Settings tab", () => {
       "Reminders are off while coaching is ended.",
     );
     await expect(page.getByRole("switch")).toHaveCount(0);
+  });
+
+  test("iPad widths: header, tabs, sub-nav and section controls are at least 44 px", async ({
+    page,
+  }) => {
+    test.setTimeout(240_000);
+    for (const [width, height] of [
+      [1180, 820],
+      [1024, 1366],
+    ] as const) {
+      await page.setViewportSize({ width, height });
+      for (const [hash, testId] of [
+        ["basic", "cs-section-basic"],
+        ["coaching", "cs-section-coaching"],
+        ["reminders", "cs-reminders-summary"],
+        ["onboarding", "screen-TW-10"],
+      ] as const) {
+        await openSection(page, ROHAN, hash, testId);
+        await page.waitForTimeout(500);
+        expect(await undersizedTargets(page), `${hash} at ${width}`).toEqual([]);
+      }
+    }
   });
 
   test("captures the Settings frames at 1440, 1180 and 1024", async ({ page }) => {

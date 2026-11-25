@@ -1367,10 +1367,13 @@ describe("ConfigureCoachingPage coaching mode (Z8-7, frame IP-07)", () => {
     expect(api.saveClientSubscription).toHaveBeenCalledTimes(1);
   });
 
-  it("without a subscription it points to Client settings and offers no radios", async () => {
+  it("without a subscription it points to Settings › Package and payments and offers no radios", async () => {
     api.getClientSettings.mockResolvedValue(clientSettings(null, false));
     const { container } = renderPage("active", "active");
     await screen.findByTestId("coaching-mode-no-subscription");
+    expect(
+      screen.getByRole("link", { name: "Package and payments" }).getAttribute("href"),
+    ).toBe(`/clients/${REL_ID}/settings#subscription`);
     expect(container.querySelector('input[name="coachingMode"]')).toBeNull();
   });
 

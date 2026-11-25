@@ -925,6 +925,13 @@
 }
 
 @media (max-width: 1194px) {
+  /* Inline links keep the line; padding gives a 44 px hit area. */
+  .configure-v3 .cfg-row p a {
+    display: inline-block;
+    padding: 14px 0;
+    margin: -14px 0;
+  }
+
   .configure-v3 .configure-sticky-footer button,
   .configure-v3 .cfg-row .cs-field input,
   .configure-v3 .cfg-row .cs-field select {

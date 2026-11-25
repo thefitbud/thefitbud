@@ -255,10 +255,10 @@ test.describe("TW-C workspace", () => {
 
     await page.goto(`/clients/${KAVYA}/overview`);
     await expect(page.getByTestId("screen-TW-30").getByText(/^Ended · /)).toBeVisible();
-    await page.getByRole("button", { name: /more actions/i }).click();
-    await expect(page.getByRole("menuitem", { name: /add note/i })).toHaveCount(
-      0,
-    );
+    // W13-10: an ended client's ⋯ menu would be empty, so it is not drawn,
+    // and the header has no Note button.
+    await expect(page.getByRole("button", { name: /more actions/i })).toHaveCount(0);
+    await expect(page.getByTestId("wsh-note")).toHaveCount(0);
     await expect(page.getByRole("button", { name: /^Add note$/i })).toHaveCount(
       0,
     );
