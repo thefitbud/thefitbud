@@ -18,7 +18,6 @@ import {
   formatClockTime,
   formatTimeDiff,
   labelFor,
-  possessivePronoun,
 } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
@@ -213,7 +212,6 @@ export function ClientCheckinsPage() {
   const clientTz = workspace?.header.traineeTimezone ?? trainerTz;
   const clientName = workspace?.header.traineeDisplayName ?? "Client";
   const firstName = clientName.trim().split(/\s+/)[0] || clientName;
-  const pronoun = possessivePronoun(workspace?.header.traineeProfile.gender);
   const configuration = workspace?.configuration?.configuration ?? null;
   // Scheduling needs an active configuration (API: NO_ACTIVE_CONFIGURATION).
   const configurationActive = configuration?.status === "active";
@@ -554,7 +552,6 @@ export function ClientCheckinsPage() {
   const endedLabel = endedAt
     ? formatCivilDate(localDateIn(endedAt, clientTz), { now })
     : null;
-  const possessive = pronoun.charAt(0).toUpperCase() + pronoun.slice(1);
 
   return (
     <div className="workspace-page client-checkins" data-testid="screen-TW-19">
@@ -573,7 +570,7 @@ export function ClientCheckinsPage() {
             {endedLabel
               ? `Coaching with ${firstName} ended ${endedLabel}. `
               : `Coaching with ${firstName} has ended. `}
-            {possessive} check-ins are read-only.
+            {firstName}&apos;s check-ins are read-only.
           </span>
         </p>
       ) : (
@@ -712,13 +709,13 @@ export function ClientCheckinsPage() {
           <h2>No check-ins yet</h2>
           <p>
             {ended
-              ? `${firstName} has no check-ins from ${pronoun} coaching.`
+              ? `${firstName} has no check-ins from this coaching.`
               : `${
                   nextCheckin
                     ? `${firstName}'s first ${cadenceWord}check-in opens ${formatCivilDate(nextCheckin.localDate, { now })}.`
                     : configurationActive
                       ? `${firstName}'s first ${cadenceWord}check-in shows here once it's scheduled.`
-                      : `Check-ins start once ${pronoun} coaching setup is active.`
+                      : `Check-ins start once coaching setup is active.`
                 } Submitted check-ins show up here, newest first.`}
           </p>
           {scheduleButton}
