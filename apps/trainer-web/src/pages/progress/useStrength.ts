@@ -8,6 +8,8 @@ type State = {
   data: StrengthReadModel | null;
   loading: boolean;
   error: string | null;
+  /** The request (relationship, keys, range) `data` was loaded for. */
+  forKey?: string;
 };
 
 export function strengthQueryFor(range: MetricRange): Partial<StrengthQuery> {
@@ -22,7 +24,14 @@ export function useStrength(input: {
   range: MetricRange;
   refreshEpoch: number;
   enabled?: boolean;
-}): State & { reload: () => void } {
+}): State & {
+  reload: () => void;
+  /**
+   * True when `data` belongs to the current relationship and range. While a new range
+   * loads, `data` still holds the previous range's numbers and this is false.
+   */
+  current: boolean;
+} {
   const { relationshipId, range, refreshEpoch, enabled = true } = input;
   const [state, setState] = useState<State>({
     data: null,
@@ -31,6 +40,7 @@ export function useStrength(input: {
   });
   const [attempt, setAttempt] = useState(0);
   const rangeKey = rangeCacheKey(range);
+  const requestKey = `${relationshipId}|${rangeKey}`;
 
   useEffect(() => {
     if (!enabled || !relationshipId) {
@@ -42,7 +52,9 @@ export function useStrength(input: {
     apiClient
       .getStrength(relationshipId, strengthQueryFor(range))
       .then((data) => {
-        if (!cancelled) setState({ data, loading: false, error: null });
+        if (!cancelled) {
+          setState({ data, loading: false, error: null, forKey: requestKey });
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -57,7 +69,11 @@ export function useStrength(input: {
       cancelled = true;
     };
     // `range` is represented by rangeKey.
-  }, [relationshipId, rangeKey, refreshEpoch, attempt, enabled]);
+  }, [relationshipId, rangeKey, refreshEpoch, attempt, enabled, requestKey]);
 
-  return { ...state, reload: () => setAttempt((value) => value + 1) };
+  return {
+    ...state,
+    reload: () => setAttempt((value) => value + 1),
+    current: state.data !== null && state.forKey === requestKey,
+  };
 }

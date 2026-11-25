@@ -275,7 +275,9 @@ export function ClientProgressPage() {
     range.range === "all" ? strengthAll.data : strengthRange.data;
 
   // The rail follows the selected range, exactly like the KPI row. While a range loads, the
-  // rail keeps the all-time numbers and its scope line says "all time".
+  // rail keeps the all-time numbers and its scope line says "all time". The hooks keep the
+  // previous range's data while the next one loads, so readiness checks `current`, never
+  // just `data` (else the scope line names the new range over the old range's numbers).
   const railRange = useProgressMetrics({
     relationshipId,
     keys: ALL_METRIC_KEYS,
@@ -285,7 +287,7 @@ export function ClientProgressPage() {
   });
   const rangeReady =
     range.range === "all" ||
-    Boolean(railRange.data && strengthRange.data);
+    (railRange.current && strengthRange.current);
   const railValueSeries =
     rangeReady && railRange.data ? railRange.data.series : railSeries;
   const railWorkouts = useMemo(() => {

@@ -3,6 +3,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -1307,6 +1308,57 @@ describe("ClientProgressPage rail and KPI agree (W13-18)", () => {
     expect(r.kpiWorkouts).toBe("4 of 11");
     expect(r.railWeightChange).toContain("−2.7");
     expect(r.kpiChange).toContain("−2.7");
+  });
+
+  it("never names the new range over the previous range's numbers while it loads", async () => {
+    const FOUR_WEEKS: StrengthReadModel = {
+      ...ROHAN_STRENGTH,
+      workoutsPerWeek: ROHAN_STRENGTH.workoutsPerWeek.slice(-1),
+    };
+    serveMetrics(ROHAN, RECENT);
+    serveStrength(ROHAN_STRENGTH, RECENT_STRENGTH);
+    renderPage();
+    await waitFor(async () =>
+      expect((await railAndKpi()).railScopeText).toBe("last 12 weeks"),
+    );
+    const twelveWeeks = (await railAndKpi()).railWorkouts;
+    expect(twelveWeeks).toBe("2 of 5");
+
+    // Hold the 4 wk strength answer: the hooks still hold the 12 wk data meanwhile.
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    api.getStrength.mockImplementation(
+      async (_relationshipId: string, query: Partial<StrengthQuery>) => {
+        const parsed = strengthQuerySchema.parse(query);
+        if (parsed.range === "all" && !parsed.from) return ROHAN_STRENGTH;
+        await held;
+        return strengthReadModelSchema.parse(FOUR_WEEKS);
+      },
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "4 wk" }));
+    await waitFor(() =>
+      expect(strengthCalls()).toContainEqual({ range: "4w" }),
+    );
+    const rail = screen.getByRole("complementary", { name: "Metrics" });
+    const done = () => within(rail).getByRole("tab", { name: /Workouts done/ });
+    // While 4 wk loads the rail falls back to all time, never "last 4 weeks" over 12 wk numbers.
+    expect(done().querySelector(".pg-rail-scope")?.textContent).toBe("all time");
+    expect(done().querySelector(".pg-rail-value")?.textContent).toBe("4 of 11");
+
+    await act(async () => {
+      release();
+      await held;
+    });
+    await waitFor(() =>
+      expect(done().querySelector(".pg-rail-scope")?.textContent).toBe(
+        "last 4 weeks",
+      ),
+    );
+    const r = await railAndKpi();
+    expect(r.railWorkouts).not.toBe(twelveWeeks);
+    expect(r.kpiWorkouts).toBe(r.railWorkouts);
   });
 
   it("reads the same for female, male and unset gender, by first name", async () => {
