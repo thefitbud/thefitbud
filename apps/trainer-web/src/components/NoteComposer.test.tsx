@@ -68,6 +68,16 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("NoteComposer wording (D-W14-37)", () => {
+  it.each(["female", "male", undefined])("shows Rohan, never a pronoun, for gender %s", async (gender) => {
+    render(<NoteComposer relationshipId={REL_ID} traineeName="Rohan Mehta" traineeGender={gender} />);
+    fireEvent.click(await screen.findByRole("radio", { name: "Rohan too" }));
+    expect(screen.getByText("Rohan sees it on Today and gets one notification.")).toBeTruthy();
+    expect(screen.getByText("Rohan will see this on Today.")).toBeTruthy();
+    expect(document.body.textContent ?? "").not.toMatch(/\b(he|she|his|her|hers|him)\b/i);
+  });
+});
+
 describe("NoteComposer (frames 188 / 189)", () => {
   it("shows About select, Visible switch, Earlier notes, and of-counter", async () => {
     render(

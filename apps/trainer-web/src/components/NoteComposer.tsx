@@ -5,7 +5,6 @@ import {
   formatCivilDate,
   formatLocalDate,
   labelFor,
-  possessivePronoun,
 } from "@fitbud/core";
 import { useAuth } from "../auth/AuthProvider";
 import { apiClient } from "../lib/api";
@@ -39,7 +38,6 @@ function noteCivilDay(iso: string, timeZone?: string | null): string {
 export function NoteComposer({
   relationshipId,
   traineeName,
-  traineeGender,
   subjectType,
   subjectId,
   checkinId,
@@ -50,7 +48,7 @@ export function NoteComposer({
 }: {
   relationshipId: string;
   traineeName?: string;
-  /** Client gender / pronoun field; fallback possessive is "their". */
+  /** Accepted for callers; the copy never words anything by gender. */
   traineeGender?: string | null;
   subjectType?: string;
   subjectId?: string;
@@ -87,8 +85,6 @@ export function NoteComposer({
     const raw = (traineeName ?? "Client").trim().split(/\s+/)[0];
     return raw || "Client";
   }, [traineeName]);
-
-  const pronoun = possessivePronoun(traineeGender);
 
   const trainerFirstName = useMemo(() => {
     const raw = (me?.trainerProfile?.displayName ?? "Coach")
@@ -368,8 +364,8 @@ export function NoteComposer({
           <div className="note-visible-preview">
             <p className="muted">
               {activeNote && activeNote.visibility === "client"
-                ? `${firstName} can see this on ${pronoun} Today screen.`
-                : `${firstName} will see this on ${pronoun} Today screen and get a notification.`}
+                ? `${firstName} can see this on Today.`
+                : `${firstName} will see this on Today.`}
             </p>
             <span className="note-preview-chip" aria-hidden="true">
               From {trainerFirstName} · just now

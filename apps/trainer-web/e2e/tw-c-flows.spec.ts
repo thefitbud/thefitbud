@@ -237,7 +237,7 @@ test.describe("TW-C workspace", () => {
       page.getByText(/Rohan sees it on Today and gets one notification/i),
     ).toBeVisible();
     await expect(
-      page.getByText(/Rohan will see this on (his|her|their) Today screen/i),
+      page.getByText(/Rohan will see this on Today\./i),
     ).toBeVisible();
     await expect(page.getByText(/From rahul · just now/i)).toBeVisible();
     await onlyMe.check();
