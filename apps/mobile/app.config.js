@@ -219,10 +219,33 @@ function resolveBundleCommit() {
   }
 }
 
+/**
+ * The one APNs environment for this build (D-W14-35). The EAS profile may set
+ * APS_ENVIRONMENT: a TestFlight build (staging-store) is signed for production
+ * APNs even though it uses the staging identity. Unset keeps the variant
+ * default. A store (production) variant can never use the sandbox.
+ */
+function resolveApsEnvironment(variantKey, variant) {
+  const value = process.env.APS_ENVIRONMENT;
+  if (value === undefined || value === "") return variant.apsEnvironment;
+  if (value !== "development" && value !== "production") {
+    throw new Error(
+      `Invalid APS_ENVIRONMENT "${value}". Use "development" or "production".`,
+    );
+  }
+  if (variantKey === "production" && value === "development") {
+    throw new Error(
+      'APS_ENVIRONMENT "development" is not allowed for the production APP_VARIANT.',
+    );
+  }
+  return value;
+}
+
 /** @param {{ config: import('@expo/config').ExpoConfig }} context */
 function createExpoConfig({ config }) {
   const variantKey = process.env.APP_VARIANT || "development";
   const variant = resolveVariant(variantKey);
+  const apsEnvironment = resolveApsEnvironment(variantKey, variant);
   // EAS file environment variable; the file itself is never committed.
   const googleServicesFile = process.env.GOOGLE_SERVICES_JSON;
   // APP_VARIANT is not EXPO_PUBLIC_, so Metro will not inline it. The JS
@@ -251,7 +274,7 @@ function createExpoConfig({ config }) {
         // aps-environment when it is not already set.
         entitlements: {
           ...config.ios?.entitlements,
-          "aps-environment": variant.apsEnvironment,
+          "aps-environment": apsEnvironment,
         },
       },
       android: {
@@ -269,7 +292,7 @@ function createExpoConfig({ config }) {
       // @bacons/apple-targets adds targets/FitBudLiveActivity to the iOS build (LA1).
       plugins: [
         ...(config.plugins ?? []),
-        ["expo-notifications", { mode: variant.apsEnvironment }],
+        ["expo-notifications", { mode: apsEnvironment }],
         // Z14-5: the SQLite device store and the meal photo picker.
         SQLITE_PLUGIN,
         IMAGE_PICKER_PLUGIN,
