@@ -299,5 +299,12 @@
     "when": 1730995200000,
     "tag": "0042_index_hygiene",
     "breakpoints": true
+  },
+  {
+    "idx": 43,
+    "version": "7",
+    "when": 1731081600000,
+    "tag": "0043_workout_session_note",
+    "breakpoints": true
   }
 ]

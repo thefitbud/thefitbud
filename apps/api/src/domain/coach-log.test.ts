@@ -56,6 +56,20 @@ describe("coach log feed lines (R4)", () => {
     );
   });
 
+  it("says how the workout note changed, never its text (Z14-31)", () => {
+    const text = "Left knee felt tight";
+    const withNote: WorkoutLogSnapshot = { ...before, sessionNote: text };
+    expect(workoutChangeLines(before, withNote)).toEqual(["Note: added"]);
+    expect(workoutChangeLines(withNote, { ...withNote, sessionNote: "Better today" })).toEqual(["Note: changed"]);
+    expect(workoutChangeLines(withNote, { ...withNote, sessionNote: null })).toEqual(["Note: removed"]);
+    // A row written before the note existed (no key) equals a null note.
+    expect(workoutChangeLines(before, { ...before, sessionNote: null })).toEqual([]);
+    expect(workoutChangeLines(withNote, withNote)).toEqual([]);
+    const summary = describeCoachLogEvent(row("edit", { ...withNote, sessionRpe: 8 }, before), "Asha").summary;
+    expect(summary).toContain("(+1 more)");
+    expect(summary).not.toContain(text);
+  });
+
   it("never shows raw stored text when a snapshot cannot be read", () => {
     const broken = { action: "edit", entityType: "workout_execution", beforeJson: "{", afterJson: "not json" };
     expect(describeCoachLogEvent(broken, "Rahul Verma")).toEqual({
