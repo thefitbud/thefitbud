@@ -1032,7 +1032,11 @@ export function ConfigureCoachingPage() {
     >
       {relationshipEnded ? (
         // Z7-13 (DS7): ended title, lede and status in one quiet banner.
-        <header className="configure-page-header readonly-banner">
+        <header
+          className="configure-page-header readonly-banner"
+          id="cs-coaching"
+          data-testid="cs-section-coaching"
+        >
           <svg
             className="readonly-banner-icon"
             viewBox="0 0 24 24"
@@ -1212,6 +1216,7 @@ export function ConfigureCoachingPage() {
             </p>
           </header>
         <AccordionSection
+          variant="row"
           id="configure-goal"
           title="Goal"
           summary={summaries.goal}
@@ -1266,6 +1271,7 @@ export function ConfigureCoachingPage() {
         </AccordionSection>
 
         <AccordionSection
+          variant="row"
           id="configure-coaching-mode"
           title="Coaching mode"
           summary={
@@ -1284,6 +1290,8 @@ export function ConfigureCoachingPage() {
         </AccordionSection>
 
         <AccordionSection
+          variant="row"
+          wide
           id="configure-expectations"
           title="Expectations"
           summary={
@@ -1307,6 +1315,7 @@ export function ConfigureCoachingPage() {
         </AccordionSection>
 
         <AccordionSection
+          variant="row"
           id="configure-tracking"
           title="Tracking"
           summary={summaries.tracking}
@@ -1379,6 +1388,7 @@ export function ConfigureCoachingPage() {
           data-testid="cs-section-checkins"
         >
         <AccordionSection
+          variant="row"
           id="configure-checkins"
           title="Check-ins"
           summary={summaries.checkins}

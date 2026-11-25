@@ -60,6 +60,15 @@ export function panelForSection(id: SettingsSectionId): SettingsPanelId {
   return SETTINGS_SECTIONS.find((section) => section.id === id)?.panel ?? "details";
 }
 
+/**
+ * The first section of each panel opens at the top of the tab (the client
+ * header stays in view); the others are scrolled to.
+ */
+export function isFirstSectionOfPanel(id: SettingsSectionId): boolean {
+  const panel = panelForSection(id);
+  return SETTINGS_SECTIONS.find((section) => section.panel === panel)?.id === id;
+}
+
 export function settingsSectionLabel(id: SettingsSectionId): string {
   return SETTINGS_SECTIONS.find((section) => section.id === id)?.label ?? "Client details";
 }

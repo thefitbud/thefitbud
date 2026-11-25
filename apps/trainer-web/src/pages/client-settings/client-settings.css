@@ -1,298 +1,204 @@
-/* Client settings (frames 209, 209b, 210, 211, 211b, 212). Scoped to .cs-* classes. */
+/*
+ * Client Settings tab (W13-10, D-WEB-3; frames W-209 + iPad, W-IP07, W-181,
+ * W-146). Sub-nav + label-left rows, as the account Settings (W-176/W-177).
+ * Tokens and kit only. The drawers (frames 210, 211, IP-08) follow below.
+ */
 
 .cs-page {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
   min-width: 0;
-}
-
-.cs-titlebar {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  flex-wrap: wrap;
-}
-
-.cs-titlebar h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 500;
-  color: var(--deep-navy);
-  letter-spacing: -0.01em;
-}
-
-.cs-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 16px 0 14px;
-  background: var(--white);
-  border: 1px solid var(--border-strong, #d9dce8);
-  border-radius: 12px;
-  color: var(--near-black);
-  font-weight: 500;
-  font-size: 14px;
-  text-decoration: none;
-}
-
-.cs-back:hover,
-.cs-back:focus-visible {
-  background: var(--hover, #f7f8fc);
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
-}
-
-.cs-only-you {
-  margin: 0 0 0 auto;
-  font-size: 12px;
-  color: var(--mid-grey);
 }
 
 .cs-layout {
   display: grid;
-  grid-template-columns: 230px minmax(0, 1fr);
-  gap: 20px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--s8);
   align-items: start;
 }
 
 .cs-side {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
   position: sticky;
-  top: 16px;
+  top: 0;
+  min-width: 0;
 }
 
-.cs-eyebrow {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--mid-grey);
-}
-
-.cs-nav .cs-eyebrow {
-  padding: 0 12px 6px;
-}
-
-.cs-nav ul {
+.cs-subnav ul {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
-.cs-nav-link {
+.cs-subnav-link {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
+  height: 36px;
   padding: 0 12px;
-  border-radius: 10px;
-  color: var(--near-black);
-  font-size: 14px;
+  border: 1px solid transparent;
+  border-radius: var(--r-ctl);
+  color: var(--ink2);
+  font: 500 14px/20px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
   text-decoration: none;
+  white-space: nowrap;
 }
 
-.cs-nav-link:hover {
-  background: var(--hover, #f7f8fc);
+.cs-subnav-link .ui-i {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  color: currentColor;
 }
 
-.cs-nav-link:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
+.cs-subnav-link:hover {
+  background: var(--fill);
+  color: var(--ink);
 }
 
-.cs-nav-link.is-active {
-  background: var(--pale-lavender);
-  color: var(--brand);
-  font-weight: 500;
+.cs-subnav-link:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
 }
 
-.cs-coaching-note {
-  margin: 0;
-  padding: 14px 12px;
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  font-size: 13px;
-  line-height: 1.35;
-  color: var(--dark-grey);
+.cs-subnav-link.is-on {
+  background: var(--card);
+  border-color: var(--line);
+  box-shadow: var(--e1);
+  color: var(--ink);
+  font-weight: 600;
 }
 
-.cs-coaching-note a {
-  color: var(--brand);
-  text-decoration: none;
+.cs-subnav-link.is-danger {
+  color: var(--crit);
 }
 
-.cs-coaching-note a:hover,
-.cs-coaching-note a:focus-visible {
-  text-decoration: underline;
+.cs-subnav-link.is-danger:hover,
+.cs-subnav-link.is-danger.is-on {
+  color: var(--crit-ink);
 }
 
-.cs-bottom-note {
-  display: none;
+.cs-subnav-group {
+  margin: var(--s6) 0 var(--s2);
+  padding: 0 12px;
+  font: var(--t-meta);
+  color: var(--ink3);
 }
 
 .cs-main {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--s5);
   min-width: 0;
 }
 
+/* Cards (DS §5.5): header, label-left rows divided by lines, optional footer. */
 .cs-card {
-  background: var(--white);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 18px 20px 20px;
-  scroll-margin-top: 16px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r-card);
+  box-shadow: var(--e1);
+  scroll-margin-top: var(--s4);
+  min-width: 0;
 }
 
 .cs-card-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  margin-bottom: 12px;
+  gap: var(--s3);
+  min-height: 36px;
+  padding: var(--s4) var(--s5) var(--s2);
 }
 
+.cs-card-head h2,
 .cs-card-head h3 {
+  flex: 1;
   margin: 0;
-  font-size: 18px;
-  font-weight: 500;
-  color: var(--deep-navy);
+  font: var(--t-h2);
+  letter-spacing: -0.005em;
+  color: var(--ink);
 }
 
-.cs-card-head .cs-edit-button,
-.cs-card-head .cs-end-button {
-  margin-left: auto;
+.cs-card-aside {
+  margin: 0;
+  font: var(--t-meta);
+  color: var(--ink3);
+  text-align: right;
 }
 
-.cs-edit-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  background: var(--white);
-  border: 1px solid var(--border-strong, #d9dce8);
-  border-radius: 12px;
-  color: var(--near-black);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
+.cs-card-pad {
+  padding: var(--s1) var(--s5) var(--s4);
 }
 
-.cs-edit-button:hover,
-.cs-edit-button:focus-visible {
-  background: var(--hover, #f7f8fc);
-  outline: 2px solid var(--brand);
-  outline-offset: 2px;
+.cs-card-foot {
+  margin: 0;
+  padding: var(--s3) var(--s5);
+  border-top: 1px solid var(--line);
+  font: var(--t-meta);
+  color: var(--ink3);
 }
 
-.cs-edit-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.cs-end-button {
-  min-height: 44px;
-  padding: 0 12px;
-  background: transparent;
-  border: 0;
-  border-radius: 10px;
-  color: var(--semantic-destructive, #b91c1c);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.cs-end-button:hover,
-.cs-end-button:focus-visible {
-  background: var(--semantic-critical-fill, #fef2f2);
-  outline: 2px solid var(--semantic-destructive, #b91c1c);
-  outline-offset: 2px;
-}
-
-.cs-end-button:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-/* Label/value pairs: two pairs per row on wide screens (frame 209). */
-.cs-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  column-gap: 32px;
-  row-gap: 8px;
+.cs-rows {
   margin: 0;
 }
 
-/* DS7 ReadOnlyField pairs, laid out label | value as in frames 209 and 212. */
-.cs-grid .readonly-field {
+.cs-row {
   display: grid;
-  grid-template-columns: 166px minmax(0, 1fr);
-  gap: 12px;
-  align-items: baseline;
+  grid-template-columns: minmax(160px, 280px) minmax(0, 1fr);
+  gap: var(--s6);
+  align-items: start;
+  padding: var(--s4) var(--s5);
+  border-top: 1px solid var(--line);
+}
+
+/* A row whose value is a control (toggle, button) gives the label the width. */
+.cs-row.is-control {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.cs-card-head + .cs-rows > .cs-row:first-child {
+  border-top: 0;
+}
+
+.cs-row dt,
+.cs-row dd {
+  margin: 0;
   min-width: 0;
 }
 
-.cs-grid .readonly-field-label {
-  color: var(--dark-grey);
-  font-size: 14px;
-  font-weight: 400;
-  line-height: 1.45;
+.cs-row-label {
+  display: block;
+  font: var(--t-h3);
+  color: var(--ink);
 }
 
-.cs-grid .readonly-field-value {
-  margin: 0;
-  color: var(--deep-navy);
-  font-size: 14px;
-  font-weight: 600;
+.cs-row-help {
+  display: block;
+  margin-top: 2px;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+/* Onboarding answers: the question is a label over a value (DS §2). */
+.cs-row-q {
+  display: block;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.cs-row-value {
+  font: var(--t-body);
+  color: var(--ink);
   overflow-wrap: anywhere;
-  white-space: normal;
 }
 
-/* Frame 212: ended clients see a lock line above the read-only sections. */
-.cs-readonly-banner {
+.cs-row-end {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin: 0;
-  padding: 10px 16px;
-  background: var(--semantic-neutral-fill, #f3f4f7);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  color: var(--near-black);
-  font-size: 14px;
+  justify-content: flex-end;
+  gap: var(--s3);
+  flex-wrap: wrap;
 }
-
-.cs-readonly-banner svg {
-  flex: none;
-  color: var(--dark-grey);
-}
-
-.cs-ended-chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--semantic-neutral-fill, #f3f4f7);
-  color: var(--semantic-neutral-text, #3f4450);
-  font-size: 12px;
-  font-weight: 500;
-}
-
-
 
 .cs-num {
   font-variant-numeric: tabular-nums;
@@ -300,68 +206,300 @@
 
 .cs-empty {
   margin: 0;
-  color: var(--mid-grey);
-  font-size: 14px;
+  font: var(--t-body);
+  color: var(--ink3);
 }
 
 .cs-saved {
-  margin: 12px 0 0;
-  font-size: 13px;
-  color: var(--success);
+  margin: 0;
+  padding: 0 var(--s5) var(--s4);
+  font: var(--t-meta);
+  color: var(--done);
 }
 
+.cs-readonly-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  background: var(--fill);
+  border: 1px solid var(--line);
+  border-radius: var(--r-ctl);
+  font: var(--t-body);
+  color: var(--ink);
+}
+
+.cs-readonly-banner .ui-i {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  color: var(--ink3);
+}
+
+/* Banners inside a Settings section use the body size (DS §2). */
+.cs-main .banner-info,
+.cs-main .banner-attention,
+.cs-main .readonly-banner {
+  margin: 0;
+  font: var(--t-body);
+}
+
+.cs-notice {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  background: var(--warn-tint);
+  border-radius: var(--r-ctl);
+  font: var(--t-body);
+  color: var(--warn-ink);
+}
+
+/* Package and payments: the records table (tracking only). */
 .cs-payments {
-  margin-top: 24px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--s2);
+  padding: var(--s3) var(--s5) var(--s4);
+  border-top: 1px solid var(--line);
+}
+
+.cs-payments-title {
+  margin: 0;
+  font: var(--t-h3);
+  color: var(--ink);
+}
+
+.cs-payments-title:focus {
+  outline: none;
 }
 
 .cs-table-wrap {
-  overflow-x: auto;
+  min-width: 0;
 }
 
 .cs-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  font: var(--t-body);
 }
 
 .cs-table th {
+  height: 40px;
+  padding: 0 var(--s3) 0 0;
+  border-bottom: 1px solid var(--line);
+  font: var(--t-cap);
+  color: var(--ink3);
   text-align: left;
-  font-weight: 500;
-  font-size: 12px;
-  color: var(--dark-grey);
-  padding: 10px 10px;
-  border-bottom: 1px solid var(--border);
 }
 
 .cs-table td {
-  padding: 12px 10px;
-  border-bottom: 1px solid var(--border);
-  color: var(--near-black);
+  padding: var(--s3) var(--s3) var(--s3) 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  vertical-align: middle;
 }
 
-.cs-pay-chip {
-  display: inline-flex;
+.cs-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.cs-table .is-r {
+  text-align: right;
+}
+
+/* Danger zone (no frame of its own; W-209 iPad draws its card). */
+.cs-danger {
+  border-color: var(--crit-tint);
+}
+
+.cs-danger.is-ended {
+  border-color: var(--line);
+}
+
+.cs-danger-row {
+  display: flex;
   align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  border: 1px solid transparent;
+  gap: var(--s5);
+  padding: var(--s4) var(--s5);
 }
 
-.cs-pay-chip.is-paid {
-  background: var(--semantic-positive-fill);
-  color: var(--semantic-positive-text);
+.cs-danger-copy {
+  flex: 1;
+  min-width: 0;
 }
 
-.cs-pay-chip.is-unpaid {
-  background: var(--semantic-neutral-fill);
-  color: var(--semantic-neutral-text);
-  border-color: var(--border);
+.cs-danger-copy h2 {
+  margin: 0;
+  font: var(--t-h3);
+  color: var(--ink);
 }
+
+.cs-danger-copy p {
+  margin: 2px 0 0;
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+.cs-end-button {
+  flex: none;
+}
+
+/* Reminders: three KPI stats across (DS §5.14, frame W-181). */
+.cs-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+}
+
+.cs-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s5);
+  padding: var(--s5);
+}
+
+.cs-kpi {
+  min-width: 0;
+}
+
+.cs-kpi p {
+  margin: 0;
+}
+
+.cs-kpi-value {
+  font: var(--t-kpi);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.cs-kpi-of {
+  font: 500 14px/20px Inter, "Noto Sans Devanagari", system-ui, sans-serif;
+  letter-spacing: 0;
+  color: var(--ink3);
+}
+
+.cs-kpi-label {
+  margin-top: var(--s1);
+  font: var(--t-meta);
+  color: var(--ink3);
+}
+
+/* Label/value pairs in the payment drawer (frames 211 / IP-08). */
+.cs-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--s8);
+  row-gap: var(--s2);
+  margin: 0;
+}
+
+.cs-grid .readonly-field {
+  display: grid;
+  grid-template-columns: 166px minmax(0, 1fr);
+  gap: var(--s3);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.cs-grid .readonly-field-label {
+  font: var(--t-body);
+  color: var(--ink3);
+}
+
+.cs-grid .readonly-field-value {
+  margin: 0;
+  font: var(--t-h3);
+  color: var(--ink);
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+/* iPad portrait (1024) and landscape (1180): narrower sub-nav, 44 px targets. */
+@media (max-width: 1279px) {
+  .cs-layout {
+    grid-template-columns: 200px minmax(0, 1fr);
+    gap: var(--s5);
+  }
+
+  .cs-row {
+    grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+    gap: var(--s4);
+    padding: var(--s4);
+  }
+
+  .cs-card-head,
+  .cs-card-pad,
+  .cs-payments,
+  .cs-danger-row,
+  .cs-card-foot {
+    padding-left: var(--s4);
+    padding-right: var(--s4);
+  }
+
+  .cs-kpis {
+    padding: var(--s4);
+  }
+}
+
+@media (max-width: 1194px) {
+  .cs-subnav-link {
+    height: 44px;
+  }
+
+  .cs-page .ui-btn {
+    min-height: 44px;
+  }
+}
+
+/* Narrower than an iPad: the sub-nav becomes a wrapping row above the content. */
+@media (max-width: 900px) {
+  .cs-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cs-side {
+    position: static;
+  }
+
+  .cs-subnav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--s1);
+  }
+
+  .cs-subnav ul {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .cs-subnav-group {
+    display: none;
+  }
+
+  .cs-row:not(.is-control) {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s1);
+  }
+
+  .cs-kpis {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.cs-num {
+  font-variant-numeric: tabular-nums;
+}
+
+
+
+
+
+
+
+
+
+
 
 /* Drawer (frame 210) */
 .cs-drawer.drawer-panel {
@@ -824,65 +962,9 @@
   border-color: var(--error);
 }
 
-/* Frame 209b (iPad / ≤1100px): the section list becomes a segmented row. */
-@media (max-width: 1100px) {
-  .cs-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .cs-side {
-    position: static;
-  }
-
-  .cs-nav .cs-eyebrow,
-  .cs-side-note {
-    display: none;
-  }
-
-  .cs-bottom-note {
-    display: block;
-  }
-
-  .cs-nav ul {
-    flex-direction: row;
-    flex-wrap: wrap;
-    align-self: flex-start;
-    width: fit-content;
-    max-width: 100%;
-    padding: 3px;
-    gap: 2px;
-    background: #ebe9f6;
-    border-radius: 12px;
-  }
-
-  .cs-nav-link {
-    padding: 0 16px;
-    color: var(--dark-grey);
-  }
-
-  .cs-nav-link svg {
-    display: none;
-  }
-
-  .cs-nav-link.is-active {
-    background: var(--white);
-    color: var(--near-black);
-    box-shadow: 0 1px 2px rgb(26 18 72 / 10%);
-  }
-
-  .cs-grid .readonly-field {
-    grid-template-columns: 120px minmax(0, 1fr);
-  }
-}
-
 @media (max-width: 860px) {
   .cs-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .cs-only-you {
-    margin-left: 0;
-    flex-basis: 100%;
   }
 }
 

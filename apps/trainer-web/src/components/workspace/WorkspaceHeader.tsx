@@ -225,23 +225,18 @@ export function WorkspaceHeader({
       node: <span>{profileParts.join(" · ")}</span>,
     });
   }
-  if (!ended && header.renewalState && header.renewalState !== "current") {
-    const renewsOn = header.renewsOn
-      ? formatCivilDate(header.renewsOn)
-      : null;
-    const stateLabel = labelFor("renewal_state", header.renewalState);
-    metaNodes.push({
-      key: "renewal",
-      node: (
-        <StatusChip
-          kind="renewal"
-          value={header.renewalState}
-          label={`Renewal ${stateLabel.toLowerCase()}${renewsOn ? ` · ${renewsOn}` : ""}`}
-          className="status-chip-xs"
-        />
-      ),
-    });
-  }
+  // DS §6: a renewal that needs attention is a header pill beside the status
+  // pills, not part of the subtitle.
+  const renewalPill =
+    !ended && header.renewalState && header.renewalState !== "current" ? (
+      <StatusChip
+        kind="renewal"
+        value={header.renewalState}
+        label={`Renewal ${labelFor("renewal_state", header.renewalState).toLowerCase()}${
+          header.renewsOn ? ` · ${formatCivilDate(header.renewsOn)}` : ""
+        }`}
+      />
+    ) : null;
 
   function runPrimary() {
     if (!primary) return;
@@ -321,7 +316,7 @@ export function WorkspaceHeader({
           <span aria-current="page">{header.traineeDisplayName}</span>
         </nav>
         <div className="wsh-r1">
-          <span className="avatar workspace-avatar lg" aria-hidden="true">
+          <span className="avatar workspace-avatar lg wsh-avatar" aria-hidden="true">
             {initials}
           </span>
           <div className="wsh-id">
@@ -343,13 +338,14 @@ export function WorkspaceHeader({
                 <>
                   <StatusChip kind="lifecycle" value={header.onboardingStatus} />
                   <StatusChip kind="adherence" value={header.adherenceState} />
+                  {renewalPill}
                 </>
               )}
             </div>
             {metaNodes.length > 0 ? (
               <div className="wsh-meta">
                 {metaNodes.map((item) => (
-                  <span key={item.key} className="wsh-meta-item">
+                  <span key={item.key} className={`wsh-meta-item is-${item.key}`}>
                     {item.node}
                   </span>
                 ))}

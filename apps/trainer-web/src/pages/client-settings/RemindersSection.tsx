@@ -251,7 +251,7 @@ export function RemindersSection({
             const labelId = `cs-reminder-${category.type}`;
             return (
               <div
-                className="cs-row"
+                className="cs-row is-control"
                 key={category.type}
                 data-testid={`cs-reminder-row-${category.counts}`}
               >
@@ -280,7 +280,7 @@ export function RemindersSection({
               </div>
             );
           })}
-          <div className="cs-row">
+          <div className="cs-row is-control">
             <dt>
               <span className="cs-row-label">WhatsApp reminders</span>
               <span className="cs-row-help">
@@ -290,7 +290,7 @@ export function RemindersSection({
               </span>
             </dt>
             <dd className="cs-row-end">
-              {waAutomationOn ? null : <span className="chip-coming">Coming soon</span>}
+              {waAutomationOn ? null : <span className="ui-pill ui-p-neutral">Coming soon</span>}
               {ended ? null : openWhatsappHref ? (
                 <a
                   className="ui-btn ui-btn-secondary ui-btn-sm"

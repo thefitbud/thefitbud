@@ -1,6 +1,6 @@
 import { userFacingMessage } from "@fitbud/api-client";
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import type {
   ResponsivenessCategoryCounts,
   ResponsivenessResponse,
@@ -96,7 +96,7 @@ const SUMMARY_BOX: CSSProperties = {
 };
 const CAPTION: CSSProperties = {
   margin: 0,
-  fontSize: "0.6875rem",
+  fontSize: "0.75rem",
   lineHeight: "1rem",
   fontWeight: 600,
   letterSpacing: "0.04em",
@@ -335,7 +335,7 @@ export function RemindersDrawer({
   timeZone,
   refreshEpoch = 0,
   ended = false,
-  openedFrom = null,
+  openedFrom,
   onClose,
 }: {
   relationshipId: string;
@@ -347,15 +347,27 @@ export function RemindersDrawer({
   refreshEpoch?: number;
   ended?: boolean;
   /**
-   * Where the drawer was opened from, for the footer line (e.g. "Overview ›
-   * Reminders › Details"). Without it the line is left out, so the review
-   * panel's Signals › Details no longer reads as the Overview (FLOW §6.4).
+   * Where the drawer was opened from, for the footer line. Left out, the line
+   * reads "Overview › Reminders › Details" only when the drawer really is the
+   * Overview's (the client Overview with no review open); from the review
+   * panel's Signals › Details it is left out (FLOW §6 item 4). `null` hides it.
    */
   openedFrom?: string | null;
   onClose: () => void;
 }) {
   const panelRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const { pathname } = useLocation();
+  const [searchParams] = useSearchParams();
+  const onOverview =
+    !searchParams.has("exception") &&
+    new RegExp(`^/clients/${relationshipId}(/overview)?/?$`).test(pathname);
+  const openedFromLine =
+    openedFrom !== undefined
+      ? openedFrom
+      : onOverview
+        ? "Overview › Reminders › Details"
+        : null;
   const firstName = traineeName.trim().split(/\s+/)[0] ?? traineeName;
   const initials = traineeName
     .trim()
@@ -454,7 +466,7 @@ export function RemindersDrawer({
           style={{ flexDirection: "row", alignItems: "center", flexWrap: "wrap" }}
         >
           <p style={{ ...FOOTER_TEXT, flex: "1 1 160px" }}>
-            {openedFrom ? `Opened from ${openedFrom}` : null}
+            {openedFromLine ? `Opened from ${openedFromLine}` : null}
           </p>
           {/* Kept as built (D-W13-13): the Overview test owns this link; the
               old route redirects into Settings (D-W13-15). */}

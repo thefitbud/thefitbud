@@ -13,7 +13,7 @@ import {
   formatOnboardingAnswer,
   possessivePronoun,
 } from "@fitbud/core";
-import { AlertTriangle, Check, ClipboardList } from "lucide-react";
+import { AlertTriangle, Check, ClipboardList, Flag } from "lucide-react";
 import { Button } from "../components/Button";
 import { WhatsAppGlyph } from "../components/WhatsAppGlyph";
 import { apiClient } from "../lib/api";
@@ -308,6 +308,9 @@ export function OnboardingReviewPage() {
       : 3;
   const doneThrough = emptyNotSubmitted ? 1 : 2;
 
+  // D-W13-15: Coaching setup is a Settings tab section now.
+  const coachingSetupHref = `/clients/${relationshipId}/settings#coaching`;
+
   async function markReadyAndConfigure() {
     if (!relationshipId) return;
     setActing(true);
@@ -325,7 +328,7 @@ export function OnboardingReviewPage() {
         );
         setMarkedReadyAt(result.review.createdAt);
       }
-      navigate(`/clients/${relationshipId}/configure`);
+      navigate(coachingSetupHref);
     } catch (err) {
       setError(
         userFacingMessage(err, { fallback: "Could not complete onboarding review." }),
@@ -337,7 +340,7 @@ export function OnboardingReviewPage() {
 
   if (loading) {
     return (
-      <div className="workspace-page intake-review-page" aria-busy="true">
+      <div className="intake-review-page intake-embedded" aria-busy="true">
         <p className="muted">Loading intake…</p>
       </div>
     );
@@ -345,7 +348,7 @@ export function OnboardingReviewPage() {
 
   if (error && !definition) {
     return (
-      <div className="workspace-page intake-review-page">
+      <div className="intake-review-page intake-embedded">
         <p className="form-error" role="alert">
           {error}
         </p>
@@ -359,9 +362,6 @@ export function OnboardingReviewPage() {
     );
   }
 
-  const versionLabel = definition
-    ? `${formName ?? definition.key} v${definition.version}`
-    : null;
   const submittedWhen = formatWhen(intake?.submittedAt, timeZone);
   const joinedWhen = formatWhen(header?.startedAt, timeZone);
   const invitedWhen = formatWhen(invitedAt, timeZone);
@@ -391,10 +391,114 @@ export function OnboardingReviewPage() {
     ? `${pronoun === "her" ? "She" : pronoun === "his" ? "He" : "They"} joined ${joinedWhen.split(",")[0]}`
     : null;
 
+  // W13-10 (frame W-146): answers grouped by form section, label-left rows.
+  const groups: Array<{ name: string; rows: AnswerRow[] }> = [];
+  for (const row of answerRows) {
+    const name = row.field.section?.trim() || "Answers";
+    const group = groups.find((g) => g.name === name);
+    if (group) group.rows.push(row);
+    else groups.push({ name, rows: [row] });
+  }
+  const flagged = answerRows.filter((row) => row.field.highlight === true);
+  const answeredCount = answerRows.filter((row) => row.text !== "—").length;
+
+  const nextStepCard = (
+    <section className="cs-card intake-next" aria-labelledby="intake-next-title">
+      <header className="cs-card-head">
+        <h2 id="intake-next-title">Next step</h2>
+      </header>
+      <div className="cs-card-pad intake-next-body">
+        {readOnly ? null : <p>{nextStepCopy}</p>}
+        {readOnly ? (
+          <p className="intake-ready-mark" role="status">
+            Marked ready
+            {readyCivil
+              ? ` ${formatCivilDate(readyCivil, { includeWeekday: false })}`
+              : ""}
+          </p>
+        ) : null}
+        <div className="intake-side-actions">
+          {!emptyNotSubmitted && !readOnly ? (
+            <Button
+              variant="primary"
+              disabled={acting || !submitted}
+              onClick={() => {
+                void markReadyAndConfigure();
+              }}
+            >
+              {acting ? "Working…" : "Mark ready & configure"}
+            </Button>
+          ) : null}
+          {readOnly && submitted ? (
+            <Button
+              variant="secondary"
+              onClick={() => navigate(coachingSetupHref)}
+            >
+              {onboardingStatus === "ended"
+                ? "View coaching setup"
+                : "Open coaching setup"}
+            </Button>
+          ) : null}
+          {!emptyNotSubmitted && !coachingEnded && thanksHref ? (
+            <a
+              className="ui-btn ui-btn-secondary"
+              href={thanksHref}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <WhatsAppGlyph />
+              Message on WhatsApp
+            </a>
+          ) : !emptyNotSubmitted && !coachingEnded && submitted ? (
+            <Button variant="whatsapp" disabled>
+              <WhatsAppGlyph />
+              Message on WhatsApp
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </section>
+  );
+
+  const timelineCard = (
+    <section className="cs-card" aria-labelledby="intake-timeline-title">
+      <header className="cs-card-head">
+        <h2 id="intake-timeline-title">Timeline</h2>
+      </header>
+      <ol className="intake-timeline cs-card-pad">
+        {invitedWhen ? (
+          <li>
+            <span className="intake-timeline-dot is-muted" aria-hidden />
+            <span>Invited · {invitedWhen}</span>
+          </li>
+        ) : null}
+        {joinedWhen ? (
+          <li>
+            <span className="intake-timeline-dot" aria-hidden />
+            <span>Joined · {joinedWhen}</span>
+          </li>
+        ) : null}
+        {emptyNotSubmitted && intakeStartedWhen ? (
+          <li>
+            <span className="intake-timeline-dot" aria-hidden />
+            <span>Intake started · {intakeStartedWhen}</span>
+          </li>
+        ) : null}
+        {!emptyNotSubmitted && submittedWhen ? (
+          <li>
+            <span className="intake-timeline-dot" aria-hidden />
+            <span>Intake submitted · {submittedWhen}</span>
+          </li>
+        ) : null}
+      </ol>
+    </section>
+  );
+
   return (
     <div
-      className="workspace-page intake-review-page"
+      className="intake-review-page intake-embedded"
       data-testid="screen-TW-10"
+      id="cs-onboarding"
     >
       {error ? (
         <p className="form-error" role="alert">
@@ -402,88 +506,133 @@ export function OnboardingReviewPage() {
         </p>
       ) : null}
 
-      <div className="intake-review-layout">
-        <div className="intake-review-main">
-          <ol className="intake-stepper" aria-label="Onboarding progress">
-            {STEPS.map((step, index) => {
-              const done = index <= doneThrough;
-              const active = index === activeStepIndex;
-              const state = done && !active ? "is-done" : active ? "is-active" : "";
-              return (
-                <li key={step.id} className={`intake-step ${state}`.trim()}>
-                  <div className="intake-step-top">
-                    <span className="intake-step-num" aria-hidden="true">
-                      {done && !active ? (
-                        <Check size={14} strokeWidth={2.5} />
-                      ) : (
-                        index + 1
-                      )}
-                    </span>
-                    <span className="intake-step-label">{step.label}</span>
-                  </div>
-                  <div className="intake-step-rail" aria-hidden="true" />
-                </li>
-              );
-            })}
-          </ol>
+      {readOnly ? null : (
+        <ol className="intake-stepper" aria-label="Onboarding progress">
+          {STEPS.map((step, index) => {
+            const done = index <= doneThrough;
+            const active = index === activeStepIndex;
+            const state = done && !active ? "is-done" : active ? "is-active" : "";
+            return (
+              <li key={step.id} className={`intake-step ${state}`.trim()}>
+                <div className="intake-step-top">
+                  <span className="intake-step-num" aria-hidden="true">
+                    {done && !active ? <Check size={14} strokeWidth={2.5} /> : index + 1}
+                  </span>
+                  <span className="intake-step-label">{step.label}</span>
+                </div>
+                <div className="intake-step-rail" aria-hidden="true" />
+              </li>
+            );
+          })}
+        </ol>
+      )}
 
-          {emptyNotSubmitted ? (
-            <section className="intake-empty-state" role="status">
-              <span className="intake-empty-icon" aria-hidden="true">
-                <ClipboardList size={28} strokeWidth={1.75} />
-              </span>
-              <h3>
-                {firstName} hasn&apos;t submitted {pronoun} intake yet
-              </h3>
-              <p>
-                {joinedLine ? `${joinedLine} and has ` : ""}
-                answered {sectionProgress.answered} of {sectionProgress.total}{" "}
-                section{sectionProgress.total === 1 ? "" : "s"}. You can remind{" "}
-                {pronoun === "her" ? "her" : pronoun === "his" ? "him" : "them"}{" "}
-                on WhatsApp.
-              </p>
-              {remindHref ? (
-                <a
-                  className="button-primary"
-                  href={remindHref}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <WhatsAppGlyph />
-                  Remind on WhatsApp
-                </a>
-              ) : (
-                <Button variant="primary" disabled>
-                  <WhatsAppGlyph />
-                  Remind on WhatsApp
-                </Button>
-              )}
-            </section>
+      {readOnly ? null : nextStepCard}
+
+      {emptyNotSubmitted ? (
+        <section className="cs-card intake-empty-state" role="status">
+          <span className="intake-empty-icon" aria-hidden="true">
+            <ClipboardList size={28} strokeWidth={1.75} />
+          </span>
+          <h3>
+            {firstName} hasn&apos;t submitted {pronoun} intake yet
+          </h3>
+          <p>
+            {joinedLine ? `${joinedLine} and has ` : ""}
+            answered {sectionProgress.answered} of {sectionProgress.total}{" "}
+            section{sectionProgress.total === 1 ? "" : "s"}. You can remind{" "}
+            {pronoun === "her" ? "her" : pronoun === "his" ? "him" : "them"}{" "}
+            on WhatsApp.
+          </p>
+          {remindHref ? (
+            <a
+              className="ui-btn ui-btn-primary"
+              href={remindHref}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <WhatsAppGlyph />
+              Remind on WhatsApp
+            </a>
           ) : (
-            <>
-              <h2 className="intake-review-heading">
-                Intake
-                {versionLabel ? ` · ${versionLabel}` : null}
-              </h2>
-              {submittedWhen ? (
-                <p className="intake-review-submitted">
-                  submitted {submittedWhen}
-                </p>
-              ) : null}
+            <Button variant="primary" disabled>
+              <WhatsAppGlyph />
+              Remind on WhatsApp
+            </Button>
+          )}
+        </section>
+      ) : (
+        <>
+          <header className="intake-embed-head">
+            <h2 className="intake-review-heading">
+              {formName ?? "Intake"}
+              {definition ? ` · v${definition.version}` : null}
+            </h2>
+            <p className="intake-review-submitted">
+              {[
+                submittedWhen ? `Submitted ${submittedWhen}` : null,
+                `${answeredCount} answer${answeredCount === 1 ? "" : "s"}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          </header>
 
-              <dl className="intake-answer-list">
-                {answerRows.map((row) => (
-                  <div key={row.field.id}>
+          {flagged.length > 0 ? (
+            <section
+              className="cs-card intake-keep"
+              aria-labelledby="intake-keep-title"
+              data-testid="intake-keep-in-mind"
+            >
+              <h3 id="intake-keep-title" className="intake-keep-title">
+                <Flag className="ui-i" aria-hidden="true" />
+                {flagged.length === 1
+                  ? "1 answer to keep in mind"
+                  : `${flagged.length} answers to keep in mind`}
+              </h3>
+              <ul className="intake-keep-list">
+                {flagged.map((row) => (
+                  <li key={row.field.id}>
+                    {row.field.section?.trim() ? (
+                      <span className="ui-pill ui-p-warn">{row.field.section.trim()}</span>
+                    ) : null}
+                    <span>
+                      <b>{row.field.label}:</b> {row.chips ? row.chips.join(", ") : row.text}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+
+          {groups.map((group, index) => (
+            <section
+              key={group.name}
+              className="cs-card"
+              aria-labelledby={`intake-group-${index}`}
+            >
+              <header className="cs-card-head">
+                <h3 id={`intake-group-${index}`}>{group.name}</h3>
+                <p className="cs-card-aside">
+                  {(() => {
+                    const count = group.rows.filter((row) => row.text !== "—").length;
+                    return count === 1 ? "1 answer" : `${count} answers`;
+                  })()}
+                </p>
+              </header>
+              <dl className="cs-rows intake-answer-list">
+                {group.rows.map((row) => (
+                  <div className="cs-row" key={row.field.id}>
                     <dt>
-                      <span>{row.field.label}</span>
+                      <span className="cs-row-q">{row.field.label}</span>
                       {row.field.highlight ? (
                         <span className="intake-review-flag">
-                          <AlertTriangle size={12} strokeWidth={2} aria-hidden />
+                          <AlertTriangle size={13} strokeWidth={2} aria-hidden />
                           Review
                         </span>
                       ) : null}
                     </dt>
-                    <dd>
+                    <dd className="cs-row-value">
                       {row.chips ? (
                         <ul className="intake-choice-chips">
                           {row.chips.map((chip) => (
@@ -499,98 +648,14 @@ export function OnboardingReviewPage() {
                   </div>
                 ))}
               </dl>
-            </>
-          )}
-        </div>
+            </section>
+          ))}
+        </>
+      )}
 
-        <aside className="intake-side">
-          <div className="intake-side-card">
-            <h2 className="t-h3">Next step</h2>
-            <p>{nextStepCopy}</p>
-            {readOnly ? (
-              <p className="intake-ready-mark" role="status">
-                Marked ready
-                {readyCivil
-                  ? ` ${formatCivilDate(readyCivil, { includeWeekday: false })}`
-                  : ""}
-              </p>
-            ) : null}
-            <div className="intake-side-actions">
-              {!emptyNotSubmitted && !readOnly ? (
-                <Button
-                  variant="primary"
-                  disabled={acting || !submitted}
-                  onClick={() => {
-                    void markReadyAndConfigure();
-                  }}
-                >
-                  {acting ? "Working…" : "Mark ready & configure"}
-                </Button>
-              ) : null}
-              {readOnly && submitted ? (
-                <Button
-                  variant="primary"
-                  onClick={() =>
-                    navigate(`/clients/${relationshipId}/configure`)
-                  }
-                >
-                  {onboardingStatus === "ended"
-                    ? "View coaching setup"
-                    : "Open configure"}
-                </Button>
-              ) : null}
-              {!emptyNotSubmitted && !coachingEnded && thanksHref ? (
-                <a
-                  className="button-secondary button-whatsapp"
-                  href={thanksHref}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <WhatsAppGlyph />
-                  Message on WhatsApp
-                </a>
-              ) : !emptyNotSubmitted && !coachingEnded && submitted ? (
-                <Button variant="whatsapp" disabled>
-                  <WhatsAppGlyph />
-                  Message on WhatsApp
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          <div className="intake-side-card">
-            <h2 className="t-h3">Timeline</h2>
-            <ol className="intake-timeline">
-              {invitedWhen ? (
-                <li>
-                  <span
-                    className="intake-timeline-dot is-muted"
-                    aria-hidden
-                  />
-                  <span>Invited · {invitedWhen}</span>
-                </li>
-              ) : null}
-              {joinedWhen ? (
-                <li>
-                  <span className="intake-timeline-dot" aria-hidden />
-                  <span>Joined · {joinedWhen}</span>
-                </li>
-              ) : null}
-              {emptyNotSubmitted && intakeStartedWhen ? (
-                <li>
-                  <span className="intake-timeline-dot" aria-hidden />
-                  <span>Intake started · {intakeStartedWhen}</span>
-                </li>
-              ) : null}
-              {!emptyNotSubmitted && submittedWhen ? (
-                <li>
-                  <span className="intake-timeline-dot" aria-hidden />
-                  <span>Intake submitted · {submittedWhen}</span>
-                </li>
-              ) : null}
-            </ol>
-          </div>
-        </aside>
+      <div className="intake-foot">
+        {readOnly ? nextStepCard : null}
+        {timelineCard}
       </div>
     </div>
   );
