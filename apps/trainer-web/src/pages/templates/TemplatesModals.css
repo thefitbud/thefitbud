@@ -100,3 +100,11 @@
 .tpl-combo-pop li button.is-on { background: var(--row-sel); }
 .tpl-combo-check { margin-left: auto; color: var(--ink); }
 .tpl-combo-none { padding: 12px; color: var(--ink3); font: var(--t-meta); }
+
+.tpl-combo-search input { height: 100%; }
+
+/* iPad: every control in these dialogs is at least 44 px. */
+@media (max-width: 1279px) {
+  .ui-modal:has(.tpl-modal-body) .ui-btn { min-height: 44px; min-width: 44px; }
+  .tpl-modal-opts .ui-cbx { min-height: 44px; }
+}

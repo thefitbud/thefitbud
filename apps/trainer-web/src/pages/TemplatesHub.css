@@ -16,7 +16,7 @@
   gap: var(--s3) var(--s6);
 }
 
-.templates-hub-header .page-header { margin: 0; flex: 1 1 16rem; }
+.templates-hub-header .page-header { display: block; margin: 0; flex: 1 1 16rem; }
 .templates-hub-header h1 { margin: 0; font: var(--t-title); color: var(--ink); letter-spacing: normal; }
 .templates-hub-header .lede { margin: 4px 0 0; max-width: 36rem; color: var(--ink3); font: var(--t-body); }
 
@@ -238,6 +238,9 @@
   .templates-hub-table td { padding-left: 12px; padding-right: 12px; }
   .templates-hub-table .col-use { padding-right: 12px; }
   .templates-hub-foot { padding: 0 16px; }
+  .templates-hub-new-btn,
+  .libraries-header .ui-btn { min-height: 44px; }
+  .templates-hub-row-actions .overflow-menu-trigger { min-width: 44px; min-height: 44px; }
 }
 
 /* Empty states */

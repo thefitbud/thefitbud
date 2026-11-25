@@ -146,6 +146,8 @@ test.describe("W13-5 templates and library", () => {
       await expect(useModal).toBeHidden();
 
       // W-175 Make a copy, from a FitBud base row.
+      await page.goto("/templates/workouts");
+      await expect(page.locator("tr", { hasText: "FitBud base" }).first()).toBeVisible({ timeout: 30_000 });
       await page
         .locator("tr", { hasText: "FitBud base" })
         .first()

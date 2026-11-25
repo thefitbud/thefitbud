@@ -19,7 +19,7 @@
   justify-content: space-between;
   gap: var(--s3) var(--s6);
 }
-.libraries-header .page-header { margin: 0; flex: 1 1 16rem; }
+.libraries-header .page-header { display: block; margin: 0; flex: 1 1 16rem; }
 .libraries-header h1 { margin: 0; font: var(--t-title); color: var(--ink); letter-spacing: normal; }
 .libraries-header .lede { margin: 4px 0 0; color: var(--ink3); font: var(--t-body); max-width: 36rem; }
 
