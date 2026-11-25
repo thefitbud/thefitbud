@@ -185,7 +185,7 @@
     display: none;
   }
 
-  /* 44 px hit areas at iPad landscape too (tap-targets.css runs up to 1280).
+  /* 44 px hit areas at iPad landscape too (tap-targets.css starts at 1024).
      The crumb keeps a real 44 px box. The plan link (a flex item of its meta
      item) gets a real 44 px box from 12 px block padding, cancelled by an
      equal negative margin, so the meta line keeps its 20 px text lines and no
@@ -235,7 +235,7 @@
   }
 }
 
-/* At 1280 and below tap-targets.css pads each tab to 44 px; the padding is the gap. */
+/* At 1024 tap-targets.css pads each tab to 44 px; the padding is the gap. */
 @media (max-width: 1024px) {
   .wsh-v3 .wsh-tabs {
     gap: 0;

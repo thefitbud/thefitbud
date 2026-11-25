@@ -78,7 +78,7 @@ async function textProblems(page: Page) {
  * 44 px hit area).
  *
  * Allow-list (reason in each case):
- *  - an anchor inside running text (`p`, `li`, `dd`, `td`, `.hint` with its own
+ *  - an anchor inside running text (`p`, `dd`, `.hint` with its own
  *    text next to it): WCAG 2.5.8 exempts inline links, and padding them would
  *    break the line height of the sentence.
  *  - `.sr-only` and the `.skip-link`: not visible to anyone until focused.
@@ -107,7 +107,7 @@ async function smallTargets(page: Page): Promise<string[]> {
     const inlineLink = (el: Element) => {
       if (el.tagName !== "A") return false;
       const parent = el.parentElement;
-      if (!parent || !parent.matches("p, li, dd, td, .hint, .field-hint")) return false;
+      if (!parent || !parent.matches("p, dd, .hint, .field-hint")) return false;
       const own = [...parent.childNodes]
         .filter((n) => n.nodeType === 3)
         .map((n) => n.textContent?.trim() ?? "")
