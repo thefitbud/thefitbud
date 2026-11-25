@@ -29,7 +29,6 @@ import {
   formatRelative,
   labelFor,
   planConsistencyWarnings,
-  possessivePronoun,
 } from "@fitbud/core";
 import { Button } from "../components/Button";
 import { PlanConsistencyNotice } from "../components/PlanConsistencyNotice";
@@ -153,13 +152,6 @@ function civilDateOrNotSet(localDate: string): string {
   return label && !/^\d{4}-\d{2}-\d{2}/.test(label) ? label : "Not set";
 }
 
-function objectPronoun(gender: string | null | undefined): string {
-  const g = (gender ?? "").trim().toLowerCase();
-  if (g === "female" || g === "woman" || g === "f") return "her";
-  if (g === "male" || g === "man" || g === "m") return "him";
-  return "them";
-}
-
 export function ConfigureCoachingPage() {
   const { relationshipId = "" } = useParams();
   const { workspace, reloadWorkspace, online = true } =
@@ -168,8 +160,6 @@ export function ConfigureCoachingPage() {
   const header = workspace?.header ?? null;
   const displayName = header?.traineeDisplayName ?? "Client";
   const firstName = firstNameOf(displayName);
-  const pronoun = possessivePronoun(header?.traineeProfile.gender);
-  const objPronoun = objectPronoun(header?.traineeProfile.gender);
   const relationshipEnded = header?.onboardingStatus === "ended";
 
   const [configuration, setConfiguration] =
@@ -992,7 +982,7 @@ export function ConfigureCoachingPage() {
   })();
   const anyReminderOn = REMINDER_CATEGORIES.some((c) => reminders[c.type]);
   const activateNotice = anyReminderOn
-    ? `Reminders follow this setup from ${todayLabel ?? "today"}, never in ${pronoun} quiet hours.`
+    ? `Reminders follow this setup from ${todayLabel ?? "today"}, never in ${firstName}'s quiet hours.`
     : null;
 
   if (loading) {
@@ -1106,7 +1096,7 @@ export function ConfigureCoachingPage() {
       {notificationsOff && !relationshipEnded ? (
         <p className="banner-attention" role="status">
           {firstName} has turned off app notifications. Reminders can&apos;t
-          reach {objPronoun}.
+          reach {firstName}.
         </p>
       ) : null}
 
