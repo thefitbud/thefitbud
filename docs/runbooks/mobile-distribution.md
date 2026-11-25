@@ -13,6 +13,8 @@ Production store release stays in [`store-release.md`](store-release.md). Dev / 
 | **`staging-store`** | **store** | Staging binary for TestFlight and Play **internal** track (closed beta rehearsal) |
 | `production` | store | `com.thefitbud.mobile` → TestFlight / Play closed testing |
 
+**Push environment (Z14-30):** `staging-store` is signed for the **production** APNs environment (TestFlight delivers through production APNs); `preview`, `development` and ad hoc builds use **development**. The EAS profile sets `APS_ENVIRONMENT`, and `app.config.js` feeds that one value to the `aps-environment` entitlement and the `expo-notifications` mode. Changing it needs a new iOS build; testers must install it and sign in again so a new push token is registered. To check, read `aps-environment` in the EAS build log or the built entitlements.
+
 `staging-store` uses the same staging API and trainer-web URLs as `preview`, `APP_VARIANT=staging`, remote credentials (EAS-managed), `autoIncrement: true`, and the EAS **preview** environment (so `GOOGLE_SERVICES_JSON` and other staging file envs apply).
 
 Workspace packages export `./dist`, which is gitignored. EAS runs `eas-build-post-install` in `apps/mobile/package.json` (`pnpm -w run build:packages`) so Bundle JavaScript can resolve `@fitbud/*` on the worker.
