@@ -164,7 +164,9 @@
 .templates-hub-table td:first-child { width: 100%; }
 .templates-hub-table .col-use { text-align: right; width: 1%; white-space: nowrap; padding-right: 16px; }
 .templates-hub-table .col-owner,
-.templates-hub-table .col-status { width: 1%; white-space: nowrap; }
+.templates-hub-table .col-status,
+.templates-hub-table .col-used,
+.templates-hub-table .col-edited { width: 1%; white-space: nowrap; }
 
 .templates-hub-row-main { display: flex; align-items: center; gap: 12px; min-width: 0; }
 
