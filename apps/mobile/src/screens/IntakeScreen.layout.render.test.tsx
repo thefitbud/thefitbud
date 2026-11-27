@@ -28,6 +28,8 @@ let version = 0;
 let answers: Record<string, unknown> = {};
 let formLoadFails = false;
 let submitCalls = 0;
+let draftCalls = 0;
+let draftGate: Promise<void> | null = null;
 
 const signOut = vi.fn();
 const auth: Record<string, unknown> = {};
@@ -79,6 +81,8 @@ const fakeFetch = async (input: RequestInfo | URL, init?: RequestInit) => {
   }
   if (method === "POST" || (method === "PUT" && !path.endsWith("/draft"))) submitCalls += 1;
   if (method === "PUT" && path.endsWith("/draft")) {
+    draftCalls += 1;
+    if (draftGate) await draftGate;
     if (failDraft) throw new TypeError("Network request failed");
     answers = body.answers;
     version += 1;
@@ -104,6 +108,8 @@ beforeEach(() => {
   failDraft = false;
   formLoadFails = false;
   submitCalls = 0;
+  draftCalls = 0;
+  draftGate = null;
   version = 0;
   answers = {};
   signOut.mockClear();
@@ -170,10 +176,51 @@ describe("Intake layout (Z14-46)", () => {
     ];
     start();
     await waitFor(() => expect(screen.getByText("—")).toBeTruthy());
-    press(/^Increase$/);
+    press(/^Increase Hours of sleep on a usual night$/);
     await waitFor(() => expect(screen.queryByText("—")).toBeNull());
     press(/^Submit intake$/);
     await waitFor(() => expect(answers.sleep).toBe(7));
+  });
+
+  it("a long-text question is named by its question and renders no empty label node (Z14-47)", async () => {
+    start();
+    await waitFor(() => expect(screen.getByText("Goals")).toBeTruthy());
+    const input = screen.getByLabelText("Goals", { selector: "textarea" });
+    expect(input.getAttribute("aria-label")).toBe("Goals");
+    // The only text above the box is the heading: the Field wrapper holds no label node.
+    const wrap = input.parentElement as HTMLElement;
+    expect(wrap.children.length).toBe(1);
+  });
+
+  it("the untouched sleep placeholder names the answer and both buttons (Z14-47)", async () => {
+    fields = [
+      { id: "sleep", type: "number", label: "Hours of sleep on a usual night", required: true },
+    ];
+    start();
+    await waitFor(() => expect(screen.getByText("—")).toBeTruthy());
+    expect(screen.getByLabelText("Hours of sleep on a usual night: not answered")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Decrease Hours of sleep on a usual night" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Increase Hours of sleep on a usual night" })).toBeTruthy();
+  });
+
+  it("the close button is disabled while a save is pending and starts no second save (Z14-47)", async () => {
+    let release: () => void = () => {};
+    draftGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    start();
+    await waitFor(() => expect(screen.getByText("Step 1 of 2")).toBeTruthy());
+    press(/^Continue$/);
+    await waitFor(() => expect(draftCalls).toBe(1));
+    const close = screen.getByRole("button", { name: /^Close$/ });
+    await waitFor(() => expect(close.getAttribute("aria-disabled")).toBe("true"));
+    fireEvent.click(close);
+    expect(draftCalls).toBe(1);
+    expect(screen.queryByText("Finish later?")).toBeNull();
+    release();
+    await waitFor(() => expect(screen.getByText("Step 2 of 2")).toBeTruthy());
+    await waitFor(() => expect(close.getAttribute("aria-disabled")).not.toBe("true"));
+    expect(draftCalls).toBe(1);
   });
 
   it("the close button opens Finish later?, saves first, and Keep going closes it", async () => {

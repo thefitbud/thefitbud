@@ -25,7 +25,7 @@ export function inputSelectionProps(
 }
 
 type Props = TextInputProps & {
-  label: string;
+  label?: string;
   hint?: string;
 };
 
@@ -39,7 +39,7 @@ export function Field({ label, hint, onFocus, onBlur, ...inputProps }: Props) {
   const [focused, setFocused] = useState(false);
   return (
     <View style={styles.wrap}>
-      <Text style={styles.label}>{label}</Text>
+      {label ? <Text style={styles.label}>{label}</Text> : null}
       <TextInput
         // ink3, not the kit's ink4: placeholder copy has to stay readable (4.5:1).
         placeholderTextColor={theme.colors.ink3}
@@ -64,7 +64,7 @@ export function Field({ label, hint, onFocus, onBlur, ...inputProps }: Props) {
         // caller's explicit `accessibilityLabel` still wins. The label is the
         // accessible name only while it is unique on the screen; a screen with
         // two same-labelled fields passes its own label or a `testID`.
-        accessibilityLabel={label}
+        accessibilityLabel={label || inputProps.accessibilityLabel || hint}
         {...inputProps}
       />
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}

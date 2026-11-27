@@ -369,14 +369,13 @@ function IntakeScreenBody({ relationshipId }: Props) {
           <View key={field.id}>
             <QuestionHeading>{field.label}</QuestionHeading>
             <Field
-            label=""
-            accessibilityLabel={field.label}
-            hint={field.helpText}
-            value={typeof stored === "string" ? stored : ""}
-            onChangeText={(value) => updateAnswer(field.id, value)}
-            multiline
-            editable={!readOnly}
-            maxLength={control.maxLength}
+              accessibilityLabel={field.label}
+              hint={field.helpText}
+              value={typeof stored === "string" ? stored : ""}
+              onChangeText={(value) => updateAnswer(field.id, value)}
+              multiline
+              editable={!readOnly}
+              maxLength={control.maxLength}
             />
           </View>
         );
@@ -416,11 +415,16 @@ function IntakeScreenBody({ relationshipId }: Props) {
               />
             ) : (
               <View style={styles.sleepEmptyCard}>
-                <Text style={styles.sleepEmptyValue}>—</Text>
+                <Text
+                  style={styles.sleepEmptyValue}
+                  accessibilityLabel={`${field.label}: not answered`}
+                >
+                  —
+                </Text>
                 <View style={styles.sleepEmptyStepper}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Decrease"
+                    accessibilityLabel={`Decrease ${field.label}`}
                     disabled={readOnly}
                     onPress={() => onChange(SLEEP_START_HOURS - 0.5)}
                     style={styles.sleepEmptyBtn}
@@ -429,7 +433,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
                   </Pressable>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel="Increase"
+                    accessibilityLabel={`Increase ${field.label}`}
                     disabled={readOnly}
                     onPress={() => onChange(SLEEP_START_HOURS + 0.5)}
                     style={styles.sleepEmptyBtn}
@@ -555,6 +559,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
 
   /** Save the current answers before the "Finish later?" sheet opens (D-W14-46). */
   async function openCloseSheet() {
+    if (saving || submitting) return;
     setCloseSaveFailed(false);
     setCloseNothingToSave(!definition || loading);
     if (definition && !readOnly && !loading) {
@@ -579,15 +584,16 @@ function IntakeScreenBody({ relationshipId }: Props) {
   }
 
   // Android hardware back (D-W14-24): the sheet on step 1, else the step before.
-  const backState = useRef({ stepIndex, closeOpen, openCloseSheet });
-  backState.current = { stepIndex, closeOpen, openCloseSheet };
+  const busy = saving || submitting;
+  const backState = useRef({ stepIndex, closeOpen, openCloseSheet, busy });
+  backState.current = { stepIndex, closeOpen, openCloseSheet, busy };
   useEffect(() => {
     if (Platform.OS !== "android") return undefined;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       const state = backState.current;
       if (state.closeOpen) setCloseOpen(false);
       else if (state.stepIndex > 0) setStepIndex((s) => Math.max(0, s - 1));
-      else void state.openCloseSheet();
+      else if (!state.busy) void state.openCloseSheet();
       return true;
     });
     return () => sub.remove();
@@ -621,7 +627,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
   if (loading) {
     return (
       <SafeAreaView style={styles.safe}>
-        <IntakeHeader onClose={() => void openCloseSheet()} />
+        <IntakeHeader onClose={() => void openCloseSheet()} disabled={saving || submitting} />
         <View style={styles.loading} accessibilityLabel="Loading">
           <ActivityIndicator size="large" color={theme.colors.brand} />
         </View>
@@ -633,7 +639,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
   if (!definition) {
     return (
       <SafeAreaView style={styles.safe}>
-        <IntakeHeader onClose={() => void openCloseSheet()} />
+        <IntakeHeader onClose={() => void openCloseSheet()} disabled={saving || submitting} />
         <View style={styles.body}>
           {errorMessage ? <ErrorBanner message={errorMessage} /> : null}
           <Button label="Try again" onPress={() => void load()} />
@@ -651,6 +657,7 @@ function IntakeScreenBody({ relationshipId }: Props) {
     <SafeAreaView style={styles.safe}>
       <IntakeHeader
         onClose={() => void openCloseSheet()}
+        disabled={saving || submitting}
         step={stepNumber}
         total={totalSteps}
       />
@@ -708,10 +715,12 @@ function IntakeScreenBody({ relationshipId }: Props) {
 /** TR-03 header: ✕ at the left, title and "Step n of N" centred, one progress bar. */
 function IntakeHeader({
   onClose,
+  disabled = false,
   step,
   total,
 }: {
   onClose: () => void;
+  disabled?: boolean;
   step?: number;
   total?: number;
 }) {
@@ -724,9 +733,11 @@ function IntakeHeader({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
+          accessibilityState={{ disabled }}
+          disabled={disabled}
           onPress={onClose}
           hitSlop={4}
-          style={styles.closeBtn}
+          style={[styles.closeBtn, disabled ? styles.closeBtnDisabled : undefined]}
         >
           <X size={20} color={theme.colors.ink2} strokeWidth={2.4} />
         </Pressable>
@@ -798,6 +809,7 @@ const useStyles = createThemedStyles((t) => ({
     justifyContent: "center",
     width: 44,
   },
+  closeBtnDisabled: { opacity: 0.45 },
   closeSpacer: { height: 44, width: 44 },
   headerCenter: { alignItems: "center", flex: 1, paddingHorizontal: spacing.sm },
   headerTitle: {

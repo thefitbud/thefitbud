@@ -81,4 +81,18 @@ describe("Field accessible name", () => {
     );
     expect(screen.getByText("At least 8 characters.")).toBeTruthy();
   });
+
+  it("renders no label node when label is absent or empty, and falls back to accessibilityLabel then hint (Z14-47)", () => {
+    const { container, rerender } = render(
+      <Field label="" accessibilityLabel="Goals" value="" onChangeText={() => {}} />,
+    );
+    expect(screen.getByLabelText("Goals").tagName).toBe("INPUT");
+    // Only the input: no label Text, no hint.
+    expect(container.querySelectorAll("input").length).toBe(1);
+    const wrap = container.querySelector("input")!.parentElement as HTMLElement;
+    expect(wrap.children.length).toBe(1);
+
+    rerender(<Field hint="Helpful note" value="" onChangeText={() => {}} />);
+    expect(screen.getByLabelText("Helpful note").tagName).toBe("INPUT");
+  });
 });
