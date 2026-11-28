@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { ExerciseLibraryItem } from "@fitbud/contracts";
 import { Dumbbell } from "lucide-react";
 import { apiClient, resolveApiUrl } from "../../lib/api";
@@ -80,6 +80,36 @@ function usePlanExerciseThumbnail(
   return cached ?? null;
 }
 
+/**
+ * True once the tile is within ~400 px of the viewport (or any scroll container). Library lists hold
+ * dozens of rows; an offscreen `<img loading="lazy">` never starts, so it would sit in the DOM as an
+ * unloaded image. Mounting the `<img>` only when it is near keeps every image in the DOM one that is
+ * loading or loaded. Without IntersectionObserver (old browsers, jsdom) it is always true.
+ */
+function useNearViewport(): [(node: HTMLElement | null) => void, boolean] {
+  const supported = typeof IntersectionObserver !== "undefined";
+  const [near, setNear] = useState(!supported);
+  const observer = useRef<IntersectionObserver | null>(null);
+  const ref = useCallback((node: HTMLElement | null) => {
+    observer.current?.disconnect();
+    observer.current = null;
+    if (!node || typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: "400px" },
+    );
+    io.observe(node);
+    observer.current = io;
+  }, []);
+  useEffect(() => () => observer.current?.disconnect(), []);
+  return [ref, near];
+}
+
 export function LibraryThumb({
   name,
   thumbnailUrl,
@@ -94,16 +124,21 @@ export function LibraryThumb({
   const resolved = usePlanExerciseThumbnail(libraryItemId, name, thumbnailUrl === undefined);
   const path = thumbnailUrl === undefined ? resolved : thumbnailUrl;
   const [failedPath, setFailedPath] = useState<string | null>(null);
+  const [tileRef, near] = useNearViewport();
   const showImage = Boolean(path) && failedPath !== path;
+  // Not near yet: an empty tile, no `<img>` (and no dumbbell, so nothing flashes when it loads in).
+  const pending = showImage && !near;
   return (
     <span
+      ref={tileRef}
       className="lib-thumb lib-thumb-photo ui-lib-thumb"
       style={tileStyle}
       aria-hidden="true"
       data-testid="library-thumb-exercise"
       data-thumb={showImage ? "image" : "fallback"}
+      data-thumb-state={pending ? "pending" : undefined}
     >
-      {showImage && path ? (
+      {pending ? null : showImage && path ? (
         <img
           src={resolveApiUrl(path)}
           alt=""

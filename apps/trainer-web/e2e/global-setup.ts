@@ -160,6 +160,14 @@ export default async function globalSetup() {
   if (process.env.SKIP_E2E_DB_RESET !== "1") {
     runCommandSync("pnpm", ["db:reset"], { cwd: repoRoot });
   }
+  // db:reset wipes D1 only. Load the exercise drawings (Z14-48) into the same local R2 state the
+  // API reads, as staging has after Firoz's upload, so thumbnails in specs are real images.
+  // Idempotent: objects already there with the same size are skipped. Runs before the API boots.
+  runCommandSync(
+    "pnpm",
+    ["--filter", "@fitbud/api", "media:upload-exercises", "--", "--target", "local"],
+    { cwd: repoRoot },
+  );
   runCommandSync("pnpm", ["--filter", "@fitbud/api", "setup:local"], {
     cwd: repoRoot,
   });

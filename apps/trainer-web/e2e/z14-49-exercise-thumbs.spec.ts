@@ -178,6 +178,50 @@ test.describe("Z14-49 exercise thumbnails", () => {
     await expect(tile).toHaveAttribute("data-thumb", "fallback", { timeout: 30_000 });
     await expect(tile.locator("img")).toHaveCount(0);
     await expect(page.locator("main.main")).not.toContainText(/exercise-media|sig=|failed to load/i);
+    // No broken image is left anywhere in the DOM: every failed drawing became the dumbbell.
+    await expect.poll(() => page.locator("[data-testid='library-thumb-exercise'] img").count(), { timeout: 15_000 }).toBe(0);
+    expect((await textProblems(page)).broken).toBe(0);
+  });
+
+  test("drawings that 404 leave no broken image in the builder library list", async ({ page }) => {
+    await page.route("**/library/exercise-media/**", (route) =>
+      route.fulfill({ status: 404, contentType: "application/json", body: "{}" }),
+    );
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const workout = await ownTemplate("workout", "Demo strength block");
+    await page.goto(`/templates/workouts/${workout.id}`);
+    await expect(page.getByTestId("session-board")).toBeVisible({ timeout: 30_000 });
+    const card = page.locator(".builder-library-card").first();
+    await expect(card).toBeVisible({ timeout: 20_000 });
+    await expect(card.getByTestId("library-thumb-exercise")).toHaveAttribute(
+      "data-thumb",
+      "fallback",
+      { timeout: 20_000 },
+    );
+    await expect.poll(() => page.locator("[data-testid='library-thumb-exercise'] img").count(), { timeout: 15_000 }).toBe(0);
+    expect((await textProblems(page)).broken).toBe(0);
+    await expect(page.locator("main.main")).not.toContainText(/404|exercise-media|sig=/i);
+  });
+
+  test("builder library list holds no unloaded image offscreen (lazy images mount near the viewport)", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    const workout = await ownTemplate("workout", "Demo strength block");
+    await page.goto(`/templates/workouts/${workout.id}`);
+    await expect(page.locator(".builder-library-card").first()).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator(".builder-library-card").nth(30)).toBeAttached({ timeout: 20_000 });
+    await drawingsLoaded(page, ".builder-library-card:nth-child(-n+4)");
+    const state = await page.evaluate(() => {
+      const imgs = [...document.querySelectorAll<HTMLImageElement>("img")];
+      return {
+        total: imgs.length,
+        unloaded: imgs.filter((img) => !img.complete || img.naturalWidth === 0).length,
+        tiles: document.querySelectorAll(".builder-library-card [data-testid='library-thumb-exercise']").length,
+      };
+    });
+    expect(state.tiles).toBeGreaterThan(state.total);
+    expect(state.unloaded).toBe(0);
   });
 
   test("food rows have no thumbnail element anywhere", async ({ page }) => {

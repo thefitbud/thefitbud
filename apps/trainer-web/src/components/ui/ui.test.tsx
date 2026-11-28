@@ -1,8 +1,8 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Button } from "./Button";
@@ -13,9 +13,15 @@ import { Toggle } from "./Toggle";
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 describe("ui kit", () => {
+  // happy-dom ships an IntersectionObserver that never reports; LibraryThumb falls back to
+  // mounting its image straight away when there is none.
+  beforeEach(() => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+  });
   it("paints the primary button with the navy brand, not coach", () => {
     render(<Button>New template</Button>);
     expect(screen.getByRole("button", { name: "New template" }).className).toContain("ui-btn-primary");
@@ -44,6 +50,28 @@ describe("ui kit", () => {
     fireEvent.error(tile.querySelector("img") as HTMLImageElement);
     expect(tile.getAttribute("data-thumb")).toBe("fallback");
     expect(tile.querySelector("img")).toBeNull();
+  });
+
+  it("mounts no image until the tile is near the viewport, so no unloaded img sits in the DOM", () => {
+    let callback: IntersectionObserverCallback = () => {};
+    class FakeObserver {
+      constructor(cb: IntersectionObserverCallback) {
+        callback = cb;
+      }
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", FakeObserver);
+    try {
+      render(<LibraryThumb name="Row 40" thumbnailUrl="/library/exercise-media/far?exp=1&sig=x" />);
+      const tile = screen.getByTestId("library-thumb-exercise");
+      expect(tile.querySelector("img")).toBeNull();
+      expect(tile.querySelector("svg")).toBeNull();
+      act(() => callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver));
+      expect(tile.querySelector("img")?.getAttribute("loading")).toBe("lazy");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("changes the segmented value", () => {
