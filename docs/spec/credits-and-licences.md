@@ -15,7 +15,7 @@ The exercise base 2026.10.21-v3 (`apps/api/seed/library/incoming/exercise-base-2
 These counts were checked against `exercise_library_media` after `pnpm db:reset`. In the seed, 338 Everkinetic rows store the author as "Everkinetic" and 574 as "Everkinetic (everkinetic.com)". Credits UI should show "Everkinetic (everkinetic.com)" for both.
 
 ## Rules
-1. **Credit line wherever a drawing appears.** Show the author and licence, with a link to the licence:
+1. **Credit on the Credits and licences page (changed by Firoz, 28 Nov 2026, D-W14-53).** Exercise screens (lists, builders, the exercise detail page) do **not** carry a per-exercise credit line; the drawings are credited once on the app-level Credits and licences page (`/credits` on web, linked from mobile), which must list every author and licence below. The original rule, kept for reference: **Credit line wherever a drawing appears.** Show the author and licence, with a link to the licence:
    - CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/
    - CC BY-SA 3.0: https://creativecommons.org/licenses/by-sa/3.0/
 
