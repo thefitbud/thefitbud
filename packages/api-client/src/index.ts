@@ -60,6 +60,7 @@ import {
   exceptionSchema,
   clientDirectoryListResponseSchema,
   exerciseLibraryItemSchema,
+  exerciseLibraryDetailResponseSchema,
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
@@ -230,6 +231,7 @@ import {
   type ClientDirectoryListResponse,
   type ExerciseDifficulty,
   type ExerciseLibraryItem,
+  type ExerciseLibraryDetailResponse,
   type ExerciseLibraryListResponse,
   type FoodLibraryItem,
   type FoodLibraryListResponse,
@@ -1163,6 +1165,17 @@ export class FitBudApiClient {
       "GET",
       `/libraries/exercises${suffix}`,
       exerciseLibraryListResponseSchema,
+      { auth: true },
+    );
+  }
+
+  async getExerciseLibraryDetail(
+    itemId: string,
+  ): Promise<ExerciseLibraryDetailResponse> {
+    return this.request(
+      "GET",
+      `/libraries/exercises/${encodeURIComponent(itemId)}`,
+      exerciseLibraryDetailResponseSchema,
       { auth: true },
     );
   }

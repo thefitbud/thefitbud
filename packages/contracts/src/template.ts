@@ -192,6 +192,33 @@ export type ExerciseLibraryListResponse = z.infer<
   typeof exerciseLibraryListResponseSchema
 >;
 
+/** One related exercise on the detail page (Z14-51). */
+export const exerciseLibraryRelatedSchema = z.object({
+  id: uuidSchema,
+  name: z.string().min(1).max(120),
+  thumbnailUrl: z.string().nullable(),
+});
+export type ExerciseLibraryRelated = z.infer<typeof exerciseLibraryRelatedSchema>;
+
+/**
+ * Everything the exercise detail page shows, in one response (Z14-51). Empty arrays
+ * mean the exercise has no such content; clients hide the section.
+ */
+export const exerciseLibraryDetailResponseSchema = z.object({
+  item: exerciseLibraryItemSchema,
+  steps: z.array(z.string()),
+  cues: z.array(z.string()),
+  mistakes: z.array(z.string()),
+  related: z.object({
+    easier: z.array(exerciseLibraryRelatedSchema),
+    harder: z.array(exerciseLibraryRelatedSchema),
+    swapFor: z.array(exerciseLibraryRelatedSchema),
+  }),
+});
+export type ExerciseLibraryDetailResponse = z.infer<
+  typeof exerciseLibraryDetailResponseSchema
+>;
+
 export const createExerciseLibraryItemRequestSchema = z.object({
   name: z.string().trim().min(1).max(120),
   instructions: z.string().trim().max(2000).nullable().optional(),
