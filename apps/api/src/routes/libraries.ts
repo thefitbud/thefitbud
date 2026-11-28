@@ -11,6 +11,7 @@ import {
   createFoodLibraryItemRequestSchema,
   exerciseDifficultySchema,
   exerciseLibraryItemSchema,
+  type ExerciseLibraryItem,
   exerciseLibraryListResponseSchema,
   foodLibraryItemSchema,
   foodLibraryListResponseSchema,
@@ -22,6 +23,7 @@ import { createDb, type Db } from "../db/client";
 import {
   coachingRelationships,
   exerciseLibraryItems,
+  exerciseLibraryMedia,
   foodLibraryItems,
   foodLibraryServings,
   traineeCustomFoods,
@@ -38,6 +40,7 @@ import {
 } from "../domain/library-fts.js";
 import { createId, nowIso } from "../lib/crypto";
 import { buildPage, decodeCursor } from "../lib/cursor";
+import { signedExerciseMediaPath } from "./library-media";
 import { fail, ok } from "../lib/envelope";
 import {
   optionalAuthMiddleware,
@@ -82,6 +85,78 @@ async function servingsByFoodId(db: Db, foodIds: string[]) {
     grouped.set(row.foodLibraryItemId, current);
   }
   return grouped;
+}
+
+type ExerciseMediaFields = Pick<
+  ExerciseLibraryItem,
+  "media" | "thumbnailMediaId" | "thumbnailUrl"
+>;
+
+const NO_EXERCISE_MEDIA: ExerciseMediaFields = {
+  media: [],
+  thumbnailMediaId: null,
+  thumbnailUrl: null,
+};
+
+/**
+ * Drawings for a page of exercises in one query (no N+1), in sort order, with signed
+ * paths and credits. No storage key is read into the payload (Z14-48).
+ */
+async function mediaByExerciseId(
+  db: Db,
+  env: Env,
+  exerciseIds: string[],
+): Promise<Map<string, ExerciseMediaFields>> {
+  const grouped = new Map<string, ExerciseMediaFields>();
+  if (exerciseIds.length === 0) return grouped;
+  const rows = await db
+    .select({
+      id: exerciseLibraryMedia.id,
+      exerciseId: exerciseLibraryMedia.exerciseLibraryItemId,
+      kind: exerciseLibraryMedia.kind,
+      frame: exerciseLibraryMedia.frame,
+      author: exerciseLibraryMedia.author,
+      licence: exerciseLibraryMedia.licence,
+      licenceUrl: exerciseLibraryMedia.licenceUrl,
+      attribution: exerciseLibraryMedia.attribution,
+    })
+    .from(exerciseLibraryMedia)
+    .where(inArray(exerciseLibraryMedia.exerciseLibraryItemId, exerciseIds))
+    .orderBy(
+      asc(exerciseLibraryMedia.exerciseLibraryItemId),
+      asc(exerciseLibraryMedia.sortOrder),
+      asc(exerciseLibraryMedia.id),
+    );
+  for (const row of rows) {
+    const url = await signedExerciseMediaPath(env, row.id);
+    const current = grouped.get(row.exerciseId) ?? {
+      media: [],
+      thumbnailMediaId: null,
+      thumbnailUrl: null,
+    };
+    current.media!.push({
+      id: row.id,
+      frame: row.frame,
+      author: row.author,
+      licence: row.licence,
+      licenceUrl: row.licenceUrl,
+      attribution: row.attribution,
+      url,
+    });
+    if (current.thumbnailMediaId === null && row.kind === "illustration") {
+      current.thumbnailMediaId = row.id;
+      current.thumbnailUrl = url;
+    }
+    grouped.set(row.exerciseId, current);
+  }
+  return grouped;
+}
+
+function exerciseWithMedia(
+  row: typeof exerciseLibraryItems.$inferSelect,
+  media?: ExerciseMediaFields,
+): ExerciseLibraryItem {
+  return { ...mapExerciseLibraryItem(row), ...(media ?? NO_EXERCISE_MEDIA) };
 }
 
 async function insertServings(
@@ -251,8 +326,13 @@ libraryRoutes.get(
       .orderBy(exerciseLibraryItems.name, exerciseLibraryItems.id)
       .limit(limit + 1);
 
+    const media = await mediaByExerciseId(
+      db,
+      c.env,
+      rows.map((row) => row.id),
+    );
     const page = buildPage(
-      rows.map((row) => mapExerciseLibraryItem(row)),
+      rows.map((row) => exerciseWithMedia(row, media.get(row.id))),
       limit,
       (item) => item.name,
     );
@@ -325,7 +405,7 @@ libraryRoutes.post(
         "Exercise library item could not be loaded.",
       );
     }
-    return ok(c, exerciseLibraryItemSchema.parse(mapExerciseLibraryItem(row)), 201);
+    return ok(c, exerciseLibraryItemSchema.parse(exerciseWithMedia(row)), 201);
   },
 );
 
@@ -409,7 +489,7 @@ libraryRoutes.put(
     }
     return ok(
       c,
-      exerciseLibraryItemSchema.parse(mapExerciseLibraryItem(updated)),
+      exerciseLibraryItemSchema.parse(exerciseWithMedia(updated)),
     );
   },
 );
@@ -471,7 +551,7 @@ libraryRoutes.delete(
         "Exercise library item could not be loaded.",
       );
     }
-    return ok(c, exerciseLibraryItemSchema.parse(mapExerciseLibraryItem(updated)));
+    return ok(c, exerciseLibraryItemSchema.parse(exerciseWithMedia(updated)));
   },
 );
 

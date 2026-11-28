@@ -145,6 +145,21 @@ export type ExerciseDifficulty = z.infer<typeof exerciseDifficultySchema>;
 
 const libraryLabelSchema = z.string().trim().min(1).max(80);
 
+/**
+ * One drawing of a library exercise (Z14-48). No storage key is exposed: `url` is a
+ * short-lived signed API path an `<img>` tag can load, and the credit travels with it.
+ */
+export const exerciseLibraryMediaSchema = z.object({
+  id: uuidSchema,
+  frame: z.string().nullable(),
+  author: z.string().nullable(),
+  licence: z.string(),
+  licenceUrl: z.string().nullable(),
+  attribution: z.string(),
+  url: z.string(),
+});
+export type ExerciseLibraryMedia = z.infer<typeof exerciseLibraryMediaSchema>;
+
 export const exerciseLibraryItemSchema = z.object({
   id: uuidSchema,
   ownership: libraryOwnershipSchema,
@@ -156,6 +171,15 @@ export const exerciseLibraryItemSchema = z.object({
   equipment: z.array(libraryLabelSchema).max(12),
   difficulty: exerciseDifficultySchema.nullable(),
   status: libraryItemStatusSchema,
+  /**
+   * Drawings in display order; the API always sends the array (empty when the exercise has
+   * none). Optional in the type only so a payload from a server older than Z14-48 still parses.
+   */
+  media: z.array(exerciseLibraryMediaSchema).optional(),
+  /** Id of the first illustration, or null. */
+  thumbnailMediaId: uuidSchema.nullable().optional(),
+  /** Signed API path of the first illustration, or null. */
+  thumbnailUrl: z.string().nullable().optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 });

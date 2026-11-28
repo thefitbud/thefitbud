@@ -25,6 +25,7 @@
     "db:seed:library": "tsx scripts/library-seed.ts",
     "seed:library:staging": "tsx scripts/library-seed.ts --env staging --remote",
     "seed:library:production": "tsx scripts/library-seed.ts --env production --remote",
+    "media:upload-exercises": "tsx scripts/upload-exercise-media.ts",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "db:seed:local": "tsx scripts/seed-demo.ts",
     "db:reseed": "tsx scripts/seed-demo.ts",

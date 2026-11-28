@@ -78,6 +78,16 @@ No new accounts were needed. The three personas the W12 tasks ask for already ex
 
 "Today" is the run date (IST). Every client with a plan has meal and workout rows from 27 days back to today, and from Z12-34 on also **6 days ahead** (assignments only, nothing logged), so the app has past, current and future days. Ended clients stop at their end date.
 
+## Exercise drawings (local R2)
+
+The exercise library rows point at 919 CC BY-SA drawings, but they only show once the files are in the local R2 bucket. `pnpm db:reset` wipes D1 only, so load them once per checkout (and again if you delete `apps/api/.wrangler/state`):
+
+```bash
+pnpm --filter @fitbud/api media:upload-exercises -- --target local   # ~10 s, skips files already there
+```
+
+Add `--dry-run` to list counts and any missing file. The local bucket is `fitbud-media-preview`, the one `wrangler dev` reads. `staging` and `production` targets only print the `wrangler r2 object put ... --remote` commands; Firoz runs them with `--yes`.
+
 ## Realistic demo world
 
 `pnpm db:reset` (or `pnpm db:reseed` on an already-migrated DB) builds a deterministic world from [docs/seed/SEED_DESIGN.md](seed/SEED_DESIGN.md). Dates are relative to the reset day in IST, so data is always "fresh"; the same day gives byte-identical SQL. Both commands work from the repo root on Windows PowerShell and Linux/macOS.
