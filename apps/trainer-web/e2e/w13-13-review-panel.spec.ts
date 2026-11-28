@@ -2,6 +2,7 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { createClientWithTwoOpenItems } from "./helpers/fresh-client";
 import { API, apiToken, signIn } from "./support/session";
 
 // W13-13 (D-W13-21): the review panel takes the trainer app's Z14-23 layout.
@@ -153,32 +154,33 @@ async function clientNamed(name: string): Promise<Client & { relationshipId: str
 }
 
 const NOT_REMINDABLE = new Set(["skipped_meal", "skipped_workout", "meal_logged_later"]);
-/** Clients other specs act on; the resolving flow below leaves them alone. */
-const SHARED = ["Rohan", "Farhan", "Kavya", "Neha", "Ishita", "Meera", "Arjun"];
 
-/** A client with exactly two open, not-yet-noted items, one remindable. */
+/**
+ * Z14-50: a fresh client with exactly two open, not-yet-noted items, one
+ * remindable. It is created through the API (not picked from the date-relative
+ * demo seed) and no other spec knows it, so the resolving flow below leaves
+ * every shared demo client alone.
+ */
 async function flowClient() {
-  for (const c of await clients()) {
-    if (!c.relationshipId) continue;
-    if (SHARED.some((s) => c.traineeDisplayName.startsWith(s))) continue;
-    const open = await openItems(c.relationshipId).catch(() => [] as Item[]);
-    if (open.length !== 2) continue;
-    if (!open.every((i) => i.status === "active" || i.status === "detected")) continue;
-    if (!open.some((i) => !NOT_REMINDABLE.has(i.type))) continue;
-    return { rid: c.relationshipId, name: c.traineeDisplayName, open };
-  }
-  throw new Error("no client with two open items");
+  const created = await createClientWithTwoOpenItems("Vikram");
+  const open = await openItems(created.relationshipId);
+  expect(open, "fresh client has exactly two open items").toHaveLength(2);
+  expect(open.every((i) => i.status === "active" || i.status === "detected")).toBe(true);
+  expect(open.some((i) => !NOT_REMINDABLE.has(i.type))).toBe(true);
+  return { rid: created.relationshipId, name: created.displayName, open };
 }
 
 async function openFromHome(page: Page, name: string) {
   await page.goto("/");
   await expect(page.getByTestId("screen-TW-04")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Loading your day…")).toHaveCount(0, { timeout: 20_000 });
-  const who = page
-    .locator(".home-rows [role=row]")
-    .filter({ hasText: name })
-    .first()
-    .locator(".home-who");
+  const row = page.locator(".home-rows [role=row]").filter({ hasText: name }).first();
+  // Home lists the first 8 clients; the newest client sorts last, so "View all"
+  // when the row is not among them (how many seeded clients need attention
+  // depends on the day).
+  const viewAll = page.getByRole("button", { name: "View all" });
+  if (!(await row.count()) && (await viewAll.count())) await viewAll.click();
+  const who = row.locator(".home-who");
   await expect(who).toBeVisible({ timeout: 30_000 });
   await who.click({ timeout: 30_000 });
   return panelLoaded(page);
@@ -230,6 +232,11 @@ test.describe("W13-13 review panel (Z14-23 layout on web)", () => {
 
     // Remind on the remindable item.
     for (let k = 0; k < 2; k += 1) {
+      // The footer is drawn once the item's detail has loaded; only then is a
+      // missing Remind button a real answer (a skipped item has none).
+      await expect(panel.getByRole("button", { name: /^noted, keep open$/i })).toBeVisible({
+        timeout: 15_000,
+      });
       const remind = panel.getByRole("button", { name: `Remind ${first}` });
       if (await remind.count()) {
         await remind.click();

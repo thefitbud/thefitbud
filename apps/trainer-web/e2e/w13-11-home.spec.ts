@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
+import { createClientWithTwoOpenItems } from "./helpers/fresh-client";
 import { API, apiToken, signIn } from "./support/session";
 
 const OUT = path.resolve("qa-captures/w13-11");
@@ -89,11 +90,13 @@ async function openClient(page: Page, name: string) {
   await page.goto("/");
   await expect(page.getByTestId("screen-TW-04")).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText("Loading your day…")).toHaveCount(0, { timeout: 20_000 });
-  const who = page
-    .locator(".home-rows [role=row]")
-    .filter({ hasText: name })
-    .first()
-    .locator(".home-who");
+  const row = page.locator(".home-rows [role=row]").filter({ hasText: name }).first();
+  // Home lists the first 8 clients; the newest client sorts last, so "View all"
+  // when the row is not among them (how many seeded clients need attention
+  // depends on the day).
+  const viewAll = page.getByRole("button", { name: "View all" });
+  if (!(await row.count()) && (await viewAll.count())) await viewAll.click();
+  const who = row.locator(".home-who");
   await expect(who).toBeVisible({ timeout: 30_000 });
   await who.click({ timeout: 30_000 });
   await expect(page.getByTestId("screen-TW-05")).toBeVisible();
@@ -142,10 +145,14 @@ test.describe("W13-11 Home, side panel, Check-ins inbox", () => {
   });
 
   test("home row click opens list mode, noted, resolve and undo", async ({ page }) => {
+    test.setTimeout(120_000);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await openClient(page, "Neha");
+    // Z14-50: a fresh client with two open items, created through the API, so
+    // the pager is there whatever weekday the demo seed ran on.
+    const fresh = await createClientWithTwoOpenItems("Karan");
+    await openClient(page, fresh.displayName);
     const panel = page.getByTestId("screen-TW-05");
-    await expect(panel.getByText(/^1 of \d+$/)).toBeVisible();
+    await expect(panel.getByText(/^1 of 2$/)).toBeVisible();
     await panel.getByRole("button", { name: /^noted, keep open$/i }).click();
     await expect(panel.getByTestId("panel-noted-state")).toBeVisible({ timeout: 15_000 });
     await panel.getByRole("button", { name: /^resolve…?$/i }).click();
