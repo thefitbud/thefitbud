@@ -30,6 +30,7 @@ import {
   templateUsedBySchema,
   createExerciseLibraryItemRequestSchema,
   createFoodLibraryItemRequestSchema,
+  exerciseLibraryDetailResponseSchema,
   exerciseLibraryItemSchema,
   foodLibraryItemSchema,
   mealFoodItemSchema,
@@ -765,6 +766,27 @@ describe("contracts", () => {
     expect(withMedia.media).toHaveLength(1);
     expect(withMedia.thumbnailMediaId).toBe("22222222-2222-4222-8222-222222222222");
     expect(JSON.stringify(withMedia)).not.toContain("storageKey");
+    // Z14-51: detail response shape.
+    const detail = exerciseLibraryDetailResponseSchema.parse({
+      item: withMedia,
+      steps: ["Stand tall."],
+      cues: [],
+      mistakes: [],
+      related: {
+        easier: [{ id: withMedia.id, name: "Bodyweight squat", thumbnailUrl: null }],
+        harder: [],
+        swapFor: [],
+      },
+    });
+    expect(detail.related.easier[0]!.thumbnailUrl).toBeNull();
+    expect(() =>
+      exerciseLibraryDetailResponseSchema.parse({
+        item: withMedia,
+        steps: [],
+        cues: [],
+        mistakes: [],
+      }),
+    ).toThrow();
     expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultReps");
     expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultLoadLabel");
     expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("parentExerciseId");
