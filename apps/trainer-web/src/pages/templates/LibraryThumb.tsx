@@ -1,1 +1,1 @@
-export { LibraryThumb, libraryThumbStyle } from "../../components/ui/LibraryThumb";
+export { LibraryThumb } from "../../components/ui/LibraryThumb";

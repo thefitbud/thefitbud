@@ -3,7 +3,7 @@ export { Chip } from "./Chip";
 export { EmptyState } from "./EmptyState";
 export { ErrorState, OfflineBanner } from "./ErrorState";
 export { Checkbox, Field, Radio, SelectField, TextInput } from "./Field";
-export { LibraryThumb, libraryThumbStyle } from "./LibraryThumb";
+export { LibraryThumb } from "./LibraryThumb";
 export { LoadingState } from "./LoadingState";
 export { LogoLockup } from "./LogoLockup";
 export { Modal } from "./Modal";

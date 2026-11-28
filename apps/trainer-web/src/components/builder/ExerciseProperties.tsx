@@ -76,7 +76,7 @@ export function ExerciseProperties({
   return (
     <aside className="builder-props" aria-label="Exercise properties" data-testid="exercise-properties">
       <header className="builder-props-head">
-        <LibraryThumb name={selected.name || "Exercise"} kind="exercise" />
+        <LibraryThumb name={selected.name || "Exercise"} libraryItemId={selected.sourceExerciseLibraryItemId} />
         <div className="builder-props-title">
           <h2 className="builder-pane-title">{selected.name || "Exercise"}</h2>
           {meta ? <p className="builder-props-meta">{meta}</p> : null}

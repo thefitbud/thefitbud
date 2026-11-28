@@ -114,10 +114,6 @@ export type LibraryPaneChrome = {
   searchRef?: RefObject<HTMLInputElement>;
 };
 
-function InitialThumb({ name }: { name: string }) {
-  return <LibraryThumb name={name} kind="exercise" />;
-}
-
 export function ExerciseSearchPane({
   day,
   onAdd,
@@ -259,7 +255,7 @@ export function ExerciseSearchPane({
               key={item.id}
               className={compact && index === 0 ? "lib-row is-highlighted" : compact ? "lib-row" : undefined}
             >
-              {compact ? <InitialThumb name={item.name} /> : null}
+              {compact ? <LibraryThumb name={item.name} thumbnailUrl={item.thumbnailUrl ?? null} /> : null}
               <div className="lib-row-copy">
                 <p className="templates-name">{item.name}</p>
                 <p className="muted">
@@ -312,7 +308,6 @@ function FoodRow({
   const [servingId, setServingId] = useState(servings[0]?.id ?? "");
   return (
     <li className="lib-row">
-      <InitialThumb name={item.name} />
       <div className="lib-row-copy">
         <p className="templates-name">{item.name}</p>
         {servings.length === 0 ? (

@@ -566,7 +566,7 @@ function ExerciseLibrary({
                   >
                     <td data-label="Exercise">
                       <div className="ui-cell-main">
-                        <LibraryThumb name={item.name} kind="exercise" />
+                        <LibraryThumb name={item.name} thumbnailUrl={item.thumbnailUrl ?? null} />
                         <div className="ui-t">
                           <b className="libraries-name">{item.name}</b>
                           <span className="libraries-sub">
@@ -1141,7 +1141,6 @@ function FoodLibrary({
                   >
                     <td data-label="Food">
                       <div className="ui-cell-main">
-                        <LibraryThumb name={item.name} kind="food" />
                         <div className="ui-t">
                           <b className="libraries-name">{item.name}</b>
                           <span className="libraries-sub">{foodCategory(item)}</span>

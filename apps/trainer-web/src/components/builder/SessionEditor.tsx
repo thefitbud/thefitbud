@@ -119,7 +119,7 @@ export function SessionEditor({
                   <span className="exercise-card-index" aria-hidden="true">
                     {index + 1}
                   </span>
-                  <LibraryThumb name={exercise.name || "Exercise"} kind="exercise" />
+                  <LibraryThumb name={exercise.name || "Exercise"} libraryItemId={exercise.sourceExerciseLibraryItemId} />
                   <span className="exercise-card-body">
                     <span className="exercise-card-title">
                       <span className="sr-only">{index + 1}. </span>

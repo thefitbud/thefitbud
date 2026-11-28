@@ -157,7 +157,7 @@ export function BuilderExerciseLibrary({
                     strokeWidth={1.75}
                     aria-hidden
                   />
-                  <LibraryThumb name={item.name} kind="exercise" />
+                  <LibraryThumb name={item.name} thumbnailUrl={item.thumbnailUrl ?? null} />
                   <span className="builder-library-copy">
                     <span className="builder-library-name">{item.name}</span>
                     {meta ? (
@@ -275,7 +275,6 @@ export function BuilderFoodLibrary({
                     strokeWidth={1.75}
                     aria-hidden
                   />
-                  <LibraryThumb name={item.name} kind="food" />
                   <span className="builder-library-copy">
                     <span className="builder-library-name">{item.name}</span>
                     <span className="builder-library-meta">{meta}</span>
