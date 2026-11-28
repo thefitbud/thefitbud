@@ -10,6 +10,8 @@ import {
   createExerciseLibraryItemRequestSchema,
   createFoodLibraryItemRequestSchema,
   exerciseDifficultySchema,
+  exerciseLibraryDetailResponseSchema,
+  type ExerciseLibraryRelated,
   exerciseLibraryItemSchema,
   type ExerciseLibraryItem,
   exerciseLibraryListResponseSchema,
@@ -23,7 +25,9 @@ import { createDb, type Db } from "../db/client";
 import {
   coachingRelationships,
   exerciseLibraryItems,
+  exerciseLibraryInstructions,
   exerciseLibraryMedia,
+  exerciseLibraryRelations,
   foodLibraryItems,
   foodLibraryServings,
   traineeCustomFoods,
@@ -406,6 +410,122 @@ libraryRoutes.post(
       );
     }
     return ok(c, exerciseLibraryItemSchema.parse(exerciseWithMedia(row)), 201);
+  },
+);
+
+libraryRoutes.get(
+  "/exercises/:itemId",
+  operation({
+    tag: "Libraries",
+    summary: "Libraries operation for GET /libraries/exercises/:itemId.",
+    description:
+      "One active global or trainer-owned exercise with its drawings, steps, cues, common mistakes and related exercises (easier, harder, swap for).",
+    roles: ["trainer"],
+    response: exerciseLibraryDetailResponseSchema,
+  }),
+  optionalAuthMiddleware,
+  requireAuthMiddleware,
+  requireRole("trainer"),
+  async (c) => {
+    const actor = c.get("actor");
+    if (!actor) {
+      return fail(c, 401, "UNAUTHENTICATED", "Authentication required.");
+    }
+
+    const itemId = c.req.param("itemId");
+    const db = createDb(c.env.DB);
+    const visibleTo = (table: typeof exerciseLibraryItems) =>
+      and(
+        eq(table.status, "active"),
+        or(
+          eq(table.ownership, "global"),
+          and(eq(table.ownership, "trainer"), eq(table.trainerUserId, actor.userId)),
+        ),
+      );
+    const [row] = await db
+      .select()
+      .from(exerciseLibraryItems)
+      .where(and(eq(exerciseLibraryItems.id, itemId), visibleTo(exerciseLibraryItems)))
+      .limit(1);
+    if (!row) {
+      return fail(
+        c,
+        404,
+        "EXERCISE_LIBRARY_ITEM_NOT_FOUND",
+        "Exercise library item not found.",
+      );
+    }
+
+    // One query per table: instructions, then relations joined to the related
+    // exercises (ownership and archive filters applied there), then drawings for the
+    // item and every related exercise together.
+    const instructionRows = await db
+      .select({
+        kind: exerciseLibraryInstructions.kind,
+        text: exerciseLibraryInstructions.text,
+      })
+      .from(exerciseLibraryInstructions)
+      .where(
+        and(
+          eq(exerciseLibraryInstructions.exerciseLibraryItemId, row.id),
+          eq(exerciseLibraryInstructions.lang, "en"),
+        ),
+      )
+      .orderBy(
+        asc(exerciseLibraryInstructions.kind),
+        asc(exerciseLibraryInstructions.position),
+      );
+    const relationRows = await db
+      .select({
+        kind: exerciseLibraryRelations.kind,
+        id: exerciseLibraryItems.id,
+        name: exerciseLibraryItems.name,
+      })
+      .from(exerciseLibraryRelations)
+      .innerJoin(
+        exerciseLibraryItems,
+        eq(exerciseLibraryItems.id, exerciseLibraryRelations.relatedExerciseId),
+      )
+      .where(
+        and(
+          eq(exerciseLibraryRelations.exerciseLibraryItemId, row.id),
+          visibleTo(exerciseLibraryItems),
+        ),
+      );
+    const relatedIds = [...new Set(relationRows.map((r) => r.id))];
+    const media = await mediaByExerciseId(db, c.env, [row.id, ...relatedIds]);
+
+    const textsOf = (kind: "step" | "cue" | "mistake") =>
+      instructionRows.filter((r) => r.kind === kind).map((r) => r.text);
+    const group = (kinds: string[]): ExerciseLibraryRelated[] => {
+      const byId = new Map<string, ExerciseLibraryRelated>();
+      for (const r of relationRows) {
+        if (!kinds.includes(r.kind) || byId.has(r.id)) continue;
+        byId.set(r.id, {
+          id: r.id,
+          name: r.name,
+          thumbnailUrl: media.get(r.id)?.thumbnailUrl ?? null,
+        });
+      }
+      return [...byId.values()].sort(
+        (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id),
+      );
+    };
+
+    return ok(
+      c,
+      exerciseLibraryDetailResponseSchema.parse({
+        item: exerciseWithMedia(row, media.get(row.id)),
+        steps: textsOf("step"),
+        cues: textsOf("cue"),
+        mistakes: textsOf("mistake"),
+        related: {
+          easier: group(["regression"]),
+          harder: group(["progression"]),
+          swapFor: group(["alternative", "home_alternative", "gym_alternative"]),
+        },
+      }),
+    );
   },
 );
 

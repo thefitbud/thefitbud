@@ -18,6 +18,52 @@ describe("FitBudApiClient", () => {
     });
   });
 
+  it("loads an exercise detail from GET /libraries/exercises/:itemId (Z14-51)", async () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    let requested = "";
+    const client = new FitBudApiClient({
+      baseUrl: "https://example.test",
+      getAccessToken: () => "token",
+      fetch: async (input) => {
+        requested = String(input);
+        return new Response(
+          JSON.stringify({
+            data: {
+              item: {
+                id,
+                ownership: "global",
+                trainerUserId: null,
+                name: "Dumbbell Goblet Squat",
+                instructions: null,
+                primaryMuscles: ["quads"],
+                secondaryMuscles: [],
+                equipment: ["dumbbell"],
+                difficulty: "beginner",
+                status: "active",
+                createdAt: "2026-09-26T00:00:00.000Z",
+                updatedAt: "2026-09-26T00:00:00.000Z",
+              },
+              steps: ["Hold the dumbbell against your chest."],
+              cues: [],
+              mistakes: [],
+              related: {
+                easier: [{ id, name: "Bodyweight Squat", thumbnailUrl: null }],
+                harder: [],
+                swapFor: [],
+              },
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    });
+
+    const detail = await client.getExerciseLibraryDetail(id);
+    expect(requested).toBe(`https://example.test/libraries/exercises/${id}`);
+    expect(detail.steps).toHaveLength(1);
+    expect(detail.related.easier[0]!.name).toBe("Bodyweight Squat");
+  });
+
   it("maps API error envelopes", async () => {
     const client = new FitBudApiClient({
       baseUrl: "https://example.test",
