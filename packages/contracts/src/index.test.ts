@@ -729,6 +729,42 @@ describe("contracts", () => {
         updatedAt: "2026-09-26T00:00:00.000Z",
       }),
     ).toMatchObject({ ownership: "global", primaryMuscles: ["quads"] });
+    // Z14-48: media fields are optional (a payload from an older server still parses).
+    const withoutMedia = exerciseLibraryItemSchema.parse({
+      id: "11111111-1111-4111-8111-111111111111",
+      ownership: "global",
+      trainerUserId: null,
+      name: "Goblet squat",
+      instructions: null,
+      primaryMuscles: [],
+      secondaryMuscles: [],
+      equipment: [],
+      difficulty: null,
+      status: "active",
+      createdAt: "2026-09-26T00:00:00.000Z",
+      updatedAt: "2026-09-26T00:00:00.000Z",
+    });
+    expect(withoutMedia.media).toBeUndefined();
+    expect(withoutMedia.thumbnailMediaId).toBeUndefined();
+    const withMedia = exerciseLibraryItemSchema.parse({
+      ...withoutMedia,
+      media: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          frame: "start",
+          author: "Everkinetic (everkinetic.com)",
+          licence: "CC-BY-SA-4.0",
+          licenceUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
+          attribution: "Illustration by Everkinetic, CC BY-SA 4.0",
+          url: "/library/exercise-media/22222222-2222-4222-8222-222222222222?exp=1&sig=x",
+        },
+      ],
+      thumbnailMediaId: "22222222-2222-4222-8222-222222222222",
+      thumbnailUrl: "/library/exercise-media/22222222-2222-4222-8222-222222222222?exp=1&sig=x",
+    });
+    expect(withMedia.media).toHaveLength(1);
+    expect(withMedia.thumbnailMediaId).toBe("22222222-2222-4222-8222-222222222222");
+    expect(JSON.stringify(withMedia)).not.toContain("storageKey");
     expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultReps");
     expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("defaultLoadLabel");
     expect(exerciseLibraryItemSchema.shape).not.toHaveProperty("parentExerciseId");
