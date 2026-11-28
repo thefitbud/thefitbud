@@ -15,7 +15,7 @@ import {
 } from "@fitbud/core";
 import { apiClient } from "../../lib/api";
 import { removeFoodItem, updateFoodItem, updateMeal } from "../plan-composition";
-import { Button, Field, LibraryThumb } from "../ui";
+import { Button, Field } from "../ui";
 
 const libraryCache = new Map<string, Promise<FoodLibraryItem | null>>();
 
@@ -111,7 +111,6 @@ function QuantityField({
   return (
     <div className="builder-meal-item">
       <div className="builder-meal-item-main">
-        <LibraryThumb name={item.name} kind="food" />
         <div className="builder-meal-item-copy">
           <p className="builder-meal-item-name">{item.name}</p>
           <p className="builder-meal-item-meta">{display}</p>

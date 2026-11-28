@@ -8,7 +8,7 @@ import {
 import { formatHhMmTime, formatNumber, formatScaledQuantity } from "@fitbud/core";
 import { Plus } from "lucide-react";
 import { OverflowMenu } from "../OverflowMenu";
-import { Button, LibraryThumb } from "../ui";
+import { Button } from "../ui";
 import {
   PLAN_COMPOSITION_LIMITS,
   addMeal,
@@ -377,7 +377,6 @@ export function MealsPane({
                       <span className="meal-food-rows">
                         {items.map((item, itemIndex) => (
                           <span key={`${item.name}-${itemIndex}`} className="meal-food-row">
-                            <LibraryThumb name={item.name} kind="food" />
                             <span className="meal-food-copy">
                               <span className="meal-food-name">{item.name}</span>
                               <span className="meal-food-serving">{servingText(item)}</span>

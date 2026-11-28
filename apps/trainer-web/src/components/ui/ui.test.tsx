@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { Button } from "./Button";
-import { LibraryThumb, libraryThumbStyle } from "./LibraryThumb";
+import { LibraryThumb } from "./LibraryThumb";
 import { Modal } from "./Modal";
 import { Seg } from "./Seg";
 import { Toggle } from "./Toggle";
@@ -21,11 +21,29 @@ describe("ui kit", () => {
     expect(screen.getByRole("button", { name: "New template" }).className).toContain("ui-btn-primary");
   });
 
-  it("keeps a library thumb as a coloured tile from the name", () => {
-    const style = libraryThumbStyle("food:Poha");
-    expect(style.backgroundImage).toContain("linear-gradient");
-    render(<LibraryThumb name="Poha" kind="food" />);
-    expect(screen.getByTitle("Poha").getAttribute("style") ?? "").toContain("gradient");
+  it("shows the drawing when an exercise has one", () => {
+    render(<LibraryThumb name="Goblet squat" thumbnailUrl="/library/exercise-media/abc?exp=1&sig=x" />);
+    const tile = screen.getByTestId("library-thumb-exercise");
+    expect(tile.getAttribute("data-thumb")).toBe("image");
+    const img = tile.querySelector("img");
+    expect(img?.getAttribute("src")).toMatch(/\/library\/exercise-media\/abc/);
+    expect(img?.getAttribute("alt")).toBe("");
+    expect(img?.getAttribute("loading")).toBe("lazy");
+  });
+
+  it("falls back to a neutral dumbbell tile with no drawing or a failed image", () => {
+    const { unmount } = render(<LibraryThumb name="Plank" thumbnailUrl={null} />);
+    let tile = screen.getByTestId("library-thumb-exercise");
+    expect(tile.getAttribute("data-thumb")).toBe("fallback");
+    expect(tile.getAttribute("style") ?? "").not.toContain("gradient");
+    expect(tile.textContent).toBe("");
+    expect(tile.getAttribute("aria-hidden")).toBe("true");
+    unmount();
+    render(<LibraryThumb name="Squat" thumbnailUrl="/library/exercise-media/bad?exp=1&sig=x" />);
+    tile = screen.getByTestId("library-thumb-exercise");
+    fireEvent.error(tile.querySelector("img") as HTMLImageElement);
+    expect(tile.getAttribute("data-thumb")).toBe("fallback");
+    expect(tile.querySelector("img")).toBeNull();
   });
 
   it("changes the segmented value", () => {

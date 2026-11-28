@@ -225,9 +225,8 @@ export function DesignSystemPage() {
               <span className="ui-thumb">
                 <ListChecks className="ui-i" strokeWidth={1.75} aria-hidden />
               </span>
-              <LibraryThumb name="Poha" kind="food" />
-              <LibraryThumb name="Goblet squat" kind="exercise" />
-              <span className="ui-t-meta">Poha · Goblet squat: coloured tile from the name</span>
+              <LibraryThumb name="Goblet squat" thumbnailUrl={null} />
+              <span className="ui-t-meta">Exercise with no drawing: neutral dumbbell tile</span>
             </div>
             <div className="ds-row">
               <span className="ui-av ui-av1">AB</span>
