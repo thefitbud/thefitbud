@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import type {
   ProgressMetricKey,
@@ -28,8 +29,15 @@ export type WorkoutsSummary = {
 };
 
 type Props = {
-  /** All-time series per key: the rail shows each key's latest entered value. */
+  /** All-time series per key: decides which rows are listed. */
   series: Partial<Record<ProgressMetricKey, ProgressMetricSeries>>;
+  /**
+   * The series the values and changes are read from: the selected range, like the KPI row
+   * (or the all-time series while the range loads, with `scope` saying so).
+   */
+  valueSeries: Partial<Record<ProgressMetricKey, ProgressMetricSeries>>;
+  /** The quiet scope line under a range-dependent row: "last 12 weeks", "all time". */
+  scope: string;
   view: RailView;
   checked: Record<"body" | "ratings", ProgressMetricKey[]>;
   /** The metric on the right-hand scale (frame 160d), shown in the compare colour. */
@@ -92,6 +100,8 @@ type RailEntry = { group: MetricGroup; key: ProgressMetricKey };
  */
 export function MetricRail({
   series,
+  valueSeries,
+  scope,
   view,
   checked,
   compare,
@@ -133,6 +143,20 @@ export function MetricRail({
       <p className="pg-rail-heading" id={id}>
         {text}
       </p>
+    );
+  }
+
+  /** The row label with the scope line under it (a quiet second line). */
+  function nameCell(label: ReactNode, withScope: boolean) {
+    return (
+      <span className="pg-rail-name">
+        <span className="pg-rail-label">{label}</span>
+        {withScope ? (
+          <span className="pg-rail-scope" data-testid="pg-rail-scope">
+            {scope}
+          </span>
+        ) : null}
+      </span>
     );
   }
 
@@ -219,7 +243,8 @@ export function MetricRail({
                   </button>
                 );
               }
-              const change = changeText(series[key]);
+              const values = valueSeries[key];
+              const change = changeText(values);
               return (
                 <button
                   key={key}
@@ -230,15 +255,18 @@ export function MetricRail({
                   className={rowClass("pg-rail-tab", selected, compared)}
                   onClick={() => onSelect(group, key)}
                 >
-                  <span className="pg-rail-label">
-                    {metricLabel(key)}
-                    {compared ? (
-                      <span className="sr-only"> (compared)</span>
-                    ) : null}
-                  </span>
+                  {nameCell(
+                    <>
+                      {metricLabel(key)}
+                      {compared ? (
+                        <span className="sr-only"> (compared)</span>
+                      ) : null}
+                    </>,
+                    change !== null,
+                  )}
                   <span className="pg-rail-figures">
                     <span className="pg-rail-value">
-                      {latestValue(key, series[key])}
+                      {latestValue(key, values)}
                     </span>
                     {change ? (
                       <span className="pg-rail-change">
@@ -313,7 +341,7 @@ export function MetricRail({
                   )}
                   onClick={() => onWorkouts(row)}
                 >
-                  <span className="pg-rail-label">{label}</span>
+                  {nameCell(label, true)}
                   <span className="pg-rail-figures">
                     <span className="pg-rail-value">{value}</span>
                   </span>

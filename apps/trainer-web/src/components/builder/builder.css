@@ -128,8 +128,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--s1) var(--s2);
+  /* No column gap: the title input and the client name set their own single space. */
+  gap: var(--s1) 0;
   min-width: 0;
+}
+
+.builder .builder-title-row > .builder-draft-pill {
+  margin-left: var(--s2);
 }
 
 .builder .builder-title-field {
@@ -176,8 +181,8 @@
 }
 
 .builder .builder-title-client {
-  /* The title input keeps its edit padding; pull the name in to sit next to it. */
-  margin-left: calc(-1 * var(--s2));
+  /* The title input keeps its edit padding (cancelled by the negative margin); one space then the dot. */
+  margin-left: calc(0.28em - var(--s2));
   font: var(--t-h2);
   color: var(--ink);
 }
@@ -1064,11 +1069,15 @@
   cursor: not-allowed;
 }
 
-.builder .meals-scroll > .button-link {
+.builder .meals-scroll > .meals-open-library {
   align-self: flex-start;
-  display: inline-flex;
-  align-items: center;
   min-height: 44px;
+}
+
+.builder .builder-tiles-note {
+  margin: calc(-1 * var(--s2)) 0 0;
+  font: var(--t-meta);
+  color: var(--ink3);
 }
 
 .builder .builder-plan-total {
@@ -1185,16 +1194,27 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Every food row: the serving select full width, quantity and Remove on one row below. */
 .builder .builder-meal-item-controls {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: var(--s2);
 }
 
 .builder .builder-meal-item-serving {
-  flex: 1 1 8rem;
-  width: auto;
+  width: 100%;
+}
+
+.builder .builder-meal-item-qty-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+}
+
+.builder .builder-meal-item-remove {
+  min-height: 44px;
 }
 
 .builder .builder-meal-item-qty {
@@ -1530,6 +1550,7 @@
 }
 
 .builder .builder-reps-clear {
+  min-height: 44px;
   padding: 0 var(--s2);
   margin-left: calc(-1 * var(--s2));
 }

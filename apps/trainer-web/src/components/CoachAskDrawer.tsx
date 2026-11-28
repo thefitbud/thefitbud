@@ -7,7 +7,6 @@ import {
   formatKcal,
   formatRelative,
   labelFor,
-  possessivePronoun,
 } from "@fitbud/core";
 import type { CoachAsk, MealAssignment, WorkoutAssignment } from "@fitbud/contracts";
 import { apiClient } from "../lib/api";
@@ -36,14 +35,6 @@ type SourceDetail = {
 
 function isPainTopic(topic: string): boolean {
   return topic === "pain" || topic === "pain_or_discomfort";
-}
-
-/** Object pronoun for copy like "ask her to pause". */
-function objectPronoun(genderOrPronoun: string | null | undefined): string {
-  const possessive = possessivePronoun(genderOrPronoun);
-  if (possessive === "her") return "her";
-  if (possessive === "his") return "him";
-  return "them";
 }
 
 function firstName(displayName: string): string {
@@ -117,8 +108,6 @@ export function CoachAskDrawer({
   const [clientWhatsappE164, setClientWhatsappE164] = useState<string | null>(
     null,
   );
-  const [possessive, setPossessive] = useState("their");
-  const [objectForm, setObjectForm] = useState("them");
   const [source, setSource] = useState<SourceDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState(false);
@@ -154,14 +143,12 @@ export function CoachAskDrawer({
 
       let nextName = clientNameProp.trim() || "Client";
       let nextWa: string | null = null;
-      let gender: string | null = null;
       let tz = "Asia/Kolkata";
       try {
         const ws = await apiClient.getClientWorkspace(found.relationshipId);
         const name = ws.header.traineeDisplayName?.trim();
         if (name) nextName = name;
         nextWa = ws.header.clientWhatsappE164 ?? null;
-        gender = ws.header.traineeProfile?.gender ?? null;
         tz = ws.header.traineeTimezone || tz;
       } catch {
         /* keep prop display name */
@@ -204,8 +191,6 @@ export function CoachAskDrawer({
 
       setDisplayName(nextName);
       setClientWhatsappE164(nextWa);
-      setPossessive(possessivePronoun(gender));
-      setObjectForm(objectPronoun(gender));
       setSource({
         itemRowLabel: itemTypeLabel || "Item",
         itemRowValue: itemRowValue || itemLabel,
@@ -356,7 +341,7 @@ export function CoachAskDrawer({
               <div>
                 <h3 className="cad-title">{title}</h3>
                 <p className="cad-sub">
-                  Opened WhatsApp from {possessive} log
+                  Opened WhatsApp from {givenName}&apos;s log
                   {relative ? ` · ${relative}` : ""}
                 </p>
               </div>
@@ -366,7 +351,7 @@ export function CoachAskDrawer({
                   <Heart size={16} strokeWidth={2} aria-hidden />
                   <span>
                     Pain topic. Reply today. If it sounds serious, ask{" "}
-                    {objectForm} to pause training and see a doctor.
+                    {givenName} to pause training and see a doctor.
                   </span>
                 </p>
               ) : null}
@@ -375,7 +360,7 @@ export function CoachAskDrawer({
                 <p className="cad-source-head">
                   <LogIcon size={16} strokeWidth={1.75} aria-hidden />
                   <span>
-                    From {possessive} {source?.logLabel ?? "log"}
+                    From {givenName}&apos;s {source?.logLabel ?? "log"}
                   </span>
                 </p>
                 <dl className="cad-source-rows">

@@ -48,7 +48,9 @@ env:
 - extendedWaitUntil:
     visible: "Getting to know you"
     timeout: 60000
-- assertVisible: ".* of 5"
+- assertVisible: "Step 1 of .*"
+- assertVisible: "Getting to know you"
+- assertVisible: "Close"
 - takeScreenshot: TR-03
 - runFlow: ../../common/assert-no-crash.yaml
 - killApp

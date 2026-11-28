@@ -28,7 +28,7 @@ import { apiClient } from "../../lib/api";
 import { createIdempotencyKey } from "../../lib/idempotency";
 import { Button } from "../Button";
 import { StatusChip } from "../StatusChip";
-import { itemShortLabel } from "./AlsoOpenList";
+import { itemShortLabel } from "./panelModel";
 import { ResolveForm, type ResolveOutcomeOption } from "./ResolveForm";
 import {
   BULK_CONFIRM_ABOVE,
@@ -89,6 +89,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
   onEnded,
   onClose,
   listRefreshFailed = false,
+  titleFor = itemShortLabel,
 }: {
   relationshipId: string;
   firstName: string;
@@ -113,6 +114,11 @@ export function BulkPanel<T extends BulkResolveOutcome>({
   onClose: () => void;
   /** The drawer could not reload this client's items after a write. */
   listRefreshFailed?: boolean;
+  /**
+   * Row title (W13-13): the same title the single item shows, e.g.
+   * "Overdue meal · Dinner · Tue 24 Nov", so rows can be told apart.
+   */
+  titleFor?: (item: Exception) => string;
 }) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => {
     const first = items.find((item) => item.id === initialSelectedId);
@@ -414,7 +420,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
                     </span>
                     <span className="sp-bulk-text">
                       <span className="sp-bulk-title">
-                        {itemShortLabel(item)}
+                        {titleFor(item)}
                       </span>
                       <span className="sp-bulk-sub">
                         {bulkRowSubline(item)}
@@ -555,7 +561,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
                   </span>
                   <span className="sp-bulk-text">
                     <span className="sp-bulk-title">
-                      {itemShortLabel(item)}
+                      {titleFor(item)}
                     </span>
                     <span className="sp-bulk-sub">{bulkRowSubline(item)}</span>
                   </span>
@@ -665,7 +671,7 @@ export function BulkPanel<T extends BulkResolveOutcome>({
                 {selectedItems.map((item) => (
                   <li key={item.id}>
                     <SourceIcon type={item.sourceEntityType} />
-                    <span>{itemShortLabel(item)}</span>
+                    <span>{titleFor(item)}</span>
                   </li>
                 ))}
               </ul>

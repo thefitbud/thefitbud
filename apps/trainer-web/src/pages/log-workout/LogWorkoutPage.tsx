@@ -65,13 +65,6 @@ function classifyFailure(err: unknown): SaveFailure {
   return { kind: "unknown" };
 }
 
-function pronoun(gender: string | null | undefined): string {
-  const value = (gender ?? "").toLowerCase();
-  if (value === "male") return "his";
-  if (value === "female") return "her";
-  return "their";
-}
-
 function firstName(name: string): string {
   return name.trim().split(/\s+/)[0] || "your client";
 }
@@ -386,7 +379,7 @@ export function LogWorkoutPage({ mode }: { mode: Mode }) {
           <p>
             Ended clients are read-only, so you can’t{" "}
             {mode === "create" ? "log" : "edit"} workouts for them. Reactivate
-            coaching from {pronoun(header?.traineeProfile.gender)} client page to{" "}
+            coaching from the client page to{" "}
             {mode === "create" ? "log again" : "edit again"}.
           </p>
           <Link className="button-secondary" to={`/clients/${relationshipId}/overview`}>
